@@ -193,7 +193,10 @@ public class NazcaComponentPreviewService
         try
         {
             var workingDir = Path.GetDirectoryName(_scriptPath);
-            if (!_launchFactory.TryBuild(_pythonExecutable, arguments, workingDir, null, out var psi, out var launchError))
+            // PYTHONSAFEPATH: stray sibling files next to the script must not shadow
+            // stdlib/Nazca modules (see PythonModuleShadowing).
+            if (!_launchFactory.TryBuild(_pythonExecutable, arguments, workingDir,
+                    PythonModuleShadowing.SafePathEnvironment, out var psi, out var launchError))
                 return NazcaPreviewResult.Fail($"Could not start Python '{_pythonExecutable}': {launchError}");
 
             psi.RedirectStandardOutput = true;

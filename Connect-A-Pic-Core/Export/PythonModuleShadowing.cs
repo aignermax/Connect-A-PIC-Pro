@@ -39,4 +39,14 @@ public static class PythonModuleShadowing
     /// <param name="fileStem">File name without extension.</param>
     public static bool ShadowsPythonModule(string fileStem) =>
         ShadowedNames.Contains(fileStem);
+
+    /// <summary>
+    /// Environment for running generated Python scripts: <c>PYTHONSAFEPATH=1</c> keeps the
+    /// script's directory off <c>sys.path</c> (Python 3.11+; older versions ignore it), so
+    /// stray sibling files like a leftover <c>re.py</c> next to the exported script cannot
+    /// shadow stdlib/Nazca modules. Generated scripts never import sibling files, so this
+    /// is always safe for Lunima's own runs.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string> SafePathEnvironment =
+        new Dictionary<string, string> { ["PYTHONSAFEPATH"] = "1" };
 }

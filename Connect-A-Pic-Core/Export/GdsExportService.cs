@@ -320,7 +320,10 @@ public class GdsExportService
         var args         = new[] { scriptPath };
         var workingDir   = Path.GetDirectoryName(scriptPath);
 
-        if (!_launchFactory.TryBuild(pythonCmd, args, workingDir, null, out var psi, out var launchError))
+        // PYTHONSAFEPATH: a leftover re.py/numpy.py NEXT TO the exported script must not
+        // shadow the modules the Nazca run imports (see PythonModuleShadowing).
+        if (!_launchFactory.TryBuild(pythonCmd, args, workingDir,
+                PythonModuleShadowing.SafePathEnvironment, out var psi, out var launchError))
             return (-1, string.Empty, launchError ?? "Failed to build process start info");
 
         psi.RedirectStandardOutput = true;
