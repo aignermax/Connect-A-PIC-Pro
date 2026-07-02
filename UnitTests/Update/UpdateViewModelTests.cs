@@ -43,6 +43,22 @@ public class UpdateViewModelTests
         }
         """;
 
+    /// <summary>Release carrying an installer for every OS, so FindPlatformAsset resolves on any runner.</summary>
+    private const string AllPlatformsReleaseJson = """
+        {
+          "tag_name": "v99.0.0",
+          "name": "Version 99.0.0",
+          "body": "Cross-platform release.",
+          "prerelease": false,
+          "published_at": "2099-01-01T00:00:00Z",
+          "assets": [
+            { "name": "Lunima-99.0.0.msi",    "browser_download_url": "https://example.com/Lunima-99.0.0.msi",    "size": 8, "content_type": "application/x-msi" },
+            { "name": "Lunima-99.0.0.dmg",    "browser_download_url": "https://example.com/Lunima-99.0.0.dmg",    "size": 8, "content_type": "application/octet-stream" },
+            { "name": "Lunima-99.0.0.tar.gz", "browser_download_url": "https://example.com/Lunima-99.0.0.tar.gz", "size": 8, "content_type": "application/gzip" }
+          ]
+        }
+        """;
+
     private static UpdateViewModel CreateViewModel(
         string responseJson,
         HttpStatusCode statusCode = HttpStatusCode.OK,
@@ -64,6 +80,17 @@ public class UpdateViewModelTests
             ? new UserPreferencesService(tempPrefsPath)
             : new UserPreferencesService(Path.GetTempFileName());
         return new UpdateViewModel(checker, downloader, prefs, urlLauncher ?? new FakeUrlLauncher(), installer ?? new FakeInstaller());
+    }
+
+    private static UpdateViewModel CreateViewModel(HttpMessageHandler handler, IUrlLauncher urlLauncher)
+    {
+        var httpClient = new HttpClient(handler);
+        return new UpdateViewModel(
+            new UpdateChecker(httpClient, "owner", "repo"),
+            new UpdateDownloader(httpClient),
+            new UserPreferencesService(Path.GetTempFileName()),
+            urlLauncher,
+            new FakeInstaller());
     }
 
     [Fact]
@@ -289,6 +316,61 @@ public class UpdateViewModelTests
             File.Delete(installer.LaunchedArchivePath);
     }
 
+    [Fact]
+    public async Task InstallUpdate_PlatformAssetPresent_OpensInstallerWithGuidanceAndKeepsAppAliveOnNonWindows()
+    {
+        // #613: after downloading, the installer is opened via the launcher and the user gets
+        // actionable guidance (per-platform wording is covered by the BuildPostDownloadGuidance
+        // tests below), so the update banner never dead-ends.
+        // A repeating handler is required: this exercises TWO requests (metadata + download),
+        // and a single shared response can only be read once.
+        var launcher = new FakeUrlLauncher();
+        var vm = CreateViewModel(StubHttpMessageHandler.RepeatingOk(AllPlatformsReleaseJson), launcher);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        try
+        {
+            launcher.LastOpenedPath.ShouldNotBeNull();   // installer opened through the abstraction
+            vm.StatusText.ShouldNotBeNullOrEmpty();       // user is never left without direction
+
+            if (OperatingSystem.IsMacOS())
+                vm.StatusText.ShouldContain("Open Anyway");
+            else if (!OperatingSystem.IsWindows())
+                vm.StatusText.ShouldContain("Extract the archive");
+        }
+        finally
+        {
+            if (launcher.LastOpenedPath != null && File.Exists(launcher.LastOpenedPath))
+                File.Delete(launcher.LastOpenedPath);
+        }
+    }
+
+    [Fact]
+    public async Task InstallUpdate_DownloadFails_ShowsRetryableErrorWithoutOpeningBrowser()
+    {
+        // A failed download has no side effects — the user can simply click Install again.
+        // In particular it must not hijack focus with a browser tab on every (possibly
+        // transient) network error.
+        var launcher = new FakeUrlLauncher();
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.Host == "example.com"
+                ? new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent("") }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(AllPlatformsReleaseJson) });
+        var vm = CreateViewModel(handler, launcher);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldContain("Download failed");
+        launcher.LastOpenedUrl.ShouldBeNull();    // no browser fallback for a retryable failure
+        launcher.LastOpenedPath.ShouldBeNull();   // nothing was opened
+        vm.IsDownloading.ShouldBeFalse();         // the Install button is usable again
+    }
+
     private const string AutoUpdateReleaseJson = """
         {
           "tag_name": "v99.0.0",
@@ -323,7 +405,7 @@ public class UpdateViewModelTests
     private static UpdateViewModel CreateViewModelForDownload(
         string releaseJson, IUrlLauncher urlLauncher, IInstaller? installer = null)
     {
-        var httpClient = new HttpClient(new ReleaseThenBinaryHandler(releaseJson));
+        var httpClient = new HttpClient(StubHttpMessageHandler.ReleaseThenBinary(releaseJson));
         return new UpdateViewModel(
             new UpdateChecker(httpClient, "owner", "repo"),
             new UpdateDownloader(httpClient),
@@ -332,26 +414,52 @@ public class UpdateViewModelTests
             installer ?? new FakeInstaller());
     }
 
-    /// <summary>Returns the release JSON for the GitHub API call and a few bytes for any other
-    /// (asset download) URL, with a fresh response each call so the download stream is readable.</summary>
-    private sealed class ReleaseThenBinaryHandler : HttpMessageHandler
+    [Fact]
+    public async Task InstallUpdate_OpeningInstallerFails_RevealsDownloadedFileInsteadOfClaimingDownloadFailed()
     {
-        private readonly string _releaseJson;
+        // The download succeeded; only opening the file failed. The status must not claim
+        // "Download failed", and instead of sending the user to re-download ~100MB from the
+        // releases page, the already-downloaded installer is revealed in the file manager.
+        var launcher = new FakeUrlLauncher { ThrowOnOpenFileOrDirectory = true };
+        var vm = CreateViewModel(StubHttpMessageHandler.RepeatingOk(AllPlatformsReleaseJson), launcher);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
 
-        public ReleaseThenBinaryHandler(string releaseJson) => _releaseJson = releaseJson;
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
 
-        protected override Task<HttpResponseMessage> SendAsync(
-            HttpRequestMessage request, CancellationToken cancellationToken)
+        try
         {
-            var isApi = request.RequestUri!.Host.Contains("api.github.com");
-            var response = new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = isApi
-                    ? new StringContent(_releaseJson)
-                    : new ByteArrayContent(new byte[] { 1, 2, 3, 4 }),
-            };
-            return Task.FromResult(response);
+            vm.StatusText.ShouldNotContain("Download failed");
+            launcher.LastRevealedPath.ShouldNotBeNull();          // user is pointed at the file on disk
+            vm.StatusText.ShouldContain(launcher.LastRevealedPath!);
+            launcher.LastOpenedUrl.ShouldBeNull();                // no browser detour to re-download
         }
+        finally
+        {
+            if (launcher.LastRevealedPath != null && File.Exists(launcher.LastRevealedPath))
+                File.Delete(launcher.LastRevealedPath);
+        }
+    }
+
+    [Fact]
+    public void PostDownloadGuidance_MacOS_PointsToSystemSettingsOpenAnyway()
+    {
+        // macOS 15 (Sequoia) removed the Control-click → Open Gatekeeper override for
+        // unsigned apps; the surviving path is System Settings → Privacy & Security →
+        // "Open Anyway", and approval must happen on the copy in /Applications (the
+        // quarantine attribute travels with the app when it is dragged out of the dmg).
+        var guidance = UpdateViewModel.BuildPostDownloadGuidance(isMacOS: true);
+
+        guidance.ShouldContain("Applications");
+        guidance.ShouldContain("Open Anyway");
+        guidance.ShouldContain("right-click");   // still works on macOS 14 and older
+    }
+
+    [Fact]
+    public void PostDownloadGuidance_NonMacOS_TellsUserToExtractArchive()
+    {
+        UpdateViewModel.BuildPostDownloadGuidance(isMacOS: false)
+            .ShouldContain("Extract the archive");
     }
 
     private sealed class FakeUrlLauncher : IUrlLauncher
@@ -359,6 +467,7 @@ public class UpdateViewModelTests
         public string? LastOpenedUrl { get; private set; }
         public string? LastOpenedPath { get; private set; }
         public string? LastRevealedPath { get; private set; }
+        public bool ThrowOnOpenFileOrDirectory { get; init; }
 
         public void Open(string url)
         {
@@ -367,6 +476,8 @@ public class UpdateViewModelTests
 
         public void OpenFileOrDirectory(string path)
         {
+            if (ThrowOnOpenFileOrDirectory)
+                throw new InvalidOperationException($"No application is associated with {path}.");
             LastOpenedPath = path;
         }
 
@@ -558,6 +669,38 @@ public class UpdateViewModelTests
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
             return Task.FromResult(_response);
+        }
+    }
+
+    /// <summary>Builds a fresh response per request via a delegate, so a body can be consumed
+    /// by more than one call (metadata fetch followed by installer download) and responses can
+    /// differ per URL (e.g. metadata succeeds while the asset download fails).</summary>
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
+    {
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
+
+        public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
+        {
+            _respond = respond;
+        }
+
+        public static StubHttpMessageHandler RepeatingOk(string body) =>
+            new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+
+        /// <summary>The release JSON for the GitHub API call and a few bytes for any other
+        /// (asset download) URL, so the download stream is readable on every call.</summary>
+        public static StubHttpMessageHandler ReleaseThenBinary(string releaseJson) =>
+            new(request => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = request.RequestUri!.Host.Contains("api.github.com")
+                    ? new StringContent(releaseJson)
+                    : new ByteArrayContent(new byte[] { 1, 2, 3, 4 }),
+            });
+
+        protected override Task<HttpResponseMessage> SendAsync(
+            HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(_respond(request));
         }
     }
 }

@@ -10,7 +10,7 @@ namespace CAP.Avalonia.ViewModels.Update;
 
 /// <summary>
 /// ViewModel for the software update panel.
-/// Handles checking GitHub releases for newer versions, downloading the MSI,
+/// Handles checking GitHub releases for newer versions, downloading the platform installer,
 /// and installing it with graceful application shutdown.
 /// </summary>
 public partial class UpdateViewModel : ObservableObject
@@ -149,6 +149,7 @@ public partial class UpdateViewModel : ObservableObject
         DownloadProgress = 0;
         StatusText = selfUpdate ? "Downloading update..." : "Downloading installer...";
 
+        string downloadedPath;
         try
         {
             var progress = new Progress<double>(p =>
@@ -157,50 +158,81 @@ public partial class UpdateViewModel : ObservableObject
                 StatusText = $"Downloading... {p:P0}";
             });
 
-            var downloadedPath = await _downloader.DownloadInstallerAsync(
+            downloadedPath = await _downloader.DownloadInstallerAsync(
                 asset.BrowserDownloadUrl, asset.Size, progress);
-
-            if (selfUpdate)
-            {
-                // Swap the installation in place and relaunch. The detached updater waits for this
-                // process to exit before replacing files, so we shut down immediately after.
-                StatusText = "Installing update and restarting...";
-                _installer.LaunchUpdater(downloadedPath);
-                ShutdownApplication();
-                return;
-            }
-
-            ApplyManualInstaller(downloadedPath);
         }
         catch (Exception ex)
         {
-            StatusText = $"Update failed: {ex.Message}";
+            // A failed download has no side effects — the user can simply click Install again.
+            StatusText = $"Download failed: {ex.Message}";
+            return;
         }
         finally
         {
             IsDownloading = false;
         }
-    }
 
-    /// <summary>
-    /// Manual fallback when an in-place update isn't possible: on Windows launch the MSI (which
-    /// needs the app to close), otherwise open the downloaded installer and guide the user through
-    /// the unsigned-build Gatekeeper bypass.
-    /// </summary>
-    private void ApplyManualInstaller(string installerPath)
-    {
-        if (OperatingSystem.IsWindows())
+        if (selfUpdate)
         {
-            StatusText = "Download complete. Launching installer...";
-            _urlLauncher.OpenFileOrDirectory(installerPath);
-            ShutdownApplication();
+            ApplySelfUpdate(downloadedPath);
             return;
         }
 
-        _urlLauncher.OpenFileOrDirectory(installerPath);
-        StatusText = "Update downloaded — the installer is opening. Quit Lunima and drag the new "
-            + "version into Applications. It's unsigned, so on first launch right-click it and "
-            + "choose Open to get past macOS's \"developer cannot be verified\" warning.";
+        StatusText = "Download complete. Opening installer...";
+        OpenDownloadedInstaller(downloadedPath);
+    }
+
+    /// <summary>
+    /// Swaps the installation in place and relaunches: the detached updater waits for this
+    /// process to exit before replacing files, so the app shuts down right after launching it.
+    /// When the updater cannot be launched the app keeps running — never quit into a broken swap.
+    /// </summary>
+    private void ApplySelfUpdate(string archivePath)
+    {
+        StatusText = "Installing update and restarting...";
+        try
+        {
+            _installer.LaunchUpdater(archivePath);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Update failed: {ex.Message}";
+            return;
+        }
+        ShutdownApplication();
+    }
+
+    /// <summary>
+    /// Opens the downloaded installer. When opening fails, the file is already on disk, so the
+    /// user is pointed at it (status text + reveal in file manager) instead of being sent to
+    /// re-download it from the releases page.
+    /// </summary>
+    private void OpenDownloadedInstaller(string installerPath)
+    {
+        try
+        {
+            _urlLauncher.OpenFileOrDirectory(installerPath);
+        }
+        catch (Exception)
+        {
+            StatusText = $"The update was downloaded to {installerPath} but could not be opened "
+                + "automatically. Run it from there to finish updating.";
+            TryRevealInstaller(installerPath);
+            return;
+        }
+        ShowPostDownloadGuidance();
+    }
+
+    private void TryRevealInstaller(string installerPath)
+    {
+        try
+        {
+            _urlLauncher.RevealInFileManager(installerPath);
+        }
+        catch (Exception)
+        {
+            // The status line already names the full path, so the user can still find the file.
+        }
     }
 
     /// <summary>Opens the GitHub releases page for the available release in the default browser.</summary>
@@ -209,8 +241,7 @@ public partial class UpdateViewModel : ObservableObject
         StatusText = "Opening GitHub releases page in browser...";
         try
         {
-            var releaseUrl = $"https://github.com/aignermax/Lunima/releases/tag/{_availableRelease!.TagName}";
-            _urlLauncher.Open(releaseUrl);
+            _urlLauncher.Open(BuildReleaseUrl(_availableRelease!.TagName));
         }
         catch (Exception ex)
         {
@@ -289,6 +320,39 @@ public partial class UpdateViewModel : ObservableObject
             IsChecking = false;
         }
     }
+
+    /// <summary>
+    /// After the installer is opened, either quits (Windows, where msiexec replaces the running
+    /// binary) or leaves the app running with platform-specific guidance.
+    /// </summary>
+    private void ShowPostDownloadGuidance()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            ShutdownApplication();
+            return;
+        }
+
+        StatusText = BuildPostDownloadGuidance(OperatingSystem.IsMacOS());
+    }
+
+    /// <summary>
+    /// Guidance shown after the installer was opened on non-Windows platforms. The macOS build
+    /// is not yet Apple-notarized, and macOS 15+ no longer offers the right-click → Open
+    /// Gatekeeper override, so the unsigned app must be approved via System Settings →
+    /// Privacy &amp; Security → "Open Anyway". Approval must happen on the copy in Applications
+    /// because the quarantine attribute travels with the app when dragged out of the disk image.
+    /// </summary>
+    internal static string BuildPostDownloadGuidance(bool isMacOS) =>
+        isMacOS
+            ? "Update downloaded. Drag Lunima from the disk image to Applications and open it "
+              + "once — macOS will block the unsigned app. Allow it under System Settings → "
+              + "Privacy & Security → 'Open Anyway' (on macOS 14 and older, right-click the app "
+              + "and choose Open instead)."
+            : "Update downloaded. Extract the archive and replace your installation to finish updating.";
+
+    private static string BuildReleaseUrl(string tagName) =>
+        $"https://github.com/aignermax/Lunima/releases/tag/{tagName}";
 
     private static SemanticVersion ResolveCurrentVersion()
     {

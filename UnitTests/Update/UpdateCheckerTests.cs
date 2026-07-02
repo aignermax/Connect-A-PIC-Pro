@@ -190,6 +190,39 @@ public class UpdateCheckerTests
         }
     };
 
+    [Fact]
+    public void FindPlatformAsset_EmptyAssets_ReturnsNull()
+    {
+        var release = new GitHubReleaseInfo
+        {
+            TagName = "v1.0.0",
+            Assets = new List<GitHubReleaseAsset>()
+        };
+
+        UpdateChecker.FindPlatformAsset(release).ShouldBeNull();
+    }
+
+    [Fact]
+    public void FindPlatformAsset_OnlyMsiAvailable_ReturnsNullOnNonWindows()
+    {
+        // Regression test: FindPlatformAsset must NOT return a .msi on macOS/Linux.
+        // Root cause of the macOS "downloads .msi instead of .dmg" bug (issue #610):
+        // the ViewModel was calling FindMsiAsset (always .msi) instead of FindPlatformAsset.
+        var release = new GitHubReleaseInfo
+        {
+            TagName = "v1.0.0",
+            Assets = new List<GitHubReleaseAsset>
+            {
+                new() { Name = "Lunima-1.0.0.msi", BrowserDownloadUrl = "https://example.com/Lunima.msi" },
+            }
+        };
+
+        if (OperatingSystem.IsWindows())
+            UpdateChecker.FindPlatformAsset(release).ShouldNotBeNull();
+        else
+            UpdateChecker.FindPlatformAsset(release).ShouldBeNull();
+    }
+
     [Theory]
     [InlineData("v1.5.0", "1.4.0", true)]   // release newer
     [InlineData("v1.5.0", "1.5.0", false)]  // same version
