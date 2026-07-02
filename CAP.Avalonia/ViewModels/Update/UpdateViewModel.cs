@@ -155,7 +155,10 @@ public partial class UpdateViewModel : ObservableObject
             var progress = new Progress<double>(p =>
             {
                 DownloadProgress = p;
-                StatusText = $"Downloading... {p:P0}";
+                // Progress callbacks run off the UI thread; guard on IsDownloading so a late one
+                // can't clobber the terminal status set after the download finishes.
+                if (IsDownloading)
+                    StatusText = $"Downloading... {p:P0}";
             });
 
             downloadedPath = await _downloader.DownloadInstallerAsync(
