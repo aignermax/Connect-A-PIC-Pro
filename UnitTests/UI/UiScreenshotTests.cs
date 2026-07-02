@@ -53,6 +53,17 @@ public class UiScreenshotTests
         TryCapture(() => new RoutingDiagnosticsPanel(), vm, 600, 700, outputDir, "RoutingDiagnosticsPanel.png", captured, skipped);
         TryCapture(() => new SelectedComponentPropertiesPanel(), vm, 450, 600, outputDir, "SelectedComponentPropertiesPanel.png", captured, skipped);
 
+        // Settings content: the environment manager moved from the Properties sidebar to a
+        // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).
+        var envVm = new CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager.PythonEnvironmentManagerViewModel(
+            new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentRegistry(
+                Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-registry-{Guid.NewGuid():N}.json")),
+            new CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper(),
+            new CAP_Core.Export.PythonEnvironmentManager.NazcaPackageInstaller(),
+            new CAP_Core.Export.PythonEnvironmentManager.EnvironmentHealthChecker(
+                new CAP_Core.Export.PythonDiscoveryService()));
+        TryCapture(() => new PythonEnvironmentManagerPanel(), envVm, 500, 700, outputDir, "PythonEnvironmentManagerPanel.png", captured, skipped);
+
         foreach (var (name, reason) in skipped)
             Console.WriteLine($"[SKIPPED] {name}: {reason}");
 
