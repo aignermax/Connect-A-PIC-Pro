@@ -158,7 +158,8 @@ public static class GroupTemplateSerializer
             OffsetY = p.OffsetYMicrometers,
             AngleDegrees = p.AngleDegrees,
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
-            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty
+            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
+            Polarization = p.LogicalPin?.Polarization.ToString()
         }).ToList();
 
         // Serialize S-Matrices so child components keep their simulation data after reload.
@@ -215,8 +216,12 @@ public static class GroupTemplateSerializer
             Pin? logicalPin = null;
             if (p.LogicalPinIdInFlow != Guid.Empty)
             {
+                PolarizationRules.TryParse(p.Polarization, out var polarization);
                 logicalPin = new Pin(p.Name, 0, MatterType.Light, RectSide.Left,
-                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow);
+                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow)
+                {
+                    Polarization = polarization
+                };
             }
 
             return new PhysicalPin
@@ -482,6 +487,12 @@ public class PinDto
     public double AngleDegrees { get; set; }
     public Guid LogicalPinIdInFlow { get; set; }
     public Guid LogicalPinIdOutFlow { get; set; }
+
+    /// <summary>
+    /// Polarization kind of the logical pin ("TE", "TM", "Both").
+    /// Null in old prefab files — deserializes to the TE default.
+    /// </summary>
+    public string? Polarization { get; set; }
 }
 
 /// <summary>

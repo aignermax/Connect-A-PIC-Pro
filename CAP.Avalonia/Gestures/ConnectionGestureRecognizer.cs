@@ -5,6 +5,7 @@ using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
+using CAP_Core.Components.Core;
 
 namespace CAP.Avalonia.Gestures;
 
@@ -76,7 +77,11 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
             targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
         {
             if (mainVm != null)
-                mainVm.StatusText = $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}";
+            {
+                mainVm.StatusText = PolarizationRules.CanConnect(_state.ConnectionDragStartPin.Polarization, targetPin.Polarization)
+                    ? $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}"
+                    : PolarizationRules.GetMismatchMessage(_state.ConnectionDragStartPin, targetPin);
+            }
         }
         else
         {
@@ -97,6 +102,17 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
         if (targetPin != null && targetPin != _state.ConnectionDragStartPin &&
             targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
         {
+            // TE↔TM connections are physically meaningless — refuse at the
+            // gesture layer with an inline message (issue #534).
+            if (!PolarizationRules.CanConnect(_state.ConnectionDragStartPin.Polarization, targetPin.Polarization))
+            {
+                if (mainVm != null)
+                    mainVm.StatusText = PolarizationRules.GetMismatchMessage(_state.ConnectionDragStartPin, targetPin);
+                _state.ConnectionDragStartPin = null;
+                _invalidate();
+                return;
+            }
+
             var cmd = new CreateConnectionCommand(canvas, _state.ConnectionDragStartPin, targetPin);
             mainVm?.CommandManager.ExecuteCommand(cmd);
             if (mainVm != null)

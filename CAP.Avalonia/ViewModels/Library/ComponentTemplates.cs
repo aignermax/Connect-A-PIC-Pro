@@ -40,7 +40,7 @@ public static class ComponentTemplates
                 270 => RectSide.Down,
                 _ => RectSide.Right
             };
-            logicalPins.Add(new Pin(def.Name, i, MatterType.Light, side));
+            logicalPins.Add(new Pin(def.Name, i, MatterType.Light, side) { Polarization = def.Polarization });
         }
 
         // Create parts array (simplified: single part)
@@ -196,11 +196,19 @@ public class PinDefinition
     public double OffsetY { get; }
     public double AngleDegrees { get; }
 
-    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees)
+    /// <summary>
+    /// Polarization mode of this pin. Defaults to the backward-compatible
+    /// <see cref="PolarizationKind.TE"/> for templates that do not declare it.
+    /// </summary>
+    public PolarizationKind Polarization { get; }
+
+    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees,
+        PolarizationKind polarization = PolarizationKind.TE)
     {
         Name = name;
         OffsetX = offsetX;
         OffsetY = offsetY;
         AngleDegrees = angleDegrees;
+        Polarization = polarization;
     }
 }

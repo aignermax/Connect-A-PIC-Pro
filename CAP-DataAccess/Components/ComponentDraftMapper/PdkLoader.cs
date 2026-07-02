@@ -175,6 +175,13 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                     {
                         errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' Y={pin.OffsetYMicrometers} outside bounds [0, {comp.HeightMicrometers}]");
                     }
+
+                    // Reject unknown polarization values at load time instead of
+                    // silently defaulting to TE and producing a wrong simulation.
+                    if (!CAP_Core.Components.Core.PolarizationRules.TryParse(pin.Polarization, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid polarization '{pin.Polarization}' (expected TE, TM or Both)");
+                    }
                 }
             }
 

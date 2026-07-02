@@ -41,5 +41,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("logicalPinNumber")]
         public int? LogicalPinNumber { get; set; }
+
+        /// <summary>
+        /// Optional polarization kind of this pin: "TE", "TM" or "Both"
+        /// (case-insensitive). When omitted (old PDKs), the pin defaults to TE
+        /// unless the component name carries a SiEPIC-style "TM" token
+        /// (e.g. "GC TM 1550", "ebeam_terminator_tm1550"), which promotes the
+        /// naming convention to a structured TM field.
+        /// </summary>
+        [JsonPropertyName("polarization")]
+        public string? Polarization { get; set; }
     }
 }

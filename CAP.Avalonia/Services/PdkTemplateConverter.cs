@@ -31,7 +31,8 @@ public static class PdkTemplateConverter
             p.Name,
             p.OffsetXMicrometers,
             p.OffsetYMicrometers,
-            p.AngleDegrees
+            p.AngleDegrees,
+            PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction)
         )).ToArray();
 
         // NazcaOriginOffset is required — validated by PdkLoader.
