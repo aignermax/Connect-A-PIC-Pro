@@ -732,9 +732,6 @@
                     <!-- Time-Domain (Transient) Simulation Panel -->
                     <panels:TimeDomainPanel/>
 
-                    <!-- Python Environment Manager Panel -->
-                    <panels:PythonEnvironmentManagerPanel/>
-
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
                     <TextBlock Text="Lock Elements:" Foreground="Gold" Margin="0,0,0,5" FontWeight="SemiBold"/>

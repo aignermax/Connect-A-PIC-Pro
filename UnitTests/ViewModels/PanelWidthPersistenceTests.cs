@@ -9,9 +9,7 @@ using CAP.Avalonia.ViewModels.AI;
 using CAP.Avalonia.ViewModels.Properties;
 using CAP.Avalonia.ViewModels.Properties.Editors;
 using CAP.Avalonia.ViewModels.Export;
-using CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager;
 using CAP_Core.Export;
-using CAP_Core.Export.PythonEnvironmentManager;
 using Moq;
 using CAP.Avalonia.Services;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -80,12 +78,7 @@ public class PanelWidthPersistenceTests : IDisposable
             {
                 new GenericComponentEditorProvider()
             }),
-            new TimeDomainViewModel(),
-            new PythonEnvironmentManagerViewModel(
-                new PythonEnvironmentRegistry(Path.Combine(Path.GetTempPath(), $"lunima-test-registry-{Guid.NewGuid():N}.json")),
-                new UvBootstrapper(),
-                new NazcaPackageInstaller(),
-                new EnvironmentHealthChecker(new PythonDiscoveryService())));
+            new TimeDomainViewModel());
 
     [Fact]
     public void LeftPanelWidth_DefaultsTo220()
