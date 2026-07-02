@@ -5,6 +5,8 @@
         xmlns:vmUpdate="using:CAP.Avalonia.ViewModels.Update"
         xmlns:vmExport="using:CAP.Avalonia.ViewModels.Export"
         xmlns:vmAi="using:CAP.Avalonia.ViewModels.AI"
+        xmlns:vmPyEnv="using:CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager"
+        xmlns:panels="using:CAP.Avalonia.Views.Panels"
         x:Class="CAP.Avalonia.Views.SettingsWindow"
         x:DataType="settings:SettingsWindowViewModel"
         Title="Settings"
@@ -201,7 +203,44 @@
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
+
+                            <!-- Managed environments with Nazca (from the environment manager) -->
+                            <ItemsControl ItemsSource="{Binding ManagedCandidates}"
+                                          Margin="0,6,0,0"
+                                          x:Name="ManagedCandidatesList"
+                                          IsVisible="{Binding ManagedCandidates.Count}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Button Content="{Binding DisplayText}"
+                                                Command="{Binding #ManagedCandidatesList.DataContext.SelectManagedEnvironmentCommand}"
+                                                CommandParameter="{Binding}"
+                                                HorizontalAlignment="Stretch"
+                                                HorizontalContentAlignment="Left"
+                                                Margin="0,2,0,0" Padding="6,4"
+                                                Background="#2d3d2d" FontSize="11"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+
+                            <!-- Fallback: no Nazca anywhere -->
+                            <Border IsVisible="{Binding ShowNazcaInstallOffer}"
+                                    Background="#3d3320" CornerRadius="4" Padding="10" Margin="0,10,0,0">
+                                <StackPanel Spacing="6">
+                                    <TextBlock Text="No Nazca environment found."
+                                               Foreground="#e8c872" FontWeight="SemiBold" FontSize="12"/>
+                                    <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap"
+                                               Text="Lunima can create a managed Python environment and install Nazca into it automatically."/>
+                                    <Button Content="Create + install Nazca now"
+                                            Click="OnCreateNazcaEnvironmentClick"
+                                            Background="#3d5d3d" HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
                         </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Python Environments (managed venvs with Nazca) -->
+                    <DataTemplate DataType="{x:Type vmPyEnv:PythonEnvironmentManagerViewModel}">
+                        <panels:PythonEnvironmentManagerPanel/>
                     </DataTemplate>
 
                     <!-- AI Assistant -->

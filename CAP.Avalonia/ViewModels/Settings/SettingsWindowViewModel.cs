@@ -26,4 +26,16 @@ public partial class SettingsWindowViewModel : ObservableObject
         Pages = pages.ToList();
         SelectedPage = Pages.FirstOrDefault();
     }
+
+    /// <summary>
+    /// Selects the page whose runtime type matches <paramref name="pageType"/>;
+    /// keeps the current selection when no such page is registered.
+    /// </summary>
+    /// <param name="pageType">Runtime type of the <see cref="ISettingsPage"/> to select.</param>
+    public void SelectPage(Type pageType)
+    {
+        var page = Pages.FirstOrDefault(p => p.GetType() == pageType);
+        if (page != null)
+            SelectedPage = page;
+    }
 }
