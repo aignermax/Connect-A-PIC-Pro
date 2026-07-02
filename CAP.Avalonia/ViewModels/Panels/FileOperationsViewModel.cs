@@ -1277,6 +1277,20 @@ public partial class FileOperationsViewModel : ObservableObject
 
         if (filePath != null)
         {
+            // A script named like a Python module it imports (e.g. re.py, numpy.py)
+            // shadows that module and fails with a cryptic circular-import error —
+            // refuse the name up front instead of letting the Nazca run explode.
+            var stem = Path.GetFileNameWithoutExtension(filePath);
+            if (PythonModuleShadowing.ShadowsPythonModule(stem))
+            {
+                var warning = $"'{Path.GetFileName(filePath)}' shadows the Python module '{stem.ToLowerInvariant()}' "
+                    + "— the exported script could not import Nazca. Please choose a different file name (e.g. chip1.py).";
+                if (MessageBoxService != null)
+                    await MessageBoxService.ShowChoicePromptAsync(warning, "Invalid script name", new[] { "OK" });
+                UpdateStatus?.Invoke(warning);
+                return;
+            }
+
             try
             {
                 // Export Python script

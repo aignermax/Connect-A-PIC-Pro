@@ -79,8 +79,9 @@
         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <TextBlock Text="Python:" Foreground="Gray" FontSize="11"
                        VerticalAlignment="Center" Width="50"/>
-            <TextBox Text="{Binding PythonVersion}"
-                     Width="80" FontSize="11" Watermark="3.11"/>
+            <ComboBox ItemsSource="{Binding PythonVersionChoices}"
+                      SelectedItem="{Binding PythonVersion}"
+                      Width="90" FontSize="11"/>
         </StackPanel>
         <Button Content="Create + Install Nazca"
                 Command="{Binding CreateAndInstallCommand}"

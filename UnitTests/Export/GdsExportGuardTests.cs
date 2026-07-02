@@ -39,6 +39,31 @@ public class GdsExportGuardTests
     }
 
     [Fact]
+    public async Task ExportNazca_FileNameShadowsPythonModule_RefusesExport()
+    {
+        // Real-world failure: a script saved as "re.py" shadows Python's stdlib re module,
+        // so numpy/nazca imports die with a circular-import error on ANY interpreter.
+        var scriptPath = Path.Combine(Path.GetTempPath(), "re.py");
+        var main = MainViewModelTestHelper.CreateMainViewModel();
+        var fileOps = main.FileOperations;
+        var messageBox = new RecordingMessageBox();
+        fileOps.MessageBoxService = messageBox;
+        fileOps.FileDialogService = new FixedPathFileDialog(scriptPath);
+        string? lastStatus = null;
+        fileOps.UpdateStatus = s => lastStatus = s;
+
+        var component = TestComponentFactory.CreateStraightWaveGuide();
+        main.Canvas.AddComponent(component, "TestTemplate");
+
+        await fileOps.ExportNazcaCommand.ExecuteAsync(null);
+
+        File.Exists(scriptPath).ShouldBeFalse();     // nichts geschrieben
+        messageBox.Calls.ShouldBe(1);                // Nutzer wurde informiert
+        lastStatus.ShouldNotBeNull();
+        lastStatus!.ShouldContain("shadows");
+    }
+
+    [Fact]
     public async Task ExportNazca_GdsEnabledButNazcaMissing_PromptsAndSkipsGds()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"lunima-export-{Guid.NewGuid():N}.py");

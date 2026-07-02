@@ -31,6 +31,14 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
     [ObservableProperty]
     private string _pythonVersion = UvBootstrapper.DefaultPythonVersion;
 
+    /// <summary>
+    /// Python versions offered in the create-environment dropdown. Limited to versions
+    /// with known-good Nazca/pyclipper support (3.14+ currently breaks numpy/nazca);
+    /// the default is <see cref="UvBootstrapper.DefaultPythonVersion"/>.
+    /// </summary>
+    public IReadOnlyList<string> PythonVersionChoices { get; } =
+        new[] { "3.10", "3.11", "3.12", "3.13" };
+
     [ObservableProperty]
     private bool _isBusy;
 
