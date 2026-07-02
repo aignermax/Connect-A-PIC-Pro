@@ -112,6 +112,12 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public IMessageBoxService? MessageBoxService { get; set; }
 
+    /// <summary>
+    /// Opens the Settings window, optionally pre-selecting a page by type.
+    /// Wired by <see cref="MainViewModel"/>; null in headless contexts.
+    /// </summary>
+    public Func<Type?, Task>? ShowSettingsWindow { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -1277,6 +1283,18 @@ public partial class FileOperationsViewModel : ObservableObject
                 var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
+                // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
+                // user how to proceed when Nazca is genuinely unavailable.
+                if (GdsExport.GenerateGdsEnabled && !GdsExport.IsEnvironmentReady)
+                    await GdsExport.CheckEnvironmentAsync();
+
+                var decision = await GdsExport.PreflightGdsAsync(MessageBoxService);
+                if (decision != Export.GdsPreflightDecision.Proceed)
+                {
+                    await HandleSkippedGdsAsync(decision, filePath);
+                    return;
+                }
+
                 // Attempt GDS generation if enabled
                 var result = await GdsExport.ExportScriptToGdsAsync(filePath);
 
@@ -1306,6 +1324,29 @@ public partial class FileOperationsViewModel : ObservableObject
                 UpdateStatus?.Invoke($"Export failed: {ex.Message}");
             }
         }
+    }
+
+    /// <summary>
+    /// Handles the non-Proceed pre-flight outcomes: the Nazca script is already on disk,
+    /// only the GDS step is skipped. Install/settings choices open the Settings window on
+    /// the Python-Environments page (the install progress is visible there).
+    /// </summary>
+    private async Task HandleSkippedGdsAsync(Export.GdsPreflightDecision decision, string scriptPath)
+    {
+        if (decision == Export.GdsPreflightDecision.InstallRequested)
+        {
+            GdsExport.InstallNazcaCommand.Execute(null);
+            if (ShowSettingsWindow != null)
+                await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
+            UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)");
+            return;
+        }
+
+        if (decision == Export.GdsPreflightDecision.OpenSettingsRequested
+            && ShowSettingsWindow != null)
+            await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
+
+        UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)");
     }
 
     /// <summary>

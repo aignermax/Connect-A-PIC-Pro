@@ -199,6 +199,14 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
+        // Let the export guard open the Settings window (e.g. on the Python-Environments
+        // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
+        FileOperations.ShowSettingsWindow = async pageType =>
+        {
+            if (ShowSettingsWindowAsync != null)
+                await ShowSettingsWindowAsync(pageType);
+        };
+
         // Wire up canvas status updates to bottom panel
         _canvas.PropertyChanged += (s, e) =>
         {
