@@ -80,6 +80,16 @@ public class UpdateViewModelTests
         return new UpdateViewModel(checker, downloader, prefs, urlLauncher ?? new FakeUrlLauncher());
     }
 
+    private static UpdateViewModel CreateViewModel(HttpMessageHandler handler, IUrlLauncher urlLauncher)
+    {
+        var httpClient = new HttpClient(handler);
+        return new UpdateViewModel(
+            new UpdateChecker(httpClient, "owner", "repo"),
+            new UpdateDownloader(httpClient),
+            new UserPreferencesService(Path.GetTempFileName()),
+            urlLauncher);
+    }
+
     [Fact]
     public async Task CheckForUpdates_NewerVersionExists_SetsUpdateAvailableTrue()
     {
@@ -259,17 +269,12 @@ public class UpdateViewModelTests
     public async Task InstallUpdate_PlatformAssetPresent_OpensInstallerWithGuidanceAndKeepsAppAliveOnNonWindows()
     {
         // #613: after downloading, the installer is opened via the launcher and the user gets
-        // actionable guidance. On macOS that guidance is the Gatekeeper right-click → Open hint
-        // (the build is not code-signed), so the update banner never dead-ends.
+        // actionable guidance (per-platform wording is covered by the BuildPostDownloadGuidance
+        // tests below), so the update banner never dead-ends.
         // A repeating handler is required: this exercises TWO requests (metadata + download),
         // and a single shared response can only be read once.
         var launcher = new FakeUrlLauncher();
-        var httpClient = new HttpClient(new RepeatingHttpMessageHandler(AllPlatformsReleaseJson));
-        var vm = new UpdateViewModel(
-            new UpdateChecker(httpClient, "owner", "repo"),
-            new UpdateDownloader(httpClient),
-            new UserPreferencesService(Path.GetTempFileName()),
-            launcher);
+        var vm = CreateViewModel(StubHttpMessageHandler.RepeatingOk(AllPlatformsReleaseJson), launcher);
         await vm.CheckForUpdatesCommand.ExecuteAsync(null);
         vm.UpdateAvailable.ShouldBeTrue();
 
@@ -281,7 +286,7 @@ public class UpdateViewModelTests
             vm.StatusText.ShouldNotBeNullOrEmpty();       // user is never left without direction
 
             if (OperatingSystem.IsMacOS())
-                vm.StatusText.ShouldContain("right-click");
+                vm.StatusText.ShouldContain("Open Anyway");
             else if (!OperatingSystem.IsWindows())
                 vm.StatusText.ShouldContain("Extract the archive");
         }
@@ -292,11 +297,83 @@ public class UpdateViewModelTests
         }
     }
 
+    [Fact]
+    public async Task InstallUpdate_DownloadFails_ShowsRetryableErrorWithoutOpeningBrowser()
+    {
+        // A failed download has no side effects — the user can simply click Install again.
+        // In particular it must not hijack focus with a browser tab on every (possibly
+        // transient) network error.
+        var launcher = new FakeUrlLauncher();
+        var handler = new StubHttpMessageHandler(request =>
+            request.RequestUri!.Host == "example.com"
+                ? new HttpResponseMessage(HttpStatusCode.InternalServerError) { Content = new StringContent("") }
+                : new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(AllPlatformsReleaseJson) });
+        var vm = CreateViewModel(handler, launcher);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldContain("Download failed");
+        launcher.LastOpenedUrl.ShouldBeNull();    // no browser fallback for a retryable failure
+        launcher.LastOpenedPath.ShouldBeNull();   // nothing was opened
+        vm.IsDownloading.ShouldBeFalse();         // the Install button is usable again
+    }
+
+    [Fact]
+    public async Task InstallUpdate_OpeningInstallerFails_RevealsDownloadedFileInsteadOfClaimingDownloadFailed()
+    {
+        // The download succeeded; only opening the file failed. The status must not claim
+        // "Download failed", and instead of sending the user to re-download ~100MB from the
+        // releases page, the already-downloaded installer is revealed in the file manager.
+        var launcher = new FakeUrlLauncher { ThrowOnOpenFileOrDirectory = true };
+        var vm = CreateViewModel(StubHttpMessageHandler.RepeatingOk(AllPlatformsReleaseJson), launcher);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        try
+        {
+            vm.StatusText.ShouldNotContain("Download failed");
+            launcher.LastRevealedPath.ShouldNotBeNull();          // user is pointed at the file on disk
+            vm.StatusText.ShouldContain(launcher.LastRevealedPath!);
+            launcher.LastOpenedUrl.ShouldBeNull();                // no browser detour to re-download
+        }
+        finally
+        {
+            if (launcher.LastRevealedPath != null && File.Exists(launcher.LastRevealedPath))
+                File.Delete(launcher.LastRevealedPath);
+        }
+    }
+
+    [Fact]
+    public void PostDownloadGuidance_MacOS_PointsToSystemSettingsOpenAnyway()
+    {
+        // macOS 15 (Sequoia) removed the Control-click → Open Gatekeeper override for
+        // unsigned apps; the surviving path is System Settings → Privacy & Security →
+        // "Open Anyway", and approval must happen on the copy in /Applications (the
+        // quarantine attribute travels with the app when it is dragged out of the dmg).
+        var guidance = UpdateViewModel.BuildPostDownloadGuidance(isMacOS: true);
+
+        guidance.ShouldContain("Applications");
+        guidance.ShouldContain("Open Anyway");
+        guidance.ShouldContain("right-click");   // still works on macOS 14 and older
+    }
+
+    [Fact]
+    public void PostDownloadGuidance_NonMacOS_TellsUserToExtractArchive()
+    {
+        UpdateViewModel.BuildPostDownloadGuidance(isMacOS: false)
+            .ShouldContain("Extract the archive");
+    }
+
     private sealed class FakeUrlLauncher : IUrlLauncher
     {
         public string? LastOpenedUrl { get; private set; }
         public string? LastOpenedPath { get; private set; }
         public string? LastRevealedPath { get; private set; }
+        public bool ThrowOnOpenFileOrDirectory { get; init; }
 
         public void Open(string url)
         {
@@ -305,6 +382,8 @@ public class UpdateViewModelTests
 
         public void OpenFileOrDirectory(string path)
         {
+            if (ThrowOnOpenFileOrDirectory)
+                throw new InvalidOperationException($"No application is associated with {path}.");
             LastOpenedPath = path;
         }
 
@@ -482,24 +561,25 @@ public class UpdateViewModelTests
         }
     }
 
-    /// <summary>Returns a fresh response with the same body on every request, so the same body
-    /// can be consumed by more than one call (metadata fetch followed by installer download).</summary>
-    private sealed class RepeatingHttpMessageHandler : HttpMessageHandler
+    /// <summary>Builds a fresh response per request via a delegate, so a body can be consumed
+    /// by more than one call (metadata fetch followed by installer download) and responses can
+    /// differ per URL (e.g. metadata succeeds while the asset download fails).</summary>
+    private sealed class StubHttpMessageHandler : HttpMessageHandler
     {
-        private readonly string _body;
+        private readonly Func<HttpRequestMessage, HttpResponseMessage> _respond;
 
-        public RepeatingHttpMessageHandler(string body)
+        public StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> respond)
         {
-            _body = body;
+            _respond = respond;
         }
+
+        public static StubHttpMessageHandler RepeatingOk(string body) =>
+            new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)
         {
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
-            {
-                Content = new StringContent(_body)
-            });
+            return Task.FromResult(_respond(request));
         }
     }
 }
