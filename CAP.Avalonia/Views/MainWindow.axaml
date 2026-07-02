@@ -188,6 +188,17 @@
                                                    Foreground="White" FontSize="12"/>
                                     </StackPanel>
                                 </Button>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,7"
+                                        Background="#3d3d5d"
+                                        Click="OpenPdkResolutionCheckDialog_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🔎" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Check PDKs against Python…"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>

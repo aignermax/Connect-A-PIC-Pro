@@ -33,6 +33,7 @@ public partial class App : Application
         services.AddCanvasAndPanels();
         services.AddSettingsFeature();
         services.AddPdkOffsetFeature();
+        services.AddPdkResolutionFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
 

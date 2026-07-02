@@ -38,6 +38,15 @@
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
+  <!-- Python helper for "Tools → Check PDKs against Python" (issue #515).
+       PdkFunctionResolutionService looks for `<baseDir>/scripts/list_pdk_resolution.py`. -->
+  <ItemGroup>
+    <Content Include="..\scripts\list_pdk_resolution.py"
+             Link="scripts\list_pdk_resolution.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <!-- FDTD S-matrix solver bridge (issue #569). DockerFdtdSMatrixService /
        FindFdtdDockerfile() look for `<baseDir>/scripts/fdtd/Dockerfile`, and that
        Dockerfile COPYs `fdtd_sparams.py` relative to its build context (the
