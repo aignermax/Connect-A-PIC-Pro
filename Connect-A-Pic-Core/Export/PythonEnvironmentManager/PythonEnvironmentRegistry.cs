@@ -10,10 +10,11 @@ namespace CAP_Core.Export.PythonEnvironmentManager;
 /// </summary>
 public class PythonEnvironmentRegistry
 {
-    private static readonly string RegistryFilePath = Path.Combine(
+    private static readonly string DefaultRegistryFilePath = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Lunima", "python-environments.json");
 
+    private readonly string _registryFilePath;
     private RegistryData _data;
 
     /// <summary>
@@ -23,9 +24,15 @@ public class PythonEnvironmentRegistry
     /// </summary>
     public Action<string?>? OnActiveEnvironmentChanged { get; set; }
 
-    /// <summary>Initialises the registry, loading any previously saved environments.</summary>
-    public PythonEnvironmentRegistry()
+    /// <summary>
+    /// Initialises the registry, loading any previously saved environments.
+    /// </summary>
+    /// <param name="registryFilePath">Storage file for the registry; null uses the
+    /// production location under the Lunima app-data directory. Tests must pass a
+    /// temp path so they never touch the user's real registry.</param>
+    public PythonEnvironmentRegistry(string? registryFilePath = null)
     {
+        _registryFilePath = registryFilePath ?? DefaultRegistryFilePath;
         _data = Load();
     }
 
@@ -85,14 +92,14 @@ public class PythonEnvironmentRegistry
 
     // ── Persistence ────────────────────────────────────────────────────────
 
-    private static RegistryData Load()
+    private RegistryData Load()
     {
-        if (!File.Exists(RegistryFilePath))
+        if (!File.Exists(_registryFilePath))
             return new RegistryData();
 
         try
         {
-            var json = File.ReadAllText(RegistryFilePath);
+            var json = File.ReadAllText(_registryFilePath);
             return JsonSerializer.Deserialize<RegistryData>(json) ?? new RegistryData();
         }
         catch
@@ -103,9 +110,9 @@ public class PythonEnvironmentRegistry
 
     private void Save()
     {
-        Directory.CreateDirectory(Path.GetDirectoryName(RegistryFilePath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(_registryFilePath)!);
         var json = JsonSerializer.Serialize(_data, new JsonSerializerOptions { WriteIndented = true });
-        File.WriteAllText(RegistryFilePath, json);
+        File.WriteAllText(_registryFilePath, json);
     }
 
     // ── Data model ─────────────────────────────────────────────────────────

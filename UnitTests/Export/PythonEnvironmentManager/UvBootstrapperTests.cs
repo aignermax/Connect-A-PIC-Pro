@@ -1,3 +1,4 @@
+using CAP_Core.Export;
 using CAP_Core.Export.PythonEnvironmentManager;
 using Shouldly;
 
@@ -9,6 +10,8 @@ namespace UnitTests.Export.PythonEnvironmentManager;
 /// </summary>
 public class UvBootstrapperTests
 {
+    private static readonly ProcessLaunchFactory Factory = ProcessLaunchFactory.CreateDefault();
+
     [Fact]
     public void EnvironmentsBaseDir_IsUnderLunimaAppData()
     {
@@ -23,51 +26,45 @@ public class UvBootstrapperTests
     public async Task RunProcessAsync_EchoCommand_ReturnsOutput()
     {
         // Run a simple cross-platform command to verify the process runner works
-        var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-            System.Runtime.InteropServices.OSPlatform.Windows);
-
-        string fileName, args;
-        if (isWindows)
-        {
-            fileName = "cmd.exe";
-            args = "/c echo hello";
-        }
-        else
-        {
-            fileName = "echo";
-            args = "hello";
-        }
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/c", "echo", "hello" })
+            : ("echo", new[] { "hello" });
 
         var (exitCode, output, _) = await UvBootstrapper.RunProcessAsync(
-            fileName, args, CancellationToken.None, timeoutMs: 10_000);
+            Factory, fileName, args, CancellationToken.None, timeoutMs: 10_000);
 
         exitCode.ShouldBe(0);
         output.Trim().ShouldContain("hello");
     }
 
     [Fact]
-    public async Task RunProcessAsync_WithCancelledToken_ThrowsOrReturnsNonZero()
+    public async Task RunProcessAsync_WithCancelledToken_ThrowsCancellation()
     {
         var cts = new CancellationTokenSource();
         cts.Cancel(); // immediately cancelled
 
-        // Either throws OperationCanceledException or returns early
-        try
-        {
-            var isWindows = System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(
-                System.Runtime.InteropServices.OSPlatform.Windows);
-            var (exitCode, _, _) = await UvBootstrapper.RunProcessAsync(
-                isWindows ? "cmd.exe" : "echo",
-                isWindows ? "/c ping -n 5 127.0.0.1" : "hello",
-                cts.Token, timeoutMs: 30_000);
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/c", "ping", "-n", "5", "127.0.0.1" })
+            : ("sleep", new[] { "5" });
 
-            // If it returned without throwing, exitCode should signal failure
-            // (either -1 for timeout/cancel path, or process was already done)
-        }
-        catch (OperationCanceledException)
-        {
-            // This is the expected path
-        }
+        await Should.ThrowAsync<OperationCanceledException>(() =>
+            UvBootstrapper.RunProcessAsync(Factory, fileName, args, cts.Token, timeoutMs: 30_000));
+    }
+
+    [Fact]
+    public async Task RunProcessAsync_TimeoutWithoutUserCancel_ReturnsNonZeroInsteadOfThrowing()
+    {
+        // A pure timeout (no user cancellation) must be reported as a failed exit code
+        // so callers surface "timed out" instead of misreporting a cancellation.
+        var (fileName, args) = OperatingSystem.IsWindows()
+            ? ("cmd.exe", new[] { "/c", "ping", "-n", "10", "127.0.0.1" })
+            : ("sleep", new[] { "10" });
+
+        var (exitCode, _, error) = await UvBootstrapper.RunProcessAsync(
+            Factory, fileName, args, CancellationToken.None, timeoutMs: 500);
+
+        exitCode.ShouldNotBe(0);
+        error.ShouldContain("timed out");
     }
 
     [Fact]

@@ -151,7 +151,7 @@ public static class MainViewModelTestHelper
             }),
             new TimeDomainViewModel(),
             new PythonEnvironmentManagerViewModel(
-                new PythonEnvironmentRegistry(),
+                new PythonEnvironmentRegistry(Path.Combine(Path.GetTempPath(), $"lunima-test-registry-{Guid.NewGuid():N}.json")),
                 new UvBootstrapper(),
                 new NazcaPackageInstaller(),
                 new EnvironmentHealthChecker(new PythonDiscoveryService())));

@@ -9,12 +9,16 @@ namespace CAP_Core.Export.PythonEnvironmentManager;
 public class EnvironmentHealthChecker
 {
     private readonly PythonDiscoveryService _discovery;
+    private readonly ProcessLaunchFactory _launchFactory;
 
     /// <summary>Initialises a new health checker with a shared discovery service.</summary>
     /// <param name="discovery">Discovery service for probing interpreter capabilities.</param>
-    public EnvironmentHealthChecker(PythonDiscoveryService discovery)
+    /// <param name="launchFactory">Factory for cross-platform process launches;
+    /// null uses <see cref="ProcessLaunchFactory.CreateDefault"/>.</param>
+    public EnvironmentHealthChecker(PythonDiscoveryService discovery, ProcessLaunchFactory? launchFactory = null)
     {
         _discovery = discovery;
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
     }
 
     /// <summary>
@@ -22,8 +26,9 @@ public class EnvironmentHealthChecker
     /// and <see cref="PythonEnvironment.LastError"/> in place.
     /// </summary>
     /// <param name="env">Environment to check. Modified in place.</param>
+    /// <param name="ct">Cancellation token; cancelling aborts the probes.</param>
     /// <returns>The same <paramref name="env"/> instance after updating.</returns>
-    public async Task<PythonEnvironment> CheckAsync(PythonEnvironment env)
+    public async Task<PythonEnvironment> CheckAsync(PythonEnvironment env, CancellationToken ct = default)
     {
         var pythonExe = env.PythonExecutable;
 
@@ -33,6 +38,7 @@ public class EnvironmentHealthChecker
             return env;
         }
 
+        ct.ThrowIfCancellationRequested();
         var installation = await _discovery.CheckPythonInstallation(pythonExe, "Managed");
         if (installation == null)
         {
@@ -49,7 +55,7 @@ public class EnvironmentHealthChecker
             return env;
         }
 
-        env.HasPyclipper = await CheckPyclipperAsync(pythonExe);
+        env.HasPyclipper = await CheckPyclipperAsync(pythonExe, ct);
 
         env.Status = PythonEnvironmentStatus.Healthy;
         env.LastError = null;
@@ -64,16 +70,21 @@ public class EnvironmentHealthChecker
         env.LastError = reason;
     }
 
-    private static async Task<bool> CheckPyclipperAsync(string pythonPath)
+    private async Task<bool> CheckPyclipperAsync(string pythonPath, CancellationToken ct)
     {
         try
         {
             var (exitCode, _, _) = await UvBootstrapper.RunProcessAsync(
+                _launchFactory,
                 pythonPath,
-                "-c \"import pyclipper\"",
-                CancellationToken.None,
+                new[] { "-c", "import pyclipper" },
+                ct,
                 timeoutMs: 10_000);
             return exitCode == 0;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
         }
         catch
         {

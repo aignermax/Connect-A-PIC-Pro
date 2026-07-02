@@ -7,14 +7,19 @@ namespace CAP_Core.Export.PythonEnvironmentManager;
 /// <summary>
 /// Locates or downloads the <c>uv</c> binary and uses it to create Python virtual
 /// environments with a specific Python version. Supports Windows, Linux, and macOS.
+/// All subprocesses are launched through <see cref="ProcessLaunchFactory"/> so PATH
+/// resolution behaves identically on every OS (CLAUDE.md §1.2).
 /// </summary>
 public class UvBootstrapper
 {
     /// <summary>Default Python version to request when none is specified.</summary>
     public const string DefaultPythonVersion = "3.11";
 
-    /// <summary>URL of the Nazca tarball that must be installed into managed environments.</summary>
-    public const string NazcaTarballUrl = "https://nazca-design.org/dist/nazca-0.6.1.tar.gz";
+    /// <summary>
+    /// Timeout for uv operations that may download a full CPython toolchain on first
+    /// use — 120s is not enough on slow connections, so these get 10 minutes.
+    /// </summary>
+    public const int LongOperationTimeoutMs = 600_000;
 
     private static readonly string AppDataDir =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima");
@@ -25,8 +30,18 @@ public class UvBootstrapper
         ? Path.Combine(ToolsDir, "uv.exe")
         : Path.Combine(ToolsDir, "uv");
 
+    private readonly ProcessLaunchFactory _launchFactory;
+
     /// <summary>Directory where managed environments are stored.</summary>
     public static string EnvironmentsBaseDir => Path.Combine(AppDataDir, "envs");
+
+    /// <summary>Initialises the bootstrapper.</summary>
+    /// <param name="launchFactory">Factory for cross-platform process launches;
+    /// null uses <see cref="ProcessLaunchFactory.CreateDefault"/>.</param>
+    public UvBootstrapper(ProcessLaunchFactory? launchFactory = null)
+    {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
+    }
 
     /// <summary>
     /// Resolves the path to the <c>uv</c> executable: checks PATH first, then the
@@ -59,7 +74,8 @@ public class UvBootstrapper
 
     /// <summary>
     /// Creates a new virtual environment at <paramref name="venvPath"/> using
-    /// <c>uv venv --python {pythonVersion}</c>.
+    /// <c>uv venv --python {pythonVersion}</c>. First use may download a full CPython
+    /// toolchain, so this runs with <see cref="LongOperationTimeoutMs"/>.
     /// </summary>
     /// <param name="uvPath">Path to the uv binary.</param>
     /// <param name="venvPath">Directory where the venv will be created.</param>
@@ -78,7 +94,8 @@ public class UvBootstrapper
         progress?.Report($"Creating Python {pythonVersion} venv at {venvPath}...");
 
         var (exitCode, _, stderr) = await RunProcessAsync(
-            uvPath, $"venv --python {pythonVersion} \"{venvPath}\"", ct);
+            _launchFactory, uvPath, new[] { "venv", "--python", pythonVersion, venvPath },
+            ct, LongOperationTimeoutMs);
 
         if (exitCode != 0)
             throw new InvalidOperationException(
@@ -110,7 +127,7 @@ public class UvBootstrapper
         return File.Exists(uvDefault) ? uvDefault : null;
     }
 
-    private async Task DownloadUvAsync(IProgress<string>? progress, CancellationToken ct)
+    private static async Task DownloadUvAsync(IProgress<string>? progress, CancellationToken ct)
     {
         var url = GetUvDownloadUrl();
         Directory.CreateDirectory(ToolsDir);
@@ -129,6 +146,8 @@ public class UvBootstrapper
         catch (Exception ex)
         {
             File.Delete(tempFile);
+            if (ex is OperationCanceledException)
+                throw;
             throw new InvalidOperationException(
                 $"Failed to download uv: {ex.Message}\nInstall uv manually from https://docs.astral.sh/uv/", ex);
         }
@@ -137,7 +156,10 @@ public class UvBootstrapper
         File.Delete(tempFile);
 
         if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            MakeExecutable(LocalUvExe);
+            File.SetUnixFileMode(LocalUvExe,
+                UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute |
+                UnixFileMode.GroupRead | UnixFileMode.GroupExecute |
+                UnixFileMode.OtherRead | UnixFileMode.OtherExecute);
     }
 
     private static void ExtractUvBinary(string archivePath, IProgress<string>? progress)
@@ -176,15 +198,6 @@ public class UvBootstrapper
             $"'{entryName}' not found in downloaded archive.");
     }
 
-    private static void MakeExecutable(string path)
-    {
-        Process.Start(new ProcessStartInfo("chmod", $"+x \"{path}\"")
-        {
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        })?.WaitForExit();
-    }
-
     private static string GetUvDownloadUrl()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -202,20 +215,26 @@ public class UvBootstrapper
             : "https://github.com/astral-sh/uv/releases/latest/download/uv-x86_64-unknown-linux-musl.tar.gz";
     }
 
+    /// <summary>
+    /// Runs a process built via <paramref name="launchFactory"/> and captures its output.
+    /// A user cancellation throws <see cref="OperationCanceledException"/>; a pure timeout
+    /// returns exit code -1 with a "timed out" error so callers report it as a failure.
+    /// </summary>
     internal static async Task<(int exitCode, string output, string error)> RunProcessAsync(
-        string fileName, string arguments, CancellationToken ct, int timeoutMs = 120_000)
+        ProcessLaunchFactory launchFactory,
+        string fileName,
+        IReadOnlyList<string> arguments,
+        CancellationToken ct,
+        int timeoutMs = 120_000)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        if (!launchFactory.TryBuild(fileName, arguments, null, null, out var startInfo, out var buildError))
+            throw new InvalidOperationException($"Cannot launch '{fileName}': {buildError}");
 
+        startInfo.RedirectStandardOutput = true;
+        startInfo.RedirectStandardError = true;
+
+        using var process = new Process { StartInfo = startInfo };
+        ct.ThrowIfCancellationRequested();
         process.Start();
         var outputTask = process.StandardOutput.ReadToEndAsync(ct);
         var errorTask = process.StandardError.ReadToEndAsync(ct);

@@ -9,6 +9,16 @@ public class NazcaPackageInstaller
     /// <summary>URL of the Nazca 0.6.1 tarball (no login or licence required).</summary>
     public const string NazcaTarballUrl = "https://nazca-design.org/dist/nazca-0.6.1.tar.gz";
 
+    private readonly ProcessLaunchFactory _launchFactory;
+
+    /// <summary>Initialises the installer.</summary>
+    /// <param name="launchFactory">Factory for cross-platform process launches;
+    /// null uses <see cref="ProcessLaunchFactory.CreateDefault"/>.</param>
+    public NazcaPackageInstaller(ProcessLaunchFactory? launchFactory = null)
+    {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
+    }
+
     /// <summary>
     /// Downloads the Nazca tarball and installs it plus pyclipper into the given venv.
     /// Reports progress; surfaces pip/uv stderr when installation fails (no silent fallback).
@@ -63,7 +73,7 @@ public class NazcaPackageInstaller
         }
     }
 
-    private static async Task InstallPackagesAsync(
+    private async Task InstallPackagesAsync(
         string uvPath,
         string venvPath,
         string tarballPath,
@@ -72,7 +82,7 @@ public class NazcaPackageInstaller
     {
         // First: install Nazca from local tarball
         progress?.Report("Installing Nazca into virtual environment...");
-        await RunUvPipInstall(uvPath, venvPath, $"\"{tarballPath}\"", progress, ct);
+        await RunUvPipInstall(uvPath, venvPath, tarballPath, progress, ct);
 
         // Second: install pyclipper (required by Nazca, not auto-pulled on all platforms)
         progress?.Report("Installing pyclipper...");
@@ -81,15 +91,16 @@ public class NazcaPackageInstaller
         progress?.Report("All packages installed successfully.");
     }
 
-    private static async Task RunUvPipInstall(
+    private async Task RunUvPipInstall(
         string uvPath,
         string venvPath,
         string packageSpec,
         IProgress<string>? progress,
         CancellationToken ct)
     {
-        var args = $"pip install --python \"{GetPythonExe(venvPath)}\" {packageSpec}";
-        var (exitCode, _, stderr) = await UvBootstrapper.RunProcessAsync(uvPath, args, ct);
+        var args = new[] { "pip", "install", "--python", GetPythonExe(venvPath), packageSpec };
+        var (exitCode, _, stderr) = await UvBootstrapper.RunProcessAsync(
+            _launchFactory, uvPath, args, ct, UvBootstrapper.LongOperationTimeoutMs);
 
         if (exitCode == 0)
             return;

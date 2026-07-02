@@ -4,141 +4,122 @@ using Shouldly;
 namespace UnitTests.Export.PythonEnvironmentManager;
 
 /// <summary>
-/// Unit tests for <see cref="PythonEnvironmentRegistry"/>.
-/// Uses a temp file to avoid touching real user preferences.
+/// Unit tests for <see cref="PythonEnvironmentRegistry"/>. Each test uses its own
+/// temp registry file so tests are isolated from each other and never touch the
+/// user's real app-data registry.
 /// </summary>
 public class PythonEnvironmentRegistryTests : IDisposable
 {
-    private readonly string _tempFile;
-    private readonly PythonEnvironmentRegistry _registry;
+    private readonly string _tempFile = Path.Combine(
+        Path.GetTempPath(), $"lunima-registry-test-{Guid.NewGuid():N}.json");
 
-    public PythonEnvironmentRegistryTests()
-    {
-        _tempFile = Path.GetTempFileName();
-        File.Delete(_tempFile); // registry creates fresh
-        _registry = CreateRegistry(_tempFile);
-    }
-
-    private static PythonEnvironmentRegistry CreateRegistry(string filePath)
-    {
-        // Use reflection to inject a custom path for testing
-        var registry = new PythonEnvironmentRegistry();
-        // NOTE: Production code uses LocalApplicationData/Lunima — tests accept that
-        // side-effect for simplicity, but we clean up in Dispose().
-        return registry;
-    }
+    private PythonEnvironmentRegistry CreateRegistry() => new(_tempFile);
 
     [Fact]
     public void GetAll_WhenEmpty_ReturnsEmptyList()
     {
-        // Fresh instance has no environments
-        var fresh = new PythonEnvironmentRegistry();
-        // We can't guarantee isolation from a previous test's persisted state in prod dir,
-        // so just verify the return type is correct.
-        fresh.GetAll().ShouldNotBeNull();
+        CreateRegistry().GetAll().ShouldBeEmpty();
     }
 
     [Fact]
     public void AddOrUpdate_NewEnv_AppearsInGetAll()
     {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-add");
+        var registry = CreateRegistry();
 
-        registry.AddOrUpdate(env);
+        registry.AddOrUpdate(MakeEnv("test-add"));
 
         registry.GetAll().ShouldContain(e => e.Name == "test-add");
-
-        // Cleanup
-        registry.Remove("test-add");
     }
 
     [Fact]
     public void AddOrUpdate_ExistingEnv_ReplacesIt()
     {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-replace");
-        registry.AddOrUpdate(env);
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("test-replace"));
 
         var updated = MakeEnv("test-replace");
         updated.PythonVersion = "3.12.0";
         registry.AddOrUpdate(updated);
 
-        var found = registry.GetAll().FirstOrDefault(e => e.Name == "test-replace");
-        found.ShouldNotBeNull();
+        var found = registry.GetAll().ShouldHaveSingleItem();
         found.PythonVersion.ShouldBe("3.12.0");
-
-        // Cleanup
-        registry.Remove("test-replace");
     }
 
     [Fact]
     public void Remove_ExistingEnv_DisappearsFromList()
     {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-remove");
-        registry.AddOrUpdate(env);
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("test-remove"));
 
         registry.Remove("test-remove");
 
-        registry.GetAll().ShouldNotContain(e => e.Name == "test-remove");
+        registry.GetAll().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Remove_ActiveEnv_ClearsActiveSelection()
+    {
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("test-active-remove"));
+        registry.SetActive("test-active-remove");
+
+        registry.Remove("test-active-remove");
+
+        registry.GetActive().ShouldBeNull();
     }
 
     [Fact]
     public void SetActive_ExistingEnv_ReturnsItAsActive()
     {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-active");
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("test-active"));
+
+        registry.SetActive("test-active");
+
+        registry.GetActive()?.Name.ShouldBe("test-active");
+    }
+
+    [Fact]
+    public void SetActive_FiresCallbackWithPythonExecutable()
+    {
+        var registry = CreateRegistry();
+        var env = MakeEnv("test-callback");
         registry.AddOrUpdate(env);
 
         string? notifiedPath = null;
         registry.OnActiveEnvironmentChanged = p => notifiedPath = p;
 
-        registry.SetActive("test-active");
-
-        registry.GetActive()?.Name.ShouldBe("test-active");
-
-        // Cleanup
-        registry.SetActive(null);
-        registry.Remove("test-active");
-    }
-
-    [Fact]
-    public void SetActive_FiresCallback()
-    {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-callback");
-        registry.AddOrUpdate(env);
-
-        var callbackFired = false;
-        registry.OnActiveEnvironmentChanged = _ => callbackFired = true;
-
         registry.SetActive("test-callback");
 
-        callbackFired.ShouldBeTrue();
-
-        // Cleanup
-        registry.SetActive(null);
-        registry.Remove("test-callback");
+        notifiedPath.ShouldBe(env.PythonExecutable);
     }
 
     [Fact]
     public void Exists_AfterAdd_ReturnsTrue()
     {
-        var registry = new PythonEnvironmentRegistry();
-        var env = MakeEnv("test-exists");
-        registry.AddOrUpdate(env);
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("test-exists"));
 
         registry.Exists("test-exists").ShouldBeTrue();
-
-        // Cleanup
-        registry.Remove("test-exists");
     }
 
     [Fact]
     public void Exists_ForMissingEnv_ReturnsFalse()
     {
-        var registry = new PythonEnvironmentRegistry();
-        registry.Exists("definitely-not-there-" + Guid.NewGuid()).ShouldBeFalse();
+        CreateRegistry().Exists("definitely-not-there").ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Persistence_SecondInstanceOnSamePath_SeesSavedState()
+    {
+        var first = CreateRegistry();
+        first.AddOrUpdate(MakeEnv("persisted"));
+        first.SetActive("persisted");
+
+        var second = CreateRegistry();
+
+        second.Exists("persisted").ShouldBeTrue();
+        second.GetActive()?.Name.ShouldBe("persisted");
     }
 
     private static PythonEnvironment MakeEnv(string name) => new()

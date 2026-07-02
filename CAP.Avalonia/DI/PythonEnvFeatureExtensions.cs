@@ -29,7 +29,14 @@ internal static class PythonEnvFeatureExtensions
         {
             var registry = new PythonEnvironmentRegistry();
             var prefs = sp.GetRequiredService<UserPreferencesService>();
-            registry.OnActiveEnvironmentChanged = path => prefs.SetCustomPythonPath(path);
+            registry.OnActiveEnvironmentChanged = path =>
+            {
+                prefs.SetCustomPythonPath(path);
+                // Export/preview consumers copy the preference once at construction, so
+                // persisting alone would only take effect after a restart — push the new
+                // interpreter into the running export pipeline as well.
+                sp.GetRequiredService<ViewModels.Export.GdsExportViewModel>().Initialize(path);
+            };
             return registry;
         });
 
