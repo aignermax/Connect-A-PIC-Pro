@@ -188,6 +188,72 @@ public class GdsExportEnvironmentSelectionTests
         vm.ShowCreateEnvironmentButton.ShouldBeFalse();
     }
 
+    /// <summary>Test double with hand-controlled discovery completion, to interleave runs.</summary>
+    private sealed class ControllableDiscoveryViewModel : GdsExportViewModel
+    {
+        public Queue<TaskCompletionSource<List<PythonDiscoveryService.PythonInstallation>>> PendingDiscoveries { get; } = new();
+
+        public ControllableDiscoveryViewModel() : base(new GdsExportService()) { }
+
+        protected override Task<List<PythonDiscoveryService.PythonInstallation>> DiscoverPythonsAsync()
+        {
+            var tcs = new TaskCompletionSource<List<PythonDiscoveryService.PythonInstallation>>();
+            PendingDiscoveries.Enqueue(tcs);
+            return tcs.Task;
+        }
+    }
+
+    private static List<PythonDiscoveryService.PythonInstallation> OneSystemPython() => new()
+    {
+        new PythonDiscoveryService.PythonInstallation
+        {
+            Path = "/usr/bin/python3",
+            Source = "System",
+            PythonVersion = "3.12.1",
+            NazcaVersion = "0.6.1",
+        },
+    };
+
+    [Fact]
+    public async Task SearchForPython_OverlappingRuns_DoNotDuplicateResults()
+    {
+        // Navigating GDS Export → elsewhere → GDS Export re-triggers the search while the
+        // first run is still in flight; both used to append their results (2 → 4 → 8 …).
+        var vm = new ControllableDiscoveryViewModel();
+        vm.CustomPythonPath = "/some/python";   // skip the auto-select side path
+
+        var first = vm.SearchForPythonAsync();
+        var second = vm.SearchForPythonAsync();
+
+        vm.PendingDiscoveries.Dequeue().SetResult(OneSystemPython());   // first finishes late
+        vm.PendingDiscoveries.Dequeue().SetResult(OneSystemPython());
+        await first;
+        await second;
+
+        vm.AvailablePythons.Count.ShouldBe(1);   // nur der neueste Lauf zählt
+        vm.IsSearching.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task SearchForPython_SupersededRun_DoesNotOverwriteNewerResults()
+    {
+        var vm = new ControllableDiscoveryViewModel();
+        vm.CustomPythonPath = "/some/python";
+
+        var first = vm.SearchForPythonAsync();
+        var second = vm.SearchForPythonAsync();
+
+        // Der NEUERE Lauf kommt zuerst zurück, der alte danach — das alte Ergebnis
+        // darf das neue nicht mehr überschreiben oder ergänzen.
+        vm.PendingDiscoveries.ToArray()[1].SetResult(OneSystemPython());
+        await second;
+        vm.PendingDiscoveries.Dequeue().SetResult(new List<PythonDiscoveryService.PythonInstallation>());
+        await first;
+
+        vm.AvailablePythons.Count.ShouldBe(1);
+        vm.IsSearching.ShouldBeFalse();
+    }
+
     [Fact]
     public void Initialize_NullPath_ClearsConfiguredInterpreter()
     {

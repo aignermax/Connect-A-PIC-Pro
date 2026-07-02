@@ -320,19 +320,33 @@ public partial class GdsExportViewModel : ObservableObject
         return result;
     }
 
+    private int _searchGeneration;
+
+    /// <summary>
+    /// Runs the actual interpreter discovery. Virtual so tests can substitute a
+    /// controllable discovery to exercise overlapping-search behavior.
+    /// </summary>
+    protected virtual Task<List<PythonDiscoveryService.PythonInstallation>> DiscoverPythonsAsync() =>
+        _discoveryService.DiscoverPythonWithNazcaAsync();
+
     /// <summary>
     /// Searches for Python installations with Nazca and updates the available list.
+    /// Starting a new search supersedes any still-running one: the stale run discards
+    /// its results, so rapid page switches can never duplicate the list.
     /// </summary>
     [RelayCommand]
     public async Task SearchForPythonAsync()
     {
+        var generation = ++_searchGeneration;
         IsSearching = true;
-        AvailablePythons.Clear();
 
         try
         {
-            var found = await _discoveryService.DiscoverPythonWithNazcaAsync();
+            var found = await DiscoverPythonsAsync();
+            if (generation != _searchGeneration)
+                return;   // a newer search owns the list now
 
+            AvailablePythons.Clear();
             foreach (var installation in found)
             {
                 AvailablePythons.Add(installation);
@@ -354,12 +368,16 @@ public partial class GdsExportViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _errorConsole?.LogError($"Python discovery failed: {ex.Message}", ex);
-            PythonStatus = $"✗ Search failed: {ex.Message}";
+            if (generation == _searchGeneration)
+            {
+                _errorConsole?.LogError($"Python discovery failed: {ex.Message}", ex);
+                PythonStatus = $"✗ Search failed: {ex.Message}";
+            }
         }
         finally
         {
-            IsSearching = false;
+            if (generation == _searchGeneration)
+                IsSearching = false;
         }
     }
 
