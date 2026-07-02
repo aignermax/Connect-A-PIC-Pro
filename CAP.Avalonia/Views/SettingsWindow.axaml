@@ -10,7 +10,7 @@
         x:Class="CAP.Avalonia.Views.SettingsWindow"
         x:DataType="settings:SettingsWindowViewModel"
         Title="Settings"
-        Width="820" Height="560"
+        Width="820" Height="680"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
         Foreground="White">
@@ -178,47 +178,55 @@
                                 <TextBlock Text="{Binding NazcaStatus}" Foreground="White"/>
                             </StackPanel>
 
-                            <!-- Unified interpreter list: managed environments + discovered system Pythons -->
-                            <ItemsControl ItemsSource="{Binding InterpreterOptions}"
-                                          Margin="0,6,0,0"
-                                          x:Name="InterpreterOptionsList"
+                            <!-- Unified interpreter list: managed environments + discovered system
+                                 Pythons. Scrolls beyond ~5 entries instead of growing unbounded. -->
+                            <ScrollViewer MaxHeight="240" Margin="0,6,0,0"
+                                          VerticalScrollBarVisibility="Auto"
                                           IsVisible="{Binding InterpreterOptions.Count}">
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <Button Command="{Binding #InterpreterOptionsList.DataContext.SelectInterpreterCommand}"
-                                                CommandParameter="{Binding}"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Left"
-                                                Margin="0,2,0,0" Padding="6,4"
-                                                Background="#2d2d2d" FontSize="11">
-                                            <StackPanel>
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                                    <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
-                                                               IsVisible="{Binding IsActive}"/>
-                                                    <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"/>
+                                <ItemsControl ItemsSource="{Binding InterpreterOptions}"
+                                              x:Name="InterpreterOptionsList">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Button Command="{Binding #InterpreterOptionsList.DataContext.SelectInterpreterCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    HorizontalAlignment="Stretch"
+                                                    HorizontalContentAlignment="Left"
+                                                    Margin="0,2,4,0" Padding="6,3"
+                                                    Background="#2d2d2d" FontSize="11">
+                                                <StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
+                                                                   IsVisible="{Binding IsActive}"/>
+                                                        <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"/>
+                                                    </StackPanel>
+                                                    <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
+                                                               TextWrapping="Wrap"/>
                                                 </StackPanel>
-                                                <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                                           TextWrapping="Wrap"/>
-                                            </StackPanel>
-                                        </Button>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
+                                            </Button>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </ScrollViewer>
 
                             <!-- No managed environment yet: offer the one-click create (warning text
                                  only when Nazca is missing everywhere) -->
                             <Border IsVisible="{Binding ShowCreateEnvironmentButton}"
                                     Background="#2a2a20" CornerRadius="4" Padding="10" Margin="0,10,0,0">
-                                <StackPanel Spacing="6">
-                                    <TextBlock Text="No Nazca environment found."
-                                               Foreground="#e8c872" FontWeight="SemiBold" FontSize="12"
-                                               IsVisible="{Binding ShowNazcaInstallOffer}"/>
-                                    <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap"
-                                               Text="Lunima can create a managed Python environment and install Nazca into it automatically."/>
-                                    <Button Content="Create + install Nazca now"
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center"
+                                                Margin="0,0,10,0">
+                                        <TextBlock Text="No Nazca environment found."
+                                                   Foreground="#e8c872" FontWeight="SemiBold" FontSize="12"
+                                                   IsVisible="{Binding ShowNazcaInstallOffer}"/>
+                                        <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap"
+                                                   Text="Lunima can create a managed Python environment with Nazca automatically."/>
+                                    </StackPanel>
+                                    <Button Grid.Column="1" Content="Install new"
                                             Click="OnCreateNazcaEnvironmentClick"
-                                            Background="#3d5d3d" HorizontalAlignment="Left"/>
-                                </StackPanel>
+                                            ToolTip.Tip="Create a managed Python environment and install Nazca into it"
+                                            Background="#3d5d3d" FontSize="11" Padding="10,2"
+                                            MinHeight="0" VerticalAlignment="Center"/>
+                                </Grid>
                             </Border>
                         </StackPanel>
                     </DataTemplate>

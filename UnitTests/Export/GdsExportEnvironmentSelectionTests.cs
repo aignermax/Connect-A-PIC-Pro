@@ -188,6 +188,82 @@ public class GdsExportEnvironmentSelectionTests
         vm.ShowCreateEnvironmentButton.ShouldBeFalse();
     }
 
+    [Fact]
+    public void Initialize_NullPath_ClearsConfiguredInterpreter()
+    {
+        // Deleting the active managed environment pushes null through the registry
+        // callback — the stale (deleted) interpreter path must not survive that.
+        var service = new GdsExportService();
+        var vm = new GdsExportViewModel(service);
+        vm.Initialize("/envs/deleted/bin/python");
+
+        vm.Initialize(null);
+
+        vm.CustomPythonPath.ShouldBeEmpty();
+        vm.PythonPathSource.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task TrySelectFallback_NoInterpreterConfigured_PicksFirstCandidate()
+    {
+        var vm = CreateViewModel();
+        string? activated = null;
+        vm.ActivateManagedEnvironment = name => activated = name;
+        vm.ManagedEnvironmentsProvider = () => new[]
+        {
+            new ManagedEnvCandidate("backup-env", "/envs/backup/bin/python", "Managed · backup-env"),
+        };
+        vm.RefreshManagedCandidates();
+
+        await vm.TrySelectFallbackInterpreterAsync();
+
+        activated.ShouldBe("backup-env");   // erster Kandidat wird automatisch übernommen
+    }
+
+    [Fact]
+    public async Task TrySelectFallback_ConfiguredInterpreterStillExists_DoesNothing()
+    {
+        var existing = Path.GetTempFileName();
+        try
+        {
+            var vm = CreateViewModel();
+            string? activated = null;
+            vm.ActivateManagedEnvironment = name => activated = name;
+            vm.CustomPythonPath = existing;
+            vm.ManagedEnvironmentsProvider = () => new[]
+            {
+                new ManagedEnvCandidate("other", "/envs/other/bin/python", "Managed · other"),
+            };
+            vm.RefreshManagedCandidates();
+
+            await vm.TrySelectFallbackInterpreterAsync();
+
+            activated.ShouldBeNull();       // funktionierende Auswahl bleibt unangetastet
+        }
+        finally
+        {
+            File.Delete(existing);
+        }
+    }
+
+    [Fact]
+    public async Task TrySelectFallback_ConfiguredInterpreterDeleted_PicksCandidate()
+    {
+        var vm = CreateViewModel();
+        string? activated = null;
+        vm.ActivateManagedEnvironment = name => activated = name;
+        vm.CustomPythonPath = Path.Combine(Path.GetTempPath(), "deleted-env", "python.exe");
+        vm.ManagedEnvironmentsProvider = () => new[]
+        {
+            new ManagedEnvCandidate("backup-env", "/envs/backup/bin/python", "Managed · backup-env"),
+        };
+        vm.RefreshManagedCandidates();
+
+        await vm.TrySelectFallbackInterpreterAsync();
+
+        activated.ShouldBe("backup-env");
+    }
+
     private sealed class FakeMessageBoxService : IMessageBoxService
     {
         public int ChoiceToReturn { get; set; } = -1;

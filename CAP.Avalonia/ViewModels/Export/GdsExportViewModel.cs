@@ -95,9 +95,11 @@ public partial class GdsExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initializes the ViewModel with saved preferences.
+    /// Initializes the ViewModel with saved preferences. A null path clears the
+    /// configuration (e.g. the active managed environment was deleted) so a stale
+    /// interpreter path never lingers; the next refresh picks a fallback.
     /// </summary>
-    /// <param name="savedPythonPath">Previously saved Python path from preferences.</param>
+    /// <param name="savedPythonPath">Previously saved Python path, or null to clear.</param>
     public void Initialize(string? savedPythonPath)
     {
         if (!string.IsNullOrEmpty(savedPythonPath))
@@ -105,7 +107,12 @@ public partial class GdsExportViewModel : ObservableObject
             CustomPythonPath = savedPythonPath;
             _exportService.SetCustomPythonPath(savedPythonPath);
             PythonPathSource = "Custom";
+            return;
         }
+
+        CustomPythonPath = string.Empty;
+        _exportService.SetCustomPythonPath(null);
+        PythonPathSource = string.Empty;
     }
 
     /// <summary>
@@ -241,6 +248,23 @@ public partial class GdsExportViewModel : ObservableObject
     {
         await SearchForPythonAsync();
         await CheckEnvironmentAsync();
+        await TrySelectFallbackInterpreterAsync();
+    }
+
+    /// <summary>
+    /// When no interpreter is configured — or the configured one no longer exists on
+    /// disk (e.g. its managed environment was deleted) — falls back to the first
+    /// available candidate (managed environments come first) instead of showing
+    /// "not found" while working alternatives sit in the list.
+    /// </summary>
+    public async Task TrySelectFallbackInterpreterAsync()
+    {
+        var configuredIsUsable = !string.IsNullOrEmpty(CustomPythonPath) && File.Exists(CustomPythonPath);
+        if (configuredIsUsable) return;
+
+        var fallback = InterpreterOptions.FirstOrDefault();
+        if (fallback != null)
+            await SelectInterpreter(fallback);
     }
 
     /// <summary>
