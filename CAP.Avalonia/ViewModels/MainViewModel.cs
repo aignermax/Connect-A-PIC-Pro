@@ -104,6 +104,8 @@ public partial class MainViewModel : ObservableObject
             FileOperations.PhotonTorchExport.FileDialogService = value;
             FileOperations.VerilogAExport.FileDialogService = value;
             LeftPanel.FileDialogService = value;
+            RightPanel.TimeDomain.FileDialogService = value;
+            RightPanel.EyeDiagram.FileDialogService = value;
         }
     }
 

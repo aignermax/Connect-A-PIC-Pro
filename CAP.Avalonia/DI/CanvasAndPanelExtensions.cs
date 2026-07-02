@@ -1,5 +1,6 @@
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -52,6 +53,7 @@ internal static class CanvasAndPanelExtensions
         services.AddTransient<ArchitectureReportViewModel>();
         services.AddTransient<PdkConsistencyViewModel>();
         services.AddTransient<TimeDomainViewModel>();
+        services.AddTransient<EyeDiagramViewModel>();
 
         // Selection-driven component property editors (right panel). Order matters:
         // most specific first, generic fallback last. ComponentEditorFactory walks them

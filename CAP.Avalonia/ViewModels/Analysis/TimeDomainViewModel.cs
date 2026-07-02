@@ -177,51 +177,14 @@ public partial class TimeDomainViewModel : ObservableObject
 
     private TimeDomainResult RunSimulationCore()
     {
-        var tileManager = new ComponentListTileManager();
-        foreach (var compVm in _canvas!.Components)
-            tileManager.AddComponent(compVm.Component);
-
-        var portManager = new PhysicalExternalPortManager();
-        ConfigureLightSources(portManager);
-
-        var gridManager = GridManager.CreateForSimulation(
-            tileManager, _canvas.ConnectionManager, portManager);
-
-        var builder = new SystemMatrixBuilder(gridManager);
-        var simulator = new TimeDomainSimulator(builder);
+        // Circuit + light-source setup shared with the eye-diagram panel (#535).
+        var (simulator, portManager) = TransientCircuitFactory.Create(_canvas!);
 
         var timeDef = TimeSignalDefinition.FromWavelengthSweep(
             CenterWavelengthNm, SpanNm, FreqPoints);
 
         var inputSignals = BuildInputSignals(portManager, timeDef);
         return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
-    }
-
-    private void ConfigureLightSources(PhysicalExternalPortManager portManager)
-    {
-        foreach (var compVm in _canvas!.Components)
-        {
-            if (compVm.TemplateName == null) continue;
-            if (!compVm.TemplateName.Contains("Coupler", StringComparison.OrdinalIgnoreCase)) continue;
-            if (compVm.TemplateName.Contains("Directional", StringComparison.OrdinalIgnoreCase)) continue;
-
-            var laserConfig = compVm.LaserConfig;
-            double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
-
-            foreach (var pin in compVm.Component.PhysicalPins)
-            {
-                if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
-                var input = new ExternalInput(
-                    $"src_{compVm.Component.Identifier}_{pin.Name}",
-                    laserType, 0, new Complex(power, 0));
-                portManager.AddLightSource(input, pin.LogicalPin.IDInFlow);
-            }
-        }
     }
 
     private Dictionary<Guid, double[]> BuildInputSignals(

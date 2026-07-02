@@ -1,6 +1,7 @@
 using CAP.Avalonia.ViewModels.Panels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP.Avalonia.ViewModels.Hierarchy;
@@ -78,7 +79,8 @@ public class PanelWidthPersistenceTests : IDisposable
             {
                 new GenericComponentEditorProvider()
             }),
-            new TimeDomainViewModel());
+            new TimeDomainViewModel(),
+            new EyeDiagramViewModel());
 
     [Fact]
     public void LeftPanelWidth_DefaultsTo220()

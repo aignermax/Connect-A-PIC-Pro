@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:oxy="using:OxyPlot.Avalonia"
+             x:Class="CAP.Avalonia.Views.Panels.EyeDiagramPanel"
+             x:DataType="vm:MainViewModel">
+
+    <StackPanel>
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <TextBlock Text="Eye Diagram / BER:" Foreground="Orchid" Margin="0,0,0,5" FontWeight="SemiBold"/>
+
+        <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
+            PRBS-modulated transient simulation → eye persistence heat map,
+            Q-factor and BER with shot / thermal / RIN receiver noise.
+        </TextBlock>
+
+        <!-- Bit rate -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="Bit rate (Gbps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+            <NumericUpDown Value="{Binding RightPanel.EyeDiagram.BitRateGbps}"
+                           Minimum="1" Maximum="1000" Increment="5"
+                           Width="110" FormatString="F1"/>
+        </StackPanel>
+
+        <!-- PRBS pattern -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+            <TextBlock Text="PRBS pattern:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+            <ComboBox ItemsSource="{Binding RightPanel.EyeDiagram.PrbsOrders}"
+                      SelectedItem="{Binding RightPanel.EyeDiagram.SelectedPrbsOrder}"
+                      Width="110"/>
+        </StackPanel>
+
+        <!-- Decision threshold -->
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Threshold (rel.):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+            <NumericUpDown Value="{Binding RightPanel.EyeDiagram.ThresholdRelative}"
+                           Minimum="0.05" Maximum="0.95" Increment="0.05"
+                           Width="110" FormatString="F2"/>
+        </StackPanel>
+
+        <!-- Run button -->
+        <Button Content="Run Eye Analysis"
+                Command="{Binding RightPanel.EyeDiagram.RunEyeAnalysisCommand}"
+                Width="140" Margin="0,0,0,5" Background="#5d3d5d"
+                IsEnabled="{Binding RightPanel.EyeDiagram.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
+
+        <!-- Status -->
+        <TextBlock Text="{Binding RightPanel.EyeDiagram.StatusText}"
+                   Foreground="Gray" FontSize="10" Margin="0,0,0,4"
+                   IsVisible="{Binding RightPanel.EyeDiagram.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Eye heat map -->
+        <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
+                Height="220" Margin="0,4,0,0"
+                IsVisible="{Binding RightPanel.EyeDiagram.HasResult}">
+            <oxy:PlotView Model="{Binding RightPanel.EyeDiagram.PlotModel}" Background="Transparent"/>
+        </Border>
+
+        <!-- Numeric eye metrics -->
+        <TextBlock Text="{Binding RightPanel.EyeDiagram.MetricsText}"
+                   Foreground="Orchid" FontFamily="Consolas" FontSize="10" Margin="0,4,0,0"
+                   IsVisible="{Binding RightPanel.EyeDiagram.MetricsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextWrapping="NoWrap"/>
+
+        <!-- Export -->
+        <Button Content="Export CSV"
+                Command="{Binding RightPanel.EyeDiagram.ExportCsvCommand}"
+                Width="110" Margin="0,5,0,0" Background="#3d3d5d"
+                IsVisible="{Binding RightPanel.EyeDiagram.HasResult}"/>
+    </StackPanel>
+
+</UserControl>

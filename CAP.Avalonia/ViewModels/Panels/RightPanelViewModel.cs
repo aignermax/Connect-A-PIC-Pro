@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Controls;
 using CAP.Avalonia.ViewModels.AI;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Converters;
@@ -113,6 +114,11 @@ public partial class RightPanelViewModel : ObservableObject
     /// </summary>
     public TimeDomainViewModel TimeDomain { get; }
 
+    /// <summary>
+    /// ViewModel for the eye-diagram / BER analysis panel (#535).
+    /// </summary>
+    public EyeDiagramViewModel EyeDiagram { get; }
+
     private readonly ComponentEditorFactory _editorFactory;
     private readonly DesignCanvasViewModel _canvas;
 
@@ -149,7 +155,8 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistantViewModel aiAssistant,
         OnaSweepViewModel onaAnalysis,
         ComponentEditorFactory editorFactory,
-        TimeDomainViewModel timeDomain)
+        TimeDomainViewModel timeDomain,
+        EyeDiagramViewModel eyeDiagram)
     {
         _preferencesService = preferencesService;
         _editorFactory = editorFactory;
@@ -167,6 +174,7 @@ public partial class RightPanelViewModel : ObservableObject
         PdkConsistency = pdkConsistency;
         AiAssistant = aiAssistant;
         TimeDomain = timeDomain;
+        EyeDiagram = eyeDiagram;
         OnaAnalysis = onaAnalysis;
 
         // Configure ViewModels that need canvas reference
@@ -174,6 +182,7 @@ public partial class RightPanelViewModel : ObservableObject
         DimensionValidator.Configure(canvas);
         CompressLayout.Configure(canvas);
         TimeDomain.Configure(canvas);
+        EyeDiagram.Configure(canvas);
         OnaAnalysis.Configure(canvas);
 
         // Drive the per-component property editor from canvas selection.
