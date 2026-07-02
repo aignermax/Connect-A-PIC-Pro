@@ -194,6 +194,31 @@ public partial class GdsExportViewModel : ObservableObject
     public void InstallNazca() => RequestNazcaInstall?.Invoke();
 
     /// <summary>
+    /// Decides how to proceed with GDS generation based on the current environment
+    /// state. Callers refresh the state (<see cref="CheckEnvironmentAsync"/>) first;
+    /// this method only maps state + user choice to a decision.
+    /// </summary>
+    /// <param name="messageBox">Dialog service; null (headless) proceeds like before.</param>
+    public async Task<GdsPreflightDecision> PreflightGdsAsync(Services.IMessageBoxService? messageBox)
+    {
+        if (!GenerateGdsEnabled || IsEnvironmentReady || messageBox == null)
+            return GdsPreflightDecision.Proceed;
+
+        var choice = await messageBox.ShowChoicePromptAsync(
+            "Nazca is required to generate a GDS file, but no Python environment with Nazca is available. "
+            + "The Nazca Python script itself has been exported.",
+            "Nazca required",
+            new[] { "Install Nazca now", "Open Settings", "Skip GDS" });
+
+        return choice switch
+        {
+            0 => GdsPreflightDecision.InstallRequested,
+            1 => GdsPreflightDecision.OpenSettingsRequested,
+            _ => GdsPreflightDecision.SkipGds,
+        };
+    }
+
+    /// <summary>
     /// Exports a Python script to GDS (if enabled and environment is ready).
     /// </summary>
     /// <param name="scriptPath">Path to the exported Python script.</param>

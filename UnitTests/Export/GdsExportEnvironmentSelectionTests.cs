@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Export;
 using CAP_Core.Export;
 using Shouldly;
@@ -103,5 +104,83 @@ public class GdsExportEnvironmentSelectionTests
         vm.InstallNazcaCommand.Execute(null);
 
         requested.ShouldBeTrue();
+    }
+
+    private sealed class FakeMessageBoxService : IMessageBoxService
+    {
+        public int ChoiceToReturn { get; set; } = -1;
+        public string? LastMessage { get; private set; }
+        public IReadOnlyList<string>? LastButtons { get; private set; }
+
+        public Task<SavePromptResult> ShowSavePromptAsync(string message, string title) =>
+            Task.FromResult(SavePromptResult.Cancel);
+
+        public Task<int> ShowChoicePromptAsync(string message, string title, IReadOnlyList<string> buttonLabels)
+        {
+            LastMessage = message;
+            LastButtons = buttonLabels;
+            return Task.FromResult(ChoiceToReturn);
+        }
+    }
+
+    [Fact]
+    public async Task PreflightGds_GdsGenerationDisabled_ProceedsWithoutDialog()
+    {
+        var vm = CreateViewModel();
+        vm.GenerateGdsEnabled = false;
+        var messageBox = new FakeMessageBoxService();
+
+        var decision = await vm.PreflightGdsAsync(messageBox);
+
+        decision.ShouldBe(GdsPreflightDecision.Proceed);
+        messageBox.LastMessage.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task PreflightGds_EnvironmentReady_ProceedsWithoutDialog()
+    {
+        var vm = CreateViewModel();
+        vm.GenerateGdsEnabled = true;
+        vm.PythonAvailable = true;
+        vm.NazcaAvailable = true;
+        var messageBox = new FakeMessageBoxService();
+
+        var decision = await vm.PreflightGdsAsync(messageBox);
+
+        decision.ShouldBe(GdsPreflightDecision.Proceed);
+        messageBox.LastMessage.ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData(0, GdsPreflightDecision.InstallRequested)]
+    [InlineData(1, GdsPreflightDecision.OpenSettingsRequested)]
+    [InlineData(2, GdsPreflightDecision.SkipGds)]
+    [InlineData(-1, GdsPreflightDecision.SkipGds)]   // Dialog geschlossen
+    public async Task PreflightGds_NazcaMissing_MapsDialogChoice(int choice, GdsPreflightDecision expected)
+    {
+        var vm = CreateViewModel();
+        vm.GenerateGdsEnabled = true;
+        vm.PythonAvailable = true;
+        vm.NazcaAvailable = false;
+        var messageBox = new FakeMessageBoxService { ChoiceToReturn = choice };
+
+        var decision = await vm.PreflightGdsAsync(messageBox);
+
+        decision.ShouldBe(expected);
+        messageBox.LastButtons!.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public async Task PreflightGds_NoMessageBoxService_ProceedsLikeBefore()
+    {
+        // Headless/legacy callers without a dialog service keep the old behavior:
+        // attempt the GDS generation and surface the failure in the result.
+        var vm = CreateViewModel();
+        vm.GenerateGdsEnabled = true;
+        vm.NazcaAvailable = false;
+
+        var decision = await vm.PreflightGdsAsync(null);
+
+        decision.ShouldBe(GdsPreflightDecision.Proceed);
     }
 }
