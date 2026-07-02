@@ -108,6 +108,38 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         }
     }
 
+    [Fact]
+    public async Task StartDefaultNazcaInstall_EnvAlreadyExists_DoesNotCreateDuplicateAndExplains()
+    {
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(new PythonEnvironment
+        {
+            Name = PythonEnvironmentManagerViewModel.DefaultEnvironmentName,
+            VenvPath = Path.Combine(UvBootstrapper.EnvironmentsBaseDir,
+                PythonEnvironmentManagerViewModel.DefaultEnvironmentName),
+        });
+        var vm = CreateViewModel(registry);
+
+        await vm.StartDefaultNazcaInstallAsync();
+
+        registry.GetAll().Count.ShouldBe(1);                 // kein Duplikat
+        vm.IsBusy.ShouldBeFalse();                           // kein Install gestartet
+        vm.ProgressText.ShouldContain(
+            PythonEnvironmentManagerViewModel.DefaultEnvironmentName);
+    }
+
+    [Fact]
+    public async Task StartDefaultNazcaInstall_WhileBusy_IsIgnored()
+    {
+        var registry = CreateRegistry();
+        var vm = CreateViewModel(registry);
+        vm.IsBusy = true;
+
+        await vm.StartDefaultNazcaInstallAsync();
+
+        registry.GetAll().ShouldBeEmpty();                   // nichts registriert
+    }
+
     private static PythonEnvironment MakeEnv(string name) => new()
     {
         Name = name,

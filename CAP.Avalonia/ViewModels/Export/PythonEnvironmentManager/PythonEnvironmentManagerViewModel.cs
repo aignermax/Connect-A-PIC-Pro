@@ -58,6 +58,31 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
         RefreshList();
     }
 
+    /// <summary>Name of the environment created by the one-click "install Nazca" offers.</summary>
+    public const string DefaultEnvironmentName = "nazca";
+
+    /// <summary>
+    /// One-click entry point used by the GDS-export fallback and the export guard:
+    /// creates the default Nazca environment with default settings. No-ops (with an
+    /// explanatory status) when an environment of that name already exists, and does
+    /// nothing while another operation runs.
+    /// </summary>
+    public async Task StartDefaultNazcaInstallAsync()
+    {
+        if (IsBusy) return;
+
+        if (_registry.Exists(DefaultEnvironmentName))
+        {
+            ProgressText = $"Environment '{DefaultEnvironmentName}' already exists — "
+                + "select it below or use Repair if it is broken.";
+            return;
+        }
+
+        NewEnvironmentName = DefaultEnvironmentName;
+        PythonVersion = UvBootstrapper.DefaultPythonVersion;
+        await CreateAndInstallCommand.ExecuteAsync(null);
+    }
+
     /// <summary>Creates a new venv and installs Nazca + pyclipper into it.</summary>
     [RelayCommand]
     private async Task CreateAndInstallAsync()
