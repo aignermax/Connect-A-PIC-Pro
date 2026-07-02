@@ -13,6 +13,9 @@ namespace CAP.Avalonia.Controls.Rendering;
 /// </summary>
 internal sealed class PinRenderer
 {
+    /// <summary>Copper/gold colour marking electrical pins (Issue #519).</summary>
+    private static readonly Color ElectricalPinColor = Color.FromRgb(218, 165, 32);
+
     /// <summary>
     /// Renders all physical pins of a component.
     /// </summary>
@@ -81,9 +84,6 @@ internal sealed class PinRenderer
             return new SolidColorBrush(Color.FromArgb(alpha, 100, 200, 100));
         return new SolidColorBrush(Color.FromArgb(alpha, 200, 100, 100));
     }
-
-    /// <summary>Copper/gold colour marking electrical pins (Issue #519).</summary>
-    private static readonly Color ElectricalPinColor = Color.FromRgb(218, 165, 32);
 
     /// <summary>
     /// Draws the pin marker: optical pins as circles, electrical pins as squares
