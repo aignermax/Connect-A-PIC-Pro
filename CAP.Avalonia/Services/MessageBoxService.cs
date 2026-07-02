@@ -119,4 +119,60 @@ public class MessageBoxService : IMessageBoxService
 
         return result ?? SavePromptResult.Cancel;
     }
+
+    /// <inheritdoc/>
+    public async Task<int> ShowChoicePromptAsync(string message, string title, IReadOnlyList<string> buttonLabels)
+    {
+        if (Application.Current?.ApplicationLifetime is not IClassicDesktopStyleApplicationLifetime desktop
+            || desktop.MainWindow == null)
+            return -1;
+
+        var dialog = new Window
+        {
+            Title = title,
+            Width = 480,
+            SizeToContent = SizeToContent.Height,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner,
+            CanResize = false,
+            Background = new SolidColorBrush(Color.Parse("#2d2d2d"))
+        };
+
+        var stackPanel = new StackPanel { Margin = new Thickness(20) };
+        stackPanel.Children.Add(new TextBlock
+        {
+            Text = message,
+            Margin = new Thickness(0, 10, 0, 20),
+            Foreground = Brushes.White,
+            TextWrapping = global::Avalonia.Media.TextWrapping.Wrap,
+            FontSize = 14
+        });
+
+        var buttonPanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            HorizontalAlignment = HorizontalAlignment.Right,
+            Spacing = 10
+        };
+
+        var result = -1;
+        for (var i = 0; i < buttonLabels.Count; i++)
+        {
+            var index = i;
+            var button = new Button
+            {
+                Content = buttonLabels[i],
+                Height = 32,
+                Padding = new Thickness(12, 0),
+                Background = new SolidColorBrush(Color.Parse(i == 0 ? "#0d6efd" : "#3d3d3d")),
+                Foreground = Brushes.White
+            };
+            button.Click += (_, _) => { result = index; dialog.Close(); };
+            buttonPanel.Children.Add(button);
+        }
+
+        stackPanel.Children.Add(buttonPanel);
+        dialog.Content = stackPanel;
+        await dialog.ShowDialog(desktop.MainWindow);
+        return result;
+    }
 }
