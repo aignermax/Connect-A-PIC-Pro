@@ -29,5 +29,11 @@ Keep the layering and MVVM clean — this is what we look at in review:
   (`ObservableObject`, `[ObservableProperty]`, `[RelayCommand]`); Views only bind.
   No business logic in code-behind.
 - One responsibility per class; add tests for new logic.
+- **Cross-platform parity.** Lunima targets macOS, Linux, and Windows *together* — don't let
+  one OS fall behind. Never call `Process.Start` directly or hardcode OS shell commands: use
+  `ProcessLaunchFactory` for external tools (python/docker) and `IUrlLauncher` for opening
+  URLs/files. Use `Path.Combine` and `InvariantCulture` for machine output; condition
+  Windows-only `.csproj` properties; and keep the release matrix (Windows MSI + portable,
+  Linux tarball, macOS `.dmg`) in sync. Details: [CLAUDE.md §1.2](CLAUDE.md).
 
 Full rules: [CLAUDE.md](CLAUDE.md).

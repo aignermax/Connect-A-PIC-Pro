@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
 
 namespace CAP.Avalonia.Services.Solvers;
@@ -25,6 +26,13 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     /// <summary>Label stamped on every solver container so orphans can be reaped.</summary>
     private const string ContainerLabel = "lunima.fdtd=1";
 
+    /// <summary>
+    /// Target platform for the Docker image. conda-forge pymeep (MPI/MPICH variant)
+    /// does not publish a linux-aarch64 wheel, so we pin to linux/amd64 for all hosts
+    /// (Apple Silicon runs it under emulation).
+    /// </summary>
+    private const string FdtdPlatform = "linux/amd64";
+
     /// <summary>Names of containers currently running, killed on process exit.</summary>
     private static readonly ConcurrentDictionary<string, byte> ActiveContainers = new();
     private static int _exitHookInstalled;
@@ -46,6 +54,7 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     /// <summary>Ceiling so we never request an absurd tmpfs cap on big machines.</summary>
     private const int ShmCeilingMb = 16384;
 
+    private readonly ProcessLaunchFactory _launchFactory;
     private readonly string _dockerExe;
     private readonly string _imageTag;
     private readonly string _dockerfilePath;
@@ -56,16 +65,21 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     /// <param name="imageTag">Pinned image tag, e.g. "lunima-meep:1".</param>
     /// <param name="dockerfilePath">Path to the Dockerfile used to build the image.</param>
     /// <param name="buildContext">Docker build context (repo root, so the script can be COPYed).</param>
-    /// <param name="dockerExecutable">Docker CLI (default "docker").</param>
+    /// <param name="dockerExecutable">Docker CLI override (default "docker").</param>
     /// <param name="timeout">Optional per-solve timeout.</param>
+    /// <param name="launchFactory">Factory used to resolve the Docker CLI and build ProcessStartInfo
+    ///     with a platform-aware PATH. Optional: production DI injects the shared singleton; tests and
+    ///     non-DI construction fall back to a working default, so there is no test churn.</param>
     public DockerFdtdSMatrixService(
         string imageTag, string dockerfilePath, string buildContext,
-        string dockerExecutable = "docker", TimeSpan? timeout = null)
+        string? dockerExecutable = null, TimeSpan? timeout = null,
+        ProcessLaunchFactory? launchFactory = null)
     {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
         _imageTag = imageTag ?? throw new ArgumentNullException(nameof(imageTag));
         _dockerfilePath = dockerfilePath ?? throw new ArgumentNullException(nameof(dockerfilePath));
         _buildContext = buildContext ?? throw new ArgumentNullException(nameof(buildContext));
-        _dockerExe = dockerExecutable;
+        _dockerExe = _launchFactory.ResolveExecutable(dockerExecutable ?? "docker") ?? "docker";
         _timeout = timeout ?? DefaultSolveTimeout;
     }
 
@@ -123,31 +137,31 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
             ActiveContainers[containerName] = 0;
 
             var cores = ResolveCores(request);
-            var si = new ProcessStartInfo { FileName = _dockerExe };
-            si.ArgumentList.Add("run");
-            si.ArgumentList.Add("--rm");
-            // Named + labelled so we can stop it on cancel/exit and reap orphans
-            // (a bare `docker run` leaves the container running in the daemon when
-            // the client process — or the whole app — is killed).
-            si.ArgumentList.Add("--name");
-            si.ArgumentList.Add(containerName);
-            si.ArgumentList.Add("--label");
-            si.ArgumentList.Add(ContainerLabel);
-            // MPICH/UCX uses shared memory (/dev/shm) for inter-rank transport.
-            // Docker's default /dev/shm is only 64 MB, which makes MPI_Init fail
-            // ("Not enough memory ... /dev/shm") once several ranks start. Scale it
-            // with the rank count (which itself scales with the machine's cores).
-            // /dev/shm is a tmpfs cap, not a reservation, so a generous size is free.
-            si.ArgumentList.Add($"--shm-size={ResolveShmMb(cores)}m");
-            si.ArgumentList.Add("-v");
-            si.ArgumentList.Add($"{ToDockerPath(workingDir)}:{ContainerDataDir}");
-            si.ArgumentList.Add(_imageTag);
-            si.ArgumentList.Add("mpirun");
-            si.ArgumentList.Add("-np");
-            si.ArgumentList.Add(cores.ToString());
-            si.ArgumentList.Add("python");
-            si.ArgumentList.Add(ContainerScript);
-            si.ArgumentList.Add($"--spec={ContainerDataDir}/_fdtd_request.json");
+            var runArgs = new[]
+            {
+                "run", "--rm",
+                // Named + labelled so we can stop it on cancel/exit and reap orphans
+                // (a bare `docker run` leaves the container running in the daemon when
+                // the client process — or the whole app — is killed).
+                "--name", containerName,
+                "--label", ContainerLabel,
+                // MPICH/UCX uses shared memory (/dev/shm) for inter-rank transport.
+                // Docker's default /dev/shm is only 64 MB, which makes MPI_Init fail
+                // ("Not enough memory ... /dev/shm") once several ranks start. Scale it
+                // with the rank count (which itself scales with the machine's cores).
+                // /dev/shm is a tmpfs cap, not a reservation, so a generous size is free.
+                $"--shm-size={ResolveShmMb(cores)}m",
+                // conda-forge pymeep mpi_mpich lacks a linux-aarch64 build today.
+                "--platform", FdtdPlatform,
+                "-v", $"{ToDockerPath(workingDir)}:{ContainerDataDir}",
+                _imageTag,
+                "mpirun", "-np", cores.ToString(),
+                "python", ContainerScript,
+                $"--spec={ContainerDataDir}/_fdtd_request.json",
+            };
+
+            if (!_launchFactory.TryBuild(_dockerExe, runArgs, workingDir, null, out var si, out var launchError))
+                return FdtdSMatrixResult.Fail($"Could not start Docker: {launchError}", missingDependency: "docker");
 
             var run = await SubprocessJsonRunner.RunAsync(si, string.Empty, _timeout, ct,
                 onStderrLine: line => { if (IsProgressLine(line)) progress?.Report(CleanProgressLine(line)); });
@@ -168,10 +182,9 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
 
     private async Task ForceRemoveContainerAsync(string name)
     {
-        var si = new ProcessStartInfo { FileName = _dockerExe };
-        si.ArgumentList.Add("rm");
-        si.ArgumentList.Add("-f");
-        si.ArgumentList.Add(name);
+        var rmArgs = new[] { "rm", "-f", name };
+        if (!_launchFactory.TryBuild(_dockerExe, rmArgs, null, null, out var si, out _))
+            return;
         try { await SubprocessJsonRunner.RunAsync(si, string.Empty, TimeSpan.FromSeconds(20), CancellationToken.None); }
         catch { /* best-effort */ }
     }
@@ -179,11 +192,9 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     /// <summary>Removes any solver containers left over from a previous (crashed) session.</summary>
     private async Task ReapOrphanContainersAsync()
     {
-        var list = new ProcessStartInfo { FileName = _dockerExe };
-        list.ArgumentList.Add("ps");
-        list.ArgumentList.Add("-aq");
-        list.ArgumentList.Add("--filter");
-        list.ArgumentList.Add($"label={ContainerLabel}");
+        var psArgs = new[] { "ps", "-aq", "--filter", $"label={ContainerLabel}" };
+        if (!_launchFactory.TryBuild(_dockerExe, psArgs, null, null, out var list, out _))
+            return;
         SubprocessJsonRunner.RunResult res;
         try { res = await SubprocessJsonRunner.RunAsync(list, string.Empty, TimeSpan.FromSeconds(20), CancellationToken.None); }
         catch { return; }
@@ -197,16 +208,16 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     {
         if (Interlocked.Exchange(ref _exitHookInstalled, 1) == 1) return;
         var dockerExe = _dockerExe;
+        var factory = _launchFactory;
         AppDomain.CurrentDomain.ProcessExit += (_, _) =>
         {
             foreach (var name in ActiveContainers.Keys)
             {
                 try
                 {
-                    var si = new ProcessStartInfo { FileName = dockerExe, UseShellExecute = false, CreateNoWindow = true };
-                    si.ArgumentList.Add("rm");
-                    si.ArgumentList.Add("-f");
-                    si.ArgumentList.Add(name);
+                    var exitArgs = new[] { "rm", "-f", name };
+                    if (!factory.TryBuild(dockerExe, exitArgs, null, null, out var si, out _))
+                        continue;
                     Process.Start(si)?.WaitForExit(5000);
                 }
                 catch { /* best-effort on shutdown */ }
@@ -216,7 +227,21 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
 
     private static string CreateTempDir()
     {
-        var dir = Path.Combine(Path.GetTempPath(), "lunima-fdtd-" + Guid.NewGuid().ToString("N"));
+        string baseDir;
+        if (OperatingSystem.IsMacOS())
+        {
+            // Docker Desktop on macOS only auto-shares a few host paths by default,
+            // ~/Library/Caches among them; placing the bind-mount source here avoids
+            // requiring the user to add /var/folders to Docker's file-sharing list.
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            baseDir = Path.Combine(home, "Library", "Caches", "lunima-fdtd");
+        }
+        else
+        {
+            baseDir = Path.GetTempPath();
+        }
+
+        var dir = Path.Combine(baseDir, "lunima-fdtd-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
         return dir;
     }
@@ -236,10 +261,9 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
     /// </summary>
     public async Task<FdtdSMatrixResult?> EnsureImageAsync(CancellationToken ct = default)
     {
-        var inspect = new ProcessStartInfo { FileName = _dockerExe };
-        inspect.ArgumentList.Add("image");
-        inspect.ArgumentList.Add("inspect");
-        inspect.ArgumentList.Add(_imageTag);
+        var inspectArgs = new[] { "image", "inspect", _imageTag };
+        if (!_launchFactory.TryBuild(_dockerExe, inspectArgs, null, null, out var inspect, out var inspectErr))
+            return FdtdSMatrixResult.Fail($"Could not start Docker: {inspectErr}", missingDependency: "docker");
         var probe = await SubprocessJsonRunner.RunAsync(inspect, string.Empty, TimeSpan.FromSeconds(30), ct);
 
         if (probe.Outcome == SubprocessJsonRunner.Outcome.StartFailed)
@@ -247,13 +271,17 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
         if (probe.Outcome == SubprocessJsonRunner.Outcome.Completed && probe.ExitCode == 0)
             return null; // image present
 
-        var build = new ProcessStartInfo { FileName = _dockerExe };
-        build.ArgumentList.Add("build");
-        build.ArgumentList.Add("-f");
-        build.ArgumentList.Add(_dockerfilePath);
-        build.ArgumentList.Add("-t");
-        build.ArgumentList.Add(_imageTag);
-        build.ArgumentList.Add(_buildContext);
+        var buildArgs = new[]
+        {
+            "build",
+            // conda-forge pymeep mpi_mpich lacks a linux-aarch64 build today.
+            "--platform", FdtdPlatform,
+            "-f", _dockerfilePath,
+            "-t", _imageTag,
+            _buildContext,
+        };
+        if (!_launchFactory.TryBuild(_dockerExe, buildArgs, null, null, out var build, out var buildErr))
+            return FdtdSMatrixResult.Fail($"Could not start Docker: {buildErr}", missingDependency: "docker");
         var built = await SubprocessJsonRunner.RunAsync(build, string.Empty, BuildTimeout, ct);
 
         if (built.Outcome == SubprocessJsonRunner.Outcome.Completed && built.ExitCode == 0)
@@ -316,10 +344,10 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
         // `docker version --format {{.Server.Version}}` prints the engine version
         // when the daemon is reachable; it fails (non-zero) if Docker is installed
         // but the engine isn't running, and won't start at all if Docker is absent.
-        var si = new ProcessStartInfo { FileName = _dockerExe };
-        si.ArgumentList.Add("version");
-        si.ArgumentList.Add("--format");
-        si.ArgumentList.Add("{{.Server.Version}}");
+        var versionArgs = new[] { "version", "--format", "{{.Server.Version}}" };
+        if (!_launchFactory.TryBuild(_dockerExe, versionArgs, null, null, out var si, out _))
+            return FdtdAvailability.Unavailable(
+                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.");
 
         var run = await SubprocessJsonRunner.RunAsync(si, string.Empty, TimeSpan.FromSeconds(20), ct);
 

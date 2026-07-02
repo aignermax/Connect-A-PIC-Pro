@@ -2,9 +2,9 @@
 
 **AI-collaborative photonic design system**
 
-<img width="1407" height="932" alt="Lunima photonic design canvas" src="https://github.com/user-attachments/assets/a784b7f3-7300-453f-a6a8-12638367ef9a" />
+<img width="1983" height="886" alt="grafik" src="https://github.com/user-attachments/assets/1ea25db5-7d03-44fc-aac2-8cf3c876efb2" />
 
-<img width="1534" height="475" alt="Lunima component library and simulation panel" src="https://github.com/user-attachments/assets/80dcf0e1-1cbf-4709-ab79-5292cf3e415e" />
+<img width="1861" height="835" alt="grafik" src="https://github.com/user-attachments/assets/855e2fea-7b1a-4f57-a8b7-f6e55e81fb06" />
 
 > Lunima is a photonic design environment for fast, physically grounded circuit exploration and system-level thinking.
 
@@ -71,6 +71,9 @@ Lunima acts as a **design and integration layer**, allowing information to flow 
 - **AI Assistant** — Natural language circuit design with Claude integration
 - **Cross-Platform UI** — Avalonia-based (Desktop, WebAssembly planned)
 
+You can now even recalculate the S-matrices using the integrated MEEP FDTD Solver (install docker first)
+<img width="574" height="800" alt="grafik" src="https://github.com/user-attachments/assets/9b276b4d-acc7-4fc5-887d-97542504bf12" />
+
 ---
 
 ## Getting Started
@@ -79,7 +82,9 @@ Lunima acts as a **design and integration layer**, allowing information to flow 
 
 Download the latest release from [GitHub Releases](https://github.com/aignermax/Lunima/releases).
 
-Supported platforms: Windows, macOS, Linux
+Supported platforms: Windows, macOS (Apple Silicon & Intel), Linux.
+
+macOS release builds ship as an **unsigned** `.dmg`; on first launch, remove the quarantine flag with `xattr -dr com.apple.quarantine /Applications/Lunima.app`. In-app auto-update is available on Windows; macOS and Linux open the releases page.
 
 ### Building from Source
 
@@ -163,12 +168,23 @@ python3 tools/semantic_search.py "query" # Semantic code search
 
 ---
 
-## License
+## Project status
 
-MIT License - see [LICENSE](LICENSE) for details.
+Lunima is an independent MIT-licensed open-source project. It is not an official Akhetonics product.
+
+Akhetonics supports the project through limited work-time contributions, as part of its broader interest in open photonic design tooling. The project remains independently maintained and community-driven.
+
+Supported by [<img width="214" height="31" alt="Akhetonics logo" src="https://github.com/user-attachments/assets/1a99b0ef-abe0-4063-825f-ff2f38c5d934" />](https://www.akhetonics.com/)
+
 
 ---
 
 ## Origins
 
 Lunima originated from [Connect-A-PIC](https://github.com/Akhetonics/Connect-A-PIC) and has evolved into a standalone photonic design system.
+
+---
+
+## License
+
+MIT License - see [LICENSE](LICENSE) for details.

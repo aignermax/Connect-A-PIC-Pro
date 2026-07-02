@@ -97,6 +97,64 @@ public class UpdateCheckerTests
         UpdateChecker.FindMsiAsset(release).ShouldBeNull();
     }
 
+    [Fact]
+    public void FindPlatformAsset_AllPlatformAssetsPresent_ReturnsCorrectAssetForCurrentOS()
+    {
+        var release = new GitHubReleaseInfo
+        {
+            TagName = "v1.5.0",
+            Assets = new List<GitHubReleaseAsset>
+            {
+                new() { Name = "Lunima-1.5.0.msi",    BrowserDownloadUrl = "https://example.com/Lunima.msi" },
+                new() { Name = "Lunima-1.5.0.dmg",    BrowserDownloadUrl = "https://example.com/Lunima.dmg" },
+                new() { Name = "Lunima-1.5.0.tar.gz", BrowserDownloadUrl = "https://example.com/Lunima.tar.gz" },
+            }
+        };
+
+        var asset = UpdateChecker.FindPlatformAsset(release);
+
+        asset.ShouldNotBeNull();
+        if (OperatingSystem.IsWindows())
+            asset!.Name.ShouldEndWith(".msi");
+        else if (OperatingSystem.IsMacOS())
+            asset!.Name.ShouldEndWith(".dmg");
+        else
+            asset!.Name.ShouldEndWith(".tar.gz");
+    }
+
+    [Fact]
+    public void FindPlatformAsset_EmptyAssets_ReturnsNull()
+    {
+        var release = new GitHubReleaseInfo
+        {
+            TagName = "v1.0.0",
+            Assets = new List<GitHubReleaseAsset>()
+        };
+
+        UpdateChecker.FindPlatformAsset(release).ShouldBeNull();
+    }
+
+    [Fact]
+    public void FindPlatformAsset_OnlyMsiAvailable_ReturnsNullOnNonWindows()
+    {
+        // Regression test: FindPlatformAsset must NOT return a .msi on macOS/Linux.
+        // Root cause of the macOS "downloads .msi instead of .dmg" bug (issue #610):
+        // the ViewModel was calling FindMsiAsset (always .msi) instead of FindPlatformAsset.
+        var release = new GitHubReleaseInfo
+        {
+            TagName = "v1.0.0",
+            Assets = new List<GitHubReleaseAsset>
+            {
+                new() { Name = "Lunima-1.0.0.msi", BrowserDownloadUrl = "https://example.com/Lunima.msi" },
+            }
+        };
+
+        if (OperatingSystem.IsWindows())
+            UpdateChecker.FindPlatformAsset(release).ShouldNotBeNull();
+        else
+            UpdateChecker.FindPlatformAsset(release).ShouldBeNull();
+    }
+
     [Theory]
     [InlineData("v1.5.0", "1.4.0", true)]   // release newer
     [InlineData("v1.5.0", "1.5.0", false)]  // same version

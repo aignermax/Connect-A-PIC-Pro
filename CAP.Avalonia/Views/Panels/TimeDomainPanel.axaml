@@ -1,8 +1,19 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:trace="using:CAP.Avalonia.ViewModels.Analysis.TimeTrace"
+             xmlns:oxy="using:OxyPlot.Avalonia"
              x:Class="CAP.Avalonia.Views.Panels.TimeDomainPanel"
              x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <!-- Dark hover-tracker so its text is readable on the dark theme,
+             mirroring the ONA window's tracker style. -->
+        <Style Selector="oxy|TrackerControl">
+            <Setter Property="Background" Value="#2D2D2D"/>
+            <Setter Property="LineStroke" Value="#A0A0A0"/>
+        </Style>
+    </UserControl.Styles>
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
@@ -86,8 +97,35 @@
                    IsVisible="{Binding RightPanel.TimeDomain.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    TextWrapping="Wrap"/>
 
-        <!-- Result table -->
-        <ScrollViewer MaxHeight="180" Margin="0,4,0,0"
+        <!-- Waveform plot: power vs time, one series per output pin.
+             Zoom/pan via OxyPlot default axes; cursor read-out via tracker. -->
+        <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
+                Height="220" Margin="0,4,0,0"
+                IsVisible="{Binding RightPanel.TimeDomain.HasResult}">
+            <oxy:PlotView Model="{Binding RightPanel.TimeDomain.PlotModel}" Background="Transparent"/>
+        </Border>
+
+        <!-- Per-pin visibility toggles (legend). -->
+        <ItemsControl ItemsSource="{Binding RightPanel.TimeDomain.Series}"
+                      Margin="0,4,0,0"
+                      IsVisible="{Binding RightPanel.TimeDomain.HasResult}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="trace:TimeTraceSeriesViewModel">
+                    <CheckBox IsChecked="{Binding IsVisible}" Margin="0,0,0,1">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <Border Width="12" Height="12" CornerRadius="2"
+                                    VerticalAlignment="Center"
+                                    Background="{Binding ColorHex}"/>
+                            <TextBlock Text="{Binding Label}" Foreground="LightGray"
+                                       FontSize="10" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </CheckBox>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
+        <!-- Peak-power summary table (kept from the original text output). -->
+        <ScrollViewer MaxHeight="120" Margin="0,4,0,0"
                       IsVisible="{Binding RightPanel.TimeDomain.ResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
             <TextBlock Text="{Binding RightPanel.TimeDomain.ResultText}"
                        Foreground="Plum" FontFamily="Consolas" FontSize="10"
@@ -98,7 +136,7 @@
         <Button Content="Export CSV"
                 Command="{Binding RightPanel.TimeDomain.ExportCsvCommand}"
                 Width="110" Margin="0,5,0,0" Background="#3d3d5d"
-                IsVisible="{Binding RightPanel.TimeDomain.ResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                IsVisible="{Binding RightPanel.TimeDomain.HasResult}"/>
         </StackPanel><!-- end Time-Domain controls -->
     </StackPanel>
 

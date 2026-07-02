@@ -8,7 +8,12 @@ using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Analysis.TimeTrace;
 using CAP.Avalonia.ViewModels.Canvas;
+using OxyPlot;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
 
 namespace CAP.Avalonia.ViewModels.Analysis;
 
@@ -50,9 +55,28 @@ public partial class TimeDomainViewModel : ObservableObject
     [ObservableProperty]
     private string _resultText = "";
 
+    /// <summary>
+    /// OxyPlot model for the transient waveform plot (power vs time, one series
+    /// per output pin). Bound to the panel's <c>PlotView</c>. Reuses the ONA
+    /// charting approach (#526) — zoom/pan come from OxyPlot's default axes.
+    /// </summary>
+    [ObservableProperty]
+    private PlotModel _plotModel = TimeTracePlotBuilder.CreateEmptyPlotModel();
+
+    /// <summary>
+    /// Legend / per-pin visibility toggles. Each entry maps to one output-pin
+    /// trace; toggling <see cref="TimeTraceSeriesViewModel.IsVisible"/> rebuilds
+    /// the plot.
+    /// </summary>
+    public ObservableCollection<TimeTraceSeriesViewModel> Series { get; } = new();
+
+    /// <summary>True once a completed transient result is available to plot/export.</summary>
+    public bool HasResult => _lastResult != null;
+
     private readonly CAP_Core.ErrorConsoleService? _errorConsole;
     private DesignCanvasViewModel? _canvas;
     private TimeDomainResult? _lastResult;
+    private Dictionary<Guid, string> _pinNameMap = new();
 
     /// <summary>Initializes a new instance of <see cref="TimeDomainViewModel"/>.</summary>
     /// <param name="errorConsole">Optional service for error logging.</param>
@@ -71,6 +95,7 @@ public partial class TimeDomainViewModel : ObservableObject
         ResultText = "";
         StatusText = "";
         _lastResult = null;
+        ClearPlot();
     }
 
     /// <summary>Runs the time-domain simulation pipeline.</summary>
@@ -88,12 +113,16 @@ public partial class TimeDomainViewModel : ObservableObject
         StatusText = "Building impulse responses…";
         ResultText = "";
         _lastResult = null;
+        ClearPlot();
 
         try
         {
+            _pinNameMap = BuildPinNameMap();
             var result = await Task.Run(() => RunSimulationCore());
             _lastResult = result;
             ResultText = TimeDomainResultFormatter.FormatResult(result);
+            BuildPlot(result);
+            OnPropertyChanged(nameof(HasResult));
             StatusText = $"Done — {result.PinTraces.Count} output pin(s)";
         }
         catch (InvalidOperationException ex)
@@ -213,4 +242,71 @@ public partial class TimeDomainViewModel : ObservableObject
         return signals;
     }
 
+    /// <summary>
+    /// Maps each logical pin Guid (both in- and out-flow) to a "Component.Pin" label so the
+    /// plot legend shows readable names instead of Guids. Built on the UI thread from the
+    /// current canvas before the simulation runs.
+    /// </summary>
+    private Dictionary<Guid, string> BuildPinNameMap()
+    {
+        var map = new Dictionary<Guid, string>();
+        if (_canvas == null) return map;
+
+        foreach (var compVm in _canvas.Components)
+        {
+            var component = compVm.Component;
+            var componentName = component.HumanReadableName ?? component.Identifier;
+            foreach (var pin in component.PhysicalPins)
+            {
+                if (pin.LogicalPin == null) continue;
+                var label = $"{componentName}.{pin.Name}";
+                // The result keys traces by the output pin's flow id; map both so the
+                // label resolves regardless of which flow direction the trace carries.
+                map[pin.LogicalPin.IDInFlow] = label;
+                map[pin.LogicalPin.IDOutFlow] = label;
+            }
+        }
+        return map;
+    }
+
+    /// <summary>
+    /// Builds the legend items and plot model from a completed result, and subscribes to
+    /// each series so toggling its visibility rebuilds the plot.
+    /// </summary>
+    private void BuildPlot(TimeDomainResult result)
+    {
+        DetachSeries();
+        Series.Clear();
+
+        var items = TimeTracePlotBuilder.BuildSeriesItems(
+            result, pinId => _pinNameMap.TryGetValue(pinId, out var name) ? name : null);
+        foreach (var item in items)
+        {
+            item.PropertyChanged += OnSeriesVisibilityChanged;
+            Series.Add(item);
+        }
+
+        PlotModel = TimeTracePlotBuilder.BuildPlotModel(result, items);
+    }
+
+    /// <summary>Resets the plot and legend to the empty state (e.g. on reconfigure or re-run).</summary>
+    private void ClearPlot()
+    {
+        DetachSeries();
+        Series.Clear();
+        PlotModel = TimeTracePlotBuilder.CreateEmptyPlotModel();
+        OnPropertyChanged(nameof(HasResult));
+    }
+
+    private void DetachSeries()
+    {
+        foreach (var series in Series)
+            series.PropertyChanged -= OnSeriesVisibilityChanged;
+    }
+
+    private void OnSeriesVisibilityChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(TimeTraceSeriesViewModel.IsVisible) && _lastResult != null)
+            PlotModel = TimeTracePlotBuilder.BuildPlotModel(_lastResult, Series);
+    }
 }

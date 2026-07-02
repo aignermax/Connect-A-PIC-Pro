@@ -183,9 +183,76 @@ jobs:
           name: Lunima-MSI-Installer
           path: Lunima-Setup-*.msi
 
+  build-macos:
+    name: Build macOS .dmg (${{ matrix.rid }})
+    needs: test
+    strategy:
+      matrix:
+        include:
+          # Both slices build on the Apple-Silicon runner. The x64 slice is cross-compiled
+          # via `dotnet publish -r osx-x64` (the bundle script never runs the produced binary,
+          # and hdiutil/.dmg packaging is arch-agnostic). This avoids the macos-13 Intel
+          # runners, which are scarce/deprecated — the x64 job previously queued 24h with no
+          # runner and was auto-cancelled, skipping the release.
+          - os: macos-latest
+            rid: osx-arm64
+          - os: macos-latest
+            rid: osx-x64
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.sha || github.ref }}
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+
+      - name: Extract version from csproj
+        id: version
+        run: |
+          version=$(grep '<Version>' CAP.Desktop/CAP.Desktop.csproj | sed 's/.*<Version>\(.*\)<\/Version>.*/\1/' | xargs)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Extracted version: $version"
+
+      - name: Setup Python (for .icns generation)
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # Best-effort icon: build_macos_bundle.sh also falls back to generating one,
+      # and ships without a custom icon if Pillow/iconutil are unavailable.
+      - name: Generate macOS app icon (.icns)
+        run: |
+          python3 -m pip install --upgrade Pillow
+          python3 scripts/generate_icon.py --icns Installer/LunimaIcon.icns
+        continue-on-error: true
+
+      - name: Build Lunima.app bundle (self-contained, unsigned)
+        run: bash scripts/build_macos_bundle.sh ${{ matrix.rid }}
+
+      # Unsigned .dmg with an /Applications drop-target. Signing/notarization is a
+      # follow-up gated on an Apple Developer ID + CI secrets (none configured yet);
+      # users clear quarantine with `xattr -dr com.apple.quarantine` on first launch.
+      - name: Package unsigned .dmg
+        run: |
+          DMG="Lunima-${{ steps.version.outputs.version }}-${{ matrix.rid }}.dmg"
+          STAGING="$(mktemp -d)"
+          cp -R dist/Lunima.app "$STAGING/"
+          ln -s /Applications "$STAGING/Applications"
+          hdiutil create -volname "Lunima" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
+          echo "Created $DMG"
+
+      - name: Upload .dmg artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lunima-${{ matrix.rid }}-dmg
+          path: Lunima-*-${{ matrix.rid }}.dmg
+
   release:
     name: Create Release
-    needs: [build, build-msi]
+    needs: [build, build-msi, build-macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -193,6 +260,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ github.event_name == 'repository_dispatch' && github.event.client_payload.sha || github.ref }}
+          # Full history (not a shallow depth-1 clone) so the changelog step's
+          # `git log <prev-tag>..<curr-tag>` can see every commit in the range.
+          # With the default shallow checkout only the tip commit is present, so
+          # the v0.9.0 notes listed a single commit instead of the whole release.
+          fetch-depth: 0
 
       - name: Compute release info
         id: info
@@ -236,6 +308,13 @@ jobs:
           name: Lunima-MSI-Installer
           path: msi
 
+      - name: Download macOS .dmg builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Lunima-*-dmg
+          path: dmg
+          merge-multiple: true
+
       - name: Create archives
         run: |
           cd win-x64 && zip -r ../Lunima-${{ steps.info.outputs.version }}-win-x64.zip . && cd ..
@@ -244,28 +323,38 @@ jobs:
       - name: Generate Changelog
         id: changelog
         run: |
-          # Get the previous tag
+          # Get the previous release tag: the highest semantic-version tag (vMAJOR.MINOR.PATCH)
+          # that is NOT the current one. The old "head -2 | tail -1" assumed the current tag was
+          # the newest in the list, but non-release tags (e.g. "vendor-cache-nazca-0.6.1") sort
+          # to the top under -version:refname and pushed the current tag into the tail position —
+          # producing a bogus "0 commits since vX..vX" changelog. Restricting to vX.Y.Z tags
+          # ignores vendor/build/cache tags entirely.
           git fetch --tags
-          PREV_TAG=$(git tag --sort=-version:refname | grep -v "build" | head -2 | tail -1)
           CURR_TAG="${{ steps.info.outputs.tag }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+$' | grep -vx "$CURR_TAG" | head -1)
 
           echo "Generating changelog from $PREV_TAG to $CURR_TAG"
 
           # Get commits since last release tag
           if [ -n "$PREV_TAG" ]; then
             COMMITS=$(git log $PREV_TAG..$CURR_TAG --pretty=format:"- %s" --no-merges)
-            COMMIT_COUNT=$(git rev-list --count $PREV_TAG..$CURR_TAG --no-merges)
           else
             COMMITS=$(git log --pretty=format:"- %s" --no-merges | head -20)
-            COMMIT_COUNT=$(git rev-list --count HEAD --no-merges)
           fi
 
-          # Categorize commits
-          FEATURES=$(echo "$COMMITS" | grep -iE "^- (feat|feature|add|implement):" || true)
-          FIXES=$(echo "$COMMITS" | grep -iE "^- (fix|bugfix):" || true)
-          IMPROVEMENTS=$(echo "$COMMITS" | grep -iE "^- (refactor|improve|update|enhance|chore):" || true)
-          BREAKING=$(echo "$COMMITS" | grep -iE "BREAKING|breaking change" || true)
-          OTHER=$(echo "$COMMITS" | grep -viE "^- (feat|feature|add|implement|fix|bugfix|refactor|improve|update|enhance|chore):" || true)
+          # Categorize commits. This repo uses symbol prefixes — (+) new, (!) breaking,
+          # (-) removed, (=) bugfix, (*) feature+fix, (~) refactor, (c) chore — so match those
+          # first, plus conventional-commit words as a fallback (fork/agent PRs use them).
+          PAT_FEAT='^- (\(\+\)|feat|feature|add|implement)'
+          PAT_FIX='^- (\(=\)|\(\*\)|fix|bugfix)'
+          PAT_IMPR='^- (\(~\)|\(c\)|\(-\)|refactor|improve|update|enhance|chore)'
+          PAT_BREAK='(^- \(!\)|BREAKING|breaking change)'
+
+          FEATURES=$(echo "$COMMITS" | grep -iE "$PAT_FEAT" || true)
+          FIXES=$(echo "$COMMITS" | grep -iE "$PAT_FIX" || true)
+          IMPROVEMENTS=$(echo "$COMMITS" | grep -iE "$PAT_IMPR" || true)
+          BREAKING=$(echo "$COMMITS" | grep -iE "$PAT_BREAK" || true)
+          OTHER=$(echo "$COMMITS" | grep -viE "$PAT_FEAT|$PAT_FIX|$PAT_IMPR|^- \(!\)" || true)
 
           # Build changelog sections
           CHANGELOG=""
@@ -290,13 +379,6 @@ jobs:
             CHANGELOG+="### 📝 Other Changes"$'\n'"$OTHER"$'\n\n'
           fi
 
-          # Add commit summary
-          if [ -n "$PREV_TAG" ]; then
-            CHANGELOG+="---"$'\n'"**$COMMIT_COUNT commits** since $PREV_TAG"
-          else
-            CHANGELOG+="---"$'\n'"**$COMMIT_COUNT commits** in this release"
-          fi
-
           # Save to output (use delimiter for multiline)
           echo "changelog<<EOF" >> $GITHUB_OUTPUT
           echo "$CHANGELOG" >> $GITHUB_OUTPUT
@@ -308,8 +390,6 @@ jobs:
           tag_name: ${{ steps.info.outputs.tag }}
           name: Lunima v${{ steps.info.outputs.version }}
           body: |
-            ## Lunima v${{ steps.info.outputs.version }}
-
             ${{ steps.changelog.outputs.changelog }}
 
             ## 📦 Installation
@@ -319,7 +399,7 @@ jobs:
             2. Run the installer
             3. Desktop shortcut and Start Menu entry will be created automatically
 
-            **Requirements:** .NET 8 Desktop Runtime (x64) - installer will check and prompt if missing
+            **Requirements:** .NET 10 Desktop Runtime (x64) - installer will check and prompt if missing
 
             ### Windows (Portable)
             1. Download `Lunima-${{ steps.info.outputs.version }}-win-x64.zip`
@@ -330,6 +410,15 @@ jobs:
             2. Extract: `tar xzf Lunima-*.tar.gz`
             3. Run: `./Lunima`
 
+            ### macOS (Apple Silicon & Intel)
+            1. Download `Lunima-${{ steps.info.outputs.version }}-osx-arm64.dmg` (Apple Silicon) or `Lunima-${{ steps.info.outputs.version }}-osx-x64.dmg` (Intel)
+            2. Open the `.dmg` and drag **Lunima** into Applications
+            3. These builds are **unsigned**. On first launch, clear the quarantine flag:
+               ```bash
+               xattr -dr com.apple.quarantine /Applications/Lunima.app
+               ```
+               (or right-click the app → **Open** → **Open** to bypass Gatekeeper once)
+
             No .NET installation required for portable versions — everything is included.
 
             ---
@@ -338,3 +427,5 @@ jobs:
             msi/Lunima-Setup-${{ steps.info.outputs.version }}.msi
             Lunima-${{ steps.info.outputs.version }}-win-x64.zip
             Lunima-${{ steps.info.outputs.version }}-linux-x64.tar.gz
+            dmg/Lunima-${{ steps.info.outputs.version }}-osx-arm64.dmg
+            dmg/Lunima-${{ steps.info.outputs.version }}-osx-x64.dmg

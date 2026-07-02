@@ -134,7 +134,7 @@ public class Component : ICloneable
         foreach (var slider in SliderMap.Values)
         {
             string pattern = "SLIDER" + slider.Number;
-            nazcaFunctionParameterString = Regex.Replace(nazcaFunctionParameterString, Regex.Escape(pattern), slider.Value.ToString(), RegexOptions.IgnoreCase);
+            nazcaFunctionParameterString = Regex.Replace(nazcaFunctionParameterString, Regex.Escape(pattern), slider.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), RegexOptions.IgnoreCase);
         }
         return nazcaFunctionParameterString;
     }

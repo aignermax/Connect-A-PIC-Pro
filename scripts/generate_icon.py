@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
 """
-Generate the Lunima application icon (LunimaIcon.ico).
+Generate the Lunima application icon (LunimaIcon.ico and LunimaIcon.icns).
 
 Produces a professional photonic/waveguide-themed icon with multiple sizes
-suitable for Windows applications and MSI installers.
+suitable for Windows applications (ICO), MSI installers, and macOS (ICNS).
 
 Usage:
-    python3 scripts/generate_icon.py [--output Installer/LunimaIcon.ico]
+    python3 scripts/generate_icon.py [--output Installer/LunimaIcon.ico] [--icns Installer/LunimaIcon.icns]
 """
 
 import argparse
 import math
 import os
+import platform
+import subprocess
+import tempfile
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFilter
@@ -205,18 +208,79 @@ def build_ico(output_path: Path) -> None:
     print(f"[generate_icon] Written: {output_path}  ({len(sizes)} sizes: {sizes})")
 
 
+def build_icns(output_path: Path) -> None:
+    """Build a macOS ICNS file and write it to *output_path*.
+
+    On macOS, renders standard iconset sizes, creates a .iconset directory,
+    and uses 'iconutil -c icns' to generate the ICNS file.
+
+    On other platforms, uses Pillow's ICNS encoder as a fallback.
+    """
+    # Standard macOS iconset sizes (in points, but we render at 1x pixel density)
+    iconset_sizes = [16, 32, 64, 128, 256, 512, 1024]
+    source = render_icon(1024)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    # Try iconutil on macOS
+    if platform.system() == "Darwin":
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+                iconset_dir = Path(tmpdir) / "LunimaIcon.iconset"
+                iconset_dir.mkdir(parents=True, exist_ok=True)
+
+                # Render each size and save as .png in the iconset directory
+                for size in iconset_sizes:
+                    icon = render_icon(size).convert("RGBA")
+                    icon_path = iconset_dir / f"icon_{size}x{size}.png"
+                    icon.save(icon_path, format="PNG")
+
+                # Convert iconset to ICNS using iconutil
+                subprocess.run(
+                    ["iconutil", "-c", "icns", "-o", str(output_path), str(iconset_dir)],
+                    check=True,
+                    capture_output=True,
+                )
+                print(f"[generate_icon] Written: {output_path}  ({len(iconset_sizes)} sizes: {iconset_sizes})")
+                return
+        except (FileNotFoundError, subprocess.CalledProcessError) as e:
+            print(f"[generate_icon] Warning: iconutil failed, falling back to Pillow: {e}")
+
+    # Fallback: use Pillow's ICNS encoder
+    try:
+        source.save(output_path, format="ICNS")
+        print(f"[generate_icon] Written: {output_path}  (Pillow ICNS fallback, {len(iconset_sizes)} sizes: {iconset_sizes})")
+    except Exception as e:
+        print(f"[generate_icon] Error: Unable to generate ICNS file: {e}")
+        raise
+
+
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate the Lunima ICO icon")
+    parser = argparse.ArgumentParser(description="Generate the Lunima application icons (ICO and ICNS)")
     parser.add_argument(
         "--output",
         default="Installer/LunimaIcon.ico",
         help="Output path for the .ico file (default: Installer/LunimaIcon.ico)",
     )
+    parser.add_argument(
+        "--icns",
+        default=None,
+        help="Output path for the .icns file (default: Installer/LunimaIcon.icns, omit to skip)",
+    )
     args = parser.parse_args()
 
     repo_root = Path(__file__).resolve().parent.parent
+
+    # Generate ICO file
     output_path = (repo_root / args.output).resolve()
     build_ico(output_path)
+
+    # Generate ICNS file if requested
+    icns_path = args.icns
+    if icns_path is None:
+        icns_path = "Installer/LunimaIcon.icns"
+    icns_output_path = (repo_root / icns_path).resolve()
+    build_icns(icns_output_path)
 
 
 if __name__ == "__main__":

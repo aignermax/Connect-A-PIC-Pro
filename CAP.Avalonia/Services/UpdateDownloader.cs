@@ -1,11 +1,10 @@
-using System.Diagnostics;
 using System.Net.Http;
 using CAP_Core.Update;
 
 namespace CAP.Avalonia.Services;
 
 /// <summary>
-/// Downloads an MSI installer from a GitHub release asset URL with progress reporting.
+/// Downloads a platform-appropriate installer from a GitHub release asset URL with progress reporting.
 /// </summary>
 public class UpdateDownloader
 {
@@ -19,17 +18,20 @@ public class UpdateDownloader
     }
 
     /// <summary>
-    /// Downloads the MSI from <paramref name="downloadUrl"/> to a temporary file,
+    /// Downloads the installer from <paramref name="downloadUrl"/> to a temporary file,
     /// reporting fractional progress (0.0–1.0) via <paramref name="progress"/>.
+    /// The temporary file extension is derived from the asset filename in <paramref name="downloadUrl"/>.
     /// </summary>
-    /// <returns>Local file path to the downloaded MSI.</returns>
-    public async Task<string> DownloadMsiAsync(
+    /// <returns>Local file path to the downloaded installer.</returns>
+    public async Task<string> DownloadInstallerAsync(
         string downloadUrl,
         long expectedSize,
         IProgress<double> progress,
         CancellationToken cancellationToken = default)
     {
-        var tempPath = Path.Combine(Path.GetTempPath(), $"Lunima_Update_{Guid.NewGuid():N}.msi");
+        var assetFileName = Path.GetFileName(new Uri(downloadUrl).LocalPath);
+        var extension = DeriveInstallerExtension(assetFileName);
+        var tempPath = Path.Combine(Path.GetTempPath(), $"Lunima_Update_{Guid.NewGuid():N}{extension}");
 
         using var response = await _httpClient.GetAsync(
             downloadUrl, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
@@ -57,20 +59,20 @@ public class UpdateDownloader
     }
 
     /// <summary>
-    /// Launches the MSI installer via msiexec (Windows only).
-    /// Does nothing on non-Windows platforms.
+    /// Returns the file extension to use for a downloaded installer asset,
+    /// preserving compound extensions such as <c>.tar.gz</c>.
+    /// Falls back to <c>.msi</c> when the filename cannot be parsed.
     /// </summary>
-    /// <param name="msiPath">Full path to the downloaded MSI file.</param>
-    public static void LaunchInstaller(string msiPath)
+    internal static string DeriveInstallerExtension(string assetFileName)
     {
-        if (!OperatingSystem.IsWindows())
-            return;
+        if (string.IsNullOrEmpty(assetFileName))
+            return ".msi";
 
-        Process.Start(new ProcessStartInfo
-        {
-            FileName = "msiexec.exe",
-            Arguments = $"/i \"{msiPath}\"",
-            UseShellExecute = true,
-        });
+        // Preserve compound extension .tar.gz
+        if (assetFileName.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
+            return ".tar.gz";
+
+        var ext = Path.GetExtension(assetFileName);
+        return string.IsNullOrEmpty(ext) ? ".msi" : ext;
     }
 }

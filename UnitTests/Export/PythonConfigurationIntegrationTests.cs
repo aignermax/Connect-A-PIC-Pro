@@ -102,7 +102,10 @@ public class PythonConfigurationIntegrationTests
         viewModel.CustomPythonPath.ShouldBeEmpty();
         // Service should use default system Python
         var currentPath = service.GetCurrentPythonPath();
-        currentPath.ShouldBeOneOf("python", "python3");
+        // The default now resolves to an absolute interpreter path when one exists on a
+        // well-known location (the macOS Finder-PATH fix); accept either the bare fallback
+        // name or a resolved python/python3 path.
+        System.IO.Path.GetFileNameWithoutExtension(currentPath).ShouldBeOneOf("python", "python3");
     }
 
     [Fact]

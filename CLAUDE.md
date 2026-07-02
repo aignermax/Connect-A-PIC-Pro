@@ -71,6 +71,28 @@ To add a service: add the registration inside the relevant extension method, not
 
 ---
 
+## 1.2 Cross-Platform Parity (macOS / Linux / Windows)
+
+Lunima ships for **macOS (arm64 + x64), Linux (x64), and Windows (x64) together**. A change that only works on one OS is a bug, not a partial win — never let the Mac build fall behind Windows/Linux or vice versa. Most changes are made by agents, so treat this as a hard rule.
+
+**Never call `Process.Start` / `new ProcessStartInfo` directly.** PATH and executable discovery differ per OS (a Finder/Dock launch on macOS has no shell PATH; Windows uses `python`/`py`, Linux `python3`). Route every launch through the shared abstractions:
+
+- **External tools (python, docker, …):** take a `CAP_Core.Export.ProcessLaunchFactory` constructor param defaulting to `ProcessLaunchFactory.CreateDefault()` (the DI singleton is registered in `CAP.Avalonia/DI/CoreServicesExtensions.cs`). Build the `ProcessStartInfo` with `factory.TryBuild(...)`. It honours an explicit/rooted path verbatim and only probes well-known locations for **bare** names **on macOS** — do not reintroduce per-OS probing that overrides a working PATH on Linux/Windows (that breaks the Linux CI runner).
+- **Opening a URL / file / reveal-in-folder:** take a `CAP.Avalonia.Services.IUrlLauncher` (`Open` / `OpenFileOrDirectory` / `RevealInFileManager`); `PlatformShellLauncher` already maps these to `open` / `xdg-open` / `explorer`. Never hardcode `explorer.exe /select` or `open -R`.
+
+**Other parity rules:**
+- **Paths:** `Path.Combine`, never a literal `\` or `/`; no drive-letter or `%USERPROFILE%` assumptions. Branch with `OperatingSystem.IsMacOS()/IsLinux()/IsWindows()` and `Environment.SpecialFolder`.
+- **Machine-facing strings** (export scripts, serialization, GDS/Nazca params): format with `CultureInfo.InvariantCulture` so a locale-`de` runner doesn't emit `1,5`.
+- **`.csproj`:** Windows-only properties (`WinExe`, `ApplicationManifest`, `BuiltInComInteropSupport`, `ApplicationIcon`) must carry `Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))"` (see `CAP.Desktop/CAP.Desktop.csproj`). Any new RID goes in `<RuntimeIdentifiers>win-x64;linux-x64;osx-arm64;osx-x64</RuntimeIdentifiers>`.
+- **CI / releases (`.github/workflows/Build_Exe.yaml`):** a release must produce a downloadable artifact for **all three** OSes. It has parallel `build` (win/linux portable), `build-msi` (Windows installer), and `build-macos` (`.dmg`) jobs, and the `release` job attaches all of them. If you add/change packaging for one OS, add the equivalent for the others (or state explicitly in the PR why not). The macOS `.app` is assembled by `scripts/build_macos_bundle.sh`.
+- **Tests:** guard platform-specific assertions with `OperatingSystem.IsX()` and use the abstractions, so the suite is green on the **Linux CI runner** (`🔍 xUnit Tests`), not just locally. A path/executable substitution that overrides the runner's PATH passes locally and fails CI — don't.
+
+**Before opening a PR that touches launching, paths, formatting, build, or packaging:** would this behave identically on macOS, Linux, and Windows? If you can't run all three, reason about each and note it in the PR.
+
+*Enforced:* `UnitTests/Architecture/CrossPlatformProcessLaunchTests.cs` fails the `🔍 xUnit Tests` check if a `new ProcessStartInfo` or `Process.Start("…")` appears in production code outside the sanctioned launchers. New launching code must use the abstractions, not extend that allowlist.
+
+---
+
 ## 1. Architecture Rules
 
 - Follow SOLID principles strictly.

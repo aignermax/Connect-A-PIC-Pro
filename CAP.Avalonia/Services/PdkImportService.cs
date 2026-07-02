@@ -13,12 +13,15 @@ namespace CAP.Avalonia.Services;
 public class PdkImportService
 {
     private readonly UserPreferencesService _preferences;
+    private readonly CAP_Core.Export.ProcessLaunchFactory _launchFactory;
 
     /// <summary>Initializes a new <see cref="PdkImportService"/>.</summary>
     /// <param name="preferences">User preferences service for Python path resolution.</param>
-    public PdkImportService(UserPreferencesService preferences)
+    /// <param name="launchFactory">Factory for launching the Nazca parser subprocess.</param>
+    public PdkImportService(UserPreferencesService preferences, CAP_Core.Export.ProcessLaunchFactory? launchFactory = null)
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _launchFactory = launchFactory ?? CAP_Core.Export.ProcessLaunchFactory.CreateDefault();
     }
 
     /// <summary>
@@ -44,7 +47,7 @@ public class PdkImportService
         var scriptPath = FindParserScript();
         var pythonExecutable = _preferences.GetCustomPythonPath() ?? "python3";
 
-        var parser = new PdkNazcaParserService(pythonExecutable, scriptPath);
+        var parser = new PdkNazcaParserService(pythonExecutable, scriptPath, launchFactory: _launchFactory);
         progress?.Report($"Parsing module '{moduleName}'...");
 
         return await parser.ParseAsync(moduleName, null, directory, cancellationToken);

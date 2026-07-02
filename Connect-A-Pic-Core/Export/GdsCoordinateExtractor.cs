@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace CAP_Core.Export;
 
@@ -12,8 +11,19 @@ namespace CAP_Core.Export;
 public class GdsCoordinateExtractor
 {
     private const string ScriptRelativePath = "scripts/extract_gds_coords.py";
+    private const int ExtractionTimeoutMs = 30_000;
 
+    private readonly ProcessLaunchFactory _launchFactory;
     private string? _customPythonPath;
+
+    /// <summary>
+    /// Initializes a new instance of <see cref="GdsCoordinateExtractor"/>.
+    /// </summary>
+    /// <param name="launchFactory">Factory used to build process start info.</param>
+    public GdsCoordinateExtractor(ProcessLaunchFactory? launchFactory = null)
+    {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
+    }
 
     /// <summary>Result of a coordinate extraction operation.</summary>
     public class ExtractionResult
@@ -65,14 +75,49 @@ public class GdsCoordinateExtractor
 
         try
         {
-            var python = GetPythonCommand();
-            var args = $"\"{scriptPath}\" \"{gdsPath}\" \"{jsonPath}\"";
-            var (exitCode, stdout, stderr) = await RunCommandAsync(python, args, cancellationToken);
+            var command = string.IsNullOrEmpty(_customPythonPath)
+                ? _launchFactory.ResolveExecutable("python3") ?? "python3"
+                : _customPythonPath;
 
-            if (exitCode != 0)
+            var args = new[] { scriptPath, gdsPath, jsonPath };
+            var workingDir = Path.GetDirectoryName(scriptPath);
+
+            if (!_launchFactory.TryBuild(command, args, workingDir, null, out var psi, out var launchError))
+                return Failure($"Failed to build process: {launchError}");
+
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+
+            using var process = Process.Start(psi)
+                ?? throw new InvalidOperationException("Process.Start returned null.");
+
+            // Linked CTS + CancelAfter (same idiom as PdkNazcaParserService): the timeout timer
+            // is disposed with the CTS the moment the method returns, so the common fast-success
+            // path doesn't leave a 30s timer armed (one leaked timer per call).
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(ExtractionTimeoutMs);
+            var linkedToken = timeoutCts.Token;
+
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(linkedToken);
+
+            try
+            {
+                await process.WaitForExitAsync(linkedToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                process.Kill(entireProcessTree: true);
+                return Failure($"Timeout after {ExtractionTimeoutMs / 1000}s");
+            }
+
+            var stdout = await stdoutTask;
+            var stderr = await stderrTask;
+
+            if (process.ExitCode != 0)
             {
                 var msg = string.IsNullOrWhiteSpace(stderr) ? stdout : stderr;
-                return Failure($"Script failed (exit {exitCode}): {msg}");
+                return Failure($"Script failed (exit {process.ExitCode}): {msg}");
             }
 
             if (!File.Exists(jsonPath))
@@ -103,8 +148,21 @@ public class GdsCoordinateExtractor
     {
         try
         {
-            var (exitCode, _, _) = await RunCommandAsync(GetPythonCommand(), "--version", CancellationToken.None);
-            return exitCode == 0;
+            var command = string.IsNullOrEmpty(_customPythonPath)
+                ? _launchFactory.ResolveExecutable("python3") ?? "python3"
+                : _customPythonPath;
+
+            if (!_launchFactory.TryBuild(command, new[] { "--version" }, null, null, out var psi, out _))
+                return false;
+
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+
+            using var process = Process.Start(psi);
+            if (process == null) return false;
+
+            await process.WaitForExitAsync();
+            return process.ExitCode == 0;
         }
         catch
         {
@@ -151,35 +209,4 @@ public class GdsCoordinateExtractor
 
     private static ExtractionResult Failure(string message) =>
         new() { Success = false, ErrorMessage = message, Status = message };
-
-    private string GetPythonCommand()
-    {
-        if (!string.IsNullOrEmpty(_customPythonPath))
-            return _customPythonPath;
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
-    }
-
-    private static async Task<(int exitCode, string output, string error)> RunCommandAsync(
-        string fileName, string arguments, CancellationToken cancellationToken)
-    {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        process.Start();
-
-        var outputTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-        var errorTask = process.StandardError.ReadToEndAsync(cancellationToken);
-
-        await process.WaitForExitAsync(cancellationToken);
-
-        return (process.ExitCode, await outputTask, await errorTask);
-    }
 }

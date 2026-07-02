@@ -37,7 +37,10 @@ internal static class PdkOffsetFeatureExtensions
                 python = discovered ?? PythonResolution.ResolvePythonExecutable();
             }
             var script = PythonResolution.FindScript("render_component_preview.py");
-            return new NazcaComponentPreviewService(python, script);
+            // Share the DI-registered launch factory so the preview subprocess gets the
+            // same platform-aware executable resolution / augmented PATH as everything else.
+            return new NazcaComponentPreviewService(
+                python, script, launchFactory: sp.GetRequiredService<ProcessLaunchFactory>());
         });
         services.AddSingleton(sp => new PdkOffsetEditorViewModel(
             sp.GetRequiredService<PdkLoader>(),

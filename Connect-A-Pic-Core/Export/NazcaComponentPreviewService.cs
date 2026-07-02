@@ -77,6 +77,7 @@ public class NazcaComponentPreviewService
     /// <summary>Default subprocess timeout.</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(90);
 
+    private readonly ProcessLaunchFactory _launchFactory;
     private readonly string _pythonExecutable;
     private readonly string _scriptPath;
     private readonly TimeSpan _timeout;
@@ -85,11 +86,13 @@ public class NazcaComponentPreviewService
     /// <summary>
     /// Initializes the service.
     /// </summary>
+    /// <param name="launchFactory">Factory used to build process start info.</param>
     /// <param name="pythonExecutable">Path to Python 3 executable.</param>
     /// <param name="scriptPath">Absolute path to render_component_preview.py.</param>
     /// <param name="timeout">Optional subprocess timeout.</param>
-    public NazcaComponentPreviewService(string pythonExecutable, string scriptPath, TimeSpan? timeout = null)
+    public NazcaComponentPreviewService(string pythonExecutable, string scriptPath, TimeSpan? timeout = null, ProcessLaunchFactory? launchFactory = null)
     {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
         _pythonExecutable = pythonExecutable ?? throw new ArgumentNullException(nameof(pythonExecutable));
         _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
         _timeout = timeout ?? DefaultTimeout;
@@ -152,7 +155,7 @@ public class NazcaComponentPreviewService
         {
             await File.WriteAllTextAsync(tempFile, code ?? string.Empty, ct);
             return await RunProcessAsync(
-                si => si.ArgumentList.Add($"--code-file"), tempFile, ct);
+                new[] { _scriptPath, "--code-file", tempFile }, ct);
         }
         catch (Exception ex)
         {
@@ -172,41 +175,33 @@ public class NazcaComponentPreviewService
             return NazcaPreviewResult.Fail($"Preview script not found: {_scriptPath}");
 
         var module = string.IsNullOrWhiteSpace(moduleName) ? "demo" : moduleName;
-        return await RunProcessAsync(si =>
-        {
-            si.ArgumentList.Add(module);
-            si.ArgumentList.Add(nazcaFunction);
-            if (!string.IsNullOrWhiteSpace(nazcaParameters))
-                si.ArgumentList.Add(nazcaParameters);
-        }, codeFilePath: null, ct);
+        var args = new List<string> { _scriptPath, module, nazcaFunction };
+        if (!string.IsNullOrWhiteSpace(nazcaParameters))
+            args.Add(nazcaParameters);
+        return await RunProcessAsync(args, ct);
     }
 
     /// <summary>
-    /// Shared subprocess plumbing: starts Python on the script, applies the
-    /// caller-specific arguments, enforces the timeout/kill, and parses stdout.
-    /// When <paramref name="codeFilePath"/> is non-null it is appended after the
-    /// caller's arguments (the <c>--code-file &lt;path&gt;</c> value).
+    /// Shared subprocess plumbing: starts Python on the script with the given
+    /// arguments (first element must be the script path), enforces the timeout/kill,
+    /// and parses stdout. Construction is delegated to <see cref="_launchFactory"/>
+    /// so that WorkingDirectory and augmented PATH are applied consistently.
     /// </summary>
     private async Task<NazcaPreviewResult> RunProcessAsync(
-        Action<ProcessStartInfo> addArguments, string? codeFilePath, CancellationToken ct)
+        IReadOnlyList<string> arguments, CancellationToken ct)
     {
         try
         {
-            using var process = new Process();
-            var si = new ProcessStartInfo
-            {
-                FileName = _pythonExecutable,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-            };
-            si.ArgumentList.Add(_scriptPath);
-            addArguments(si);
-            if (codeFilePath != null)
-                si.ArgumentList.Add(codeFilePath);
-            process.StartInfo = si;
-            process.Start();
+            var workingDir = Path.GetDirectoryName(_scriptPath);
+            if (!_launchFactory.TryBuild(_pythonExecutable, arguments, workingDir, null, out var psi, out var launchError))
+                return NazcaPreviewResult.Fail($"Could not start Python '{_pythonExecutable}': {launchError}");
+
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError = true;
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return NazcaPreviewResult.Fail($"Could not start Python '{_pythonExecutable}'.");
 
             var stdoutTask = process.StandardOutput.ReadToEndAsync();
             var stderrTask = process.StandardError.ReadToEndAsync();

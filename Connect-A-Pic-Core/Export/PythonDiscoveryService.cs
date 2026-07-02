@@ -9,6 +9,17 @@ namespace CAP_Core.Export;
 /// </summary>
 public class PythonDiscoveryService
 {
+    private readonly ProcessLaunchFactory _launchFactory;
+
+    /// <summary>
+    /// Initializes a new instance of <see cref="PythonDiscoveryService"/>.
+    /// </summary>
+    /// <param name="launchFactory">Factory used to build process start infos.</param>
+    public PythonDiscoveryService(ProcessLaunchFactory? launchFactory = null)
+    {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
+    }
+
     /// <summary>
     /// Information about a discovered Python installation.
     /// </summary>
@@ -89,14 +100,25 @@ public class PythonDiscoveryService
             }
         }
 
+        // 1c. macOS: full paths of installed interpreters (Homebrew, framework, pyenv).
+        foreach (var installPath in GetMacOsPythonInstallPaths())
+        {
+            if (checkedPaths.Add(installPath))
+            {
+                var installation = await CheckPythonInstallation(installPath, "Installed");
+                if (installation?.HasNazca == true)
+                    found.Add(installation);
+            }
+        }
+
         // 2. Check standard system commands
         var systemCommands = GetSystemPythonCommands();
         foreach (var cmd in systemCommands)
         {
-            var resolvedPath = await ResolvePythonPath(cmd);
+            var resolvedPath = ResolvePythonPath(cmd);
             if (resolvedPath != null && checkedPaths.Add(resolvedPath))
             {
-                var installation = await CheckPythonInstallation(cmd, "System");
+                var installation = await CheckPythonInstallation(resolvedPath, "System");
                 if (installation?.HasNazca == true)
                     found.Add(installation);
             }
@@ -132,6 +154,10 @@ public class PythonDiscoveryService
             return v;
 
         foreach (var installPath in GetWindowsPythonInstallPaths())
+            if (await FirstWithNazca(installPath, "Installed") is { } p)
+                return p;
+
+        foreach (var installPath in GetMacOsPythonInstallPaths())
             if (await FirstWithNazca(installPath, "Installed") is { } p)
                 return p;
 
@@ -200,9 +226,11 @@ public class PythonDiscoveryService
     }
 
     /// <summary>
-    /// Gets standard Python command names for the current platform.
+    /// Gets standard Python command names for the current platform, probing absolute
+    /// well-known paths via the launch factory before falling back to PATH names.
+    /// On Windows only the "py" launcher is returned (Microsoft Store stubs are avoided).
     /// </summary>
-    private static string[] GetSystemPythonCommands()
+    private IReadOnlyList<string> GetSystemPythonCommands()
     {
         // On Windows we deliberately probe ONLY "py" (the official launcher), never
         // bare "python"/"python3": those usually resolve to the Microsoft Store
@@ -210,9 +238,18 @@ public class PythonDiscoveryService
         // indefinitely (it triggers Store/App-Installer activation that never returns).
         // Real interpreters are found via the filesystem scan in
         // GetWindowsPythonInstallPaths instead.
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows)
-            ? new[] { "py" }
-            : new[] { "python3", "python" };
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            return new[] { "py" };
+
+        // On macOS and Linux, probe absolute well-known paths first so the factory's
+        // resolver is consulted before falling back to unqualified PATH names.
+        var resolved3 = _launchFactory.ResolveExecutable("python3");
+        var resolved  = _launchFactory.ResolveExecutable("python");
+
+        var commands = new List<string>();
+        if (resolved3 != null) commands.Add(resolved3);
+        if (resolved  != null && resolved != resolved3) commands.Add(resolved);
+        return commands;
     }
 
     /// <summary>
@@ -230,8 +267,10 @@ public class PythonDiscoveryService
             pythonPaths.AddRange(FindPythonInVenvs(venvsDir));
         }
 
-        // ./venv/bin/python (current directory)
-        var localVenv = System.IO.Path.Combine(Directory.GetCurrentDirectory(), "venv");
+        // <AppBase>/venv/bin/python — use AppContext.BaseDirectory, not
+        // Directory.GetCurrentDirectory(): on macOS Finder launches the app with cwd='/'
+        // so a relative probe would always miss.
+        var localVenv = System.IO.Path.Combine(AppContext.BaseDirectory, "venv");
         if (Directory.Exists(localVenv))
         {
             var pythonPath = GetPythonPathInVenv(localVenv);
@@ -252,43 +291,16 @@ public class PythonDiscoveryService
     /// launched directly without going through a PATH execution-alias stub.
     /// </summary>
     private static List<string> GetWindowsPythonInstallPaths()
-    {
-        var paths = new List<string>();
-        if (!RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
-            return paths;
+        => PythonInstallPathScanner.WindowsInstallPaths();
 
-        var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-        var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
-
-        // (root, pattern) — pattern restricts the ProgramFiles scan to "Python*"
-        // so we don't enumerate every unrelated Program Files folder.
-        var roots = new[]
-        {
-            (System.IO.Path.Combine(localAppData, "Python"), "*"),
-            (System.IO.Path.Combine(localAppData, "Programs", "Python"), "*"),
-            (programFiles, "Python*"),
-        };
-
-        foreach (var (root, pattern) in roots)
-        {
-            if (!Directory.Exists(root)) continue;
-            try
-            {
-                foreach (var dir in Directory.GetDirectories(root, pattern))
-                {
-                    var exe = System.IO.Path.Combine(dir, "python.exe");
-                    if (File.Exists(exe))
-                        paths.Add(exe);
-                }
-            }
-            catch
-            {
-                // Ignore access errors — a single unreadable root must not abort discovery.
-            }
-        }
-
-        return paths;
-    }
+    /// <summary>
+    /// Finds full paths of installed Python interpreters on macOS by consulting the
+    /// launch factory's well-known path list (Homebrew, /usr/local, Python.framework,
+    /// pyenv shims). Returns an empty list on non-macOS platforms. Each returned path
+    /// passes <see cref="File.Exists"/> so callers can launch without PATH fallback.
+    /// </summary>
+    private List<string> GetMacOsPythonInstallPaths()
+        => PythonInstallPathScanner.MacOsInstallPaths(_launchFactory);
 
     /// <summary>
     /// Finds Python executables in subdirectories of a venv parent directory.
@@ -336,26 +348,21 @@ public class PythonDiscoveryService
     }
 
     /// <summary>
-    /// Resolves a Python command to its full path (for deduplication).
+    /// Resolves a Python command to its full path for deduplication, using the launch
+    /// factory's executable resolver to probe absolute well-known paths before PATH.
     /// </summary>
-    private async Task<string?> ResolvePythonPath(string command)
+    private string? ResolvePythonPath(string command)
     {
-        try
-        {
-            var whichCmd = RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "where" : "which";
-            var (exitCode, output, _) = await RunCommandAsync(whichCmd, command);
+        var resolved = _launchFactory.ResolveExecutable(command);
+        if (resolved == null) return null;
 
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
-            {
-                return output.Trim().Split('\n')[0].Trim();
-            }
-        }
-        catch
-        {
-            // Command resolution failed
-        }
+        // If the factory returned an absolute path that exists, use it directly.
+        if (System.IO.Path.IsPathRooted(resolved) && File.Exists(resolved))
+            return resolved;
 
-        return null;
+        // The factory fell back to the bare name (PATH resolution at Start time);
+        // return it as-is so the caller can still deduplicate by command name.
+        return resolved;
     }
 
     /// <summary>
@@ -365,7 +372,7 @@ public class PythonDiscoveryService
     {
         try
         {
-            var (exitCode, output, _) = await RunCommandAsync(pythonPath, "--version");
+            var (exitCode, output, _) = await RunCommandAsync(pythonPath, new[] { "--version" });
 
             if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
             {
@@ -383,18 +390,44 @@ public class PythonDiscoveryService
 
     /// <summary>
     /// Gets the Nazca version string, or null if not installed.
+    /// Routes the spawn through <see cref="ProcessLaunchFactory.TryBuild"/> with
+    /// <c>ArgumentList</c> so the interpreter path is resolved and arguments are never
+    /// hand-quoted.
     /// </summary>
     private async Task<string?> GetNazcaVersion(string pythonPath)
     {
         try
         {
             var checkScript = "import nazca; print(nazca.__version__)";
-            var (exitCode, output, _) = await RunCommandAsync(pythonPath, $"-c \"{checkScript}\"", NazcaImportTimeoutMs);
+            IReadOnlyList<string> args = new[] { "-c", checkScript };
 
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            if (!_launchFactory.TryBuild(pythonPath, args, null, null, out var psi, out var launchError))
+                return null;
+
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError  = true;
+
+            using var process = Process.Start(psi);
+            if (process == null)
+                return null;
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask  = process.StandardError.ReadToEndAsync();
+
+            using var cts = new CancellationTokenSource(NazcaImportTimeoutMs);
+            try
             {
-                return output.Trim();
+                await process.WaitForExitAsync(cts.Token);
             }
+            catch (OperationCanceledException)
+            {
+                try { process.Kill(entireProcessTree: true); } catch { /* already gone */ }
+                return null;
+            }
+
+            var output = await outputTask;
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
+                return output.Trim();
         }
         catch
         {
@@ -405,30 +438,27 @@ public class PythonDiscoveryService
     }
 
     /// <summary>
-    /// Runs a command and captures output, killing it if it does not exit within
-    /// <paramref name="timeoutMs"/>. The timeout is essential on Windows: a bare
-    /// "python"/"python3" command can be a Microsoft Store execution-alias stub that
-    /// hangs (waiting on the Store) instead of exiting — without a kill that would
+    /// Runs a command with the given argument list, capturing output and killing it if it
+    /// does not exit within <paramref name="timeoutMs"/>. The timeout is essential on
+    /// Windows: a bare "python"/"python3" command can be a Microsoft Store
+    /// execution-alias stub that hangs instead of exiting — without a kill that would
     /// block discovery forever. A timed-out command is reported as a failure (exit -1).
     /// </summary>
     private async Task<(int exitCode, string output, string error)> RunCommandAsync(
-        string fileName, string arguments, int timeoutMs = DefaultCommandTimeoutMs)
+        string fileName, IReadOnlyList<string> arguments, int timeoutMs = DefaultCommandTimeoutMs)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        if (!_launchFactory.TryBuild(fileName, arguments, null, null, out var psi, out _))
+            return (-1, string.Empty, "Failed to build process start info.");
 
-        process.Start();
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError  = true;
+
+        using var process = Process.Start(psi);
+        if (process == null)
+            return (-1, string.Empty, "Process.Start returned null.");
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
+        var errorTask  = process.StandardError.ReadToEndAsync();
 
         using var cts = new CancellationTokenSource(timeoutMs);
         try
@@ -442,12 +472,12 @@ public class PythonDiscoveryService
         }
 
         var output = await outputTask;
-        var error = await errorTask;
+        var error  = await errorTask;
 
         return (process.ExitCode, output, error);
     }
 
-    /// <summary>Default timeout for a probe command (version / which). Real interpreters
+    /// <summary>Default timeout for a probe command (version check). Real interpreters
     /// answer in well under a second; a longer wait means a hung Store-alias stub.</summary>
     private const int DefaultCommandTimeoutMs = 5000;
 

@@ -27,7 +27,7 @@ internal static class UpdateFeatureExtensions
             repo: "Connect-A-PIC-Pro"));
         services.AddSingleton(sp => new UpdateDownloader(
             sp.GetRequiredService<HttpClient>()));
-        services.AddSingleton<IUrlLauncher, SystemUrlLauncher>();
+        services.AddSingleton<IUrlLauncher, PlatformShellLauncher>();
         services.AddSingleton<UpdateViewModel>();
 
         return services;

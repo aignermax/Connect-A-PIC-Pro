@@ -17,6 +17,7 @@ public partial class PhotonTorchExportViewModel : ObservableObject
     private readonly PhotonTorchExporter _exporter;
     private readonly DesignCanvasViewModel _canvas;
     private readonly ErrorConsoleService? _errorConsole;
+    private readonly IUrlLauncher _urlLauncher;
 
     /// <summary>Wavelength in nanometers used for simulation.</summary>
     [ObservableProperty]
@@ -64,14 +65,18 @@ public partial class PhotonTorchExportViewModel : ObservableObject
     /// <param name="canvas">Design canvas providing components and connections.</param>
     /// <param name="errorConsole">Optional service for surfacing best-effort failures (e.g. auto-open folder)
     /// to the bottom-panel error console without overwriting the user-facing status message.</param>
+    /// <param name="urlLauncher">Optional launcher for opening URLs and file-system paths; defaults to
+    /// <see cref="PlatformShellLauncher.CreateDefault"/> when not supplied.</param>
     public PhotonTorchExportViewModel(
         PhotonTorchExporter exporter,
         DesignCanvasViewModel canvas,
-        ErrorConsoleService? errorConsole = null)
+        ErrorConsoleService? errorConsole = null,
+        IUrlLauncher? urlLauncher = null)
     {
         _exporter = exporter;
         _canvas = canvas;
         _errorConsole = errorConsole;
+        _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
     }
 
     /// <summary>
@@ -177,11 +182,7 @@ public partial class PhotonTorchExportViewModel : ObservableObject
             return;
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = directory,
-                UseShellExecute = true
-            });
+            _urlLauncher.OpenFileOrDirectory(directory);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {

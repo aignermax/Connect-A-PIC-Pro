@@ -20,7 +20,7 @@ public class InstanceNazcaCodeEditorPinOverrideTests
 
     private static Mock<NazcaComponentPreviewService> MockService()
         => new(MockBehavior.Loose,
-            "python3", "preview.py", (TimeSpan?)TimeSpan.FromSeconds(5)) { CallBase = false };
+            "python3", "preview.py", (TimeSpan?)TimeSpan.FromSeconds(5), (ProcessLaunchFactory?)null) { CallBase = false };
 
     private static NazcaPreviewResult OkResultWithPins(
         double w = 20, double h = 10,

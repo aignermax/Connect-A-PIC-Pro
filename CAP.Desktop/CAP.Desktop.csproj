@@ -1,15 +1,21 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <OutputType>WinExe</OutputType>
+    <!-- Default output type for cross-platform builds (macOS requires Exe for the .app bundle) -->
+    <OutputType>Exe</OutputType>
+    <!-- Windows-only override: WinExe suppresses the console window on Windows -->
+    <OutputType Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">WinExe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <ApplicationManifest>app.manifest</ApplicationManifest>
-    <BuiltInComInteropSupport>true</BuiltInComInteropSupport>
-    <RuntimeIdentifiers>win-x64;linux-x64</RuntimeIdentifiers>
-    <Version>0.8.0</Version>
-    <!-- Lunima application icon (embedded in the .exe) -->
-    <ApplicationIcon>LunimaIcon.ico</ApplicationIcon>
+    <!-- Windows PE manifest (not used on macOS/Linux) -->
+    <ApplicationManifest Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">app.manifest</ApplicationManifest>
+    <!-- Windows COM interop support (not needed on macOS/Linux) -->
+    <BuiltInComInteropSupport Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">true</BuiltInComInteropSupport>
+    <!-- Add macOS ARM64 and x64 support alongside Windows and Linux -->
+    <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64;osx-x64</RuntimeIdentifiers>
+    <Version>0.9.0</Version>
+    <!-- Windows icon (embedded in the .exe; macOS uses the .icns inside the bundle) -->
+    <ApplicationIcon Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">LunimaIcon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>

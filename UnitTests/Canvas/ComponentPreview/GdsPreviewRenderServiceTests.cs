@@ -216,7 +216,7 @@ public sealed class GdsPreviewRenderServiceTests
     [Fact]
     public async Task GetGeometry_RendersOnce_ThenServesFromMemory()
     {
-        var mock = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null);
+        var mock = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
         mock.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Ok());
 
@@ -238,14 +238,14 @@ public sealed class GdsPreviewRenderServiceTests
         var diskDir = Path.Combine(Path.GetTempPath(), "lunima-svc-" + Guid.NewGuid().ToString("N"));
         var key = new GdsPreviewKey("m", "f", "p");
 
-        var mock1 = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null);
+        var mock1 = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
         mock1.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(Ok());
         var svc1 = new GdsPreviewRenderService(mock1.Object, new GdsPreviewDiskCache(diskDir));
         svc1.TryGetGeometry(key);
         await svc1.WaitForPendingAsync();   // populates disk
 
-        var mock2 = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null);
+        var mock2 = new Mock<NazcaComponentPreviewService>("python", "script.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
         var svc2 = new GdsPreviewRenderService(mock2.Object, new GdsPreviewDiskCache(diskDir));
         svc2.TryGetGeometry(key);
         await svc2.WaitForPendingAsync();

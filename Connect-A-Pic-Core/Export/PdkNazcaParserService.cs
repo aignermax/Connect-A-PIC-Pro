@@ -20,6 +20,7 @@ public class PdkNazcaParserService
     /// </summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(60);
 
+    private readonly ProcessLaunchFactory _launchFactory;
     private readonly string _pythonExecutable;
     private readonly string _scriptPath;
     private readonly TimeSpan _timeout;
@@ -27,11 +28,13 @@ public class PdkNazcaParserService
     /// <summary>
     /// Creates a <see cref="PdkNazcaParserService"/> with explicit paths.
     /// </summary>
+    /// <param name="launchFactory">Factory used to build <see cref="ProcessStartInfo"/> instances.</param>
     /// <param name="pythonExecutable">Path to Python 3 executable (e.g. "python3").</param>
     /// <param name="scriptPath">Absolute path to <c>scripts/parse_pdk.py</c>.</param>
     /// <param name="timeout">Optional subprocess timeout. Defaults to <see cref="DefaultTimeout"/>.</param>
-    public PdkNazcaParserService(string pythonExecutable, string scriptPath, TimeSpan? timeout = null)
+    public PdkNazcaParserService(string pythonExecutable, string scriptPath, TimeSpan? timeout = null, ProcessLaunchFactory? launchFactory = null)
     {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
         _pythonExecutable = pythonExecutable ?? throw new ArgumentNullException(nameof(pythonExecutable));
         _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
         _timeout = timeout ?? DefaultTimeout;
@@ -65,8 +68,7 @@ public class PdkNazcaParserService
         if (!File.Exists(_scriptPath))
             throw new FileNotFoundException($"PDK parser script not found: {_scriptPath}", _scriptPath);
 
-        var arguments = BuildArguments(moduleName, functionNames);
-        var (exitCode, stdout, stderr) = await RunScriptAsync(arguments, additionalPythonPath, cancellationToken);
+        var (exitCode, stdout, stderr) = await RunScriptAsync(moduleName, functionNames, additionalPythonPath, cancellationToken);
 
         if (exitCode != 0)
             throw new PdkParserException(
@@ -81,41 +83,34 @@ public class PdkNazcaParserService
 
     // ── Helpers ─────────────────────────────────────────────────────────────
 
-    private string BuildArguments(string moduleName, IEnumerable<string>? functionNames)
-    {
-        var parts = new List<string> { $"\"{_scriptPath}\"", moduleName };
-        if (functionNames != null)
-            parts.AddRange(functionNames);
-        return string.Join(" ", parts);
-    }
-
     private async Task<(int exitCode, string stdout, string stderr)> RunScriptAsync(
-        string arguments, string? additionalPythonPath, CancellationToken cancellationToken)
+        string moduleName, IEnumerable<string>? functionNames,
+        string? additionalPythonPath, CancellationToken cancellationToken)
     {
-        using var process = new Process();
-        var startInfo = new ProcessStartInfo
-        {
-            FileName = _pythonExecutable,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true,
-        };
+        var args = BuildArgumentList(_scriptPath, moduleName, functionNames);
+        var extraEnv = BuildExtraEnv(additionalPythonPath);
 
-        if (!string.IsNullOrEmpty(additionalPythonPath))
+        if (!_launchFactory.TryBuild(
+                _pythonExecutable, args,
+                Path.GetDirectoryName(_scriptPath),
+                extraEnv,
+                out var psi, out var launchError))
         {
-            var existing = Environment.GetEnvironmentVariable("PYTHONPATH") ?? "";
-            var separator = Path.PathSeparator.ToString();
-            startInfo.EnvironmentVariables["PYTHONPATH"] = string.IsNullOrEmpty(existing)
-                ? additionalPythonPath
-                : $"{additionalPythonPath}{separator}{existing}";
+            throw new PdkParserException(
+                $"Could not start Python executable '{_pythonExecutable}'. " +
+                $"Check the Python path in Preferences or ensure python3 is on PATH. ({launchError})");
         }
 
-        process.StartInfo = startInfo;
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError  = true;
+
+        Process process;
         try
         {
-            process.Start();
+            process = Process.Start(psi)
+                ?? throw new PdkParserException(
+                    $"Could not start Python executable '{_pythonExecutable}'. " +
+                    "Check the Python path in Preferences or ensure python3 is on PATH.");
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -124,26 +119,51 @@ public class PdkNazcaParserService
                 "Check the Python path in Preferences or ensure python3 is on PATH.", ex);
         }
 
-        using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        timeoutCts.CancelAfter(_timeout);
-        var linkedToken = timeoutCts.Token;
-
-        var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedToken);
-        var stderrTask = process.StandardError.ReadToEndAsync(linkedToken);
-
-        try
+        using (process)
         {
-            await process.WaitForExitAsync(linkedToken);
-        }
-        catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
-        {
-            TryKill(process);
-            throw new PdkParserException(
-                $"parse_pdk.py did not finish within {_timeout.TotalSeconds:F0}s. " +
-                "The module may have blocked on input or entered an infinite loop.");
-        }
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+            timeoutCts.CancelAfter(_timeout);
+            var linkedToken = timeoutCts.Token;
 
-        return (process.ExitCode, await stdoutTask, await stderrTask);
+            var stdoutTask = process.StandardOutput.ReadToEndAsync(linkedToken);
+            var stderrTask = process.StandardError.ReadToEndAsync(linkedToken);
+
+            try
+            {
+                await process.WaitForExitAsync(linkedToken);
+            }
+            catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
+            {
+                TryKill(process);
+                throw new PdkParserException(
+                    $"parse_pdk.py did not finish within {_timeout.TotalSeconds:F0}s. " +
+                    "The module may have blocked on input or entered an infinite loop.");
+            }
+
+            return (process.ExitCode, await stdoutTask, await stderrTask);
+        }
+    }
+
+    private static IReadOnlyList<string> BuildArgumentList(string scriptPath, string moduleName, IEnumerable<string>? functionNames)
+    {
+        var args = new List<string> { scriptPath, moduleName };
+        if (functionNames != null)
+            args.AddRange(functionNames);
+        return args;
+    }
+
+    private static Dictionary<string, string>? BuildExtraEnv(string? additionalPythonPath)
+    {
+        if (string.IsNullOrEmpty(additionalPythonPath))
+            return null;
+
+        var existing = Environment.GetEnvironmentVariable("PYTHONPATH") ?? "";
+        var separator = Path.PathSeparator.ToString();
+        var pythonPath = string.IsNullOrEmpty(existing)
+            ? additionalPythonPath
+            : $"{additionalPythonPath}{separator}{existing}";
+
+        return new Dictionary<string, string> { ["PYTHONPATH"] = pythonPath };
     }
 
     private static void TryKill(Process process)

@@ -21,7 +21,7 @@ public class InstanceNazcaCodeEditorViewModelTests
 
     private static Mock<NazcaComponentPreviewService> MockService()
         => new(MockBehavior.Loose,
-            "python3", "preview.py", (TimeSpan?)TimeSpan.FromSeconds(5)) { CallBase = false };
+            "python3", "preview.py", (TimeSpan?)TimeSpan.FromSeconds(5), (ProcessLaunchFactory?)null) { CallBase = false };
 
     private static NazcaPreviewResult OkResult(double w = 12, double h = 6, string? source = null) => new()
     {

@@ -19,6 +19,14 @@ internal static class CoreServicesExtensions
     {
         services.AddSingleton<IDataAccessor, FileDataAccessor>();
         services.AddSingleton<CAP_Core.Components.Creation.GroupLibraryManager>();
+
+        // Platform-aware external-process launching (Python, Docker). The prober supplies
+        // well-known interpreter/Docker locations and an augmented PATH so subprocesses
+        // resolve correctly even when the app is launched from Finder/Dock on macOS (which
+        // does not inherit a shell-initialised PATH). Registered as shared singletons so
+        // every export/preview/solver service uses the same resolution.
+        services.AddSingleton<CAP_Core.Export.ExecutablePathProber>();
+        services.AddSingleton<CAP_Core.Export.ProcessLaunchFactory>();
         services.AddSingleton<CAP_Core.ErrorConsoleService>();
         services.AddSingleton<SimpleNazcaExporter>();
 

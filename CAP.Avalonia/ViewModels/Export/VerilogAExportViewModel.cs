@@ -18,6 +18,7 @@ public partial class VerilogAExportViewModel : ObservableObject
     private readonly VerilogAFileWriter _fileWriter;
     private readonly DesignCanvasViewModel _canvas;
     private readonly ErrorConsoleService? _errorConsole;
+    private readonly IUrlLauncher _urlLauncher;
 
     [ObservableProperty]
     private int _wavelengthNm = 1550;
@@ -55,16 +56,20 @@ public partial class VerilogAExportViewModel : ObservableObject
     /// <summary>Initializes the ViewModel with required services.</summary>
     /// <param name="errorConsole">Optional service for surfacing best-effort failures (e.g. auto-open folder)
     /// to the bottom-panel error console without overwriting the user-facing status message.</param>
+    /// <param name="urlLauncher">Optional launcher used to open the output folder after export.
+    /// Defaults to <see cref="PlatformShellLauncher.CreateDefault"/> when not supplied.</param>
     public VerilogAExportViewModel(
         VerilogAExporter exporter,
         VerilogAFileWriter fileWriter,
         DesignCanvasViewModel canvas,
-        ErrorConsoleService? errorConsole = null)
+        ErrorConsoleService? errorConsole = null,
+        IUrlLauncher? urlLauncher = null)
     {
         _exporter = exporter;
         _fileWriter = fileWriter;
         _canvas = canvas;
         _errorConsole = errorConsole;
+        _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
     }
 
     /// <summary>
@@ -181,11 +186,7 @@ public partial class VerilogAExportViewModel : ObservableObject
     {
         try
         {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = directory,
-                UseShellExecute = true
-            });
+            _urlLauncher.OpenFileOrDirectory(directory);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {

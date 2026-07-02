@@ -32,6 +32,7 @@ public partial class FileOperationsViewModel : ObservableObject
     private readonly ObservableCollection<ComponentTemplate> _componentLibrary;
     private readonly ErrorConsoleService? _errorConsole;
     private readonly UserSMatrixOverrideStore? _userSMatrixOverrideStore;
+    private readonly IUrlLauncher _urlLauncher;
 
     /// <summary>
     /// Current .lun format version this build reads and writes. Files with any other value are rejected at load time.
@@ -122,7 +123,8 @@ public partial class FileOperationsViewModel : ObservableObject
         PhotonTorchExportViewModel photonTorchExport,
         VerilogAExportViewModel verilogAExport,
         ErrorConsoleService? errorConsole = null,
-        UserSMatrixOverrideStore? userSMatrixOverrideStore = null)
+        UserSMatrixOverrideStore? userSMatrixOverrideStore = null,
+        IUrlLauncher? urlLauncher = null)
     {
         _canvas = canvas;
         _commandManager = commandManager;
@@ -134,6 +136,7 @@ public partial class FileOperationsViewModel : ObservableObject
         VerilogAExport = verilogAExport;
         _errorConsole = errorConsole;
         _userSMatrixOverrideStore = userSMatrixOverrideStore;
+        _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
 
         // Track changes to mark project as unsaved
         _canvas.Components.CollectionChanged += (s, e) => HasUnsavedChanges = true;
@@ -1387,18 +1390,11 @@ public partial class FileOperationsViewModel : ObservableObject
             if (!File.Exists(filePath))
                 return;
 
-            // Try to open with default application first; on systems without a registered
-            // handler Process.Start raises Win32Exception. Fall back to selecting the file
-            // in the system file manager so the user can still locate the export.
+            // Open with the default application via the platform launcher.
+            // Falls back to revealing in the file manager if no handler is registered.
             try
             {
-                var startInfo = new System.Diagnostics.ProcessStartInfo
-                {
-                    FileName = filePath,
-                    UseShellExecute = true
-                };
-
-                System.Diagnostics.Process.Start(startInfo);
+                _urlLauncher.OpenFileOrDirectory(filePath);
             }
             catch (System.ComponentModel.Win32Exception ex)
             {
@@ -1413,41 +1409,16 @@ public partial class FileOperationsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Opens the file explorer and selects the specified file.
-    /// Works cross-platform (Windows, Linux, macOS).
+    /// Reveals the specified file in the system file manager.
+    /// Works cross-platform via <see cref="IUrlLauncher.RevealInFileManager"/>.
     /// </summary>
-    /// <param name="filePath">Path to the file to select.</param>
+    /// <param name="filePath">Path to the file to reveal.</param>
     private void OpenFileExplorer(string filePath)
     {
         try
         {
             var absolutePath = Path.GetFullPath(filePath);
-
-            if (OperatingSystem.IsWindows())
-            {
-                // Windows: explorer.exe /select,"path"
-                System.Diagnostics.Process.Start("explorer.exe", $"/select,\"{absolutePath}\"");
-            }
-            else if (OperatingSystem.IsLinux())
-            {
-                // Linux: Try xdg-open on the directory
-                var directory = Path.GetDirectoryName(absolutePath);
-                if (directory != null)
-                {
-                    var startInfo = new System.Diagnostics.ProcessStartInfo
-                    {
-                        FileName = "xdg-open",
-                        Arguments = $"\"{directory}\"",
-                        UseShellExecute = true
-                    };
-                    System.Diagnostics.Process.Start(startInfo);
-                }
-            }
-            else if (OperatingSystem.IsMacOS())
-            {
-                // macOS: open -R "path"
-                System.Diagnostics.Process.Start("open", $"-R \"{absolutePath}\"");
-            }
+            _urlLauncher.RevealInFileManager(absolutePath);
         }
         catch (Exception ex)
         {

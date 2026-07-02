@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 
 namespace CAP_Core.Export;
 
@@ -10,7 +9,22 @@ namespace CAP_Core.Export;
 public class GdsExportService
 {
     private const string MinimumNazcaVersion = "0.5.0";
+    private const string DefaultPythonCommand = "python3";
+
+    private readonly ProcessLaunchFactory _launchFactory;
+    private readonly PythonDiscoveryService _pythonDiscovery;
     private string? _customPythonPath;
+
+    /// <summary>
+    /// Initializes the service with a process launch factory and Python discovery service.
+    /// </summary>
+    /// <param name="launchFactory">Factory used to build process start info.</param>
+    /// <param name="pythonDiscovery">Service used to locate a Python interpreter with Nazca.</param>
+    public GdsExportService(ProcessLaunchFactory? launchFactory = null, PythonDiscoveryService? pythonDiscovery = null)
+    {
+        _launchFactory   = launchFactory   ?? ProcessLaunchFactory.CreateDefault();
+        _pythonDiscovery = pythonDiscovery ?? new PythonDiscoveryService(_launchFactory);
+    }
 
     /// <summary>
     /// Result of a GDS export operation.
@@ -103,7 +117,7 @@ public class GdsExportService
     /// </summary>
     public string GetCurrentPythonPath()
     {
-        return _customPythonPath ?? GetPythonCommand();
+        return _customPythonPath ?? _launchFactory.ResolveExecutable(DefaultPythonCommand) ?? DefaultPythonCommand;
     }
 
     /// <summary>
@@ -115,14 +129,12 @@ public class GdsExportService
     {
         var result = new PythonEnvironmentInfo();
 
-        // Check Python
         var pythonVersion = await GetPythonVersionAsync();
         if (!string.IsNullOrEmpty(pythonVersion))
         {
             result.PythonAvailable = true;
             result.PythonVersion = pythonVersion;
 
-            // If Python is available, check for Nazca
             var nazcaVersion = await GetNazcaVersionAsync();
             if (!string.IsNullOrEmpty(nazcaVersion))
             {
@@ -162,7 +174,6 @@ public class GdsExportService
             };
         }
 
-        // Check environment
         var envInfo = await CheckPythonEnvironmentAsync();
         if (!envInfo.IsReady)
         {
@@ -175,7 +186,6 @@ public class GdsExportService
             };
         }
 
-        // Execute Python script
         try
         {
             var gdsPath = Path.ChangeExtension(scriptPath, ".gds");
@@ -214,16 +224,44 @@ public class GdsExportService
     }
 
     /// <summary>
+    /// Resolves the Python command to use: custom path, then discovery service, then fallback.
+    /// </summary>
+    private async Task<string> ResolvePythonCommandAsync()
+    {
+        if (!string.IsNullOrEmpty(_customPythonPath))
+            return _customPythonPath;
+
+        var discovered = await _pythonDiscovery.FindFirstNazcaPythonPathAsync();
+        if (!string.IsNullOrEmpty(discovered))
+            return discovered;
+
+        return _launchFactory.ResolveExecutable(DefaultPythonCommand) ?? DefaultPythonCommand;
+    }
+
+    /// <summary>
     /// Gets the Python version string.
     /// </summary>
     private async Task<string?> GetPythonVersionAsync()
     {
         try
         {
-            var pythonCmd = GetPythonCommand();
-            var (exitCode, output, _) = await RunCommandAsync(pythonCmd, "--version");
+            var pythonCmd = await ResolvePythonCommandAsync();
+            var args = new[] { "--version" };
+            if (!_launchFactory.TryBuild(pythonCmd, args, null, null, out var psi, out var launchError))
+                return null;
 
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError  = true;
+            using var process = Process.Start(psi);
+            if (process == null) return null;
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask  = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            var output = await outputTask;
+            await errorTask;
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
             {
                 // Python version output: "Python 3.10.5"
                 var parts = output.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
@@ -245,14 +283,25 @@ public class GdsExportService
     {
         try
         {
-            var pythonCmd = GetPythonCommand();
+            var pythonCmd  = await ResolvePythonCommandAsync();
             var checkScript = "import nazca; print(nazca.__version__)";
-            var (exitCode, output, _) = await RunCommandAsync(pythonCmd, $"-c \"{checkScript}\"");
+            var args = new[] { "-c", checkScript };
+            if (!_launchFactory.TryBuild(pythonCmd, args, null, null, out var psi, out var launchError))
+                return null;
 
-            if (exitCode == 0 && !string.IsNullOrWhiteSpace(output))
-            {
+            psi.RedirectStandardOutput = true;
+            psi.RedirectStandardError  = true;
+            using var process = Process.Start(psi);
+            if (process == null) return null;
+
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask  = process.StandardError.ReadToEndAsync();
+            await process.WaitForExitAsync();
+            var output = await outputTask;
+            await errorTask;
+
+            if (process.ExitCode == 0 && !string.IsNullOrWhiteSpace(output))
                 return output.Trim();
-            }
         }
         catch
         {
@@ -267,51 +316,25 @@ public class GdsExportService
     /// </summary>
     private async Task<(int exitCode, string output, string error)> ExecutePythonScriptAsync(string scriptPath)
     {
-        var pythonCmd = GetPythonCommand();
-        return await RunCommandAsync(pythonCmd, $"\"{scriptPath}\"");
-    }
+        var pythonCmd    = await ResolvePythonCommandAsync();
+        var args         = new[] { scriptPath };
+        var workingDir   = Path.GetDirectoryName(scriptPath);
 
-    /// <summary>
-    /// Runs a command and captures output.
-    /// </summary>
-    private async Task<(int exitCode, string output, string error)> RunCommandAsync(
-        string fileName, string arguments)
-    {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
+        if (!_launchFactory.TryBuild(pythonCmd, args, workingDir, null, out var psi, out var launchError))
+            return (-1, string.Empty, launchError ?? "Failed to build process start info");
 
-        process.Start();
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError  = true;
+        using var process = Process.Start(psi);
+        if (process == null)
+            return (-1, string.Empty, "Failed to start Python process");
 
         var outputTask = process.StandardOutput.ReadToEndAsync();
-        var errorTask = process.StandardError.ReadToEndAsync();
-
+        var errorTask  = process.StandardError.ReadToEndAsync();
         await process.WaitForExitAsync();
-
         var output = await outputTask;
-        var error = await errorTask;
+        var error  = await errorTask;
 
         return (process.ExitCode, output, error);
-    }
-
-    /// <summary>
-    /// Gets the Python command name for the current platform.
-    /// Returns custom path if set, otherwise returns system default.
-    /// </summary>
-    private string GetPythonCommand()
-    {
-        if (!string.IsNullOrEmpty(_customPythonPath))
-            return _customPythonPath;
-
-        // On Windows, try "python" first (most common)
-        // On Unix-like systems, try "python3" first
-        return RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
     }
 }

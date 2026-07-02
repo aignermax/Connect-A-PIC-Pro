@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Text.Json;
 
 namespace CAP_Core.Export;
@@ -11,6 +10,8 @@ namespace CAP_Core.Export;
 /// </summary>
 public class GdsCoordinateComparisonService
 {
+    private readonly ProcessLaunchFactory _launchFactory;
+
     /// <summary>Result of a GDS coordinate comparison run.</summary>
     public class ComparisonResult
     {
@@ -41,6 +42,15 @@ public class GdsCoordinateComparisonService
     }
 
     private string? _customPythonPath;
+
+    /// <summary>
+    /// Initializes the service with the required process launch factory.
+    /// </summary>
+    /// <param name="launchFactory">Factory used to build <see cref="ProcessStartInfo"/> instances.</param>
+    public GdsCoordinateComparisonService(ProcessLaunchFactory? launchFactory = null)
+    {
+        _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
+    }
 
     /// <summary>
     /// Sets a custom Python executable path.  When null the system default is used.
@@ -74,9 +84,15 @@ public class GdsCoordinateComparisonService
             return ErrorResult($"System JSON not found: {systemJsonPath}");
 
         var reportPath = Path.Combine(Path.GetTempPath(), $"cap_comparison_{Guid.NewGuid():N}.json");
-        var args = $"\"{resolvedScript}\" \"{referenceJsonPath}\" \"{systemJsonPath}\" \"{reportPath}\"";
+        var scriptArgs = new[] { resolvedScript, referenceJsonPath, systemJsonPath, reportPath };
 
-        var (exitCode, stdout, stderr) = await RunCommandAsync(GetPythonCommand(), args);
+        if (!_launchFactory.TryBuild("python3", scriptArgs, Path.GetDirectoryName(resolvedScript), null, out var psi, out var launchError))
+            return ErrorResult($"Failed to build process: {launchError}");
+
+        psi.RedirectStandardOutput = true;
+        psi.RedirectStandardError = true;
+
+        var (exitCode, stdout, stderr) = await RunCommandAsync(psi);
 
         return ParseResult(exitCode, stdout, stderr, reportPath);
     }
@@ -125,25 +141,14 @@ public class GdsCoordinateComparisonService
     };
 
     private static async Task<(int exitCode, string stdout, string stderr)> RunCommandAsync(
-        string fileName, string arguments, int timeoutMs = 30_000)
+        ProcessStartInfo startInfo, int timeoutMs = 30_000)
     {
-        using var process = new Process();
-        process.StartInfo = new ProcessStartInfo
-        {
-            FileName = fileName,
-            Arguments = arguments,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        process.Start();
+        using var process = Process.Start(startInfo)!;
 
         var stdoutTask = process.StandardOutput.ReadToEndAsync();
         var stderrTask = process.StandardError.ReadToEndAsync();
 
-        var completed = await Task.WhenAny(
+        await Task.WhenAny(
             process.WaitForExitAsync(),
             Task.Delay(timeoutMs));
 
@@ -155,11 +160,6 @@ public class GdsCoordinateComparisonService
 
         return (process.ExitCode, await stdoutTask, await stderrTask);
     }
-
-    private string GetPythonCommand() =>
-        !string.IsNullOrEmpty(_customPythonPath)
-            ? _customPythonPath
-            : RuntimeInformation.IsOSPlatform(OSPlatform.Windows) ? "python" : "python3";
 
     /// <summary>
     /// Searches for <c>scripts/compare_gds_coords.py</c> by walking up from the

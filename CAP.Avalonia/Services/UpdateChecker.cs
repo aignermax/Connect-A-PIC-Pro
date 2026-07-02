@@ -63,10 +63,42 @@ public class UpdateChecker
     /// Finds the first MSI installer asset in the release's asset list.
     /// Returns null if no MSI asset exists.
     /// </summary>
+    /// <remarks>
+    /// This method always matches <c>.msi</c> regardless of the current platform.
+    /// Use <see cref="FindPlatformAsset"/> when you want platform-aware selection.
+    /// </remarks>
     public static GitHubReleaseAsset? FindMsiAsset(GitHubReleaseInfo release)
     {
         return release.Assets.FirstOrDefault(a =>
             a.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Finds the best installer asset for the current operating system.
+    /// <list type="bullet">
+    ///   <item><description>Windows — <c>.msi</c></description></item>
+    ///   <item><description>macOS — <c>.dmg</c>, then <c>.pkg</c></description></item>
+    ///   <item><description>Linux — <c>.tar.gz</c>, then <c>.AppImage</c></description></item>
+    /// </list>
+    /// Returns null if no matching asset exists for the current platform.
+    /// </summary>
+    public static GitHubReleaseAsset? FindPlatformAsset(GitHubReleaseInfo release)
+    {
+        if (OperatingSystem.IsWindows())
+            return release.Assets.FirstOrDefault(a =>
+                a.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase));
+
+        if (OperatingSystem.IsMacOS())
+            return release.Assets.FirstOrDefault(a =>
+                a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
+                ?? release.Assets.FirstOrDefault(a =>
+                a.Name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase));
+
+        // Linux
+        return release.Assets.FirstOrDefault(a =>
+            a.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
+            ?? release.Assets.FirstOrDefault(a =>
+            a.Name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

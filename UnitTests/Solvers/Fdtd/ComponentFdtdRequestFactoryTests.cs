@@ -96,7 +96,7 @@ public class ComponentFdtdRequestFactoryTests
 
         string? renderedModule = "<never called>";
         var preview = new Mock<NazcaComponentPreviewService>(
-            MockBehavior.Loose, "python3", "preview.py", (TimeSpan?)null) { CallBase = false };
+            MockBehavior.Loose, "python3", "preview.py", (TimeSpan?)null, (ProcessLaunchFactory?)null) { CallBase = false };
         preview.Setup(s => s.RenderAsync(
                 It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
             .Callback<string?, string, string?, CancellationToken>((module, _, _, _) => renderedModule = module)

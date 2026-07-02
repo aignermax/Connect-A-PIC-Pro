@@ -19,6 +19,7 @@ public partial class AiAssistantViewModel : ObservableObject
     private readonly IAiService _aiService;
     private readonly UserPreferencesService _preferencesService;
     private readonly IAiToolRegistry? _toolRegistry;
+    private readonly IUrlLauncher _urlLauncher;
     private CancellationTokenSource? _cancellationSource;
 
     private const int MaxHistoryMessages = 20;
@@ -49,11 +50,13 @@ public partial class AiAssistantViewModel : ObservableObject
     public AiAssistantViewModel(
         IAiService aiService,
         UserPreferencesService preferencesService,
-        IAiToolRegistry? toolRegistry = null)
+        IAiToolRegistry? toolRegistry = null,
+        IUrlLauncher? urlLauncher = null)
     {
         _aiService = aiService;
         _preferencesService = preferencesService;
         _toolRegistry = toolRegistry;
+        _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
 
         var savedKey = _preferencesService.GetAiApiKey();
         if (!string.IsNullOrEmpty(savedKey))
@@ -177,18 +180,14 @@ public partial class AiAssistantViewModel : ObservableObject
     [RelayCommand]
     private void OpenApiKeyPage()
     {
+        const string Url = "https://console.anthropic.com/settings/keys";
         try
         {
-            var url = "https://console.anthropic.com/settings/keys";
-            var psi = new System.Diagnostics.ProcessStartInfo
-            {
-                FileName = url,
-                UseShellExecute = true
-            };
-            System.Diagnostics.Process.Start(psi);
+            _urlLauncher.Open(Url);
         }
         catch
         {
+            // Non-fatal: the user can navigate manually. Surface the fallback URL so they are not blocked.
             StatusText = "Could not open browser. Visit: console.anthropic.com/settings/keys";
         }
     }
