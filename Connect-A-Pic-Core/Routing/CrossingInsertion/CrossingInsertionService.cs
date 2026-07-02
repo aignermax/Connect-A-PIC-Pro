@@ -19,16 +19,18 @@ public class CrossingInsertionService
 
     /// <summary>
     /// Creates the service with a factory producing fresh crossing component
-    /// instances (e.g. cloned "Crossing 4-Port" PDK drafts). A new instance is
-    /// requested for every insertion.
+    /// instances (e.g. instantiated from the "Crossing 4-Port" PDK template).
+    /// A new instance is requested for every insertion. The factory may return
+    /// null when no crossing PDK component is available — in that case the pass
+    /// is skipped entirely (conservative: keep detours, never fake a crossing).
     /// </summary>
-    public CrossingInsertionService(Func<Component> crossingComponentFactory)
+    public CrossingInsertionService(Func<Component?> crossingComponentFactory)
     {
         CrossingComponentFactory = crossingComponentFactory;
     }
 
-    /// <summary>Factory for fresh crossing component instances.</summary>
-    public Func<Component> CrossingComponentFactory { get; }
+    /// <summary>Factory for fresh crossing component instances (null = PDK crossing unavailable).</summary>
+    public Func<Component?> CrossingComponentFactory { get; }
 
     /// <summary>
     /// Invoked when a crossing component was placed. The host must add it to its
@@ -58,6 +60,8 @@ public class CrossingInsertionService
         if (grid == null) return;
 
         var draft = CrossingComponentFactory();
+        if (draft == null) return; // no crossing PDK component available → keep detours
+
         double? crossingLossDb = _inserter.GetCrossingThroughLossDb(draft);
         if (crossingLossDb == null) return; // no usable S-matrix → never insert silently
 
@@ -131,12 +135,15 @@ public class CrossingInsertionService
         }
 
         router.RemoveComponentObstacle(record.CrossingComponent);
-        ComponentRemoved?.Invoke(record.CrossingComponent);
 
         foreach (var survivor in survivors)
         {
             manager.Connections.Add(survivor);
         }
+
+        // Notify AFTER the connection list is consistent again, so hosts
+        // (e.g. the canvas binder) can sync their view of the connections.
+        ComponentRemoved?.Invoke(record.CrossingComponent);
     }
 
     private bool TryInsertForConnection(
@@ -145,6 +152,10 @@ public class CrossingInsertionService
     {
         var grid = router.PathfindingGrid!;
         if (connection.RoutedPath == null || !connection.IsPathValid) return false;
+
+        // Never split a sub-connection of an existing crossing again: dissolving
+        // the outer crossing would orphan the inner crossing component and its subs.
+        if (IsCrossingSubConnection(connection)) return false;
 
         double detourLossDb = connection.IsBlockedFallback
             ? double.PositiveInfinity
@@ -174,9 +185,17 @@ public class CrossingInsertionService
         {
             candidate = _inserter.FindCandidate(
                 connection, directPath, others, grid, crossingEdgeMicrometers, crossingLossDb);
+
+            // Never cross a sub-connection of an existing crossing (see guard above).
+            if (candidate != null && IsCrossingSubConnection(candidate.ExistingConnection))
+                candidate = null;
         }
 
-        if (candidate == null || !_inserter.IsCrossingBeneficial(candidate, detourLossDb))
+        Component? crossing = null;
+        if (candidate != null && _inserter.IsCrossingBeneficial(candidate, detourLossDb))
+            crossing = CrossingComponentFactory();
+
+        if (crossing == null)
         {
             // Keep the detour: restore this connection's own obstacle.
             grid.AddWaveguideObstacle(connection.Id, connection.RoutedPath.Segments,
@@ -184,15 +203,15 @@ public class CrossingInsertionService
             return false;
         }
 
-        ApplyInsertion(candidate, manager, router);
+        ApplyInsertion(candidate!, crossing, manager, router);
         return true;
     }
 
     private void ApplyInsertion(
-        CrossingCandidate candidate, WaveguideConnectionManager manager, WaveguideRouter router)
+        CrossingCandidate candidate, Component crossing,
+        WaveguideConnectionManager manager, WaveguideRouter router)
     {
         var grid = router.PathfindingGrid!;
-        var crossing = CrossingComponentFactory();
         crossing.Name = $"{crossing.Name}_{Guid.NewGuid().ToString("N")[..8]}";
         var record = _placement.Place(candidate, crossing);
 
@@ -202,7 +221,6 @@ public class CrossingInsertionService
         manager.Connections.Remove(record.OriginalB);
 
         router.AddComponentObstacle(crossing);
-        ComponentAdded?.Invoke(crossing);
 
         foreach (var sub in record.AllSubConnections)
         {
@@ -213,6 +231,10 @@ public class CrossingInsertionService
         }
 
         _records.Add(record);
+
+        // Notify AFTER the sub-connections replaced the originals, so hosts
+        // (e.g. the canvas binder) see a consistent connection list.
+        ComponentAdded?.Invoke(crossing);
     }
 
     private static double StraightLineLossDb(WaveguideConnection connection)
@@ -224,6 +246,10 @@ public class CrossingInsertionService
                              ?? connection.PropagationLossDbPerCm;
         return distanceMicrometers / 10000.0 * lossDbPerCm;
     }
+
+    /// <summary>True when the connection is a sub-connection of any active crossing.</summary>
+    private bool IsCrossingSubConnection(WaveguideConnection connection) =>
+        _records.Any(r => r.ContainsSubConnection(connection));
 
     private static bool Touches(WaveguideConnection connection, Component component) =>
         connection.StartPin.ParentComponent == component ||

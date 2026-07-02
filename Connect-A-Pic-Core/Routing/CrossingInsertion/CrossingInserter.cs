@@ -33,9 +33,12 @@ public class CrossingInserter
         var eastPin = CrossingPlacement.FindPinByAngle(crossingComponent, 0);
         if (westPin?.LogicalPin == null || eastPin?.LogicalPin == null) return null;
 
-        if (!crossingComponent.WaveLengthToSMatrixMap.TryGetValue(ReferenceWavelengthNm, out var sMatrix))
-            sMatrix = crossingComponent.WaveLengthToSMatrixMap.Values.FirstOrDefault();
-        if (sMatrix == null) return null;
+        // No fallback to another wavelength's matrix: using an arbitrary
+        // wavelength's loss would be a silent physical assumption. Missing
+        // reference wavelength → no crossing insertion (detours are kept).
+        if (!crossingComponent.WaveLengthToSMatrixMap.TryGetValue(ReferenceWavelengthNm, out var sMatrix)
+            || sMatrix == null)
+            return null;
 
         var values = sMatrix.GetNonNullValues();
         if (!values.TryGetValue((westPin.LogicalPin.IDInFlow, eastPin.LogicalPin.IDOutFlow), out var through))

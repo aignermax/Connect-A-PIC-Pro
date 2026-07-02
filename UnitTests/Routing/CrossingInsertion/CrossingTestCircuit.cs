@@ -54,7 +54,12 @@ public static class CrossingTestCircuit
     /// crossing pass then decides crossing vs. detour by insertion loss.
     /// </summary>
     /// <param name="bendLossDbPer90Deg">Bend loss to make the detour expensive or cheap.</param>
-    public static CrossLayout Build(double bendLossDbPer90Deg)
+    /// <param name="crossingFactory">
+    /// Optional crossing component factory (defaults to <see cref="CreateCrossingComponent"/>).
+    /// Pass a factory backed by the real PDK instantiation path to exercise production wiring.
+    /// </param>
+    public static CrossLayout Build(
+        double bendLossDbPer90Deg, Func<Component?>? crossingFactory = null)
     {
         // Only the light-source terminal maps InFlow→OutFlow; the sink terminals are
         // absorbing, otherwise the mirrors would form a Fabry–Pérot cavity through
@@ -78,7 +83,7 @@ public static class CrossingTestCircuit
 
         var added = new List<Component>();
         var removed = new List<Component>();
-        var service = new CrossingInsertionService(CreateCrossingComponent)
+        var service = new CrossingInsertionService(crossingFactory ?? CreateCrossingComponent)
         {
             ComponentAdded = crossing =>
             {
