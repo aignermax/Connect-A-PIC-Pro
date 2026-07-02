@@ -17,6 +17,8 @@ public partial class SettingsWindowViewModel : ObservableObject
     [ObservableProperty]
     private ISettingsPage? _selectedPage;
 
+    partial void OnSelectedPageChanged(ISettingsPage? value) => value?.OnSelected();
+
     /// <summary>
     /// Initializes a new instance of <see cref="SettingsWindowViewModel"/>.
     /// </summary>

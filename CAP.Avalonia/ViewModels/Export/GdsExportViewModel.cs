@@ -54,6 +54,12 @@ public partial class GdsExportViewModel : ObservableObject
     [ObservableProperty]
     private bool _showNazcaInstallOffer;
 
+    [ObservableProperty]
+    private ObservableCollection<InterpreterOption> _interpreterOptions = new();
+
+    [ObservableProperty]
+    private bool _showCreateEnvironmentButton;
+
     /// <summary>
     /// True if both Python and Nazca are available and ready.
     /// </summary>
@@ -175,6 +181,66 @@ public partial class GdsExportViewModel : ObservableObject
             ManagedCandidates.Add(candidate);
 
         ShowNazcaInstallOffer = !NazcaAvailable && ManagedCandidates.Count == 0;
+        // The one-click create stays available whenever no managed environment exists,
+        // even if a system Python happens to carry Nazca.
+        ShowCreateEnvironmentButton = ManagedCandidates.Count == 0;
+        RebuildInterpreterOptions();
+    }
+
+    /// <summary>
+    /// Rebuilds the unified interpreter list (managed environments first, then discovered
+    /// system Pythons), marking the entry that matches the configured interpreter path.
+    /// </summary>
+    private void RebuildInterpreterOptions()
+    {
+        InterpreterOptions.Clear();
+        foreach (var candidate in ManagedCandidates)
+            InterpreterOptions.Add(new InterpreterOption(
+                candidate.DisplayText,
+                candidate.PythonExecutable,
+                IsConfiguredPath(candidate.PythonExecutable),
+                candidate.Name));
+
+        foreach (var python in AvailablePythons)
+            InterpreterOptions.Add(new InterpreterOption(
+                $"{python.Source} · Python {python.PythonVersion ?? "?"} · Nazca {python.NazcaVersion ?? "—"}",
+                python.Path,
+                IsConfiguredPath(python.Path),
+                ManagedName: null));
+    }
+
+    private bool IsConfiguredPath(string path) =>
+        string.Equals(path, CustomPythonPath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Selects an interpreter from the unified list: managed environments are activated
+    /// through the registry (persists + updates the running pipeline), system Pythons via
+    /// the classic path selection. Both re-check the environment afterwards.
+    /// </summary>
+    /// <param name="option">The interpreter the user clicked.</param>
+    [RelayCommand]
+    public async Task SelectInterpreter(InterpreterOption option)
+    {
+        if (option.ManagedName != null)
+        {
+            ActivateManagedEnvironment?.Invoke(option.ManagedName);
+            await CheckEnvironmentAsync();
+            return;
+        }
+
+        await SetPythonPathAsync(option.Path);
+    }
+
+    /// <summary>
+    /// One-stop refresh for the settings page: discovers system Pythons with Nazca
+    /// (auto-selecting the first hit when nothing is configured yet — the "first start"
+    /// default), then re-checks the configured interpreter and rebuilds the list.
+    /// </summary>
+    [RelayCommand]
+    public async Task RefreshInterpretersAsync()
+    {
+        await SearchForPythonAsync();
+        await CheckEnvironmentAsync();
     }
 
     /// <summary>

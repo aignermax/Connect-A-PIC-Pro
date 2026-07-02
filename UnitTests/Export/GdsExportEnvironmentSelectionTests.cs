@@ -106,6 +106,88 @@ public class GdsExportEnvironmentSelectionTests
         requested.ShouldBeTrue();
     }
 
+    [Fact]
+    public void RebuildInterpreterOptions_MergesManagedAndDiscovered_WithActiveMarking()
+    {
+        var vm = CreateViewModel();
+        vm.CustomPythonPath = "/envs/nazca/bin/python";
+        vm.ManagedEnvironmentsProvider = () => new[]
+        {
+            new ManagedEnvCandidate("nazca", "/envs/nazca/bin/python", "Managed · nazca"),
+        };
+        vm.AvailablePythons.Add(new PythonDiscoveryService.PythonInstallation
+        {
+            Path = "/usr/bin/python3",
+            Source = "System",
+            PythonVersion = "3.12.1",
+            NazcaVersion = "0.6.1",
+        });
+
+        vm.RefreshManagedCandidates();
+
+        vm.InterpreterOptions.Count.ShouldBe(2);
+        vm.InterpreterOptions[0].Path.ShouldBe("/envs/nazca/bin/python");
+        vm.InterpreterOptions[0].IsActive.ShouldBeTrue();      // matches CustomPythonPath
+        vm.InterpreterOptions[0].ManagedName.ShouldBe("nazca");
+        vm.InterpreterOptions[1].Path.ShouldBe("/usr/bin/python3");
+        vm.InterpreterOptions[1].IsActive.ShouldBeFalse();
+        vm.InterpreterOptions[1].ManagedName.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task SelectInterpreter_ManagedOption_ActivatesViaRegistryDelegate()
+    {
+        var vm = CreateViewModel();
+        string? activated = null;
+        vm.ActivateManagedEnvironment = name => activated = name;
+        var option = new InterpreterOption("Managed · nazca", "/envs/nazca/bin/python", false, "nazca");
+
+        await vm.SelectInterpreterCommand.ExecuteAsync(option);
+
+        activated.ShouldBe("nazca");
+    }
+
+    [Fact]
+    public async Task SelectInterpreter_SystemOption_SetsPathAndPersists()
+    {
+        var vm = CreateViewModel();
+        string? persisted = null;
+        vm.OnPythonPathChanged = p => persisted = p;
+        var option = new InterpreterOption("System · 3.12", "/usr/bin/python3", false, null);
+
+        await vm.SelectInterpreterCommand.ExecuteAsync(option);
+
+        vm.CustomPythonPath.ShouldBe("/usr/bin/python3");
+        persisted.ShouldBe("/usr/bin/python3");
+    }
+
+    [Fact]
+    public void RefreshManagedCandidates_NoManagedEnvs_ShowsCreateEnvironmentButton()
+    {
+        var vm = CreateViewModel();
+        vm.NazcaAvailable = true;   // auch mit System-Nazca soll der Create-Button sichtbar bleiben
+        vm.ManagedEnvironmentsProvider = () => Array.Empty<ManagedEnvCandidate>();
+
+        vm.RefreshManagedCandidates();
+
+        vm.ShowCreateEnvironmentButton.ShouldBeTrue();
+        vm.ShowNazcaInstallOffer.ShouldBeFalse();   // Warnbanner nur ohne jegliches Nazca
+    }
+
+    [Fact]
+    public void RefreshManagedCandidates_ManagedEnvExists_HidesCreateEnvironmentButton()
+    {
+        var vm = CreateViewModel();
+        vm.ManagedEnvironmentsProvider = () => new[]
+        {
+            new ManagedEnvCandidate("nazca", "/envs/nazca/bin/python", "Managed · nazca"),
+        };
+
+        vm.RefreshManagedCandidates();
+
+        vm.ShowCreateEnvironmentButton.ShouldBeFalse();
+    }
+
     private sealed class FakeMessageBoxService : IMessageBoxService
     {
         public int ChoiceToReturn { get; set; } = -1;

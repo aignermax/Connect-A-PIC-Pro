@@ -19,4 +19,10 @@ public interface ISettingsPage
 
     /// <summary>The ViewModel rendered inside the content area when this page is selected.</summary>
     object ViewModel { get; }
+
+    /// <summary>
+    /// Invoked by the Settings window whenever this page becomes the selected page.
+    /// Default: no-op. Override to refresh page data on navigation.
+    /// </summary>
+    void OnSelected() { }
 }

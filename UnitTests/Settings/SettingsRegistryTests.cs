@@ -188,6 +188,16 @@ public class SettingsRegistryTests
     }
 
     [Fact]
+    public void PythonEnvironmentsSettingsPage_StableContract()
+    {
+        ISettingsPage page = new PythonEnvironmentsSettingsPage(null!);
+
+        page.Title.ShouldBe("Python Environments");
+        page.Icon.ShouldBe("📦");
+        page.Category.ShouldBe("Export");
+    }
+
+    [Fact]
     public void AiAssistantSettingsPage_StableContract()
     {
         ISettingsPage page = new AiAssistantSettingsPage(null!);
