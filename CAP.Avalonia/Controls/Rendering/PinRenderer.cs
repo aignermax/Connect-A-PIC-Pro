@@ -36,7 +36,7 @@ internal sealed class PinRenderer
                 context.DrawEllipse(glowBrush, null, new Point(pinX, pinY), pinSize * 1.5, pinSize * 1.5);
             }
 
-            context.DrawEllipse(pinBrush, null, new Point(pinX, pinY), pinSize, pinSize);
+            DrawPinShape(context, pin, pinBrush, pinX, pinY, pinSize);
             DrawPinDirectionIndicator(context, pin, pinX, pinY, isHighlighted, isDimmed);
 
             if (isHighlighted)
@@ -73,11 +73,30 @@ internal sealed class PinRenderer
     {
         if (isHighlighted)
             return new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255));
+        if (pin.MatterType == MatterType.Electricity)
+            return new SolidColorBrush(Color.FromArgb(alpha, ElectricalPinColor.R, ElectricalPinColor.G, ElectricalPinColor.B));
         if (isConnectMode)
             return new SolidColorBrush(Color.FromArgb(alpha, 255, 200, 0));
         if (pin.LogicalPin != null)
             return new SolidColorBrush(Color.FromArgb(alpha, 100, 200, 100));
         return new SolidColorBrush(Color.FromArgb(alpha, 200, 100, 100));
+    }
+
+    /// <summary>Copper/gold colour marking electrical pins (Issue #519).</summary>
+    private static readonly Color ElectricalPinColor = Color.FromRgb(218, 165, 32);
+
+    /// <summary>
+    /// Draws the pin marker: optical pins as circles, electrical pins as squares
+    /// so the signal domain is visually distinguishable at a glance.
+    /// </summary>
+    private static void DrawPinShape(DrawingContext context, PhysicalPin pin, IBrush brush, double pinX, double pinY, double pinSize)
+    {
+        if (pin.MatterType == MatterType.Electricity)
+        {
+            context.DrawRectangle(brush, null, new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
+            return;
+        }
+        context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
     }
 
     private static void DrawPinDirectionIndicator(DrawingContext context, PhysicalPin pin, double pinX, double pinY, bool isHighlighted, bool isDimmed)

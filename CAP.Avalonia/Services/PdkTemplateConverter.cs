@@ -1,6 +1,7 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.FormulaReading;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -31,7 +32,8 @@ public static class PdkTemplateConverter
             p.Name,
             p.OffsetXMicrometers,
             p.OffsetYMicrometers,
-            p.AngleDegrees
+            p.AngleDegrees,
+            PinKindHelper.Parse(p.PinKind)
         )).ToArray();
 
         // NazcaOriginOffset is required — validated by PdkLoader.

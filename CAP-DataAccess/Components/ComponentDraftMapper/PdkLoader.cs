@@ -166,6 +166,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                         errors.Add($"[{pdkName}/{compLabel}] Pin must have a name");
                     }
 
+                    if (!CAP_Core.Components.PinKinds.PinKindHelper.TryParse(pin.PinKind, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid pinKind '{pin.PinKind}' (expected 'Optical' or 'Electrical')");
+                    }
+
                     const double tolerance = 1.0;
                     if (pin.OffsetXMicrometers < -tolerance || pin.OffsetXMicrometers > comp.WidthMicrometers + tolerance)
                     {
