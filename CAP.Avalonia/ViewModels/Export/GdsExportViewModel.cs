@@ -48,6 +48,12 @@ public partial class GdsExportViewModel : ObservableObject
     [ObservableProperty]
     private string _pythonPathSource = string.Empty;
 
+    [ObservableProperty]
+    private ObservableCollection<ManagedEnvCandidate> _managedCandidates = new();
+
+    [ObservableProperty]
+    private bool _showNazcaInstallOffer;
+
     /// <summary>
     /// True if both Python and Nazca are available and ready.
     /// </summary>
@@ -57,6 +63,18 @@ public partial class GdsExportViewModel : ObservableObject
     /// Callback to save Python path to preferences when changed.
     /// </summary>
     public Action<string?>? OnPythonPathChanged { get; set; }
+
+    /// <summary>
+    /// Supplies the managed environments that carry Nazca (wired by the DI layer;
+    /// the GDS-export slice never references the environment-manager slice directly).
+    /// </summary>
+    public Func<IReadOnlyList<ManagedEnvCandidate>>? ManagedEnvironmentsProvider { get; set; }
+
+    /// <summary>Activates a managed environment by name (wired by the DI layer).</summary>
+    public Action<string>? ActivateManagedEnvironment { get; set; }
+
+    /// <summary>Starts the default Nazca environment installation (wired by the DI layer).</summary>
+    public Action? RequestNazcaInstall { get; set; }
 
     private readonly ErrorConsoleService? _errorConsole;
 
@@ -127,6 +145,7 @@ public partial class GdsExportViewModel : ObservableObject
             }
 
             OnPropertyChanged(nameof(IsEnvironmentReady));
+            RefreshManagedCandidates();
         }
         catch (Exception ex)
         {
@@ -136,12 +155,43 @@ public partial class GdsExportViewModel : ObservableObject
             NazcaStatus = "✗ Check failed";
             _errorConsole?.LogError($"Python environment check failed: {ex.Message}", ex);
             OnPropertyChanged(nameof(IsEnvironmentReady));
+            RefreshManagedCandidates();
         }
         finally
         {
             IsChecking = false;
         }
     }
+
+    /// <summary>
+    /// Rebuilds <see cref="ManagedCandidates"/> from <see cref="ManagedEnvironmentsProvider"/>
+    /// and recomputes whether the "install Nazca" offer should be shown (no Nazca in the
+    /// active interpreter AND no managed environment to switch to).
+    /// </summary>
+    public void RefreshManagedCandidates()
+    {
+        ManagedCandidates.Clear();
+        foreach (var candidate in ManagedEnvironmentsProvider?.Invoke() ?? Array.Empty<ManagedEnvCandidate>())
+            ManagedCandidates.Add(candidate);
+
+        ShowNazcaInstallOffer = !NazcaAvailable && ManagedCandidates.Count == 0;
+    }
+
+    /// <summary>
+    /// Activates a managed environment: the registry callback (DI layer) persists the
+    /// interpreter and pushes it into this ViewModel, then the status is re-checked.
+    /// </summary>
+    /// <param name="candidate">The managed environment to activate.</param>
+    [RelayCommand]
+    public async Task SelectManagedEnvironment(ManagedEnvCandidate candidate)
+    {
+        ActivateManagedEnvironment?.Invoke(candidate.Name);
+        await CheckEnvironmentAsync();
+    }
+
+    /// <summary>Requests creation + installation of the default Nazca environment.</summary>
+    [RelayCommand]
+    public void InstallNazca() => RequestNazcaInstall?.Invoke();
 
     /// <summary>
     /// Exports a Python script to GDS (if enabled and environment is ready).
