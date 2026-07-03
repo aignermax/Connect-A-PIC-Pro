@@ -34,5 +34,5 @@ public class PythonEnvironmentsSettingsPage : ISettingsPage
     /// without a manual refresh (issue #645).
     /// </summary>
     public void OnSelected() =>
-        ((PythonEnvironmentManagerViewModel)ViewModel).RefreshSystemInterpretersCommand.Execute(null);
+        ((PythonEnvironmentManagerViewModel)ViewModel).RefreshInterpretersCommand.Execute(null);
 }

@@ -5,76 +5,15 @@
              x:DataType="vm:PythonEnvironmentManagerViewModel">
 
     <StackPanel>
-        <TextBlock Text="Python Environment Manager:" Foreground="LightSkyBlue"
+        <TextBlock Text="Python Environments:" Foreground="LightSkyBlue"
                    Margin="0,0,0,5" FontWeight="SemiBold"/>
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
-            Create isolated Python environments with Nazca pre-installed.
-            The active environment is used for GDS export and preview.
+            One place to pick the interpreter used for GDS export and preview. Create a managed
+            environment (Nazca + gdsfactory pre-installed) or activate one of your system Pythons.
         </TextBlock>
 
-        <!-- Environments list -->
-        <ListBox ItemsSource="{Binding Environments}"
-                 SelectedItem="{Binding SelectedEnvironment}"
-                 MaxHeight="160" Margin="0,0,0,6" Background="#1e1e1e" BorderBrush="#3d3d3d"
-                 BorderThickness="1">
-            <ListBox.ItemTemplate>
-                <DataTemplate>
-                    <StackPanel Margin="4,2">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <TextBlock Text="{Binding Name}" Foreground="LightGray" FontWeight="SemiBold"/>
-                            <Border CornerRadius="3" Padding="4,1" Background="#333333">
-                                <TextBlock Text="{Binding StatusBadge}"
-                                           Foreground="{Binding StatusColor}"
-                                           FontSize="10"/>
-                            </Border>
-                            <TextBlock Text="[Active]" Foreground="Gold" FontSize="10"
-                                       FontWeight="SemiBold"
-                                       IsVisible="{Binding IsActive}"/>
-                        </StackPanel>
-                        <TextBlock Text="{Binding Details}" Foreground="Gray"
-                                   FontSize="10" TextWrapping="Wrap"
-                                   IsVisible="{Binding Details, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                    </StackPanel>
-                </DataTemplate>
-            </ListBox.ItemTemplate>
-        </ListBox>
-
-        <!-- Action buttons for selected environment -->
-        <StackPanel IsVisible="{Binding SelectedEnvironment,
-                                        Converter={x:Static ObjectConverters.IsNotNull}}">
-            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-                <Button Content="Set Active"
-                        Command="{Binding SetActiveCommand}"
-                        Width="80" Background="#3d5d3d" FontSize="11"
-                        IsEnabled="{Binding IsBusy,
-                                            Converter={x:Static BoolConverters.Not}}"/>
-                <Button Content="Check Health"
-                        Command="{Binding CheckHealthCommand}"
-                        Width="90" Background="#3d4d5d" FontSize="11"
-                        IsEnabled="{Binding IsBusy,
-                                            Converter={x:Static BoolConverters.Not}}"/>
-                <Button Content="Repair"
-                        Command="{Binding RepairCommand}"
-                        Width="70" Background="#5d4d3d" FontSize="11"
-                        IsEnabled="{Binding IsBusy,
-                                            Converter={x:Static BoolConverters.Not}}"/>
-                <Button Content="Install gdsfactory"
-                        Command="{Binding InstallGdsFactoryCommand}"
-                        Background="#3d5d4d" FontSize="11"
-                        ToolTip.Tip="Install gdsfactory + ubcpdk into this environment (needed for the gdsfactory export)"
-                        IsEnabled="{Binding IsBusy,
-                                            Converter={x:Static BoolConverters.Not}}"/>
-                <Button Content="Remove"
-                        Command="{Binding RemoveCommand}"
-                        Width="70" Background="#5d3d3d" FontSize="11"
-                        IsEnabled="{Binding IsBusy,
-                                            Converter={x:Static BoolConverters.Not}}"/>
-            </StackPanel>
-        </StackPanel>
-
-        <!-- Create new environment -->
-        <Separator Margin="0,6,0,6" Background="#2d2d2d"/>
-        <TextBlock Text="Create New Environment:" Foreground="Gray" FontSize="10"
+        <!-- Create new managed environment (installs Nazca + gdsfactory together, #645) -->
+        <TextBlock Text="Create managed environment:" Foreground="Gray" FontSize="10"
                    Margin="0,0,0,4"/>
         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <TextBlock Text="Name:" Foreground="Gray" FontSize="11"
@@ -89,62 +28,15 @@
                       SelectedItem="{Binding PythonVersion}"
                       Width="90" FontSize="11"/>
         </StackPanel>
-        <Button Content="Create + Install Nazca"
+        <Button Content="Create + Install (Nazca + gdsfactory)"
                 Command="{Binding CreateAndInstallCommand}"
-                Width="160" Background="#3d5d7d" FontSize="11" Margin="0,0,0,6"
+                Background="#3d5d7d" FontSize="11" Margin="0,0,0,6"
+                ToolTip.Tip="Creates a managed venv and installs Nazca, pyclipper, gdsfactory and ubcpdk"
                 IsEnabled="{Binding IsBusy,
                                     Converter={x:Static BoolConverters.Not}}"/>
 
-        <!-- Detected system interpreters (issue #645): discovered Pythons that carry Nazca,
-             each showing its Nazca and gdsfactory version, activatable as the export/preview
-             interpreter just like a managed environment. -->
-        <Separator Margin="0,6,0,6" Background="#2d2d2d"/>
-        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-            <TextBlock Grid.Column="0" Text="Detected system interpreters:"
-                       Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Content="🔄" Width="28" Padding="2" FontSize="11"
-                    Command="{Binding RefreshSystemInterpretersCommand}"
-                    ToolTip.Tip="Re-scan for system Python interpreters (shows Nazca + gdsfactory versions)"
-                    IsEnabled="{Binding IsDiscoveringInterpreters,
-                                        Converter={x:Static BoolConverters.Not}}"/>
-        </Grid>
-        <TextBlock Text="Scanning for interpreters…" Foreground="LightSkyBlue" FontSize="10"
-                   Margin="0,0,0,4" IsVisible="{Binding IsDiscoveringInterpreters}"/>
-        <TextBlock Text="No system interpreter with Nazca found. Create a managed environment above."
-                   Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,4"
-                   IsVisible="{Binding ShowNoSystemInterpretersHint}"/>
-        <ScrollViewer MaxHeight="160" Margin="0,0,0,6"
-                      VerticalScrollBarVisibility="Auto"
-                      IsVisible="{Binding SystemInterpreters.Count}">
-            <ItemsControl ItemsSource="{Binding SystemInterpreters}" x:Name="SystemInterpretersList">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <Button Command="{Binding #SystemInterpretersList.DataContext.ActivateSystemInterpreterCommand}"
-                                CommandParameter="{Binding}"
-                                HorizontalAlignment="Stretch"
-                                HorizontalContentAlignment="Left"
-                                Margin="0,2,4,0" Padding="6,3"
-                                Background="#2d2d2d" FontSize="11"
-                                ToolTip.Tip="Set as the active interpreter for export and preview">
-                            <StackPanel>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
-                                               IsVisible="{Binding IsActive}"/>
-                                    <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
-                                               TextWrapping="Wrap"/>
-                                </StackPanel>
-                                <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
-                        </Button>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
-
         <!-- Progress and cancel -->
-        <StackPanel IsVisible="{Binding IsBusy}"
-                    Margin="0,0,0,4">
+        <StackPanel IsVisible="{Binding IsBusy}" Margin="0,0,0,4">
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="{Binding ProgressText}"
                            Foreground="LightSkyBlue" FontSize="10" TextWrapping="Wrap"/>
@@ -154,6 +46,83 @@
                         IsEnabled="{Binding CanCancel}"/>
             </StackPanel>
         </StackPanel>
+
+        <!-- Unified interpreter list: managed environments (with health + remove) and
+             discovered system Pythons, each activatable the same way (issue #645). -->
+        <Separator Margin="0,6,0,6" Background="#2d2d2d"/>
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+            <TextBlock Grid.Column="0" Text="Available interpreters (managed + system):"
+                       Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="🔄" Width="28" Padding="2" FontSize="11"
+                    Command="{Binding RefreshInterpretersCommand}"
+                    ToolTip.Tip="Re-scan for system Python interpreters (shows Nazca + gdsfactory versions)"
+                    IsEnabled="{Binding IsDiscoveringInterpreters,
+                                        Converter={x:Static BoolConverters.Not}}"/>
+        </Grid>
+        <TextBlock Text="Scanning for interpreters…" Foreground="LightSkyBlue" FontSize="10"
+                   Margin="0,0,0,4" IsVisible="{Binding IsDiscoveringInterpreters}"/>
+        <TextBlock Text="No interpreters found. Create a managed environment above."
+                   Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,4"
+                   IsVisible="{Binding ShowNoInterpretersHint}"/>
+
+        <ScrollViewer MaxHeight="260" Margin="0,0,0,6"
+                      VerticalScrollBarVisibility="Auto"
+                      IsVisible="{Binding Interpreters.Count}">
+            <ItemsControl ItemsSource="{Binding Interpreters}" x:Name="InterpretersList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Background="#1e1e1e" BorderBrush="#3d3d3d" BorderThickness="1"
+                                CornerRadius="3" Margin="0,2,0,0" Padding="2">
+                            <Grid ColumnDefinitions="*,Auto,Auto">
+                                <!-- Row body: click to activate -->
+                                <Button Grid.Column="0"
+                                        Command="{Binding #InterpretersList.DataContext.SetActiveInterpreterCommand}"
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Background="Transparent" BorderThickness="0"
+                                        Padding="6,3" FontSize="11"
+                                        ToolTip.Tip="Set as the active interpreter for export and preview">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Spacing="6">
+                                            <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
+                                                       IsVisible="{Binding IsActive}"/>
+                                            <Border CornerRadius="3" Padding="4,1" Background="#333333"
+                                                    IsVisible="{Binding HasStatusBadge}">
+                                                <TextBlock Text="{Binding StatusBadge}"
+                                                           Foreground="{Binding StatusColor}" FontSize="10"/>
+                                            </Border>
+                                            <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
+                                                       TextWrapping="Wrap"/>
+                                        </StackPanel>
+                                        <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
+                                                   TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </Button>
+
+                                <!-- Managed-only: health check -->
+                                <Button Grid.Column="1" Content="Check"
+                                        Command="{Binding #InterpretersList.DataContext.CheckHealthInterpreterCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding IsManaged}"
+                                        VerticalAlignment="Center" Margin="2,0,0,0"
+                                        Padding="6,2" FontSize="10" Background="#3d4d5d"
+                                        ToolTip.Tip="Re-check this environment's health"/>
+
+                                <!-- Managed-only: remove -->
+                                <Button Grid.Column="2" Content="✕"
+                                        Command="{Binding #InterpretersList.DataContext.RemoveInterpreterCommand}"
+                                        CommandParameter="{Binding}"
+                                        IsVisible="{Binding IsManaged}"
+                                        VerticalAlignment="Center" Margin="2,0,2,0"
+                                        Padding="7,2" FontSize="10" Background="#5d3d3d"
+                                        ToolTip.Tip="Remove this managed environment (deletes its venv)"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
 
         <!-- Status (idle) -->
         <TextBlock Text="{Binding ProgressText}"

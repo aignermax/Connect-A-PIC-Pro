@@ -55,13 +55,28 @@ public class UiScreenshotTests
 
         // Settings content: the environment manager moved from the Properties sidebar to a
         // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).
+        // Seed one active, healthy managed environment so the unified list renders a real row
+        // (active marker + status badge + versions + Check / remove buttons) rather than the
+        // empty state (issue #645).
+        var envRegistry = new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentRegistry(
+            Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-registry-{Guid.NewGuid():N}.json"));
+        envRegistry.AddOrUpdate(new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironment
+        {
+            Name = "nazca",
+            VenvPath = Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca"),
+            Status = CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentStatus.Healthy,
+            PythonVersion = "3.11.9", NazcaVersion = "0.6.1", GdsFactoryVersion = "9.5.3", HasPyclipper = true,
+        });
+        envRegistry.SetActive("nazca");
         var envVm = new CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager.PythonEnvironmentManagerViewModel(
-            new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentRegistry(
-                Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-registry-{Guid.NewGuid():N}.json")),
+            envRegistry,
             new CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper(),
             new CAP_Core.Export.PythonEnvironmentManager.NazcaPackageInstaller(),
             new CAP_Core.Export.PythonEnvironmentManager.EnvironmentHealthChecker(
-                new CAP_Core.Export.PythonDiscoveryService()));
+                new CAP_Core.Export.PythonDiscoveryService()),
+            new CAP_Core.Export.PythonDiscoveryService(),
+            () => Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca",
+                OperatingSystem.IsWindows() ? @"Scripts\python.exe" : "bin/python"));
         TryCapture(() => new PythonEnvironmentManagerPanel(), envVm, 500, 700, outputDir, "PythonEnvironmentManagerPanel.png", captured, skipped);
 
         foreach (var (name, reason) in skipped)
