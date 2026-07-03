@@ -40,11 +40,6 @@ public partial class InstanceNazcaCodeEditorViewModel
         ? "Write gdsfactory code and assign your component to a variable named `component`."
         : "Write self-contained Nazca code that defines a component() cell.";
 
-    /// <summary>Section title above the editor, per backend.</summary>
-    public string CodeSectionTitle => IsGdsFactoryBackend
-        ? "gdsfactory Code (geometry only)"
-        : "Nazca Code (geometry only)";
-
     /// <summary>Docs-button caption, per backend.</summary>
     public string DocsButtonLabel => IsGdsFactoryBackend ? "gdsfactory docs ↗" : "Nazca docs ↗";
 
@@ -79,7 +74,6 @@ public partial class InstanceNazcaCodeEditorViewModel
         OnPropertyChanged(nameof(IsGdsFactoryBackend));
         OnPropertyChanged(nameof(UseGdsFactoryBackend));
         OnPropertyChanged(nameof(BackendHelp));
-        OnPropertyChanged(nameof(CodeSectionTitle));
         OnPropertyChanged(nameof(DocsButtonLabel));
         OnPropertyChanged(nameof(DocsUrl));
         OnPropertyChanged(nameof(QuickHelpTitle));

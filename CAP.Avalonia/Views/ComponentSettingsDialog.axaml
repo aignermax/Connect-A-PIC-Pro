@@ -78,12 +78,9 @@
                                TextWrapping="Wrap" VerticalAlignment="Center"/>
                 </StackPanel>
 
-                <!-- Section header (title/docs/cheat-sheet all backend-aware) -->
+                <!-- Section actions/badges (title omitted — it's the window title already;
+                     docs + cheat-sheet are backend-aware, #556/#637) -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="{Binding CodeSectionTitle}"
-                               FontWeight="SemiBold"
-                               FontSize="12"
-                               Foreground="#8888cc"/>
                     <TextBlock Text="🔧 Override active"
                                FontSize="10"
                                Foreground="#FFA500"
@@ -159,21 +156,22 @@
                      place isn't supported — it's a decorated closure with non-standalone
                      references — so it's shown for understanding only; use the override
                      editor below to replace the geometry with your own self-contained code. -->
-                <Expander Header="Original source (read-only reference)"
-                          IsExpanded="False"
-                          Margin="0,2,0,0"
-                          MinHeight="0"
-                          FontSize="11"
-                          Padding="6,1"
-                          IsVisible="{Binding HasEditableSource}">
-                    <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
-                        <SelectableTextBlock Text="{Binding OriginalSource}"
-                                             FontFamily="Consolas, Courier New, monospace"
-                                             FontSize="10"
-                                             Foreground="#9aa0b0"
-                                             TextWrapping="NoWrap"/>
-                    </ScrollViewer>
-                </Expander>
+                <!-- Original source (read-only reference), always visible but kept thin;
+                     scroll for the rest. -->
+                <TextBlock Text="Original source (read-only reference)"
+                           Foreground="#777799" FontSize="10" Margin="0,2,0,0"
+                           IsVisible="{Binding HasEditableSource}"/>
+                <ScrollViewer MaxHeight="56" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto"
+                              Background="#101018"
+                              IsVisible="{Binding HasEditableSource}">
+                    <SelectableTextBlock Text="{Binding OriginalSource}"
+                                         FontFamily="Consolas, Courier New, monospace"
+                                         FontSize="10"
+                                         Foreground="#9aa0b0"
+                                         Margin="4"
+                                         TextWrapping="NoWrap"/>
+                </ScrollViewer>
 
                 <!-- Override editor (left) + live preview (right) -->
                 <Grid ColumnDefinitions="*,160" Height="340">
@@ -254,27 +252,21 @@
             </StackPanel>
         </Border>
 
-        <!-- Load button -->
-        <Button DockPanel.Dock="Bottom"
-                Content="Load S-matrix from file…"
-                Command="{Binding LoadFromFileCommand}"
-                HorizontalAlignment="Left"
-                Margin="0,4,0,0"
-                Padding="12,2"
-                Background="#3d5d3d"
-                ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
-                IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
-
-        <!-- Recalculate via FDTD: like Load, but the S-matrix is computed from the
-             component geometry with the open-source Meep solver instead of imported. -->
-        <Button DockPanel.Dock="Bottom"
-                Content="Recalculate S-matrix (FDTD)…"
-                Command="{Binding RecalculateSMatrixCommand}"
-                HorizontalAlignment="Left"
-                Margin="0,3,0,0"
-                Padding="12,2"
-                Background="#3d4d6d"
-                IsVisible="{Binding CanRecalculate}"/>
+        <!-- Load + Recalculate side by side. Recalculate (FDTD) computes the S-matrix from
+             the component geometry with the open-source Meep solver instead of importing. -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
+            <Button Content="Load S-matrix from file…"
+                    Command="{Binding LoadFromFileCommand}"
+                    Padding="12,2"
+                    Background="#3d5d3d"
+                    ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
+                    IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
+            <Button Content="Recalculate S-matrix (FDTD)…"
+                    Command="{Binding RecalculateSMatrixCommand}"
+                    Padding="12,2"
+                    Background="#3d4d6d"
+                    IsVisible="{Binding CanRecalculate}"/>
+        </StackPanel>
 
         <!-- Solver / simulation status -->
         <Border DockPanel.Dock="Bottom"
