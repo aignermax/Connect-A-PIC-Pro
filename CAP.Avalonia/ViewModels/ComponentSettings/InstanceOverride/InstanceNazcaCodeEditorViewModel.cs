@@ -429,7 +429,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
 
     /// <summary>Replaces the editor content with the showcase example (from the help flyout).</summary>
     [RelayCommand]
-    private void InsertStarter() => Code = Services.NazcaCodeExamples.Complex;
+    private void InsertStarter() => Code = StarterExample;
 
     /// <summary>
     /// Clears the raw-code override for this instance and restores the editor to the

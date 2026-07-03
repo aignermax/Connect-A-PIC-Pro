@@ -40,11 +40,51 @@ public partial class InstanceNazcaCodeEditorViewModel
         ? "Write gdsfactory code and assign your component to a variable named `component`."
         : "Write self-contained Nazca code that defines a component() cell.";
 
+    /// <summary>Section title above the editor, per backend.</summary>
+    public string CodeSectionTitle => IsGdsFactoryBackend
+        ? "gdsfactory Code (geometry only)"
+        : "Nazca Code (geometry only)";
+
+    /// <summary>Docs-button caption, per backend.</summary>
+    public string DocsButtonLabel => IsGdsFactoryBackend ? "gdsfactory docs ↗" : "Nazca docs ↗";
+
+    /// <summary>Docs URL opened by the docs button, per backend.</summary>
+    public string DocsUrl => IsGdsFactoryBackend
+        ? "https://gdsfactory.github.io/gdsfactory/"
+        : "https://nazca-design.org/manual/";
+
+    /// <summary>Quick-help title in the "?" flyout, per backend.</summary>
+    public string QuickHelpTitle => IsGdsFactoryBackend
+        ? "gdsfactory — assign a Component to `component`"
+        : "Nazca elements — showcase circuit (Insert, or select & Ctrl+C)";
+
+    /// <summary>Example snippet shown in the "?" flyout and inserted by "Insert into editor".</summary>
+    public string StarterExample => IsGdsFactoryBackend ? GdsFactoryExample : Services.NazcaCodeExamples.Complex;
+
+    /// <summary>Cheat-sheet line of common elements, per backend.</summary>
+    public string QuickHelpElements => IsGdsFactoryBackend
+        ? "gf.components: straight(length, width) · bend_euler(radius, angle) · mmi1x2() · mmi2x2() · "
+          + "coupler(gap, length) · ring_single(radius) · taper(length, width1, width2) · grating_coupler_elliptical()"
+        : "strt(length, width) · bend(radius, angle, width) · taper(length, width1, width2) · euler(width, radius, angle) · "
+          + "sinebend(width, distance, offset) · cobra(xya=(x,y,a), width1, width2) · ring(radius, width) · Pin(name).put(x, y, angle)";
+
+    /// <summary>Runnable gdsfactory starter (verified against gdsfactory 9.x).</summary>
+    private const string GdsFactoryExample =
+        "import gdsfactory as gf\n\n" +
+        "# Assign your component to `component`. Ports become the instance pins.\n" +
+        "component = gf.components.mmi1x2()\n";
+
     partial void OnSelectedBackendChanged(OverrideBackend value)
     {
         OnPropertyChanged(nameof(IsGdsFactoryBackend));
         OnPropertyChanged(nameof(UseGdsFactoryBackend));
         OnPropertyChanged(nameof(BackendHelp));
+        OnPropertyChanged(nameof(CodeSectionTitle));
+        OnPropertyChanged(nameof(DocsButtonLabel));
+        OnPropertyChanged(nameof(DocsUrl));
+        OnPropertyChanged(nameof(QuickHelpTitle));
+        OnPropertyChanged(nameof(StarterExample));
+        OnPropertyChanged(nameof(QuickHelpElements));
         // Re-seed only when the user hasn't authored code yet (still on a starter), so a
         // toggle never discards real work.
         if (IsOnAStarter())

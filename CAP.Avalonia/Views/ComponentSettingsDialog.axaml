@@ -63,9 +63,24 @@
                 DataContext="{Binding NazcaCodeEditor}"
                 x:DataType="io:InstanceNazcaCodeEditorViewModel">
             <StackPanel Spacing="6">
-                <!-- Section header -->
+                <!-- Backend toggle (#637): Nazca | gdsfactory. Above the header so the whole
+                     section (title, docs, cheat-sheet) reflects the selected backend. -->
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <TextBlock Text="Backend:" Foreground="#9aa0b0" FontSize="11"
+                               VerticalAlignment="Center"/>
+                    <RadioButton Content="Nazca" GroupName="overrideBackend" FontSize="11"
+                                 Foreground="#ddddee"
+                                 IsChecked="{Binding !UseGdsFactoryBackend}"/>
+                    <RadioButton Content="gdsfactory" GroupName="overrideBackend" FontSize="11"
+                                 Foreground="#ddddee"
+                                 IsChecked="{Binding UseGdsFactoryBackend, Mode=TwoWay}"/>
+                    <TextBlock Text="{Binding BackendHelp}" Foreground="#777799" FontSize="10"
+                               TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </StackPanel>
+
+                <!-- Section header (title/docs/cheat-sheet all backend-aware) -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Nazca Code (geometry only)"
+                    <TextBlock Text="{Binding CodeSectionTitle}"
                                FontWeight="SemiBold"
                                FontSize="12"
                                Foreground="#8888cc"/>
@@ -79,8 +94,8 @@
                                Foreground="#FF8888"
                                VerticalAlignment="Center"
                                IsVisible="{Binding HasOverlap}"/>
-                    <!-- Nazca docs + cheat-sheet (issue #556) -->
-                    <Button Content="Nazca docs ↗"
+                    <!-- Docs + cheat-sheet — backend-aware (issue #556/#637) -->
+                    <Button Content="{Binding DocsButtonLabel}"
                             Click="OnOpenNazcaDocs"
                             Padding="6,1"
                             Background="Transparent"
@@ -88,7 +103,7 @@
                             BorderThickness="0"
                             FontSize="10"
                             VerticalAlignment="Center"
-                            ToolTip.Tip="Open the Nazca Design manual in your browser"/>
+                            ToolTip.Tip="Open the selected backend's manual in your browser"/>
                     <Button Content="?"
                             Padding="8,1"
                             Background="#33335a"
@@ -98,20 +113,20 @@
                             FontSize="11"
                             FontWeight="Bold"
                             VerticalAlignment="Center"
-                            ToolTip.Tip="Quick help — most-used Nazca commands">
+                            ToolTip.Tip="Quick help — most-used commands for the selected backend">
                         <Button.Flyout>
                             <Flyout>
                                 <StackPanel Spacing="4" MaxWidth="460">
-                                    <TextBlock Text="Nazca elements — showcase circuit (Insert, or select &amp; Ctrl+C)"
+                                    <TextBlock Text="{Binding QuickHelpTitle}"
                                                FontWeight="SemiBold" FontSize="11" Foreground="#aaaacc"
                                                TextWrapping="Wrap"/>
-                                    <!-- Verified-runnable showcase (NazcaCodeExamples.Complex). Selectable for copy. -->
+                                    <!-- Backend-appropriate runnable example. Selectable for copy. -->
                                     <Border Background="#101018" BorderBrush="#333355" BorderThickness="1"
                                             CornerRadius="3" Padding="6">
                                         <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
                                             <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
                                                                  FontSize="10" Foreground="#dddddd"
-                                                                 Text="{x:Static services:NazcaCodeExamples.Complex}"/>
+                                                                 Text="{Binding StarterExample}"/>
                                         </ScrollViewer>
                                     </Border>
                                     <Button Content="Insert into editor"
@@ -119,33 +134,16 @@
                                             Padding="8,3" FontSize="10"
                                             Background="#2a4a2a" Foreground="#cceecc" BorderThickness="0"
                                             HorizontalAlignment="Left"
-                                            ToolTip.Tip="Replace the editor content with this showcase circuit"/>
-                                    <TextBlock Text="Common elements (chain with .put(), or .put(x, y, angle)):"
+                                            ToolTip.Tip="Replace the editor content with this example"/>
+                                    <TextBlock Text="Common elements:"
                                                FontSize="10" Foreground="#aaaacc" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                     <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
                                                          FontSize="9" Foreground="#9aa0b0" TextWrapping="Wrap"
-                                                         Text="strt(length, width) · bend(radius, angle, width) · taper(length, width1, width2) · ptaper(...) · euler(width, radius, angle) · sinebend(width, distance, offset) · cobra(xya=(x,y,a), width1, width2) · ring(radius, width) · text(text, height, layer) · Pin(name).put(x, y, angle)"/>
-                                    <TextBlock Text="Tip: ring()/text() return polygon lists — add them with nd.Polygon(...)/loops, not .put(). Full reference: nazca-design.org/manual."
-                                               FontSize="9" Foreground="#777799" TextWrapping="Wrap"/>
+                                                         Text="{Binding QuickHelpElements}"/>
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
                     </Button>
-                </StackPanel>
-
-                <!-- Backend toggle (#637): Nazca | gdsfactory. Switches the help text and
-                     which backend runs Preview/Apply; the code editor below is shared. -->
-                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
-                    <TextBlock Text="Backend:" Foreground="#9aa0b0" FontSize="11"
-                               VerticalAlignment="Center"/>
-                    <RadioButton Content="Nazca" GroupName="overrideBackend" FontSize="11"
-                                 Foreground="#ddddee"
-                                 IsChecked="{Binding !UseGdsFactoryBackend}"/>
-                    <RadioButton Content="gdsfactory" GroupName="overrideBackend" FontSize="11"
-                                 Foreground="#ddddee"
-                                 IsChecked="{Binding UseGdsFactoryBackend, Mode=TwoWay}"/>
-                    <TextBlock Text="{Binding BackendHelp}" Foreground="#777799" FontSize="10"
-                               TextWrapping="Wrap" VerticalAlignment="Center"/>
                 </StackPanel>
 
                 <!-- No-editable-source note: shown for fixed-cell GDS / KLayout PCells
@@ -164,6 +162,9 @@
                 <Expander Header="Original source (read-only reference)"
                           IsExpanded="False"
                           Margin="0,2,0,0"
+                          MinHeight="0"
+                          FontSize="11"
+                          Padding="6,1"
                           IsVisible="{Binding HasEditableSource}">
                     <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
                         <SelectableTextBlock Text="{Binding OriginalSource}"
@@ -173,9 +174,6 @@
                                              TextWrapping="NoWrap"/>
                     </ScrollViewer>
                 </Expander>
-
-                <TextBlock Text="Override — your own self-contained Nazca code. Run shows the real component until you define a component()."
-                           Foreground="#8888aa" FontSize="10" Margin="0,4,0,2" TextWrapping="Wrap"/>
 
                 <!-- Override editor (left) + live preview (right) -->
                 <Grid ColumnDefinitions="*,160" Height="340">
@@ -261,9 +259,10 @@
                 Content="Load S-matrix from file…"
                 Command="{Binding LoadFromFileCommand}"
                 HorizontalAlignment="Left"
-                Margin="0,10,0,0"
-                Padding="12,6"
+                Margin="0,4,0,0"
+                Padding="12,2"
                 Background="#3d5d3d"
+                ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
                 IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
 
         <!-- Recalculate via FDTD: like Load, but the S-matrix is computed from the
@@ -272,8 +271,8 @@
                 Content="Recalculate S-matrix (FDTD)…"
                 Command="{Binding RecalculateSMatrixCommand}"
                 HorizontalAlignment="Left"
-                Margin="0,6,0,0"
-                Padding="12,6"
+                Margin="0,3,0,0"
+                Padding="12,2"
                 Background="#3d4d6d"
                 IsVisible="{Binding CanRecalculate}"/>
 
@@ -296,7 +295,7 @@
 
         <!-- Empty state -->
         <TextBlock DockPanel.Dock="Top"
-                   Text="No S-matrices stored for this component.&#10;Use 'Load S-matrix from file…' to import Lumerical or Touchstone data."
+                   Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it."
                    Foreground="Gray"
                    FontSize="11"
                    Margin="0,0,0,10"
