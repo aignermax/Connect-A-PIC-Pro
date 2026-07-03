@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsFactoryExport;
+using CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core;
 using CAP_Core.Export;
@@ -23,12 +24,14 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     private readonly IUrlLauncher _urlLauncher;
     private readonly ErrorConsoleService? _errorConsole;
     private readonly GdsFactoryExporter _exporter = new();
+    private readonly MixedBackendGdsOrchestrator _orchestrator;
 
     [ObservableProperty]
     private ObservableCollection<string> _unmappedComponents = new();
 
-    /// <summary>Instances whose override is written for Nazca — not honoured in the gdsfactory
-    /// export (they use ubcpdk/stub geometry instead). Surfaced as a pre-export warning.</summary>
+    /// <summary>Instances whose override is written for Nazca — rendered by the Nazca emitter
+    /// and merged into the final GDS via the mixed-backend flow (issue #646). Surfaced as
+    /// pre-export info so the two-phase run is visible.</summary>
     [ObservableProperty]
     private ObservableCollection<string> _backendMismatches = new();
 
@@ -65,6 +68,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     {
         _canvas = canvas;
         _exportService = exportService;
+        _orchestrator = new MixedBackendGdsOrchestrator(exportService);
         _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
         _errorConsole = errorConsole;
     }
@@ -122,15 +126,8 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         IsExporting = true;
         try
         {
-            // Always ubcpdk-where-available with stub fallback — no geometry question.
-            // gdsfactory-backend overrides are emitted as factories; Nazca-backend ones fall
-            // back to ubcpdk/stub (surfaced as a mismatch warning).
-            await File.WriteAllTextAsync(filePath,
-                _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                    OverridesProvider?.Invoke()));
-
-            StatusText = "Running gdsfactory to generate the GDS...";
-            var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
+            var overrides = OverridesProvider?.Invoke();
+            var result = await RunSingleExportAsync(filePath, overrides);
 
             // gdsfactory missing → auto-install into a managed environment and retry once.
             if (!result.Success && IsGdsFactoryMissing(result.ErrorMessage) && EnsureGdsFactoryAsync != null)
@@ -141,7 +138,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 if (installed)
                 {
                     StatusText = "Retrying GDS generation...";
-                    result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
+                    result = await RunSingleExportAsync(filePath, overrides);
                 }
             }
 
@@ -158,6 +155,29 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         {
             IsExporting = false;
         }
+    }
+
+    /// <summary>
+    /// One export attempt. Designs that mix Nazca-backend and gdsfactory-backend overrides
+    /// take the two-phase mixed flow (issue #646): the Nazca part GDS is rendered first,
+    /// then the gdsfactory host merges it — every custom geometry lands in ONE GDS.
+    /// Pure-gdsfactory designs export directly. Always ubcpdk-where-available with stub
+    /// fallback — no geometry question.
+    /// </summary>
+    private async Task<GdsExportService.ExportResult> RunSingleExportAsync(
+        string filePath, IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>? overrides)
+    {
+        var options = new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells);
+
+        if (overrides != null && MixedBackendGdsOrchestrator.RequiresMixedExport(_canvas, overrides))
+        {
+            var progress = new Progress<string>(m => StatusText = m);
+            return await _orchestrator.ExportMixedAsync(_canvas, options, overrides, filePath, progress);
+        }
+
+        await File.WriteAllTextAsync(filePath, _exporter.Export(_canvas, options, overrides));
+        StatusText = "Running gdsfactory to generate the GDS...";
+        return await _exportService.ExportToGdsAsync(filePath, generateGds: true);
     }
 
     private static bool IsGdsFactoryMissing(string? errorMessage) =>

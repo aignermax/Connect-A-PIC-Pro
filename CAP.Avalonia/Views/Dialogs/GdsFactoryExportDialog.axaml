@@ -43,13 +43,13 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Backend mismatch: instances with a Nazca override won't get their custom
-                     geometry in a gdsfactory export. -->
-                <Border Background="#3a2020" CornerRadius="4" Padding="8"
+                <!-- Mixed backends (issue #646): instances with a Nazca override are rendered
+                     by Nazca first and merged into the final GDS — one GDS, both geometries. -->
+                <Border Background="#20303a" CornerRadius="4" Padding="8"
                         IsVisible="{Binding BackendMismatches.Count}">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="⚠ Nazca override not applied here (uses ubcpdk/stub instead):"
-                                   Foreground="#e8a0a0" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <TextBlock Text="ℹ Nazca-backend overrides — rendered with Nazca and merged into the GDS (needs Nazca installed):"
+                                   Foreground="#a0c8e8" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap"/>
                         <ItemsControl ItemsSource="{Binding BackendMismatches}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>

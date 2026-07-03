@@ -21,24 +21,48 @@ public class GdsFactoryExporter
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
     /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
     /// component factories. Null skips override handling.</param>
+    /// <param name="merge">Mixed-backend composition (issue #646): instances already rendered
+    /// by the Nazca emitter are skipped here and merged in via <c>gf.import_gds</c> instead.
+    /// Null exports gdsfactory-only.</param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
+        MixedBackend.NazcaGdsMerge? merge = null)
     {
         var sb = new StringBuilder();
         AppendHeader(sb, options);
         AppendOverrideFactories(sb, canvas, overrides);
-        AppendStubs(sb, canvas, options, overrides);
+        AppendStubs(sb, canvas, options, overrides, merge);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
         sb.AppendLine("# Components");
         foreach (var comp in EnumerateExportableComponents(canvas))
+        {
+            if (merge?.MergedIdentifiers.Contains(comp.Identifier) == true)
+                continue;   // rendered by the Nazca emitter, merged below
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
+        }
+        AppendNazcaMerge(sb, merge);
         sb.AppendLine();
         AppendConnections(sb, canvas);
         AppendFooter(sb);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Imports the Nazca-rendered part GDS and places it at the origin: the part's
+    /// geometry already sits at absolute mapper coordinates, so no transform is needed.
+    /// </summary>
+    private static void AppendNazcaMerge(StringBuilder sb, MixedBackend.NazcaGdsMerge? merge)
+    {
+        if (merge == null) return;
+        sb.AppendLine();
+        sb.AppendLine("# Nazca-backend override instances, rendered by Nazca and merged in (issue #646)");
+        sb.AppendLine("_nazca_part_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "
+                      + $"'{merge.NazcaGdsFileName}')");
+        sb.AppendLine("_nazca_part = gf.import_gds(_nazca_part_path)");
+        sb.AppendLine("c.add_ref(_nazca_part)  # already at absolute design coordinates");
     }
 
     /// <summary>
@@ -53,22 +77,13 @@ public class GdsFactoryExporter
             .ToList()!;
 
     /// <summary>
-    /// Identifiers of instances whose override is written for Nazca — the gdsfactory export
-    /// cannot run that code, so those instances use their ubcpdk/stub geometry instead of the
-    /// custom override. Surfaced as a pre-export warning so the divergence is visible.
+    /// Identifiers of instances whose override is written for Nazca. In a mixed-backend
+    /// export (issue #646) these are rendered by the Nazca emitter and merged into the
+    /// final GDS; without the mixed flow they fall back to ubcpdk/stub geometry.
     /// </summary>
     public static IReadOnlyList<string> CollectBackendMismatches(
-        DesignCanvasViewModel canvas, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
-    {
-        if (overrides == null) return Array.Empty<string>();
-        return EnumerateExportableComponents(canvas)
-            .Where(c => overrides.TryGetValue(c.Identifier, out var o)
-                        && !string.IsNullOrWhiteSpace(o.RawCode)
-                        && o.Backend == OverrideBackend.Nazca)
-            .Select(c => c.Identifier)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-    }
+        DesignCanvasViewModel canvas, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides) =>
+        MixedBackend.NazcaPartialExporter.CollectNazcaBackendOverrideIds(canvas, overrides);
 
     /// <summary>Returns the gdsfactory-backend override RawCode for a component, or null.</summary>
     private static string? GdsFactoryOverrideCode(
@@ -149,13 +164,16 @@ public class GdsFactoryExporter
 
     private static void AppendStubs(
         StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides,
+        MixedBackend.NazcaGdsMerge? merge = null)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
-            // A gdsfactory override provides the geometry itself; a ubcpdk cell replaces the stub.
-            if (GdsFactoryOverrideCode(comp, overrides) != null || UsesUbcPdkCell(comp, options))
+            // A gdsfactory override provides the geometry itself; a ubcpdk cell replaces the
+            // stub; a Nazca-merged instance arrives via the imported part GDS.
+            if (GdsFactoryOverrideCode(comp, overrides) != null || UsesUbcPdkCell(comp, options)
+                || merge?.MergedIdentifiers.Contains(comp.Identifier) == true)
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
         }
