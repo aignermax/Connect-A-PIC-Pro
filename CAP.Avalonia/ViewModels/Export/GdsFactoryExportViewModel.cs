@@ -10,22 +10,19 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.Export;
 
 /// <summary>
-/// ViewModel for the gdsfactory export dialog (#581): mode selection (standalone stub
-/// geometry vs. real ubcpdk cells), optional GDS generation through the configured
-/// interpreter, and the list of components without a ubcpdk mapping.
+/// ViewModel for the gdsfactory export dialog (#581/#643). The export "just works":
+/// it always uses real ubcpdk (SiEPIC) cells where a mapping exists and falls back to
+/// stub geometry otherwise (no geometry question), always generates the GDS and opens it,
+/// and — when gdsfactory is missing from the active interpreter — auto-installs it into a
+/// managed environment (creating one if needed) and retries.
 /// </summary>
 public partial class GdsFactoryExportViewModel : ObservableObject
 {
     private readonly DesignCanvasViewModel _canvas;
     private readonly GdsExportService _exportService;
+    private readonly IUrlLauncher _urlLauncher;
     private readonly ErrorConsoleService? _errorConsole;
     private readonly GdsFactoryExporter _exporter = new();
-
-    [ObservableProperty]
-    private bool _useUbcPdkCells;
-
-    [ObservableProperty]
-    private bool _generateGdsEnabled = true;
 
     [ObservableProperty]
     private ObservableCollection<string> _unmappedComponents = new();
@@ -39,17 +36,27 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// <summary>File dialog service; wired by the UI layer like the other exporters.</summary>
     public IFileDialogService? FileDialogService { get; set; }
 
+    /// <summary>
+    /// Ensures gdsfactory is installed into a managed environment (creating one if needed)
+    /// and returns true when it is available afterwards. Wired by the DI layer to the
+    /// environment manager so the export slice does not import it directly.
+    /// </summary>
+    public Func<IProgress<string>, CancellationToken, Task<bool>>? EnsureGdsFactoryAsync { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="GdsFactoryExportViewModel"/>.</summary>
     /// <param name="canvas">The design canvas to export.</param>
-    /// <param name="exportService">Script runner used for the optional GDS generation.</param>
+    /// <param name="exportService">Script runner used for GDS generation.</param>
+    /// <param name="urlLauncher">Launcher used to open the generated GDS.</param>
     /// <param name="errorConsole">Optional error logging.</param>
     public GdsFactoryExportViewModel(
         DesignCanvasViewModel canvas,
         GdsExportService exportService,
+        IUrlLauncher? urlLauncher = null,
         ErrorConsoleService? errorConsole = null)
     {
         _canvas = canvas;
         _exportService = exportService;
+        _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
         _errorConsole = errorConsole;
     }
 
@@ -101,20 +108,29 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         IsExporting = true;
         try
         {
-            var options = new GdsFactoryExportOptions(UseUbcPdkCells
-                ? GdsFactoryComponentMode.UbcPdkCells
-                : GdsFactoryComponentMode.StandaloneStubs);
-            await File.WriteAllTextAsync(filePath, _exporter.Export(_canvas, options));
-
-            if (!GenerateGdsEnabled)
-            {
-                StatusText = $"Exported {Path.GetFileName(filePath)} (GDS generation skipped).";
-                return;
-            }
+            // Always ubcpdk-where-available with stub fallback — no geometry question.
+            await File.WriteAllTextAsync(filePath,
+                _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells)));
 
             StatusText = "Running gdsfactory to generate the GDS...";
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
+
+            // gdsfactory missing → auto-install into a managed environment and retry once.
+            if (!result.Success && IsGdsFactoryMissing(result.ErrorMessage) && EnsureGdsFactoryAsync != null)
+            {
+                var progress = new Progress<string>(m => StatusText = m);
+                StatusText = "gdsfactory not found — installing it into a managed environment...";
+                var installed = await EnsureGdsFactoryAsync(progress, CancellationToken.None);
+                if (installed)
+                {
+                    StatusText = "Retrying GDS generation...";
+                    result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
+                }
+            }
+
             StatusText = DescribeResult(filePath, result);
+            if (result.Success && result.GdsPath != null)
+                TryOpenGds(result.GdsPath);
         }
         catch (Exception ex)
         {
@@ -127,11 +143,28 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         }
     }
 
+    private static bool IsGdsFactoryMissing(string? errorMessage) =>
+        errorMessage?.Contains("No module named 'gdsfactory'", StringComparison.OrdinalIgnoreCase) == true;
+
+    /// <summary>Opens the generated GDS in the default viewer (KLayout etc.), best-effort.</summary>
+    private void TryOpenGds(string gdsPath)
+    {
+        try
+        {
+            if (File.Exists(gdsPath))
+                _urlLauncher.OpenFileOrDirectory(gdsPath);
+        }
+        catch (Exception ex)
+        {
+            _errorConsole?.LogWarning($"Could not open {Path.GetFileName(gdsPath)}: {ex.Message}");
+        }
+    }
+
     private string DescribeResult(string filePath, GdsExportService.ExportResult result)
     {
         var scriptName = Path.GetFileName(filePath);
         if (result.Success && result.GdsPath != null)
-            return $"Exported {scriptName} and {Path.GetFileName(result.GdsPath)}.";
+            return $"Exported {scriptName} and opened {Path.GetFileName(result.GdsPath)}.";
         if (result.Success)
             return $"Exported {scriptName}.";
 

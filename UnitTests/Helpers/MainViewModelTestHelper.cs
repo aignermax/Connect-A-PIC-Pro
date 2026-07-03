@@ -63,7 +63,7 @@ public static class MainViewModelTestHelper
             Mock.Of<IUrlLauncher>());
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
-        var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsoleService);
+        var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
 
         return new MainViewModel(
             canvas,
