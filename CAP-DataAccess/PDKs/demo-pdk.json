@@ -444,7 +444,7 @@
       }
     },
     {
-      "name": "Straight Waveguide 100\u00C2\u00B5m",
+      "name": "Straight Waveguide 100\u00B5m",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.strt",
       "nazcaParameters": "length=100",
@@ -479,7 +479,7 @@
       }
     },
     {
-      "name": "90\u00C2\u00B0 Bend",
+      "name": "90\u00B0 Bend",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.bend",
       "nazcaParameters": "angle=90",
