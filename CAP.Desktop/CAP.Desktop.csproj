@@ -36,6 +36,12 @@
              Link="scripts\render_component_preview.py"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <!-- gdsfactory preview renderer (issue #637): same code-file CLI + JSON
+         contract as render_component_preview.py, so the preview parser is shared. -->
+    <Content Include="..\scripts\render_gdsfactory_preview.py"
+             Link="scripts\render_gdsfactory_preview.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 
   <!-- FDTD S-matrix solver bridge (issue #569). DockerFdtdSMatrixService /

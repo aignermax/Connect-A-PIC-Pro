@@ -1297,6 +1297,18 @@ public partial class FileOperationsViewModel : ObservableObject
                 var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
+                // Warn if any instance has a gdsfactory-backend override: the Nazca export
+                // can't run gdsfactory code, so those instances use their PDK cell here.
+                var gfOverrides = StoredNazcaOverrides
+                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.RawCode)
+                                 && kv.Value.Backend == CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory)
+                    .Select(kv => kv.Key).ToList();
+                if (gfOverrides.Count > 0)
+                    _errorConsole?.LogWarning(
+                        $"Nazca export: {gfOverrides.Count} instance(s) have a gdsfactory override "
+                        + $"not applied here (PDK geometry used instead): {string.Join(", ", gfOverrides)}. "
+                        + "Use the gdsfactory export to honour them.");
+
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.
                 if (GdsExport.GenerateGdsEnabled && !GdsExport.IsEnvironmentReady)

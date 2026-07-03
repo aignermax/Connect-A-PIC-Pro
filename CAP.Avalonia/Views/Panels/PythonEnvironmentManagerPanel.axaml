@@ -58,6 +58,12 @@
                         Width="70" Background="#5d4d3d" FontSize="11"
                         IsEnabled="{Binding IsBusy,
                                             Converter={x:Static BoolConverters.Not}}"/>
+                <Button Content="Install gdsfactory"
+                        Command="{Binding InstallGdsFactoryCommand}"
+                        Background="#3d5d4d" FontSize="11"
+                        ToolTip.Tip="Install gdsfactory + ubcpdk into this environment (needed for the gdsfactory export)"
+                        IsEnabled="{Binding IsBusy,
+                                            Converter={x:Static BoolConverters.Not}}"/>
                 <Button Content="Remove"
                         Command="{Binding RemoveCommand}"
                         Width="70" Background="#5d3d3d" FontSize="11"
