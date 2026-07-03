@@ -86,6 +86,31 @@ public class GdsFactoryExportViewModelTests
     }
 
     [Fact]
+    public void BuildFailureMessage_MissingGdsFactory_GuidesToInstallWithoutTraceback()
+    {
+        var traceback = "Python script execution failed (exit code 1): Traceback ...\n"
+            + "ModuleNotFoundError: No module named 'gdsfactory'";
+
+        var msg = GdsFactoryExportViewModel.BuildFailureMessage("test.py", traceback);
+
+        msg.ShouldContain("gdsfactory is not installed");
+        msg.ShouldContain("Install gdsfactory");
+        msg.ShouldNotContain("Traceback");         // no raw error in the dialog line
+        msg.ShouldNotContain("ModuleNotFoundError");
+    }
+
+    [Fact]
+    public void BuildFailureMessage_OtherError_PointsToErrorConsoleWithoutTraceback()
+    {
+        var msg = GdsFactoryExportViewModel.BuildFailureMessage(
+            "test.py", "Traceback ...\nSomeOtherError: boom");
+
+        msg.ShouldContain("Error Console");
+        msg.ShouldNotContain("Traceback");
+        msg.ShouldNotContain("boom");
+    }
+
+    [Fact]
     public void RefreshUnmappedComponents_ListsOnlyUnmapped()
     {
         var vm = new GdsFactoryExportViewModel(CanvasWithComponent("ebeam_dc_te1550"), new GdsExportService());

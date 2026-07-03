@@ -135,11 +135,26 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         if (result.Success)
             return $"Exported {scriptName}.";
 
-        var hint = result.ErrorMessage?.Contains("gdsfactory", StringComparison.OrdinalIgnoreCase) == true
-            ? " Install gdsfactory into the active environment "
-              + "(Settings → Python Environments → Install gdsfactory)."
-            : string.Empty;
+        // Full traceback goes to the (copyable) Error Console only — the dialog shows a
+        // short, actionable line so it doesn't duplicate an uncopyable wall of text.
         _errorConsole?.LogError($"gdsfactory GDS generation failed: {result.ErrorMessage}");
-        return $"Exported {scriptName}, but the GDS run failed: {result.ErrorMessage}.{hint}";
+        return BuildFailureMessage(scriptName, result.ErrorMessage);
+    }
+
+    /// <summary>
+    /// Builds the short, dialog-facing failure line. The full error is logged to the
+    /// Error Console separately; this never embeds the raw traceback so the dialog stays
+    /// concise and the copyable detail lives in one place.
+    /// </summary>
+    internal static string BuildFailureMessage(string scriptName, string? errorMessage)
+    {
+        var gdsFactoryMissing = errorMessage?.Contains("No module named 'gdsfactory'",
+            StringComparison.OrdinalIgnoreCase) == true;
+        if (gdsFactoryMissing)
+            return $"Exported {scriptName}, but gdsfactory is not installed in the active "
+                + "environment. Install it under Settings → Python Environments → Install gdsfactory, "
+                + "then export again.";
+
+        return $"Exported {scriptName}, but the GDS run failed — see the Error Console for details.";
     }
 }
