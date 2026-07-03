@@ -58,7 +58,10 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Reduces the full override map to a dictionary of identifier -> RawCode,
-    /// keeping only entries whose RawCode is non-null and non-empty.
+    /// keeping only entries whose RawCode is non-null and non-empty AND that were
+    /// written for the Nazca backend. gdsfactory-backend overrides (issue #637)
+    /// are skipped here — the instance exports via its PDK template instead, and
+    /// the gdsfactory exporter honours the override on its side.
     /// </summary>
     private static Dictionary<string, string> BuildRawOverrides(
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
@@ -69,8 +72,11 @@ public class SimpleNazcaExporter
 
         foreach (var kv in overrides)
         {
-            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode))
+            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode)
+                && !OverrideBackend.IsGdsFactory(kv.Value!.Backend))
+            {
                 result[kv.Key] = kv.Value!.RawCode!;
+            }
         }
         return result;
     }

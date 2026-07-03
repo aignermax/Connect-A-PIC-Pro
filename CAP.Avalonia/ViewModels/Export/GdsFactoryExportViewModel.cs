@@ -39,6 +39,13 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// <summary>File dialog service; wired by the UI layer like the other exporters.</summary>
     public IFileDialogService? FileDialogService { get; set; }
 
+    /// <summary>
+    /// Supplies the current per-instance overrides at export time (issue #637); wired by
+    /// the UI layer to the loaded project's stored overrides. gdsfactory-backend entries
+    /// are embedded as self-contained factories in the exported script.
+    /// </summary>
+    public Func<IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>>? OverridesProvider { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="GdsFactoryExportViewModel"/>.</summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="exportService">Script runner used for the optional GDS generation.</param>
@@ -104,7 +111,8 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             var options = new GdsFactoryExportOptions(UseUbcPdkCells
                 ? GdsFactoryComponentMode.UbcPdkCells
                 : GdsFactoryComponentMode.StandaloneStubs);
-            await File.WriteAllTextAsync(filePath, _exporter.Export(_canvas, options));
+            await File.WriteAllTextAsync(
+                filePath, _exporter.Export(_canvas, options, OverridesProvider?.Invoke()));
 
             if (!GenerateGdsEnabled)
             {

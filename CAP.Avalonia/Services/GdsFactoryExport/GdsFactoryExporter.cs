@@ -3,6 +3,7 @@ using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
 
@@ -18,22 +19,61 @@ public class GdsFactoryExporter
     /// <summary>Exports the design to a gdsfactory Python script.</summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
-    public string Export(DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    /// <param name="overrides">
+    /// Optional per-instance overrides keyed by component identifier (issue #637). Only
+    /// entries written for the gdsfactory backend are honoured here: the instance is
+    /// emitted via a self-contained factory wrapping the user's RawCode (which defines
+    /// <c>component()</c> returning a <c>gf.Component</c>), org-anchored on the persisted
+    /// bbox corner. Nazca-backend overrides fall back to the PDK template/stub.
+    /// </param>
+    public string Export(
+        DesignCanvasViewModel canvas,
+        GdsFactoryExportOptions options,
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
     {
         var sb = new StringBuilder();
+        var gdsFactoryOverrides = BuildGdsFactoryOverrides(overrides);
         AppendHeader(sb, options);
-        AppendStubs(sb, canvas, options);
+        NazcaOverrideFactory.AppendFactories(sb, ToRawCodeMap(gdsFactoryOverrides));
+        AppendStubs(sb, canvas, options, gdsFactoryOverrides);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
         sb.AppendLine("# Components");
         foreach (var comp in EnumerateExportableComponents(canvas))
-            AppendPlacement(sb, comp, options, ref refIndex);
+            AppendPlacement(sb, comp, options, ref refIndex, gdsFactoryOverrides);
         sb.AppendLine();
         AppendConnections(sb, canvas);
         AppendFooter(sb);
         return sb.ToString();
     }
+
+    /// <summary>
+    /// Filters the full override map down to entries with non-empty RawCode that were
+    /// written for the gdsfactory backend (issue #637).
+    /// </summary>
+    private static Dictionary<string, NazcaCodeOverride> BuildGdsFactoryOverrides(
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+    {
+        var result = new Dictionary<string, NazcaCodeOverride>(StringComparer.Ordinal);
+        if (overrides == null)
+            return result;
+
+        foreach (var kv in overrides)
+        {
+            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode)
+                && OverrideBackend.IsGdsFactory(kv.Value!.Backend))
+            {
+                result[kv.Key] = kv.Value!;
+            }
+        }
+        return result;
+    }
+
+    /// <summary>Projects the filtered overrides to the identifier → RawCode map the factory writer expects.</summary>
+    private static Dictionary<string, string> ToRawCodeMap(
+        IReadOnlyDictionary<string, NazcaCodeOverride> overrides) =>
+        overrides.ToDictionary(kv => kv.Key, kv => kv.Value.RawCode!, StringComparer.Ordinal);
 
     /// <summary>
     /// Lists the distinct nazcaFunction names in the design that have no ubcpdk
@@ -85,11 +125,16 @@ public class GdsFactoryExporter
         sb.AppendLine();
     }
 
-    private static void AppendStubs(StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    private static void AppendStubs(
+        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        IReadOnlyDictionary<string, NazcaCodeOverride> overrides)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
+            // Overridden instances are self-defined by their factory (issue #637).
+            if (overrides.ContainsKey(comp.Identifier))
+                continue;
             if (UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
@@ -103,26 +148,51 @@ public class GdsFactoryExporter
     /// <summary>
     /// Places one component: <c>rotate</c> about the cell origin, then <c>move</c> the
     /// origin to the mapper placement — equivalent to Nazca's <c>put('org', x, y, rot)</c>.
+    /// A gdsfactory-backend override (issue #637) is placed via its RawCode factory,
+    /// anchored on the persisted bbox corner so the geometry lands on the grid rectangle.
     /// </summary>
     private static void AppendPlacement(
-        StringBuilder sb, Component comp, GdsFactoryExportOptions options, ref int refIndex)
+        StringBuilder sb, Component comp, GdsFactoryExportOptions options, ref int refIndex,
+        IReadOnlyDictionary<string, NazcaCodeOverride> overrides)
     {
         var ci = CultureInfo.InvariantCulture;
-        var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
+        var overrideAnchor = GetOverrideAnchor(comp, overrides, out var isOverride);
+        var placement = NazcaCoordinateMapper.GetCellPlacement(comp, overrideAnchor);
         var x = placement.X.ToString("F2", ci);
         var y = placement.Y.ToString("F2", ci);
         var rot = placement.RotationDegrees.ToString("F0", ci);
         var varName = $"ref_{refIndex}";
 
-        var factory = UsesUbcPdkCell(comp, options)
-            ? $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')"
-            : $"{GdsFactoryStubWriter.StubFunctionName(comp)}({StubArguments(comp)})";
+        var factory = isOverride
+            ? $"{NazcaOverrideFactory.FactoryName(comp.Identifier)}()"
+            : UsesUbcPdkCell(comp, options)
+                ? $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')"
+                : $"{GdsFactoryStubWriter.StubFunctionName(comp)}({StubArguments(comp)})";
 
-        sb.AppendLine($"{varName} = c.add_ref({factory})  # {comp.Identifier}");
+        var suffix = isOverride ? " (raw-code override)" : string.Empty;
+        sb.AppendLine($"{varName} = c.add_ref({factory})  # {comp.Identifier}{suffix}");
         sb.AppendLine($"{varName}.rotate({rot})");
         sb.AppendLine($"{varName}.move(({x}, {y}))");
 
         refIndex++;
+    }
+
+    /// <summary>
+    /// Returns the persisted bbox anchor (XMin, YMax) for an overridden instance so the
+    /// mapper can land the user geometry on the component's grid rectangle. Overrides
+    /// saved without geometry recompute leave the anchor null (default placement).
+    /// </summary>
+    private static (double XMin, double YMax)? GetOverrideAnchor(
+        Component comp, IReadOnlyDictionary<string, NazcaCodeOverride> overrides, out bool isOverride)
+    {
+        isOverride = overrides.TryGetValue(comp.Identifier, out var record);
+        if (isOverride
+            && record!.OverrideBboxXMinMicrometers is { } xMin
+            && record.OverrideBboxYMaxMicrometers is { } yMax)
+        {
+            return (xMin, yMax);
+        }
+        return null;
     }
 
     /// <summary>Forwards stored parameters for parametric straights (length=…).</summary>

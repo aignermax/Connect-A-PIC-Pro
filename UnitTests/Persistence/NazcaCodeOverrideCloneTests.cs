@@ -19,6 +19,7 @@ public class NazcaCodeOverrideCloneTests
             TemplateFunctionParameters = "tp=2",
             TemplateModuleName = "tmod",
             RawCode = "import nazca",
+            Backend = OverrideBackend.GdsFactory,
             OverrideWidthMicrometers = 5.5,
             OverrideHeightMicrometers = 3.3,
             HasNoSimulationModel = true,
@@ -35,6 +36,7 @@ public class NazcaCodeOverrideCloneTests
         copy.TemplateFunctionParameters.ShouldBe("tp=2");
         copy.TemplateModuleName.ShouldBe("tmod");
         copy.RawCode.ShouldBe("import nazca");
+        copy.Backend.ShouldBe(OverrideBackend.GdsFactory);
         copy.OverrideWidthMicrometers.ShouldBe(5.5);
         copy.OverrideHeightMicrometers.ShouldBe(3.3);
         copy.HasNoSimulationModel.ShouldBeTrue();

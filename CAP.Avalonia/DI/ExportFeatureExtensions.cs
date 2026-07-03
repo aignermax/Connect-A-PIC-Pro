@@ -52,6 +52,14 @@ internal static class ExportFeatureExtensions
 
         services.AddSingleton<GdsFactoryExportViewModel>();
 
+        // Preview back-end for per-instance gdsfactory overrides (issue #637).
+        // Resolved lazily (first Component Settings open), so GetCurrentPythonPath()
+        // reflects the interpreter the user configured for the gdsfactory export.
+        services.AddSingleton(sp => new GdsFactoryComponentPreviewService(
+            sp.GetRequiredService<GdsExportService>().GetCurrentPythonPath(),
+            PythonResolution.FindScript("render_gdsfactory_preview.py"),
+            launchFactory: sp.GetRequiredService<ProcessLaunchFactory>()));
+
         services.AddSingleton<VerilogAExporter>();
         services.AddSingleton<VerilogAFileWriter>();
         services.AddSingleton<VerilogAExportViewModel>();

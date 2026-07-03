@@ -30,6 +30,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     private readonly Component? _liveComponent;
     private readonly string _componentKey;
     private readonly NazcaComponentPreviewService? _previewService;
+    private readonly GdsFactoryComponentPreviewService? _gdsFactoryPreviewService;
     private readonly Func<double, double, IReadOnlyList<string>>? _overlapCheck;
     private readonly Action? _onDimensionsChanged;
     private readonly Action? _onChanged;
@@ -49,23 +50,6 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     /// the user's edited code via raw-code mode.
     /// </summary>
     private string? _originalSourceCode;
-
-    /// <summary>
-    /// Self-contained starter shown in the (editable) override box. Editing the original
-    /// PDK source in place is not possible — it is a decorated closure with non-standalone
-    /// references — so the editor's honest model is "view the original (read-only) + write
-    /// your own self-contained Nazca code here to override the geometry". Leaving this
-    /// unchanged keeps the preview on the real component (rendered via module mode).
-    /// </summary>
-    private const string OverrideStub =
-        "# Override this component's geometry with your own self-contained Nazca code.\n" +
-        "# Until you define a component() below, Run Preview shows the real component.\n" +
-        "# Example:\n" +
-        "# import nazca as nd\n" +
-        "# def component():\n" +
-        "#     with nd.Cell() as C:\n" +
-        "#         nd.strt(length=20).put()\n" +
-        "#         return C\n";
 
     /// <summary>The editable override code (your own self-contained Nazca cell).</summary>
     [ObservableProperty]
@@ -165,7 +149,8 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     /// <param name="nazcaFunction">The component's Nazca function / cell name.</param>
     /// <param name="nazcaParameters">Optional keyword-argument string for the function, or null.</param>
     /// <param name="templateCode">Runnable code fallback; used as last-resort seed when no real source is available.</param>
-    /// <param name="previewService">Preview back-end. Null disables Run (e.g. headless tests).</param>
+    /// <param name="previewService">Nazca preview back-end. Null disables Run (e.g. headless tests).</param>
+    /// <param name="gdsFactoryPreviewService">gdsfactory preview back-end (issue #637). Null disables Run in gdsfactory mode.</param>
     /// <param name="overlapCheck">Optional callback returning names of components the resized instance would overlap.</param>
     /// <param name="onDimensionsChanged">Invoked after the live component's size changes so the canvas can repaint.</param>
     /// <param name="onChanged">Invoked after every successful Apply or Reset so observers refresh badges.</param>
@@ -179,6 +164,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         string? nazcaParameters,
         string templateCode,
         NazcaComponentPreviewService? previewService = null,
+        GdsFactoryComponentPreviewService? gdsFactoryPreviewService = null,
         Func<double, double, IReadOnlyList<string>>? overlapCheck = null,
         Action? onDimensionsChanged = null,
         Action? onChanged = null,
@@ -192,6 +178,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         _nazcaParameters = nazcaParameters;
         _templateCode = templateCode ?? string.Empty;
         _previewService = previewService;
+        _gdsFactoryPreviewService = gdsFactoryPreviewService;
         _overlapCheck = overlapCheck;
         _onDimensionsChanged = onDimensionsChanged;
         _onChanged = onChanged;
@@ -291,9 +278,14 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     [RelayCommand]
     private async Task RunPreviewAsync()
     {
-        if (_previewService == null)
+        var service = IsGdsFactoryBackend
+            ? (NazcaComponentPreviewService?)_gdsFactoryPreviewService
+            : _previewService;
+        if (service == null)
         {
-            PreviewError = "Preview service unavailable.";
+            PreviewError = IsGdsFactoryBackend
+                ? "gdsfactory preview service unavailable."
+                : "Preview service unavailable.";
             IsValid = false;
             return;
         }
@@ -302,12 +294,13 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         StatusText = "Running preview…";
         try
         {
-            // Unedited original → render the real component via module mode (handles demo
-            // PDK and SiEPIC PCells, whose source is not standalone-runnable). Edited code
-            // → run the user's own self-contained snippet via raw-code mode.
-            var result = IsCustomCode
-                ? await _previewService.RenderRawCodeAsync(Code)
-                : await _previewService.RenderAsync(_moduleName, _nazcaFunction, _nazcaParameters);
+            // Nazca + unedited original → render the real component via module mode
+            // (handles demo PDK and SiEPIC PCells, whose source is not standalone-
+            // runnable). Otherwise run the user's own self-contained snippet via
+            // raw-code mode; gdsfactory has no module-mode render of PDK cells.
+            var result = !IsGdsFactoryBackend && !IsCustomCode
+                ? await service.RenderAsync(_moduleName, _nazcaFunction, _nazcaParameters)
+                : await service.RenderRawCodeAsync(Code);
             if (result.Success)
             {
                 _lastSuccessfulPreview = result;
@@ -385,6 +378,10 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         // Derive override pins from the preview pin stubs.
         var overridePins = OverridePinMapper.BuildOverridePins(_lastSuccessfulPreview);
         overrideData.RawCode = Code;
+        // Record which backend the code was written for so the matching
+        // export/preview honors it (issue #637). Null keeps the Nazca default
+        // and existing overrides byte-identical.
+        overrideData.Backend = IsGdsFactoryBackend ? OverrideBackend.GdsFactory : null;
         overrideData.SetOverrideGeometry(
             width, height, _lastSuccessfulPreview.XMin, _lastSuccessfulPreview.YMax);
         overrideData.OverridePins = overridePins;
@@ -423,10 +420,6 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     // default, not an override (and its source may not be standalone-runnable on reload).
     private bool CanApplyOverride() => IsValid && !IsRunning && IsCustomCode;
 
-    /// <summary>Replaces the editor content with the showcase example (from the help flyout).</summary>
-    [RelayCommand]
-    private void InsertStarter() => Code = Services.NazcaCodeExamples.Complex;
-
     /// <summary>
     /// Clears the raw-code override for this instance and restores the editor to the
     /// component's ORIGINAL Nazca source (re-fetched via module-mode render), not a
@@ -461,6 +454,8 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         HasOverlap = false;
         HasOverride = false;
         HasNoSimulationModel = false;
+        // The PDK template is Nazca-defined — reset returns the editor to the default backend.
+        IsGdsFactoryBackend = false;
         await LoadOriginalSourceAsync();
         _originalSourceCode = Code;
         bool hasPins = templatePinsToRestore?.Count > 0;
@@ -479,6 +474,9 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         if (_storedOverrides.TryGetValue(_componentKey, out var stored) && stored.RawCode != null)
         {
             // A stored override is always editable code the user authored/saved.
+            // Seed the backend toggle from the record so preview/apply keep
+            // targeting the backend the code was written for (issue #637).
+            IsGdsFactoryBackend = OverrideBackend.IsGdsFactory(stored.Backend);
             Code = stored.RawCode;
             HasOverride = true;
             HasEditableSource = true;

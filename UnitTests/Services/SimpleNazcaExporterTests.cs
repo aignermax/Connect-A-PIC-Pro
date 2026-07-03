@@ -525,6 +525,32 @@ public class SimpleNazcaExporterTests
     }
 
     [Fact]
+    public void Export_GdsFactoryBackendOverride_IsIgnoredByNazcaExport()
+    {
+        // A gdsfactory-backend override (issue #637) must NOT be embedded in the
+        // Nazca script — the instance falls back to its PDK template placement.
+        var canvas = new DesignCanvasViewModel();
+        var comp = CreateComponentWithName("ebeam_y_1550");
+        comp.Identifier = "GF Override";
+        canvas.Components.Add(new ComponentViewModel(comp));
+
+        var overrides = new Dictionary<string, NazcaCodeOverride>
+        {
+            [comp.Identifier] = new NazcaCodeOverride
+            {
+                RawCode = "import gdsfactory as gf",
+                Backend = OverrideBackend.GdsFactory,
+            }
+        };
+
+        var result = new SimpleNazcaExporter().Export(canvas, overrides: overrides);
+
+        result.ShouldNotContain("_ovr_GF_Override");
+        result.ShouldNotContain("import gdsfactory");
+        result.ShouldContain(".put('org',");
+    }
+
+    [Fact]
     public void Export_NonOverriddenComponent_StillUsesOrgPlacement()
     {
         var canvas = new DesignCanvasViewModel();

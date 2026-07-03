@@ -402,6 +402,10 @@ public partial class MainViewModel : ObservableObject
         // Export validation must run against the SAME per-instance Nazca overrides the
         // production export uses; FileOperations owns the live store (issue #565 F1).
         RightPanel.ExportValidation.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+
+        // The gdsfactory export embeds gdsfactory-backend overrides from the same
+        // live store (issue #637).
+        GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
         FileOperations.ZoomToFitAfterLoad = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);

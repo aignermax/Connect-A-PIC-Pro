@@ -282,8 +282,14 @@ public class DesignCanvas : Control
         {
             newVm.CommandManager.StateChanged += OnCommandStateChanged;
             newVm.GdsPreviewRenderService.OnPreviewLoaded += InvalidateVisual;
+            // Only Nazca-backend overrides feed the (Nazca-based) canvas renderer;
+            // gdsfactory-backend code would fail there, so those instances fall
+            // back to their template preview (issue #637).
             newVm.GdsPreviewRenderService.RawCodeLookup = id =>
-                newVm.FileOperations.StoredNazcaOverrides.TryGetValue(id, out var o) ? o.RawCode : null;
+                newVm.FileOperations.StoredNazcaOverrides.TryGetValue(id, out var o)
+                && !CAP_DataAccess.Persistence.PIR.OverrideBackend.IsGdsFactory(o.Backend)
+                    ? o.RawCode
+                    : null;
         }
     }
 

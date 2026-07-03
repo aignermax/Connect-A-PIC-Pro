@@ -3,7 +3,6 @@
         xmlns:vm="using:CAP.Avalonia.ViewModels.ComponentSettings"
         xmlns:io="using:CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride"
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
-        xmlns:services="using:CAP.Avalonia.Services"
         xmlns:edit="using:AvaloniaEdit"
         x:Class="CAP.Avalonia.Views.ComponentSettingsDialog"
         x:Name="DialogRoot"
@@ -65,10 +64,28 @@
             <StackPanel Spacing="6">
                 <!-- Section header -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Nazca Code (geometry only)"
+                    <TextBlock Text="{Binding BackendTexts.SectionTitle}"
                                FontWeight="SemiBold"
                                FontSize="12"
                                Foreground="#8888cc"/>
+                    <!-- Backend toggle (issue #637): switches help text, docs and which
+                         backend Run Preview / Apply target. Everything below is shared. -->
+                    <Border Background="#14142a" CornerRadius="4" Padding="2"
+                            VerticalAlignment="Center"
+                            ToolTip.Tip="Which layout backend this override targets — the export uses the matching runner">
+                        <StackPanel Orientation="Horizontal" Spacing="2">
+                            <RadioButton Content="Nazca"
+                                         GroupName="OverrideBackend"
+                                         FontSize="10"
+                                         Padding="6,1"
+                                         IsChecked="{Binding !IsGdsFactoryBackend, Mode=OneWay}"/>
+                            <RadioButton Content="gdsfactory"
+                                         GroupName="OverrideBackend"
+                                         FontSize="10"
+                                         Padding="6,1"
+                                         IsChecked="{Binding IsGdsFactoryBackend, Mode=TwoWay}"/>
+                        </StackPanel>
+                    </Border>
                     <TextBlock Text="🔧 Override active"
                                FontSize="10"
                                Foreground="#FFA500"
@@ -79,8 +96,8 @@
                                Foreground="#FF8888"
                                VerticalAlignment="Center"
                                IsVisible="{Binding HasOverlap}"/>
-                    <!-- Nazca docs + cheat-sheet (issue #556) -->
-                    <Button Content="Nazca docs ↗"
+                    <!-- Backend docs + cheat-sheet (issues #556/#637): texts follow the toggle -->
+                    <Button Content="{Binding BackendTexts.DocsButtonText}"
                             Click="OnOpenNazcaDocs"
                             Padding="6,1"
                             Background="Transparent"
@@ -88,7 +105,7 @@
                             BorderThickness="0"
                             FontSize="10"
                             VerticalAlignment="Center"
-                            ToolTip.Tip="Open the Nazca Design manual in your browser"/>
+                            ToolTip.Tip="Open the selected backend's reference documentation in your browser"/>
                     <Button Content="?"
                             Padding="8,1"
                             Background="#33335a"
@@ -98,20 +115,20 @@
                             FontSize="11"
                             FontWeight="Bold"
                             VerticalAlignment="Center"
-                            ToolTip.Tip="Quick help — most-used Nazca commands">
+                            ToolTip.Tip="Quick help — most-used commands of the selected backend">
                         <Button.Flyout>
                             <Flyout>
                                 <StackPanel Spacing="4" MaxWidth="460">
-                                    <TextBlock Text="Nazca elements — showcase circuit (Insert, or select &amp; Ctrl+C)"
+                                    <TextBlock Text="Showcase circuit (Insert, or select &amp; Ctrl+C)"
                                                FontWeight="SemiBold" FontSize="11" Foreground="#aaaacc"
                                                TextWrapping="Wrap"/>
-                                    <!-- Verified-runnable showcase (NazcaCodeExamples.Complex). Selectable for copy. -->
+                                    <!-- Verified-runnable showcase for the selected backend. Selectable for copy. -->
                                     <Border Background="#101018" BorderBrush="#333355" BorderThickness="1"
                                             CornerRadius="3" Padding="6">
                                         <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
                                             <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
                                                                  FontSize="10" Foreground="#dddddd"
-                                                                 Text="{x:Static services:NazcaCodeExamples.Complex}"/>
+                                                                 Text="{Binding BackendTexts.StarterExample}"/>
                                         </ScrollViewer>
                                     </Border>
                                     <Button Content="Insert into editor"
@@ -120,13 +137,17 @@
                                             Background="#2a4a2a" Foreground="#cceecc" BorderThickness="0"
                                             HorizontalAlignment="Left"
                                             ToolTip.Tip="Replace the editor content with this showcase circuit"/>
-                                    <TextBlock Text="Common elements (chain with .put(), or .put(x, y, angle)):"
+                                    <TextBlock Text="Common elements:"
                                                FontSize="10" Foreground="#aaaacc" Margin="0,2,0,0" TextWrapping="Wrap"/>
                                     <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
                                                          FontSize="9" Foreground="#9aa0b0" TextWrapping="Wrap"
-                                                         Text="strt(length, width) · bend(radius, angle, width) · taper(length, width1, width2) · ptaper(...) · euler(width, radius, angle) · sinebend(width, distance, offset) · cobra(xya=(x,y,a), width1, width2) · ring(radius, width) · text(text, height, layer) · Pin(name).put(x, y, angle)"/>
+                                                         Text="{Binding BackendTexts.CheatSheet}"/>
                                     <TextBlock Text="Tip: ring()/text() return polygon lists — add them with nd.Polygon(...)/loops, not .put(). Full reference: nazca-design.org/manual."
-                                               FontSize="9" Foreground="#777799" TextWrapping="Wrap"/>
+                                               FontSize="9" Foreground="#777799" TextWrapping="Wrap"
+                                               IsVisible="{Binding IsGdsFactoryBackend, Converter={x:Static BoolConverters.Not}}"/>
+                                    <TextBlock Text="Tip: re-export inner ports with c.add_port(name, port=ref.ports['o2']) so Lunima picks them up. Full reference: gdsfactory.github.io/gdsfactory."
+                                               FontSize="9" Foreground="#777799" TextWrapping="Wrap"
+                                               IsVisible="{Binding IsGdsFactoryBackend}"/>
                                 </StackPanel>
                             </Flyout>
                         </Button.Flyout>
@@ -159,7 +180,7 @@
                     </ScrollViewer>
                 </Expander>
 
-                <TextBlock Text="Override — your own self-contained Nazca code. Run shows the real component until you define a component()."
+                <TextBlock Text="{Binding BackendTexts.EditorHint}"
                            Foreground="#8888aa" FontSize="10" Margin="0,4,0,2" TextWrapping="Wrap"/>
 
                 <!-- Override editor (left) + live preview (right) -->

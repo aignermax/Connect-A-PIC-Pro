@@ -137,6 +137,84 @@ public class GdsFactoryExporterTests
         unmapped.ShouldBe(new[] { "ebeam_dc_te1550" });
     }
 
+    // ── Per-instance gdsfactory-backend overrides (issue #637) ────────────────
+
+    private const string GdsFactoryOverrideRawCode = """
+        import gdsfactory as gf
+
+        def component():
+            c = gf.Component()
+            c.add_ref(gf.components.straight(length=42))
+            return c
+        """;
+
+    [Fact]
+    public void Export_GdsFactoryBackendOverride_EmitsFactoryAndPlacesViaFactory()
+    {
+        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "GF Override");
+        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
+        {
+            ["GF Override"] = new()
+            {
+                RawCode = GdsFactoryOverrideRawCode,
+                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
+            }
+        };
+
+        var script = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), overrides);
+
+        script.ShouldContain("def _ovr_GF_Override():");
+        script.ShouldContain("gf.components.straight(length=42)");
+        script.ShouldContain("return component()");
+        script.ShouldContain("c.add_ref(_ovr_GF_Override())");
+        script.ShouldContain("(raw-code override)");
+        script.ShouldNotContain("def stub_ebeam_y_1550(");
+    }
+
+    [Fact]
+    public void Export_GdsFactoryBackendOverrideWithBboxAnchor_UsesAnchoredPlacement()
+    {
+        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "Anchored GF");
+        var comp = canvas.Components.Single().Component;
+        var record = new CAP_DataAccess.Persistence.PIR.NazcaCodeOverride
+        {
+            RawCode = GdsFactoryOverrideRawCode,
+            Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
+        };
+        record.SetOverrideGeometry(width: 45, height: 11, bboxXMin: -3, bboxYMax: 10);
+        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
+        {
+            [comp.Identifier] = record,
+        };
+        var expected = NazcaCoordinateMapper.GetCellPlacement(comp, (-3, 10));
+        var ci = System.Globalization.CultureInfo.InvariantCulture;
+
+        var script = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), overrides);
+
+        script.ShouldContain($".move(({expected.X.ToString("F2", ci)}, {expected.Y.ToString("F2", ci)}))");
+    }
+
+    [Fact]
+    public void Export_NazcaBackendOverride_IsIgnoredByGdsFactoryExport()
+    {
+        // A Nazca-backend override must NOT leak into the gdsfactory script — the
+        // instance exports via its stub/ubcpdk cell instead (issue #637).
+        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "Nazca Override");
+        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
+        {
+            ["Nazca Override"] = new() { RawCode = "import nazca as nd", Backend = null }
+        };
+
+        var script = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), overrides);
+
+        script.ShouldNotContain("_ovr_Nazca_Override");
+        script.ShouldNotContain("import nazca");
+        script.ShouldContain("def stub_ebeam_y_1550(");
+    }
+
     [Fact]
     public void SegmentWriter_StraightSegment_EmitsAbsolutelyPlacedStraight()
     {

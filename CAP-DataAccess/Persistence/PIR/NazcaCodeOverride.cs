@@ -58,6 +58,15 @@ public class NazcaCodeOverride
     public string? RawCode { get; set; }
 
     /// <summary>
+    /// Layout backend the <see cref="RawCode"/> was written for (issue #637).
+    /// One of the <see cref="OverrideBackend"/> constants; null means Nazca
+    /// (the pre-#637 default), so existing overrides keep working unchanged.
+    /// The matching preview service and exporter honor this value: Nazca
+    /// overrides drive the Nazca export, gdsfactory overrides the gdsfactory export.
+    /// </summary>
+    public string? Backend { get; set; }
+
+    /// <summary>
     /// Component width (µm) recomputed from the rendered raw-code geometry's bounding box.
     /// Null when no raw-code override has recomputed the size.
     /// </summary>
@@ -131,6 +140,7 @@ public class NazcaCodeOverride
     public void ClearRawCodeOverride()
     {
         RawCode = null;
+        Backend = null;
         OverrideWidthMicrometers = null;
         OverrideHeightMicrometers = null;
         OverrideBboxXMinMicrometers = null;
@@ -154,6 +164,7 @@ public class NazcaCodeOverride
         TemplateFunctionParameters = TemplateFunctionParameters,
         TemplateModuleName = TemplateModuleName,
         RawCode = RawCode,
+        Backend = Backend,
         OverrideWidthMicrometers = OverrideWidthMicrometers,
         OverrideHeightMicrometers = OverrideHeightMicrometers,
         OverridePins = OverridePins?.Select(p => p.Clone()).ToList(),
