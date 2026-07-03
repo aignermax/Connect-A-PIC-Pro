@@ -133,6 +133,21 @@
                     </Button>
                 </StackPanel>
 
+                <!-- Backend toggle (#637): Nazca | gdsfactory. Switches the help text and
+                     which backend runs Preview/Apply; the code editor below is shared. -->
+                <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,2,0,0">
+                    <TextBlock Text="Backend:" Foreground="#9aa0b0" FontSize="11"
+                               VerticalAlignment="Center"/>
+                    <RadioButton Content="Nazca" GroupName="overrideBackend" FontSize="11"
+                                 Foreground="#ddddee"
+                                 IsChecked="{Binding !UseGdsFactoryBackend}"/>
+                    <RadioButton Content="gdsfactory" GroupName="overrideBackend" FontSize="11"
+                                 Foreground="#ddddee"
+                                 IsChecked="{Binding UseGdsFactoryBackend, Mode=TwoWay}"/>
+                    <TextBlock Text="{Binding BackendHelp}" Foreground="#777799" FontSize="10"
+                               TextWrapping="Wrap" VerticalAlignment="Center"/>
+                </StackPanel>
+
                 <!-- No-editable-source note: shown for fixed-cell GDS / KLayout PCells
                      whose Python source can't be introspected. The geometry preview
                      still renders; the user may paste their own Nazca code to override. -->

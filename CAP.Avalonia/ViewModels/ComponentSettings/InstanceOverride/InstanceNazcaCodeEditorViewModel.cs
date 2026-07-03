@@ -30,6 +30,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
     private readonly Component? _liveComponent;
     private readonly string _componentKey;
     private readonly NazcaComponentPreviewService? _previewService;
+    private readonly NazcaComponentPreviewService? _gdsFactoryPreviewService;
     private readonly Func<double, double, IReadOnlyList<string>>? _overlapCheck;
     private readonly Action? _onDimensionsChanged;
     private readonly Action? _onChanged;
@@ -182,7 +183,8 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         Func<double, double, IReadOnlyList<string>>? overlapCheck = null,
         Action? onDimensionsChanged = null,
         Action? onChanged = null,
-        Action<IReadOnlyList<PhysicalPin>>? onPinsChanged = null)
+        Action<IReadOnlyList<PhysicalPin>>? onPinsChanged = null,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _componentKey = componentKey;
         _storedOverrides = storedOverrides;
@@ -192,6 +194,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         _nazcaParameters = nazcaParameters;
         _templateCode = templateCode ?? string.Empty;
         _previewService = previewService;
+        _gdsFactoryPreviewService = gdsFactoryPreviewService;
         _overlapCheck = overlapCheck;
         _onDimensionsChanged = onDimensionsChanged;
         _onChanged = onChanged;
@@ -302,12 +305,12 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         StatusText = "Running preview…";
         try
         {
-            // Unedited original → render the real component via module mode (handles demo
-            // PDK and SiEPIC PCells, whose source is not standalone-runnable). Edited code
-            // → run the user's own self-contained snippet via raw-code mode.
-            var result = IsCustomCode
-                ? await _previewService.RenderRawCodeAsync(Code)
-                : await _previewService.RenderAsync(_moduleName, _nazcaFunction, _nazcaParameters);
+            var result = await RenderForBackendAsync();
+            if (result == null)
+            {
+                IsValid = false;
+                return;
+            }
             if (result.Success)
             {
                 _lastSuccessfulPreview = result;
@@ -385,6 +388,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         // Derive override pins from the preview pin stubs.
         var overridePins = OverridePinMapper.BuildOverridePins(_lastSuccessfulPreview);
         overrideData.RawCode = Code;
+        overrideData.Backend = SelectedBackend;
         overrideData.SetOverrideGeometry(
             width, height, _lastSuccessfulPreview.XMin, _lastSuccessfulPreview.YMax);
         overrideData.OverridePins = overridePins;
@@ -480,6 +484,7 @@ public partial class InstanceNazcaCodeEditorViewModel : ObservableObject
         {
             // A stored override is always editable code the user authored/saved.
             Code = stored.RawCode;
+            SelectedBackend = stored.Backend;
             HasOverride = true;
             HasEditableSource = true;
             HasNoSimulationModel = stored.HasNoSimulationModel;

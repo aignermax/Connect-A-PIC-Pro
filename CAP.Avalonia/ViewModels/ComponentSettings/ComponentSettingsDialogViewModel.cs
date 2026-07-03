@@ -211,7 +211,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null,
         Action? nazcaDimensionsChanged = null,
         Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
-        Func<string>? smatrixKeyResolver = null)
+        Func<string>? smatrixKeyResolver = null,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _smatrixKey = smatrixKey;
         _smatrixKeyResolver = smatrixKeyResolver;
@@ -265,7 +266,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
                 nazcaOverlapCheck,
                 nazcaDimensionsChanged,
                 OnNazcaGeometryChanged,
-                nazcaPinsChanged);
+                nazcaPinsChanged,
+                gdsFactoryPreviewService);
         }
         else
         {
