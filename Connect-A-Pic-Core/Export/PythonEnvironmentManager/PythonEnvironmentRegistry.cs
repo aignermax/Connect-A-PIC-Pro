@@ -11,7 +11,7 @@ namespace CAP_Core.Export.PythonEnvironmentManager;
 public class PythonEnvironmentRegistry
 {
     private static readonly string DefaultRegistryFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Helpers.AppDataFolders.LocalApplicationData,
         "Lunima", "python-environments.json");
 
     private readonly string _registryFilePath;
