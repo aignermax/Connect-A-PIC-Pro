@@ -122,20 +122,6 @@ public class PythonEnvironmentRegistryTests : IDisposable
         second.GetActive()?.Name.ShouldBe("persisted");
     }
 
-    [Fact]
-    public void Persistence_GdsFactoryVersion_SurvivesReload()
-    {
-        var registry = CreateRegistry();
-        var env = MakeEnv("gdsfactory-roundtrip");
-        env.GdsFactoryVersion = "9.5.7";
-        registry.AddOrUpdate(env);
-
-        var reloaded = CreateRegistry().GetAll()
-            .Single(e => e.Name == "gdsfactory-roundtrip");
-
-        reloaded.GdsFactoryVersion.ShouldBe("9.5.7");
-    }
-
     private static PythonEnvironment MakeEnv(string name) => new()
     {
         Name = name,

@@ -142,10 +142,11 @@
                             <TextBlock Text="GDS Export" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
                             <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
                                 Configures how the "Export" top-toolbar action generates a GDS file
-                                from the exported Nazca Python script.
+                                from the exported Nazca Python script. The gdsfactory export is a separate
+                                Export-menu entry; install gdsfactory below via "Install gdsfactory".
                             </TextBlock>
 
-                            <CheckBox Content="Generate GDS file after Nazca export (requires Python + Nazca)"
+                            <CheckBox Content="Generate GDS file after Nazca export (Nazca export requires Python + Nazca; gdsfactory export requires gdsfactory)"
                                       IsChecked="{Binding GenerateGdsEnabled}"
                                       Foreground="White" Margin="0,4,0,0"/>
 

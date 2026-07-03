@@ -63,6 +63,7 @@ public static class MainViewModelTestHelper
             Mock.Of<IUrlLauncher>());
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
+        var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
 
         return new MainViewModel(
             canvas,
@@ -83,6 +84,7 @@ public static class MainViewModelTestHelper
             new PdkOffsetEditorViewModel(pdkLoader, new PdkJsonSaver(), new PdkManagerViewModel()),
             photonTorchVm,
             verilogAVm,
+            gdsFactoryVm,
             new CAP.Avalonia.ViewModels.Canvas.ChipSizeViewModel(preferencesService, canvas),
             // Test-isolated user S-matrix store: a unique temp path per call so
             // tests don't contaminate each other or the developer's real file.

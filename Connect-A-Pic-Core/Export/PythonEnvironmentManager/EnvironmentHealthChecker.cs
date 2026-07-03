@@ -72,9 +72,8 @@ public class EnvironmentHealthChecker
     }
 
     /// <summary>
-    /// Probes the interpreter for an importable gdsfactory and returns its
-    /// version string, or null when gdsfactory is not installed. gdsfactory is
-    /// optional — a missing install never marks the environment broken.
+    /// Returns the installed gdsfactory version, or null when it is not importable.
+    /// gdsfactory is optional — its absence never marks the environment broken.
     /// </summary>
     private async Task<string?> ProbeGdsFactoryVersionAsync(string pythonPath, CancellationToken ct)
     {
@@ -86,8 +85,7 @@ public class EnvironmentHealthChecker
                 new[] { "-c", "import gdsfactory; print(gdsfactory.__version__)" },
                 ct,
                 timeoutMs: 30_000);
-            var version = output.Trim();
-            return exitCode == 0 && version.Length > 0 ? version : null;
+            return exitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output.Trim() : null;
         }
         catch (OperationCanceledException)
         {

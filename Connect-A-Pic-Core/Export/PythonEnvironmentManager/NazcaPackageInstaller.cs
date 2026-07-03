@@ -58,6 +58,26 @@ public class NazcaPackageInstaller
         }
     }
 
+    /// <summary>
+    /// Installs gdsfactory + ubcpdk (both on PyPI) into the given venv — the packages
+    /// needed to run the gdsfactory export (#581). Surfaces pip stderr on failure.
+    /// </summary>
+    /// <param name="uvPath">Absolute path to the uv binary.</param>
+    /// <param name="venvPath">Root directory of the target virtual environment.</param>
+    /// <param name="progress">Receives human-readable status updates.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task InstallGdsFactoryAsync(
+        string uvPath,
+        string venvPath,
+        IProgress<string>? progress,
+        CancellationToken ct = default)
+    {
+        progress?.Report("Installing gdsfactory + ubcpdk (this can take a few minutes)...");
+        await RunUvPipInstall(uvPath, venvPath, "gdsfactory", progress, ct);
+        await RunUvPipInstall(uvPath, venvPath, "ubcpdk", progress, ct);
+        progress?.Report("gdsfactory installed successfully.");
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
 
     private static async Task<string> DownloadNazcaTarballAsync(

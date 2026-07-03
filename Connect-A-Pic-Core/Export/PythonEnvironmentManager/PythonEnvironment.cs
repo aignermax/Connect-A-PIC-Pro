@@ -23,7 +23,7 @@ public class PythonEnvironment
     /// <summary>Detected Nazca version, e.g. "0.6.1". Null if not installed.</summary>
     public string? NazcaVersion { get; set; }
 
-    /// <summary>Detected gdsfactory version, e.g. "9.5.7". Null if not installed.</summary>
+    /// <summary>Detected gdsfactory version, e.g. "9.34.2". Null if not installed.</summary>
     public string? GdsFactoryVersion { get; set; }
 
     /// <summary>True when pyclipper is importable in this environment.</summary>
