@@ -1,13 +1,23 @@
 namespace CAP_Core.Export.PythonEnvironmentManager;
 
 /// <summary>
-/// Installs Nazca and its required dependencies (pyclipper) into a managed
-/// Python virtual environment using <c>uv pip install</c>.
+/// Installs Nazca and the packages the preview/export pipelines import into a
+/// managed Python virtual environment using <c>uv pip install</c>.
 /// </summary>
 public class NazcaPackageInstaller
 {
     /// <summary>URL of the Nazca 0.6.1 tarball (no login or licence required).</summary>
     public const string NazcaTarballUrl = "https://nazca-design.org/dist/nazca-0.6.1.tar.gz";
+
+    /// <summary>
+    /// PyPI packages installed alongside the Nazca tarball. pyclipper is a
+    /// Nazca dependency that is not auto-pulled on all platforms; klayout and
+    /// siepic_ebeam_pdk are imported by the SiEPIC fixed-cell render path of
+    /// the PDK preview — without them every SiEPIC component fails with
+    /// "not installed in this Python environment".
+    /// </summary>
+    internal static readonly string[] AdditionalPackages =
+        { "pyclipper", "klayout", "siepic_ebeam_pdk" };
 
     private readonly ProcessLaunchFactory _launchFactory;
 
@@ -84,9 +94,11 @@ public class NazcaPackageInstaller
         progress?.Report("Installing Nazca into virtual environment...");
         await RunUvPipInstall(uvPath, venvPath, tarballPath, progress, ct);
 
-        // Second: install pyclipper (required by Nazca, not auto-pulled on all platforms)
-        progress?.Report("Installing pyclipper...");
-        await RunUvPipInstall(uvPath, venvPath, "pyclipper", progress, ct);
+        foreach (var package in AdditionalPackages)
+        {
+            progress?.Report($"Installing {package}...");
+            await RunUvPipInstall(uvPath, venvPath, package, progress, ct);
+        }
 
         progress?.Report("All packages installed successfully.");
     }
