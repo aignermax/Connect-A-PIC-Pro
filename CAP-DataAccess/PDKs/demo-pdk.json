@@ -486,7 +486,7 @@
       "widthMicrometers": 209.4,
       "heightMicrometers": 209.4,
       "nazcaOriginOffsetX": 0,
-      "nazcaOriginOffsetY": 9.400000000000006,
+      "nazcaOriginOffsetY": 200,
       "pins": [
         {
           "name": "a0",
