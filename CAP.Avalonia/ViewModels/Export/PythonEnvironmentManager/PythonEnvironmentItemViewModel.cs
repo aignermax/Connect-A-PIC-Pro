@@ -50,6 +50,8 @@ public partial class PythonEnvironmentItemViewModel : ObservableObject
                 parts.Add($"Python {Environment.PythonVersion}");
             if (Environment.NazcaVersion != null)
                 parts.Add($"Nazca {Environment.NazcaVersion}");
+            if (Environment.GdsFactoryVersion != null)
+                parts.Add($"gdsfactory {Environment.GdsFactoryVersion}");
             if (Environment.HasPyclipper)
                 parts.Add("pyclipper ✓");
             if (!string.IsNullOrEmpty(Environment.LastError))

@@ -56,6 +56,7 @@ public class EnvironmentHealthChecker
         }
 
         env.HasPyclipper = await CheckPyclipperAsync(pythonExe, ct);
+        env.GdsFactoryVersion = await ProbeGdsFactoryVersionAsync(pythonExe, ct);
 
         env.Status = PythonEnvironmentStatus.Healthy;
         env.LastError = null;
@@ -68,6 +69,34 @@ public class EnvironmentHealthChecker
     {
         env.Status = PythonEnvironmentStatus.Broken;
         env.LastError = reason;
+    }
+
+    /// <summary>
+    /// Probes the interpreter for an importable gdsfactory and returns its
+    /// version string, or null when gdsfactory is not installed. gdsfactory is
+    /// optional — a missing install never marks the environment broken.
+    /// </summary>
+    private async Task<string?> ProbeGdsFactoryVersionAsync(string pythonPath, CancellationToken ct)
+    {
+        try
+        {
+            var (exitCode, output, _) = await UvBootstrapper.RunProcessAsync(
+                _launchFactory,
+                pythonPath,
+                new[] { "-c", "import gdsfactory; print(gdsfactory.__version__)" },
+                ct,
+                timeoutMs: 30_000);
+            var version = output.Trim();
+            return exitCode == 0 && version.Length > 0 ? version : null;
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private async Task<bool> CheckPyclipperAsync(string pythonPath, CancellationToken ct)
