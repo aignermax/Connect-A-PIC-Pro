@@ -33,6 +33,7 @@ public class NazcaEditorPreviewIntegrationTests
 
         result.Success.ShouldBeTrue($"demo component must render in the editor. Error: {result.Error}");
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
+        if (IsGdsReaderMissing(result)) return;   // env skip: no gdstk/gdspy installed
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 
@@ -122,8 +123,20 @@ public class NazcaEditorPreviewIntegrationTests
         var result = await svc.RenderRawCodeAsync(NazcaCodeExamples.Complex);
 
         result.Success.ShouldBeTrue($"the showcase example must render. Error: {result.Error}");
+        if (IsGdsReaderMissing(result)) return;   // env skip: no gdstk/gdspy installed
         result.Polygons.Count.ShouldBeGreaterThan(0);
     }
+
+    /// <summary>
+    /// True when the render succeeded but polygon extraction was unavailable because the
+    /// python environment has neither gdstk nor gdspy (the script reports this via
+    /// <c>polygon_warning</c> and returns an empty polygon list). Polygon-count assertions
+    /// skip in that case — mirroring the nazca-availability env skip — instead of failing
+    /// on a machine that simply lacks a GDS reader.
+    /// </summary>
+    private static bool IsGdsReaderMissing(NazcaPreviewResult result) =>
+        result.Polygons.Count == 0
+        && result.PolygonWarning?.Contains("gdstk", StringComparison.OrdinalIgnoreCase) == true;
 
     private static InstanceNazcaCodeEditorViewModel BuildEditorVm(
         string? module, string function, NazcaComponentPreviewService svc)
