@@ -50,6 +50,8 @@ internal static class ExportFeatureExtensions
         services.AddSingleton<PhotonTorchExporter>();
         services.AddSingleton<PhotonTorchExportViewModel>();
 
+        services.AddSingleton<GdsFactoryExportViewModel>();
+
         services.AddSingleton<VerilogAExporter>();
         services.AddSingleton<VerilogAFileWriter>();
         services.AddSingleton<VerilogAExportViewModel>();

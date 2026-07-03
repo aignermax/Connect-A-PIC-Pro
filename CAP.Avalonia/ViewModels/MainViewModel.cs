@@ -92,6 +92,12 @@ public partial class MainViewModel : ObservableObject
     /// <summary>PhotonTorch format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
     public PhotonTorchExportFormat PhotonTorchExportFormat { get; private set; } = null!;
 
+    /// <summary>gdsfactory format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
+    public GdsFactoryExportFormat GdsFactoryExportFormat { get; private set; } = null!;
+
+    /// <summary>gdsfactory export options/executor ViewModel (dialog DataContext).</summary>
+    public ViewModels.Export.GdsFactoryExportViewModel GdsFactoryExport { get; private set; } = null!;
+
     /// <summary>Verilog-A format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
     public VerilogAExportFormat VerilogAExportFormat { get; private set; } = null!;
 
@@ -103,6 +109,7 @@ public partial class MainViewModel : ObservableObject
             FileOperations.FileDialogService = value;
             FileOperations.PhotonTorchExport.FileDialogService = value;
             FileOperations.VerilogAExport.FileDialogService = value;
+            GdsFactoryExport.FileDialogService = value;
             LeftPanel.FileDialogService = value;
         }
     }
@@ -156,6 +163,7 @@ public partial class MainViewModel : ObservableObject
         PdkOffsetEditorViewModel pdkOffsetEditor,
         ViewModels.Export.PhotonTorchExportViewModel photonTorchExport,
         ViewModels.Export.VerilogAExportViewModel verilogAExport,
+        ViewModels.Export.GdsFactoryExportViewModel gdsFactoryExport,
         ViewModels.Canvas.ChipSizeViewModel chipSize,
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
@@ -185,9 +193,12 @@ public partial class MainViewModel : ObservableObject
         // Build the unified Export menu (add new IExportFormat here for new formats)
         PhotonTorchExportFormat = new PhotonTorchExportFormat();
         VerilogAExportFormat = new VerilogAExportFormat(verilogAExport);
+        GdsFactoryExportFormat = new GdsFactoryExportFormat();
+        GdsFactoryExport = gdsFactoryExport;
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),
+            GdsFactoryExportFormat,
             new SaxExportFormat(FileOperations.ExportSaxCommand),
             PhotonTorchExportFormat,
             VerilogAExportFormat,

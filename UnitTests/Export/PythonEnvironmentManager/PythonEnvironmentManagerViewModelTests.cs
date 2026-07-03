@@ -140,6 +140,31 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         registry.GetAll().ShouldBeEmpty();                   // nichts registriert
     }
 
+    [Fact]
+    public async Task InstallGdsFactory_NoSelection_IsIgnored()
+    {
+        var registry = CreateRegistry();
+        var vm = CreateViewModel(registry);
+
+        await vm.InstallGdsFactoryCommand.ExecuteAsync(null);
+
+        vm.IsBusy.ShouldBeFalse();
+        registry.GetAll().ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void GdsFactoryVersion_RoundTripsThroughRegistryPersistence()
+    {
+        var registry = CreateRegistry();
+        var env = MakeEnv("gf-env");
+        env.GdsFactoryVersion = "9.34.2";
+        registry.AddOrUpdate(env);
+
+        var reloaded = new PythonEnvironmentRegistry(_tempRegistryFile);
+
+        reloaded.GetAll().Single().GdsFactoryVersion.ShouldBe("9.34.2");
+    }
+
     private static PythonEnvironment MakeEnv(string name) => new()
     {
         Name = name,

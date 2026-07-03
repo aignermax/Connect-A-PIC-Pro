@@ -1,0 +1,75 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.Export"
+        x:Class="CAP.Avalonia.Views.Dialogs.GdsFactoryExportDialog"
+        x:DataType="vm:GdsFactoryExportViewModel"
+        Title="Export — gdsfactory"
+        Width="440" Height="420"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="#1e1e1e"
+        Foreground="White">
+
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Export…"
+                    Command="{Binding ExportCommand}"
+                    Width="90" Background="#3d5d4d"
+                    IsEnabled="{Binding IsExporting, Converter={x:Static BoolConverters.Not}}"/>
+            <Button Content="Close" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="10">
+                <TextBlock Text="🏭 gdsfactory Export" FontSize="15" FontWeight="SemiBold"
+                           Foreground="LightGreen"/>
+                <TextBlock Text="Exports the design as a gdsfactory Python script; optionally runs it with the configured Python to produce the GDS."
+                           Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
+
+                <Separator Background="#3d3d3d"/>
+
+                <TextBlock Text="Component geometry:" Foreground="Gray" FontSize="11"/>
+                <RadioButton GroupName="mode"
+                             Content="Standalone — stub geometry from Lunima dimensions"
+                             IsChecked="{Binding !UseUbcPdkCells}"
+                             Foreground="White" FontSize="12"/>
+                <TextBlock Text="Runs with a plain gdsfactory install; layout matches the canvas 1:1 (like the Nazca export)."
+                           Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="24,0,0,0"/>
+                <RadioButton GroupName="mode"
+                             Content="ubcpdk (SiEPIC) — real PDK cells where available"
+                             IsChecked="{Binding UseUbcPdkCells}"
+                             Foreground="White" FontSize="12"/>
+                <TextBlock Text="Requires the ubcpdk package; components without a ubcpdk equivalent fall back to stub geometry."
+                           Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="24,0,0,0"/>
+
+                <!-- Components without a ubcpdk mapping (relevant in ubcpdk mode) -->
+                <Border Background="#2a2a20" CornerRadius="4" Padding="8"
+                        IsVisible="{Binding UnmappedComponents.Count}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Without ubcpdk mapping (stub fallback):"
+                                   Foreground="#e8c872" FontSize="11" FontWeight="SemiBold"/>
+                        <ItemsControl ItemsSource="{Binding UnmappedComponents}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="Gray" FontSize="10"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
+                <Separator Background="#3d3d3d"/>
+
+                <CheckBox Content="Generate GDS after export (requires Python + gdsfactory)"
+                          IsChecked="{Binding GenerateGdsEnabled}"
+                          Foreground="White" FontSize="12"/>
+
+                <TextBlock Text="{Binding StatusText}"
+                           Foreground="LightSkyBlue" FontSize="11" TextWrapping="Wrap"
+                           IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

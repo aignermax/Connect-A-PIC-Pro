@@ -140,6 +140,28 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
         }, env, $"Environment '{name}' is ready.");
     }
 
+    /// <summary>
+    /// Installs gdsfactory + ubcpdk into the selected environment (for the gdsfactory
+    /// export, #581/#622). gdsfactory is optional per environment — the health status
+    /// stays governed by Nazca.
+    /// </summary>
+    [RelayCommand]
+    private async Task InstallGdsFactoryAsync()
+    {
+        var item = SelectedEnvironment;
+        if (item == null) return;
+        var env = item.Environment;
+
+        await RunLongOperationAsync(async ct =>
+        {
+            var progress = CreateProgress(env);
+            var uvPath = await _bootstrapper.EnsureUvAsync(progress, ct);
+            await _installer.InstallGdsFactoryAsync(uvPath, env.VenvPath, progress, ct);
+            await _healthChecker.CheckAsync(env, ct);
+            _registry.AddOrUpdate(env);
+        }, env, $"gdsfactory installed into '{env.Name}'.");
+    }
+
     /// <summary>Re-installs packages into the selected environment (repair).</summary>
     [RelayCommand]
     private async Task RepairAsync()
