@@ -20,19 +20,42 @@ namespace UnitTests.ComponentSettings.InstanceOverride;
 /// </summary>
 public class NazcaEditorPreviewIntegrationTests
 {
+    /// <summary>
+    /// Generous subprocess timeout for CI: a nazca render already takes ~1 min on an
+    /// idle machine, and the production default of 90 s flakes when the full suite
+    /// runs other CPU-heavy tests in parallel (observed on the QA runner).
+    /// </summary>
+    private static readonly TimeSpan CiRenderTimeout = TimeSpan.FromMinutes(5);
+
+    private static NazcaComponentPreviewService CreateService(string python, string script)
+        => new(python, script, CiRenderTimeout);
+
+    /// <summary>
+    /// True when the render succeeded but the interpreter has neither gdstk nor
+    /// gdspy, so the script could not populate the polygon overlay (it reports
+    /// this via <see cref="NazcaPreviewResult.PolygonWarning"/>). Treated as an
+    /// environment skip — same philosophy as skipping when nazca itself is
+    /// missing — so runners with a nazca-only interpreter stay green.
+    /// </summary>
+    private static bool PolygonToolchainMissing(NazcaPreviewResult result) =>
+        result.Success
+        && result.Polygons.Count == 0
+        && result.PolygonWarning?.Contains("gdstk", StringComparison.OrdinalIgnoreCase) == true;
+
     [Fact]
     public async Task DemoPdkComponent_RendersPreviewGeometry()
     {
         var (python, script) = await ResolveEnvironmentAsync();
         if (python == null || script == null) return;   // env skip
 
-        var svc = new NazcaComponentPreviewService(python, script);
+        var svc = CreateService(python, script);
 
         // Demo PDK Directional Coupler — function "demo.mmi2x2_dp" (nazca.demofab).
         var result = await svc.RenderAsync(moduleName: null, nazcaFunction: "demo.mmi2x2_dp", nazcaParameters: null);
 
         result.Success.ShouldBeTrue($"demo component must render in the editor. Error: {result.Error}");
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
+        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 
@@ -42,7 +65,7 @@ public class NazcaEditorPreviewIntegrationTests
         var (python, script) = await ResolveEnvironmentAsync();
         if (python == null || script == null) return;   // env skip
 
-        var svc = new NazcaComponentPreviewService(python, script);
+        var svc = CreateService(python, script);
 
         // SiEPIC EBeam PDK directional coupler — a KLayout PCell resolved by name
         // (NOT a Python attribute) through the script's module-mode SiEPIC handling.
@@ -58,6 +81,7 @@ public class NazcaEditorPreviewIntegrationTests
         }
 
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
+        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 
@@ -75,7 +99,7 @@ public class NazcaEditorPreviewIntegrationTests
         if (python == null || script == null) return;   // env skip
 
         var vm = BuildEditorVm(module: null, function: "demo.mmi2x2_dp",
-            new NazcaComponentPreviewService(python, script));
+            CreateService(python, script));
 
         await vm.InitializeAsync();
         await vm.RunPreviewCommand.ExecuteAsync(null);
@@ -92,7 +116,7 @@ public class NazcaEditorPreviewIntegrationTests
         if (python == null || script == null) return;   // env skip
 
         var vm = BuildEditorVm(module: "siepic_ebeam_pdk", function: "ebeam_dc_halfring_straight",
-            new NazcaComponentPreviewService(python, script));
+            CreateService(python, script));
 
         await vm.InitializeAsync();
         await vm.RunPreviewCommand.ExecuteAsync(null);
@@ -115,13 +139,14 @@ public class NazcaEditorPreviewIntegrationTests
         var (python, script) = await ResolveEnvironmentAsync();
         if (python == null || script == null) return;   // env skip
 
-        var svc = new NazcaComponentPreviewService(python, script);
+        var svc = CreateService(python, script);
 
         // The "?" help offers NazcaCodeExamples.Complex as an insertable starter — it
         // must always render (it's shipped as a working example).
         var result = await svc.RenderRawCodeAsync(NazcaCodeExamples.Complex);
 
         result.Success.ShouldBeTrue($"the showcase example must render. Error: {result.Error}");
+        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0);
     }
 
