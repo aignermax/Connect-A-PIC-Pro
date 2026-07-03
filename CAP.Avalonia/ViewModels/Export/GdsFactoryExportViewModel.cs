@@ -27,6 +27,11 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _unmappedComponents = new();
 
+    /// <summary>Instances whose override is written for Nazca — not honoured in the gdsfactory
+    /// export (they use ubcpdk/stub geometry instead). Surfaced as a pre-export warning.</summary>
+    [ObservableProperty]
+    private ObservableCollection<string> _backendMismatches = new();
+
     [ObservableProperty]
     private string _statusText = string.Empty;
 
@@ -35,6 +40,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
 
     /// <summary>File dialog service; wired by the UI layer like the other exporters.</summary>
     public IFileDialogService? FileDialogService { get; set; }
+
+    /// <summary>Supplies the per-instance overrides (wired by the UI layer to the design's
+    /// stored overrides); gdsfactory-backend ones are emitted as factories.</summary>
+    public Func<IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>>? OverridesProvider { get; set; }
 
     /// <summary>
     /// Ensures gdsfactory is installed into a managed environment (creating one if needed)
@@ -61,14 +70,19 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Recomputes the list of components that would fall back to stub geometry in
-    /// ubcpdk mode. Called when the export dialog opens.
+    /// Recomputes the pre-export info: components that fall back to stub geometry (no ubcpdk
+    /// cell) and instances whose override targets Nazca (not honoured here). Called when the
+    /// export dialog opens.
     /// </summary>
     public void RefreshUnmappedComponents()
     {
         UnmappedComponents.Clear();
         foreach (var name in GdsFactoryExporter.CollectUnmappedComponents(_canvas))
             UnmappedComponents.Add(name);
+
+        BackendMismatches.Clear();
+        foreach (var id in GdsFactoryExporter.CollectBackendMismatches(_canvas, OverridesProvider?.Invoke()))
+            BackendMismatches.Add(id);
     }
 
     /// <summary>Runs the export: file dialog → shadowing guard → script → optional GDS.</summary>
@@ -109,8 +123,11 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         try
         {
             // Always ubcpdk-where-available with stub fallback — no geometry question.
+            // gdsfactory-backend overrides are emitted as factories; Nazca-backend ones fall
+            // back to ubcpdk/stub (surfaced as a mismatch warning).
             await File.WriteAllTextAsync(filePath,
-                _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells)));
+                _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
+                    OverridesProvider?.Invoke()));
 
             StatusText = "Running gdsfactory to generate the GDS...";
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);

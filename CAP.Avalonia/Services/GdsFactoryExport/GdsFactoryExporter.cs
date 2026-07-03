@@ -3,6 +3,7 @@ using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
 
@@ -18,17 +19,22 @@ public class GdsFactoryExporter
     /// <summary>Exports the design to a gdsfactory Python script.</summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
-    public string Export(DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
+    /// component factories. Null skips override handling.</param>
+    public string Export(
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
     {
         var sb = new StringBuilder();
         AppendHeader(sb, options);
-        AppendStubs(sb, canvas, options);
+        AppendOverrideFactories(sb, canvas, overrides);
+        AppendStubs(sb, canvas, options, overrides);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
         sb.AppendLine("# Components");
         foreach (var comp in EnumerateExportableComponents(canvas))
-            AppendPlacement(sb, comp, options, ref refIndex);
+            AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
         AppendConnections(sb, canvas);
         AppendFooter(sb);
@@ -45,6 +51,62 @@ public class GdsFactoryExporter
             .Where(name => !string.IsNullOrEmpty(name) && UbcPdkCellMap.MapToUbcPdkCell(name) == null)
             .Distinct(StringComparer.Ordinal)
             .ToList()!;
+
+    /// <summary>
+    /// Identifiers of instances whose override is written for Nazca — the gdsfactory export
+    /// cannot run that code, so those instances use their ubcpdk/stub geometry instead of the
+    /// custom override. Surfaced as a pre-export warning so the divergence is visible.
+    /// </summary>
+    public static IReadOnlyList<string> CollectBackendMismatches(
+        DesignCanvasViewModel canvas, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+    {
+        if (overrides == null) return Array.Empty<string>();
+        return EnumerateExportableComponents(canvas)
+            .Where(c => overrides.TryGetValue(c.Identifier, out var o)
+                        && !string.IsNullOrWhiteSpace(o.RawCode)
+                        && o.Backend == OverrideBackend.Nazca)
+            .Select(c => c.Identifier)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+    }
+
+    /// <summary>Returns the gdsfactory-backend override RawCode for a component, or null.</summary>
+    private static string? GdsFactoryOverrideCode(
+        Component comp, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+    {
+        if (overrides != null
+            && overrides.TryGetValue(comp.Identifier, out var o)
+            && !string.IsNullOrWhiteSpace(o.RawCode)
+            && o.Backend == OverrideBackend.GdsFactory)
+            return o.RawCode;
+        return null;
+    }
+
+    private static string OverrideFactoryName(Component comp) =>
+        "override_" + System.Text.RegularExpressions.Regex.Replace(comp.Identifier, @"[^a-zA-Z0-9_]", "_");
+
+    /// <summary>Emits one factory per gdsfactory-backend override: the user's code wrapped in a
+    /// function that returns the `component` it defines.</summary>
+    private static void AppendOverrideFactories(
+        StringBuilder sb, DesignCanvasViewModel canvas,
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+    {
+        var generated = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var comp in EnumerateExportableComponents(canvas))
+        {
+            var code = GdsFactoryOverrideCode(comp, overrides);
+            if (code == null) continue;
+            var name = OverrideFactoryName(comp);
+            if (!generated.Add(name)) continue;
+
+            sb.AppendLine($"def {name}() -> gf.Component:");
+            sb.AppendLine("    import gdsfactory as gf");
+            foreach (var line in code.Replace("\r\n", "\n").Split('\n'))
+                sb.AppendLine("    " + line);
+            sb.AppendLine("    return component");
+            sb.AppendLine();
+        }
+    }
 
     private static IEnumerable<Component> EnumerateExportableComponents(DesignCanvasViewModel canvas)
     {
@@ -85,12 +147,15 @@ public class GdsFactoryExporter
         sb.AppendLine();
     }
 
-    private static void AppendStubs(StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    private static void AppendStubs(
+        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
-            if (UsesUbcPdkCell(comp, options))
+            // A gdsfactory override provides the geometry itself; a ubcpdk cell replaces the stub.
+            if (GdsFactoryOverrideCode(comp, overrides) != null || UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
         }
@@ -105,7 +170,8 @@ public class GdsFactoryExporter
     /// origin to the mapper placement — equivalent to Nazca's <c>put('org', x, y, rot)</c>.
     /// </summary>
     private static void AppendPlacement(
-        StringBuilder sb, Component comp, GdsFactoryExportOptions options, ref int refIndex)
+        StringBuilder sb, Component comp, GdsFactoryExportOptions options,
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides, ref int refIndex)
     {
         var ci = CultureInfo.InvariantCulture;
         var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
@@ -114,9 +180,13 @@ public class GdsFactoryExporter
         var rot = placement.RotationDegrees.ToString("F0", ci);
         var varName = $"ref_{refIndex}";
 
-        var factory = UsesUbcPdkCell(comp, options)
-            ? $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')"
-            : $"{GdsFactoryStubWriter.StubFunctionName(comp)}({StubArguments(comp)})";
+        string factory;
+        if (GdsFactoryOverrideCode(comp, overrides) != null)
+            factory = $"{OverrideFactoryName(comp)}()";
+        else if (UsesUbcPdkCell(comp, options))
+            factory = $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')";
+        else
+            factory = $"{GdsFactoryStubWriter.StubFunctionName(comp)}({StubArguments(comp)})";
 
         sb.AppendLine($"{varName} = c.add_ref({factory})  # {comp.Identifier}");
         sb.AppendLine($"{varName}.rotate({rot})");

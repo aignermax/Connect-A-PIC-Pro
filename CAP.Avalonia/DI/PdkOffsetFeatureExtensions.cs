@@ -42,6 +42,16 @@ internal static class PdkOffsetFeatureExtensions
             return new NazcaComponentPreviewService(
                 python, script, launchFactory: sp.GetRequiredService<ProcessLaunchFactory>());
         });
+        // gdsfactory override preview (#637): same plumbing, gf renderer + the active
+        // (gdsfactory-capable) interpreter. Resolved lazily each time it is used.
+        services.AddSingleton(sp =>
+        {
+            var prefs = sp.GetRequiredService<UserPreferencesService>();
+            var python = prefs.GetCustomPythonPath() ?? PythonResolution.ResolvePythonExecutable();
+            var script = PythonResolution.FindScript("render_gdsfactory_preview.py");
+            return new GdsFactoryComponentPreviewService(
+                python, script, launchFactory: sp.GetRequiredService<ProcessLaunchFactory>());
+        });
         services.AddSingleton(sp => new PdkOffsetEditorViewModel(
             sp.GetRequiredService<PdkLoader>(),
             sp.GetRequiredService<PdkJsonSaver>(),
