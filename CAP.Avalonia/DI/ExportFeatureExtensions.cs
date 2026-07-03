@@ -50,7 +50,20 @@ internal static class ExportFeatureExtensions
         services.AddSingleton<PhotonTorchExporter>();
         services.AddSingleton<PhotonTorchExportViewModel>();
 
-        services.AddSingleton<GdsFactoryExportViewModel>();
+        services.AddSingleton<GdsFactoryExportViewModel>(sp =>
+        {
+            var vm = new GdsFactoryExportViewModel(
+                sp.GetRequiredService<CAP.Avalonia.ViewModels.Canvas.DesignCanvasViewModel>(),
+                sp.GetRequiredService<GdsExportService>(),
+                sp.GetService<IUrlLauncher>(),
+                sp.GetService<CAP_Core.ErrorConsoleService>());
+            // Auto-install gdsfactory on export (env-manager slice resolved lazily so the
+            // export slice never imports it directly).
+            vm.EnsureGdsFactoryAsync = (progress, ct) =>
+                sp.GetRequiredService<PythonEnvironmentManagerViewModel>()
+                    .EnsureGdsFactoryInstalledAsync(progress, ct);
+            return vm;
+        });
 
         services.AddSingleton<VerilogAExporter>();
         services.AddSingleton<VerilogAFileWriter>();
