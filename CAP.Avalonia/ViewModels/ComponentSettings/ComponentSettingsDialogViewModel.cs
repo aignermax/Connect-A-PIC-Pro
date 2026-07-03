@@ -36,6 +36,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private Dictionary<int, SMatrix>? _effectiveSMatrices;
     private IReadOnlyList<Pin>? _effectivePins;
     private IReadOnlyList<string>? _availablePinNames;
+    private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
 
     /// <summary>
     /// ViewModel for the per-instance Nazca parameter override section.
@@ -191,6 +192,14 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// sync without reopening the dialog. Pass the same expression that produced
     /// <paramref name="smatrixKey"/>; null disables re-resolution (per-template mode).
     /// </param>
+    /// <param name="propagateToTemplate">
+    /// Optional sink invoked after a successful FDTD recompute (issue #580 E).
+    /// The caller decides whether the instance geometry still matches the PDK
+    /// template draft and, if so, writes the data to the template-scoped
+    /// (user-global) override store so every instance of the type inherits it.
+    /// Returns true when the data was propagated (reflected in the status text).
+    /// Null (default) keeps the recompute instance-scoped only.
+    /// </param>
     public void Configure(
         string entityKey,
         string smatrixKey,
@@ -211,10 +220,12 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null,
         Action? nazcaDimensionsChanged = null,
         Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
-        Func<string>? smatrixKeyResolver = null)
+        Func<string>? smatrixKeyResolver = null,
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
     {
         _smatrixKey = smatrixKey;
         _smatrixKeyResolver = smatrixKeyResolver;
+        _propagateToTemplate = propagateToTemplate;
         _displayName = displayName;
         _storedSMatrices = storedSMatrices;
         _liveComponent = liveComponent;
