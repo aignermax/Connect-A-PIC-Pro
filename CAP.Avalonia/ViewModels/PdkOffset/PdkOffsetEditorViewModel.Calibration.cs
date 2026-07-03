@@ -46,10 +46,10 @@ public partial class PdkOffsetEditorViewModel
         foreach (var (lp, np) in pairs)
         {
             // Same projection as the matcher — see MatchPinsByGreedyNearest
-            // for the y-flip derivation (Lunima y-down vs Nazca y-up).
+            // for the convention (NazcaOriginOffsetY = bbox top above the org,
+            // so cell-local Nazca y = oy - OffsetY; Lunima y-down vs Nazca y-up).
             var lunimaNazcaX = lp.OffsetXMicrometers - (draft.NazcaOriginOffsetX ?? 0);
-            var lunimaNazcaY = (draft.HeightMicrometers - lp.OffsetYMicrometers)
-                               - (draft.NazcaOriginOffsetY ?? 0);
+            var lunimaNazcaY = (draft.NazcaOriginOffsetY ?? 0) - lp.OffsetYMicrometers;
             var dx = np.X - lunimaNazcaX;
             var dy = np.Y - lunimaNazcaY;
             var dist = Math.Sqrt(dx * dx + dy * dy);
