@@ -195,6 +195,8 @@ public partial class MainViewModel : ObservableObject
         VerilogAExportFormat = new VerilogAExportFormat(verilogAExport);
         GdsFactoryExportFormat = new GdsFactoryExportFormat();
         GdsFactoryExport = gdsFactoryExport;
+        // gdsfactory export honours gdsfactory-backend overrides from the design's store.
+        GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),

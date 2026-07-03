@@ -43,6 +43,23 @@
                     </StackPanel>
                 </Border>
 
+                <!-- Backend mismatch: instances with a Nazca override won't get their custom
+                     geometry in a gdsfactory export. -->
+                <Border Background="#3a2020" CornerRadius="4" Padding="8"
+                        IsVisible="{Binding BackendMismatches.Count}">
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="⚠ Nazca override not applied here (uses ubcpdk/stub instead):"
+                                   Foreground="#e8a0a0" FontSize="11" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                        <ItemsControl ItemsSource="{Binding BackendMismatches}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="Gray" FontSize="10"/>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="{Binding StatusText}"
                            Foreground="LightSkyBlue" FontSize="11" TextWrapping="Wrap"
                            IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>

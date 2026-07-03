@@ -23,13 +23,7 @@
                   HorizontalScrollBarVisibility="Disabled">
     <DockPanel Margin="16">
 
-        <!-- Title -->
-        <TextBlock DockPanel.Dock="Top"
-                   Text="{Binding Title}"
-                   FontWeight="SemiBold"
-                   FontSize="15"
-                   Foreground="LightBlue"
-                   Margin="0,0,0,12"/>
+        <!-- No in-content title: the window title bar already shows {Binding Title}. -->
 
         <!-- Status bar -->
         <Border DockPanel.Dock="Bottom"
@@ -156,15 +150,22 @@
                      place isn't supported — it's a decorated closure with non-standalone
                      references — so it's shown for understanding only; use the override
                      editor below to replace the geometry with your own self-contained code. -->
-                <!-- Original source (read-only reference), always visible but kept thin;
-                     scroll for the rest. -->
-                <TextBlock Text="Original source (read-only reference)"
-                           Foreground="#777799" FontSize="10" Margin="0,2,0,0"
-                           IsVisible="{Binding HasEditableSource}"/>
-                <ScrollViewer MaxHeight="56" VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto"
-                              Background="#101018"
-                              IsVisible="{Binding HasEditableSource}">
+                <!-- Original source (read-only reference): a thin toggle expands a scrollable
+                     code box. A ToggleButton (not an Expander) so the control height is minimal. -->
+                <ToggleButton x:Name="OrigSrcToggle"
+                              Content="▸ Original source (read-only reference)"
+                              FontSize="10"
+                              Foreground="#777799"
+                              Background="Transparent"
+                              BorderThickness="0"
+                              Padding="2,0"
+                              MinHeight="0"
+                              Margin="0,2,0,0"
+                              HorizontalAlignment="Left"
+                              IsVisible="{Binding HasEditableSource}"/>
+                <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
+                              HorizontalScrollBarVisibility="Auto" Background="#101018"
+                              IsVisible="{Binding #OrigSrcToggle.IsChecked}">
                     <SelectableTextBlock Text="{Binding OriginalSource}"
                                          FontFamily="Consolas, Courier New, monospace"
                                          FontSize="10"
