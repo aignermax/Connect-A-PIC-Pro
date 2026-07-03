@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CAP_Core;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Update;
 
 namespace CAP.Avalonia.Services;
@@ -281,6 +282,30 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Gets the global interconnect settings (waveguide width/bend radius/GDS layer).
+    /// Falls back to the historical export defaults when not configured.
+    /// </summary>
+    public InterconnectSettings GetInterconnectSettings() => new()
+    {
+        WidthMicrometers = _preferences.InterconnectWidthMicrometers
+            ?? InterconnectSettings.DefaultWidthMicrometers,
+        BendRadiusMicrometers = _preferences.InterconnectBendRadiusMicrometers
+            ?? InterconnectSettings.DefaultBendRadiusMicrometers,
+        GdsLayer = _preferences.InterconnectGdsLayer,
+    };
+
+    /// <summary>
+    /// Sets the global interconnect settings and saves preferences.
+    /// </summary>
+    public void SetInterconnectSettings(InterconnectSettings settings)
+    {
+        _preferences.InterconnectWidthMicrometers = settings.WidthMicrometers;
+        _preferences.InterconnectBendRadiusMicrometers = settings.BendRadiusMicrometers;
+        _preferences.InterconnectGdsLayer = settings.GdsLayer;
+        Save();
+    }
+
+    /// <summary>
     /// Clears any skipped update version and saves preferences.
     /// </summary>
     public void ClearSkippedUpdateVersion()
@@ -368,4 +393,19 @@ public class UserPreferences
     /// Default chip height in millimeters for new projects (default 5 mm).
     /// </summary>
     public double DefaultChipHeightMm { get; set; } = 5.0;
+
+    /// <summary>
+    /// Global interconnect waveguide width in µm. Null = export default (0.45).
+    /// </summary>
+    public double? InterconnectWidthMicrometers { get; set; }
+
+    /// <summary>
+    /// Global interconnect bend radius in µm. Null = export default (50).
+    /// </summary>
+    public double? InterconnectBendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Global interconnect GDS layer. Null = PDK/Nazca default layer.
+    /// </summary>
+    public int? InterconnectGdsLayer { get; set; }
 }

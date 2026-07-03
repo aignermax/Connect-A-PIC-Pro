@@ -21,6 +21,11 @@ public partial class BottomPanelViewModel : ObservableObject
     public WaveguideLengthViewModel WaveguideLength { get; }
 
     /// <summary>
+    /// ViewModel for per-connection routing options (style, width/radius, freeze — issue #574).
+    /// </summary>
+    public ConnectionRoutingViewModel ConnectionRouting { get; }
+
+    /// <summary>
     /// ViewModel for locking/unlocking components and connections.
     /// </summary>
     public ElementLockViewModel ElementLock { get; }
@@ -40,10 +45,12 @@ public partial class BottomPanelViewModel : ObservableObject
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
         WaveguideLengthViewModel waveguideLength,
+        ConnectionRoutingViewModel connectionRouting,
         ElementLockViewModel elementLock,
         ErrorConsoleViewModel errorConsole)
     {
         WaveguideLength = waveguideLength;
+        ConnectionRouting = connectionRouting;
         ElementLock = elementLock;
         ErrorConsole = errorConsole;
 

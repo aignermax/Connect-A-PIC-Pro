@@ -304,6 +304,51 @@
                         </StackPanel>
                     </DataTemplate>
 
+                    <!-- Interconnect defaults (issue #574) -->
+                    <DataTemplate DataType="{x:Type settings:InterconnectSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Interconnects" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap">
+                                Global defaults for waveguide interconnects used by the Nazca/GDS export
+                                (WG_WIDTH, BEND_RADIUS and optional GDS layer).
+                            </TextBlock>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="Width:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding WidthMicrometers}"
+                                               Minimum="0.05" Maximum="100" Increment="0.05"
+                                               Width="130" FormatString="F2"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="Bend radius:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding BendRadiusMicrometers}"
+                                               Minimum="0.5" Maximum="10000" Increment="1"
+                                               Width="130" FormatString="F1"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="GDS layer:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <TextBox Text="{Binding GdsLayerText}" Width="130" Watermark="PDK default"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                                <Button Content="Apply"
+                                        Command="{Binding ApplyCommand}"
+                                        Padding="16,4" Background="#3d5d5d"/>
+                                <Button Content="Reset to Defaults"
+                                        Command="{Binding ResetToDefaultsCommand}"
+                                        Padding="16,4"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="LightGreen" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
                     <!-- General (placeholder — GDS config lives on the GDS Export page) -->
                     <DataTemplate DataType="{x:Type settings:GeneralSettingsViewModel}">
                         <StackPanel Spacing="8">

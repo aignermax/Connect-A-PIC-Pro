@@ -278,6 +278,14 @@ public partial class MainViewModel : ObservableObject
                 // (SelectedTemplate is bound to MainViewModel.SelectedTemplate which wraps CanvasInteraction.SelectedTemplate,
                 // so it will automatically update the UI ListBox)
             }
+            else if (e.PropertyName == nameof(CanvasInteraction.SelectedWaveguideConnection))
+            {
+                // Feed the selected connection into the right-panel sub-ViewModels
+                // (length matching + routing options, issue #574).
+                var connection = CanvasInteraction.SelectedWaveguideConnection;
+                BottomPanel.WaveguideLength.SelectedConnection = connection;
+                BottomPanel.ConnectionRouting.SelectedConnection = connection;
+            }
         };
 
         // Wire up group template selection from left panel to canvas interaction
@@ -839,6 +847,21 @@ public class ConnectionData
     public double? TargetLengthMicrometers { get; set; }
     public bool? IsTargetLengthEnabled { get; set; }
     public double? LengthToleranceMicrometers { get; set; }
+
+    /// <summary>Routing style name (WaveguideType); null = Auto (issue #574).</summary>
+    public string? RoutingStyle { get; set; }
+
+    /// <summary>Waveguide width in µm; null = model default.</summary>
+    public double? WidthMicrometers { get; set; }
+
+    /// <summary>Bend radius in µm; null = model default.</summary>
+    public double? BendRadiusMicrometers { get; set; }
+
+    /// <summary>True when the routed path is frozen (manual bend edits); null = false.</summary>
+    public bool? IsRouteFrozen { get; set; }
+
+    /// <summary>Manual per-bend radius overrides (bend index → radius µm); null = none.</summary>
+    public Dictionary<int, double>? BendRadiusOverrides { get; set; }
 }
 
 /// <summary>

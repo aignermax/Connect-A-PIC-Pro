@@ -5,7 +5,9 @@ using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
 using CAP_Core.Export;
+using CAP_Core.Export.InterconnectRouting;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services;
@@ -16,6 +18,13 @@ namespace CAP.Avalonia.Services;
 /// </summary>
 public class SimpleNazcaExporter
 {
+    /// <summary>
+    /// Optional source for global interconnect settings (width/radius/layer).
+    /// When null, the historical defaults (<see cref="InterconnectSettings"/>) are used,
+    /// keeping legacy output byte-identical.
+    /// </summary>
+    public Func<InterconnectSettings>? SettingsSource { get; set; }
+
     /// <summary>
     /// Exports the full design to a Python/Nazca script.
     /// </summary>
@@ -44,11 +53,12 @@ public class SimpleNazcaExporter
         // Build a flat map of overridden identifier -> RawCode (only non-null RawCode entries).
         var rawOverrides = BuildRawOverrides(overrides);
 
-        AppendHeader(sb);
+        var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+        AppendHeader(sb, interconnectSettings);
         NazcaOverrideFactory.AppendFactories(sb, rawOverrides);
         AppendPdkComponentStubs(sb, canvas, rawOverrides);
         var componentNames = AppendComponents(sb, canvas, rawOverrides, overrides, emitVerification);
-        AppendConnections(sb, canvas, componentNames, rawOverrides);
+        AppendConnections(sb, canvas, componentNames, rawOverrides, interconnectSettings.GdsLayer);
         AppendFooter(sb);
         if (emitVerification)
             AppendVerificationEpilog(sb);
@@ -75,18 +85,23 @@ public class SimpleNazcaExporter
         return result;
     }
 
-    private static void AppendHeader(StringBuilder sb)
+    private static void AppendHeader(StringBuilder sb, InterconnectSettings settings)
     {
+        var ci = CultureInfo.InvariantCulture;
         sb.AppendLine("import nazca as nd");
         sb.AppendLine("import nazca.demofab as demo");
         sb.AppendLine("from nazca.interconnects import Interconnect");
         sb.AppendLine();
         sb.AppendLine("# PDK Configuration");
-        sb.AppendLine("WG_WIDTH = 0.45  # Waveguide width in µm");
-        sb.AppendLine("BEND_RADIUS = 50  # Minimum bend radius in µm");
+        sb.AppendLine($"WG_WIDTH = {settings.WidthMicrometers.ToString("0.0###", ci)}  # Waveguide width in µm");
+        sb.AppendLine($"BEND_RADIUS = {settings.BendRadiusMicrometers.ToString("0.###", ci)}  # Minimum bend radius in µm");
+        if (settings.GdsLayer.HasValue)
+            sb.AppendLine($"WG_LAYER = {settings.GdsLayer.Value}  # Waveguide GDS layer");
         sb.AppendLine();
         sb.AppendLine("# Create interconnect for waveguide routing");
-        sb.AppendLine("ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
+        sb.AppendLine(settings.GdsLayer.HasValue
+            ? "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS, layer=WG_LAYER)"
+            : "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
         sb.AppendLine();
     }
 
@@ -419,7 +434,8 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        IReadOnlyDictionary<string, string> rawOverrides,
+        int? gdsLayer = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -440,6 +456,15 @@ public class SimpleNazcaExporter
             // cell is bbox-anchored, so app-space segment coordinates line up with
             // its geometry and the GDS shows the same bends/radii as the canvas.
             // Only routeless connections fall back to a p2p interconnect.
+            // Explicit routing style (issue #574): export a single Nazca primitive
+            // (strt/sinebend/bend/euler/cobra) instead of the routed segments.
+            var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer);
+            if (styledLine != null)
+            {
+                sb.AppendLine(styledLine);
+                continue;
+            }
+
             var segments = conn.GetPathSegments();
 
             if (segments.Count > 0)
