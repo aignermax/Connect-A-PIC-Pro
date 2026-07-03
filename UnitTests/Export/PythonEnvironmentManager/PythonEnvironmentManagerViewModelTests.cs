@@ -1,4 +1,5 @@
 using System.Collections.Specialized;
+using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager;
 using CAP_Core.Export;
 using CAP_Core.Export.PythonEnvironmentManager;
@@ -163,6 +164,31 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         var reloaded = new PythonEnvironmentRegistry(_tempRegistryFile);
 
         reloaded.GetAll().Single().GdsFactoryVersion.ShouldBe("9.34.2");
+    }
+
+    [Fact]
+    public void ActivateSystemInterpreter_ClearsManagedActive_AndPushesPathThroughRegistryCallback()
+    {
+        // Activating a discovered system interpreter in the tab (issue #645) must route the
+        // path through the registry callback — the same channel export/preview listen on —
+        // and clear any managed active selection so exactly one interpreter is active.
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("managed-a"));
+        registry.SetActive("managed-a");
+
+        string? pushedPath = null;
+        registry.OnActiveEnvironmentChanged = p => pushedPath = p;
+
+        var vm = CreateViewModel(registry);
+        var option = new InterpreterOption(
+            "System · Python 3.12 (Nazca 0.6.1, gdsfactory not installed)",
+            @"/usr/bin/python3.12", IsActive: false, ManagedName: null);
+
+        vm.ActivateSystemInterpreterCommand.Execute(option);
+
+        pushedPath.ShouldBe(@"/usr/bin/python3.12");
+        registry.GetActive().ShouldBeNull();
+        vm.ProgressText.ShouldContain(@"/usr/bin/python3.12");
     }
 
     private static PythonEnvironment MakeEnv(string name) => new()

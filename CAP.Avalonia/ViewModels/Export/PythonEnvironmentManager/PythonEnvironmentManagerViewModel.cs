@@ -17,6 +17,8 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
     private readonly UvBootstrapper _bootstrapper;
     private readonly NazcaPackageInstaller _installer;
     private readonly EnvironmentHealthChecker _healthChecker;
+    private readonly PythonDiscoveryService _discovery;
+    private readonly Func<string?> _getActiveInterpreterPath;
 
     private CancellationTokenSource? _cts;
 
@@ -52,16 +54,28 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
     public bool IsSelectedEnvActive => SelectedEnvironment?.IsActive == true;
 
     /// <summary>Initialises the ViewModel with core services.</summary>
+    /// <param name="registry">Managed-environment registry.</param>
+    /// <param name="bootstrapper">uv bootstrapper for venv creation.</param>
+    /// <param name="installer">Nazca / gdsfactory package installer.</param>
+    /// <param name="healthChecker">Environment health prober.</param>
+    /// <param name="discovery">Discovers system Python interpreters (issue #645); null
+    /// falls back to a fresh <see cref="PythonDiscoveryService"/>.</param>
+    /// <param name="getActiveInterpreterPath">Returns the currently active interpreter path
+    /// so discovered system interpreters can be marked active; null treats none as active.</param>
     public PythonEnvironmentManagerViewModel(
         PythonEnvironmentRegistry registry,
         UvBootstrapper bootstrapper,
         NazcaPackageInstaller installer,
-        EnvironmentHealthChecker healthChecker)
+        EnvironmentHealthChecker healthChecker,
+        PythonDiscoveryService? discovery = null,
+        Func<string?>? getActiveInterpreterPath = null)
     {
         _registry = registry;
         _bootstrapper = bootstrapper;
         _installer = installer;
         _healthChecker = healthChecker;
+        _discovery = discovery ?? new PythonDiscoveryService();
+        _getActiveInterpreterPath = getActiveInterpreterPath ?? (() => null);
 
         RefreshList();
     }
@@ -274,6 +288,7 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
 
         _registry.SetActive(name);
         RefreshList();
+        RemarkSystemInterpreters();
         OnPropertyChanged(nameof(IsSelectedEnvActive));
         ProgressText = $"'{name}' is now the active environment.";
     }

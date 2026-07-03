@@ -86,6 +86,21 @@ public class PythonEnvironmentRegistry
         OnActiveEnvironmentChanged?.Invoke(pythonPath);
     }
 
+    /// <summary>
+    /// Selects a discovered system interpreter (not a managed environment) as the active
+    /// Python for export and preview (issue #645). Clears any managed active selection so
+    /// there is exactly one active interpreter, then fires
+    /// <see cref="OnActiveEnvironmentChanged"/> with the given path — the same channel a
+    /// managed activation uses, so downstream consumers need no special case.
+    /// </summary>
+    /// <param name="pythonPath">Full path of the system interpreter to activate.</param>
+    public void SetActiveExternalPath(string pythonPath)
+    {
+        _data.ActiveName = null;
+        Save();
+        OnActiveEnvironmentChanged?.Invoke(pythonPath);
+    }
+
     /// <summary>Returns true when an environment with this name already exists.</summary>
     public bool Exists(string name) =>
         _data.Environments.Any(e => e.Name == name);

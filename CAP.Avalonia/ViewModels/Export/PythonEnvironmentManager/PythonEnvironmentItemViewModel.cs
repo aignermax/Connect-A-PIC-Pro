@@ -52,8 +52,11 @@ public partial class PythonEnvironmentItemViewModel : ObservableObject
                 parts.Add($"Nazca {Environment.NazcaVersion}");
             if (Environment.HasPyclipper)
                 parts.Add("pyclipper ✓");
-            if (Environment.GdsFactoryVersion != null)
-                parts.Add($"gdsfactory {Environment.GdsFactoryVersion}");
+            // gdsfactory is always surfaced (incl. "not installed") so the user can tell a
+            // Nazca-only environment from a gdsfactory-capable one at a glance (issue #645).
+            parts.Add(Environment.GdsFactoryVersion != null
+                ? $"gdsfactory {Environment.GdsFactoryVersion}"
+                : "gdsfactory not installed");
             if (!string.IsNullOrEmpty(Environment.LastError))
                 parts.Add($"Error: {Environment.LastError}");
             return parts.Count > 0 ? string.Join("  |  ", parts) : string.Empty;

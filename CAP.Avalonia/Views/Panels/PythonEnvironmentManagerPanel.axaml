@@ -95,6 +95,53 @@
                 IsEnabled="{Binding IsBusy,
                                     Converter={x:Static BoolConverters.Not}}"/>
 
+        <!-- Detected system interpreters (issue #645): discovered Pythons that carry Nazca,
+             each showing its Nazca and gdsfactory version, activatable as the export/preview
+             interpreter just like a managed environment. -->
+        <Separator Margin="0,6,0,6" Background="#2d2d2d"/>
+        <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
+            <TextBlock Grid.Column="0" Text="Detected system interpreters:"
+                       Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+            <Button Grid.Column="1" Content="🔄" Width="28" Padding="2" FontSize="11"
+                    Command="{Binding RefreshSystemInterpretersCommand}"
+                    ToolTip.Tip="Re-scan for system Python interpreters (shows Nazca + gdsfactory versions)"
+                    IsEnabled="{Binding IsDiscoveringInterpreters,
+                                        Converter={x:Static BoolConverters.Not}}"/>
+        </Grid>
+        <TextBlock Text="Scanning for interpreters…" Foreground="LightSkyBlue" FontSize="10"
+                   Margin="0,0,0,4" IsVisible="{Binding IsDiscoveringInterpreters}"/>
+        <TextBlock Text="No system interpreter with Nazca found. Create a managed environment above."
+                   Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,4"
+                   IsVisible="{Binding ShowNoSystemInterpretersHint}"/>
+        <ScrollViewer MaxHeight="160" Margin="0,0,0,6"
+                      VerticalScrollBarVisibility="Auto"
+                      IsVisible="{Binding SystemInterpreters.Count}">
+            <ItemsControl ItemsSource="{Binding SystemInterpreters}" x:Name="SystemInterpretersList">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Button Command="{Binding #SystemInterpretersList.DataContext.ActivateSystemInterpreterCommand}"
+                                CommandParameter="{Binding}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Left"
+                                Margin="0,2,4,0" Padding="6,3"
+                                Background="#2d2d2d" FontSize="11"
+                                ToolTip.Tip="Set as the active interpreter for export and preview">
+                            <StackPanel>
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
+                                               IsVisible="{Binding IsActive}"/>
+                                    <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
+                                               TextWrapping="Wrap"/>
+                                </StackPanel>
+                                <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
+                                           TextWrapping="Wrap"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
         <!-- Progress and cancel -->
         <StackPanel IsVisible="{Binding IsBusy}"
                     Margin="0,0,0,4">
