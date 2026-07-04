@@ -269,14 +269,19 @@
                 Padding="8,6"
                 Margin="0,8,0,0"
                 IsVisible="{Binding SolverStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <StackPanel Orientation="Horizontal" Spacing="8">
-                <TextBlock Text="⏳" FontSize="12" VerticalAlignment="Center"
+            <!-- Grid, not a horizontal StackPanel: a StackPanel measures its
+                 children with infinite width, which disables TextWrapping and
+                 pushes long solver messages (e.g. the Docker install hint)
+                 out of the window. The star column bounds the text width. -->
+            <Grid ColumnDefinitions="Auto,*">
+                <TextBlock Grid.Column="0" Text="⏳" FontSize="12" VerticalAlignment="Center"
+                           Margin="0,0,8,0"
                            IsVisible="{Binding IsComputing}"/>
-                <TextBlock Text="{Binding SolverStatus}"
+                <TextBlock Grid.Column="1" Text="{Binding SolverStatus}"
                            Foreground="#aaccaa"
                            FontSize="11"
                            TextWrapping="Wrap"/>
-            </StackPanel>
+            </Grid>
         </Border>
 
         <!-- Empty state -->
