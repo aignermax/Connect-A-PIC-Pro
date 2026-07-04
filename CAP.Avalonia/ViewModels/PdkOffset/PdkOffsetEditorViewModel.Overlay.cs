@@ -17,9 +17,11 @@ public partial class PdkOffsetEditorViewModel
 
         if (HasNazcaOverlay)
         {
-            // Nazca geometry is fixed; move Lunima box as offset changes
+            // Nazca geometry is fixed; move Lunima box as offset changes.
+            // OffsetY is the bbox TOP edge above the org (mapper convention),
+            // so the box top sits OffsetY above the origin in Nazca space.
             CanvasComponentLeft = _nazcaCanvasRefX - OffsetX * CanvasScale;
-            CanvasComponentTop = _nazcaCanvasRefY - (ComponentHeight - OffsetY) * CanvasScale;
+            CanvasComponentTop = _nazcaCanvasRefY - OffsetY * CanvasScale;
             CanvasOriginX = _nazcaCanvasRefX;
             CanvasOriginY = _nazcaCanvasRefY;
         }
@@ -28,7 +30,7 @@ public partial class PdkOffsetEditorViewModel
             CanvasComponentLeft = CanvasPadding;
             CanvasComponentTop = CanvasPadding;
             CanvasOriginX = CanvasPadding + OffsetX * CanvasScale;
-            CanvasOriginY = CanvasPadding + (ComponentHeight - OffsetY) * CanvasScale;
+            CanvasOriginY = CanvasPadding + OffsetY * CanvasScale;
         }
 
         PinMarkers.Clear();

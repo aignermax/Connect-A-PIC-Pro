@@ -686,6 +686,8 @@ public partial class MainWindow : Window
         // Per-instance raw Nazca code editor (issue #556) — only in per-instance mode.
         var nazcaPreviewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
+        var gdsFactoryPreviewService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
+            as CAP_Core.Export.GdsFactoryComponentPreviewService;
         string? nazcaTemplateCode = null;
         Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null;
         Action? nazcaDimensionsChanged = null;
@@ -746,7 +748,8 @@ public partial class MainWindow : Window
             nazcaOverlapCheck: nazcaOverlapCheck,
             nazcaDimensionsChanged: nazcaDimensionsChanged,
             nazcaPinsChanged: nazcaPinsChanged,
-            smatrixKeyResolver: smatrixKeyResolver);
+            smatrixKeyResolver: smatrixKeyResolver,
+            gdsFactoryPreviewService: gdsFactoryPreviewService);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         dialog.Show(this);

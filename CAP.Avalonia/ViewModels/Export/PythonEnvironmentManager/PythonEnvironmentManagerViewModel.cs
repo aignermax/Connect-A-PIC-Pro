@@ -140,6 +140,28 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
         }, env, $"Environment '{name}' is ready.");
     }
 
+    /// <summary>
+    /// Installs gdsfactory + ubcpdk into the selected environment (for the gdsfactory
+    /// export, #581/#622). gdsfactory is optional per environment — the health status
+    /// stays governed by Nazca.
+    /// </summary>
+    [RelayCommand]
+    private async Task InstallGdsFactoryAsync()
+    {
+        var item = SelectedEnvironment;
+        if (item == null) return;
+        var env = item.Environment;
+
+        await RunLongOperationAsync(async ct =>
+        {
+            var progress = CreateProgress(env);
+            var uvPath = await _bootstrapper.EnsureUvAsync(progress, ct);
+            await _installer.InstallGdsFactoryAsync(uvPath, env.VenvPath, progress, ct);
+            await _healthChecker.CheckAsync(env, ct);
+            _registry.AddOrUpdate(env);
+        }, env, $"gdsfactory installed into '{env.Name}'.");
+    }
+
     /// <summary>Re-installs packages into the selected environment (repair).</summary>
     [RelayCommand]
     private async Task RepairAsync()
@@ -185,6 +207,59 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Ensures a managed environment with gdsfactory exists and is active — used by the
+    /// gdsfactory export to auto-provision on first use. Installs gdsfactory (+ubcpdk) into
+    /// the active managed env, or creates the default environment (Nazca + gdsfactory) when
+    /// none exists, then activates it. Reports progress; returns true when gdsfactory is
+    /// available afterwards. No-ops to false while another operation runs.
+    /// </summary>
+    public async Task<bool> EnsureGdsFactoryInstalledAsync(
+        IProgress<string> progress, CancellationToken ct)
+    {
+        if (IsBusy) return false;
+
+        var active = _registry.GetActive();
+        var target = active ?? _registry.GetAll().FirstOrDefault();
+
+        IsBusy = true;
+        CanCancel = true;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
+        {
+            var token = _cts.Token;
+            var uvPath = await _bootstrapper.EnsureUvAsync(progress, token);
+
+            if (target == null)
+            {
+                var venvPath = Path.Combine(UvBootstrapper.EnvironmentsBaseDir, DefaultEnvironmentName);
+                target = new PythonEnvironment { Name = DefaultEnvironmentName, VenvPath = venvPath };
+                progress.Report($"Creating managed environment '{DefaultEnvironmentName}'...");
+                await _bootstrapper.CreateVenvAsync(uvPath, venvPath, UvBootstrapper.DefaultPythonVersion, progress, token);
+                await _installer.InstallAsync(uvPath, venvPath, progress, token);
+            }
+
+            await _installer.InstallGdsFactoryAsync(uvPath, target.VenvPath, progress, token);
+            await _healthChecker.CheckAsync(target, token);
+            _registry.AddOrUpdate(target);
+            _registry.SetActive(target.Name);
+            RefreshList();
+            return target.GdsFactoryVersion != null;
+        }
+        catch (Exception ex)
+        {
+            ProgressText = $"gdsfactory install failed: {ex.Message}";
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+            CanCancel = false;
+            _cts?.Dispose();
+            _cts = null;
         }
     }
 

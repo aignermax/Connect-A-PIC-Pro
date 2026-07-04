@@ -399,7 +399,6 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
                 pin.Name,
                 pin.OffsetXMicrometers,
                 pin.OffsetYMicrometers,
-                ComponentHeight,
                 OffsetX,
                 OffsetY));
         }
