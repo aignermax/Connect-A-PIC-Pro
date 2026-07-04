@@ -1,0 +1,89 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.Solvers.DockerSetup"
+        x:Class="CAP.Avalonia.Views.Dialogs.DockerSetupDialog"
+        x:DataType="vm:DockerSetupViewModel"
+        Title="Set up FDTD (Docker)"
+        Width="560" SizeToContent="Height"
+        MinWidth="460"
+        CanResize="False"
+        Background="#1e1e1e"
+        WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="16" Spacing="10">
+
+        <TextBlock Text="FDTD needs Docker"
+                   FontWeight="SemiBold" FontSize="15" Foreground="LightBlue"/>
+
+        <!-- Current availability status -->
+        <Border Background="#3a2f1f" CornerRadius="4" Padding="10,8">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="#ffcc88" FontSize="12" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Linux: not installed — copyable install commands -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxInstall}">
+            <TextBlock Text="Install Docker with the official convenience script, then add yourself to the docker group:"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxInstallCommandsText, Mode=OneWay}"
+                         IsReadOnly="True" AcceptsReturn="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="Copy" VerticalAlignment="Top"
+                        Command="{Binding CopyInstallCommandsCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+            <TextBlock Text="Note: you must log out and back in for the docker group change to take effect."
+                       Foreground="#888888" FontSize="11" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Windows / macOS: not installed — download button -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowDesktopInstall}">
+            <TextBlock Text="Install Docker Desktop, start it, then come back here."
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Button Content="Download Docker Desktop"
+                    Command="{Binding OpenDownloadPageCommand}"
+                    Background="#0d6efd" Foreground="White"/>
+        </StackPanel>
+
+        <!-- Linux: engine stopped — copyable start command -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxStart}">
+            <TextBlock Text="Docker is installed but the engine isn't running. Start it with:"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxStartCommandText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="Copy" VerticalAlignment="Top"
+                        Command="{Binding CopyStartCommandCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Windows / macOS: engine stopped — start hint -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowDesktopStart}">
+            <TextBlock Text="Docker is installed but the engine isn't running. Start Docker Desktop and wait until it reports 'Engine running', then check again."
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Copy feedback -->
+        <TextBlock Text="{Binding CopyFeedback}"
+                   Foreground="#7fce7f" FontSize="11"
+                   IsVisible="{Binding CopyFeedback, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- Actions -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="Cancel" Click="OnCancelClick" Width="90"
+                    Background="#3d3d3d" Foreground="White"/>
+            <Button Content="Check again" Width="120"
+                    Command="{Binding CheckAgainCommand}"
+                    IsEnabled="{Binding !IsChecking}"
+                    Background="#0d6efd" Foreground="White" IsDefault="True"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

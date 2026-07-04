@@ -347,20 +347,23 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
         var versionArgs = new[] { "version", "--format", "{{.Server.Version}}" };
         if (!_launchFactory.TryBuild(_dockerExe, versionArgs, null, null, out var si, out _))
             return FdtdAvailability.Unavailable(
-                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.");
+                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.",
+                FdtdUnavailableReason.NotInstalled);
 
         var run = await SubprocessJsonRunner.RunAsync(si, string.Empty, TimeSpan.FromSeconds(20), ct);
 
         if (run.Outcome == SubprocessJsonRunner.Outcome.StartFailed)
             return FdtdAvailability.Unavailable(
-                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.");
+                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.",
+                FdtdUnavailableReason.NotInstalled);
 
         if (run.Outcome == SubprocessJsonRunner.Outcome.Completed && run.ExitCode == 0
             && !string.IsNullOrWhiteSpace(run.Stdout))
             return FdtdAvailability.Available($"Docker engine {run.Stdout.Trim()} ready.");
 
         return FdtdAvailability.Unavailable(
-            "Docker is installed but the engine isn't running. Start Docker Desktop and try again.");
+            "Docker is installed but the engine isn't running. Start Docker Desktop and try again.",
+            FdtdUnavailableReason.EngineNotRunning);
     }
 
     private static string ToDockerPath(string path) => path.Replace('\\', '/');

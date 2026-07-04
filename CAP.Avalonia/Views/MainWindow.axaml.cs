@@ -574,13 +574,19 @@ public partial class MainWindow : Window
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
+        // Guided Docker setup (issue #649): shown when the availability probe
+        // reports Docker missing or its engine stopped.
+        var dockerSetupDialog = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.IDockerSetupDialogService))
+            as CAP.Avalonia.Services.Solvers.IDockerSetupDialogService;
+
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
             importers: null,
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
-            fdtdRequestFactory: fdtdRequestFactory);
+            fdtdRequestFactory: fdtdRequestFactory,
+            dockerSetupDialog: dockerSetupDialog);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
