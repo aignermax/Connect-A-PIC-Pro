@@ -51,4 +51,15 @@ public class ActiveProcessResolverTests
         warning!.ShouldContain("SOI 220");
         warning.ShouldContain("InP");
     }
+
+    [Fact]
+    public void Migrate_ComponentsFromUninstalledPdk_FallsBackToPlaygroundNamingMissingPdk()
+    {
+        var sel = ActiveProcessResolver.Migrate(
+            new[] { "Ghost PDK" }, new[] { Soi, Inp }, out var warning);
+        sel!.IsPlayground.ShouldBeTrue();
+        warning.ShouldNotBeNull();
+        warning!.ShouldContain("Ghost PDK");
+        warning.ShouldNotContain("multiple processes");
+    }
 }

@@ -59,6 +59,14 @@ public static class ActiveProcessResolver
         if (matched.Count == 1)
             return ActiveProcessSelection.ForGroup(matched[0]);
 
+        if (matched.Count == 0)
+        {
+            warning = "This design uses PDK(s) that are not currently available: " +
+                $"{string.Join(", ", pdkNames)}. Opened in Playground — install the missing " +
+                "PDK(s) or start a new design.";
+            return ActiveProcessSelection.Playground();
+        }
+
         warning = "This design contains components from multiple processes " +
             $"({string.Join(", ", matched.Select(g => g.DisplayName))}). Opened in Playground — " +
             "not manufacturable. Remove conflicting components or start a new design.";
