@@ -143,12 +143,32 @@ public class GdsCoordinateExtractionTests
 
             var polygon = polygons[0];
             polygon.GetProperty("layer").GetInt32().ShouldBe(1);
+
+            // GDS BOUNDARY records store a *closed* polygon (last vertex repeats the
+            // first); whether the reader strips that duplicate is gdspy-version
+            // dependent. Accept both representations, then compare the distinct
+            // corner set so the actual coordinate payload is verified either way.
             var vertices = polygon.GetProperty("vertices");
-            vertices.GetArrayLength().ShouldBe(4, "Rectangle must have 4 vertices");
+            var points = new List<(double X, double Y)>();
             foreach (var vertex in vertices.EnumerateArray())
             {
                 vertex.GetArrayLength().ShouldBe(2, "Each vertex must be an [x, y] pair");
+                points.Add((vertex[0].GetDouble(), vertex[1].GetDouble()));
             }
+
+            points.Count.ShouldBeInRange(4, 5,
+                "Rectangle must have 4 vertices (or 5 when the closing vertex is kept)");
+            if (points.Count == 5)
+            {
+                points[4].ShouldBe(points[0],
+                    "A 5-vertex polygon must be closed (last vertex repeats the first)");
+                points.RemoveAt(4);
+            }
+
+            var expectedCorners = new[] { (0d, 0d), (0d, 10d), (10d, 10d), (10d, 0d) };
+            points.OrderBy(p => p.X).ThenBy(p => p.Y)
+                .ShouldBe(expectedCorners.OrderBy(p => p.Item1).ThenBy(p => p.Item2),
+                    "Polygon corners must match the 10x10 rectangle at the origin");
         }
         finally
         {
