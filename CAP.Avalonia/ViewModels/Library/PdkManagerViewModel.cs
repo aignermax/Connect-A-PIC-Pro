@@ -14,6 +14,14 @@ public partial class PdkManagerViewModel : ObservableObject
     private string _statusText = "";
 
     /// <summary>
+    /// True when the user may freely toggle individual PDKs on/off. Set to false while a real
+    /// (non-Playground) process governs the enabled set (issue #570), so the per-PDK checkboxes
+    /// in the PDK-manager UI can be disabled/hidden and reflect that the selection is locked.
+    /// </summary>
+    [ObservableProperty]
+    private bool _manualTogglesEnabled = true;
+
+    /// <summary>
     /// Collection of all loaded PDK information.
     /// Each item tracks name, path, component count, and enabled state.
     /// </summary>
@@ -123,6 +131,22 @@ public partial class PdkManagerViewModel : ObservableObject
             .Where(p => p.IsEnabled)
             .Select(p => p.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Drives the enabled set directly: every loaded PDK whose name is in <paramref name="names"/>
+    /// is enabled, all others disabled. Used to lock the library to the active process's member
+    /// PDKs (issue #570); callers are expected to also set <see cref="ManualTogglesEnabled"/>.
+    /// </summary>
+    public void SetEnabledPdks(IEnumerable<string> names)
+    {
+        var nameSet = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        foreach (var pdk in LoadedPdks)
+        {
+            pdk.IsEnabled = nameSet.Contains(pdk.Name);
+        }
+
+        OnFilterChanged?.Invoke();
     }
 }
 

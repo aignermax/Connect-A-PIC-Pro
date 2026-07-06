@@ -27,6 +27,13 @@ public class ComponentClipboard
     public bool HasContent => _entries.Count > 0;
 
     /// <summary>
+    /// PDK sources of every copied component, in copy order (issue #570). Lets callers
+    /// (e.g. <c>CanvasInteractionViewModel.PasteSelected</c>) check the active-process policy
+    /// against clipboard contents before executing the paste command.
+    /// </summary>
+    public IReadOnlyList<string?> PeekPdkSources() => _entries.Select(e => e.PdkSource).ToList();
+
+    /// <summary>
     /// Copies the given components and their internal connections.
     /// </summary>
     public void Copy(
@@ -45,7 +52,8 @@ public class ComponentClipboard
                 comp.Component,
                 comp.TemplateName,
                 comp.X,
-                comp.Y));
+                comp.Y,
+                comp.TemplatePdkSource));
         }
 
         // Capture internal connections (both endpoints inside selection)
@@ -336,7 +344,8 @@ public class ComponentClipboard
         Component OriginalComponent,
         string? TemplateName,
         double OriginalX,
-        double OriginalY);
+        double OriginalY,
+        string? PdkSource);
 
     /// <summary>
     /// Data stored for an internal connection between copied components.

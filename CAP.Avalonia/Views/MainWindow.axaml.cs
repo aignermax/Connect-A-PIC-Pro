@@ -11,6 +11,7 @@ using CAP_Core.Components.Core;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
+using CAP.Avalonia.ViewModels.Process;
 using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
@@ -92,6 +93,15 @@ public partial class MainWindow : Window
                         DataContext = processVm
                     };
                     processWindow.Show(this);
+                };
+
+                // Wire up the New-Design process-selection dialog (issue #570)
+                vm.ShowProcessSelectionAsync = async groups =>
+                {
+                    var pvm = new ProcessSelectionViewModel(groups);
+                    var dlg = new ProcessSelectionDialog { DataContext = pvm };
+                    await dlg.ShowDialog(this);
+                    return pvm.Result;
                 };
 
                 // Wire up clipboard for RoutingDiagnostics

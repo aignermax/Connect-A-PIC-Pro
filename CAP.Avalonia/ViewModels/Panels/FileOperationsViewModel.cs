@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -63,6 +64,35 @@ public partial class FileOperationsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasUnsavedChanges;
+
+    /// <summary>
+    /// The fabrication process this design is currently locked to (issue #570).
+    /// Null means no components have been placed yet. Set via <see cref="SetActiveProcess"/>
+    /// (from the New-Design dialog or the process picker), restored on load, or migrated
+    /// from a legacy file's placed-component PDK sources.
+    /// </summary>
+    [ObservableProperty]
+    private ActiveProcessSelection? _activeProcess;
+
+    /// <summary>
+    /// Supplies the current set of installable/loaded process groups. Wired by DI/MainViewModel
+    /// to the live PDK catalog; used to migrate legacy files that predate single-process support.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
+    /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
+    /// analyzer-only tool PDKs never count toward a legacy design's process attribution
+    /// (issue #570 final review).
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? ProcessAgnosticPdkNamesProvider { get; set; }
+
+    /// <summary>
+    /// Callback invoked when loading a legacy file requires falling back to Playground
+    /// because its components could not be attributed to a single installed process.
+    /// </summary>
+    public Action<string>? OnProcessMigrationWarning { get; set; }
 
     /// <summary>
     /// ViewModel for GDS export functionality.
@@ -218,6 +248,16 @@ public partial class FileOperationsViewModel : ObservableObject
         ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
     }
 
+    /// <summary>
+    /// Sets the active process this design is locked to (issue #570), e.g. from the
+    /// New-Design dialog or a process-picker action, and marks the project as dirty.
+    /// </summary>
+    public void SetActiveProcess(ActiveProcessSelection? selection)
+    {
+        ActiveProcess = selection;
+        HasUnsavedChanges = true;
+    }
+
     [RelayCommand]
     private async Task SaveDesign()
     {
@@ -333,6 +373,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
+            designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -756,6 +797,24 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
+
+                // Restore the active process (issue #570), or infer one for legacy files
+                // that predate single-process support from the placed components' PDKs.
+                var storedProcess = ActiveProcessResolver.FromData(designData.ActiveProcess);
+                if (storedProcess != null)
+                {
+                    ActiveProcess = storedProcess;
+                }
+                else
+                {
+                    var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    var pdkSources = designData.Components.Select(c => c.PdkSource)
+                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                                ?? Enumerable.Empty<string?>());
+                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
+                        ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
+                    if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
+                }
 
                 // Restore imported S-matrices from PIR section
                 StoredSMatrices.Clear();
