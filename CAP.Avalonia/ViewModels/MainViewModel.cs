@@ -467,6 +467,7 @@ public partial class MainViewModel : ObservableObject
         ActiveProcessLabel = p == null ? "No process selected"
             : p.IsPlayground ? "Playground — not manufacturable"
             : $"Process: {p.DisplayName}";
+        LeftPanel.ApplyActiveProcess(p);
     }
 
     // Canvas interaction delegates

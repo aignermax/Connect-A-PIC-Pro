@@ -401,4 +401,24 @@ public partial class LeftPanelViewModel : ObservableObject
     /// <summary>Process fingerprints of all loaded PDKs, for single-process grouping (#570).</summary>
     public IReadOnlyList<PdkProcessEntry> GetLoadedPdkProcessEntries() =>
         _loadedPdkDrafts.Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
+
+    /// <summary>
+    /// Drives the library filter to the active process's PDKs (issue #570). A real (non-Playground)
+    /// process locks the enabled set to exactly its member PDKs and disallows manual toggling;
+    /// Playground or no selection restores manual control, leaving the current enables as-is.
+    /// </summary>
+    public void ApplyActiveProcess(ActiveProcessSelection? active)
+    {
+        if (active is { IsPlayground: false })
+        {
+            PdkManager.SetEnabledPdks(active.MemberPdkNames);
+            PdkManager.ManualTogglesEnabled = false;
+        }
+        else
+        {
+            PdkManager.ManualTogglesEnabled = true;
+        }
+
+        FilterComponents();
+    }
 }
