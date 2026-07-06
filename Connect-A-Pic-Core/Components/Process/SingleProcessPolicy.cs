@@ -19,6 +19,15 @@ public static class SingleProcessPolicy
         string.Equals(pdkSource, BuiltInSource, StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
+    /// True when the PDK source is exempt from process enforcement: built-in components and
+    /// members of process-agnostic tool PDKs (e.g. "Analysis Tools"). Single source of truth
+    /// shared by placement checks and legacy-file migration so the two can never drift.
+    /// </summary>
+    public static bool IsExempt(string? pdkSource, IReadOnlyCollection<string>? processAgnosticPdkNames) =>
+        IsBuiltIn(pdkSource) ||
+        (processAgnosticPdkNames?.Contains(pdkSource!, StringComparer.OrdinalIgnoreCase) ?? false);
+
+    /// <summary>
     /// Decides whether a component from <paramref name="componentPdkName"/> may be placed on a
     /// design locked to <paramref name="active"/>. Built-ins, process-agnostic PDKs (tool
     /// libraries such as "Analysis Tools" — see <paramref name="processAgnosticPdkNames"/>),
@@ -29,11 +38,7 @@ public static class SingleProcessPolicy
         ActiveProcessSelection? active, string? componentPdkName,
         IReadOnlyCollection<string>? processAgnosticPdkNames = null)
     {
-        if (IsBuiltIn(componentPdkName))
-            return (true, null);
-
-        if (processAgnosticPdkNames != null &&
-            processAgnosticPdkNames.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
+        if (IsExempt(componentPdkName, processAgnosticPdkNames))
             return (true, null);
 
         if (active == null || active.IsPlayground)

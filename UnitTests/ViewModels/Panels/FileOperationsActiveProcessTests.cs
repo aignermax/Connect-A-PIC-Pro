@@ -126,6 +126,68 @@ public class FileOperationsActiveProcessTests
         }
     }
 
+    [Fact]
+    public void SetActiveProcess_MarkDirtyFalse_DoesNotFlagUnsavedChanges()
+    {
+        var (vm, _) = CreateFileOperationsSetup();
+        vm.HasUnsavedChanges.ShouldBeFalse();
+
+        vm.SetActiveProcess(ActiveProcessSelection.Playground(), markDirty: false);
+
+        vm.ActiveProcess.ShouldNotBeNull();
+        vm.HasUnsavedChanges.ShouldBeFalse(
+            "the startup/New-Design picker must not turn a pristine design dirty");
+    }
+
+    [Fact]
+    public void SetActiveProcess_Default_FlagsUnsavedChanges()
+    {
+        var (vm, _) = CreateFileOperationsSetup();
+        vm.HasUnsavedChanges.ShouldBeFalse();
+
+        vm.SetActiveProcess(ActiveProcessSelection.Playground());
+
+        vm.ActiveProcess.ShouldNotBeNull();
+        vm.HasUnsavedChanges.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task TryNewProjectAsync_UnsavedChangesAndCancel_ReturnsFalseAndKeepsDesign()
+    {
+        var (vm, canvas) = CreateFileOperationsSetup();
+        canvas.AddComponent(TestComponentFactory.CreateStraightWaveGuide());
+        vm.HasUnsavedChanges.ShouldBeTrue("adding a component marks the design dirty");
+
+        var messageBox = new Mock<IMessageBoxService>();
+        messageBox.Setup(m => m.ShowSavePromptAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(SavePromptResult.Cancel);
+        vm.MessageBoxService = messageBox.Object;
+
+        var created = await vm.TryNewProjectAsync();
+
+        created.ShouldBeFalse("cancelling the save prompt must cancel the new project");
+        canvas.Components.Count.ShouldBe(1, "the current design must stay untouched");
+        vm.HasUnsavedChanges.ShouldBeTrue("the cancelled operation must not reset the dirty flag");
+    }
+
+    [Fact]
+    public async Task TryNewProjectAsync_NoUnsavedChanges_ReturnsTrueWithoutPrompting()
+    {
+        var (vm, _) = CreateFileOperationsSetup();
+        vm.HasUnsavedChanges.ShouldBeFalse();
+
+        var messageBox = new Mock<IMessageBoxService>();
+        messageBox.Setup(m => m.ShowSavePromptAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(SavePromptResult.Cancel);
+        vm.MessageBoxService = messageBox.Object;
+
+        var created = await vm.TryNewProjectAsync();
+
+        created.ShouldBeTrue();
+        messageBox.Verify(m => m.ShowSavePromptAsync(It.IsAny<string>(), It.IsAny<string>()),
+            Times.Never, "a clean design must not answer a save prompt");
+    }
+
     /// <summary>
     /// Creates a FileOperationsViewModel with a real component library for testing.
     /// Mirrors the setup helper in <c>DesignFileGroupPersistenceTests</c>.

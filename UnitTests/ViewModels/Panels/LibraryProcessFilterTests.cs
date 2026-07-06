@@ -25,6 +25,7 @@ public class LibraryProcessFilterTests : IDisposable
 {
     private readonly string _testPrefsPath;
     private readonly LeftPanelViewModel _leftPanel;
+    private readonly UserPreferencesService _preferencesService;
 
     public LibraryProcessFilterTests()
     {
@@ -33,6 +34,7 @@ public class LibraryProcessFilterTests : IDisposable
 
         var prefsFile = Path.Combine(_testPrefsPath, "user-preferences.json");
         var preferencesService = new UserPreferencesService();
+        _preferencesService = preferencesService;
 
         // Point the preferences service at an isolated temp file, same pattern as
         // LeftPanelWidthPersistenceTests, so this test never touches real user prefs.
@@ -141,5 +143,60 @@ public class LibraryProcessFilterTests : IDisposable
         _leftPanel.ApplyActiveProcess(null);
 
         _leftPanel.PdkManager.ManualTogglesEnabled.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// Manually enables exactly one non-demo, non-agnostic PDK so the persisted
+    /// preferences hold a user selection that differs from any process-locked set.
+    /// Returns the name of that PDK.
+    /// </summary>
+    private string EnableCustomManualSelection()
+    {
+        var demoPdkName = DemoPdkName();
+        var agnosticNames = _leftPanel.GetProcessAgnosticPdkNames();
+        var customPdkName = _leftPanel.PdkManager.LoadedPdks
+            .First(p => !p.Name.Equals(demoPdkName, StringComparison.OrdinalIgnoreCase) &&
+                        !agnosticNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase))
+            .Name;
+
+        // Toggle with manual control active — each change persists via SavePdkFilterState.
+        foreach (var pdk in _leftPanel.PdkManager.LoadedPdks)
+            pdk.IsEnabled = pdk.Name.Equals(customPdkName, StringComparison.OrdinalIgnoreCase);
+
+        _preferencesService.GetEnabledPdks()
+            .ShouldBe(new[] { customPdkName }, ignoreOrder: true,
+                "sanity: the manual selection must be persisted before locking");
+        return customPdkName;
+    }
+
+    [Fact]
+    public void ApplyActiveProcess_LockedProcess_DoesNotOverwritePersistedManualSelection()
+    {
+        var customPdkName = EnableCustomManualSelection();
+
+        _leftPanel.ApplyActiveProcess(new ActiveProcessSelection(
+            DisplayName: "Demo Process",
+            Fingerprint: null,
+            MemberPdkNames: new List<string> { DemoPdkName() },
+            IsPlayground: false));
+
+        _preferencesService.GetEnabledPdks().ShouldBe(new[] { customPdkName }, ignoreOrder: true,
+            "the process-locked enable set is derived state and must never replace the user's persisted selection");
+    }
+
+    [Fact]
+    public void ApplyActiveProcess_BackToPlayground_RestoresUsersPersistedSelection()
+    {
+        var customPdkName = EnableCustomManualSelection();
+
+        _leftPanel.ApplyActiveProcess(new ActiveProcessSelection(
+            DisplayName: "Demo Process",
+            Fingerprint: null,
+            MemberPdkNames: new List<string> { DemoPdkName() },
+            IsPlayground: false));
+        _leftPanel.ApplyActiveProcess(ActiveProcessSelection.Playground());
+
+        _leftPanel.PdkManager.GetEnabledPdkNames().ShouldBe(new[] { customPdkName }, ignoreOrder: true,
+            "leaving the lock must restore the user's own selection, not keep the locked set");
     }
 }

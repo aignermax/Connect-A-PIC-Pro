@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Creation;
 using CAP_Core.Components.Process;
 using CAP_Core.LightCalculation;
 using CAP_Core.Tiles;
@@ -184,6 +185,39 @@ public class CanvasInteractionProcessEnforcementTests
         interaction.PasteSelected();
 
         canvas.Components.Count.ShouldBe(countBeforePaste + 1, "a member-PDK clipboard entry must paste normally");
+    }
+
+    [Fact]
+    public void PlaceGroupTemplateAt_ChildResolvesToForeignProcessPdk_BlocksPlacementAndReportsStatus()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var commandManager = new CommandManager();
+        var libraryVm = new ComponentLibraryViewModel(new GroupLibraryManager());
+        var interaction = new CanvasInteractionViewModel(canvas, commandManager, libraryVm);
+
+        interaction.GetActiveProcess = () => Soi("Demo");
+        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        // Group templates record no PDK source — every child resolves through the library,
+        // here to a PDK that is not a member of the active process.
+        interaction.ResolvePdkSource = _ => "HHI-InP";
+
+        var group = TestComponentFactory.CreateComponentGroup("ForeignGroup", addChildren: true);
+        interaction.SelectedGroupTemplate = new GroupTemplate
+        {
+            Name = "ForeignGroup",
+            TemplateGroup = group,
+            ComponentCount = group.ChildComponents.Count
+        };
+
+        string? status = null;
+        interaction.UpdateStatus = s => status = s;
+
+        interaction.CanvasClicked(100, 100);
+
+        canvas.Components.Count.ShouldBe(0, "a group with a foreign-process child must not be placed");
+        commandManager.CanUndo.ShouldBeFalse("the blocked attempt must not touch the undo stack");
+        status.ShouldNotBeNull();
+        status!.ShouldContain("process");
     }
 
     private static Component CreateComponent(double width, double height)

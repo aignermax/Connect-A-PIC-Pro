@@ -250,12 +250,19 @@ public partial class FileOperationsViewModel : ObservableObject
 
     /// <summary>
     /// Sets the active process this design is locked to (issue #570), e.g. from the
-    /// New-Design dialog or a process-picker action, and marks the project as dirty.
+    /// New-Design dialog or a process-picker action.
     /// </summary>
-    public void SetActiveProcess(ActiveProcessSelection? selection)
+    /// <param name="selection">The process to lock the design to (or Playground).</param>
+    /// <param name="markDirty">
+    /// False for the startup / New-Design picker: choosing the baseline process of a
+    /// pristine empty design is not an unsaved change, and marking it dirty made every
+    /// fresh launch answer a spurious "Save changes?" prompt.
+    /// </param>
+    public void SetActiveProcess(ActiveProcessSelection? selection, bool markDirty = true)
     {
         ActiveProcess = selection;
-        HasUnsavedChanges = true;
+        if (markDirty)
+            HasUnsavedChanges = true;
     }
 
     [RelayCommand]
@@ -472,6 +479,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Finds the PDK source for a component by matching its NazcaFunctionName against the library.
     /// Returns null if no match is found.
     /// </summary>
+    /// <summary>
+    /// Resolves a component's PDK source from the loaded library (by Nazca function
+    /// name). Shared with the clipboard and group-template placement paths so process
+    /// enforcement (issue #570) sees a real source even when the ViewModel-level
+    /// <c>TemplatePdkSource</c> was lost (pasted copies, group children, undo).
+    /// </summary>
+    public string? ResolveTemplatePdkSource(Component component) => FindTemplatePdkSource(component);
+
     private string? FindTemplatePdkSource(Component component)
     {
         var nazcaFunc = component.NazcaFunctionName;
@@ -803,7 +818,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 var storedProcess = ActiveProcessResolver.FromData(designData.ActiveProcess);
                 if (storedProcess != null)
                 {
-                    ActiveProcess = storedProcess;
+                    // Re-anchor the stored snapshot to the installed catalog: compatible
+                    // PDKs installed since the save join the process, and a design whose
+                    // PDKs are missing warns instead of silently bricking the library.
+                    var installedCatalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    ActiveProcess = ActiveProcessResolver.Revalidate(
+                        storedProcess, installedCatalog, out var revalidationWarning);
+                    if (revalidationWarning != null)
+                        OnProcessMigrationWarning?.Invoke(revalidationWarning);
                 }
                 else
                 {
@@ -907,7 +929,16 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Exits group edit mode if active before clearing the canvas.
     /// </summary>
     [RelayCommand]
-    private async Task NewProject()
+    private async Task NewProject() => await TryNewProjectAsync();
+
+    /// <summary>
+    /// Command body of File → New, returning whether the new project was actually
+    /// created. False means the user cancelled (save prompt or save dialog) and the
+    /// current design is untouched — callers such as the process picker must NOT
+    /// proceed in that case. An empty canvas is no substitute for this signal: the
+    /// canvas can be empty while the operation was still cancelled.
+    /// </summary>
+    public async Task<bool> TryNewProjectAsync()
     {
         // Check if there are unsaved changes
         if (HasUnsavedChanges && MessageBoxService != null)
@@ -924,13 +955,13 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (HasUnsavedChanges)
                 {
                     // User cancelled the save dialog, so cancel new project
-                    return;
+                    return false;
                 }
             }
             else if (result == SavePromptResult.Cancel)
             {
                 // User cancelled, do nothing
-                return;
+                return false;
             }
             // DontSave: continue to clear
         }
@@ -951,6 +982,7 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+        return true;
     }
 
     /// <summary>

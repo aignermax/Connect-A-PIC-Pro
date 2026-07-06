@@ -19,7 +19,7 @@ public static class ActiveProcessResolver
         CoreMaterial = sel.Fingerprint?.CoreMaterial,
         CoreThicknessNm = sel.Fingerprint?.CoreThicknessNm,
         Cladding = sel.Fingerprint?.Cladding,
-        DesignWavelengthNm = sel.Fingerprint?.DesignWavelengthNm ?? 1550,
+        DesignWavelengthNm = sel.Fingerprint?.DesignWavelengthNm ?? ProcessFingerprint.DefaultDesignWavelengthNm,
         ProcessName = sel.Fingerprint?.ProcessName,
         MemberPdkNames = sel.MemberPdkNames.ToList(),
     };
@@ -32,6 +32,39 @@ public static class ActiveProcessResolver
         var fp = new ProcessFingerprint(data.CoreMaterial, data.CoreThicknessNm, data.Cladding,
             data.DesignWavelengthNm, data.ProcessName);
         return new ActiveProcessSelection(data.DisplayName, fp, data.MemberPdkNames, IsPlayground: false);
+    }
+
+    /// <summary>
+    /// Re-anchors a stored (non-legacy) selection to the currently installed process
+    /// catalog. A stored process is a snapshot of the save-time member-PDK list; matching
+    /// against the live catalog (by fingerprint compatibility, falling back to member-name
+    /// overlap for unspecified fingerprints) means newly installed compatible PDKs join the
+    /// process, and designs whose PDKs are missing get an explicit warning instead of
+    /// silently locking the library to nonexistent names.
+    /// </summary>
+    /// <param name="stored">The selection read from the design file. Playground passes through.</param>
+    /// <param name="catalog">The currently installed process groups.</param>
+    /// <param name="warning">Set when no installed PDK belongs to the stored process.</param>
+    public static ActiveProcessSelection Revalidate(
+        ActiveProcessSelection stored,
+        IReadOnlyList<ProcessGroup> catalog,
+        out string? warning)
+    {
+        warning = null;
+        if (stored.IsPlayground) return stored;
+
+        var match = catalog.FirstOrDefault(g =>
+            (stored.Fingerprint is { IsSpecified: true } fp && g.Fingerprint.IsSpecified &&
+             ProcessCompatibility.AreCompatible(g.Fingerprint, fp)) ||
+            g.MemberPdkNames.Intersect(stored.MemberPdkNames, System.StringComparer.OrdinalIgnoreCase).Any());
+
+        if (match != null)
+            return ActiveProcessSelection.ForGroup(match);
+
+        warning = $"This design is locked to the process '{stored.DisplayName}', but none of its " +
+            $"PDK(s) ({string.Join(", ", stored.MemberPdkNames)}) are installed. Only tool " +
+            "components are available — install the missing PDK(s) to edit the design.";
+        return stored;
     }
 
     /// <summary>
@@ -56,8 +89,7 @@ public static class ActiveProcessResolver
     {
         warning = null;
         var pdkNames = componentPdkSources
-            .Where(s => !SingleProcessPolicy.IsBuiltIn(s) &&
-                        !(processAgnosticPdkNames?.Contains(s!, System.StringComparer.OrdinalIgnoreCase) ?? false))
+            .Where(s => !SingleProcessPolicy.IsExempt(s, processAgnosticPdkNames))
             .Select(s => s!)
             .Distinct(System.StringComparer.OrdinalIgnoreCase)
             .ToList();
@@ -68,7 +100,19 @@ public static class ActiveProcessResolver
             .ToList();
 
         if (matched.Count == 1)
+        {
+            // Partial coverage is not silent success: components from PDKs the matched
+            // process does NOT cover (typically uninstalled PDKs) would otherwise sit on
+            // a chip that now claims to be manufacturable under that process.
+            var uncovered = pdkNames
+                .Where(n => !matched[0].MemberPdkNames.Contains(n, System.StringComparer.OrdinalIgnoreCase))
+                .ToList();
+            if (uncovered.Count > 0)
+                warning = $"Locked to process '{matched[0].DisplayName}', but the design also " +
+                    $"contains components from unavailable PDK(s): {string.Join(", ", uncovered)}. " +
+                    "Those components are not covered by the process — remove them or install their PDK(s).";
             return ActiveProcessSelection.ForGroup(matched[0]);
+        }
 
         if (matched.Count == 0)
         {

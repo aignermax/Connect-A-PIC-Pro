@@ -16,6 +16,9 @@ public sealed record ProcessFingerprint(
     int DesignWavelengthNm,
     string? ProcessName)
 {
+    /// <summary>Fallback design wavelength (C-band) for PDKs that don't declare one.</summary>
+    public const int DefaultDesignWavelengthNm = 1550;
+
     /// <summary>True when the fingerprint carries a complete physical fingerprint (core material, thickness, and cladding all present).</summary>
     public bool IsSpecified => !string.IsNullOrWhiteSpace(CoreMaterial) && CoreThicknessNm.HasValue && !string.IsNullOrWhiteSpace(Cladding);
 }

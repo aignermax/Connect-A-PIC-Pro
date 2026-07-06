@@ -300,6 +300,11 @@ public partial class LeftPanelViewModel : ObservableObject
 
     private void SavePdkFilterState()
     {
+        // A process-locked enable set is derived state (issue #570) — persisting it
+        // would permanently overwrite the user's own manual PDK selection.
+        if (!PdkManager.ManualTogglesEnabled)
+            return;
+
         var enabledPdks = PdkManager.GetEnabledPdkNames();
         _preferencesService.SetEnabledPdks(enabledPdks);
     }
@@ -385,6 +390,9 @@ public partial class LeftPanelViewModel : ObservableObject
             PdkManager.RegisterPdk(pdk.Name, filePath, false, addedCount);
             _preferencesService.AddUserPdkPath(filePath);
 
+            // A PDK imported while a process is locked must not escape the lock:
+            // re-apply so a foreign PDK registers disabled (issue #570).
+            ReapplyActiveProcessAfterPdkChange();
             FilterComponents();
             UpdateStatus?.Invoke($"Loaded PDK '{pdk.Name}' with {addedCount} components");
         }
@@ -418,21 +426,44 @@ public partial class LeftPanelViewModel : ObservableObject
     /// <summary>
     /// Drives the library filter to the active process's PDKs (issue #570). A real (non-Playground)
     /// process locks the enabled set to its member PDKs plus any process-agnostic tool PDKs, and
-    /// disallows manual toggling; Playground or no selection restores manual control, leaving the
-    /// current enables as-is.
+    /// disallows manual toggling; Playground or no selection restores manual control and brings the
+    /// user's own (persisted) enable selection back — the locked set is derived state and must
+    /// never replace it.
     /// </summary>
     public void ApplyActiveProcess(ActiveProcessSelection? active)
     {
+        _lastAppliedProcess = active;
         if (active is { IsPlayground: false })
         {
-            PdkManager.SetEnabledPdks(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
+            // Order matters: the lock flag must be set BEFORE SetEnabledPdks — that call
+            // triggers FilterComponents → SavePdkFilterState, whose guard reads the flag.
+            // Reversed, the locked set would be persisted over the user's own selection.
             PdkManager.ManualTogglesEnabled = false;
+            PdkManager.SetEnabledPdks(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
+            FilterComponents();
         }
         else
         {
             PdkManager.ManualTogglesEnabled = true;
+            // Leaving a locked process: restore the user's persisted selection instead of
+            // keeping the previous process's enable set (which would silently hide every
+            // other PDK in Playground). RestorePdkFilterState already re-filters.
+            RestorePdkFilterState();
+            FilterComponents();
         }
+    }
 
-        FilterComponents();
+    /// <summary>
+    /// The most recently applied process selection. Re-applied when a PDK is loaded
+    /// afterwards, so importing a PDK while a process is locked cannot slip foreign
+    /// components into the library (issue #570).
+    /// </summary>
+    private ActiveProcessSelection? _lastAppliedProcess;
+
+    /// <summary>Re-applies the current process lock after a PDK load/import.</summary>
+    internal void ReapplyActiveProcessAfterPdkChange()
+    {
+        if (_lastAppliedProcess is { IsPlayground: false })
+            ApplyActiveProcess(_lastAppliedProcess);
     }
 }

@@ -105,6 +105,19 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// </summary>
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
+    /// <summary>
+    /// Resolves a component's PDK source from the loaded library (issue #570). Saved
+    /// group templates record no PDK source, so their children are resolved through
+    /// this before placement. Wired by <c>MainViewModel</c> to
+    /// <c>FileOperationsViewModel.ResolveTemplatePdkSource</c>.
+    /// </summary>
+    public Func<Component, string?>? ResolvePdkSource { get; set; }
+
+    /// <summary>Flattens a group's children, recursing into nested groups.</summary>
+    private static IEnumerable<Component> FlattenGroupChildren(ComponentGroup group) =>
+        group.ChildComponents.SelectMany(c =>
+            c is ComponentGroup nested ? FlattenGroupChildren(nested) : new[] { c });
+
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
@@ -351,6 +364,23 @@ public partial class CanvasInteractionViewModel : ObservableObject
         if (SelectedGroupTemplate.TemplateGroup == null)
         {
             UpdateStatus?.Invoke($"ERROR: Template '{SelectedGroupTemplate.Name}' not loaded! TemplateGroup is null.");
+            return;
+        }
+
+        // Single-process enforcement (issue #570): saved group templates record no PDK
+        // source themselves, so resolve every child component against the library and
+        // apply the same gate as single-component placement.
+        var active = GetActiveProcess?.Invoke();
+        var agnostic = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var blockReasonForGroup = FlattenGroupChildren(SelectedGroupTemplate.TemplateGroup)
+            .Select(child => SingleProcessPolicy.CheckPlacement(
+                active, ResolvePdkSource?.Invoke(child), agnostic))
+            .Where(check => !check.IsAllowed)
+            .Select(check => check.BlockReason)
+            .FirstOrDefault();
+        if (blockReasonForGroup != null)
+        {
+            UpdateStatus?.Invoke(blockReasonForGroup);
             return;
         }
 

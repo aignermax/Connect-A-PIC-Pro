@@ -10,12 +10,26 @@ namespace CAP_Core.Components.Process;
 /// </summary>
 public static class ProcessCatalog
 {
-    /// <summary>Builds the process groups from the given PDK fingerprints.</summary>
+    /// <summary>
+    /// Builds the process groups from the given PDK fingerprints. Entries are sorted
+    /// deterministically first: greedy tolerance-based grouping is order-dependent
+    /// (compatibility is not transitive — 218/222/226 nm chains split differently per
+    /// insertion order), and the natural input order comes from filesystem enumeration,
+    /// which differs across machines. Sorting makes the same PDK set always yield the
+    /// same groups everywhere.
+    /// </summary>
     public static IReadOnlyList<ProcessGroup> BuildGroups(IEnumerable<PdkProcessEntry> pdks)
     {
+        var ordered = pdks
+            .OrderBy(p => p.Fingerprint.CoreMaterial, System.StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.Fingerprint.CoreThicknessNm)
+            .ThenBy(p => p.Fingerprint.Cladding, System.StringComparer.OrdinalIgnoreCase)
+            .ThenBy(p => p.Fingerprint.DesignWavelengthNm)
+            .ThenBy(p => p.PdkName, System.StringComparer.OrdinalIgnoreCase);
+
         var groups = new List<List<PdkProcessEntry>>();
 
-        foreach (var entry in pdks)
+        foreach (var entry in ordered)
         {
             var target = entry.Fingerprint.IsSpecified
                 ? groups.FirstOrDefault(g =>

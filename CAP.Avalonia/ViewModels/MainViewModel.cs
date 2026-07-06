@@ -184,7 +184,8 @@ public partial class MainViewModel : ObservableObject
         ViewModels.Canvas.ChipSizeViewModel chipSize,
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
-        Services.IUrlLauncher? urlLauncher = null)
+        Services.IUrlLauncher? urlLauncher = null,
+        Services.IAiGridService? aiGridService = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         Simulation = simulationService;
@@ -229,10 +230,24 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
-        // Single-process enforcement at placement/paste (issue #570): consult the design's
-        // active process and the process-agnostic tool PDKs (e.g. "Analysis Tools").
-        CanvasInteraction.GetActiveProcess = () => FileOperations.ActiveProcess;
-        CanvasInteraction.GetProcessAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+        // Single-process enforcement (issue #570): every placement surface — manual
+        // placement/paste, saved group templates, and the AI assistant — consults the
+        // same active process, the same process-agnostic tool PDKs, and the same
+        // library-based PDK-source resolver.
+        Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
+        Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+        Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource =
+            comp => FileOperations.ResolveTemplatePdkSource(comp);
+
+        CanvasInteraction.GetActiveProcess = getActiveProcess;
+        CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+        CanvasInteraction.ResolvePdkSource = resolvePdkSource;
+        _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+        if (aiGridService is Services.AiGridService aiGrid)
+        {
+            aiGrid.GetActiveProcess = getActiveProcess;
+            aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+        }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
         // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
@@ -426,10 +441,15 @@ public partial class MainViewModel : ObservableObject
         // Single-process wiring (issue #570): supply the live PDK catalog for the
         // New-Design picker and legacy-file migration, route migration warnings to
         // the status bar, and keep the toolbar indicator in sync with the active process.
-        FileOperations.ProcessCatalogProvider = () =>
-            ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+        FileOperations.ProcessCatalogProvider = BuildProcessCatalog;
         FileOperations.ProcessAgnosticPdkNamesProvider = () => LeftPanel.GetProcessAgnosticPdkNames();
-        FileOperations.OnProcessMigrationWarning = UpdateStatusText;
+        // Migration/revalidation warnings must survive the next status update — the
+        // status bar is overwritten by the load-complete message an instant later.
+        FileOperations.OnProcessMigrationWarning = warning =>
+        {
+            UpdateStatusText(warning);
+            ErrorConsole.LogWarning(warning);
+        };
         FileOperations.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
@@ -553,13 +573,12 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task NewProject()
     {
-        await FileOperations.NewProjectCommand.ExecuteAsync(null);
-
-        // NewProjectCommand no-ops (e.g. the user cancelled the unsaved-changes save
-        // prompt) without clearing the canvas. Applying a picked process to that
-        // still-populated, un-cleared design would corrupt the process/canvas
-        // invariant #570 exists to protect — abort before showing the picker.
-        if (Canvas.Components.Count > 0 || Canvas.Connections.Count > 0)
+        // TryNewProjectAsync reports cancellation explicitly. An empty canvas is NOT a
+        // usable success signal: the canvas can already be empty while the user cancels
+        // the unsaved-changes prompt, and showing the picker then would overwrite the
+        // process of a design the user explicitly chose to keep (issue #570).
+        var created = await FileOperations.TryNewProjectAsync();
+        if (!created)
             return;
 
         await PickAndApplyProcessAsync();
@@ -579,6 +598,14 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Builds the live process catalog from the loaded PDKs. Single definition shared by
+    /// the New-Design/startup picker and the file-load migration path, so the two can
+    /// never diverge on how the catalog is constructed.
+    /// </summary>
+    private IReadOnlyList<ProcessGroup> BuildProcessCatalog() =>
+        ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+
+    /// <summary>
     /// Shows the process picker and applies the result to the design. Dismissing the picker
     /// defaults to Playground (not manufacturable) rather than leaving the process undefined,
     /// so the design is always in a known state (issue #570). No-op when no picker is wired
@@ -589,9 +616,12 @@ public partial class MainViewModel : ObservableObject
         if (ShowProcessSelectionAsync == null)
             return;
 
-        var groups = ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+        var groups = BuildProcessCatalog();
         var selection = await ShowProcessSelectionAsync(groups);
-        FileOperations.SetActiveProcess(selection ?? ActiveProcessSelection.Playground());
+        // markDirty: false — picking the baseline process of a fresh, empty design is
+        // not an unsaved change; marking it dirty made every launch (and every File→New)
+        // answer a spurious "Save changes?" prompt for an untouched design.
+        FileOperations.SetActiveProcess(selection ?? ActiveProcessSelection.Playground(), markDirty: false);
     }
 
     [RelayCommand]

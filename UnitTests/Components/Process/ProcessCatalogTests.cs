@@ -55,8 +55,9 @@ public class ProcessCatalogTests
     [Fact]
     public void ChainedToleranceDrift_DoesNotGroupNonMutuallyCompatiblePdks()
     {
-        // A=220 & B=224 are mutually compatible (Δ4≤5). C=216 is compatible with A (Δ4)
-        // but NOT with B (Δ8>5), so C must not share the A+B group.
+        // B=224 and C=216 are NOT mutually compatible (Δ8 > 5), so whatever partition
+        // the (deterministically sorted) grouping picks, B and C must never share a
+        // group — chained drift through A=220 must not bridge them.
         var groups = ProcessCatalog.BuildGroups(new[]
         {
             Pdk("A", "Si", 220, "SiO2", 1550),
@@ -64,6 +65,30 @@ public class ProcessCatalogTests
             Pdk("C", "Si", 216, "SiO2", 1550),
         });
         groups.Count.ShouldBe(2);
-        groups.Single(g => g.MemberPdkNames.Contains("C")).MemberPdkNames.ShouldBe(new[] { "C" });
+        groups.ShouldAllBe(g =>
+            !(g.MemberPdkNames.Contains("B") && g.MemberPdkNames.Contains("C")));
+    }
+
+    [Fact]
+    public void BuildGroups_SamePdkSet_YieldsSameGroupsRegardlessOfInputOrder()
+    {
+        // Greedy tolerance grouping is order-dependent for chains (218/222/226 with ±5 nm:
+        // 218+222 group, or 222+226, depending on which arrives first). Input order comes
+        // from filesystem enumeration, which differs per machine — the catalog must sort
+        // deterministically so the same PDK set always yields the same processes.
+        var a = Pdk("A", "Si", 218, "SiO2", 1550);
+        var b = Pdk("B", "Si", 222, "SiO2", 1550);
+        var c = Pdk("C", "Si", 226, "SiO2", 1550);
+
+        static string Key(System.Collections.Generic.IReadOnlyList<ProcessGroup> gs) =>
+            string.Join(";", gs
+                .Select(g => string.Join(",", g.MemberPdkNames.OrderBy(n => n)))
+                .OrderBy(s => s));
+
+        var reference = Key(ProcessCatalog.BuildGroups(new[] { a, b, c }));
+
+        Key(ProcessCatalog.BuildGroups(new[] { c, b, a })).ShouldBe(reference);
+        Key(ProcessCatalog.BuildGroups(new[] { b, c, a })).ShouldBe(reference);
+        Key(ProcessCatalog.BuildGroups(new[] { c, a, b })).ShouldBe(reference);
     }
 }
