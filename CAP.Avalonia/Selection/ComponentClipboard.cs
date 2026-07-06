@@ -34,21 +34,20 @@ public class ComponentClipboard
     public Func<Component, string?>? PdkSourceResolver { get; set; }
 
     /// <summary>
-    /// PDK sources of every copied LEAF component, in copy order (issue #570). Groups are
-    /// expanded to their children — a group VM itself carries no PDK source, and treating
-    /// it as one entry made foreign-PDK components paste into a locked design unchecked.
-    /// Lets callers (e.g. <c>CanvasInteractionViewModel.PasteSelected</c>) check the
-    /// active-process policy against clipboard contents before executing the paste command.
+    /// PDK sources of every copied LEAF component, in copy order (issues #570/#653).
+    /// Groups are expanded to their recursive non-group children — a group carries no PDK
+    /// source of its own, and treating it as one entry let foreign-process components
+    /// smuggle past the paste guard. Lets callers (e.g.
+    /// <c>CanvasInteractionViewModel.PasteSelected</c>) check the active-process policy
+    /// against clipboard contents before executing the paste command.
     /// </summary>
     public IReadOnlyList<string?> PeekPdkSources() =>
         _entries.SelectMany(e => e.OriginalComponent is ComponentGroup group
-                ? Flatten(group).Select(child => PdkSourceResolver?.Invoke(child))
+                ? group.GetAllComponentsRecursive()
+                    .Where(child => child is not ComponentGroup)
+                    .Select(child => PdkSourceResolver?.Invoke(child))
                 : new[] { e.PdkSource ?? PdkSourceResolver?.Invoke(e.OriginalComponent) })
             .ToList();
-
-    private static IEnumerable<Component> Flatten(ComponentGroup group) =>
-        group.ChildComponents.SelectMany(c =>
-            c is ComponentGroup nested ? Flatten(nested) : new[] { c });
 
     /// <summary>
     /// Copies the given components and their internal connections.
