@@ -132,6 +132,23 @@ public class GdsCoordinateExtractionTests
                 cell.TryGetProperty("paths", out _).ShouldBeTrue(
                     $"Cell '{name}' must have 'paths' array");
             }
+
+            // The minimal GDS contains a single 10x10 rectangle on layer 1 in cell
+            // 'TEST' — verify the actual coordinate payload, not just key presence,
+            // so schema drift in extract_gds_coords.py cannot pass silently.
+            var testCell = cells.EnumerateArray()
+                .Single(c => c.GetProperty("name").GetString() == "TEST");
+            var polygons = testCell.GetProperty("polygons");
+            polygons.GetArrayLength().ShouldBe(1, "Cell 'TEST' must contain exactly one polygon");
+
+            var polygon = polygons[0];
+            polygon.GetProperty("layer").GetInt32().ShouldBe(1);
+            var vertices = polygon.GetProperty("vertices");
+            vertices.GetArrayLength().ShouldBe(4, "Rectangle must have 4 vertices");
+            foreach (var vertex in vertices.EnumerateArray())
+            {
+                vertex.GetArrayLength().ShouldBe(2, "Each vertex must be an [x, y] pair");
+            }
         }
         finally
         {
