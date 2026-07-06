@@ -176,6 +176,43 @@ public partial class PdkManagerViewModel : ObservableObject
         UpdateStatusText();
         OnFilterChanged?.Invoke();
     }
+
+    /// <summary>
+    /// Locks the library to a process (issue #570): PDKs in <paramref name="allowedNames"/>
+    /// (process members + process-agnostic tools) start enabled and REMAIN individually
+    /// toggleable — deselecting a member PDK to declutter the component library is a
+    /// filtering choice, not a process violation. All other PDKs are disabled and their
+    /// checkbox is locked, because enabling a foreign-process PDK would contradict the
+    /// single-process rule.
+    /// </summary>
+    public void ApplyProcessLock(IEnumerable<string> allowedNames)
+    {
+        var allowed = allowedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in LoadedPdks)
+            {
+                var isAllowed = allowed.Contains(pdk.Name);
+                pdk.IsEnabled = isAllowed;
+                pdk.IsLockedByProcess = !isAllowed;
+            }
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+
+        UpdateStatusText();
+        OnFilterChanged?.Invoke();
+    }
+
+    /// <summary>Removes all per-PDK process locks (returning to Playground / no selection).</summary>
+    public void ClearProcessLock()
+    {
+        foreach (var pdk in LoadedPdks)
+            pdk.IsLockedByProcess = false;
+    }
 }
 
 /// <summary>
@@ -185,6 +222,14 @@ public partial class PdkInfoViewModel : ObservableObject
 {
     [ObservableProperty]
     private bool _isEnabled = true;
+
+    /// <summary>
+    /// True when this PDK belongs to a foreign process while the design is locked
+    /// (issue #570): its checkbox is disabled because enabling it would violate the
+    /// single-process rule. Member/tool PDKs stay toggleable for library filtering.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLockedByProcess;
 
     public string Name { get; }
     public string? FilePath { get; }

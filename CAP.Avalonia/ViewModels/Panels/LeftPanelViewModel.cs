@@ -435,16 +435,19 @@ public partial class LeftPanelViewModel : ObservableObject
         _lastAppliedProcess = active;
         if (active is { IsPlayground: false })
         {
-            // Order matters: the lock flag must be set BEFORE SetEnabledPdks — that call
+            // Order matters: the lock flag must be set BEFORE ApplyProcessLock — that call
             // triggers FilterComponents → SavePdkFilterState, whose guard reads the flag.
             // Reversed, the locked set would be persisted over the user's own selection.
             PdkManager.ManualTogglesEnabled = false;
-            PdkManager.SetEnabledPdks(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
+            // Member + tool PDKs stay individually toggleable (library filtering);
+            // only foreign-process PDKs get their checkbox locked.
+            PdkManager.ApplyProcessLock(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
             FilterComponents();
         }
         else
         {
             PdkManager.ManualTogglesEnabled = true;
+            PdkManager.ClearProcessLock();
             // Leaving a locked process: restore the user's persisted selection instead of
             // keeping the previous process's enable set (which would silently hide every
             // other PDK in Playground). RestorePdkFilterState already re-filters.

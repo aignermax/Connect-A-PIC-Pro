@@ -590,7 +590,10 @@
                                                           Content="{Binding Name}"
                                                           FontSize="10"
                                                           Margin="0,0,5,0"
-                                                          IsEnabled="{Binding $parent[Window].DataContext.LeftPanel.PdkManager.ManualTogglesEnabled}"/>
+                                                          IsEnabled="{Binding !IsLockedByProcess}"/>
+                                                <TextBlock Text="🔒" FontSize="9" VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsLockedByProcess}"
+                                                           ToolTip.Tip="Belongs to another fabrication process — locked while this design's process is active."/>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
                                                 <TextBlock Text="{Binding SourceBadge}"
@@ -612,6 +615,12 @@
                                         Width="75" Height="24" Margin="2" FontSize="10"
                                         Background="#3d3d3d"/>
                             </StackPanel>
+
+                            <!-- Active fabrication process of this design (issue #570) -->
+                            <TextBlock Text="{Binding ActiveProcessLabel}"
+                                       FontSize="10" FontWeight="SemiBold" Foreground="LightSkyBlue"
+                                       Margin="2,8,2,0" TextWrapping="Wrap"
+                                       ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
 
                             <!-- Fabrication process (layer stack, cross-sections, materials) — #570 -->
                             <Button Content="Fabrication Process…" Command="{Binding OpenProcessManagerCommand}"
