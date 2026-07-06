@@ -18,6 +18,7 @@ using CAP.Avalonia.ViewModels.Export.Formats;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Export;
 using CAP.Avalonia.ViewModels.PdkOffset;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels;
@@ -34,6 +35,22 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusText = "Ready";
+
+    /// <summary>
+    /// Human-readable label for the design's active fabrication process (issue #570),
+    /// e.g. "Process: Generic SOI 220 nm" or "Playground — not manufacturable". Kept in
+    /// sync with <see cref="FileOperationsViewModel.ActiveProcess"/> by
+    /// <see cref="RefreshProcessIndicator"/>. Bound by the toolbar indicator chip.
+    /// </summary>
+    [ObservableProperty]
+    private string _activeProcessLabel = "No process selected";
+
+    /// <summary>
+    /// True when the active process is Playground (mixing PDKs allowed, chip not
+    /// manufacturable). Drives the warning styling on the toolbar indicator chip.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPlayground;
 
     public Commands.CommandManager CommandManager { get; }
     public SimulationService Simulation { get; }
@@ -401,6 +418,17 @@ public partial class MainViewModel : ObservableObject
         FileOperations.PhotonTorchExport.UpdateStatus = UpdateStatusText;
         FileOperations.RebuildHierarchy = LeftPanel.HierarchyPanel.RebuildTree;
 
+        // Single-process wiring (issue #570): supply the live PDK catalog for the
+        // New-Design picker and legacy-file migration, route migration warnings to
+        // the status bar, and keep the toolbar indicator in sync with the active process.
+        FileOperations.ProcessCatalogProvider = () =>
+            ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+        FileOperations.OnProcessMigrationWarning = UpdateStatusText;
+        FileOperations.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
+        };
+
         // Export validation must run against the SAME per-instance Nazca overrides the
         // production export uses; FileOperations owns the live store (issue #565 F1).
         RightPanel.ExportValidation.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
@@ -425,6 +453,20 @@ public partial class MainViewModel : ObservableObject
         {
             _ = gdsExport.CheckEnvironmentAsync();
         }
+    }
+
+    /// <summary>
+    /// Updates <see cref="ActiveProcessLabel"/> and <see cref="IsPlayground"/> from
+    /// <see cref="FileOperationsViewModel.ActiveProcess"/> (issue #570). Invoked whenever
+    /// the active process changes (New-Design selection, load, or migration).
+    /// </summary>
+    private void RefreshProcessIndicator()
+    {
+        var p = FileOperations.ActiveProcess;
+        IsPlayground = p?.IsPlayground == true;
+        ActiveProcessLabel = p == null ? "No process selected"
+            : p.IsPlayground ? "Playground — not manufacturable"
+            : $"Process: {p.DisplayName}";
     }
 
     // Canvas interaction delegates
@@ -489,8 +531,30 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadDesign() => await FileOperations.LoadDesignCommand.ExecuteAsync(null);
 
+    /// <summary>
+    /// Starts a new design: asks the user which fabrication process to lock the design
+    /// to (or Playground) before clearing the canvas (issue #570). Cancelling the picker
+    /// aborts New Design entirely — the current canvas is left untouched. When no picker
+    /// is wired (headless/test contexts), falls back to the pre-#570 behavior of clearing
+    /// the canvas without setting a process.
+    /// </summary>
     [RelayCommand]
-    private async Task NewProject() => await FileOperations.NewProjectCommand.ExecuteAsync(null);
+    private async Task NewProject()
+    {
+        ActiveProcessSelection? selection = null;
+        if (ShowProcessSelectionAsync != null)
+        {
+            var groups = ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+            selection = await ShowProcessSelectionAsync(groups);
+            if (selection == null)
+                return; // User cancelled the picker — abort New Design.
+        }
+
+        await FileOperations.NewProjectCommand.ExecuteAsync(null);
+
+        if (selection != null)
+            FileOperations.SetActiveProcess(selection);
+    }
 
     [RelayCommand]
     private async Task ExportNazca() => await FileOperations.ExportNazcaCommand.ExecuteAsync(null);
@@ -524,6 +588,15 @@ public partial class MainViewModel : ObservableObject
     {
         ShowProcessManagerRequested?.Invoke();
     }
+
+    /// <summary>
+    /// Shows the New-Design process-selection dialog (issue #570) and returns the
+    /// user's choice, or null if the user cancelled. Wired by
+    /// <see cref="CAP.Avalonia.Views.MainWindow"/>; left null in headless/test
+    /// contexts, in which case <see cref="NewProject"/> skips the dialog and
+    /// proceeds without locking a process.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>, Task<ActiveProcessSelection?>>? ShowProcessSelectionAsync { get; set; }
 
     [RelayCommand]
     private void OpenPdkHelp()

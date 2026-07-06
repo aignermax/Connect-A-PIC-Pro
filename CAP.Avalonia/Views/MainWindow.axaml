@@ -195,6 +195,23 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
+                <!-- Active process indicator (issue #570): shows the fabrication process the
+                     current design is locked to, or a warning chip when in Playground mode. -->
+                <Border x:Name="ActiveProcessIndicator" Margin="2" Padding="8,4" CornerRadius="4"
+                        VerticalAlignment="Center" Background="#2d4d2d"
+                        Classes.playground="{Binding IsPlayground}"
+                        ToolTip.Tip="The fabrication process the current design is locked to. Set via File → New.">
+                    <Border.Styles>
+                        <Style Selector="Border.playground">
+                            <Setter Property="Background" Value="#5d4510"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="{Binding ActiveProcessLabel}"
+                               Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                </Border>
+
+                <Separator Width="1" Background="Gray" Margin="10,5"/>
+
                 <!-- Settings -->
                 <Button Command="{Binding OpenSettingsWindowCommand}"
                         Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Open Settings (grid snap, updates, Python environment, AI key)">

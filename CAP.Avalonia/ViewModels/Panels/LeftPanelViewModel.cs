@@ -9,6 +9,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -25,6 +26,13 @@ public partial class LeftPanelViewModel : ObservableObject
     private readonly PdkLoader _pdkLoader;
     private readonly UserPreferencesService _preferencesService;
     private readonly ErrorConsoleService? _errorConsole;
+
+    /// <summary>
+    /// Every PDK loaded into the library so far (bundled + user-imported), kept so
+    /// <see cref="GetLoadedPdkProcessEntries"/> can derive process fingerprints for
+    /// the single-process catalog (issue #570).
+    /// </summary>
+    private readonly List<PdkDraft> _loadedPdkDrafts = new();
 
     /// <summary>
     /// ViewModel for the hierarchy panel showing component tree structure.
@@ -176,6 +184,7 @@ public partial class LeftPanelViewModel : ObservableObject
             try
             {
                 var pdk = _pdkLoader.LoadFromFile(pdkFile);
+                _loadedPdkDrafts.Add(pdk);
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)
                 {
@@ -361,6 +370,8 @@ public partial class LeftPanelViewModel : ObservableObject
                 return;
             }
 
+            _loadedPdkDrafts.Add(pdk);
+
             int addedCount = 0;
             foreach (var pdkComp in pdk.Components)
             {
@@ -386,4 +397,8 @@ public partial class LeftPanelViewModel : ObservableObject
 
     private static ComponentTemplate ConvertPdkComponentToTemplate(PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName)
         => PdkTemplateConverter.ConvertToTemplate(pdkComp, pdkName, nazcaModuleName);
+
+    /// <summary>Process fingerprints of all loaded PDKs, for single-process grouping (#570).</summary>
+    public IReadOnlyList<PdkProcessEntry> GetLoadedPdkProcessEntries() =>
+        _loadedPdkDrafts.Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
 }
