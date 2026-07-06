@@ -7,7 +7,7 @@ namespace CAP_Core.Export;
 /// Discovers Python installations with Nazca in common locations.
 /// Supports system Python, virtual environments, and conda environments.
 /// </summary>
-public class PythonDiscoveryService
+public partial class PythonDiscoveryService
 {
     private readonly ProcessLaunchFactory _launchFactory;
 
@@ -18,53 +18,6 @@ public class PythonDiscoveryService
     public PythonDiscoveryService(ProcessLaunchFactory? launchFactory = null)
     {
         _launchFactory = launchFactory ?? ProcessLaunchFactory.CreateDefault();
-    }
-
-    /// <summary>
-    /// Information about a discovered Python installation.
-    /// </summary>
-    public class PythonInstallation
-    {
-        /// <summary>
-        /// Path to the Python executable.
-        /// </summary>
-        public string Path { get; init; } = string.Empty;
-
-        /// <summary>
-        /// Source/origin of this installation (e.g., "System", "venv: nazca", "Active venv").
-        /// </summary>
-        public string Source { get; init; } = string.Empty;
-
-        /// <summary>
-        /// Python version string (e.g., "3.12.3").
-        /// </summary>
-        public string? PythonVersion { get; init; }
-
-        /// <summary>
-        /// Nazca version string (e.g., "0.6.1"), null if Nazca not installed.
-        /// </summary>
-        public string? NazcaVersion { get; init; }
-
-        /// <summary>
-        /// True if this Python has Nazca installed.
-        /// </summary>
-        public bool HasNazca => !string.IsNullOrEmpty(NazcaVersion);
-
-        /// <summary>
-        /// Display text for UI (e.g., "System Python 3.12 (Nazca 0.6.1)").
-        /// </summary>
-        public string DisplayText
-        {
-            get
-            {
-                var text = $"{Source}";
-                if (PythonVersion != null)
-                    text += $" Python {PythonVersion}";
-                if (NazcaVersion != null)
-                    text += $" (Nazca {NazcaVersion})";
-                return text;
-            }
-        }
     }
 
     /// <summary>
@@ -81,7 +34,7 @@ public class PythonDiscoveryService
         var venvPython = GetActiveVenvPython();
         if (venvPython != null && checkedPaths.Add(venvPython))
         {
-            var installation = await CheckPythonInstallation(venvPython, "Active venv");
+            var installation = await CheckPythonInstallation(venvPython, "Active venv", probeGdsFactory: true);
             if (installation?.HasNazca == true)
                 found.Add(installation);
         }
@@ -94,7 +47,7 @@ public class PythonDiscoveryService
         {
             if (checkedPaths.Add(installPath))
             {
-                var installation = await CheckPythonInstallation(installPath, "Installed");
+                var installation = await CheckPythonInstallation(installPath, "Installed", probeGdsFactory: true);
                 if (installation?.HasNazca == true)
                     found.Add(installation);
             }
@@ -105,7 +58,7 @@ public class PythonDiscoveryService
         {
             if (checkedPaths.Add(installPath))
             {
-                var installation = await CheckPythonInstallation(installPath, "Installed");
+                var installation = await CheckPythonInstallation(installPath, "Installed", probeGdsFactory: true);
                 if (installation?.HasNazca == true)
                     found.Add(installation);
             }
@@ -118,7 +71,7 @@ public class PythonDiscoveryService
             var resolvedPath = ResolvePythonPath(cmd);
             if (resolvedPath != null && checkedPaths.Add(resolvedPath))
             {
-                var installation = await CheckPythonInstallation(resolvedPath, "System");
+                var installation = await CheckPythonInstallation(resolvedPath, "System", probeGdsFactory: true);
                 if (installation?.HasNazca == true)
                     found.Add(installation);
             }
@@ -130,7 +83,7 @@ public class PythonDiscoveryService
         {
             if (checkedPaths.Add(venvPath))
             {
-                var installation = await CheckPythonInstallation(venvPath, GetVenvSource(venvPath));
+                var installation = await CheckPythonInstallation(venvPath, GetVenvSource(venvPath), probeGdsFactory: true);
                 if (installation?.HasNazca == true)
                     found.Add(installation);
             }
@@ -183,8 +136,13 @@ public class PythonDiscoveryService
     /// Checks if a specific Python path has Nazca installed and retrieves version info.
     /// </summary>
     /// <param name="pythonPath">Path to Python executable or command name.</param>
+    /// <param name="source">Human-readable origin label for the installation.</param>
+    /// <param name="probeGdsFactory">When true, additionally probes the gdsfactory version
+    /// (issue #645). Off by default so the startup fast-path and health checks — which only
+    /// care about Nazca — do not pay for the extra import probe.</param>
     /// <returns>Installation info with versions, or null if Python not accessible.</returns>
-    public async Task<PythonInstallation?> CheckPythonInstallation(string pythonPath, string source)
+    public async Task<PythonInstallation?> CheckPythonInstallation(
+        string pythonPath, string source, bool probeGdsFactory = false)
     {
         try
         {
@@ -193,13 +151,15 @@ public class PythonDiscoveryService
                 return null;
 
             var nazcaVersion = await GetNazcaVersion(pythonPath);
+            var gdsFactoryVersion = probeGdsFactory ? await GetGdsFactoryVersion(pythonPath) : null;
 
             return new PythonInstallation
             {
                 Path = pythonPath,
                 Source = source,
                 PythonVersion = pythonVersion,
-                NazcaVersion = nazcaVersion
+                NazcaVersion = nazcaVersion,
+                GdsFactoryVersion = gdsFactoryVersion
             };
         }
         catch
@@ -388,17 +348,25 @@ public class PythonDiscoveryService
         return null;
     }
 
+    /// <summary>Gets the installed Nazca version string, or null if not importable.</summary>
+    private Task<string?> GetNazcaVersion(string pythonPath) =>
+        GetPackageVersion(pythonPath, "nazca");
+
+    /// <summary>Gets the installed gdsfactory version string, or null if not importable.</summary>
+    private Task<string?> GetGdsFactoryVersion(string pythonPath) =>
+        GetPackageVersion(pythonPath, "gdsfactory");
+
     /// <summary>
-    /// Gets the Nazca version string, or null if not installed.
-    /// Routes the spawn through <see cref="ProcessLaunchFactory.TryBuild"/> with
-    /// <c>ArgumentList</c> so the interpreter path is resolved and arguments are never
+    /// Gets the version reported by <c>&lt;module&gt;.__version__</c>, or null if the module
+    /// cannot be imported. Routes the spawn through <see cref="ProcessLaunchFactory.TryBuild"/>
+    /// with <c>ArgumentList</c> so the interpreter path is resolved and arguments are never
     /// hand-quoted.
     /// </summary>
-    private async Task<string?> GetNazcaVersion(string pythonPath)
+    private async Task<string?> GetPackageVersion(string pythonPath, string moduleName)
     {
         try
         {
-            var checkScript = "import nazca; print(nazca.__version__)";
+            var checkScript = $"import {moduleName}; print({moduleName}.__version__)";
             IReadOnlyList<string> args = new[] { "-c", checkScript };
 
             if (!_launchFactory.TryBuild(pythonPath, args, null, null, out var psi, out var launchError))
