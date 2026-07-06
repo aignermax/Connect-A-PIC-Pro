@@ -67,10 +67,21 @@
                 <!-- Zoom Controls -->
                 <Button Content="+" Command="{Binding ZoomInCommand}" Width="30" Margin="2"/>
                 <Button Content="-" Command="{Binding ZoomOutCommand}" Width="30" Margin="2"/>
-                <Button Content="[F] Fit" x:Name="ZoomToFitButton" Click="ZoomToFitButton_Click"
-                        Width="50" Margin="2" Background="#3d3d3d" ToolTip.Tip="Zoom to fit all components (F)"/>
                 <Button Content="1:1" Command="{Binding ResetZoomCommand}"
                         Width="35" Margin="2" ToolTip.Tip="Reset zoom to 100%"/>
+                <Button x:Name="ZoomToFitButton" Click="ZoomToFitButton_Click"
+                        Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Zoom to fit all components (F)">
+                    <PathIcon Data="M2,2 L6,2 L6,4 L4,4 L4,6 L2,6 Z M10,2 L14,2 L14,6 L12,6 L12,4 L10,4 Z M2,10 L4,10 L4,12 L6,12 L6,14 L2,14 Z M12,10 L14,10 L14,14 L10,14 L10,12 L12,12 Z M6.5,6.5 L9.5,6.5 L9.5,9.5 L6.5,9.5 Z"
+                              Width="16" Height="16" Foreground="White"/>
+                </Button>
+
+                <!-- Simulation — icon-only (play triangle), next to Fit per field feedback -->
+                <Button Command="{Binding RunSimulationCommand}"
+                        Width="36" Margin="2" Background="#3d5d3d"
+                        ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes.">
+                    <PathIcon Data="M4.5,2.5 L13.5,8 L4.5,13.5 Z"
+                              Width="16" Height="16" Foreground="LightGreen"/>
+                </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
@@ -148,16 +159,6 @@
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
-                </Button>
-
-                <Separator Width="1" Background="Gray" Margin="10,5"/>
-
-                <!-- Simulation — icon-only (play triangle), tooltip carries the label -->
-                <Button Command="{Binding RunSimulationCommand}"
-                        Width="36" Margin="2" Background="#3d5d3d"
-                        ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes.">
-                    <PathIcon Data="M4.5,2.5 L13.5,8 L4.5,13.5 Z"
-                              Width="16" Height="16" Foreground="LightGreen"/>
                 </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
