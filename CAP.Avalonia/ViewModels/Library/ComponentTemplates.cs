@@ -118,6 +118,7 @@ public static class ComponentTemplates
         component.NazcaOriginOffsetX = template.NazcaOriginOffsetX;
         component.NazcaOriginOffsetY = template.NazcaOriginOffsetY;
         component.NazcaModuleName = template.NazcaModuleName;
+        component.GdsFactoryFunction = template.GdsFactoryFunction;
 
         // Set human-readable display name from the template's display name.
         // This ensures components placed from the library show their PDK display name
@@ -187,6 +188,13 @@ public partial class ComponentTemplate : ObservableObject
     /// Python module name for Nazca import (e.g., "siepic_ebeam_pdk").
     /// </summary>
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend PDK components
+    /// (e.g. "cspdk.sin300.mmi1x2"); null for Nazca components. Flows to the placed
+    /// component so the gdsfactory export can call the real factory (#570).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
 }
 
 public class PinDefinition

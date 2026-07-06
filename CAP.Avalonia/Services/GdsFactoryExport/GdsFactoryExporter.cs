@@ -26,7 +26,7 @@ public class GdsFactoryExporter
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
     {
         var sb = new StringBuilder();
-        AppendHeader(sb, options);
+        AppendHeader(sb, canvas, options);
         AppendOverrideFactories(sb, canvas, overrides);
         AppendStubs(sb, canvas, options, overrides);
         var refIndex = 0;
@@ -127,7 +127,7 @@ public class GdsFactoryExporter
         }
     }
 
-    private static void AppendHeader(StringBuilder sb, GdsFactoryExportOptions options)
+    private static void AppendHeader(StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
     {
         sb.AppendLine("import os");
         sb.AppendLine("import gdsfactory as gf");
@@ -142,6 +142,15 @@ public class GdsFactoryExporter
             // PDK is enough for the self-contained stub geometry.
             sb.AppendLine("gf.gpdk.PDK.activate()");
         }
+
+        // gdsfactory-backend PDKs (e.g. CornerStone SiN via cspdk.sin300, #570): import each
+        // referenced module and activate its PDK so its factories resolve. A single-process
+        // design references one such module; activating it last makes it the active PDK.
+        foreach (var module in GdsFactoryModules(canvas))
+        {
+            sb.AppendLine($"import {module}");
+            sb.AppendLine($"{module}.PDK.activate()");
+        }
         sb.AppendLine();
         sb.AppendLine("WG_WIDTH = 0.45  # waveguide width in um");
         sb.AppendLine();
@@ -154,8 +163,10 @@ public class GdsFactoryExporter
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
-            // A gdsfactory override provides the geometry itself; a ubcpdk cell replaces the stub.
-            if (GdsFactoryOverrideCode(comp, overrides) != null || UsesUbcPdkCell(comp, options))
+            // A gdsfactory override / real gdsfactory factory / ubcpdk cell all replace the stub.
+            if (GdsFactoryOverrideCode(comp, overrides) != null
+                || !string.IsNullOrEmpty(comp.GdsFactoryFunction)
+                || UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
         }
@@ -164,6 +175,18 @@ public class GdsFactoryExporter
     private static bool UsesUbcPdkCell(Component comp, GdsFactoryExportOptions options) =>
         options.Mode == GdsFactoryComponentMode.UbcPdkCells
         && UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName) != null;
+
+    /// <summary>
+    /// Distinct Python modules of the design's gdsfactory-backend components — the package
+    /// part of each <see cref="Component.GdsFactoryFunction"/> (e.g. "cspdk.sin300" from
+    /// "cspdk.sin300.mmi1x2"). Each is imported and PDK-activated in the header (#570).
+    /// </summary>
+    private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
+        EnumerateExportableComponents(canvas)
+            .Select(c => c.GdsFactoryFunction)
+            .Where(f => !string.IsNullOrEmpty(f) && f!.Contains('.'))
+            .Select(f => f!.Substring(0, f!.LastIndexOf('.')))
+            .Distinct(StringComparer.Ordinal);
 
     /// <summary>
     /// Places one component: <c>rotate</c> about the cell origin, then <c>move</c> the
@@ -183,6 +206,9 @@ public class GdsFactoryExporter
         string factory;
         if (GdsFactoryOverrideCode(comp, overrides) != null)
             factory = $"{OverrideFactoryName(comp)}()";
+        else if (!string.IsNullOrEmpty(comp.GdsFactoryFunction))
+            // gdsfactory-backend component: call its real factory (its PDK is activated in the header).
+            factory = $"{comp.GdsFactoryFunction}()";
         else if (UsesUbcPdkCell(comp, options))
             factory = $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')";
         else

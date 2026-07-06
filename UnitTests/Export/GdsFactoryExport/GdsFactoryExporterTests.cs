@@ -231,4 +231,35 @@ public class GdsFactoryExporterTests
         script.ShouldContain(".rotate(-90.00)");
         script.ShouldContain(".move((10.00, -20.00))");
     }
+
+    [Fact]
+    public void Export_GdsFactoryBackendComponent_CallsRealFactoryAndActivatesItsPdk()
+    {
+        // A gdsfactory-native PDK component (e.g. CornerStone SiN via cspdk, #570) exports by
+        // calling its real factory, after importing + activating its PDK module — not a stub.
+        var canvas = new DesignCanvasViewModel();
+        var component = TestComponentFactory.CreateBasicComponent();
+        component.Identifier = "SIN1";
+        component.NazcaFunctionName = "";                        // gdsfactory-native: no Nazca function
+        component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        component.PhysicalX = 30;
+        component.PhysicalY = 20;
+        component.RotationDegrees = 0;
+        component.PhysicalPins.Add(new CAP_Core.Components.Core.PhysicalPin
+        {
+            Name = "opt1",
+            ParentComponent = component,
+            OffsetXMicrometers = 0,
+            OffsetYMicrometers = 5,
+            AngleDegrees = 180,
+        });
+        canvas.AddComponent(component, "SiN MMI");
+
+        var script = ExportStandalone(canvas);
+
+        script.ShouldContain("import cspdk.sin300");
+        script.ShouldContain("cspdk.sin300.PDK.activate()");
+        script.ShouldContain("c.add_ref(cspdk.sin300.mmi1x2())");
+        script.ShouldNotContain("def stub_");   // real factory used, no stub emitted
+    }
 }

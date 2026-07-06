@@ -77,6 +77,14 @@ public class Component : ICloneable
     public string? NazcaModuleName { get; set; }
 
     /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend PDK components (e.g.
+    /// "cspdk.sin300.mmi1x2"); null for Nazca components. When set, the gdsfactory export
+    /// calls this factory directly (and activates its PDK module) instead of a Nazca-mapped
+    /// or stub cell. Flows from the component template on placement and on load (#570).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
+    /// <summary>
     /// Sentinel value used in <see cref="NazcaFunctionName"/> for virtual analysis
     /// components (e.g. ONA Analyzer). Such components are skipped during GDS /
     /// PhotonTorch export and have a dedicated UI flow.
@@ -389,6 +397,7 @@ public class Component : ICloneable
         // without it a copy renders against the wrong module and its geometry-scoped S-matrix
         // override no longer matches the original.
         clonedComponent.NazcaModuleName = NazcaModuleName;
+        clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.HumanReadableName = HumanReadableName;
 

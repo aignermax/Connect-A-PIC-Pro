@@ -46,6 +46,7 @@ public static class PdkTemplateConverter
             HeightMicrometers = pdkComp.HeightMicrometers,
             PinDefinitions = pinDefs,
             NazcaFunctionName = pdkComp.NazcaFunction,
+            GdsFactoryFunction = pdkComp.GdsFactoryFunction,
             NazcaParameters = pdkComp.NazcaParameters,
             HasSlider = pdkComp.Sliders?.Any() ?? false,
             SliderMin = pdkComp.Sliders?.FirstOrDefault()?.MinVal ?? 0,
