@@ -81,6 +81,14 @@ public partial class FileOperationsViewModel : ObservableObject
     public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
 
     /// <summary>
+    /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
+    /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
+    /// analyzer-only tool PDKs never count toward a legacy design's process attribution
+    /// (issue #570 final review).
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? ProcessAgnosticPdkNamesProvider { get; set; }
+
+    /// <summary>
     /// Callback invoked when loading a legacy file requires falling back to Playground
     /// because its components could not be attributed to a single installed process.
     /// </summary>
@@ -803,7 +811,8 @@ public partial class FileOperationsViewModel : ObservableObject
                     var pdkSources = designData.Components.Select(c => c.PdkSource)
                         .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
                                 ?? Enumerable.Empty<string?>());
-                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning);
+                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
+                        ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
                     if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
                 }
 

@@ -39,14 +39,25 @@ public static class ActiveProcessResolver
     /// components. One matching group → that process; several → Playground + a warning;
     /// none → null (empty / built-ins only).
     /// </summary>
+    /// <param name="componentPdkSources">PDK source name of every placed component.</param>
+    /// <param name="catalog">The currently installed process groups.</param>
+    /// <param name="warning">Set when the design falls back to Playground.</param>
+    /// <param name="processAgnosticPdkNames">
+    /// Names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools" — virtual
+    /// analyzers and other tool libraries). These are excluded from the migration decision,
+    /// just like built-ins, so a design using only a real process plus an analyzer migrates
+    /// to that process instead of Playground (issue #570 final review).
+    /// </param>
     public static ActiveProcessSelection? Migrate(
         IEnumerable<string?> componentPdkSources,
         IReadOnlyList<ProcessGroup> catalog,
-        out string? warning)
+        out string? warning,
+        IReadOnlyCollection<string>? processAgnosticPdkNames = null)
     {
         warning = null;
         var pdkNames = componentPdkSources
-            .Where(s => !SingleProcessPolicy.IsBuiltIn(s))
+            .Where(s => !SingleProcessPolicy.IsBuiltIn(s) &&
+                        !(processAgnosticPdkNames?.Contains(s!, System.StringComparer.OrdinalIgnoreCase) ?? false))
             .Select(s => s!)
             .Distinct(System.StringComparer.OrdinalIgnoreCase)
             .ToList();

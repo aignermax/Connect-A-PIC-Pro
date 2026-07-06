@@ -62,4 +62,27 @@ public class ActiveProcessResolverTests
         warning!.ShouldContain("Ghost PDK");
         warning.ShouldNotContain("multiple processes");
     }
+
+    [Fact]
+    public void Migrate_RealProcessPlusAgnosticTool_ExcludesAgnosticAndAdoptsProcess()
+    {
+        var sel = ActiveProcessResolver.Migrate(
+            new[] { "Demo", "Analysis Tools" }, new[] { Soi, Inp }, out var warning,
+            processAgnosticPdkNames: new[] { "Analysis Tools" });
+
+        sel!.DisplayName.ShouldBe("SOI 220");
+        sel.IsPlayground.ShouldBeFalse();
+        warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Migrate_OnlyAgnosticTool_ReturnsNullWithNoWarning()
+    {
+        var sel = ActiveProcessResolver.Migrate(
+            new[] { "Analysis Tools" }, new[] { Soi, Inp }, out var warning,
+            processAgnosticPdkNames: new[] { "Analysis Tools" });
+
+        sel.ShouldBeNull();
+        warning.ShouldBeNull();
+    }
 }

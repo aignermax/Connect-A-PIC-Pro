@@ -28,6 +28,20 @@ public class MainViewModelProcessTests
     }
 
     [Fact]
+    public void ProcessCatalogProvider_ExcludesProcessAgnosticToolPdks()
+    {
+        // Final-review finding for #570: the process-agnostic "Analysis Tools" PDK must
+        // not appear as a selectable fabrication process in the New-Design catalog, while
+        // the real SOI process built from the bundled Demo/SiEPIC PDKs still does.
+        var vm = MainViewModelTestHelper.CreateMainViewModel();
+
+        var groups = vm.FileOperations.ProcessCatalogProvider!.Invoke();
+
+        groups.ShouldNotContain(g => g.DisplayName == "Analysis Tools");
+        groups.ShouldContain(g => g.MemberPdkNames.Contains("Demo PDK"));
+    }
+
+    [Fact]
     public void ActiveProcessLabel_DefaultsToNoProcessSelected()
     {
         var vm = MainViewModelTestHelper.CreateMainViewModel();

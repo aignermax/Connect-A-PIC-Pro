@@ -398,9 +398,14 @@ public partial class LeftPanelViewModel : ObservableObject
     private static ComponentTemplate ConvertPdkComponentToTemplate(PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName)
         => PdkTemplateConverter.ConvertToTemplate(pdkComp, pdkName, nazcaModuleName);
 
-    /// <summary>Process fingerprints of all loaded PDKs, for single-process grouping (#570).</summary>
+    /// <summary>
+    /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).
+    /// Excludes process-agnostic tool PDKs (e.g. "Analysis Tools") — they are not a
+    /// fabrication process and must not appear as a selectable process in the catalog.
+    /// </summary>
     public IReadOnlyList<PdkProcessEntry> GetLoadedPdkProcessEntries() =>
-        _loadedPdkDrafts.Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
+        _loadedPdkDrafts.Where(d => !d.ProcessAgnostic)
+            .Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
 
     /// <summary>
     /// Names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools" — virtual analyzers

@@ -428,6 +428,7 @@ public partial class MainViewModel : ObservableObject
         // the status bar, and keep the toolbar indicator in sync with the active process.
         FileOperations.ProcessCatalogProvider = () =>
             ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+        FileOperations.ProcessAgnosticPdkNamesProvider = () => LeftPanel.GetProcessAgnosticPdkNames();
         FileOperations.OnProcessMigrationWarning = UpdateStatusText;
         FileOperations.PropertyChanged += (_, e) =>
         {
