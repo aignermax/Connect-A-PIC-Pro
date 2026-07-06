@@ -472,20 +472,8 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Finds the PDK source for a component by matching its NazcaFunctionName against the library.
     /// Returns null if no match is found.
     /// </summary>
-    private string? FindTemplatePdkSource(Component component)
-    {
-        var nazcaFunc = component.NazcaFunctionName;
-        if (string.IsNullOrEmpty(nazcaFunc))
-            return null;
-
-        var match = _componentLibrary.FirstOrDefault(t =>
-        {
-            var templateFunc = t.NazcaFunctionName
-                ?? $"nazca_{t.Name.ToLower().Replace(" ", "_")}";
-            return templateFunc == nazcaFunc;
-        });
-        return match?.PdkSource;
-    }
+    private string? FindTemplatePdkSource(Component component) =>
+        ComponentPdkSourceResolver.Resolve(component, _componentLibrary);
 
     /// <summary>
     /// Recursively serializes a ComponentGroup and all its nested child groups.

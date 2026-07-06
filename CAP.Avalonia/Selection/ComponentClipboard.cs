@@ -29,9 +29,29 @@ public class ComponentClipboard
     /// <summary>
     /// PDK sources of every copied component, in copy order (issue #570). Lets callers
     /// (e.g. <c>CanvasInteractionViewModel.PasteSelected</c>) check the active-process policy
-    /// against clipboard contents before executing the paste command.
+    /// against clipboard contents before executing the paste command. When
+    /// <paramref name="resolveGroupChildPdkSource"/> is provided, copied
+    /// <see cref="ComponentGroup"/>s additionally contribute the resolved PDK source of every
+    /// recursive non-group child, so a group cannot smuggle foreign-process components past
+    /// the paste guard (issue #653).
     /// </summary>
-    public IReadOnlyList<string?> PeekPdkSources() => _entries.Select(e => e.PdkSource).ToList();
+    public IReadOnlyList<string?> PeekPdkSources(
+        Func<Component, string?>? resolveGroupChildPdkSource = null)
+    {
+        var sources = new List<string?>();
+        foreach (var entry in _entries)
+        {
+            sources.Add(entry.PdkSource);
+
+            if (resolveGroupChildPdkSource != null && entry.OriginalComponent is ComponentGroup group)
+            {
+                sources.AddRange(group.GetAllComponentsRecursive()
+                    .Where(child => child is not ComponentGroup)
+                    .Select(resolveGroupChildPdkSource));
+            }
+        }
+        return sources;
+    }
 
     /// <summary>
     /// Copies the given components and their internal connections.

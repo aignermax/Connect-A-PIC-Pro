@@ -105,6 +105,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// </summary>
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
+    /// <summary>
+    /// Callback resolving the PDK source of a placed core component (groups carry none of
+    /// their own, so their children are resolved individually — issue #653). Wired by
+    /// <c>MainViewModel</c> to <c>ComponentPdkSourceResolver.Resolve</c> over the loaded
+    /// component library. When unwired, group children resolve to null (treated as built-in).
+    /// </summary>
+    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
@@ -354,6 +362,19 @@ public partial class CanvasInteractionViewModel : ObservableObject
             return;
         }
 
+        // Single-process enforcement over the group's children (issue #653): a group has no
+        // PdkSource of its own, so a foreign-process child must not slip in via grouping.
+        var (isAllowed, blockReason) = GroupProcessPolicy.CheckGroupPlacement(
+            GetActiveProcess?.Invoke(),
+            ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            SelectedGroupTemplate.Name);
+        if (!isAllowed)
+        {
+            UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place group.");
+            return;
+        }
+
         var libraryManager = _libraryViewModel.GetLibraryManager();
         var cmd = PlaceGroupTemplateCommand.TryCreate(_canvas, libraryManager, SelectedGroupTemplate, x, y);
 
@@ -366,6 +387,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
         _commandManager.ExecuteCommand(cmd);
         UpdateStatus?.Invoke($"Placed group '{SelectedGroupTemplate.Name}' at ({x:F0}, {y:F0})µm");
     }
+
+    /// <summary>
+    /// Resolved PDK source of every recursive non-group child of <paramref name="group"/>,
+    /// used to check the single-process policy over a group's contents (issue #653).
+    /// </summary>
+    private IEnumerable<string?> ChildPdkSources(ComponentGroup group) =>
+        group.GetAllComponentsRecursive()
+            .Where(child => child is not ComponentGroup)
+            .Select(child => ResolveComponentPdkSource?.Invoke(child));
 
     /// <summary>
     /// Selects the component or connection at the given canvas position, keeping the
@@ -666,7 +696,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         var active = GetActiveProcess?.Invoke();
         var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
-        var blockedCount = _canvas.Clipboard.PeekPdkSources()
+        // Include resolved group-child PDK sources so a copied group cannot smuggle
+        // foreign-process components past the paste guard (issue #653).
+        var blockedCount = _canvas.Clipboard.PeekPdkSources(ResolveComponentPdkSource)
             .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
         if (blockedCount > 0)
         {

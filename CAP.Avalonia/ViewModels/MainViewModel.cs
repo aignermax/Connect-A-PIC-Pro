@@ -233,6 +233,10 @@ public partial class MainViewModel : ObservableObject
         // active process and the process-agnostic tool PDKs (e.g. "Analysis Tools").
         CanvasInteraction.GetActiveProcess = () => FileOperations.ActiveProcess;
         CanvasInteraction.GetProcessAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+        // Group children carry no PdkSource of their own — resolve via the loaded library so
+        // group placement/paste is checked against the active process too (issue #653).
+        CanvasInteraction.ResolveComponentPdkSource = component =>
+            ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
         // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
