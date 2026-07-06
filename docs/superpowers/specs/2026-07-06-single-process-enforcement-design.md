@@ -105,8 +105,10 @@ A **persistent active-process chip** in the top toolbar/title area, always visib
 
 `SingleProcessPolicy` (pure, `CAP_Core.Components.Process`) — the process-keyed successor to #602's `SinglePdkPolicy`:
 
-- `CheckPlacement(activeProcess, componentPdkName, catalog) → (IsAllowed, BlockReason?)`:
-  - Built-in/tool component (`PdkSource` null/empty/`"Built-in"`) → allowed.
+**Process-agnostic tool PDKs.** Tool/utility libraries (the bundled "Analysis Tools" PDK — virtual analyzers; and future packaged/heterogeneous parts) declare `processAgnostic: true` in their PDK JSON (`PdkDraft.ProcessAgnostic`). Their components are usable on any chip regardless of the active process. This is threaded consistently: they are **always visible** in the library (kept enabled even under a real process), **always placeable** (`CheckPlacement` exempts their PDK names alongside the `"Built-in"` sentinel), **excluded from the process catalog** (they never appear as a selectable process in New Design), and **exempt from migration matching** (a design holding a real-process circuit plus an analyzer migrates to the real process, not Playground).
+
+- `CheckPlacement(activeProcess, componentPdkName, processAgnosticPdkNames) → (IsAllowed, BlockReason?)`:
+  - Built-in/tool component (`PdkSource` null/empty/`"Built-in"`) or a process-agnostic PDK name → allowed.
   - Playground or unset active process → allowed.
   - Component's PDK compatible with the active process (same group) → allowed.
   - Otherwise blocked with a clear message naming both processes ("belongs to <X>; chip is locked to <Y>").
