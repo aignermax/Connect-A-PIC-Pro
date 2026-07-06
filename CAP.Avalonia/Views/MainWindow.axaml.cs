@@ -11,6 +11,7 @@ using CAP_Core.Components.Core;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
+using CAP.Avalonia.ViewModels.Process;
 using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
@@ -93,6 +94,22 @@ public partial class MainWindow : Window
                     };
                     processWindow.Show(this);
                 };
+
+                // Wire up the New-Design process-selection dialog (issue #570)
+                vm.ShowProcessSelectionAsync = async groups =>
+                {
+                    var pvm = new ProcessSelectionViewModel(groups);
+                    var dlg = new ProcessSelectionDialog { DataContext = pvm };
+                    await dlg.ShowDialog(this);
+                    return pvm.Result;
+                };
+
+                // Prompt for the fabrication process once at startup (issue #570). Deferred so
+                // the main window is fully shown before the modal picker opens; dismissing it
+                // starts in Playground.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    async () => await vm.PromptForInitialProcessAsync(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>

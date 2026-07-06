@@ -5,6 +5,26 @@
   "foundry": "Demo Foundry",
   "version": "2.0.0",
   "defaultWavelengthNm": 1550,
+  "process": {
+    "name": "Demo SOI 220nm",
+    "foundry": "Demo Foundry",
+    "coreThicknessNm": 220,
+    "layers": [],
+    "xsections": [],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": []
+  },
   "components": [
     {
       "name": "1x2 MMI Splitter",
