@@ -155,26 +155,27 @@ public class PdkOffsetEditorViewModelTests
     [Fact]
     public void PinPosition_NazcaRelX_IsLocalXMinusOffsetX()
     {
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5, componentHeight: 20,
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5,
                                            nazcaOffsetX: 5, nazcaOffsetY: 10);
 
         pin.NazcaRelX.ShouldBe(-5.0);  // 0 - 5
     }
 
     [Fact]
-    public void PinPosition_NazcaRelY_UsesFlippedYMinusOffsetY()
+    public void PinPosition_NazcaRelY_IsOffsetYMinusLocalY()
     {
-        // NazcaRelY = (height - localY) - offsetY
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5, componentHeight: 20,
+        // Mapper convention: NazcaOriginOffsetY is the org's distance below
+        // the bbox top edge, so NazcaRelY = offsetY - localY.
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5,
                                            nazcaOffsetX: 5, nazcaOffsetY: 10);
 
-        pin.NazcaRelY.ShouldBe(5.0);   // (20 - 5) - 10 = 5
+        pin.NazcaRelY.ShouldBe(5.0);   // 10 - 5 = 5
     }
 
     [Fact]
     public void PinPosition_WhenZeroOffset_NazcaRelXEqualsLocalX()
     {
-        var pin = new PinPositionViewModel("a0", localX: 15.0, localY: 5, componentHeight: 20,
+        var pin = new PinPositionViewModel("a0", localX: 15.0, localY: 5,
                                            nazcaOffsetX: 0, nazcaOffsetY: 0);
 
         pin.NazcaRelX.ShouldBe(15.0);
@@ -184,14 +185,14 @@ public class PdkOffsetEditorViewModelTests
     public void PinPosition_WithNegativeOffsetAndPinAtOrigin_ComputesCorrectly()
     {
         // Covers the negative-offset arithmetic path that the positive-only
-        // tests above skip. Pin at (0, 0), 10 µm-tall component, offset (-3, -4):
+        // tests above skip. Pin at (0, 0), offset (-3, -4):
         //   NazcaRelX = 0 - (-3) = 3
-        //   NazcaRelY = (10 - 0) - (-4) = 14
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 0, componentHeight: 10,
+        //   NazcaRelY = -4 - 0 = -4
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 0,
                                            nazcaOffsetX: -3, nazcaOffsetY: -4);
 
         pin.NazcaRelX.ShouldBe(3.0);
-        pin.NazcaRelY.ShouldBe(14.0);
+        pin.NazcaRelY.ShouldBe(-4.0);
     }
 
     // ─── PdkOffsetEditorViewModel ──────────────────────────────────────────────
@@ -314,11 +315,11 @@ public class PdkOffsetEditorViewModelTests
         vm.OffsetY = 0.0;
         vm.ApplyOffsetCommand.Execute(null);
 
-        // Pin a0: localX=0, localY=5, height=20, offset=(0,0)
+        // Pin a0: localX=0, localY=5, offset=(0,0)
         // NazcaRelX = 0 - 0 = 0
-        // NazcaRelY = (20 - 5) - 0 = 15
+        // NazcaRelY = 0 - 5 = -5 (mapper convention: offsetY - localY)
         vm.PinPositions[0].NazcaRelX.ShouldBe(0.0);
-        vm.PinPositions[0].NazcaRelY.ShouldBe(15.0);
+        vm.PinPositions[0].NazcaRelY.ShouldBe(-5.0);
     }
 
     [Fact]

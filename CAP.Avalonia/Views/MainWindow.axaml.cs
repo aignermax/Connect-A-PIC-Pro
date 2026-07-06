@@ -1,7 +1,9 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
@@ -31,6 +33,7 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
             {
                 WireSettingsOpener(vm); // see MainWindow.SettingsOpener.cs
+                AttachNotificationHost();
 
                 vm.FileDialogService = new FileDialogService(this);
                 vm.FileOperations.MessageBoxService = new MessageBoxService();
@@ -180,6 +183,25 @@ public partial class MainWindow : Window
                 };
             }
         };
+    }
+
+    /// <summary>
+    /// Creates the toast host for transient, non-error feedback (issue #586)
+    /// and connects it to the app-wide <see cref="NotificationService"/> so
+    /// ViewModels can raise auto-dismissing popups on the right side of the
+    /// window instead of opening the error console.
+    /// </summary>
+    private void AttachNotificationHost()
+    {
+        const int maxVisibleToasts = 3;
+        var manager = new WindowNotificationManager(this)
+        {
+            Position = NotificationPosition.BottomRight,
+            MaxItems = maxVisibleToasts
+        };
+
+        var service = App.Services.GetService(typeof(NotificationService)) as NotificationService;
+        service?.Attach(manager);
     }
 
     /// <summary>
@@ -574,13 +596,17 @@ public partial class MainWindow : Window
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
+        var notificationService = App.Services.GetService(typeof(INotificationService))
+            as INotificationService;
+
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
             importers: null,
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
-            fdtdRequestFactory: fdtdRequestFactory);
+            fdtdRequestFactory: fdtdRequestFactory,
+            notificationService: notificationService);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
