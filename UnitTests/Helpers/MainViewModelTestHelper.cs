@@ -149,7 +149,10 @@ public static class MainViewModelTestHelper
             {
                 new GenericComponentEditorProvider()
             }),
-            new TimeDomainViewModel());
+            new TimeDomainViewModel(),
+            // Registry browser backed by the committed fixtures — no network access.
+            new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
+                new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()));
     }
 
     /// <summary>

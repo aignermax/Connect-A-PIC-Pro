@@ -732,6 +732,9 @@
                     <!-- Time-Domain (Transient) Simulation Panel -->
                     <panels:TimeDomainPanel/>
 
+                    <!-- Photonic Registry browser (read-only, issue #656) -->
+                    <panels:RegistryBrowserPanel/>
+
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
                     <TextBlock Text="Lock Elements:" Foreground="Gold" Margin="0,0,0,5" FontWeight="SemiBold"/>

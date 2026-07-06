@@ -53,6 +53,20 @@ public class UiScreenshotTests
         TryCapture(() => new RoutingDiagnosticsPanel(), vm, 600, 700, outputDir, "RoutingDiagnosticsPanel.png", captured, skipped);
         TryCapture(() => new SelectedComponentPropertiesPanel(), vm, 450, 600, outputDir, "SelectedComponentPropertiesPanel.png", captured, skipped);
 
+        // Photonic Registry panel (#656): the helper wires a stubbed client fed by the
+        // committed fixtures (no network). Expand to trigger the lazy load, set a divergent
+        // active process so the "different process" indicator renders, and select a
+        // component so the detail pane (parameters + artifact provenance) is visible.
+        var registry = vm.RightPanel.Registry;
+        registry.IsExpanded = true;
+        PumpUntilComplete(registry.IndexLoadTask);
+        registry.ActiveProcessId = "my-inhouse-fab";
+        // y-branch-1x2 is the only component with a committed manifest fixture,
+        // so selecting it renders a fully populated detail pane.
+        registry.SelectedComponent = registry.Components.FirstOrDefault(c => c.Id == "y-branch-1x2");
+        PumpUntilComplete(registry.DetailsLoadTask);
+        TryCapture(() => new RegistryBrowserPanel(), vm, 450, 950, outputDir, "RegistryBrowserPanel.png", captured, skipped);
+
         // Settings content: the environment manager moved from the Properties sidebar to a
         // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).
         // Seed one active, healthy managed environment so the unified list renders a real row
@@ -103,6 +117,17 @@ public class UiScreenshotTests
         }
 
         captured.Count.ShouldBeGreaterThan(0, "At least one screenshot must be captured");
+    }
+
+    /// <summary>
+    /// Pumps the headless UI dispatcher until <paramref name="task"/> completes,
+    /// so async ViewModel loads finish without deadlocking the test thread.
+    /// </summary>
+    private static void PumpUntilComplete(Task task)
+    {
+        while (!task.IsCompleted)
+            Dispatcher.UIThread.RunJobs();
+        task.GetAwaiter().GetResult();
     }
 
     private static void TryCapture(

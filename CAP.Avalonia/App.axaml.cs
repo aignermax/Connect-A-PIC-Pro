@@ -36,6 +36,7 @@ public partial class App : Application
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
+        services.AddComponentRegistryFeature();
 
         services.AddSingleton<MainViewModel>();
     }

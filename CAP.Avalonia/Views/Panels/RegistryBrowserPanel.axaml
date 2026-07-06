@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:reg="using:CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser"
+             x:Class="CAP.Avalonia.Views.Panels.RegistryBrowserPanel"
+             x:DataType="vm:MainViewModel">
+
+    <StackPanel>
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Expander IsExpanded="{Binding RightPanel.Registry.IsExpanded}"
+                  Background="Transparent" Padding="0" MinHeight="0">
+            <Expander.Header>
+                <TextBlock Text="Photonic Registry" Foreground="DeepSkyBlue" FontWeight="SemiBold"/>
+            </Expander.Header>
+            <StackPanel Margin="0,5,0,0">
+                <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
+                    Open-source components shared by the community. Read-only browsing — placement follows in a later release.
+                </TextBlock>
+
+                <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,0,0,6">
+                    <Button Content="Refresh"
+                            Command="{Binding RightPanel.Registry.RefreshCommand}"
+                            Background="#3d3d5d" FontSize="11"
+                            IsEnabled="{Binding RightPanel.Registry.IsLoading, Converter={x:Static BoolConverters.Not}}"/>
+                    <TextBlock Text="Loading…" Foreground="Gray" FontSize="10" VerticalAlignment="Center"
+                               IsVisible="{Binding RightPanel.Registry.IsLoading}"/>
+                </StackPanel>
+
+                <TextBlock Text="{Binding RightPanel.Registry.ErrorMessage}"
+                           Foreground="Salmon" FontSize="10" Margin="0,0,0,5" TextWrapping="Wrap"
+                           IsVisible="{Binding RightPanel.Registry.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <TextBlock Text="{Binding RightPanel.Registry.SourceNote}"
+                           Foreground="Gold" FontSize="10" Margin="0,0,0,5" TextWrapping="Wrap"
+                           IsVisible="{Binding RightPanel.Registry.SourceNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                <ListBox ItemsSource="{Binding RightPanel.Registry.Components}"
+                         SelectedItem="{Binding RightPanel.Registry.SelectedComponent}"
+                         MaxHeight="320" Background="#1e1e1e">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="reg:RegistryComponentItemViewModel">
+                            <StackPanel Margin="0,3">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding Name}" Foreground="White"
+                                               FontWeight="SemiBold" FontSize="12"/>
+                                    <Border Background="{Binding StatusColor}" CornerRadius="3"
+                                            Padding="4,1" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Status}" Foreground="White" FontSize="9"/>
+                                    </Border>
+                                    <Border Background="#7a3d3d" CornerRadius="3" Padding="4,1"
+                                            VerticalAlignment="Center"
+                                            IsVisible="{Binding IsProcessMismatch}">
+                                        <TextBlock Text="different process" Foreground="White" FontSize="9"/>
+                                    </Border>
+                                </StackPanel>
+                                <TextBlock Text="{Binding ProcessAndPortsText}" Foreground="Gray" FontSize="10"/>
+                                <TextBlock Text="{Binding TiersText}" Foreground="#8fbf8f" FontSize="10"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Detail pane for the selected component -->
+                <StackPanel Margin="0,8,0,0"
+                            IsVisible="{Binding RightPanel.Registry.SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <TextBlock Text="Details:" Foreground="DeepSkyBlue" FontSize="11" FontWeight="SemiBold" Margin="0,0,0,3"/>
+                    <TextBlock Text="Loading details…" Foreground="Gray" FontSize="10"
+                               IsVisible="{Binding RightPanel.Registry.Details.IsLoading}"/>
+                    <TextBlock Text="{Binding RightPanel.Registry.Details.ErrorMessage}"
+                               Foreground="Salmon" FontSize="10" TextWrapping="Wrap"
+                               IsVisible="{Binding RightPanel.Registry.Details.ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <TextBlock Text="{Binding RightPanel.Registry.Details.Description}"
+                               Foreground="White" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    <TextBlock Text="{Binding RightPanel.Registry.Details.PortsText}"
+                               Foreground="Gray" FontSize="10" Margin="0,0,0,4"
+                               IsVisible="{Binding RightPanel.Registry.Details.PortsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                    <TextBlock Text="Parameters:" Foreground="Gray" FontSize="10" FontWeight="SemiBold"
+                               IsVisible="{Binding RightPanel.Registry.Details.HasParameters}"/>
+                    <ItemsControl ItemsSource="{Binding RightPanel.Registry.Details.Parameters}" Margin="6,0,0,4">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" Foreground="#b0b0b0" FontFamily="Consolas" FontSize="10"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Text="Artifacts:" Foreground="Gray" FontSize="10" FontWeight="SemiBold"
+                               IsVisible="{Binding RightPanel.Registry.Details.HasArtifacts}"/>
+                    <ItemsControl ItemsSource="{Binding RightPanel.Registry.Details.Artifacts}" Margin="6,0,0,4">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="reg:RegistryArtifactDisplay">
+                                <StackPanel Margin="0,2">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="{Binding Tier}" Foreground="#8fbf8f" FontSize="10"/>
+                                        <TextBlock Text="{Binding File}" Foreground="White" FontSize="10"/>
+                                        <Border Background="{Binding StatusColor}" CornerRadius="3"
+                                                Padding="3,0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding Status}" Foreground="White" FontSize="9"/>
+                                        </Border>
+                                    </StackPanel>
+                                    <TextBlock Text="{Binding Provenance}" Foreground="Gray" FontSize="9" TextWrapping="Wrap"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <TextBlock Foreground="Gray" FontSize="9" Margin="0,2,0,0"
+                               IsVisible="{Binding RightPanel.Registry.Details.License, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <Run Text="License: "/><Run Text="{Binding RightPanel.Registry.Details.License}"/>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Expander>
+    </StackPanel>
+
+</UserControl>
