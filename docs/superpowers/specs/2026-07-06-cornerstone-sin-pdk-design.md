@@ -8,9 +8,25 @@
 Ship a **real, open-source second fabrication process** (silicon nitride) so the single-process rule is demonstrable with genuine data — not the invented SiN demo PDK that was reverted (it broke `PdkJsonSaverRoundTripTests` and `GdsRoundtripTests`). CornerStone SiN is a real UK-MPW process, open via gdsfactory's `cspdk` package.
 
 ## Confirmed facts (this machine)
-- gdsfactory **9.23.0** is available in the managed env (`%LOCALAPPDATA%/Lunima/envs/fd`). That env has no `pip`/`cspdk` yet.
-- `cspdk` (PyPI, open source) provides two real CornerStone processes: **`cspdk.si220`** (220 nm SOI) and **`cspdk.sin300`** (300 nm SiN). We want `sin300`.
-- SiN300 fingerprint (for #652's compatibility model): coreMaterial `Si3N4`, `coreThicknessNm` 300, cladding `SiO2`, designWavelengthNm 1550 → **distinct** from the Si-220 SOI PDKs (different material *and* thickness) → its own process group. 
+- gdsfactory **9.23.0** available; **cspdk 1.4.2** installed into a throwaway uv env; `cspdk.sin300.PDK` has 38 cells.
+- SiN300 fingerprint (for #652's compatibility model): coreMaterial `Si3N4`, `coreThicknessNm` 300, cladding `SiO2`, designWavelengthNm 1550 → **distinct** from the Si-220 SOI PDKs (different material *and* thickness) → its own process group.
+
+## Extraction results — DONE (real cspdk.sin300 data, via `scripts/extract_cspdk_sin300.py`)
+Curated placeable set with real geometry + ports (µm; orientation in degrees). Lunima pin
+mapping: `offsetX = port.x − bbox.left`, `offsetY = port.y − bbox.bottom`, `angleDegrees = orientation`.
+(`coupler` skipped — its cspdk 1.4.2 default args raise `bend_s(allow_min_radius_violation=…)`.)
+
+| component | W×H µm | ports (name, x, y, orient) |
+|---|---|---|
+| straight | 10.0 × 1.2 | o1(0,0,180) o2(10,0,0) |
+| taper | 10.0 × 1.2 | o1(0,0,180) o2(10,0,0) |
+| bend_euler | 25.6 × 25.6 | o1(0,0,180) o2(25,25,90) |
+| mmi1x2 | 164.7 × 12.0 | o1(−50,0,180) o2(114.7,2.95,0) o3(114.7,−2.95,0) |
+| mmi2x2 | 105.5 × 12.0 | o1(−50,−2.95,180) o2(−50,2.95,180) o3(55.5,2.95,0) o4(55.5,−2.95,0) |
+| grating_coupler_rectangular | 219.8 × 11.0 | o1(0,0,180) o2(209.652,0,0) |
+
+Note the SiN single-mode waveguide is **1.2 µm** wide (vs ~0.5 µm for Si-220), and mmi ports
+sit at ±2.95 µm — genuine SiN-300 dimensions. `gdsFactoryFunction = "cspdk.sin300.<name>"`.
 
 ## Core problem: gdsfactory-native PDK in a nazca-centric schema
 Lunima's bundled PDKs are **nazca-based**: each component carries a `nazcaFunction` (+ PDK `nazcaModuleName`), and several tests export **all** bundled components through nazca (`NazcaExportAllComponentsTests`, `GdsRoundtripTests`, `PdkJsonSaverRoundTripTests`). cspdk components are **gdsfactory** cells with no nazca functions. A naive add (invented nazca function strings, hand-written JSON) breaks those tests — exactly what happened with the reverted demo PDK.
