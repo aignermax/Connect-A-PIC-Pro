@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.Process;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
@@ -89,6 +90,20 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
     /// </summary>
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
+
+    /// <summary>
+    /// Callback returning the design's active process (issue #570), consulted before
+    /// placement and paste so a component from a foreign PDK is rejected. Wired by
+    /// <c>MainViewModel</c> to <c>FileOperationsViewModel.ActiveProcess</c>.
+    /// </summary>
+    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
+
+    /// <summary>
+    /// Callback returning the names of loaded PDKs flagged process-agnostic (e.g. "Analysis
+    /// Tools"), which stay placeable/pasteable regardless of the active process (issue #570).
+    /// Wired by <c>MainViewModel</c> to <c>LeftPanelViewModel.GetProcessAgnosticPdkNames</c>.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
@@ -304,6 +319,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private void PlaceComponentAt(double x, double y)
     {
         if (SelectedTemplate == null) return;
+
+        var (isAllowed, blockReason) = SingleProcessPolicy.CheckPlacement(
+            GetActiveProcess?.Invoke(), SelectedTemplate.PdkSource,
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+        if (!isAllowed)
+        {
+            UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
+            return;
+        }
 
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
@@ -639,6 +663,18 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public void PasteSelected(double? targetX = null, double? targetY = null)
     {
         if (!_canvas.Clipboard.HasContent) return;
+
+        var active = GetActiveProcess?.Invoke();
+        var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var blockedCount = _canvas.Clipboard.PeekPdkSources()
+            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
+        if (blockedCount > 0)
+        {
+            UpdateStatus?.Invoke(
+                $"Clipboard has {blockedCount} component(s) from another process; " +
+                $"cannot paste into the '{active!.DisplayName}' design.");
+            return;
+        }
 
         var cmd = new PasteComponentsCommand(_canvas, _canvas.Clipboard, targetX, targetY);
         _commandManager.ExecuteCommand(cmd);

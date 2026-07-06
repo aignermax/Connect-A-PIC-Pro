@@ -229,6 +229,11 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
+        // Single-process enforcement at placement/paste (issue #570): consult the design's
+        // active process and the process-agnostic tool PDKs (e.g. "Analysis Tools").
+        CanvasInteraction.GetActiveProcess = () => FileOperations.ActiveProcess;
+        CanvasInteraction.GetProcessAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+
         // Let the export guard open the Settings window (e.g. on the Python-Environments
         // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
         FileOperations.ShowSettingsWindow = async pageType =>
