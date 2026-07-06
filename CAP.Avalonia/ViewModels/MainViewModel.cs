@@ -532,26 +532,34 @@ public partial class MainViewModel : ObservableObject
     private async Task LoadDesign() => await FileOperations.LoadDesignCommand.ExecuteAsync(null);
 
     /// <summary>
-    /// Starts a new design: asks the user which fabrication process to lock the design
-    /// to (or Playground) before clearing the canvas (issue #570). Cancelling the picker
-    /// aborts New Design entirely — the current canvas is left untouched. When no picker
-    /// is wired (headless/test contexts), falls back to the pre-#570 behavior of clearing
-    /// the canvas without setting a process.
+    /// Starts a new design: first clears the canvas via
+    /// <see cref="FileOperationsViewModel.NewProjectCommand"/> — which prompts to save
+    /// unsaved changes and silently no-ops if the user cancels that prompt — and only
+    /// once the canvas is confirmed empty does it ask which fabrication process to lock
+    /// the fresh design to (or Playground), issue #570. This ordering is required so a
+    /// picked process is never applied to a design that failed to clear (the exact
+    /// data-integrity bug the process lock exists to prevent). Cancelling the process
+    /// picker after a successful clear simply leaves the new, empty design with no
+    /// process set. When no picker is wired (headless/test contexts), the canvas is
+    /// cleared and no process is set.
     /// </summary>
     [RelayCommand]
     private async Task NewProject()
     {
-        ActiveProcessSelection? selection = null;
-        if (ShowProcessSelectionAsync != null)
-        {
-            var groups = ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
-            selection = await ShowProcessSelectionAsync(groups);
-            if (selection == null)
-                return; // User cancelled the picker — abort New Design.
-        }
-
         await FileOperations.NewProjectCommand.ExecuteAsync(null);
 
+        // NewProjectCommand no-ops (e.g. the user cancelled the unsaved-changes save
+        // prompt) without clearing the canvas. Applying a picked process to that
+        // still-populated, un-cleared design would corrupt the process/canvas
+        // invariant #570 exists to protect — abort before showing the picker.
+        if (Canvas.Components.Count > 0 || Canvas.Connections.Count > 0)
+            return;
+
+        if (ShowProcessSelectionAsync == null)
+            return;
+
+        var groups = ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+        var selection = await ShowProcessSelectionAsync(groups);
         if (selection != null)
             FileOperations.SetActiveProcess(selection);
     }
