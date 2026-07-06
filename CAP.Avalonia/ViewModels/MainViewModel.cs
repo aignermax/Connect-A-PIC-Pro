@@ -230,23 +230,25 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
-        // Single-process enforcement (issue #570): every placement surface — manual
+        // Single-process enforcement (issues #570/#653): every placement surface — manual
         // placement/paste, saved group templates, and the AI assistant — consults the
         // same active process, the same process-agnostic tool PDKs, and the same
-        // library-based PDK-source resolver.
+        // library-based PDK-source resolver (groups/pasted copies carry no source of
+        // their own, so children are resolved against the loaded library).
         Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
         Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
-        Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource =
-            comp => FileOperations.ResolveTemplatePdkSource(comp);
+        Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
+            ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
 
         CanvasInteraction.GetActiveProcess = getActiveProcess;
         CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
-        CanvasInteraction.ResolvePdkSource = resolvePdkSource;
+        CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
         if (aiGridService is Services.AiGridService aiGrid)
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+            aiGrid.ResolveComponentPdkSource = resolvePdkSource;
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
