@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.Process;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
@@ -89,6 +90,33 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
     /// </summary>
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
+
+    /// <summary>
+    /// Callback returning the design's active process (issue #570), consulted before
+    /// placement and paste so a component from a foreign PDK is rejected. Wired by
+    /// <c>MainViewModel</c> to <c>FileOperationsViewModel.ActiveProcess</c>.
+    /// </summary>
+    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
+
+    /// <summary>
+    /// Callback returning the names of loaded PDKs flagged process-agnostic (e.g. "Analysis
+    /// Tools"), which stay placeable/pasteable regardless of the active process (issue #570).
+    /// Wired by <c>MainViewModel</c> to <c>LeftPanelViewModel.GetProcessAgnosticPdkNames</c>.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
+
+    /// <summary>
+    /// Resolves a component's PDK source from the loaded library (issue #570). Saved
+    /// group templates record no PDK source, so their children are resolved through
+    /// this before placement. Wired by <c>MainViewModel</c> to
+    /// <c>FileOperationsViewModel.ResolveTemplatePdkSource</c>.
+    /// </summary>
+    public Func<Component, string?>? ResolvePdkSource { get; set; }
+
+    /// <summary>Flattens a group's children, recursing into nested groups.</summary>
+    private static IEnumerable<Component> FlattenGroupChildren(ComponentGroup group) =>
+        group.ChildComponents.SelectMany(c =>
+            c is ComponentGroup nested ? FlattenGroupChildren(nested) : new[] { c });
 
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
@@ -305,6 +333,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (SelectedTemplate == null) return;
 
+        var (isAllowed, blockReason) = SingleProcessPolicy.CheckPlacement(
+            GetActiveProcess?.Invoke(), SelectedTemplate.PdkSource,
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+        if (!isAllowed)
+        {
+            UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
+            return;
+        }
+
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
 
@@ -327,6 +364,23 @@ public partial class CanvasInteractionViewModel : ObservableObject
         if (SelectedGroupTemplate.TemplateGroup == null)
         {
             UpdateStatus?.Invoke($"ERROR: Template '{SelectedGroupTemplate.Name}' not loaded! TemplateGroup is null.");
+            return;
+        }
+
+        // Single-process enforcement (issue #570): saved group templates record no PDK
+        // source themselves, so resolve every child component against the library and
+        // apply the same gate as single-component placement.
+        var active = GetActiveProcess?.Invoke();
+        var agnostic = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var blockReasonForGroup = FlattenGroupChildren(SelectedGroupTemplate.TemplateGroup)
+            .Select(child => SingleProcessPolicy.CheckPlacement(
+                active, ResolvePdkSource?.Invoke(child), agnostic))
+            .Where(check => !check.IsAllowed)
+            .Select(check => check.BlockReason)
+            .FirstOrDefault();
+        if (blockReasonForGroup != null)
+        {
+            UpdateStatus?.Invoke(blockReasonForGroup);
             return;
         }
 
@@ -639,6 +693,18 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public void PasteSelected(double? targetX = null, double? targetY = null)
     {
         if (!_canvas.Clipboard.HasContent) return;
+
+        var active = GetActiveProcess?.Invoke();
+        var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var blockedCount = _canvas.Clipboard.PeekPdkSources()
+            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
+        if (blockedCount > 0)
+        {
+            UpdateStatus?.Invoke(
+                $"Clipboard has {blockedCount} component(s) from another process; " +
+                $"cannot paste into the '{active!.DisplayName}' design.");
+            return;
+        }
 
         var cmd = new PasteComponentsCommand(_canvas, _canvas.Clipboard, targetX, targetY);
         _commandManager.ExecuteCommand(cmd);

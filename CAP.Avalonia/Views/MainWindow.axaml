@@ -205,13 +205,31 @@
 
         <!-- Status Bar -->
         <Border DockPanel.Dock="Bottom" Background="#1e1e1e" Height="25">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding StatusText}"
-                           VerticalAlignment="Center" Margin="10,0" Foreground="LightGray"/>
-                <TextBlock VerticalAlignment="Center" Margin="20,0,0,0" Foreground="Gray">
-                    <Run Text="S=Select  C=Connect  D=Delete  R=Rotate  G=Grid Snap  F=Fit  L=Simulate  P=Toggle Overlay  Del=Remove  Ctrl+G=Group  Ctrl+Shift+G=Ungroup  Ctrl+L=Lock/Unlock  Ctrl+Z/Y=Undo/Redo  Ctrl+C/V=Copy/Paste  F12=Error Console"/>
-                </TextBlock>
-            </StackPanel>
+            <DockPanel LastChildFill="True">
+                <!-- Active process indicator (issue #570): persistent, low-clutter home in the
+                     status bar (right) rather than the crowded top toolbar. Green = a real
+                     process; amber = Playground (not manufacturable); "No process selected" until
+                     one is chosen via File → New. -->
+                <Border DockPanel.Dock="Right" x:Name="ActiveProcessIndicator"
+                        Margin="6,3" Padding="8,1" CornerRadius="3" VerticalAlignment="Center"
+                        Background="#2d4d2d" Classes.playground="{Binding IsPlayground}"
+                        ToolTip.Tip="The fabrication process this design is locked to (set via File → New). Amber = Playground: not manufacturable.">
+                    <Border.Styles>
+                        <Style Selector="Border.playground">
+                            <Setter Property="Background" Value="#5d4510"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="{Binding ActiveProcessLabel}"
+                               Foreground="White" FontSize="10" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding StatusText}"
+                               VerticalAlignment="Center" Margin="10,0" Foreground="LightGray"/>
+                    <TextBlock VerticalAlignment="Center" Margin="20,0,0,0" Foreground="Gray">
+                        <Run Text="S=Select  C=Connect  D=Delete  R=Rotate  G=Grid Snap  F=Fit  L=Simulate  P=Toggle Overlay  Del=Remove  Ctrl+G=Group  Ctrl+Shift+G=Ungroup  Ctrl+L=Lock/Unlock  Ctrl+Z/Y=Undo/Redo  Ctrl+C/V=Copy/Paste  F12=Error Console"/>
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <!-- Error Console Panel (collapsible, above status bar, toggled via F12) -->
@@ -571,7 +589,11 @@
                                                 <CheckBox IsChecked="{Binding IsEnabled}"
                                                           Content="{Binding Name}"
                                                           FontSize="10"
-                                                          Margin="0,0,5,0"/>
+                                                          Margin="0,0,5,0"
+                                                          IsEnabled="{Binding !IsLockedByProcess}"/>
+                                                <TextBlock Text="🔒" FontSize="9" VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsLockedByProcess}"
+                                                           ToolTip.Tip="Belongs to another fabrication process — locked while this design's process is active."/>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
                                                 <TextBlock Text="{Binding SourceBadge}"
@@ -593,6 +615,12 @@
                                         Width="75" Height="24" Margin="2" FontSize="10"
                                         Background="#3d3d3d"/>
                             </StackPanel>
+
+                            <!-- Active fabrication process of this design (issue #570) -->
+                            <TextBlock Text="{Binding ActiveProcessLabel}"
+                                       FontSize="10" FontWeight="SemiBold" Foreground="LightSkyBlue"
+                                       Margin="2,8,2,0" TextWrapping="Wrap"
+                                       ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
 
                             <!-- Fabrication process (layer stack, cross-sections, materials) — #570 -->
                             <Button Content="Fabrication Process…" Command="{Binding OpenProcessManagerCommand}"

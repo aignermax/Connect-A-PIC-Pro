@@ -6,6 +6,26 @@
   "version": "0.5.4",
   "defaultWavelengthNm": 1550,
   "nazcaModuleName": "siepic_ebeam_pdk",
+  "process": {
+    "name": "SiEPIC EBeam SOI 220nm",
+    "foundry": "Applied Nanotools",
+    "coreThicknessNm": 220,
+    "layers": [],
+    "xsections": [],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": []
+  },
   "components": [
     {
       "name": "Y-Branch 1550",

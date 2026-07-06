@@ -14,6 +14,23 @@ public partial class PdkManagerViewModel : ObservableObject
     private string _statusText = "";
 
     /// <summary>
+    /// True when the user may freely toggle individual PDKs on/off. Set to false while a real
+    /// (non-Playground) process governs the enabled set (issue #570), so the per-PDK checkboxes
+    /// in the PDK-manager UI can be disabled/hidden and reflect that the selection is locked.
+    /// </summary>
+    [ObservableProperty]
+    [NotifyCanExecuteChangedFor(nameof(EnableAllCommand))]
+    [NotifyCanExecuteChangedFor(nameof(DisableAllCommand))]
+    private bool _manualTogglesEnabled = true;
+
+    /// <summary>
+    /// True while a bulk update (SetEnabledPdks / EnableAll / DisableAll) is toggling
+    /// PDKs: the per-PDK PropertyChanged handler skips its per-item filter refresh so a
+    /// batch of N toggles costs one re-filter (and one preferences write), not N+1.
+    /// </summary>
+    private bool _suppressFilterNotifications;
+
+    /// <summary>
     /// Collection of all loaded PDK information.
     /// Each item tracks name, path, component count, and enabled state.
     /// </summary>
@@ -37,7 +54,7 @@ public partial class PdkManagerViewModel : ObservableObject
         var pdkVm = new PdkInfoViewModel(name, filePath, isBundled, componentCount);
         pdkVm.PropertyChanged += (s, e) =>
         {
-            if (e.PropertyName == nameof(PdkInfoViewModel.IsEnabled))
+            if (e.PropertyName == nameof(PdkInfoViewModel.IsEnabled) && !_suppressFilterNotifications)
             {
                 OnFilterChanged?.Invoke();
                 UpdateStatusText();
@@ -67,31 +84,41 @@ public partial class PdkManagerViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Enables all PDKs and refreshes the component library.
+    /// Enables all PDKs and refreshes the component library. Disabled while a process
+    /// governs the enabled set (issue #570) — the bulk buttons must not override the
+    /// same lock that greys out the per-PDK checkboxes.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
     private void EnableAll()
     {
-        foreach (var pdk in LoadedPdks)
-        {
-            pdk.IsEnabled = true;
-        }
-        OnFilterChanged?.Invoke();
+        SetAllEnabled(true);
         StatusText = "All PDKs enabled";
     }
 
     /// <summary>
-    /// Disables all PDKs and refreshes the component library.
+    /// Disables all PDKs and refreshes the component library. Disabled while a process
+    /// governs the enabled set (issue #570).
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
     private void DisableAll()
     {
-        foreach (var pdk in LoadedPdks)
+        SetAllEnabled(false);
+        StatusText = "All PDKs disabled";
+    }
+
+    private void SetAllEnabled(bool enabled)
+    {
+        _suppressFilterNotifications = true;
+        try
         {
-            pdk.IsEnabled = false;
+            foreach (var pdk in LoadedPdks)
+                pdk.IsEnabled = enabled;
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
         }
         OnFilterChanged?.Invoke();
-        StatusText = "All PDKs disabled";
     }
 
     /// <summary>
@@ -124,6 +151,68 @@ public partial class PdkManagerViewModel : ObservableObject
             .Select(p => p.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Drives the enabled set directly: every loaded PDK whose name is in <paramref name="names"/>
+    /// is enabled, all others disabled. Used to lock the library to the active process's member
+    /// PDKs (issue #570); callers are expected to also set <see cref="ManualTogglesEnabled"/>.
+    /// </summary>
+    public void SetEnabledPdks(IEnumerable<string> names)
+    {
+        var nameSet = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in LoadedPdks)
+            {
+                pdk.IsEnabled = nameSet.Contains(pdk.Name);
+            }
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+
+        UpdateStatusText();
+        OnFilterChanged?.Invoke();
+    }
+
+    /// <summary>
+    /// Locks the library to a process (issue #570): PDKs in <paramref name="allowedNames"/>
+    /// (process members + process-agnostic tools) start enabled and REMAIN individually
+    /// toggleable — deselecting a member PDK to declutter the component library is a
+    /// filtering choice, not a process violation. All other PDKs are disabled and their
+    /// checkbox is locked, because enabling a foreign-process PDK would contradict the
+    /// single-process rule.
+    /// </summary>
+    public void ApplyProcessLock(IEnumerable<string> allowedNames)
+    {
+        var allowed = allowedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in LoadedPdks)
+            {
+                var isAllowed = allowed.Contains(pdk.Name);
+                pdk.IsEnabled = isAllowed;
+                pdk.IsLockedByProcess = !isAllowed;
+            }
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+
+        UpdateStatusText();
+        OnFilterChanged?.Invoke();
+    }
+
+    /// <summary>Removes all per-PDK process locks (returning to Playground / no selection).</summary>
+    public void ClearProcessLock()
+    {
+        foreach (var pdk in LoadedPdks)
+            pdk.IsLockedByProcess = false;
+    }
 }
 
 /// <summary>
@@ -133,6 +222,14 @@ public partial class PdkInfoViewModel : ObservableObject
 {
     [ObservableProperty]
     private bool _isEnabled = true;
+
+    /// <summary>
+    /// True when this PDK belongs to a foreign process while the design is locked
+    /// (issue #570): its checkbox is disabled because enabling it would violate the
+    /// single-process rule. Member/tool PDKs stay toggleable for library filtering.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isLockedByProcess;
 
     public string Name { get; }
     public string? FilePath { get; }
