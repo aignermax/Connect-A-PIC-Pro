@@ -67,6 +67,15 @@ public class UiScreenshotTests
             Status = CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentStatus.Healthy,
             PythonVersion = "3.11.9", NazcaVersion = "0.6.1", GdsFactoryVersion = "9.5.3", HasPyclipper = true,
         });
+        // A second, inactive environment so the "Set Active" button state renders alongside
+        // the active "✓ Active" indicator.
+        envRegistry.AddOrUpdate(new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironment
+        {
+            Name = "nazca-py312",
+            VenvPath = Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca-py312"),
+            Status = CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentStatus.Healthy,
+            PythonVersion = "3.12.4", NazcaVersion = "0.6.1", GdsFactoryVersion = null, HasPyclipper = true,
+        });
         envRegistry.SetActive("nazca");
         var envVm = new CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager.PythonEnvironmentManagerViewModel(
             envRegistry,
