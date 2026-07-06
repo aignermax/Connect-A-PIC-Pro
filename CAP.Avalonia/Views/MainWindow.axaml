@@ -589,7 +589,7 @@
                                                           Content="{Binding Name}"
                                                           FontSize="10"
                                                           Margin="0,0,5,0"
-                                                          IsEnabled="{Binding $parent[Window].((vm:MainViewModel)DataContext).LeftPanel.PdkManager.ManualTogglesEnabled}"/>
+                                                          IsEnabled="{Binding $parent[Window].DataContext.LeftPanel.PdkManager.ManualTogglesEnabled}"/>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
                                                 <TextBlock Text="{Binding SourceBadge}"
