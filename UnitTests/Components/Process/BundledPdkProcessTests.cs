@@ -51,6 +51,25 @@ public class BundledPdkProcessTests
     }
 
     [Fact]
+    public void CornerStoneSin_Mmi1x2_HasRealMultiWavelengthSMatrix_AndStraightPassesThrough()
+    {
+        // The SiN components carry real cspdk sax models (mmi) / lossless pass-through
+        // (passives), not an all-zero (perfect-absorber) black-box (#570 review finding #1).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+
+        var mmi = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.mmi1x2");
+        mmi.SMatrix.ShouldNotBeNull();
+        mmi.SMatrix!.WavelengthData.ShouldNotBeNull();
+        mmi.SMatrix.WavelengthData!.Count.ShouldBeGreaterThan(1);            // multi-wavelength
+        var at1550 = mmi.SMatrix.WavelengthData!.Single(w => w.WavelengthNm == 1550);
+        at1550.Connections.ShouldNotBeEmpty();
+        at1550.Connections.ShouldAllBe(c => c.Magnitude > 0.1);             // real split, not absorbed
+
+        var straight = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.straight");
+        straight.SMatrix!.Connections.ShouldContain(c => c.Magnitude == 1.0);  // lossless pass-through
+    }
+
+    [Fact]
     public void CornerStoneSin_IsADistinctProcessFromSoiPdks()
     {
         var loader = new PdkLoader();

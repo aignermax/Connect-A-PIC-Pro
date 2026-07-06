@@ -18,10 +18,25 @@ PDKs for the single-process rule (#570).
 """
 import sys
 import json
+import cmath
 
 # gdsfactory generic utilities / frames / arrays — not placeable SiN circuit components.
 SKIP_UTILITIES = {"array", "compass", "die", "die_nc", "die_no", "pad", "rectangle",
                   "grating_coupler_array"}
+
+# Wavelengths (nm) at which to sample the sax circuit models. C-band-centred on 1550.
+WAVELENGTHS_NM = [1500, 1520, 1540, 1550, 1560, 1580, 1600]
+
+# Components whose sax model + port mapping are unambiguous enough to emit a real S-matrix.
+# mmi1x2/mmi2x2 build cleanly and their in*/out* ports map to the layout ports by orientation.
+SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2"}
+
+# Passive routing components that faithfully pass light (or current) straight through — a
+# lossless pass-through S-matrix is the honest ideal. Their cspdk 1.4.2 sax models raise on
+# the `loss` kwarg, so we synthesize the transfer rather than evaluate it. NOT gratings:
+# a grating is a fibre coupler (out-of-plane, lossy, wavelength-dependent), so a pass-through
+# would be a wrong model — it stays black-box until its real fibre model is wired.
+PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s", "wire_corner"}
 
 
 def _num(v):
@@ -76,7 +91,7 @@ def build_component(pdk, name):
             "offsetYMicrometers": round(y - bottom, 3),
             "angleDegrees": _num(ori),
         })
-    return {
+    comp = {
         "name": _prettify(name),
         "category": _category(name),
         "gdsFactoryFunction": f"cspdk.sin300.{name}",
@@ -84,6 +99,85 @@ def build_component(pdk, name):
         "heightMicrometers": round(top - bottom, 3),
         "pins": pins,
     }
+    smatrix = build_smatrix(name, pins)
+    if smatrix is not None:
+        comp["sMatrix"] = smatrix
+    return comp
+
+
+def _classify_ports(pins):
+    """Split layout pins into (inputs, outputs) by orientation and return the model-port map.
+
+    gdsfactory/sax name west-facing ports in0,in1,… and east-facing ports out0,out1,…, in
+    ascending transverse (y) order. A layout pin faces "in" when its angle points westish
+    (90°<angle<270°). Returns (map, n_in, n_out) where map is {"in0": pinName, "out0": …}.
+    """
+    def norm(a):
+        return a % 360
+    inputs = sorted((p for p in pins if 90 < norm(p["angleDegrees"]) < 270),
+                    key=lambda p: p["offsetYMicrometers"])
+    outputs = sorted((p for p in pins if not (90 < norm(p["angleDegrees"]) < 270)),
+                     key=lambda p: p["offsetYMicrometers"])
+    port_map = {}
+    for i, p in enumerate(inputs):
+        port_map[f"in{i}"] = p["name"]
+    for i, p in enumerate(outputs):
+        port_map[f"out{i}"] = p["name"]
+    return port_map, len(inputs), len(outputs)
+
+
+def build_smatrix(name, pins):
+    """Real S-matrix for the component, or None (black-box).
+
+    - SAX_MODEL_COMPONENTS: evaluate the cspdk sax model at each WAVELENGTHS_NM and emit only
+      forward (in→out) transfers mapped to layout pins — Lunima adds the reverse transfer per
+      connection (PdkTemplateConverter.CreateSMatrixFromPdk), so we must not emit both.
+    - 2-port passives (1 in, 1 out): a lossless pass-through (their cspdk models raise).
+    - otherwise None (grating fibre ports / erroring components stay black-box).
+    """
+    import numpy as np
+    port_map, n_in, n_out = _classify_ports(pins)
+
+    if name in SAX_MODEL_COMPONENTS:
+        try:
+            import cspdk.sin300.models as models
+            model = getattr(models, name)
+            wl_data = []
+            for wl_nm in WAVELENGTHS_NM:
+                s = model(wl=wl_nm / 1000.0)   # sax wavelengths are in µm
+                conns = []
+                for (a, b), value in s.items():
+                    if a not in port_map or b not in port_map:
+                        continue
+                    if not (a.startswith("in") and b.startswith("out")):
+                        continue   # forward transfers only; skip reverse + reflections
+                    v = complex(np.asarray(value).reshape(-1)[0])
+                    if abs(v) < 1e-6:
+                        continue
+                    conns.append({
+                        "fromPin": port_map[a],
+                        "toPin": port_map[b],
+                        "magnitude": round(abs(v), 6),
+                        "phaseDegrees": round(cmath.phase(v) * 180.0 / cmath.pi, 3),
+                    })
+                if conns:
+                    wl_data.append({"wavelengthNm": wl_nm, "connections": conns})
+            if wl_data:
+                return {"wavelengthNm": 1550, "wavelengthData": wl_data}
+        except Exception:  # noqa: BLE001 — fall through to black-box on any model failure
+            return None
+        return None
+
+    # Lossless pass-through for a known passive routing component (straight/taper/bend/wire).
+    if name in PASS_THROUGH_COMPONENTS and n_in == 1 and n_out == 1:
+        return {
+            "wavelengthNm": 1550,
+            "connections": [{
+                "fromPin": port_map["in0"], "toPin": port_map["out0"],
+                "magnitude": 1.0, "phaseDegrees": 0.0,
+            }],
+        }
+    return None
 
 
 def main():
