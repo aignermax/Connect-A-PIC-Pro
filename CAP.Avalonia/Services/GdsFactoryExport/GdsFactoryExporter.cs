@@ -25,15 +25,17 @@ public class GdsFactoryExporter
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
     {
+        // Materialized once so header/factories/stubs/placement share a single canvas walk (#666).
+        var components = EnumerateExportableComponents(canvas).ToList();
         var sb = new StringBuilder();
-        AppendHeader(sb, canvas, options);
-        AppendOverrideFactories(sb, canvas, overrides);
-        AppendStubs(sb, canvas, options, overrides);
+        AppendHeader(sb, components, options);
+        AppendOverrideFactories(sb, components, overrides);
+        AppendStubs(sb, components, options, overrides);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
         sb.AppendLine("# Components");
-        foreach (var comp in EnumerateExportableComponents(canvas))
+        foreach (var comp in components)
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
         AppendConnections(sb, canvas);
@@ -91,11 +93,11 @@ public class GdsFactoryExporter
     /// <summary>Emits one factory per gdsfactory-backend override: the user's code wrapped in a
     /// function that returns the `component` it defines.</summary>
     private static void AppendOverrideFactories(
-        StringBuilder sb, DesignCanvasViewModel canvas,
+        StringBuilder sb, IReadOnlyList<Component> components,
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var comp in EnumerateExportableComponents(canvas))
+        foreach (var comp in components)
         {
             var code = GdsFactoryOverrideCode(comp, overrides);
             if (code == null) continue;
@@ -130,12 +132,12 @@ public class GdsFactoryExporter
         }
     }
 
-    private static void AppendHeader(StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    private static void AppendHeader(StringBuilder sb, IReadOnlyList<Component> components, GdsFactoryExportOptions options)
     {
         sb.AppendLine("import os");
         sb.AppendLine("import gdsfactory as gf");
 
-        var gdsfactoryModules = GdsFactoryModules(canvas).ToList();
+        var gdsfactoryModules = GdsFactoryModules(components).ToList();
         if (gdsfactoryModules.Count > 0)
         {
             // gdsfactory-backend design (e.g. CornerStone SiN via cspdk.sin300, #570): one
@@ -165,11 +167,11 @@ public class GdsFactoryExporter
     }
 
     private static void AppendStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        StringBuilder sb, IReadOnlyList<Component> components, GdsFactoryExportOptions options,
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var comp in EnumerateExportableComponents(canvas))
+        foreach (var comp in components)
         {
             // A gdsfactory override / real gdsfactory factory / ubcpdk cell all replace the stub.
             if (GdsFactoryOverrideCode(comp, overrides) != null
@@ -199,8 +201,8 @@ public class GdsFactoryExporter
     /// part of each <see cref="Component.GdsFactoryFunction"/> (e.g. "cspdk.sin300" from
     /// "cspdk.sin300.mmi1x2"). Each is imported and PDK-activated in the header (#570).
     /// </summary>
-    private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
-        EnumerateExportableComponents(canvas)
+    private static IEnumerable<string> GdsFactoryModules(IReadOnlyList<Component> components) =>
+        components
             .Select(c => c.GdsFactoryFunction)
             .Where(f => !string.IsNullOrEmpty(f) && f!.Contains('.'))
             .Select(f => f!.Substring(0, f!.LastIndexOf('.')))
