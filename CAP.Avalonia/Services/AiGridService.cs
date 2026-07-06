@@ -29,6 +29,13 @@ public class AiGridService : IAiGridService
     /// <summary>Names of loaded process-agnostic tool PDKs (see CanvasInteractionViewModel).</summary>
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
+    /// <summary>
+    /// Resolves a placed core component's PDK source from the loaded library
+    /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
+    /// path checks the group's children instead of the group's null source (#653).
+    /// </summary>
+    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+
     private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
         SingleProcessPolicy.CheckPlacement(
             GetActiveProcess?.Invoke(), pdkSource,
@@ -317,13 +324,18 @@ public class AiGridService : IAiGridService
         if (sourceVm == null)
             return Task.FromResult($"Component '{sourceId}' not found.");
 
-        // Single-process enforcement (issue #570) — mirrors the paste gate.
-        var (copyAllowed, copyBlockReason) = CheckProcess(sourceVm.TemplatePdkSource);
-        if (!copyAllowed)
-            return Task.FromResult(copyBlockReason ?? $"Cannot copy '{sourceId}' — it belongs to another process.");
-
-        var tempClipboard = new ComponentClipboard();
+        var tempClipboard = new ComponentClipboard { PdkSourceResolver = ResolveComponentPdkSource };
         tempClipboard.Copy(new[] { sourceVm }, _canvas.Connections);
+
+        // Single-process enforcement (issues #570/#653) — mirrors the paste gate;
+        // PeekPdkSources expands groups to their resolved children.
+        var copyBlockReason = tempClipboard.PeekPdkSources()
+            .Select(pdk => CheckProcess(pdk))
+            .Where(check => !check.IsAllowed)
+            .Select(check => check.BlockReason)
+            .FirstOrDefault();
+        if (copyBlockReason != null)
+            return Task.FromResult(copyBlockReason);
 
         var result = tempClipboard.Paste(_canvas, x, y);
         if (result == null || result.Components.Count == 0)

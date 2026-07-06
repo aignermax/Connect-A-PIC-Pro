@@ -199,7 +199,7 @@ public class CanvasInteractionProcessEnforcementTests
         interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
         // Group templates record no PDK source — every child resolves through the library,
         // here to a PDK that is not a member of the active process.
-        interaction.ResolvePdkSource = _ => "HHI-InP";
+        interaction.ResolveComponentPdkSource = _ => "HHI-InP";
 
         var group = TestComponentFactory.CreateComponentGroup("ForeignGroup", addChildren: true);
         interaction.SelectedGroupTemplate = new GroupTemplate
