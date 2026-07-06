@@ -260,6 +260,9 @@ public class GdsFactoryExporterTests
         script.ShouldContain("import cspdk.sin300");
         script.ShouldContain("cspdk.sin300.PDK.activate()");
         script.ShouldContain("c.add_ref(cspdk.sin300.mmi1x2())");
-        script.ShouldNotContain("def stub_");   // real factory used, no stub emitted
+        script.ShouldNotContain("def stub_");            // real factory used, no stub emitted
+        script.ShouldNotContain("gf.gpdk.PDK.activate()"); // gdsfactory design activates only its own PDK (#570 review)
+        // A gdsfactory-backend component is not "unmapped" — no false stub-fallback warning.
+        GdsFactoryExporter.CollectUnmappedComponents(canvas).ShouldBeEmpty();
     }
 }

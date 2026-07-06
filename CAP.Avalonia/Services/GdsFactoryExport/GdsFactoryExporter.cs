@@ -47,6 +47,9 @@ public class GdsFactoryExporter
     /// </summary>
     public static IReadOnlyList<string> CollectUnmappedComponents(DesignCanvasViewModel canvas) =>
         EnumerateExportableComponents(canvas)
+            // gdsfactory-backend components export via their real factory, not a stub — don't
+            // report them as "no gdsfactory equivalent" (#570).
+            .Where(comp => string.IsNullOrEmpty(comp.GdsFactoryFunction))
             .Select(comp => comp.NazcaFunctionName)
             .Where(name => !string.IsNullOrEmpty(name) && UbcPdkCellMap.MapToUbcPdkCell(name) == null)
             .Distinct(StringComparer.Ordinal)
@@ -131,7 +134,21 @@ public class GdsFactoryExporter
     {
         sb.AppendLine("import os");
         sb.AppendLine("import gdsfactory as gf");
-        if (options.Mode == GdsFactoryComponentMode.UbcPdkCells)
+
+        var gdsfactoryModules = GdsFactoryModules(canvas).ToList();
+        if (gdsfactoryModules.Count > 0)
+        {
+            // gdsfactory-backend design (e.g. CornerStone SiN via cspdk.sin300, #570): one
+            // process per chip, so its own PDK is the active one — import and activate the
+            // referenced module(s). We deliberately do NOT also activate ubcpdk/gpdk here: a
+            // second activate would win and break these factories' layer lookups.
+            foreach (var module in gdsfactoryModules)
+            {
+                sb.AppendLine($"import {module}");
+                sb.AppendLine($"{module}.PDK.activate()");
+            }
+        }
+        else if (options.Mode == GdsFactoryComponentMode.UbcPdkCells)
         {
             sb.AppendLine("from ubcpdk import PDK");
             sb.AppendLine("PDK.activate()");
@@ -141,15 +158,6 @@ public class GdsFactoryExporter
             // gdsfactory 9.x refuses layer lookups without an active PDK — the generic
             // PDK is enough for the self-contained stub geometry.
             sb.AppendLine("gf.gpdk.PDK.activate()");
-        }
-
-        // gdsfactory-backend PDKs (e.g. CornerStone SiN via cspdk.sin300, #570): import each
-        // referenced module and activate its PDK so its factories resolve. A single-process
-        // design references one such module; activating it last makes it the active PDK.
-        foreach (var module in GdsFactoryModules(canvas))
-        {
-            sb.AppendLine($"import {module}");
-            sb.AppendLine($"{module}.PDK.activate()");
         }
         sb.AppendLine();
         sb.AppendLine("WG_WIDTH = 0.45  # waveguide width in um");
@@ -165,7 +173,7 @@ public class GdsFactoryExporter
         {
             // A gdsfactory override / real gdsfactory factory / ubcpdk cell all replace the stub.
             if (GdsFactoryOverrideCode(comp, overrides) != null
-                || !string.IsNullOrEmpty(comp.GdsFactoryFunction)
+                || UsesGdsFactoryFactory(comp)
                 || UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
@@ -175,6 +183,16 @@ public class GdsFactoryExporter
     private static bool UsesUbcPdkCell(Component comp, GdsFactoryExportOptions options) =>
         options.Mode == GdsFactoryComponentMode.UbcPdkCells
         && UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName) != null;
+
+    /// <summary>
+    /// True when the component exports via a real gdsfactory factory: it has a
+    /// <see cref="Component.GdsFactoryFunction"/> that is module-qualified (contains a '.', e.g.
+    /// "cspdk.sin300.mmi1x2"), so the header imports+activates its module and the placement can
+    /// call it. A bare (dotless) name has no importable module and falls through to a stub
+    /// rather than emitting an undefined-name call (#570).
+    /// </summary>
+    private static bool UsesGdsFactoryFactory(Component comp) =>
+        !string.IsNullOrEmpty(comp.GdsFactoryFunction) && comp.GdsFactoryFunction!.Contains('.');
 
     /// <summary>
     /// Distinct Python modules of the design's gdsfactory-backend components — the package
@@ -206,7 +224,7 @@ public class GdsFactoryExporter
         string factory;
         if (GdsFactoryOverrideCode(comp, overrides) != null)
             factory = $"{OverrideFactoryName(comp)}()";
-        else if (!string.IsNullOrEmpty(comp.GdsFactoryFunction))
+        else if (UsesGdsFactoryFactory(comp))
             // gdsfactory-backend component: call its real factory (its PDK is activated in the header).
             factory = $"{comp.GdsFactoryFunction}()";
         else if (UsesUbcPdkCell(comp, options))

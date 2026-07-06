@@ -11,7 +11,7 @@ Ship a **real, open-source second fabrication process** (silicon nitride) so the
 - gdsfactory **9.23.0** available; **cspdk 1.4.2** installed into a throwaway uv env; `cspdk.sin300.PDK` has 38 cells.
 - SiN300 fingerprint (for #652's compatibility model): coreMaterial `Si3N4`, `coreThicknessNm` 300, cladding `SiO2`, designWavelengthNm 1550 → **distinct** from the Si-220 SOI PDKs (different material *and* thickness) → its own process group.
 
-## Extraction results — DONE (real cspdk.sin300 data, via `scripts/extract_cspdk_sin300.py`)
+## Extraction results — DONE (real cspdk.sin300 data, via `scripts/generate_cspdk_sin300_pdk.py`)
 Curated placeable set with real geometry + ports (µm; orientation in degrees). Lunima pin
 mapping: `offsetX = port.x − bbox.left`, `offsetY = port.y − bbox.bottom`, `angleDegrees = orientation`.
 (`coupler` skipped — its cspdk 1.4.2 default args raise `bend_s(allow_min_radius_violation=…)`.)

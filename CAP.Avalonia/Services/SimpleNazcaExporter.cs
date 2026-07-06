@@ -275,12 +275,17 @@ public class SimpleNazcaExporter
         {
             var comp = compVm.Component;
             if (comp.IsAnalysisTool) continue;
+            // gdsfactory-native components (e.g. CornerStone SiN) have no Nazca representation —
+            // skip them rather than emit a meaningless demofab stub (#570). They export via the
+            // gdsfactory export instead.
+            if (!string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
             if (comp is ComponentGroup group)
             {
                 // Flatten group: export all child components at their absolute positions
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
+                    if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, rawOverrides, overrides);
                 }
             }
