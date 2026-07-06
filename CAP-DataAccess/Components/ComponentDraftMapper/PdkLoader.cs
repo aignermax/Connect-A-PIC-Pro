@@ -100,9 +100,12 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             }
 
             var errors = new List<string>();
+            // gdsfactory-backend PDKs export via gdsfactory, not Nazca, so the Nazca-only
+            // nazcaOriginOffset requirement does not apply to their components (issue #570).
+            var requireOffset = requireNazcaOffset && !pdk.IsGdsFactoryBackend;
             foreach (var comp in pdk.Components)
             {
-                ValidateComponent(comp, pdk.Name, errors, requireNazcaOffset);
+                ValidateComponent(comp, pdk.Name, errors, requireOffset);
             }
 
             if (errors.Count > 0)

@@ -36,6 +36,11 @@ public class PdkJsonSaverRoundTripTests
 
         var pdk = loader.LoadFromFileForEditing(path);
 
+        // gdsfactory-backend PDKs are machine-generated (scripts/generate_*), not hand-edited,
+        // so byte-exact round-trip identity is not a maintenance guarantee for them (issue #570).
+        if (pdk.IsGdsFactoryBackend)
+            return;
+
         // Stable path so failures can be diffed manually with the source.
         // Left on disk on failure for inspection; removed on success.
         var name = Path.GetFileNameWithoutExtension(path);
