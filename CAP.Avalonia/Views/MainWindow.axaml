@@ -152,9 +152,13 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
-                <!-- Simulation -->
-                <Button Content="[L] Simulate" Command="{Binding RunSimulationCommand}"
-                        Width="90" Margin="2" Background="#3d5d3d" ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes."/>
+                <!-- Simulation — icon-only (play triangle), tooltip carries the label -->
+                <Button Command="{Binding RunSimulationCommand}"
+                        Width="36" Margin="2" Background="#3d5d3d"
+                        ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes.">
+                    <PathIcon Data="M4.5,2.5 L13.5,8 L4.5,13.5 Z"
+                              Width="16" Height="16" Foreground="LightGreen"/>
+                </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
