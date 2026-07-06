@@ -87,11 +87,13 @@ def build_component(pdk, name):
     left, bottom, right, top = _num(bb.left), _num(bb.bottom), _num(bb.right), _num(bb.top)
     pins = []
     for p in c.ports:
-        # Only in-plane optical waveguide ports become Lunima pins. Grating couplers
-        # additionally expose a vertical fibre port (port_type "vertical_te"/"vertical_tm")
-        # in the MIDDLE of the grating — that is where the fibre couples from above, not a
-        # routable connection point on the chip plane.
-        if getattr(p, "port_type", "optical") != "optical":
+        # Optical waveguide ports and vertical fibre ports become Lunima pins; electrical
+        # ports (e.g. wire_corner's metal ends) do not — this is an optical PDK. A grating
+        # coupler's vertical_te/vertical_tm port sits in the MIDDLE of the grating on
+        # purpose: that is where the fibre couples from above (same convention as
+        # SiEPIC/KLayout fibre pins), and the #665 coupling-band S-matrix (o1 -> o2)
+        # needs it as its second terminal.
+        if getattr(p, "port_type", "optical") not in ("optical", "vertical_te", "vertical_tm"):
             continue
         dc = p.dcenter
         x = _num(getattr(dc, "x", dc[0] if hasattr(dc, "__getitem__") else 0))
