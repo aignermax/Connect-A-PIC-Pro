@@ -20,7 +20,7 @@ public static class ProcessCatalog
             var target = entry.Fingerprint.IsSpecified
                 ? groups.FirstOrDefault(g =>
                     g[0].Fingerprint.IsSpecified &&
-                    ProcessCompatibility.AreCompatible(g[0].Fingerprint, entry.Fingerprint))
+                    g.All(m => ProcessCompatibility.AreCompatible(m.Fingerprint, entry.Fingerprint)))
                 : null;   // unspecified never joins an existing group
 
             if (target == null)

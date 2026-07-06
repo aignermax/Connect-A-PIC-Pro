@@ -1,3 +1,4 @@
+using System.Linq;
 using CAP_Core.Components.Process;
 using Shouldly;
 using Xunit;
@@ -49,5 +50,20 @@ public class ProcessCatalogTests
     {
         var groups = ProcessCatalog.BuildGroups(new[] { Pdk("P", "Si", 220, "SiO2", 1550, "AMF SOI 220nm") });
         groups[0].DisplayName.ShouldBe("AMF SOI 220nm");
+    }
+
+    [Fact]
+    public void ChainedToleranceDrift_DoesNotGroupNonMutuallyCompatiblePdks()
+    {
+        // A=220 & B=224 are mutually compatible (Δ4≤5). C=216 is compatible with A (Δ4)
+        // but NOT with B (Δ8>5), so C must not share the A+B group.
+        var groups = ProcessCatalog.BuildGroups(new[]
+        {
+            Pdk("A", "Si", 220, "SiO2", 1550),
+            Pdk("B", "Si", 224, "SiO2", 1550),
+            Pdk("C", "Si", 216, "SiO2", 1550),
+        });
+        groups.Count.ShouldBe(2);
+        groups.Single(g => g.MemberPdkNames.Contains("C")).MemberPdkNames.ShouldBe(new[] { "C" });
     }
 }
