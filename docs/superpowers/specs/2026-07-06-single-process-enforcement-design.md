@@ -134,7 +134,7 @@ A **persistent active-process chip** in the top toolbar/title area, always visib
 - FDTD solver wiring (E) — separate spec; will read `ProcessFingerprint`/`ProcessDefinition`.
 - A UI to edit tolerances (constants only in v1).
 - **Switching the active process of a non-empty design.** The process is chosen at New Design. To change it, start a new design (or use Playground). The indicator is informational, not a mid-design switcher in v1 — this avoids silently invalidating already-placed components.
-- Heterogeneous/multi-chip cross-process assembly.
+- **Heterogeneous / multi-die assembly** (a real future need, explicitly deferred). Active materials — thin-film lithium niobate (TFLN) modulators, III-V/InP gain or saturable absorbers — combined with a passive SiN/SiPh part are **not** one monolithic multi-process chip: they are separate dies, each fabricated single-process, joined by edge-coupling or flip-chip. That is a distinct multi-die/packaging system and would build **on top of** this fingerprint model ("several dies, each single-process, connected via edge couplers"), not weaken the one-process-per-die rule established here.
 - Auto-detecting a process from arbitrary imported GDS.
 
 ## 11. Testing strategy
