@@ -1,0 +1,51 @@
+{
+  "id": "y-branch-1x2",
+  "name": "Y-branch splitter 1x2",
+  "description": "Ideal 50/50 power splitter with 0.2 dB excess loss and 5 um effective path length.",
+  "process": "generic-si220",
+  "ports": [
+    {
+      "name": "o1",
+      "kind": "optical",
+      "description": "input"
+    },
+    {
+      "name": "o2",
+      "kind": "optical",
+      "description": "output top"
+    },
+    {
+      "name": "o3",
+      "kind": "optical",
+      "description": "output bottom"
+    }
+  ],
+  "properties": {
+    "passive": true,
+    "reciprocal": true
+  },
+  "parameters": {
+    "splitRatio": "50/50",
+    "excessLoss_dB": 0.2
+  },
+  "geometry": {
+    "format": "none"
+  },
+  "artifacts": {
+    "simulated": [
+      {
+        "file": "simulated/analytic-demo.json",
+        "status": "demo",
+        "provenance": {
+          "method": "analytic-model",
+          "tool": "generate_demo_data.py",
+          "settings": "S21 = S31 = 10^(-0.2/20)/sqrt(2) * prop(5um)",
+          "createdBy": "generate_demo_data.py",
+          "date": "2026-07-06"
+        }
+      }
+    ],
+    "measured": []
+  },
+  "license": "MIT"
+}
