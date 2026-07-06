@@ -27,7 +27,7 @@ public static class ProcessCompatibility
         if (!string.Equals(a.Cladding, b.Cladding, StringComparison.OrdinalIgnoreCase))
             return false;
 
-        if (Math.Abs((a.CoreThicknessNm ?? 0) - (b.CoreThicknessNm ?? 0)) > CoreThicknessToleranceNm)
+        if (Math.Abs(a.CoreThicknessNm.Value - b.CoreThicknessNm.Value) > CoreThicknessToleranceNm)
             return false;
 
         return Math.Abs(a.DesignWavelengthNm - b.DesignWavelengthNm) <= WavelengthToleranceNm;

@@ -16,6 +16,6 @@ public sealed record ProcessFingerprint(
     int DesignWavelengthNm,
     string? ProcessName)
 {
-    /// <summary>True when the fingerprint carries enough physical data to group by (core material present).</summary>
-    public bool IsSpecified => !string.IsNullOrWhiteSpace(CoreMaterial);
+    /// <summary>True when the fingerprint carries a complete physical fingerprint (core material, thickness, and cladding all present).</summary>
+    public bool IsSpecified => !string.IsNullOrWhiteSpace(CoreMaterial) && CoreThicknessNm.HasValue && !string.IsNullOrWhiteSpace(Cladding);
 }

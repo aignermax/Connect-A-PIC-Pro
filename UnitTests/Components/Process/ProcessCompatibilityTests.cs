@@ -44,4 +44,12 @@ public class ProcessCompatibilityTests
         ProcessCompatibility.AreCompatible(unspecified, unspecified).ShouldBeFalse();
         unspecified.IsSpecified.ShouldBeFalse();
     }
+
+    [Fact]
+    public void MaterialSetButThicknessMissing_IsUnspecified_AndNotCompatible()
+    {
+        var incomplete = new ProcessFingerprint("Si", CoreThicknessNm: null, "SiO2", 1550, ProcessName: null);
+        incomplete.IsSpecified.ShouldBeFalse();
+        ProcessCompatibility.AreCompatible(incomplete, Fp("Si", 220, "SiO2", 1550)).ShouldBeFalse();
+    }
 }
