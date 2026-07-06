@@ -39,7 +39,7 @@ This supersedes agent PR #602, whose `SinglePdkPolicy` keys enforcement on the r
   - `CoreThicknessNm` — `Process.CoreThicknessNm`.
   - `DesignWavelengthNm` — `PdkDraft.DefaultWavelengthNm`.
   - `ProcessName` — `Process.Name` (display only).
-  - `IsSpecified` — true when the PDK has a `process` block with at least a core material.
+  - `IsSpecified` — true only when the fingerprint is **complete**: core material, core thickness, and cladding are all present. An incomplete fingerprint is treated as unspecified (conservative — it never matches another, so its PDK becomes a singleton process). Wavelength always has a value (PDK default).
 
 ### 3.3 Compatibility rule (with tolerance)
 
@@ -50,7 +50,7 @@ This supersedes agent PR #602, whose `SinglePdkPolicy` keys enforcement on the r
   - `|CoreThicknessNm_a − CoreThicknessNm_b| ≤ CoreThicknessToleranceNm` (**default 5 nm**).
   - `|DesignWavelengthNm_a − DesignWavelengthNm_b| ≤ WavelengthToleranceNm` (**default 40 nm**, ≈ C-band width).
 - Tolerances are named constants (single place, tunable; no UI in v1).
-- **Unspecified fallback:** a PDK with no `process` block, or an incomplete fingerprint (no core material), is its **own singleton process** keyed by the PDK name; it never groups with any other PDK.
+- **Unspecified fallback:** a PDK with no `process` block, or an incomplete fingerprint (missing core material, thickness, or cladding), is its **own singleton process** keyed by the PDK name; it never groups with any other PDK.
 
 `Si 220 nm SOI @1550` and `Si 222 nm SOI @1560` → compatible. `Si 220 nm` vs `SiN 340 nm` or `@1310` → incompatible.
 
