@@ -416,6 +416,13 @@ public partial class LeftPanelViewModel : ObservableObject
             .Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
 
     /// <summary>
+    /// All currently loaded PDK drafts. The Fabrication Process details dialog reads the
+    /// members' <c>process</c> blocks from here so it always reflects the live PDK state
+    /// (issue #660) instead of keeping its own copy.
+    /// </summary>
+    public IReadOnlyList<PdkDraft> GetLoadedPdkDrafts() => _loadedPdkDrafts;
+
+    /// <summary>
     /// Names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools" — virtual analyzers
     /// and other tool libraries). These stay usable regardless of the active fabrication process
     /// (issue #570).

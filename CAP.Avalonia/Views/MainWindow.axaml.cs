@@ -84,10 +84,13 @@ public partial class MainWindow : Window
                     editorWindow.Show(this);
                 };
 
-                // Wire up Fabrication Process window (process model — #570)
+                // Wire up Fabrication Process window (process model — #570). The dialog derives
+                // its state from the design's active process + loaded PDKs at open time, so a
+                // reopened dialog always reflects the current selection (#660).
                 vm.ShowProcessManagerRequested = () =>
                 {
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
+                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
                     var processWindow = new ProcessManagementWindow
                     {
                         DataContext = processVm
