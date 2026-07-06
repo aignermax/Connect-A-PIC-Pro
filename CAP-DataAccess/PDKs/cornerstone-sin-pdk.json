@@ -315,7 +315,89 @@
           "offsetYMicrometers": 22.097,
           "angleDegrees": 0.0
         }
-      ]
+      ],
+      "sMatrix": {
+        "wavelengthNm": 1550,
+        "wavelengthData": [
+          {
+            "wavelengthNm": 1500,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.029601,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1520,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.180997,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1540,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.447561,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1550,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.501187,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1560,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.447561,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1580,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.180997,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1600,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.029601,
+                "phaseDegrees": 0.0
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "Grating Coupler Rectangular",
@@ -336,7 +418,89 @@
           "offsetYMicrometers": 5.5,
           "angleDegrees": 0.0
         }
-      ]
+      ],
+      "sMatrix": {
+        "wavelengthNm": 1550,
+        "wavelengthData": [
+          {
+            "wavelengthNm": 1500,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.029601,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1520,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.180997,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1540,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.447561,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1550,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.501187,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1560,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.447561,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1580,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.180997,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1600,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.029601,
+                "phaseDegrees": 0.0
+              }
+            ]
+          }
+        ]
+      }
     },
     {
       "name": "MZI",

@@ -70,6 +70,21 @@ public class BundledPdkProcessTests
     }
 
     [Fact]
+    public void CornerStoneSin_GratingCoupler_HasWavelengthPeakedCouplingBand()
+    {
+        // Grating couplers carry the real cspdk sax model: a wavelength-dependent coupling band
+        // that peaks near 1550 nm and rolls off at the edges — not a flat/black-box response (#665).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var gc = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.grating_coupler_rectangular");
+
+        gc.SMatrix.ShouldNotBeNull();
+        var wl = gc.SMatrix!.WavelengthData!;
+        double MagAt(int nm) => wl.Single(w => w.WavelengthNm == nm).Connections[0].Magnitude;
+        MagAt(1550).ShouldBeGreaterThan(MagAt(1500));   // peak in-band
+        MagAt(1550).ShouldBeGreaterThan(MagAt(1600));   // rolls off at the edges
+    }
+
+    [Fact]
     public void CornerStoneSin_IsADistinctProcessFromSoiPdks()
     {
         var loader = new PdkLoader();

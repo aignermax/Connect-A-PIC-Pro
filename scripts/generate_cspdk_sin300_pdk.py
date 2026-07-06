@@ -29,7 +29,13 @@ WAVELENGTHS_NM = [1500, 1520, 1540, 1550, 1560, 1580, 1600]
 
 # Components whose sax model + port mapping are unambiguous enough to emit a real S-matrix.
 # mmi1x2/mmi2x2 build cleanly and their in*/out* ports map to the layout ports by orientation.
-SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2"}
+# Grating couplers (#665): their 2 layout ports map cleanly too — o1 (180°, waveguide) -> in0,
+# o2 (0°, fibre) -> out0 — and the sax model returns a real wavelength-dependent coupling band
+# (≈0.03 mag at 1500/1600 nm, ≈0.50 at the 1550 peak). `mzi` has no cspdk compact model (it is a
+# composite that would need circuit simulation) and `coupler` fails to build in cspdk 1.4.2
+# (bend_s allow_min_radius_violation) — both stay black-box/excluded until those are resolved.
+SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2",
+                        "grating_coupler_rectangular", "grating_coupler_elliptical"}
 
 # Passive routing components that faithfully pass light (or current) straight through — a
 # lossless pass-through S-matrix is the honest ideal. Their cspdk 1.4.2 sax models raise on
