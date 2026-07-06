@@ -161,7 +161,13 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     private static bool IsGdsFactoryMissing(string? errorMessage) =>
-        errorMessage?.Contains("No module named 'gdsfactory'", StringComparison.OrdinalIgnoreCase) == true;
+        // Any package the gdsfactory export env is expected to provide — gdsfactory itself,
+        // ubcpdk, or cspdk (CornerStone SiN, #661). Environments provisioned before a package
+        // was added report "No module named '<pkg>'"; the same reinstall fixes all of them.
+        errorMessage != null &&
+        (errorMessage.Contains("No module named 'gdsfactory'", StringComparison.OrdinalIgnoreCase) ||
+         errorMessage.Contains("No module named 'ubcpdk'", StringComparison.OrdinalIgnoreCase) ||
+         errorMessage.Contains("No module named 'cspdk'", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Opens the generated GDS in the default viewer (KLayout etc.), best-effort.</summary>
     private void TryOpenGds(string gdsPath)

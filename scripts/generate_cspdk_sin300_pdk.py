@@ -11,10 +11,11 @@ changes, re-run this to regenerate the Lunima PDK JSON. No hand-editing, no fabr
 
 Emits a `backend: "gdsfactory"` PDK: each component carries its gdsfactory factory name
 (`gdsFactoryFunction = "cspdk.sin300.<cell>"`) instead of a `nazcaFunction`, so it exports via
-the gdsfactory path and is skipped by the nazca-export tests. Geometry + pins are real
-(`c.dbbox()` / `c.ports`); no S-matrix is emitted (black-box light sim for v1). The process
-fingerprint (Si3N4 / 300 nm / SiO2 / 1550 nm) makes it a distinct process from the 220 nm SOI
-PDKs for the single-process rule (#570).
+the gdsfactory path and is skipped by the nazca-export tests. Geometry, pins and origin offset
+are real (`c.dbbox()` / `c.ports`). S-matrices come from the cspdk sax models where available
+(MMIs and grating couplers, multi-wavelength) and a lossless pass-through for 2-port passives;
+remaining cells stay black-box. The process fingerprint (Si3N4 / 300 nm / SiO2 / 1550 nm)
+makes it a distinct process from the 220 nm SOI PDKs for the single-process rule (#570).
 """
 import sys
 import json
@@ -32,17 +33,18 @@ WAVELENGTHS_NM = [1500, 1520, 1540, 1550, 1560, 1580, 1600]
 # Grating couplers (#665): their 2 layout ports map cleanly too — o1 (180°, waveguide) -> in0,
 # o2 (0°, fibre) -> out0 — and the sax model returns a real wavelength-dependent coupling band
 # (≈0.03 mag at 1500/1600 nm, ≈0.50 at the 1550 peak). `mzi` has no cspdk compact model (it is a
-# composite that would need circuit simulation) and `coupler` fails to build in cspdk 1.4.2
-# (bend_s allow_min_radius_violation) — both stay black-box/excluded until those are resolved.
+# composite that would need circuit simulation) and `coupler`/`coupler_straight` are 4-port
+# directional couplers with no unambiguous 1-in-1-out transfer — all stay black-box until a
+# proper multi-port model mapping is wired.
 SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2",
                         "grating_coupler_rectangular", "grating_coupler_elliptical"}
 
-# Passive routing components that faithfully pass light (or current) straight through — a
-# lossless pass-through S-matrix is the honest ideal. Their cspdk 1.4.2 sax models raise on
-# the `loss` kwarg, so we synthesize the transfer rather than evaluate it. NOT gratings:
+# Passive routing components that faithfully pass light straight through — a lossless
+# pass-through S-matrix is the honest ideal. Their cspdk sax models raise on the `loss`
+# kwarg, so we synthesize the transfer rather than evaluate it. NOT gratings:
 # a grating is a fibre coupler (out-of-plane, lossy, wavelength-dependent), so a pass-through
 # would be a wrong model — it stays black-box until its real fibre model is wired.
-PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s", "wire_corner"}
+PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s"}
 
 
 def _num(v):
@@ -106,7 +108,11 @@ def build_component(pdk, name):
             # (see docs/PDK_JSON_FORMAT.md). bottom-up ("y - bottom") only coincides for
             # y-symmetric cells and mirrors e.g. the euler bend's pins.
             "offsetYMicrometers": round(top - y, 3),
-            "angleDegrees": _num(ori),
+            # gdsfactory orientation is y-up (math convention); Lunima's editor is y-down, so
+            # a vertical port flips: gf 90° (up) -> 270°, gf 270° (down) -> 90° (0/180 unchanged).
+            # Matches the bundled demofab 90° bend (b0 = 270°); an unflipped 90° would make the
+            # euler bend's exit port face into the cell and break connection snapping/routing.
+            "angleDegrees": round((360.0 - _num(ori)) % 360.0, 3),
         })
     comp = {
         "name": _prettify(name),
@@ -114,6 +120,14 @@ def build_component(pdk, name):
         "gdsFactoryFunction": f"cspdk.sin300.{name}",
         "widthMicrometers": round(right - left, 3),
         "heightMicrometers": round(top - bottom, 3),
+        # Where the gdsfactory cell origin (0,0) sits relative to the bbox, in the same
+        # convention as Nazca PDKs (#640): ox = -XMin, oy = YMax. cspdk cells are
+        # port-anchored (origin at o1, geometry y-centered), so the origin is NOT the
+        # bbox corner — the exporter needs this to place the real cell where Lunima drew
+        # it (without it the mapper falls back to a bottom-left anchor and every cell
+        # lands ~height/2 off its routed waveguides).
+        "nazcaOriginOffsetX": round(-left, 3),
+        "nazcaOriginOffsetY": round(top, 3),
         "pins": pins,
     }
     smatrix = build_smatrix(name, pins)

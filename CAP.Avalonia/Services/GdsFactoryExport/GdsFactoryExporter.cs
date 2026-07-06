@@ -47,13 +47,35 @@ public class GdsFactoryExporter
     /// </summary>
     public static IReadOnlyList<string> CollectUnmappedComponents(DesignCanvasViewModel canvas) =>
         EnumerateExportableComponents(canvas)
-            // gdsfactory-backend components export via their real factory, not a stub — don't
-            // report them as "no gdsfactory equivalent" (#570).
-            .Where(comp => string.IsNullOrEmpty(comp.GdsFactoryFunction))
+            // Components exported via a real gdsfactory factory are not stubs — don't report
+            // them as "no gdsfactory equivalent". Use the SAME predicate as the placement path
+            // so a bare (dotless) gdsFactoryFunction, which DOES fall through to a stub, is
+            // still surfaced here (#570 review).
+            .Where(comp => !UsesGdsFactoryFactory(comp))
             .Select(comp => comp.NazcaFunctionName)
             .Where(name => !string.IsNullOrEmpty(name) && UbcPdkCellMap.MapToUbcPdkCell(name) == null)
             .Distinct(StringComparer.Ordinal)
             .ToList()!;
+
+    /// <summary>
+    /// Detects an unsupported mixed-backend design: a gdsfactory-native PDK activates its own
+    /// PDK in the export header (one process per chip), which makes ubcpdk cell lookups and a
+    /// second gdsfactory module unresolvable. Returns the conflicting module names when more
+    /// than one gdsfactory module is present, or a gdsfactory module coexists with
+    /// ubcpdk-mapped components; empty when the design is single-backend (#570 review).
+    /// </summary>
+    public static IReadOnlyList<string> CollectBackendConflicts(
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    {
+        var modules = GdsFactoryModules(canvas).ToList();
+        var conflicts = new List<string>();
+        if (modules.Count > 1)
+            conflicts.AddRange(modules);
+        else if (modules.Count == 1 &&
+                 EnumerateExportableComponents(canvas).Any(c => UsesUbcPdkCell(c, options)))
+            conflicts.Add(modules[0] + " + ubcpdk cells");
+        return conflicts;
+    }
 
     /// <summary>
     /// Identifiers of instances whose override is written for Nazca — the gdsfactory export
@@ -188,22 +210,36 @@ public class GdsFactoryExporter
     /// True when the component exports via a real gdsfactory factory: it has a
     /// <see cref="Component.GdsFactoryFunction"/> that is module-qualified (contains a '.', e.g.
     /// "cspdk.sin300.mmi1x2"), so the header imports+activates its module and the placement can
-    /// call it. A bare (dotless) name has no importable module and falls through to a stub
-    /// rather than emitting an undefined-name call (#570).
+    /// resolve the cell from the active PDK. A bare (dotless) name has no importable module and
+    /// falls through to a stub rather than emitting an unresolvable call (#570).
     /// </summary>
     private static bool UsesGdsFactoryFactory(Component comp) =>
-        !string.IsNullOrEmpty(comp.GdsFactoryFunction) && comp.GdsFactoryFunction!.Contains('.');
+        GdsFactoryModuleOf(comp.GdsFactoryFunction) != null;
 
     /// <summary>
-    /// Distinct Python modules of the design's gdsfactory-backend components — the package
-    /// part of each <see cref="Component.GdsFactoryFunction"/> (e.g. "cspdk.sin300" from
-    /// "cspdk.sin300.mmi1x2"). Each is imported and PDK-activated in the header (#570).
+    /// The Python module part of a module-qualified gdsfactory function ("cspdk.sin300" from
+    /// "cspdk.sin300.mmi1x2"), or null when the name is empty/bare. Single definition of the
+    /// module-qualification rule, shared by the header import, the factory call, and the
+    /// stub-vs-factory decision so they can never disagree (#570 review).
+    /// </summary>
+    private static string? GdsFactoryModuleOf(string? gdsFactoryFunction) =>
+        !string.IsNullOrEmpty(gdsFactoryFunction) && gdsFactoryFunction!.Contains('.')
+            ? gdsFactoryFunction.Substring(0, gdsFactoryFunction.LastIndexOf('.'))
+            : null;
+
+    /// <summary>The cell name of a module-qualified gdsfactory function ("mmi1x2" from "cspdk.sin300.mmi1x2").</summary>
+    private static string GdsFactoryCellOf(string gdsFactoryFunction) =>
+        gdsFactoryFunction.Substring(gdsFactoryFunction.LastIndexOf('.') + 1);
+
+    /// <summary>
+    /// Distinct Python modules of the design's gdsfactory-backend components. Each is imported
+    /// and PDK-activated in the header (#570).
     /// </summary>
     private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
         EnumerateExportableComponents(canvas)
-            .Select(c => c.GdsFactoryFunction)
-            .Where(f => !string.IsNullOrEmpty(f) && f!.Contains('.'))
-            .Select(f => f!.Substring(0, f!.LastIndexOf('.')))
+            .Select(c => GdsFactoryModuleOf(c.GdsFactoryFunction))
+            .Where(m => m != null)
+            .Select(m => m!)
             .Distinct(StringComparer.Ordinal);
 
     /// <summary>
@@ -225,8 +261,10 @@ public class GdsFactoryExporter
         if (GdsFactoryOverrideCode(comp, overrides) != null)
             factory = $"{OverrideFactoryName(comp)}()";
         else if (UsesGdsFactoryFactory(comp))
-            // gdsfactory-backend component: call its real factory (its PDK is activated in the header).
-            factory = $"{comp.GdsFactoryFunction}()";
+            // gdsfactory-backend component: resolve the cell from the PDK activated in the header.
+            // cspdk exposes cells via the PDK registry (cspdk.sin300.cells / gf.get_component),
+            // NOT as module attributes — "cspdk.sin300.mmi1x2()" raises AttributeError (#570 review).
+            factory = $"gf.get_component('{GdsFactoryCellOf(comp.GdsFactoryFunction!)}')";
         else if (UsesUbcPdkCell(comp, options))
             factory = $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')";
         else

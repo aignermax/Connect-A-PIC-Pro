@@ -259,10 +259,58 @@ public class GdsFactoryExporterTests
 
         script.ShouldContain("import cspdk.sin300");
         script.ShouldContain("cspdk.sin300.PDK.activate()");
-        script.ShouldContain("c.add_ref(cspdk.sin300.mmi1x2())");
+        // Cells resolve from the ACTIVE PDK registry — cspdk exposes them via
+        // cspdk.sin300.cells / gf.get_component, not as module attributes, so
+        // "cspdk.sin300.mmi1x2()" raises AttributeError (#661 review, verified vs cspdk 1.4.4).
+        script.ShouldContain("gf.get_component('mmi1x2')");
+        script.ShouldNotContain("cspdk.sin300.mmi1x2()");
         script.ShouldNotContain("def stub_");            // real factory used, no stub emitted
         script.ShouldNotContain("gf.gpdk.PDK.activate()"); // gdsfactory design activates only its own PDK (#570 review)
         // A gdsfactory-backend component is not "unmapped" — no false stub-fallback warning.
         GdsFactoryExporter.CollectUnmappedComponents(canvas).ShouldBeEmpty();
+        // Single gdsfactory module + no ubcpdk cells → no backend conflict.
+        GdsFactoryExporter.CollectBackendConflicts(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells)).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void CollectBackendConflicts_TwoGdsFactoryModules_ReportsConflict()
+    {
+        // Two distinct gdsfactory PDK modules on one canvas cannot both be PDK-activated
+        // (activation is a global singleton) — the export header would activate the last
+        // one and the first module's cells would build against the wrong PDK (#661 review).
+        var canvas = new DesignCanvasViewModel();
+        foreach (var (id, func) in new[] { ("A", "cspdk.sin300.mmi1x2"), ("B", "cspdk.si220.mmi1x2") })
+        {
+            var c = TestComponentFactory.CreateBasicComponent();
+            c.Identifier = id;
+            c.NazcaFunctionName = "";
+            c.GdsFactoryFunction = func;
+            canvas.AddComponent(c, id);
+        }
+
+        var conflicts = GdsFactoryExporter.CollectBackendConflicts(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
+
+        conflicts.ShouldContain("cspdk.sin300");
+        conflicts.ShouldContain("cspdk.si220");
+    }
+
+    [Fact]
+    public void BareGdsFactoryFunction_FallsToStubAndIsReportedUnmapped()
+    {
+        // A dotless gdsFactoryFunction has no importable module → it must fall through to a
+        // stub AND be surfaced as unmapped, not silently emit an unresolvable factory call.
+        var canvas = new DesignCanvasViewModel();
+        var c = TestComponentFactory.CreateBasicComponent();
+        c.Identifier = "BARE";
+        c.NazcaFunctionName = "mystery_cell";
+        c.GdsFactoryFunction = "mmi1x2";   // no module part
+        canvas.AddComponent(c, "Bare");
+
+        var script = ExportStandalone(canvas);
+
+        script.ShouldNotContain("gf.get_component('mmi1x2')");
+        GdsFactoryExporter.CollectUnmappedComponents(canvas).ShouldContain("mystery_cell");
     }
 }

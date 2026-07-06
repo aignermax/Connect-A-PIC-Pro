@@ -192,6 +192,7 @@ public static class GroupTemplateSerializer
             NazcaFunctionName = comp.NazcaFunctionName,
             NazcaFunctionParameters = comp.NazcaFunctionParameters,
             NazcaModuleName = comp.NazcaModuleName,
+            GdsFactoryFunction = comp.GdsFactoryFunction,
             TypeNumber = comp.TypeNumber,
             PhysicalX = comp.PhysicalX,
             PhysicalY = comp.PhysicalY,
@@ -257,6 +258,7 @@ public static class GroupTemplateSerializer
             WidthMicrometers = dto.WidthMicrometers,
             HeightMicrometers = dto.HeightMicrometers,
             NazcaModuleName = dto.NazcaModuleName,
+            GdsFactoryFunction = dto.GdsFactoryFunction,
             HumanReadableName = dto.HumanReadableName
         };
     }
@@ -454,6 +456,13 @@ public class ChildComponentDto
     public string? NazcaFunctionName { get; set; }
     public string? NazcaFunctionParameters { get; set; }
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend components (e.g. "cspdk.sin300.mmi1x2").
+    /// Persisted so a saved group template keeps its backend across reloads (#570/#661 review).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
     public int TypeNumber { get; set; }
     public double PhysicalX { get; set; }
     public double PhysicalY { get; set; }

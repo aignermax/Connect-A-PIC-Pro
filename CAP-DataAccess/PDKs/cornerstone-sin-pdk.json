@@ -28,6 +28,8 @@
       "gdsFactoryFunction": "cspdk.sin300.coupler",
       "widthMicrometers": 60.0,
       "heightMicrometers": 5.2,
+      "nazcaOriginOffsetX": 20.0,
+      "nazcaOriginOffsetY": 3.318,
       "pins": [
         {
           "name": "o1",
@@ -61,6 +63,8 @@
       "gdsFactoryFunction": "cspdk.sin300.coupler_straight",
       "widthMicrometers": 20.0,
       "heightMicrometers": 2.636,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 2.036,
       "pins": [
         {
           "name": "o1",
@@ -94,6 +98,8 @@
       "gdsFactoryFunction": "cspdk.sin300.mmi2x2",
       "widthMicrometers": 105.5,
       "heightMicrometers": 12.0,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 6.0,
       "pins": [
         {
           "name": "o1",
@@ -335,6 +341,8 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_elliptical",
       "widthMicrometers": 61.83,
       "heightMicrometers": 44.194,
+      "nazcaOriginOffsetX": -18.597,
+      "nazcaOriginOffsetY": 22.097,
       "pins": [
         {
           "name": "o1",
@@ -438,6 +446,8 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_rectangular",
       "widthMicrometers": 219.8,
       "heightMicrometers": 11.0,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 5.5,
       "pins": [
         {
           "name": "o1",
@@ -541,6 +551,8 @@
       "gdsFactoryFunction": "cspdk.sin300.mzi",
       "widthMicrometers": 616.8,
       "heightMicrometers": 136.1,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 65.55,
       "pins": [
         {
           "name": "o1",
@@ -568,6 +580,8 @@
       "gdsFactoryFunction": "cspdk.sin300.mmi1x2",
       "widthMicrometers": 164.7,
       "heightMicrometers": 12.0,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 6.0,
       "pins": [
         {
           "name": "o1",
@@ -719,6 +733,8 @@
       "gdsFactoryFunction": "cspdk.sin300.bend_euler",
       "widthMicrometers": 30.6,
       "heightMicrometers": 30.6,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 30.0,
       "pins": [
         {
           "name": "o1",
@@ -730,7 +746,7 @@
           "name": "o2",
           "offsetXMicrometers": 30.0,
           "offsetYMicrometers": 0.0,
-          "angleDegrees": 90.0
+          "angleDegrees": 270.0
         }
       ],
       "sMatrix": {
@@ -751,6 +767,8 @@
       "gdsFactoryFunction": "cspdk.sin300.bend_s",
       "widthMicrometers": 15.0,
       "heightMicrometers": 3.0,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 2.4,
       "pins": [
         {
           "name": "o1",
@@ -783,6 +801,8 @@
       "gdsFactoryFunction": "cspdk.sin300.straight",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
@@ -815,6 +835,8 @@
       "gdsFactoryFunction": "cspdk.sin300.taper",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
