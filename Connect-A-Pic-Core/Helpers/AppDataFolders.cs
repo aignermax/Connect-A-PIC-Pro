@@ -42,9 +42,12 @@ public static class AppDataFolders
         if (string.IsNullOrEmpty(osProvidedPath) || string.IsNullOrEmpty(homeDirectory))
             return osProvidedPath;
 
-        var snapRoot = Path.Combine(homeDirectory, "snap") + Path.DirectorySeparatorChar;
-        return osProvidedPath.StartsWith(snapRoot, StringComparison.Ordinal)
-            ? Path.Combine(homeDirectory, ".local", "share")
+        // This function only ever sees Linux paths, so the separator is a
+        // literal '/' — Path.Combine would inject '\' when the test suite
+        // runs on a Windows dev machine and break the comparison.
+        var home = homeDirectory.TrimEnd('/');
+        return osProvidedPath.StartsWith(home + "/snap/", StringComparison.Ordinal)
+            ? home + "/.local/share"
             : osProvidedPath;
     }
 }
