@@ -85,13 +85,34 @@ public class LibraryProcessFilterTests : IDisposable
 
         _leftPanel.PdkManager.ManualTogglesEnabled.ShouldBeFalse();
 
+        var agnosticNames = _leftPanel.GetProcessAgnosticPdkNames();
         foreach (var pdk in _leftPanel.PdkManager.LoadedPdks)
         {
-            pdk.IsEnabled.ShouldBe(pdk.Name.Equals(demoPdkName, StringComparison.OrdinalIgnoreCase));
+            var expectedEnabled = pdk.Name.Equals(demoPdkName, StringComparison.OrdinalIgnoreCase) ||
+                agnosticNames.Contains(pdk.Name, StringComparer.OrdinalIgnoreCase);
+            pdk.IsEnabled.ShouldBe(expectedEnabled);
         }
 
         _leftPanel.FilteredTemplates.Count.ShouldBeGreaterThan(0);
-        _leftPanel.FilteredTemplates.ShouldAllBe(t => t.PdkSource.Equals(demoPdkName, StringComparison.OrdinalIgnoreCase));
+        _leftPanel.FilteredTemplates.ShouldAllBe(t =>
+            t.PdkSource.Equals(demoPdkName, StringComparison.OrdinalIgnoreCase) ||
+            agnosticNames.Contains(t.PdkSource, StringComparer.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public void ApplyActiveProcess_RealProcess_KeepsProcessAgnosticToolsEnabledAndVisible()
+    {
+        var demoPdkName = DemoPdkName();
+        var active = new ActiveProcessSelection(
+            DisplayName: "Demo Process",
+            Fingerprint: null,
+            MemberPdkNames: new List<string> { demoPdkName },
+            IsPlayground: false);
+
+        _leftPanel.ApplyActiveProcess(active);
+
+        _leftPanel.PdkManager.GetEnabledPdkNames().ShouldContain("Analysis Tools");
+        _leftPanel.FilteredTemplates.ShouldContain(t => t.PdkSource.Equals("Analysis Tools", StringComparison.OrdinalIgnoreCase));
     }
 
     [Fact]

@@ -46,4 +46,13 @@ public class SingleProcessPolicyTests
     {
         SingleProcessPolicy.CheckPlacement(null, "HHI-InP").IsAllowed.ShouldBeTrue();
     }
+
+    [Fact]
+    public void ProcessAgnosticPdk_IsAllowedUnderRealProcess()
+    {
+        var agnostic = new[] { "Analysis Tools" };
+        SingleProcessPolicy.CheckPlacement(Soi(), "Analysis Tools", agnostic).IsAllowed.ShouldBeTrue();
+        // Without the agnostic set it stays blocked (default overload behavior unchanged):
+        SingleProcessPolicy.CheckPlacement(Soi(), "Analysis Tools").IsAllowed.ShouldBeFalse();
+    }
 }

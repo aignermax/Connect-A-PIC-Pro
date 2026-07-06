@@ -45,6 +45,18 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public int DefaultWavelengthNm { get; set; } = 1550;
 
         /// <summary>
+        /// True for a process-agnostic tool/utility library (e.g. "Analysis Tools":
+        /// virtual analyzers; and packaged/heterogeneous parts). Its components are usable
+        /// on any chip regardless of the active fabrication process (issue #570).
+        /// Omitted from serialized output when false, so the many existing bundled PDKs
+        /// that don't set it round-trip through <c>PdkJsonSaver</c> byte-for-byte
+        /// (see <c>PdkJsonSaverRoundTripTests</c>).
+        /// </summary>
+        [JsonPropertyName("processAgnostic")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool ProcessAgnostic { get; set; }
+
+        /// <summary>
         /// Python module name for Nazca import (e.g., "amf", "imec").
         /// Used to generate: import {nazcaModuleName} as pdk
         /// </summary>

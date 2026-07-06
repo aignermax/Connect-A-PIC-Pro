@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 
 namespace CAP_Core.Components.Process;
@@ -19,13 +20,20 @@ public static class SingleProcessPolicy
 
     /// <summary>
     /// Decides whether a component from <paramref name="componentPdkName"/> may be placed on a
-    /// design locked to <paramref name="active"/>. Built-ins, Playground, and an unset selection
-    /// always pass; otherwise the component's PDK must be a member of the active process.
+    /// design locked to <paramref name="active"/>. Built-ins, process-agnostic PDKs (tool
+    /// libraries such as "Analysis Tools" — see <paramref name="processAgnosticPdkNames"/>),
+    /// Playground, and an unset selection always pass; otherwise the component's PDK must be a
+    /// member of the active process.
     /// </summary>
     public static (bool IsAllowed, string? BlockReason) CheckPlacement(
-        ActiveProcessSelection? active, string? componentPdkName)
+        ActiveProcessSelection? active, string? componentPdkName,
+        IReadOnlyCollection<string>? processAgnosticPdkNames = null)
     {
         if (IsBuiltIn(componentPdkName))
+            return (true, null);
+
+        if (processAgnosticPdkNames != null &&
+            processAgnosticPdkNames.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
             return (true, null);
 
         if (active == null || active.IsPlayground)

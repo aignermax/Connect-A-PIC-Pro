@@ -403,15 +403,24 @@ public partial class LeftPanelViewModel : ObservableObject
         _loadedPdkDrafts.Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
 
     /// <summary>
+    /// Names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools" — virtual analyzers
+    /// and other tool libraries). These stay usable regardless of the active fabrication process
+    /// (issue #570).
+    /// </summary>
+    public IReadOnlyList<string> GetProcessAgnosticPdkNames() =>
+        _loadedPdkDrafts.Where(d => d.ProcessAgnostic).Select(d => d.Name).ToList();
+
+    /// <summary>
     /// Drives the library filter to the active process's PDKs (issue #570). A real (non-Playground)
-    /// process locks the enabled set to exactly its member PDKs and disallows manual toggling;
-    /// Playground or no selection restores manual control, leaving the current enables as-is.
+    /// process locks the enabled set to its member PDKs plus any process-agnostic tool PDKs, and
+    /// disallows manual toggling; Playground or no selection restores manual control, leaving the
+    /// current enables as-is.
     /// </summary>
     public void ApplyActiveProcess(ActiveProcessSelection? active)
     {
         if (active is { IsPlayground: false })
         {
-            PdkManager.SetEnabledPdks(active.MemberPdkNames);
+            PdkManager.SetEnabledPdks(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
             PdkManager.ManualTogglesEnabled = false;
         }
         else
