@@ -104,6 +104,13 @@ public partial class MainWindow : Window
                     return pvm.Result;
                 };
 
+                // Prompt for the fabrication process once at startup (issue #570). Deferred so
+                // the main window is fully shown before the modal picker opens; dismissing it
+                // starts in Playground.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    async () => await vm.PromptForInitialProcessAsync(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
+
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
                 {

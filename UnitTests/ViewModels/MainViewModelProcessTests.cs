@@ -100,20 +100,62 @@ public class MainViewModelProcessTests
     }
 
     [Fact]
-    public async Task NewProject_WhenPickerReturnsNull_LeavesPreviousActiveProcessUntouched()
+    public async Task NewProject_WhenPickerDismissed_FallsBackToPlayground()
     {
         var vm = MainViewModelTestHelper.CreateMainViewModel();
-        vm.FileOperations.SetActiveProcess(ActiveProcessSelection.Playground());
+        // Start from a real process so the fall-back to Playground is an observable change.
+        var group = vm.FileOperations.ProcessCatalogProvider!.Invoke()[0];
+        vm.FileOperations.SetActiveProcess(ActiveProcessSelection.ForGroup(group));
         vm.ShowProcessSelectionAsync = _ => Task.FromResult<ActiveProcessSelection?>(null);
 
         await vm.NewProjectCommand.ExecuteAsync(null);
 
-        // The canvas clears first (NewProjectCommand runs before the picker is shown);
-        // clearing the canvas does not itself touch ActiveProcess. Cancelling the picker
-        // afterwards means SetActiveProcess is never called, so whatever process was
-        // active before New Design simply carries over onto the fresh, empty canvas.
-        vm.FileOperations.ActiveProcess.ShouldNotBeNull();
+        // On a freshly-cleared design, dismissing the picker defaults to Playground rather
+        // than leaving the process undefined — the design is always in a known state.
         vm.IsPlayground.ShouldBeTrue();
+        vm.ActiveProcessLabel.ShouldContain("Playground");
+    }
+
+    [Fact]
+    public async Task PromptForInitialProcess_WhenPickerConfirmsProcess_SetsIt()
+    {
+        var vm = MainViewModelTestHelper.CreateMainViewModel();
+        var group = vm.FileOperations.ProcessCatalogProvider!.Invoke()[0];
+        vm.ShowProcessSelectionAsync = _ =>
+            Task.FromResult<ActiveProcessSelection?>(ActiveProcessSelection.ForGroup(group));
+
+        await vm.PromptForInitialProcessAsync();
+
+        vm.IsPlayground.ShouldBeFalse();
+        vm.ActiveProcessLabel.ShouldBe($"Process: {group.DisplayName}");
+    }
+
+    [Fact]
+    public async Task PromptForInitialProcess_WhenDismissed_StartsInPlayground()
+    {
+        var vm = MainViewModelTestHelper.CreateMainViewModel();
+        vm.ShowProcessSelectionAsync = _ => Task.FromResult<ActiveProcessSelection?>(null);
+
+        await vm.PromptForInitialProcessAsync();
+
+        vm.IsPlayground.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task PromptForInitialProcess_WhenProcessAlreadyActive_DoesNotPrompt()
+    {
+        var vm = MainViewModelTestHelper.CreateMainViewModel();
+        vm.FileOperations.SetActiveProcess(ActiveProcessSelection.Playground());
+        var promptShown = false;
+        vm.ShowProcessSelectionAsync = _ =>
+        {
+            promptShown = true;
+            return Task.FromResult<ActiveProcessSelection?>(null);
+        };
+
+        await vm.PromptForInitialProcessAsync();
+
+        promptShown.ShouldBeFalse();   // a process is already established → no startup prompt
     }
 
     [Fact]

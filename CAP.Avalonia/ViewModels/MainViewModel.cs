@@ -562,13 +562,36 @@ public partial class MainViewModel : ObservableObject
         if (Canvas.Components.Count > 0 || Canvas.Connections.Count > 0)
             return;
 
+        await PickAndApplyProcessAsync();
+    }
+
+    /// <summary>
+    /// Prompts once at startup for the fabrication process (the same picker as New Design),
+    /// unless a design that already carries a process was loaded first. Invoked by the view
+    /// after the window opens (issue #570). Dismissing the picker starts in Playground.
+    /// </summary>
+    public async Task PromptForInitialProcessAsync()
+    {
+        if (FileOperations.ActiveProcess != null)
+            return;   // a design (with its process) is already established
+
+        await PickAndApplyProcessAsync();
+    }
+
+    /// <summary>
+    /// Shows the process picker and applies the result to the design. Dismissing the picker
+    /// defaults to Playground (not manufacturable) rather than leaving the process undefined,
+    /// so the design is always in a known state (issue #570). No-op when no picker is wired
+    /// (headless/tests), leaving the process unset.
+    /// </summary>
+    private async Task PickAndApplyProcessAsync()
+    {
         if (ShowProcessSelectionAsync == null)
             return;
 
         var groups = ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
         var selection = await ShowProcessSelectionAsync(groups);
-        if (selection != null)
-            FileOperations.SetActiveProcess(selection);
+        FileOperations.SetActiveProcess(selection ?? ActiveProcessSelection.Playground());
     }
 
     [RelayCommand]
