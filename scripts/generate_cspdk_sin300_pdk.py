@@ -81,6 +81,12 @@ def build_component(pdk, name):
     left, bottom, right, top = _num(bb.left), _num(bb.bottom), _num(bb.right), _num(bb.top)
     pins = []
     for p in c.ports:
+        # Only in-plane optical waveguide ports become Lunima pins. Grating couplers
+        # additionally expose a vertical fibre port (port_type "vertical_te"/"vertical_tm")
+        # in the MIDDLE of the grating — that is where the fibre couples from above, not a
+        # routable connection point on the chip plane.
+        if getattr(p, "port_type", "optical") != "optical":
+            continue
         dc = p.dcenter
         x = _num(getattr(dc, "x", dc[0] if hasattr(dc, "__getitem__") else 0))
         y = _num(getattr(dc, "y", dc[1] if hasattr(dc, "__getitem__") else 0))
@@ -88,7 +94,10 @@ def build_component(pdk, name):
         pins.append({
             "name": p.name,
             "offsetXMicrometers": round(x - left, 3),
-            "offsetYMicrometers": round(y - bottom, 3),
+            # Lunima pin offsets are measured from the bounding box TOP-left, y-down
+            # (see docs/PDK_JSON_FORMAT.md). bottom-up ("y - bottom") only coincides for
+            # y-symmetric cells and mirrors e.g. the euler bend's pins.
+            "offsetYMicrometers": round(top - y, 3),
             "angleDegrees": _num(ori),
         })
     comp = {
