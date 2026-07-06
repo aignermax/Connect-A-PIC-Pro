@@ -840,7 +840,7 @@ public class GdsCoordinateVerificationTests
 
             // 2. Generate reference GDS
             var repoRoot = FindRepoRoot();
-            var refScriptSrc = Path.Combine(repoRoot, "Scripts", "reference_minimal.py");
+            var refScriptSrc = Path.Combine(repoRoot, "scripts", "reference_minimal.py");
             var refGdsPath    = Path.Combine(tempDir, "reference_minimal.gds");
             var refCoordsPath = Path.Combine(tempDir, "reference_coords.json");
             var reportPath    = Path.Combine(tempDir, "comparison_report.json");
@@ -860,7 +860,7 @@ public class GdsCoordinateVerificationTests
             }
 
             // 3. Extract coordinates from both GDS files
-            var extractScript = Path.Combine(repoRoot, "Scripts", "extract_gds_coords.py");
+            var extractScript = Path.Combine(repoRoot, "scripts", "extract_gds_coords.py");
             await RunPythonAsync(extractScript, $"\"{systemGdsPath}\" \"{systemCoordsPath}\"");
             await RunPythonAsync(extractScript, $"\"{refGdsPath}\" \"{refCoordsPath}\"");
 
@@ -871,7 +871,7 @@ public class GdsCoordinateVerificationTests
             }
 
             // 4. Compare coordinates
-            var compareScript = Path.Combine(repoRoot, "Scripts", "compare_gds_coords.py");
+            var compareScript = Path.Combine(repoRoot, "scripts", "compare_gds_coords.py");
             var (exitCode, compareOut, _) = await RunPythonRawAsync(
                 compareScript, $"\"{refCoordsPath}\" \"{systemCoordsPath}\" \"{reportPath}\"");
 
