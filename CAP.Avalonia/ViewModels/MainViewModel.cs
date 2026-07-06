@@ -744,6 +744,12 @@ public class DesignFileData
     /// Null for files saved before chip-size support was added (defaults to 5000 μm on load).
     /// </summary>
     public double? ChipHeightMicrometers { get; set; }
+
+    /// <summary>
+    /// The fabrication process this design is locked to (issue #570 — one process per chip).
+    /// Null for legacy files saved before single-process support; migrated on load.
+    /// </summary>
+    public ActiveProcessData? ActiveProcess { get; set; }
 }
 
 /// <summary>
