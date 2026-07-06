@@ -38,6 +38,7 @@
                     Spacing="8">
             <Button Content="Cancel"
                     Click="OnCancelClick"
+                    IsCancel="True"
                     Width="80"
                     Background="#3d3d3d"
                     Foreground="White"/>
