@@ -1,9 +1,9 @@
 {
   "fileFormatVersion": 1,
   "name": "CornerStone SiN 300nm",
-  "description": "CornerStone open-source silicon-nitride (Si3N4, 300 nm) process, generated from gdsfactory's cspdk.sin300 by scripts/generate_cspdk_sin300_pdk.py. A distinct fabrication process from the 220 nm SOI PDKs (single-process rule, #570). gdsfactory backend \u2014 components export via gdsfactory, not Nazca; light sim is black-box until circuit models are added.",
+  "description": "CornerStone open-source silicon-nitride (Si3N4, 300 nm) process, generated from gdsfactory's cspdk.sin300 by scripts/generate_cspdk_sin300_pdk.py. A distinct fabrication process from the 220 nm SOI PDKs (single-process rule, #570). gdsfactory backend \u2014 components export via gdsfactory, not Nazca; S-matrices are sampled from cspdk's own sax compact models (#665).",
   "foundry": "CornerStone",
-  "version": "cspdk-1.4.4",
+  "version": "cspdk-1.4.3",
   "defaultWavelengthNm": 1550,
   "backend": "gdsfactory",
   "gdsFactoryRoutingCrossSection": "xs_nc",
@@ -29,101 +29,29 @@
       "gdsFactoryFunction": "cspdk.sin300.coupler",
       "widthMicrometers": 60.0,
       "heightMicrometers": 5.2,
-      "nazcaOriginOffsetX": 20.0,
-      "nazcaOriginOffsetY": 3.318,
       "pins": [
         {
           "name": "o1",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 0.6,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o2",
           "offsetXMicrometers": 0.0,
           "offsetYMicrometers": 4.6,
           "angleDegrees": 180.0
         },
         {
-          "name": "o2",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
-          "angleDegrees": 180.0
-        },
-        {
           "name": "o3",
-          "offsetXMicrometers": 60.0,
-          "offsetYMicrometers": 0.6,
-          "angleDegrees": 0.0
-        },
-        {
-          "name": "o4",
           "offsetXMicrometers": 60.0,
           "offsetYMicrometers": 4.6,
           "angleDegrees": 0.0
-        }
-      ]
-    },
-    {
-      "name": "Coupler Straight",
-      "category": "Couplers",
-      "gdsFactoryFunction": "cspdk.sin300.coupler_straight",
-      "widthMicrometers": 20.0,
-      "heightMicrometers": 2.636,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 2.036,
-      "pins": [
-        {
-          "name": "o1",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 2.036,
-          "angleDegrees": 180.0
-        },
-        {
-          "name": "o2",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
-          "angleDegrees": 180.0
         },
         {
           "name": "o4",
-          "offsetXMicrometers": 20.0,
-          "offsetYMicrometers": 2.036,
-          "angleDegrees": 0.0
-        },
-        {
-          "name": "o3",
-          "offsetXMicrometers": 20.0,
+          "offsetXMicrometers": 60.0,
           "offsetYMicrometers": 0.6,
-          "angleDegrees": 0.0
-        }
-      ]
-    },
-    {
-      "name": "Mmi2x2",
-      "category": "Couplers",
-      "gdsFactoryFunction": "cspdk.sin300.mmi2x2",
-      "widthMicrometers": 105.5,
-      "heightMicrometers": 12.0,
-      "nazcaOriginOffsetX": 50.0,
-      "nazcaOriginOffsetY": 6.0,
-      "pins": [
-        {
-          "name": "o1",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 8.95,
-          "angleDegrees": 180.0
-        },
-        {
-          "name": "o2",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 3.05,
-          "angleDegrees": 180.0
-        },
-        {
-          "name": "o3",
-          "offsetXMicrometers": 105.5,
-          "offsetYMicrometers": 3.05,
-          "angleDegrees": 0.0
-        },
-        {
-          "name": "o4",
-          "offsetXMicrometers": 105.5,
-          "offsetYMicrometers": 8.95,
           "angleDegrees": 0.0
         }
       ],
@@ -134,28 +62,28 @@
             "wavelengthNm": 1500,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.568584,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.568584,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.568584,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.568584,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -163,28 +91,28 @@
             "wavelengthNm": 1520,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.64054,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.64054,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.64054,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.64054,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -192,28 +120,28 @@
             "wavelengthNm": 1540,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.678361,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.678361,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.678361,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.678361,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -221,18 +149,6 @@
             "wavelengthNm": 1550,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
                 "magnitude": 0.683101,
@@ -243,6 +159,18 @@
                 "toPin": "o4",
                 "magnitude": 0.683101,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.683101,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.683101,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -250,28 +178,28 @@
             "wavelengthNm": 1560,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.678481,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.678481,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.678481,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.678481,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -279,28 +207,28 @@
             "wavelengthNm": 1580,
             "connections": [
               {
-                "fromPin": "o2",
-                "toPin": "o3",
-                "magnitude": 0.683101,
-                "phaseDegrees": 90.0
-              },
-              {
-                "fromPin": "o2",
-                "toPin": "o4",
-                "magnitude": 0.683101,
-                "phaseDegrees": 0.0
-              },
-              {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.643618,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.643618,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.643618,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.643618,
+                "phaseDegrees": 0.0
               }
             ]
           },
@@ -308,17 +236,192 @@
             "wavelengthNm": 1600,
             "connections": [
               {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.581359,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.581359,
+                "phaseDegrees": 90.0
+              },
+              {
                 "fromPin": "o2",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.581359,
                 "phaseDegrees": 90.0
               },
               {
                 "fromPin": "o2",
                 "toPin": "o4",
-                "magnitude": 0.683101,
+                "magnitude": 0.581359,
+                "phaseDegrees": 0.0
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Coupler Straight",
+      "category": "Couplers",
+      "gdsFactoryFunction": "cspdk.sin300.coupler_straight",
+      "widthMicrometers": 20.0,
+      "heightMicrometers": 2.636,
+      "pins": [
+        {
+          "name": "o1",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 0.6,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o2",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 2.036,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o4",
+          "offsetXMicrometers": 20.0,
+          "offsetYMicrometers": 0.6,
+          "angleDegrees": 0.0
+        },
+        {
+          "name": "o3",
+          "offsetXMicrometers": 20.0,
+          "offsetYMicrometers": 2.036,
+          "angleDegrees": 0.0
+        }
+      ]
+    },
+    {
+      "name": "Mmi2x2",
+      "category": "Couplers",
+      "gdsFactoryFunction": "cspdk.sin300.mmi2x2",
+      "widthMicrometers": 105.5,
+      "heightMicrometers": 12.0,
+      "pins": [
+        {
+          "name": "o1",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 3.05,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o2",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 8.95,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o3",
+          "offsetXMicrometers": 105.5,
+          "offsetYMicrometers": 8.95,
+          "angleDegrees": 0.0
+        },
+        {
+          "name": "o4",
+          "offsetXMicrometers": 105.5,
+          "offsetYMicrometers": 3.05,
+          "angleDegrees": 0.0
+        }
+      ],
+      "sMatrix": {
+        "wavelengthNm": 1550,
+        "wavelengthData": [
+          {
+            "wavelengthNm": 1500,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.568584,
                 "phaseDegrees": 0.0
               },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.568584,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.568584,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.568584,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1520,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.64054,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.64054,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.64054,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.64054,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1540,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.678361,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.678361,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.678361,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.678361,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1550,
+            "connections": [
               {
                 "fromPin": "o1",
                 "toPin": "o3",
@@ -330,6 +433,105 @@
                 "toPin": "o4",
                 "magnitude": 0.683101,
                 "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.683101,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.683101,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1560,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.678481,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.678481,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.678481,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.678481,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1580,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.643618,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.643618,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.643618,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.643618,
+                "phaseDegrees": 0.0
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1600,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.581359,
+                "phaseDegrees": 0.0
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o4",
+                "magnitude": 0.581359,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o3",
+                "magnitude": 0.581359,
+                "phaseDegrees": 90.0
+              },
+              {
+                "fromPin": "o2",
+                "toPin": "o4",
+                "magnitude": 0.581359,
+                "phaseDegrees": 0.0
               }
             ]
           }
@@ -342,8 +544,6 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_elliptical",
       "widthMicrometers": 61.83,
       "heightMicrometers": 44.194,
-      "nazcaOriginOffsetX": -18.597,
-      "nazcaOriginOffsetY": 22.097,
       "pins": [
         {
           "name": "o1",
@@ -447,8 +647,6 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_rectangular",
       "widthMicrometers": 219.8,
       "heightMicrometers": 11.0,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 5.5,
       "pins": [
         {
           "name": "o1",
@@ -550,56 +748,25 @@
       "name": "MZI",
       "category": "Interferometers",
       "gdsFactoryFunction": "cspdk.sin300.mzi",
-      "widthMicrometers": 616.8,
-      "heightMicrometers": 136.1,
-      "nazcaOriginOffsetX": 50.0,
-      "nazcaOriginOffsetY": 65.55,
+      "widthMicrometers": 596.8,
+      "heightMicrometers": 116.1,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 65.55,
+          "offsetYMicrometers": 60.55,
           "angleDegrees": 180.0
         },
         {
           "name": "o3",
-          "offsetXMicrometers": 616.8,
-          "offsetYMicrometers": 68.5,
+          "offsetXMicrometers": 596.8,
+          "offsetYMicrometers": 57.6,
           "angleDegrees": 0.0
         },
         {
           "name": "o2",
-          "offsetXMicrometers": 616.8,
-          "offsetYMicrometers": 62.6,
-          "angleDegrees": 0.0
-        }
-      ]
-    },
-    {
-      "name": "Mmi1x2",
-      "category": "Splitters",
-      "gdsFactoryFunction": "cspdk.sin300.mmi1x2",
-      "widthMicrometers": 164.7,
-      "heightMicrometers": 12.0,
-      "nazcaOriginOffsetX": 50.0,
-      "nazcaOriginOffsetY": 6.0,
-      "pins": [
-        {
-          "name": "o1",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 6.0,
-          "angleDegrees": 180.0
-        },
-        {
-          "name": "o2",
-          "offsetXMicrometers": 164.7,
-          "offsetYMicrometers": 3.05,
-          "angleDegrees": 0.0
-        },
-        {
-          "name": "o3",
-          "offsetXMicrometers": 164.7,
-          "offsetYMicrometers": 8.95,
+          "offsetXMicrometers": 596.8,
+          "offsetYMicrometers": 63.5,
           "angleDegrees": 0.0
         }
       ],
@@ -612,13 +779,164 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.016379,
+                "phaseDegrees": -139.826
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.64633,
+                "phaseDegrees": 40.174
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1520,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.437742,
+                "phaseDegrees": -140.34
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.694018,
+                "phaseDegrees": 39.66
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1540,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.814306,
+                "phaseDegrees": -112.788
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.428775,
+                "phaseDegrees": 67.212
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1550,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.909046,
+                "phaseDegrees": 91.173
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.210948,
+                "phaseDegrees": -88.827
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1560,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.920325,
+                "phaseDegrees": -58.25
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.023322,
+                "phaseDegrees": -58.25
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1580,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.717937,
+                "phaseDegrees": 22.248
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.413376,
+                "phaseDegrees": 22.248
+              }
+            ]
+          },
+          {
+            "wavelengthNm": 1600,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.361162,
+                "phaseDegrees": 127.735
+              },
+              {
+                "fromPin": "o1",
+                "toPin": "o3",
+                "magnitude": 0.571337,
+                "phaseDegrees": 127.735
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "name": "Mmi1x2",
+      "category": "Splitters",
+      "gdsFactoryFunction": "cspdk.sin300.mmi1x2",
+      "widthMicrometers": 164.7,
+      "heightMicrometers": 12.0,
+      "pins": [
+        {
+          "name": "o1",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 6.0,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "o2",
+          "offsetXMicrometers": 164.7,
+          "offsetYMicrometers": 8.95,
+          "angleDegrees": 0.0
+        },
+        {
+          "name": "o3",
+          "offsetXMicrometers": 164.7,
+          "offsetYMicrometers": 3.05,
+          "angleDegrees": 0.0
+        }
+      ],
+      "sMatrix": {
+        "wavelengthNm": 1550,
+        "wavelengthData": [
+          {
+            "wavelengthNm": 1500,
+            "connections": [
+              {
+                "fromPin": "o1",
+                "toPin": "o2",
+                "magnitude": 0.568584,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.568584,
                 "phaseDegrees": 0.0
               }
             ]
@@ -629,13 +947,13 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.64054,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.64054,
                 "phaseDegrees": 0.0
               }
             ]
@@ -646,13 +964,13 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.678361,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.678361,
                 "phaseDegrees": 0.0
               }
             ]
@@ -680,13 +998,13 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.678481,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.678481,
                 "phaseDegrees": 0.0
               }
             ]
@@ -697,13 +1015,13 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.643618,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.643618,
                 "phaseDegrees": 0.0
               }
             ]
@@ -714,13 +1032,13 @@
               {
                 "fromPin": "o1",
                 "toPin": "o2",
-                "magnitude": 0.683101,
+                "magnitude": 0.581359,
                 "phaseDegrees": 0.0
               },
               {
                 "fromPin": "o1",
                 "toPin": "o3",
-                "magnitude": 0.683101,
+                "magnitude": 0.581359,
                 "phaseDegrees": 0.0
               }
             ]
@@ -732,22 +1050,20 @@
       "name": "Bend Euler",
       "category": "Waveguides",
       "gdsFactoryFunction": "cspdk.sin300.bend_euler",
-      "widthMicrometers": 30.6,
-      "heightMicrometers": 30.6,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 30.0,
+      "widthMicrometers": 25.6,
+      "heightMicrometers": 25.6,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 30.0,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
-          "offsetXMicrometers": 30.0,
-          "offsetYMicrometers": 0.0,
-          "angleDegrees": 270.0
+          "offsetXMicrometers": 25.0,
+          "offsetYMicrometers": 25.6,
+          "angleDegrees": 90.0
         }
       ],
       "sMatrix": {
@@ -768,19 +1084,17 @@
       "gdsFactoryFunction": "cspdk.sin300.bend_s",
       "widthMicrometers": 15.0,
       "heightMicrometers": 3.0,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 2.4,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 2.4,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 15.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 2.4,
           "angleDegrees": 0.0
         }
       ],
@@ -802,8 +1116,6 @@
       "gdsFactoryFunction": "cspdk.sin300.straight",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
@@ -836,8 +1148,6 @@
       "gdsFactoryFunction": "cspdk.sin300.taper",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
-      "nazcaOriginOffsetX": -0.0,
-      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
@@ -858,6 +1168,38 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
+            "magnitude": 1.0,
+            "phaseDegrees": 0.0
+          }
+        ]
+      }
+    },
+    {
+      "name": "Wire Corner",
+      "category": "Waveguides",
+      "gdsFactoryFunction": "cspdk.sin300.wire_corner",
+      "widthMicrometers": 10.0,
+      "heightMicrometers": 10.0,
+      "pins": [
+        {
+          "name": "e1",
+          "offsetXMicrometers": 0.0,
+          "offsetYMicrometers": 5.0,
+          "angleDegrees": 180.0
+        },
+        {
+          "name": "e2",
+          "offsetXMicrometers": 5.0,
+          "offsetYMicrometers": 10.0,
+          "angleDegrees": 90.0
+        }
+      ],
+      "sMatrix": {
+        "wavelengthNm": 1550,
+        "connections": [
+          {
+            "fromPin": "e1",
+            "toPin": "e2",
             "magnitude": 1.0,
             "phaseDegrees": 0.0
           }

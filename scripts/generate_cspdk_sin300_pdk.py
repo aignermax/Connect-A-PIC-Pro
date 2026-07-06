@@ -5,17 +5,20 @@ gdsfactory's open-source `cspdk` library — issue #570 follow-up / gdsfactory-b
 This is the PDK's *updater*: the CornerStone process is a Python library (cspdk); when it
 changes, re-run this to regenerate the Lunima PDK JSON. No hand-editing, no fabricated data.
 
-    uv venv .cspdk --python 3.11
-    uv pip install --python .cspdk cspdk
+Environment (cspdk >= 1.4.3 — 1.4.2's `coupler` cell raises on a `bend_s` kwarg; sax ~0.17
+matches cspdk's model kwargs; installed --no-deps to avoid the unused gplugins/gdstk chain):
+
+    uv venv .cspdk --python 3.12
+    uv pip install --python .cspdk "gdsfactory==9.43.0" "sax~=0.17.0"
+    uv pip install --python .cspdk --no-deps "cspdk==1.4.3"
     .cspdk/Scripts/python scripts/generate_cspdk_sin300_pdk.py CAP-DataAccess/PDKs/cornerstone-sin-pdk.json
 
 Emits a `backend: "gdsfactory"` PDK: each component carries its gdsfactory factory name
 (`gdsFactoryFunction = "cspdk.sin300.<cell>"`) instead of a `nazcaFunction`, so it exports via
-the gdsfactory path and is skipped by the nazca-export tests. Geometry, pins and origin offset
-are real (`c.dbbox()` / `c.ports`). S-matrices come from the cspdk sax models where available
-(MMIs and grating couplers, multi-wavelength) and a lossless pass-through for 2-port passives;
-remaining cells stay black-box. The process fingerprint (Si3N4 / 300 nm / SiO2 / 1550 nm)
-makes it a distinct process from the 220 nm SOI PDKs for the single-process rule (#570).
+the gdsfactory path and is skipped by the nazca-export tests. Geometry + pins are real
+(`c.dbbox()` / `c.ports`); S-matrices come from cspdk's own `sax` compact models (#665). The
+process fingerprint (Si3N4 / 300 nm / SiO2 / 1550 nm) makes it a distinct process from the
+220 nm SOI PDKs for the single-process rule (#570).
 """
 import sys
 import json
@@ -29,22 +32,25 @@ SKIP_UTILITIES = {"array", "compass", "die", "die_nc", "die_no", "pad", "rectang
 WAVELENGTHS_NM = [1500, 1520, 1540, 1550, 1560, 1580, 1600]
 
 # Components whose sax model + port mapping are unambiguous enough to emit a real S-matrix.
-# mmi1x2/mmi2x2 build cleanly and their in*/out* ports map to the layout ports by orientation.
-# Grating couplers (#665): their 2 layout ports map cleanly too — o1 (180°, waveguide) -> in0,
-# o2 (0°, fibre) -> out0 — and the sax model returns a real wavelength-dependent coupling band
-# (≈0.03 mag at 1500/1600 nm, ≈0.50 at the 1550 peak). `mzi` has no cspdk compact model (it is a
-# composite that would need circuit simulation) and `coupler`/`coupler_straight` are 4-port
-# directional couplers with no unambiguous 1-in-1-out transfer — all stay black-box until a
-# proper multi-port model mapping is wired.
-SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2",
+# With sax's "optical" port-naming strategy the model port names (o1, o2, …) are *identical*
+# to the layout port names, so the mapping is verified name identity (checked in
+# _eval_model_smatrix; any mismatch → black-box). The grating-coupler fibre-port convention:
+# the sax model's o1 is the in-plane waveguide port, o2 the out-of-plane fibre port — the
+# layout exposes exactly those two ports under the same names (#665).
+SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2", "coupler",
                         "grating_coupler_rectangular", "grating_coupler_elliptical"}
 
-# Passive routing components that faithfully pass light straight through — a lossless
-# pass-through S-matrix is the honest ideal. Their cspdk sax models raise on the `loss`
-# kwarg, so we synthesize the transfer rather than evaluate it. NOT gratings:
-# a grating is a fibre coupler (out-of-plane, lossy, wavelength-dependent), so a pass-through
-# would be a wrong model — it stays black-box until its real fibre model is wired.
-PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s"}
+# Multi-component cells with no direct sax model: composed with sax.circuit from the cell's
+# own recursive netlist + cspdk's models, so arm lengths (mzi delta_length) enter via the
+# real layout netlist. (cspdk.sin300's mzi has no heater — passive arms only.)
+CIRCUIT_MODEL_COMPONENTS = {"mzi"}
+
+# Passive routing components that faithfully pass light (or current) straight through — a
+# lossless pass-through S-matrix is the honest ideal. Their cspdk sax model wrappers raise
+# on the `loss` kwarg (see _mzi_circuit), so we synthesize the transfer rather than evaluate
+# it. NOT gratings: a grating is a fibre coupler (out-of-plane, lossy, wavelength-dependent),
+# so a pass-through would be a wrong model — it gets its real sax model above (#665).
+PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s", "wire_corner"}
 
 
 def _num(v):
@@ -130,81 +136,129 @@ def build_component(pdk, name):
         "nazcaOriginOffsetY": round(top, 3),
         "pins": pins,
     }
-    smatrix = build_smatrix(name, pins)
+    smatrix = build_smatrix(pdk, name, pins)
     if smatrix is not None:
         comp["sMatrix"] = smatrix
     return comp
 
 
-def _classify_ports(pins):
-    """Split layout pins into (inputs, outputs) by orientation and return the model-port map.
+def _west_east(pins):
+    """Split layout pin names into (west-facing, east/other) sets by orientation.
 
-    gdsfactory/sax name west-facing ports in0,in1,… and east-facing ports out0,out1,…, in
-    ascending transverse (y) order. A layout pin faces "in" when its angle points westish
-    (90°<angle<270°). Returns (map, n_in, n_out) where map is {"in0": pinName, "out0": …}.
+    Forward transfers are west→east: Lunima adds the reverse transfer per connection
+    (PdkTemplateConverter.CreateSMatrixFromPdk), so we must only emit one direction.
     """
-    def norm(a):
-        return a % 360
-    inputs = sorted((p for p in pins if 90 < norm(p["angleDegrees"]) < 270),
-                    key=lambda p: p["offsetYMicrometers"])
-    outputs = sorted((p for p in pins if not (90 < norm(p["angleDegrees"]) < 270)),
-                     key=lambda p: p["offsetYMicrometers"])
-    port_map = {}
-    for i, p in enumerate(inputs):
-        port_map[f"in{i}"] = p["name"]
-    for i, p in enumerate(outputs):
-        port_map[f"out{i}"] = p["name"]
-    return port_map, len(inputs), len(outputs)
+    west = {p["name"] for p in pins if 90 < p["angleDegrees"] % 360 < 270}
+    east = {p["name"] for p in pins} - west
+    return west, east
 
 
-def build_smatrix(name, pins):
-    """Real S-matrix for the component, or None (black-box).
+def _sax_models():
+    """cspdk's sax models with the "optical" port-naming strategy, so model port names are
+    the layout port names (o1, o2, …) — the strategy applies when a model is *called*."""
+    import sax
+    sax.set_port_naming_strategy("optical")
+    import cspdk.sin300.models as models
+    return sax, models
 
-    - SAX_MODEL_COMPONENTS: evaluate the cspdk sax model at each WAVELENGTHS_NM and emit only
-      forward (in→out) transfers mapped to layout pins — Lunima adds the reverse transfer per
-      connection (PdkTemplateConverter.CreateSMatrixFromPdk), so we must not emit both.
-    - 2-port passives (1 in, 1 out): a lossless pass-through (their cspdk models raise).
-    - otherwise None (grating fibre ports / erroring components stay black-box).
+
+def _mzi_circuit(pdk, sax, models):
+    """Compose the mzi S-model from its own recursive netlist + cspdk's sub-cell models.
+
+    cspdk's straight/bend model wrappers pass `loss=` to sax models that spell the kwarg
+    `loss_dB_cm` (upstream naming bug), so we call sax.models.straight directly with cspdk's
+    own SiN parameters (straight_nc partial keywords: neff/ng/wl0/loss) — a kwarg rename,
+    not new physics. Netlist instance settings supply the real arm lengths.
+    """
+    import inspect
+    import sax.models as sm
+    nc = dict(models.straight_nc.keywords)
+    bend_loss = inspect.signature(models.bend_euler).parameters["loss"].default
+
+    def straight(wl=1.55, length=10.0, loss=nc["loss"], **_):
+        return sm.straight(wl=wl, length=length, wl0=nc["wl0"],
+                           neff=nc["neff"], ng=nc["ng"], loss_dB_cm=loss)
+
+    def bend_euler(wl=1.55, length=10.0, loss=bend_loss, **_):
+        return straight(wl=wl, length=length, loss=loss)
+
+    netlist = pdk.get_component("mzi").get_netlist(recursive=True)
+    circuit, _info = sax.circuit(netlist, models={
+        "straight": straight, "bend_euler": bend_euler,
+        "mmi1x2": models.mmi1x2_nc, "mmi2x2": models.mmi2x2_nc,
+    })
+    return circuit
+
+
+def _eval_model_smatrix(model, pins):
+    """Sample `model` at WAVELENGTHS_NM; keep forward (west→east) transfers by name identity.
+
+    Guardrail (#665): every model port must exist as a layout pin, else the mapping is not
+    verified and the component stays black-box (a wrong model is worse than none).
     """
     import numpy as np
-    port_map, n_in, n_out = _classify_ports(pins)
+    west, east = _west_east(pins)
+    pin_names = west | east
 
-    if name in SAX_MODEL_COMPONENTS:
-        try:
-            import cspdk.sin300.models as models
-            model = getattr(models, name)
-            wl_data = []
-            for wl_nm in WAVELENGTHS_NM:
-                s = model(wl=wl_nm / 1000.0)   # sax wavelengths are in µm
-                conns = []
-                for (a, b), value in s.items():
-                    if a not in port_map or b not in port_map:
-                        continue
-                    if not (a.startswith("in") and b.startswith("out")):
-                        continue   # forward transfers only; skip reverse + reflections
-                    v = complex(np.asarray(value).reshape(-1)[0])
-                    if abs(v) < 1e-6:
-                        continue
-                    conns.append({
-                        "fromPin": port_map[a],
-                        "toPin": port_map[b],
-                        "magnitude": round(abs(v), 6),
-                        "phaseDegrees": round(cmath.phase(v) * 180.0 / cmath.pi, 3),
-                    })
-                if conns:
-                    wl_data.append({"wavelengthNm": wl_nm, "connections": conns})
-            if wl_data:
-                return {"wavelengthNm": 1550, "wavelengthData": wl_data}
-        except Exception:  # noqa: BLE001 — fall through to black-box on any model failure
-            return None
+    # Evaluate ONCE over the whole wavelength array: sax's mmi models normalise their
+    # spectral response by its max over the passed wl array, so scalar-per-wavelength calls
+    # would flatten the band to the peak value. The grid contains wl0 = 1550 nm, so the
+    # normalisation anchor is the true peak.
+    s = model(wl=np.array([w / 1000.0 for w in WAVELENGTHS_NM]))   # sax wl in µm
+    model_ports = {p for k in s for p in k}
+    if not model_ports <= pin_names:
+        print(f"model ports {sorted(model_ports - pin_names)} missing from layout — "
+              "black-box", file=sys.stderr)
         return None
 
+    wl_data = []
+    for i, wl_nm in enumerate(WAVELENGTHS_NM):
+        conns = []
+        for (a, b), value in s.items():
+            if a not in west or b not in east:
+                continue   # forward transfers only; skip reverse + reflections
+            arr = np.asarray(value).reshape(-1)
+            v = complex(arr[i] if arr.size > 1 else arr[0])
+            if abs(v) < 1e-6:
+                continue
+            conns.append({
+                "fromPin": a,
+                "toPin": b,
+                "magnitude": round(abs(v), 6),
+                "phaseDegrees": round(cmath.phase(v) * 180.0 / cmath.pi, 3),
+            })
+        if conns:
+            wl_data.append({"wavelengthNm": wl_nm, "connections": conns})
+    if not wl_data:
+        return None
+    return {"wavelengthNm": 1550, "wavelengthData": wl_data}
+
+
+def build_smatrix(pdk, name, pins):
+    """Real S-matrix for the component, or None (black-box).
+
+    - SAX_MODEL_COMPONENTS: the cspdk sax model, sampled at WAVELENGTHS_NM.
+    - CIRCUIT_MODEL_COMPONENTS: a sax.circuit composition of the cell's netlist.
+    - 2-port passives (1 in, 1 out): a lossless pass-through (their cspdk models raise).
+    - otherwise None (unverified port mapping / erroring components stay black-box).
+    """
+    if name in SAX_MODEL_COMPONENTS or name in CIRCUIT_MODEL_COMPONENTS:
+        try:
+            sax, models = _sax_models()
+            model = (_mzi_circuit(pdk, sax, models) if name in CIRCUIT_MODEL_COMPONENTS
+                     else getattr(models, name))
+            return _eval_model_smatrix(model, pins)
+        except Exception as e:  # noqa: BLE001 — black-box on any model failure
+            print(f"{name}: sax model failed ({e}) — black-box", file=sys.stderr)
+            return None
+
     # Lossless pass-through for a known passive routing component (straight/taper/bend/wire).
-    if name in PASS_THROUGH_COMPONENTS and n_in == 1 and n_out == 1:
+    west, east = _west_east(pins)
+    if name in PASS_THROUGH_COMPONENTS and len(west) == 1 and len(east) == 1:
         return {
             "wavelengthNm": 1550,
             "connections": [{
-                "fromPin": port_map["in0"], "toPin": port_map["out0"],
+                "fromPin": next(iter(west)), "toPin": next(iter(east)),
                 "magnitude": 1.0, "phaseDegrees": 0.0,
             }],
         }
@@ -238,8 +292,8 @@ def main():
                         "generated from gdsfactory's cspdk.sin300 by "
                         "scripts/generate_cspdk_sin300_pdk.py. A distinct fabrication process "
                         "from the 220 nm SOI PDKs (single-process rule, #570). gdsfactory "
-                        "backend — components export via gdsfactory, not Nazca; light sim is "
-                        "black-box until circuit models are added."),
+                        "backend — components export via gdsfactory, not Nazca; S-matrices "
+                        "are sampled from cspdk's own sax compact models (#665)."),
         "foundry": "CornerStone",
         "version": f"cspdk-{getattr(__import__('cspdk'), '__version__', '?')}",
         "defaultWavelengthNm": 1550,
