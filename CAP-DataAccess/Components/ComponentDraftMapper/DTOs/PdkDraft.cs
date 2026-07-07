@@ -90,6 +90,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("backend")]
         public string? Backend { get; set; }
 
+        /// <summary>
+        /// gdsfactory cross-section name used to route waveguides between this PDK's components
+        /// (e.g. <c>"xs_nc"</c> — CornerStone SiN C-band, 1.2 µm). gdsfactory-backend only; the
+        /// generic <c>"strip"</c> default does not exist under a nitride PDK, so routed
+        /// straights/bends must name the PDK's own cross-section (#570 field-test fix).
+        /// </summary>
+        [JsonPropertyName("gdsFactoryRoutingCrossSection")]
+        public string? GdsFactoryRoutingCrossSection { get; set; }
+
         /// <summary>True when this PDK's components are gdsfactory-native (see <see cref="Backend"/>).</summary>
         [JsonIgnore]
         public bool IsGdsFactoryBackend =>

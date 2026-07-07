@@ -6,6 +6,7 @@
   "version": "cspdk-1.4.4",
   "defaultWavelengthNm": 1550,
   "backend": "gdsfactory",
+  "gdsFactoryRoutingCrossSection": "xs_nc",
   "process": {
     "name": "CornerStone SiN 300nm",
     "foundry": "CornerStone",

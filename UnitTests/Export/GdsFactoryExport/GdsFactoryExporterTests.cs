@@ -233,6 +233,54 @@ public class GdsFactoryExporterTests
     }
 
     [Fact]
+    public void Export_GdsFactoryNativeDesign_RoutesWithPdkCrossSection_NotStrip()
+    {
+        // A routed waveguide in a gdsfactory-native design (CornerStone SiN) must use the PDK's
+        // cross-section, not the generic default. gf.components.straight(width=…) resolves the
+        // 'strip' cross-section, which does not exist under the activated cspdk.sin300 PDK
+        // (only xs_nc/xs_no) → every export with a connection crashed at runtime (#570 field test).
+        var canvas = new DesignCanvasViewModel();
+        var a = CreateSinComponent("A", "cspdk.sin300.mmi1x2", 0, 0);
+        var b = CreateSinComponent("B", "cspdk.sin300.straight", 50, 0);
+        canvas.AddComponent(a, "SiN A");
+        canvas.AddComponent(b, "SiN B");
+        canvas.Connections.Add(new WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
+
+        var script = ExportStandalone(canvas);
+
+        script.ShouldContain("gf.components.straight(length=");   // the connecting waveguide was routed
+        script.ShouldContain("cross_section='xs_nc'");            // …with the PDK's cross-section
+        script.ShouldNotContain("width=WG_WIDTH");                // …not the generic 'strip'-width default
+    }
+
+    private static CAP_Core.Components.Core.Component CreateSinComponent(
+        string id, string gdsFactoryFunction, double x, double y)
+    {
+        var c = TestComponentFactory.CreateBasicComponent();
+        c.Identifier = id;
+        c.NazcaFunctionName = "";                                  // gdsfactory-native: no Nazca function
+        c.GdsFactoryFunction = gdsFactoryFunction;
+        c.GdsFactoryRoutingCrossSection = "xs_nc";
+        c.PhysicalX = x;
+        c.PhysicalY = y;
+        c.RotationDegrees = 0;
+        c.PhysicalPins.Add(new CAP_Core.Components.Core.PhysicalPin
+        {
+            Name = "o1",
+            ParentComponent = c,
+            OffsetXMicrometers = 0,
+            OffsetYMicrometers = 5,
+            AngleDegrees = 180,
+        });
+        return c;
+    }
+
+    [Fact]
     public void Export_GdsFactoryBackendComponent_CallsRealFactoryAndActivatesItsPdk()
     {
         // A gdsfactory-native PDK component (e.g. CornerStone SiN via cspdk, #570) exports by

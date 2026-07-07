@@ -244,6 +244,10 @@ def main():
         "version": f"cspdk-{getattr(__import__('cspdk'), '__version__', '?')}",
         "defaultWavelengthNm": 1550,
         "backend": "gdsfactory",
+        # Routing cross-section for waveguides between components. cspdk's route_single_nc uses
+        # xs_nc (C-band, 1.2 µm); the O-band variant would be xs_no. The generic gdsfactory
+        # "strip" default does not exist under this nitride PDK, so the export must name it (#570).
+        "gdsFactoryRoutingCrossSection": "xs_nc",
         "process": {
             "name": "CornerStone SiN 300nm",
             "foundry": "CornerStone",

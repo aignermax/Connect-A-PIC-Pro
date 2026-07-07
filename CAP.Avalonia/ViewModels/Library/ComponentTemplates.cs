@@ -119,6 +119,7 @@ public static class ComponentTemplates
         component.NazcaOriginOffsetY = template.NazcaOriginOffsetY;
         component.NazcaModuleName = template.NazcaModuleName;
         component.GdsFactoryFunction = template.GdsFactoryFunction;
+        component.GdsFactoryRoutingCrossSection = template.GdsFactoryRoutingCrossSection;
 
         // Set human-readable display name from the template's display name.
         // This ensures components placed from the library show their PDK display name
@@ -195,6 +196,13 @@ public partial class ComponentTemplate : ObservableObject
     /// component so the gdsfactory export can call the real factory (#570).
     /// </summary>
     public string? GdsFactoryFunction { get; set; }
+
+    /// <summary>
+    /// gdsfactory routing cross-section for this PDK (e.g. "xs_nc"); null for Nazca PDKs.
+    /// Flows to the placed component so routed waveguides use a cross-section that exists
+    /// under the activated gdsfactory PDK (#570 field-test fix).
+    /// </summary>
+    public string? GdsFactoryRoutingCrossSection { get; set; }
 }
 
 public class PinDefinition

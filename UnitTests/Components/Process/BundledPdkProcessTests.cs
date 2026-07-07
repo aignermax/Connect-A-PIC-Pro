@@ -85,6 +85,22 @@ public class BundledPdkProcessTests
     }
 
     [Fact]
+    public void CornerStoneSin_RoutingCrossSection_FlowsFromPdkToComponentTemplate()
+    {
+        // The PDK declares its routing cross-section (xs_nc); it must reach the component
+        // template so routed waveguides in a placed design use a cross-section that exists
+        // under the activated cspdk PDK — the generic 'strip' does not (#570 field-test fix).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        draft.GdsFactoryRoutingCrossSection.ShouldBe("xs_nc");
+
+        var comp = draft.Components.First(c => c.GdsFactoryFunction == "cspdk.sin300.mmi1x2");
+        var template = CAP.Avalonia.Services.PdkTemplateConverter.ConvertToTemplate(
+            comp, draft.Name, draft.NazcaModuleName, draft.GdsFactoryRoutingCrossSection);
+
+        template.GdsFactoryRoutingCrossSection.ShouldBe("xs_nc");
+    }
+
+    [Fact]
     public void CornerStoneSin_IsADistinctProcessFromSoiPdks()
     {
         var loader = new PdkLoader();

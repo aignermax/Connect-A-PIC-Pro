@@ -188,7 +188,8 @@ public partial class LeftPanelViewModel : ObservableObject
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)
                 {
-                    var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
+                    var template = ConvertPdkComponentToTemplate(
+                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
                     AllTemplates.Add(template);
                     componentCount++;
                 }
@@ -403,8 +404,11 @@ public partial class LeftPanelViewModel : ObservableObject
         }
     }
 
-    private static ComponentTemplate ConvertPdkComponentToTemplate(PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName)
-        => PdkTemplateConverter.ConvertToTemplate(pdkComp, pdkName, nazcaModuleName);
+    private static ComponentTemplate ConvertPdkComponentToTemplate(
+        PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName,
+        string? gdsFactoryRoutingCrossSection = null)
+        => PdkTemplateConverter.ConvertToTemplate(
+            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
 
     /// <summary>
     /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).

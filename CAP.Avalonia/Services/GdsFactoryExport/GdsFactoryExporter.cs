@@ -36,9 +36,24 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
-        AppendConnections(sb, canvas);
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas));
         AppendFooter(sb);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
+    /// designs route with the PDK's cross-section (e.g. <c>cross_section='xs_nc'</c>): the
+    /// generic <c>gf.components.straight(width=…)</c> resolves the 'strip' cross-section, which
+    /// does not exist under a nitride PDK and crashed every export with a connection (#570 field
+    /// test). Nazca/generic designs keep the explicit <c>width=WG_WIDTH</c>.
+    /// </summary>
+    private static string RoutingWaveguideKwarg(DesignCanvasViewModel canvas)
+    {
+        var crossSection = EnumerateExportableComponents(canvas)
+            .Select(c => c.GdsFactoryRoutingCrossSection)
+            .FirstOrDefault(x => !string.IsNullOrEmpty(x));
+        return string.IsNullOrEmpty(crossSection) ? "width=WG_WIDTH" : $"cross_section='{crossSection}'";
     }
 
     /// <summary>
@@ -284,7 +299,7 @@ public class GdsFactoryExporter
             ? comp.NazcaFunctionParameters
             : string.Empty;
 
-    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas)
+    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg)
     {
         sb.AppendLine("# Waveguide connections");
         foreach (var connVm in canvas.Connections)
@@ -295,32 +310,32 @@ public class GdsFactoryExporter
 
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg);
             else if (conn.StartPin != null && conn.EndPin != null)
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg);
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg);
         }
         sb.AppendLine();
     }
 
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group)
+    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, string waveguideKwarg)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
                 GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin);
+                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg);
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg);
         }
     }
 

@@ -85,6 +85,15 @@ public class Component : ICloneable
     public string? GdsFactoryFunction { get; set; }
 
     /// <summary>
+    /// gdsfactory cross-section name used to route waveguides between this design's components
+    /// (e.g. "xs_nc" — CornerStone SiN C-band, 1.2 µm). Null for Nazca designs, which route with
+    /// an explicit width. Set for gdsfactory-native PDKs so routed straights/bends resolve a
+    /// cross-section that exists under the activated PDK — the generic "strip" default does not
+    /// (#570 field-test fix). Uniform per PDK; flows from the template on placement and on load.
+    /// </summary>
+    public string? GdsFactoryRoutingCrossSection { get; set; }
+
+    /// <summary>
     /// Sentinel value used in <see cref="NazcaFunctionName"/> for virtual analysis
     /// components (e.g. ONA Analyzer). Such components are skipped during GDS /
     /// PhotonTorch export and have a dedicated UI flow.
@@ -398,6 +407,7 @@ public class Component : ICloneable
         // override no longer matches the original.
         clonedComponent.NazcaModuleName = NazcaModuleName;
         clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
+        clonedComponent.GdsFactoryRoutingCrossSection = GdsFactoryRoutingCrossSection;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.HumanReadableName = HumanReadableName;
 
