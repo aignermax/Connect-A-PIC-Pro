@@ -69,6 +69,73 @@ public class BundledPdkProcessTests
         straight.SMatrix!.Connections.ShouldContain(c => c.Magnitude == 1.0);  // lossless pass-through
     }
 
+    [Theory]
+    [InlineData("cspdk.sin300.grating_coupler_rectangular")]
+    [InlineData("cspdk.sin300.grating_coupler_elliptical")]
+    [InlineData("cspdk.sin300.coupler")]
+    [InlineData("cspdk.sin300.mzi")]
+    public void CornerStoneSin_GratingsCouplerAndMzi_CarryRealMultiWavelengthSMatrices(
+        string gdsFactoryFunction)
+    {
+        // Follow-up to the mmi/passive models: gratings, the 2x2 directional coupler and the
+        // MZI must carry real (non-black-box) S-matrices from cspdk's sax models (#665).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+
+        var comp = draft.Components.Single(c => c.GdsFactoryFunction == gdsFactoryFunction);
+        comp.SMatrix.ShouldNotBeNull();
+        comp.SMatrix!.WavelengthData.ShouldNotBeNull();
+        comp.SMatrix.WavelengthData!.Count.ShouldBeGreaterThan(1);           // multi-wavelength
+        var at1550 = comp.SMatrix.WavelengthData.Single(w => w.WavelengthNm == 1550);
+        at1550.Connections.ShouldNotBeEmpty();
+        at1550.Connections.ShouldAllBe(c => c.Magnitude > 0 && c.Magnitude <= 1);
+    }
+
+    [Fact]
+    public void CornerStoneSin_GratingCoupler_CouplesWaveguideToFibre_PeakedAt1550()
+    {
+        // Fibre-port convention (#665): o1 is the in-plane waveguide port, o2 the
+        // out-of-plane fibre port; the coupling band must peak at the 1550 nm design
+        // wavelength and roll off towards the band edges (Gaussian coupling band).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var gc = draft.Components.Single(
+            c => c.GdsFactoryFunction == "cspdk.sin300.grating_coupler_rectangular");
+
+        double At(int wl) => gc.SMatrix!.WavelengthData!
+            .Single(w => w.WavelengthNm == wl).Connections
+            .Single(c => c.FromPin == "o1" && c.ToPin == "o2").Magnitude;
+
+        At(1550).ShouldBeGreaterThan(At(1500) * 2);   // wavelength-selective, not flat
+        At(1550).ShouldBeGreaterThan(At(1600) * 2);
+    }
+
+    [Fact]
+    public void CornerStoneSin_DirectionalCoupler_SplitsBothInputsAcrossBothOutputs()
+    {
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var coupler = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.coupler");
+
+        var at1550 = coupler.SMatrix!.WavelengthData!.Single(w => w.WavelengthNm == 1550);
+        // 2x2: forward transfers o1/o2 → o3/o4, all four carrying a real ~50/50 split.
+        at1550.Connections.Count.ShouldBe(4);
+        at1550.Connections.ShouldAllBe(c => c.Magnitude > 0.5 && c.Magnitude < 0.8);
+    }
+
+    [Fact]
+    public void CornerStoneSin_Mzi_ShowsInterferenceFringesAcrossTheBand()
+    {
+        // The composed netlist model (splitter/combiner + unequal arms) must produce
+        // wavelength-dependent interference, not a flat transfer.
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var mzi = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.mzi");
+
+        var barMagnitudes = mzi.SMatrix!.WavelengthData!
+            .Select(w => w.Connections.Single(c => c.FromPin == "o1" && c.ToPin == "o2").Magnitude)
+            .ToList();
+
+        barMagnitudes.Max().ShouldBeGreaterThan(0.8);   // near-constructive somewhere in band
+        barMagnitudes.Min().ShouldBeLessThan(0.1);      // near-destructive somewhere in band
+    }
+
     [Fact]
     public void CornerStoneSin_GratingCoupler_HasWavelengthPeakedCouplingBand()
     {

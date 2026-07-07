@@ -95,8 +95,11 @@ public class PdkJsonSaverRoundTripTests
 
     private static string FindRepoRoot()
     {
+        // `.git` is a directory in a normal checkout but a *file* in a git worktree.
         var dir = new DirectoryInfo(Directory.GetCurrentDirectory());
-        while (dir != null && !Directory.Exists(Path.Combine(dir.FullName, ".git")))
+        while (dir != null
+               && !Directory.Exists(Path.Combine(dir.FullName, ".git"))
+               && !File.Exists(Path.Combine(dir.FullName, ".git")))
             dir = dir.Parent;
         return dir?.FullName
             ?? throw new System.InvalidOperationException("Could not find repo root.");
