@@ -13,6 +13,25 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class PdkOffsetEditorViewModelTests
 {
+    [Fact]
+    public void BuildPreviewSource_GdsFactoryNativeDraft_EmitsFactoryCode_NotDemoCall()
+    {
+        // Before the fix, a gdsfactory-native draft (empty NazcaFunction) resolved to demo.(),
+        // whose Nazca render crashed the offset editor. It must now emit real gdsfactory code (#570).
+        var draft = new PdkComponentDraft
+        {
+            Name = "SiN MMI",
+            NazcaFunction = "",
+            GdsFactoryFunction = "cspdk.sin300.mmi1x2",
+        };
+
+        var source = PdkOffsetEditorViewModel.BuildPreviewSource(draft);
+
+        source.ShouldContain("import cspdk.sin300");
+        source.ShouldContain("component = gf.get_component('mmi1x2')");
+        source.ShouldNotContain("demo.()");   // the broken empty-function Nazca call
+    }
+
     private static PdkDraft BuildTestPdk(string pdkName = "Test PDK") => new()
     {
         Name = pdkName,

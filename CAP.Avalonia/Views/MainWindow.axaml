@@ -570,6 +570,7 @@
                                             PinDefinitions="{Binding PinDefinitions}"
                                             NazcaModuleName="{Binding NazcaModuleName}"
                                             NazcaFunctionName="{Binding NazcaFunctionName}"
+                                            GdsFactoryFunction="{Binding GdsFactoryFunction}"
                                             Margin="0,0,6,0"/>
                                         <StackPanel VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal">

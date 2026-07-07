@@ -28,9 +28,12 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<ViewportControlViewModel>();
 
         // GDS preview render service — shared by the canvas overlay and the
-        // component-library thumbnails (depends on the Nazca preview backend).
+        // component-library thumbnails. Uses the Nazca backend for Nazca components and the
+        // gdsfactory backend for gdsfactory-native components (CornerStone SiN etc., #570).
         services.AddSingleton(sp =>
-            new GdsPreviewRenderService(sp.GetRequiredService<NazcaComponentPreviewService>()));
+            new GdsPreviewRenderService(
+                sp.GetRequiredService<NazcaComponentPreviewService>(),
+                sp.GetRequiredService<GdsFactoryComponentPreviewService>()));
 
         // Left panel sub-ViewModels
         services.AddTransient<HierarchyPanelViewModel>();

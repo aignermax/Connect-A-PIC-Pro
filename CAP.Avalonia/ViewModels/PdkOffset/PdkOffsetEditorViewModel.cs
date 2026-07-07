@@ -28,6 +28,12 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     private readonly PdkJsonSaver _pdkSaver;
     private readonly PdkManagerViewModel _pdkManager;
     private readonly NazcaComponentPreviewService? _previewService;
+
+    /// <summary>gdsfactory preview back-end for gdsfactory-native components (#570); null → no preview.
+    /// Typed as the base so it can be mocked in tests; DI injects the
+    /// <see cref="GdsFactoryComponentPreviewService"/> instance.</summary>
+    private readonly NazcaComponentPreviewService? _gdsFactoryPreviewService;
+
     private PdkDraft? _loadedPdk;
     private string? _loadedFilePath;
     private double _nazcaCanvasRefX;
@@ -208,12 +214,14 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         PdkLoader pdkLoader,
         PdkJsonSaver pdkSaver,
         PdkManagerViewModel pdkManager,
-        NazcaComponentPreviewService? previewService = null)
+        NazcaComponentPreviewService? previewService = null,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _pdkLoader = pdkLoader;
         _pdkSaver = pdkSaver;
         _pdkManager = pdkManager;
         _previewService = previewService;
+        _gdsFactoryPreviewService = gdsFactoryPreviewService;
     }
 
     /// <summary>Opens a file dialog and loads the selected PDK JSON file.</summary>
