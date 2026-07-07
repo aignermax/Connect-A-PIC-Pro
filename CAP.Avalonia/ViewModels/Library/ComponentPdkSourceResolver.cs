@@ -20,6 +20,17 @@ public static class ComponentPdkSourceResolver
     /// </summary>
     public static string? Resolve(Component component, IEnumerable<ComponentTemplate> library)
     {
+        // gdsfactory-backend components: match by the module-qualified (unique) gdsfactory
+        // factory name so two gdsfactory PDKs that share a component base-name don't collide
+        // on the synthesized "nazca_<name>" fallback and mislabel the source/process (#570).
+        if (!string.IsNullOrEmpty(component.GdsFactoryFunction))
+        {
+            var gf = library.FirstOrDefault(
+                t => t.GdsFactoryFunction == component.GdsFactoryFunction);
+            if (gf != null)
+                return gf.PdkSource;
+        }
+
         var nazcaFunc = component.NazcaFunctionName;
         if (string.IsNullOrEmpty(nazcaFunc))
             return null;
