@@ -41,13 +41,24 @@ public class BundledPdkProcessTests
     public void CornerStoneSin_LoadsAsGdsFactoryBackend_WithComponents()
     {
         // The gdsfactory-native SiN PDK (generated from cspdk) must load via the main path
-        // despite having no nazcaFunction / nazcaOriginOffset (issue #570).
+        // despite having no nazcaFunction (issue #570).
         var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
 
         draft.IsGdsFactoryBackend.ShouldBeTrue();
         draft.Components.ShouldNotBeEmpty();
         draft.Components.ShouldAllBe(c => !string.IsNullOrEmpty(c.GdsFactoryFunction));
         ProcessFingerprintFactory.From(draft).IsSpecified.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void CornerStoneSin_EveryComponent_HasPlacementOffsets()
+    {
+        // gdsfactory cells are port-anchored (origin at o1), not bbox-corner-anchored, so the PDK
+        // must carry nazcaOriginOffset for every component or placement lands cells off their
+        // routed waveguides. An earlier generated JSON shipped with zero offsets (#570 field test).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+
+        draft.Components.ShouldAllBe(c => c.NazcaOriginOffsetX != null && c.NazcaOriginOffsetY != null);
     }
 
     [Fact]

@@ -29,29 +29,31 @@
       "gdsFactoryFunction": "cspdk.sin300.coupler",
       "widthMicrometers": 60.0,
       "heightMicrometers": 5.2,
+      "nazcaOriginOffsetX": 20.0,
+      "nazcaOriginOffsetY": 3.318,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 4.6,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 4.6,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 180.0
         },
         {
           "name": "o3",
           "offsetXMicrometers": 60.0,
-          "offsetYMicrometers": 4.6,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 0.0
         },
         {
           "name": "o4",
           "offsetXMicrometers": 60.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 4.6,
           "angleDegrees": 0.0
         }
       ],
@@ -270,29 +272,31 @@
       "gdsFactoryFunction": "cspdk.sin300.coupler_straight",
       "widthMicrometers": 20.0,
       "heightMicrometers": 2.636,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 2.036,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 2.036,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 2.036,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 180.0
         },
         {
           "name": "o4",
           "offsetXMicrometers": 20.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 2.036,
           "angleDegrees": 0.0
         },
         {
           "name": "o3",
           "offsetXMicrometers": 20.0,
-          "offsetYMicrometers": 2.036,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 0.0
         }
       ]
@@ -303,29 +307,31 @@
       "gdsFactoryFunction": "cspdk.sin300.mmi2x2",
       "widthMicrometers": 105.5,
       "heightMicrometers": 12.0,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 6.0,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 3.05,
+          "offsetYMicrometers": 8.95,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 8.95,
+          "offsetYMicrometers": 3.05,
           "angleDegrees": 180.0
         },
         {
           "name": "o3",
           "offsetXMicrometers": 105.5,
-          "offsetYMicrometers": 8.95,
+          "offsetYMicrometers": 3.05,
           "angleDegrees": 0.0
         },
         {
           "name": "o4",
           "offsetXMicrometers": 105.5,
-          "offsetYMicrometers": 3.05,
+          "offsetYMicrometers": 8.95,
           "angleDegrees": 0.0
         }
       ],
@@ -544,6 +550,8 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_elliptical",
       "widthMicrometers": 61.83,
       "heightMicrometers": 44.194,
+      "nazcaOriginOffsetX": -18.597,
+      "nazcaOriginOffsetY": 22.097,
       "pins": [
         {
           "name": "o1",
@@ -647,6 +655,8 @@
       "gdsFactoryFunction": "cspdk.sin300.grating_coupler_rectangular",
       "widthMicrometers": 219.8,
       "heightMicrometers": 11.0,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 5.5,
       "pins": [
         {
           "name": "o1",
@@ -750,23 +760,25 @@
       "gdsFactoryFunction": "cspdk.sin300.mzi",
       "widthMicrometers": 596.8,
       "heightMicrometers": 116.1,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 55.55,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 60.55,
+          "offsetYMicrometers": 55.55,
           "angleDegrees": 180.0
         },
         {
           "name": "o3",
           "offsetXMicrometers": 596.8,
-          "offsetYMicrometers": 57.6,
+          "offsetYMicrometers": 58.5,
           "angleDegrees": 0.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 596.8,
-          "offsetYMicrometers": 63.5,
+          "offsetYMicrometers": 52.6,
           "angleDegrees": 0.0
         }
       ],
@@ -901,6 +913,8 @@
       "gdsFactoryFunction": "cspdk.sin300.mmi1x2",
       "widthMicrometers": 164.7,
       "heightMicrometers": 12.0,
+      "nazcaOriginOffsetX": 50.0,
+      "nazcaOriginOffsetY": 6.0,
       "pins": [
         {
           "name": "o1",
@@ -911,13 +925,13 @@
         {
           "name": "o2",
           "offsetXMicrometers": 164.7,
-          "offsetYMicrometers": 8.95,
+          "offsetYMicrometers": 3.05,
           "angleDegrees": 0.0
         },
         {
           "name": "o3",
           "offsetXMicrometers": 164.7,
-          "offsetYMicrometers": 3.05,
+          "offsetYMicrometers": 8.95,
           "angleDegrees": 0.0
         }
       ],
@@ -1052,18 +1066,20 @@
       "gdsFactoryFunction": "cspdk.sin300.bend_euler",
       "widthMicrometers": 25.6,
       "heightMicrometers": 25.6,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 25.0,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 25.0,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 25.0,
-          "offsetYMicrometers": 25.6,
-          "angleDegrees": 90.0
+          "offsetYMicrometers": 0.0,
+          "angleDegrees": 270.0
         }
       ],
       "sMatrix": {
@@ -1084,17 +1100,19 @@
       "gdsFactoryFunction": "cspdk.sin300.bend_s",
       "widthMicrometers": 15.0,
       "heightMicrometers": 3.0,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 2.4,
       "pins": [
         {
           "name": "o1",
           "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 0.6,
+          "offsetYMicrometers": 2.4,
           "angleDegrees": 180.0
         },
         {
           "name": "o2",
           "offsetXMicrometers": 15.0,
-          "offsetYMicrometers": 2.4,
+          "offsetYMicrometers": 0.6,
           "angleDegrees": 0.0
         }
       ],
@@ -1116,6 +1134,8 @@
       "gdsFactoryFunction": "cspdk.sin300.straight",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
@@ -1148,6 +1168,8 @@
       "gdsFactoryFunction": "cspdk.sin300.taper",
       "widthMicrometers": 10.0,
       "heightMicrometers": 1.2,
+      "nazcaOriginOffsetX": -0.0,
+      "nazcaOriginOffsetY": 0.6,
       "pins": [
         {
           "name": "o1",
@@ -1168,38 +1190,6 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
-            "magnitude": 1.0,
-            "phaseDegrees": 0.0
-          }
-        ]
-      }
-    },
-    {
-      "name": "Wire Corner",
-      "category": "Waveguides",
-      "gdsFactoryFunction": "cspdk.sin300.wire_corner",
-      "widthMicrometers": 10.0,
-      "heightMicrometers": 10.0,
-      "pins": [
-        {
-          "name": "e1",
-          "offsetXMicrometers": 0.0,
-          "offsetYMicrometers": 5.0,
-          "angleDegrees": 180.0
-        },
-        {
-          "name": "e2",
-          "offsetXMicrometers": 5.0,
-          "offsetYMicrometers": 10.0,
-          "angleDegrees": 90.0
-        }
-      ],
-      "sMatrix": {
-        "wavelengthNm": 1550,
-        "connections": [
-          {
-            "fromPin": "e1",
-            "toPin": "e2",
             "magnitude": 1.0,
             "phaseDegrees": 0.0
           }
