@@ -212,6 +212,16 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
+        // Feed the design's active process (#570) into the registry browser so
+        // components from a different fabrication process are flagged (#656).
+        // Playground accepts everything, so it clears the filter.
+        RightPanel.Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
+        FileOperations.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FileOperationsViewModel.ActiveProcess))
+                RightPanel.Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
+        };
+
         // Let the export guard open the Settings window (e.g. on the Python-Environments
         // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
         FileOperations.ShowSettingsWindow = async pageType =>
@@ -376,6 +386,14 @@ public partial class MainViewModel : ObservableObject
         StatusText = text;
         BottomPanel.SetStatus(text);
     }
+
+    /// <summary>
+    /// Maps the design's active process to the id the registry browser compares
+    /// component processes against. Playground and "no process yet" return null,
+    /// which disables mismatch flagging.
+    /// </summary>
+    private static string? RegistryProcessIdFor(CAP_Core.Components.Process.ActiveProcessSelection? selection) =>
+        selection == null || selection.IsPlayground ? null : selection.DisplayName;
 
     private void WireHierarchyPanel()
     {
