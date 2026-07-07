@@ -148,6 +148,13 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Func<Type?, Task>? ShowSettingsWindow { get; set; }
 
+    /// <summary>
+    /// Launches the gdsfactory export flow. Wired by <see cref="MainViewModel"/>; invoked when
+    /// the user, prompted about gdsfactory-native components in a Nazca export, chooses to use
+    /// the gdsfactory export instead. Null in headless contexts.
+    /// </summary>
+    public Func<Task>? RequestGdsFactoryExport { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -1343,15 +1350,22 @@ public partial class FileOperationsViewModel : ObservableObject
             $"{gdsFactory.Count} component(s) in this design are gdsfactory-native (e.g. CornerStone "
             + "SiN) and cannot be written to a Nazca script — they would be omitted from the export. "
             + "Use the gdsfactory export to include them.\n\nExport to Nazca anyway?";
-        // Button 0 = switch to gdsfactory (cancel this Nazca export); button 1 = proceed anyway.
+        const int switchToGdsFactoryIndex = 0;
         const int exportAnywayIndex = 1;
         var choice = await MessageBoxService.ShowChoicePromptAsync(
             message, "gdsfactory components will be omitted",
             new[] { "Use gdsfactory export instead", "Export to Nazca anyway" });
 
-        if (choice != exportAnywayIndex)
+        if (choice == exportAnywayIndex)
+            return true;
+
+        // "Use gdsfactory export instead" — cancel this Nazca export and open the gdsfactory
+        // export flow so the user isn't left with nothing happening. A dismissed dialog just cancels.
+        if (choice == switchToGdsFactoryIndex && RequestGdsFactoryExport != null)
+            await RequestGdsFactoryExport();
+        else
             UpdateStatus?.Invoke("Nazca export cancelled — use the gdsfactory export for this design.");
-        return choice == exportAnywayIndex;
+        return false;
     }
 
     [RelayCommand]

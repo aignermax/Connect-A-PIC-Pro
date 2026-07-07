@@ -215,6 +215,8 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport = gdsFactoryExport;
         // gdsfactory export honours gdsfactory-backend overrides from the design's store.
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
+        FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),
