@@ -74,6 +74,22 @@ public sealed class GdsPreviewRenderServiceTests
     }
 
     [Fact]
+    public void BuildCacheKey_GdsFactoryNativeComponent_WithSynthesizedNazcaName_StillReturnsGdsfactoryKey()
+    {
+        // On placement, a gdsfactory-native component is given a synthesized nazcaFunction
+        // ("nazca_<name>") that no Nazca script can render. The gdsfactory factory must take
+        // precedence so the placed component previews via gdsfactory, not a dead Nazca call —
+        // otherwise the canvas grid stays blank (#570 field test).
+        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_mmi1x2");
+        comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+
+        var key = GdsPreviewRenderService.BuildCacheKey(comp);
+
+        key.ShouldNotBeNull();
+        key!.ShouldStartWith("gdsfactory|cspdk.sin300.mmi1x2|");
+    }
+
+    [Fact]
     public async Task GetGeometry_GdsFactoryKey_RendersViaGdsFactoryServiceNotNazca()
     {
         // A gdsfactory-native render identity must be resolved by the gdsfactory preview

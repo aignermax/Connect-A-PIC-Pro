@@ -140,18 +140,29 @@ public sealed class GdsPreviewRenderService
         if (rawCode != null)
             return $"rawcode|{ComputeRawCodeHash(rawCode)}|{comp.Width:F2}|{comp.Height:F2}";
 
+        // gdsfactory-native components (e.g. CornerStone SiN) take precedence over the Nazca
+        // function: on placement they are given a *synthesized* nazcaFunction ("nazca_<name>",
+        // for grouping/save) that no Nazca script can render — so keying on it would route the
+        // preview to the Nazca path and draw nothing. A module-qualified GdsFactoryFunction is
+        // the real render identity, so check it first (#570 field test — blank canvas grid).
+        if (IsGdsFactoryNative(comp.Component))
+            return $"gdsfactory|{comp.Component.GdsFactoryFunction}|{comp.Width:F2}|{comp.Height:F2}";
+
         var fn = comp.Component.NazcaFunctionName;
         if (!string.IsNullOrWhiteSpace(fn))
             return $"{fn}|{comp.Width:F2}|{comp.Height:F2}";
 
-        // gdsfactory-native component (e.g. CornerStone SiN): no Nazca function, render via the
-        // gdsfactory factory instead so it gets a real geometry preview rather than a rectangle (#570).
-        var gdsFn = comp.Component.GdsFactoryFunction;
-        if (!string.IsNullOrWhiteSpace(gdsFn))
-            return $"gdsfactory|{gdsFn}|{comp.Width:F2}|{comp.Height:F2}";
-
         return null;
     }
+
+    /// <summary>
+    /// True when the component is gdsfactory-native: it carries a module-qualified
+    /// <see cref="Component.GdsFactoryFunction"/> (e.g. "cspdk.sin300.mmi1x2"). Such components
+    /// render via the gdsfactory back-end, never Nazca — even if they also carry a synthesized
+    /// nazcaFunction fallback from placement.
+    /// </summary>
+    private static bool IsGdsFactoryNative(CAP_Core.Components.Core.Component comp) =>
+        !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction) && comp.GdsFactoryFunction!.Contains('.');
 
     private static string ComputeRawCodeHash(string code)
     {
@@ -181,9 +192,9 @@ public sealed class GdsPreviewRenderService
             {
                 result = await _previewService.RenderRawCodeAsync(rawCode);
             }
-            else if (string.IsNullOrWhiteSpace(comp.Component.NazcaFunctionName)
-                     && !string.IsNullOrWhiteSpace(comp.Component.GdsFactoryFunction))
+            else if (IsGdsFactoryNative(comp.Component))
             {
+                // Precedence over the (possibly synthesized) nazcaFunction — see BuildCacheKey.
                 result = await RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);
             }
             else
