@@ -56,6 +56,22 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private CAP.Avalonia.ViewModels.Analysis.SimulationMode _simulationMode = CAP.Avalonia.ViewModels.Analysis.SimulationMode.Cw;
 
+    /// <summary>
+    /// Zero-based index view of <see cref="SimulationMode"/> (0 = Cw, 1 = Transient) for the
+    /// toolbar <c>ComboBox</c>, which binds <c>SelectedIndex</c> directly with no converter.
+    /// </summary>
+    public int SimulationModeIndex
+    {
+        get => (int)SimulationMode;
+        set => SimulationMode = (CAP.Avalonia.ViewModels.Analysis.SimulationMode)value;
+    }
+
+    /// <summary>Keeps <see cref="SimulationModeIndex"/> in sync when <see cref="SimulationMode"/> changes.</summary>
+    partial void OnSimulationModeChanged(CAP.Avalonia.ViewModels.Analysis.SimulationMode value)
+    {
+        OnPropertyChanged(nameof(SimulationModeIndex));
+    }
+
     public Commands.CommandManager CommandManager { get; }
     public SimulationService Simulation { get; }
 
@@ -746,6 +762,13 @@ public partial class MainViewModel : ObservableObject
     private async Task RunSimulation()
     {
         if (_isSimulating) return;
+
+        if (SimulationMode == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient)
+        {
+            BottomPanel.Analysis.OpenTransient();
+            await BottomPanel.Analysis.Transient.RunTransientCommand.ExecuteAsync(null);
+            return;
+        }
 
         // Toggle off if overlay is already showing
         if (Canvas.ShowPowerFlow)

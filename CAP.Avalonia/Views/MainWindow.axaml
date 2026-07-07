@@ -81,6 +81,14 @@
                               Width="16" Height="16" Foreground="LightGreen"/>
                 </Button>
 
+                <!-- Simulation mode: CW vs Transient. Run (L) executes the active mode. -->
+                <ComboBox Width="120" Margin="2" VerticalAlignment="Center"
+                          SelectedIndex="{Binding SimulationModeIndex}"
+                          ToolTip.Tip="Simulation mode: CW (steady-state) or Transient (time-domain). Run (L) executes this mode.">
+                    <ComboBoxItem>CW</ComboBoxItem>
+                    <ComboBoxItem>Transient</ComboBoxItem>
+                </ComboBox>
+
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
                 <!-- Undo/Redo -->

@@ -56,6 +56,7 @@ public partial class BottomPanelViewModel : ObservableObject
 
         // Configure ViewModels that need canvas and command manager
         ElementLock.Configure(canvas, commandManager);
+        Analysis.Configure(canvas);
     }
 
     /// <summary>
