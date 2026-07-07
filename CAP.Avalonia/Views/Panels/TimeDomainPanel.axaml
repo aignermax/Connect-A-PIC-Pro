@@ -19,27 +19,6 @@
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
         <TextBlock Text="Transient (Time-Domain):" Foreground="Plum" Margin="0,0,0,5" FontWeight="SemiBold"/>
 
-        <!-- Mode selector: flips between frequency-domain and time-domain without restart -->
-        <TextBlock Text="Simulation mode:" Foreground="Gray" FontSize="10" Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8" Spacing="10">
-            <RadioButton Content="Frequency Domain (CW)"
-                         GroupName="TimeDomainMode"
-                         IsChecked="{Binding RightPanel.TimeDomain.IsTimeDomainMode, Converter={x:Static BoolConverters.Not}}"
-                         Foreground="LightGray" FontSize="10"/>
-            <RadioButton Content="Time Domain (Transient)"
-                         GroupName="TimeDomainMode"
-                         IsChecked="{Binding RightPanel.TimeDomain.IsTimeDomainMode}"
-                         Foreground="Plum" FontSize="10"/>
-        </StackPanel>
-
-        <!-- Frequency Domain hint (shown when CW mode is selected) -->
-        <TextBlock Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,8"
-                   IsVisible="{Binding RightPanel.TimeDomain.IsTimeDomainMode, Converter={x:Static BoolConverters.Not}}">
-            Use "Run Simulation" (L key) for CW frequency-domain steady-state analysis.
-        </TextBlock>
-
-        <!-- Time-Domain controls (shown when Transient mode is selected) -->
-        <StackPanel IsVisible="{Binding RightPanel.TimeDomain.IsTimeDomainMode}">
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
             IFFT of S-parameters → impulse response → convolve with Gaussian pulse.
             Linear circuits only (Phase 1).
@@ -48,21 +27,21 @@
         <!-- Sweep parameters -->
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="λ centre (nm):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding RightPanel.TimeDomain.CenterWavelengthNm}"
+            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.CenterWavelengthNm}"
                            Minimum="800" Maximum="2000" Increment="10"
                            Width="110" FormatString="F0"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Span (nm):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding RightPanel.TimeDomain.SpanNm}"
+            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.SpanNm}"
                            Minimum="1" Maximum="500" Increment="10"
                            Width="110" FormatString="F0"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Freq. points:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding RightPanel.TimeDomain.FreqPoints}"
+            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.FreqPoints}"
                            Minimum="16" Maximum="1024" Increment="64"
                            Width="110" FormatString="F0"/>
         </StackPanel>
@@ -73,42 +52,42 @@
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
             <TextBlock Text="Centre (ps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding RightPanel.TimeDomain.PulseCenterPs}"
+            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseCenterPs}"
                            Minimum="0" Maximum="100" Increment="0.5"
                            Width="110" FormatString="F2"/>
         </StackPanel>
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
             <TextBlock Text="σ width (ps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding RightPanel.TimeDomain.PulseSigmaPs}"
+            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseSigmaPs}"
                            Minimum="0.01" Maximum="50" Increment="0.1"
                            Width="110" FormatString="F2"/>
         </StackPanel>
 
         <!-- Run button -->
         <Button Content="Run Transient"
-                Command="{Binding RightPanel.TimeDomain.RunTransientCommand}"
+                Command="{Binding BottomPanel.Analysis.Transient.RunTransientCommand}"
                 Width="140" Margin="0,0,0,5" Background="#5d3d5d"
-                IsEnabled="{Binding RightPanel.TimeDomain.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
+                IsEnabled="{Binding BottomPanel.Analysis.Transient.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
 
         <!-- Status -->
-        <TextBlock Text="{Binding RightPanel.TimeDomain.StatusText}"
+        <TextBlock Text="{Binding BottomPanel.Analysis.Transient.StatusText}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,4"
-                   IsVisible="{Binding RightPanel.TimeDomain.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   IsVisible="{Binding BottomPanel.Analysis.Transient.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    TextWrapping="Wrap"/>
 
         <!-- Waveform plot: power vs time, one series per output pin.
              Zoom/pan via OxyPlot default axes; cursor read-out via tracker. -->
         <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
                 Height="220" Margin="0,4,0,0"
-                IsVisible="{Binding RightPanel.TimeDomain.HasResult}">
-            <oxy:PlotView Model="{Binding RightPanel.TimeDomain.PlotModel}" Background="Transparent"/>
+                IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}">
+            <oxy:PlotView Model="{Binding BottomPanel.Analysis.Transient.PlotModel}" Background="Transparent"/>
         </Border>
 
         <!-- Per-pin visibility toggles (legend). -->
-        <ItemsControl ItemsSource="{Binding RightPanel.TimeDomain.Series}"
+        <ItemsControl ItemsSource="{Binding BottomPanel.Analysis.Transient.Series}"
                       Margin="0,4,0,0"
-                      IsVisible="{Binding RightPanel.TimeDomain.HasResult}">
+                      IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}">
             <ItemsControl.ItemTemplate>
                 <DataTemplate x:DataType="trace:TimeTraceSeriesViewModel">
                     <CheckBox IsChecked="{Binding IsVisible}" Margin="0,0,0,1">
@@ -126,18 +105,17 @@
 
         <!-- Peak-power summary table (kept from the original text output). -->
         <ScrollViewer MaxHeight="120" Margin="0,4,0,0"
-                      IsVisible="{Binding RightPanel.TimeDomain.ResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <TextBlock Text="{Binding RightPanel.TimeDomain.ResultText}"
+                      IsVisible="{Binding BottomPanel.Analysis.Transient.ResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+            <TextBlock Text="{Binding BottomPanel.Analysis.Transient.ResultText}"
                        Foreground="Plum" FontFamily="Consolas" FontSize="10"
                        TextWrapping="NoWrap"/>
         </ScrollViewer>
 
         <!-- Export -->
         <Button Content="Export CSV"
-                Command="{Binding RightPanel.TimeDomain.ExportCsvCommand}"
+                Command="{Binding BottomPanel.Analysis.Transient.ExportCsvCommand}"
                 Width="110" Margin="0,5,0,0" Background="#3d3d5d"
-                IsVisible="{Binding RightPanel.TimeDomain.HasResult}"/>
-        </StackPanel><!-- end Time-Domain controls -->
+                IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}"/>
     </StackPanel>
 
 </UserControl>

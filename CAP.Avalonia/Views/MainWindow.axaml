@@ -340,6 +340,9 @@
             </StackPanel>
         </Border>
 
+        <!-- Analysis Dock Panel (collapsible, above the Error Console, #570/#535) -->
+        <panels:AnalysisDockPanel DockPanel.Dock="Bottom"/>
+
         <!-- Left Panel - Hierarchy + Component Library -->
         <Grid DockPanel.Dock="Left" ColumnDefinitions="*,Auto" Name="LeftPanelGrid">
             <Border Grid.Column="0"
@@ -793,9 +796,6 @@
 
                     <!-- Design Checks Panel -->
                     <panels:DesignChecksPanel/>
-
-                    <!-- Time-Domain (Transient) Simulation Panel -->
-                    <panels:TimeDomainPanel/>
 
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
