@@ -42,13 +42,6 @@ public partial class TimeDomainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isRunning;
 
-    /// <summary>
-    /// True = Time Domain (Transient) mode active; False = Frequency Domain (CW) mode active.
-    /// Controls which simulation mode is visible in the panel.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isTimeDomainMode = true;
-
     [ObservableProperty]
     private string _statusText = "";
 

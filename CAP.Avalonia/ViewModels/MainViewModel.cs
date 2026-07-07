@@ -52,6 +52,10 @@ public partial class MainViewModel : ObservableObject
     [ObservableProperty]
     private bool _isPlayground;
 
+    /// <summary>Active simulation mode; the toolbar selector binds here and Run(L) dispatches on it.</summary>
+    [ObservableProperty]
+    private CAP.Avalonia.ViewModels.Analysis.SimulationMode _simulationMode = CAP.Avalonia.ViewModels.Analysis.SimulationMode.Cw;
+
     public Commands.CommandManager CommandManager { get; }
     public SimulationService Simulation { get; }
 
