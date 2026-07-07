@@ -765,6 +765,14 @@ public partial class MainViewModel : ObservableObject
 
         if (SimulationMode == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient)
         {
+            // Clear any stale CW power-flow overlay so it doesn't render on top of
+            // the transient results (matches the CW toggle-off below).
+            if (Canvas.ShowPowerFlow)
+            {
+                Canvas.ShowPowerFlow = false;
+                Canvas.PowerFlowVisualizer.IsEnabled = false;
+            }
+
             BottomPanel.Analysis.OpenTransient();
             await BottomPanel.Analysis.Transient.RunTransientCommand.ExecuteAsync(null);
             return;

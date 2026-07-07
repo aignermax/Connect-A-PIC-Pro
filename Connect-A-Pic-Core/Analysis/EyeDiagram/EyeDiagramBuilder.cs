@@ -36,7 +36,7 @@ public static class EyeDiagramBuilder
         ValidateArguments(trace, sampleRateHz, bitPeriodSeconds, timeBins, amplitudeBins);
 
         double dt = 1.0 / sampleRateHz;
-        int startSample = Math.Min((int)(skipBits * bitPeriodSeconds * sampleRateHz), trace.Length);
+        int startSample = EyeFolding.StartSample(skipBits, bitPeriodSeconds, sampleRateHz, trace.Length);
 
         (double min, double max) = AmplitudeRange(trace, startSample);
         double ampSpan = max - min;
@@ -44,8 +44,7 @@ public static class EyeDiagramBuilder
 
         for (int n = startSample; n < trace.Length; n++)
         {
-            double offset = (n * dt) % bitPeriodSeconds;
-            int timeBin = Math.Min((int)(offset / bitPeriodSeconds * timeBins), timeBins - 1);
+            int timeBin = EyeFolding.TimeBin(n, dt, bitPeriodSeconds, timeBins);
 
             int ampBin = ampSpan <= 0
                 ? 0

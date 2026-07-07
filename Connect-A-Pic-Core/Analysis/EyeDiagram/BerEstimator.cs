@@ -43,7 +43,7 @@ public static class BerEstimator
         if (timeBins < 1) throw new ArgumentOutOfRangeException(nameof(timeBins));
 
         double dt = 1.0 / sampleRateHz;
-        int startSample = Math.Min((int)(skipBits * bitPeriodSeconds * sampleRateHz), trace.Length);
+        int startSample = EyeFolding.StartSample(skipBits, bitPeriodSeconds, sampleRateHz, trace.Length);
 
         var bins = FoldIntoBins(trace, startSample, dt, bitPeriodSeconds, timeBins);
         var qPerBin = bins.Select(b => BinQFactor(b, decisionThreshold, noise)).ToArray();
@@ -70,8 +70,7 @@ public static class BerEstimator
 
         for (int n = startSample; n < trace.Length; n++)
         {
-            double offset = (n * dt) % bitPeriodSeconds;
-            int bin = Math.Min((int)(offset / bitPeriodSeconds * timeBins), timeBins - 1);
+            int bin = EyeFolding.TimeBin(n, dt, bitPeriodSeconds, timeBins);
             bins[bin].Add(trace[n]);
         }
         return bins;

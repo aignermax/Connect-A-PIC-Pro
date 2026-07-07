@@ -20,6 +20,7 @@ public class SimulationModeTests
     {
         var vm = UnitTests.Helpers.MainViewModelTestHelper.CreateMainViewModel();
         vm.SimulationMode = SimulationMode.Transient;
+        vm.Canvas.ShowPowerFlow = true; // simulate a stale CW overlay left on from a previous run
 
         await ((IAsyncRelayCommand)vm.RunSimulationCommand).ExecuteAsync(null);
 
