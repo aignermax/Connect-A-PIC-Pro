@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -102,12 +103,7 @@ public partial class PdkOffsetEditorViewModel
 
         try
         {
-            var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
-            var result = await _previewService!.RenderAsync(
-                module,
-                function,
-                draft.NazcaParameters,
-                token);
+            var result = await RenderDraftAsync(draft, token);
 
             if (token.IsCancellationRequested) return;
             // SelectedComponent has moved on while we were waiting — drop result.
@@ -162,12 +158,39 @@ public partial class PdkOffsetEditorViewModel
     }
 
     /// <summary>
+    /// Renders the selected component: gdsfactory-native components (no Nazca function, a
+    /// gdsfactory factory) go through the gdsfactory preview back-end; everything else uses the
+    /// Nazca path. Without this branch a gdsfactory component resolves to <c>demo.()</c> and the
+    /// Nazca script fails (#570).
+    /// </summary>
+    private Task<NazcaPreviewResult> RenderDraftAsync(PdkComponentDraft draft, System.Threading.CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(draft.NazcaFunction)
+            && !string.IsNullOrWhiteSpace(draft.GdsFactoryFunction))
+        {
+            var code = GdsFactoryPreviewCode.For(draft.GdsFactoryFunction);
+            if (code != null && _gdsFactoryPreviewService != null)
+                return _gdsFactoryPreviewService.RenderRawCodeAsync(code, token);
+            return Task.FromResult(
+                NazcaPreviewResult.Fail("No gdsfactory preview available for this component."));
+        }
+
+        var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
+        return _previewService!.RenderAsync(module, function, draft.NazcaParameters, token);
+    }
+
+    /// <summary>
     /// Renders the same Python the preview helper would execute, as a string
     /// the user can read and copy. Different shape per render path:
-    /// SiEPIC → klayout GDS load; demofab → Nazca cell call.
+    /// gdsfactory → PDK factory call; SiEPIC → klayout GDS load; demofab → Nazca cell call.
     /// </summary>
-    private static string BuildPreviewSource(PdkComponentDraft draft)
+    internal static string BuildPreviewSource(PdkComponentDraft draft)
     {
+        if (string.IsNullOrWhiteSpace(draft.NazcaFunction)
+            && !string.IsNullOrWhiteSpace(draft.GdsFactoryFunction))
+            return GdsFactoryPreviewCode.For(draft.GdsFactoryFunction)
+                   ?? "# No gdsfactory preview available for this component.";
+
         var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
         var paramsBlock = string.IsNullOrWhiteSpace(draft.NazcaParameters)
             ? "" : draft.NazcaParameters;

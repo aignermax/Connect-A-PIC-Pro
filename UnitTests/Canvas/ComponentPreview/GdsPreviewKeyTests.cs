@@ -37,4 +37,20 @@ public class GdsPreviewKeyTests
         new GdsPreviewKey("m", "   ", "p").IsRenderable.ShouldBeFalse();
         new GdsPreviewKey("m", "f", "p").IsRenderable.ShouldBeTrue();
     }
+
+    [Fact]
+    public void IsRenderable_TrueWhenGdsFactoryFunctionSet_EvenWithoutNazcaFunction()
+    {
+        // gdsfactory-native components have no Nazca function but must still render (#570).
+        var key = new GdsPreviewKey(null, null, null) { GdsFactoryFunction = "cspdk.sin300.mmi1x2" };
+        key.IsRenderable.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void Hash_DiffersByGdsFactoryFunction()
+    {
+        var a = new GdsPreviewKey(null, null, null) { GdsFactoryFunction = "cspdk.sin300.mmi1x2" };
+        var b = new GdsPreviewKey(null, null, null) { GdsFactoryFunction = "cspdk.sin300.mmi2x2" };
+        a.Hash().ShouldNotBe(b.Hash());
+    }
 }
