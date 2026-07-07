@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Avalonia.Threading;
+using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Export;
 
@@ -35,6 +36,12 @@ public sealed class GdsPreviewRenderService
     internal const int MinBitmapPixels = 16;
 
     private readonly NazcaComponentPreviewService _previewService;
+
+    /// <summary>Renders gdsfactory-native components (cspdk etc.); null falls back to no preview.
+    /// Typed as the base so it can be mocked in tests; DI injects the
+    /// <see cref="GdsFactoryComponentPreviewService"/> instance.</summary>
+    private readonly NazcaComponentPreviewService? _gdsFactoryPreviewService;
+
     private readonly GdsPreviewCache _cache = new();
 
     /// <summary>Persistent on-disk cache for resolution-independent geometry.</summary>
@@ -74,19 +81,25 @@ public sealed class GdsPreviewRenderService
     /// Initializes the service with the shared Nazca preview back-end and a
     /// default disk cache.
     /// </summary>
-    public GdsPreviewRenderService(NazcaComponentPreviewService previewService)
-        : this(previewService, new GdsPreviewDiskCache())
+    public GdsPreviewRenderService(
+        NazcaComponentPreviewService previewService,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        : this(previewService, new GdsPreviewDiskCache(), gdsFactoryPreviewService)
     {
     }
 
     /// <summary>
-    /// Initializes the service with the shared Nazca preview back-end and an
-    /// explicit disk cache (used by tests to redirect cache files).
+    /// Initializes the service with the shared Nazca preview back-end, an explicit disk cache
+    /// (used by tests to redirect cache files), and an optional gdsfactory preview back-end
+    /// for gdsfactory-native components (#570).
     /// </summary>
-    public GdsPreviewRenderService(NazcaComponentPreviewService previewService, GdsPreviewDiskCache diskCache)
+    public GdsPreviewRenderService(
+        NazcaComponentPreviewService previewService, GdsPreviewDiskCache diskCache,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _previewService = previewService ?? throw new ArgumentNullException(nameof(previewService));
         _diskCache = diskCache ?? throw new ArgumentNullException(nameof(diskCache));
+        _gdsFactoryPreviewService = gdsFactoryPreviewService;
     }
 
     /// <summary>
@@ -128,10 +141,16 @@ public sealed class GdsPreviewRenderService
             return $"rawcode|{ComputeRawCodeHash(rawCode)}|{comp.Width:F2}|{comp.Height:F2}";
 
         var fn = comp.Component.NazcaFunctionName;
-        if (string.IsNullOrWhiteSpace(fn))
-            return null;
+        if (!string.IsNullOrWhiteSpace(fn))
+            return $"{fn}|{comp.Width:F2}|{comp.Height:F2}";
 
-        return $"{fn}|{comp.Width:F2}|{comp.Height:F2}";
+        // gdsfactory-native component (e.g. CornerStone SiN): no Nazca function, render via the
+        // gdsfactory factory instead so it gets a real geometry preview rather than a rectangle (#570).
+        var gdsFn = comp.Component.GdsFactoryFunction;
+        if (!string.IsNullOrWhiteSpace(gdsFn))
+            return $"gdsfactory|{gdsFn}|{comp.Width:F2}|{comp.Height:F2}";
+
+        return null;
     }
 
     private static string ComputeRawCodeHash(string code)
@@ -139,6 +158,18 @@ public sealed class GdsPreviewRenderService
         var bytes = System.Security.Cryptography.SHA256.HashData(
             System.Text.Encoding.UTF8.GetBytes(code));
         return Convert.ToHexString(bytes);
+    }
+
+    /// <summary>
+    /// Renders a gdsfactory-native component's geometry via the gdsfactory preview back-end,
+    /// or a failure result when no service is wired / the function is not module-qualified (#570).
+    /// </summary>
+    private async Task<NazcaPreviewResult> RenderGdsFactoryAsync(string? gdsFactoryFunction)
+    {
+        var code = GdsFactoryPreviewCode.For(gdsFactoryFunction);
+        if (code == null || _gdsFactoryPreviewService == null)
+            return NazcaPreviewResult.Fail("No gdsfactory preview available for this component.");
+        return await _gdsFactoryPreviewService.RenderRawCodeAsync(code);
     }
 
     private async Task FetchAndCacheAsync(string cacheKey, ComponentViewModel comp, string? rawCode)
@@ -149,6 +180,11 @@ public sealed class GdsPreviewRenderService
             if (rawCode != null)
             {
                 result = await _previewService.RenderRawCodeAsync(rawCode);
+            }
+            else if (string.IsNullOrWhiteSpace(comp.Component.NazcaFunctionName)
+                     && !string.IsNullOrWhiteSpace(comp.Component.GdsFactoryFunction))
+            {
+                result = await RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);
             }
             else
             {
@@ -220,7 +256,12 @@ public sealed class GdsPreviewRenderService
             }
             await _renderGate.WaitAsync();
             NazcaPreviewResult result;
-            try { result = await _previewService.RenderAsync(key.Module, key.Function!, key.Parameters); }
+            try
+            {
+                result = string.IsNullOrWhiteSpace(key.Function)
+                    ? await RenderGdsFactoryAsync(key.GdsFactoryFunction)
+                    : await _previewService.RenderAsync(key.Module, key.Function!, key.Parameters);
+            }
             finally { _renderGate.Release(); }
 
             if (result.Success && result.Polygons.Count > 0)

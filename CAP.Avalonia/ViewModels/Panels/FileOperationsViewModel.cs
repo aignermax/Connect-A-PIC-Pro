@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -63,6 +64,35 @@ public partial class FileOperationsViewModel : ObservableObject
 
     [ObservableProperty]
     private bool _hasUnsavedChanges;
+
+    /// <summary>
+    /// The fabrication process this design is currently locked to (issue #570).
+    /// Null means no components have been placed yet. Set via <see cref="SetActiveProcess"/>
+    /// (from the New-Design dialog or the process picker), restored on load, or migrated
+    /// from a legacy file's placed-component PDK sources.
+    /// </summary>
+    [ObservableProperty]
+    private ActiveProcessSelection? _activeProcess;
+
+    /// <summary>
+    /// Supplies the current set of installable/loaded process groups. Wired by DI/MainViewModel
+    /// to the live PDK catalog; used to migrate legacy files that predate single-process support.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
+    /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
+    /// analyzer-only tool PDKs never count toward a legacy design's process attribution
+    /// (issue #570 final review).
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? ProcessAgnosticPdkNamesProvider { get; set; }
+
+    /// <summary>
+    /// Callback invoked when loading a legacy file requires falling back to Playground
+    /// because its components could not be attributed to a single installed process.
+    /// </summary>
+    public Action<string>? OnProcessMigrationWarning { get; set; }
 
     /// <summary>
     /// ViewModel for GDS export functionality.
@@ -218,6 +248,23 @@ public partial class FileOperationsViewModel : ObservableObject
         ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
     }
 
+    /// <summary>
+    /// Sets the active process this design is locked to (issue #570), e.g. from the
+    /// New-Design dialog or a process-picker action.
+    /// </summary>
+    /// <param name="selection">The process to lock the design to (or Playground).</param>
+    /// <param name="markDirty">
+    /// False for the startup / New-Design picker: choosing the baseline process of a
+    /// pristine empty design is not an unsaved change, and marking it dirty made every
+    /// fresh launch answer a spurious "Save changes?" prompt.
+    /// </param>
+    public void SetActiveProcess(ActiveProcessSelection? selection, bool markDirty = true)
+    {
+        ActiveProcess = selection;
+        if (markDirty)
+            HasUnsavedChanges = true;
+    }
+
     [RelayCommand]
     private async Task SaveDesign()
     {
@@ -333,6 +380,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
+            designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -431,20 +479,8 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Finds the PDK source for a component by matching its NazcaFunctionName against the library.
     /// Returns null if no match is found.
     /// </summary>
-    private string? FindTemplatePdkSource(Component component)
-    {
-        var nazcaFunc = component.NazcaFunctionName;
-        if (string.IsNullOrEmpty(nazcaFunc))
-            return null;
-
-        var match = _componentLibrary.FirstOrDefault(t =>
-        {
-            var templateFunc = t.NazcaFunctionName
-                ?? $"nazca_{t.Name.ToLower().Replace(" ", "_")}";
-            return templateFunc == nazcaFunc;
-        });
-        return match?.PdkSource;
-    }
+    private string? FindTemplatePdkSource(Component component) =>
+        ComponentPdkSourceResolver.Resolve(component, _componentLibrary);
 
     /// <summary>
     /// Recursively serializes a ComponentGroup and all its nested child groups.
@@ -757,6 +793,31 @@ public partial class FileOperationsViewModel : ObservableObject
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
 
+                // Restore the active process (issue #570), or infer one for legacy files
+                // that predate single-process support from the placed components' PDKs.
+                var storedProcess = ActiveProcessResolver.FromData(designData.ActiveProcess);
+                if (storedProcess != null)
+                {
+                    // Re-anchor the stored snapshot to the installed catalog: compatible
+                    // PDKs installed since the save join the process, and a design whose
+                    // PDKs are missing warns instead of silently bricking the library.
+                    var installedCatalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    ActiveProcess = ActiveProcessResolver.Revalidate(
+                        storedProcess, installedCatalog, out var revalidationWarning);
+                    if (revalidationWarning != null)
+                        OnProcessMigrationWarning?.Invoke(revalidationWarning);
+                }
+                else
+                {
+                    var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    var pdkSources = designData.Components.Select(c => c.PdkSource)
+                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                                ?? Enumerable.Empty<string?>());
+                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
+                        ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
+                    if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
+                }
+
                 // Restore imported S-matrices from PIR section
                 StoredSMatrices.Clear();
                 if (designData.SMatrices != null)
@@ -848,7 +909,16 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Exits group edit mode if active before clearing the canvas.
     /// </summary>
     [RelayCommand]
-    private async Task NewProject()
+    private async Task NewProject() => await TryNewProjectAsync();
+
+    /// <summary>
+    /// Command body of File → New, returning whether the new project was actually
+    /// created. False means the user cancelled (save prompt or save dialog) and the
+    /// current design is untouched — callers such as the process picker must NOT
+    /// proceed in that case. An empty canvas is no substitute for this signal: the
+    /// canvas can be empty while the operation was still cancelled.
+    /// </summary>
+    public async Task<bool> TryNewProjectAsync()
     {
         // Check if there are unsaved changes
         if (HasUnsavedChanges && MessageBoxService != null)
@@ -865,13 +935,13 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (HasUnsavedChanges)
                 {
                     // User cancelled the save dialog, so cancel new project
-                    return;
+                    return false;
                 }
             }
             else if (result == SavePromptResult.Cancel)
             {
                 // User cancelled, do nothing
-                return;
+                return false;
             }
             // DontSave: continue to clear
         }
@@ -892,6 +962,7 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+        return true;
     }
 
     /// <summary>

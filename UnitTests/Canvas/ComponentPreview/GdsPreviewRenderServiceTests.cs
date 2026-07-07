@@ -59,6 +59,48 @@ public sealed class GdsPreviewRenderServiceTests
         key1.ShouldNotBe(key2);
     }
 
+    [Fact]
+    public void BuildCacheKey_GdsFactoryNativeComponent_ReturnsGdsfactoryKey()
+    {
+        // A gdsfactory-native component (no Nazca function, a gdsfactory factory) must still get
+        // a cache key so it renders a real preview instead of falling back to a rectangle (#570).
+        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "");
+        comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+
+        var key = GdsPreviewRenderService.BuildCacheKey(comp);
+
+        key.ShouldNotBeNull();
+        key!.ShouldStartWith("gdsfactory|cspdk.sin300.mmi1x2|");
+    }
+
+    [Fact]
+    public async Task GetGeometry_GdsFactoryKey_RendersViaGdsFactoryServiceNotNazca()
+    {
+        // A gdsfactory-native render identity must be resolved by the gdsfactory preview
+        // back-end (RenderRawCodeAsync with generated get_component code), never Nazca (#570).
+        var nazca = new Mock<NazcaComponentPreviewService>("python", "nazca.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        // The gdsfactory back-end is typed as the base service (mockable, sealed derived type isn't).
+        var gf = new Mock<NazcaComponentPreviewService>("python", "gf.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Ok());
+
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-gf-" + Guid.NewGuid().ToString("N"));
+        var svc = new GdsPreviewRenderService(nazca.Object, new GdsPreviewDiskCache(diskDir), gf.Object);
+        var key = new GdsPreviewKey(null, null, null) { GdsFactoryFunction = "cspdk.sin300.mmi1x2" };
+
+        key.IsRenderable.ShouldBeTrue();
+        svc.TryGetGeometry(key).ShouldBeNull();       // miss → async render kicked off
+        await svc.WaitForPendingAsync();
+        svc.TryGetGeometry(key).ShouldNotBeNull();    // rendered via gdsfactory service
+
+        gf.Verify(s => s.RenderRawCodeAsync(
+            It.Is<string>(c => c.Contains("gf.get_component('mmi1x2')")), It.IsAny<CancellationToken>()), Times.Once);
+        nazca.Verify(s => s.RenderAsync(
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
     // ── TryGetPreview — fallback behaviour ─────────────────────────────────
 
     [Fact]

@@ -327,5 +327,64 @@ namespace UnitTests.Components
             componentNames.ShouldContain("Adiabatic Coupler TE 1550"); // New
             componentNames.ShouldContain("Bond Pad"); // New
         }
+
+        [Fact]
+        public void LoadFromJson_GdsFactoryBackendComponent_LoadsWithoutNazcaFunctionOrOffset()
+        {
+            // gdsfactory-native components carry a gdsFactoryFunction, no nazcaFunction, and no
+            // nazcaOriginOffset — the main load path must accept them (#570 review).
+            var loader = new PdkLoader();
+            var json = @"{
+                ""fileFormatVersion"": 1,
+                ""name"": ""SiN PDK"",
+                ""backend"": ""gdsfactory"",
+                ""defaultWavelengthNm"": 1550,
+                ""components"": [
+                    {
+                        ""name"": ""Straight"",
+                        ""category"": ""Waveguides"",
+                        ""gdsFactoryFunction"": ""cspdk.sin300.straight"",
+                        ""widthMicrometers"": 10,
+                        ""heightMicrometers"": 1.2,
+                        ""pins"": [
+                            { ""name"": ""o1"", ""offsetXMicrometers"": 0, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 180 },
+                            { ""name"": ""o2"", ""offsetXMicrometers"": 10, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 0 }
+                        ]
+                    }
+                ]
+            }";
+
+            var pdk = loader.LoadFromJson(json);
+
+            pdk.IsGdsFactoryBackend.ShouldBeTrue();
+            pdk.Components.Single().GdsFactoryFunction.ShouldBe("cspdk.sin300.straight");
+        }
+
+        [Fact]
+        public void LoadFromJson_GdsFactoryBackendComponentMissingFactory_Throws()
+        {
+            // A gdsfactory-backend component with neither a gdsFactoryFunction nor a
+            // nazcaFunction is unexportable by any backend — reject it (#570 review).
+            var loader = new PdkLoader();
+            var json = @"{
+                ""fileFormatVersion"": 1,
+                ""name"": ""Broken SiN PDK"",
+                ""backend"": ""gdsfactory"",
+                ""defaultWavelengthNm"": 1550,
+                ""components"": [
+                    {
+                        ""name"": ""Nameless"",
+                        ""category"": ""Waveguides"",
+                        ""widthMicrometers"": 10,
+                        ""heightMicrometers"": 1.2,
+                        ""pins"": [
+                            { ""name"": ""o1"", ""offsetXMicrometers"": 0, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 180 }
+                        ]
+                    }
+                ]
+            }";
+
+            Should.Throw<PdkValidationException>(() => loader.LoadFromJson(json));
+        }
     }
 }
