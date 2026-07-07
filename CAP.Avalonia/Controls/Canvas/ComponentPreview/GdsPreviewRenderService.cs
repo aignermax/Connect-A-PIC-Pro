@@ -269,9 +269,20 @@ public sealed class GdsPreviewRenderService
                 _diskCache.Write(key, result);
                 _memGeometry.Set(cacheKey, result);
             }
+            else if (result.Success)
+            {
+                // A genuinely empty render (0 polygons) — persist the empty marker so we don't
+                // keep re-rendering a component that has no geometry.
+                _diskCache.WriteEmpty(key);
+                _memGeometry.Set(cacheKey, null);
+            }
             else
             {
-                _diskCache.WriteEmpty(key);
+                // The render FAILED (Python/env/script error — e.g. cspdk not yet installed, a
+                // broken or half-provisioned interpreter). Do NOT persist: a transient env failure
+                // must not poison the disk cache permanently, or the component stays blank forever
+                // even after the env is fixed. Remember null for this session only (like the catch
+                // block below), so the next launch retries. (#570 field test.)
                 _memGeometry.Set(cacheKey, null);
             }
             RaisePreviewLoaded();

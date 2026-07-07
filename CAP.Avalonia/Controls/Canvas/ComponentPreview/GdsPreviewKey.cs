@@ -11,7 +11,10 @@ namespace CAP.Avalonia.Controls.Canvas.ComponentPreview;
 public readonly record struct GdsPreviewKey(string? Module, string? Function, string? Parameters)
 {
     /// <summary>Bump to invalidate every cached entry (format or render-semantics change).</summary>
-    public const int FormatVersion = 2;
+    // v3: failed renders are no longer persisted as empty markers, so any poisoned "empty"
+    // entries written under v2 (from a transient broken/half-provisioned interpreter) are
+    // discarded and re-rendered cleanly (#570 field test).
+    public const int FormatVersion = 3;
 
     /// <summary>ASCII unit separator — never appears in module/function/parameter strings.</summary>
     private const char FieldSeparator = (char)31;

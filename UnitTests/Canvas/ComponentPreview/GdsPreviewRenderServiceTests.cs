@@ -275,6 +275,60 @@ public sealed class GdsPreviewRenderServiceTests
     }
 
     [Fact]
+    public async Task GetGeometry_RenderFails_IsNotPersisted_AndRetriesOnNextInstance()
+    {
+        // A failed render (broken/half-provisioned interpreter) must NOT be persisted as an
+        // empty marker — otherwise the component stays blank forever, even after the env is
+        // fixed. A fresh instance must re-attempt the render (#570 field test).
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-fail-" + Guid.NewGuid().ToString("N"));
+        var key = new GdsPreviewKey("m", "f", "p");
+
+        var failing = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        failing.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NazcaPreviewResult.Fail("interpreter not ready"));
+        var svc1 = new GdsPreviewRenderService(failing.Object, new GdsPreviewDiskCache(diskDir));
+        svc1.TryGetGeometry(key);
+        await svc1.WaitForPendingAsync();
+
+        // A new instance (e.g. after the env is fixed) must render, not serve a persisted "empty".
+        var ok = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        ok.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Ok());
+        var svc2 = new GdsPreviewRenderService(ok.Object, new GdsPreviewDiskCache(diskDir));
+        svc2.TryGetGeometry(key);
+        await svc2.WaitForPendingAsync();
+
+        svc2.TryGetGeometry(key).ShouldNotBeNull();
+        ok.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
+    [Fact]
+    public async Task GetGeometry_GenuinelyEmptyRender_PersistsEmpty_NoRetry()
+    {
+        // A successful render with 0 polygons is genuinely empty (not a failure) — persist it so
+        // a second instance does not pointlessly re-render nothing.
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-empty-" + Guid.NewGuid().ToString("N"));
+        var key = new GdsPreviewKey("m", "f", "p");
+
+        var empty = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        empty.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NazcaPreviewResult { Success = true, Polygons = new List<NazcaPreviewPolygon>() });
+        var svc1 = new GdsPreviewRenderService(empty.Object, new GdsPreviewDiskCache(diskDir));
+        svc1.TryGetGeometry(key);
+        await svc1.WaitForPendingAsync();
+
+        var mock2 = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        var svc2 = new GdsPreviewRenderService(mock2.Object, new GdsPreviewDiskCache(diskDir));
+        svc2.TryGetGeometry(key);
+        await svc2.WaitForPendingAsync();
+        mock2.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
+    [Fact]
     public async Task GetGeometry_SecondInstance_ServesFromDisk_NoRender()
     {
         var diskDir = Path.Combine(Path.GetTempPath(), "lunima-svc-" + Guid.NewGuid().ToString("N"));
