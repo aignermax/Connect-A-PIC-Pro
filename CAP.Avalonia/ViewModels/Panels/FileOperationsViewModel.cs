@@ -1326,6 +1326,34 @@ public partial class FileOperationsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// When the design contains gdsfactory-native components (a Nazca script can't express
+    /// them), asks the user whether to export to Nazca anyway (omitting them) or switch to the
+    /// gdsfactory export. Returns true to proceed with the Nazca export, false to cancel.
+    /// A pure Nazca design (or a headless run with no message box) proceeds without prompting.
+    /// </summary>
+    private async Task<bool> ConfirmNazcaExportDropsGdsFactoryComponentsAsync()
+    {
+        var gdsFactory = CAP.Avalonia.Services.GdsFactoryExport.NazcaExportGuard
+            .CollectGdsFactoryNativeComponents(_canvas);
+        if (gdsFactory.Count == 0 || MessageBoxService == null)
+            return true;
+
+        var message =
+            $"{gdsFactory.Count} component(s) in this design are gdsfactory-native (e.g. CornerStone "
+            + "SiN) and cannot be written to a Nazca script — they would be omitted from the export. "
+            + "Use the gdsfactory export to include them.\n\nExport to Nazca anyway?";
+        // Button 0 = switch to gdsfactory (cancel this Nazca export); button 1 = proceed anyway.
+        const int exportAnywayIndex = 1;
+        var choice = await MessageBoxService.ShowChoicePromptAsync(
+            message, "gdsfactory components will be omitted",
+            new[] { "Use gdsfactory export instead", "Export to Nazca anyway" });
+
+        if (choice != exportAnywayIndex)
+            UpdateStatus?.Invoke("Nazca export cancelled — use the gdsfactory export for this design.");
+        return choice == exportAnywayIndex;
+    }
+
     [RelayCommand]
     private async Task ExportNazca()
     {
@@ -1340,6 +1368,12 @@ public partial class FileOperationsViewModel : ObservableObject
             UpdateStatus?.Invoke("Nothing to export - add some components first");
             return;
         }
+
+        // A gdsfactory-native design (e.g. CornerStone SiN) cannot be expressed in a Nazca
+        // script — those components would be silently omitted. Make the user choose consciously:
+        // continue anyway, or switch to the gdsfactory export that can include them (#570).
+        if (!await ConfirmNazcaExportDropsGdsFactoryComponentsAsync())
+            return;
 
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to Nazca Python",
