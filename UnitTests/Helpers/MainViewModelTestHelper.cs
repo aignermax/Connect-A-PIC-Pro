@@ -3,6 +3,7 @@ using System.Net.Http;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
@@ -61,7 +62,8 @@ public static class MainViewModelTestHelper
             new UpdateChecker(new HttpClient(), "aignermax", "Connect-A-PIC-Pro"),
             new UpdateDownloader(new HttpClient()),
             preferencesService,
-            Mock.Of<IUrlLauncher>());
+            Mock.Of<IUrlLauncher>(),
+            Mock.Of<IInstaller>());
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
         var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
