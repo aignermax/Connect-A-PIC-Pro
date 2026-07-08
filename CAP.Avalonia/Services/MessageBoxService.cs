@@ -161,8 +161,10 @@ public class MessageBoxService : IMessageBoxService
             var button = new Button
             {
                 Content = buttonLabels[i],
-                Height = 32,
-                Padding = new Thickness(12, 0),
+                MinHeight = 32,
+                Padding = new Thickness(12, 6),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
                 Background = new SolidColorBrush(Color.Parse(i == 0 ? "#0d6efd" : "#3d3d3d")),
                 Foreground = Brushes.White
             };

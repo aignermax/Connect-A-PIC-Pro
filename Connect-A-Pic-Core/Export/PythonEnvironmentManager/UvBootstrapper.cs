@@ -22,7 +22,7 @@ public class UvBootstrapper
     public const int LongOperationTimeoutMs = 600_000;
 
     private static readonly string AppDataDir =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima");
+        Path.Combine(Helpers.AppDataFolders.LocalApplicationData, "Lunima");
 
     private static readonly string ToolsDir = Path.Combine(AppDataDir, "tools");
 

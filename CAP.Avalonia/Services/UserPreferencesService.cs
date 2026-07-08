@@ -39,7 +39,7 @@ public class UserPreferencesService
     /// </summary>
     private static string GetAppDataDirectory()
     {
-        var baseDir = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+        var baseDir = CAP_Core.Helpers.AppDataFolders.LocalApplicationData;
         return Path.Combine(baseDir, "Lunima");
     }
 

@@ -16,7 +16,7 @@ namespace CAP_DataAccess
         {
             lock (_logFileLock)
             {
-                string appDataFolder = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+                string appDataFolder = CAP_Core.Helpers.AppDataFolders.LocalApplicationData;
                 string appFolder = Path.Combine(appDataFolder, "Connect A PIC");
                 string logFilePath = Path.Combine(appFolder, "logs.txt");
                 string logBackupPathFormat = Path.Combine(appFolder, "logs_{0}.txt"); // Format for backup files for string.Format()

@@ -30,6 +30,11 @@ public partial class BottomPanelViewModel : ObservableObject
     /// </summary>
     public ErrorConsoleViewModel ErrorConsole { get; }
 
+    /// <summary>
+    /// ViewModel for the collapsible transient/eye-diagram analysis dock (#570/#535).
+    /// </summary>
+    public AnalysisDockViewModel Analysis { get; }
+
     [ObservableProperty]
     private string _statusText = "Ready";
 
@@ -41,14 +46,17 @@ public partial class BottomPanelViewModel : ObservableObject
         CommandManager commandManager,
         WaveguideLengthViewModel waveguideLength,
         ElementLockViewModel elementLock,
-        ErrorConsoleViewModel errorConsole)
+        ErrorConsoleViewModel errorConsole,
+        AnalysisDockViewModel analysis)
     {
         WaveguideLength = waveguideLength;
         ElementLock = elementLock;
         ErrorConsole = errorConsole;
+        Analysis = analysis;
 
         // Configure ViewModels that need canvas and command manager
         ElementLock.Configure(canvas, commandManager);
+        Analysis.Configure(canvas);
     }
 
     /// <summary>

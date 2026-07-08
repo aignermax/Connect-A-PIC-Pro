@@ -46,10 +46,10 @@ public partial class PdkOffsetEditorViewModel
         foreach (var (lp, np) in pairs)
         {
             // Same projection as the matcher — see MatchPinsByGreedyNearest
-            // for the y-flip derivation (Lunima y-down vs Nazca y-up).
+            // for the convention (NazcaOriginOffsetY = bbox top above the org,
+            // so cell-local Nazca y = oy - OffsetY; Lunima y-down vs Nazca y-up).
             var lunimaNazcaX = lp.OffsetXMicrometers - (draft.NazcaOriginOffsetX ?? 0);
-            var lunimaNazcaY = (draft.HeightMicrometers - lp.OffsetYMicrometers)
-                               - (draft.NazcaOriginOffsetY ?? 0);
+            var lunimaNazcaY = (draft.NazcaOriginOffsetY ?? 0) - lp.OffsetYMicrometers;
             var dx = np.X - lunimaNazcaX;
             var dy = np.Y - lunimaNazcaY;
             var dist = Math.Sqrt(dx * dx + dy * dy);
@@ -316,12 +316,14 @@ public partial class PdkOffsetEditorViewModel
         }
     }
 
-    private async Task<NazcaPreviewResult?> RenderForBatch(PdkComponentDraft draft, CancellationToken token)
+    internal async Task<NazcaPreviewResult?> RenderForBatch(PdkComponentDraft draft, CancellationToken token)
     {
         try
         {
-            var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
-            return await _previewService!.RenderAsync(module, function, draft.NazcaParameters, token);
+            // Same render routing as the interactive path: gdsfactory-native components go through
+            // the gdsfactory back-end, not the Nazca demo.() path — otherwise Check-All / Try-Fix-All
+            // report every gdsfactory component as RenderFailed (#570).
+            return await RenderDraftAsync(draft, token);
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex)

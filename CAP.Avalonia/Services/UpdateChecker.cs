@@ -1,4 +1,5 @@
 using System.Net.Http;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using CAP_Core.Update;
 
@@ -89,16 +90,54 @@ public class UpdateChecker
                 a.Name.EndsWith(".msi", StringComparison.OrdinalIgnoreCase));
 
         if (OperatingSystem.IsMacOS())
+        {
+            // Prefer the .dmg matching the current arch (both osx-arm64 and osx-x64 ship together),
+            // then fall back to any .dmg/.pkg so an unusual naming still yields something.
+            var rid = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
             return release.Assets.FirstOrDefault(a =>
-                a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
+                    a.Name.Contains(rid, StringComparison.OrdinalIgnoreCase) &&
+                    a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
                 ?? release.Assets.FirstOrDefault(a =>
-                a.Name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase));
+                    a.Name.EndsWith(".dmg", StringComparison.OrdinalIgnoreCase))
+                ?? release.Assets.FirstOrDefault(a =>
+                    a.Name.EndsWith(".pkg", StringComparison.OrdinalIgnoreCase));
+        }
 
         // Linux
         return release.Assets.FirstOrDefault(a =>
             a.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase))
             ?? release.Assets.FirstOrDefault(a =>
             a.Name.EndsWith(".AppImage", StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Finds the release asset used for an <b>in-place auto-update</b> on the current OS/arch:
+    /// the arch-specific zipped <c>.app</c> on macOS, the <c>.msi</c> on Windows, the
+    /// <c>.tar.gz</c> on Linux. Distinct from <see cref="FindPlatformAsset"/>, which selects the
+    /// artifact for a first-time manual install (the macOS <c>.dmg</c>). Returns null when the
+    /// release carries no suitable auto-update archive (e.g. an older release without the zip),
+    /// so the caller can fall back to the manual installer.
+    /// </summary>
+    public static GitHubReleaseAsset? FindAutoUpdateAsset(GitHubReleaseInfo release)
+    {
+        if (OperatingSystem.IsWindows())
+            // Windows in-place self-update is deferred (#614 follow-up): msiexec installs to its own
+            // perMachine location, so a portable/zip install would be silently misrouted and the
+            // stale exe relaunched. Returning null makes the caller fall back to the manual MSI upgrade.
+            return null;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            var rid = RuntimeInformation.OSArchitecture == Architecture.Arm64 ? "osx-arm64" : "osx-x64";
+            return release.Assets.FirstOrDefault(a =>
+                a.Name.Contains(rid, StringComparison.OrdinalIgnoreCase) &&
+                a.Name.EndsWith(".zip", StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Linux
+        return release.Assets.FirstOrDefault(a =>
+            a.Name.Contains("linux", StringComparison.OrdinalIgnoreCase) &&
+            a.Name.EndsWith(".tar.gz", StringComparison.OrdinalIgnoreCase));
     }
 
     /// <summary>

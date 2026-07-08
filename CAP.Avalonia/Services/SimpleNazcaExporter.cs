@@ -58,7 +58,10 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Reduces the full override map to a dictionary of identifier -> RawCode,
-    /// keeping only entries whose RawCode is non-null and non-empty.
+    /// keeping only entries whose RawCode is non-null and non-empty AND whose backend is
+    /// Nazca. A gdsfactory-backend override must NOT be emitted into the Nazca script (its
+    /// gdsfactory Python would crash the Nazca run) — such an instance falls back to its
+    /// PDK cell here; the gdsfactory export honours it instead.
     /// </summary>
     private static Dictionary<string, string> BuildRawOverrides(
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
@@ -69,8 +72,9 @@ public class SimpleNazcaExporter
 
         foreach (var kv in overrides)
         {
-            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode))
-                result[kv.Key] = kv.Value!.RawCode!;
+            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode)
+                && kv.Value!.Backend == OverrideBackend.Nazca)
+                result[kv.Key] = kv.Value.RawCode!;
         }
         return result;
     }
@@ -271,12 +275,17 @@ public class SimpleNazcaExporter
         {
             var comp = compVm.Component;
             if (comp.IsAnalysisTool) continue;
+            // gdsfactory-native components (e.g. CornerStone SiN) have no Nazca representation —
+            // skip them rather than emit a meaningless demofab stub (#570). They export via the
+            // gdsfactory export instead.
+            if (!string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
             if (comp is ComponentGroup group)
             {
                 // Flatten group: export all child components at their absolute positions
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
+                    if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, rawOverrides, overrides);
                 }
             }

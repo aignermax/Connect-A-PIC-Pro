@@ -121,6 +121,34 @@ namespace UnitTests.ViewModels.Properties
             wrongOrder.CreateEditor(vm).ShouldBeOfType<GenericComponentEditorViewModel>();
         }
 
+        [Theory]
+        [InlineData("Grating Coupler")]
+        [InlineData("Phase Shifter")]
+        public void CreateEditor_SpecificComponents_MatchExactlyOneSpecificProvider(string templateName)
+        {
+            // Regression guard for issue #554: the old MainWindow.axaml carried
+            // hard-coded "Laser Configuration" / "Component Parameter" sections
+            // that duplicated the provider editors. With the migration done,
+            // exactly ONE specific (non-generic) provider must claim the
+            // component, so exactly one editor section is rendered.
+            var template = FindTemplate(templateName);
+            if (template == null) return; // CI guard
+
+            var vm = BuildVm(template);
+            var specificProviders = new IComponentEditorProvider[]
+            {
+                new OnaAnalyzerEditorProvider(),
+                new LightSourceEditorProvider(),
+                new SliderEditorProvider(),
+            };
+
+            var matches = specificProviders
+                .Select(p => p.TryCreateEditor(vm))
+                .Count(editor => editor != null);
+
+            matches.ShouldBe(1);
+        }
+
         [Fact]
         public void OnaAnalyzerEditor_OpenSweep_CallsWiredDelegate()
         {

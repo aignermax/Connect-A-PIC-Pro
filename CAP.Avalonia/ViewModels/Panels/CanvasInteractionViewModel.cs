@@ -5,6 +5,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components.PinKinds;
+using CAP_Core.Components.Process;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
@@ -90,6 +91,28 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
     /// </summary>
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
+
+    /// <summary>
+    /// Callback returning the design's active process (issue #570), consulted before
+    /// placement and paste so a component from a foreign PDK is rejected. Wired by
+    /// <c>MainViewModel</c> to <c>FileOperationsViewModel.ActiveProcess</c>.
+    /// </summary>
+    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
+
+    /// <summary>
+    /// Callback returning the names of loaded PDKs flagged process-agnostic (e.g. "Analysis
+    /// Tools"), which stay placeable/pasteable regardless of the active process (issue #570).
+    /// Wired by <c>MainViewModel</c> to <c>LeftPanelViewModel.GetProcessAgnosticPdkNames</c>.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
+
+    /// <summary>
+    /// Callback resolving the PDK source of a placed core component (groups carry none of
+    /// their own, so their children are resolved individually — issue #653). Wired by
+    /// <c>MainViewModel</c> to <c>ComponentPdkSourceResolver.Resolve</c> over the loaded
+    /// component library. When unwired, group children resolve to null (treated as built-in).
+    /// </summary>
+    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
 
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
@@ -313,6 +336,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (SelectedTemplate == null) return;
 
+        var (isAllowed, blockReason) = SingleProcessPolicy.CheckPlacement(
+            GetActiveProcess?.Invoke(), SelectedTemplate.PdkSource,
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+        if (!isAllowed)
+        {
+            UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
+            return;
+        }
+
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
 
@@ -338,6 +370,19 @@ public partial class CanvasInteractionViewModel : ObservableObject
             return;
         }
 
+        // Single-process enforcement over the group's children (issue #653): a group has no
+        // PdkSource of its own, so a foreign-process child must not slip in via grouping.
+        var (isAllowed, blockReason) = GroupProcessPolicy.CheckGroupPlacement(
+            GetActiveProcess?.Invoke(),
+            ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            SelectedGroupTemplate.Name);
+        if (!isAllowed)
+        {
+            UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place group.");
+            return;
+        }
+
         var libraryManager = _libraryViewModel.GetLibraryManager();
         var cmd = PlaceGroupTemplateCommand.TryCreate(_canvas, libraryManager, SelectedGroupTemplate, x, y);
 
@@ -350,6 +395,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
         _commandManager.ExecuteCommand(cmd);
         UpdateStatus?.Invoke($"Placed group '{SelectedGroupTemplate.Name}' at ({x:F0}, {y:F0})µm");
     }
+
+    /// <summary>
+    /// Resolved PDK source of every recursive non-group child of <paramref name="group"/>,
+    /// used to check the single-process policy over a group's contents (issue #653).
+    /// </summary>
+    private IEnumerable<string?> ChildPdkSources(ComponentGroup group) =>
+        group.GetAllComponentsRecursive()
+            .Where(child => child is not ComponentGroup)
+            .Select(child => ResolveComponentPdkSource?.Invoke(child));
 
     /// <summary>
     /// Selects the component or connection at the given canvas position, keeping the
@@ -647,6 +701,21 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public void PasteSelected(double? targetX = null, double? targetY = null)
     {
         if (!_canvas.Clipboard.HasContent) return;
+
+        var active = GetActiveProcess?.Invoke();
+        var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        // PeekPdkSources expands groups to their resolved children (the clipboard's
+        // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
+        // smuggle foreign-process components past the paste guard (issue #653).
+        var blockedCount = _canvas.Clipboard.PeekPdkSources()
+            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
+        if (blockedCount > 0)
+        {
+            UpdateStatus?.Invoke(
+                $"Clipboard has {blockedCount} component(s) from another process; " +
+                $"cannot paste into the '{active!.DisplayName}' design.");
+            return;
+        }
 
         var cmd = new PasteComponentsCommand(_canvas, _canvas.Clipboard, targetX, targetY);
         _commandManager.ExecuteCommand(cmd);
