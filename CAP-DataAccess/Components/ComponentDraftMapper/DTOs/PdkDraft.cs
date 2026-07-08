@@ -203,6 +203,24 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("sliders")]
         public List<SliderDraft>? Sliders { get; set; }
+
+        /// <summary>
+        /// Optional compact-model name for active time-dependent components
+        /// (e.g. "LaserDiodeRateEquation", "PhotodiodeRc",
+        /// "ElectroOpticPhaseModulator"). Must match a registered model in
+        /// <c>CompactModelRegistry</c>; unknown names fail PDK validation —
+        /// there is no silent fallback to passive behaviour (issue #529).
+        /// </summary>
+        [JsonPropertyName("compactModel")]
+        public string? CompactModel { get; set; }
+
+        /// <summary>
+        /// Optional model-specific parameters for <see cref="CompactModel"/>
+        /// (e.g. threshold current, responsivity, V_π). Keys are defined by
+        /// each model; missing keys use the model's defaults.
+        /// </summary>
+        [JsonPropertyName("compactModelParameters")]
+        public Dictionary<string, double>? CompactModelParameters { get; set; }
     }
 
     /// <summary>
