@@ -193,6 +193,10 @@ public class SimpleNazcaExporter
         // a straight's pins share the centre line, so their local Y is oy - OffsetY = 0.
         foreach (var pin in comp.PhysicalPins)
         {
+            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
+            // must not be emitted as waveguide stubs (#519). Metal routing is a separate feature.
+            if (pin.MatterType != MatterType.Light) continue;
+
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -247,6 +251,9 @@ public class SimpleNazcaExporter
         // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
         foreach (var pin in comp.PhysicalPins)
         {
+            // Optical ports only — see the straight-stub loop above (#519).
+            if (pin.MatterType != MatterType.Light) continue;
+
             var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - offsetX).ToString("F2", ci);
             var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);

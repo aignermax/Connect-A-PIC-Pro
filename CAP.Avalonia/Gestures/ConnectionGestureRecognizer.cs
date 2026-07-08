@@ -80,7 +80,7 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
             {
                 mainVm.StatusText = PinKindHelper.AreKindsCompatible(_state.ConnectionDragStartPin, targetPin)
                     ? $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}"
-                    : $"Cannot connect {PinKindHelper.ToKindName(_state.ConnectionDragStartPin.MatterType)} pin {_state.ConnectionDragStartPin.Name} to {PinKindHelper.ToKindName(targetPin.MatterType)} pin {targetPin.Name}";
+                    : PinKindHelper.DescribeIncompatibility(_state.ConnectionDragStartPin, targetPin);
             }
         }
         else
@@ -106,7 +106,7 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
         {
             // Cross-domain connection (optical ↔ electrical) is physically meaningless — reject.
             if (mainVm != null)
-                mainVm.StatusText = $"Cannot connect {PinKindHelper.ToKindName(startPin.MatterType)} pin {startPin.Name} to {PinKindHelper.ToKindName(targetPin!.MatterType)} pin {targetPin.Name}";
+                mainVm.StatusText = PinKindHelper.DescribeIncompatibility(startPin, targetPin!);
         }
         else if (isValidTarget)
         {

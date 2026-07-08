@@ -158,7 +158,8 @@ public static class GroupTemplateSerializer
             OffsetY = p.OffsetYMicrometers,
             AngleDegrees = p.AngleDegrees,
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
-            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty
+            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
+            MatterType = p.MatterType
         }).ToList();
 
         // Serialize S-Matrices so child components keep their simulation data after reload.
@@ -216,7 +217,7 @@ public static class GroupTemplateSerializer
             Pin? logicalPin = null;
             if (p.LogicalPinIdInFlow != Guid.Empty)
             {
-                logicalPin = new Pin(p.Name, 0, MatterType.Light, RectSide.Left,
+                logicalPin = new Pin(p.Name, 0, p.MatterType, RectSide.Left,
                     p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow);
             }
 
@@ -491,6 +492,14 @@ public class PinDto
     public double AngleDegrees { get; set; }
     public Guid LogicalPinIdInFlow { get; set; }
     public Guid LogicalPinIdOutFlow { get; set; }
+
+    /// <summary>
+    /// Signal domain of the pin (optical vs. electrical). Persisted so a saved group template
+    /// keeps its electrical pins electrical on reload — without it every pin reverted to optical
+    /// and cross-kind connection guards were defeated (#519). Defaults to Light for older
+    /// templates that predate the field.
+    /// </summary>
+    public MatterType MatterType { get; set; } = MatterType.Light;
 }
 
 /// <summary>

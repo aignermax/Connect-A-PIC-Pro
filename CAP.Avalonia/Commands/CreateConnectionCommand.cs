@@ -9,8 +9,11 @@ namespace CAP.Avalonia.Commands;
 /// <summary>
 /// Command for creating a waveguide connection between two pins.
 /// Tracks and restores any connections that were overwritten.
-/// Cross-domain pairs (optical ↔ electrical) are rejected: <see cref="Execute"/>
-/// becomes a no-op, acting as the single choke point for pin-kind enforcement.
+/// Cross-domain pairs (optical ↔ electrical) are rejected: <see cref="Execute"/> is a no-op
+/// for them — a defensive backstop. The UI connect paths (drag gesture, click-to-connect)
+/// pre-check <see cref="PinKindHelper.AreKindsCompatible"/> and do not issue this command for
+/// an incompatible pair (so no empty undo entry is created); this guard only catches a caller
+/// that skips that check.
 /// </summary>
 public class CreateConnectionCommand : IUndoableCommand
 {

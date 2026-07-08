@@ -76,6 +76,32 @@ namespace UnitTests.Components.PinKinds
         }
 
         [Fact]
+        public void AreKindsCompatible_NoneAndLight_AreBothOptical_ReturnsTrue()
+        {
+            // The domain split is electrical vs. everything-else. A pin left at the MatterType.None
+            // default (e.g. after Pin.Reset) is optical, so it must still connect to a Light pin —
+            // a raw enum-equality check would wrongly block it (#519 review).
+            var none = CreatePhysicalPin(MatterType.None);
+            var light = CreatePhysicalPin(MatterType.Light);
+
+            PinKindHelper.AreKindsCompatible(none, light).ShouldBeTrue();
+            PinKindHelper.AreKindsCompatible(none, CreatePhysicalPin(MatterType.None)).ShouldBeTrue();
+            PinKindHelper.AreKindsCompatible(none, CreatePhysicalPin(MatterType.Electricity)).ShouldBeFalse();
+        }
+
+        [Fact]
+        public void DescribeIncompatibility_NamesBothPinsAndKinds()
+        {
+            var optical = new PhysicalPin { Name = "in", LogicalPin = new Pin("in", 0, MatterType.Light, RectSide.Left) };
+            var electrical = new PhysicalPin { Name = "elec1", LogicalPin = new Pin("elec1", 0, MatterType.Electricity, RectSide.Up) };
+
+            var msg = PinKindHelper.DescribeIncompatibility(optical, electrical);
+
+            msg.ShouldContain("Optical pin in");
+            msg.ShouldContain("Electrical pin elec1");
+        }
+
+        [Fact]
         public void PhysicalPin_WithoutLogicalPin_DefaultsToOptical()
         {
             var pin = new PhysicalPin { Name = "a0" };

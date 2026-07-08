@@ -134,6 +134,7 @@ and never appear in the process picker.
 | `offsetXMicrometers` | Yes | X position relative to the bounding box **top-left** corner (µm), increasing right |
 | `offsetYMicrometers` | Yes | Y position relative to the bounding box **top-left** corner (µm), increasing **down** |
 | `angleDegrees` | Yes | Port direction: `0`=right, `90`=up, `180`=left, `270`=down |
+| `pinKind` | No | Signal domain: `"Optical"` (default when absent) or `"Electrical"`. Electrical pins (heater/modulator contacts, detector anode/cathode, bond pads) can only be connected to other electrical pins — never to optical ports — and are excluded from the optical S-matrix and the optical (Nazca/gdsfactory/photontorch) export. |
 
 ### S-Matrix Fields
 
@@ -247,11 +248,13 @@ I need to convert a Nazca Python PDK to Lunima JSON format.
 Here is the Lunima PDK JSON schema:
 - fileFormatVersion: 1
 - Each component has: name, category, nazcaFunction, widthMicrometers, heightMicrometers,
-  nazcaOriginOffsetX, nazcaOriginOffsetY, pins[], sMatrix{}
-- Pins have: name, offsetXMicrometers, offsetYMicrometers, angleDegrees
-- Coordinate system: Y-down, origin at bounding box bottom-left
-- Nazca Y-axis is flipped: lunima_y = component_height - nazca_y
-- sMatrix connections have: fromPin, toPin, magnitude (0–1), phaseDegrees
+  nazcaOriginOffsetX (= -XMin), nazcaOriginOffsetY (= YMax), pins[], sMatrix{}
+- Pins have: name, offsetXMicrometers, offsetYMicrometers, angleDegrees, and optionally
+  pinKind ("Optical" default, or "Electrical" for heater/detector/pad contacts)
+- Coordinate system: Y-down, pin offsets measured from the bounding box top-left corner
+- Nazca conversion: offsetX = nazca_x - XMin, offsetY = YMax - nazca_y
+- sMatrix connections have: fromPin, toPin, magnitude (0–1), phaseDegrees — reference
+  OPTICAL pins only (electrical pins carry no light)
 
 Here is my Nazca Python PDK code:
 [PASTE YOUR PYTHON CODE HERE]

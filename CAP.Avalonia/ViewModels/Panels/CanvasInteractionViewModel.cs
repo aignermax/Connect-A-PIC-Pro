@@ -318,9 +318,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             else if (!PinKindHelper.AreKindsCompatible(_connectionStartPin, pin))
             {
                 // Cross-domain connection (optical ↔ electrical) is physically meaningless — reject.
-                UpdateStatus?.Invoke(
-                    $"Cannot connect {PinKindHelper.ToKindName(_connectionStartPin.MatterType)} pin {_connectionStartPin.Name} " +
-                    $"to {PinKindHelper.ToKindName(pin.MatterType)} pin {pin.Name}");
+                UpdateStatus?.Invoke(PinKindHelper.DescribeIncompatibility(_connectionStartPin, pin));
             }
             else
             {
