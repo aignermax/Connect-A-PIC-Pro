@@ -2,12 +2,15 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.PinKinds;
 
 namespace CAP.Avalonia.Commands;
 
 /// <summary>
 /// Command for creating a waveguide connection between two pins.
 /// Tracks and restores any connections that were overwritten.
+/// Cross-domain pairs (optical ↔ electrical) are rejected: <see cref="Execute"/>
+/// becomes a no-op, acting as the single choke point for pin-kind enforcement.
 /// </summary>
 public class CreateConnectionCommand : IUndoableCommand
 {
@@ -32,8 +35,18 @@ public class CreateConnectionCommand : IUndoableCommand
 
     public string Description => $"Connect {_startPin.Name} to {_endPin.Name}";
 
+    /// <summary>
+    /// True when both pins belong to the same signal domain and may be connected.
+    /// </summary>
+    public bool ArePinKindsCompatible => PinKindHelper.AreKindsCompatible(_startPin, _endPin);
+
     public void Execute()
     {
+        // Optical ↔ electrical connections are physically meaningless — refuse to create them
+        // regardless of which UI path (drag gesture, click-to-connect, …) issued the command.
+        if (!ArePinKindsCompatible)
+            return;
+
         if (_connection != null && _connectionViewModel != null)
         {
             // Redo: remove any restored connections first, then re-add the new connection

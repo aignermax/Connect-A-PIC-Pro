@@ -5,6 +5,7 @@ using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
+using CAP_Core.Components.PinKinds;
 
 namespace CAP.Avalonia.Gestures;
 
@@ -76,7 +77,11 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
             targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
         {
             if (mainVm != null)
-                mainVm.StatusText = $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}";
+            {
+                mainVm.StatusText = PinKindHelper.AreKindsCompatible(_state.ConnectionDragStartPin, targetPin)
+                    ? $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}"
+                    : $"Cannot connect {PinKindHelper.ToKindName(_state.ConnectionDragStartPin.MatterType)} pin {_state.ConnectionDragStartPin.Name} to {PinKindHelper.ToKindName(targetPin.MatterType)} pin {targetPin.Name}";
+            }
         }
         else
         {
@@ -92,10 +97,18 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
     {
         if (_state.ConnectionDragStartPin == null) return;
 
+        var startPin = _state.ConnectionDragStartPin;
         var targetPin = canvas.HighlightedPin?.Pin;
+        bool isValidTarget = targetPin != null && targetPin != startPin &&
+            targetPin.ParentComponent != startPin.ParentComponent;
 
-        if (targetPin != null && targetPin != _state.ConnectionDragStartPin &&
-            targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
+        if (isValidTarget && !PinKindHelper.AreKindsCompatible(startPin, targetPin!))
+        {
+            // Cross-domain connection (optical ↔ electrical) is physically meaningless — reject.
+            if (mainVm != null)
+                mainVm.StatusText = $"Cannot connect {PinKindHelper.ToKindName(startPin.MatterType)} pin {startPin.Name} to {PinKindHelper.ToKindName(targetPin!.MatterType)} pin {targetPin.Name}";
+        }
+        else if (isValidTarget)
         {
             var cmd = new CreateConnectionCommand(canvas, _state.ConnectionDragStartPin, targetPin);
             mainVm?.CommandManager.ExecuteCommand(cmd);

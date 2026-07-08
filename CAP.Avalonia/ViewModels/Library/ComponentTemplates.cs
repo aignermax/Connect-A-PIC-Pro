@@ -40,7 +40,7 @@ public static class ComponentTemplates
                 270 => RectSide.Down,
                 _ => RectSide.Right
             };
-            logicalPins.Add(new Pin(def.Name, i, MatterType.Light, side));
+            logicalPins.Add(new Pin(def.Name, i, def.Kind, side));
         }
 
         // Create parts array (simplified: single part)
@@ -212,11 +212,18 @@ public class PinDefinition
     public double OffsetY { get; }
     public double AngleDegrees { get; }
 
-    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees)
+    /// <summary>
+    /// Signal domain of the pin: <see cref="MatterType.Light"/> (optical, default)
+    /// or <see cref="MatterType.Electricity"/> (electrical metal contact).
+    /// </summary>
+    public MatterType Kind { get; }
+
+    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees, MatterType kind = MatterType.Light)
     {
         Name = name;
         OffsetX = offsetX;
         OffsetY = offsetY;
         AngleDegrees = angleDegrees;
+        Kind = kind;
     }
 }
