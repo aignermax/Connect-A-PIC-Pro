@@ -24,45 +24,41 @@
             Linear circuits only (Phase 1).
         </TextBlock>
 
-        <!-- Sweep parameters -->
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="λ centre (nm):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.CenterWavelengthNm}"
-                           Minimum="800" Maximum="2000" Increment="10"
-                           Width="110" FormatString="F0"/>
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="Span (nm):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.SpanNm}"
-                           Minimum="1" Maximum="500" Increment="10"
-                           Width="110" FormatString="F0"/>
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="Freq. points:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.FreqPoints}"
-                           Minimum="16" Maximum="1024" Increment="64"
-                           Width="110" FormatString="F0"/>
-        </StackPanel>
-
-        <!-- Pulse parameters -->
-        <Separator Margin="0,8,0,8" Background="#2d2d2d"/>
-        <TextBlock Text="Gaussian input pulse:" Foreground="Gray" FontSize="10" Margin="0,0,0,4"/>
-
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="Centre (ps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseCenterPs}"
-                           Minimum="0" Maximum="100" Increment="0.5"
-                           Width="110" FormatString="F2"/>
-        </StackPanel>
-
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="σ width (ps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseSigmaPs}"
-                           Minimum="0.01" Maximum="50" Increment="0.1"
-                           Width="110" FormatString="F2"/>
-        </StackPanel>
+        <!-- Parameters: side-by-side (wraps as the dock narrows) so the wide dock width is used
+             and each field is wide enough to show its full value (#570 feedback). Sweep params
+             first, then the Gaussian pulse params. -->
+        <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="λ centre (nm)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.CenterWavelengthNm}"
+                               Minimum="800" Maximum="2000" Increment="10"
+                               Width="140" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Span (nm)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.SpanNm}"
+                               Minimum="1" Maximum="500" Increment="10"
+                               Width="130" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Freq. points" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.FreqPoints}"
+                               Minimum="16" Maximum="1024" Increment="64"
+                               Width="130" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Pulse centre (ps)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseCenterPs}"
+                               Minimum="0" Maximum="100" Increment="0.5"
+                               Width="140" FormatString="F2"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Pulse σ width (ps)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseSigmaPs}"
+                               Minimum="0.01" Maximum="50" Increment="0.1"
+                               Width="140" FormatString="F2"/>
+            </StackPanel>
+        </WrapPanel>
 
         <!-- Run button -->
         <Button Content="Run Transient"

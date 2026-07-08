@@ -35,4 +35,16 @@ public class AnalysisDockViewModelTests
         vm.IsVisible.ShouldBeTrue();
         vm.SelectedTabIndex.ShouldBe(0);
     }
+
+    [Fact]
+    public void SetDockHeight_ClampsToMinAndMax()
+    {
+        var vm = Make();
+        vm.SetDockHeight(10_000);
+        vm.DockHeight.ShouldBe(AnalysisDockViewModel.MaxDockHeight);
+        vm.SetDockHeight(1);
+        vm.DockHeight.ShouldBe(AnalysisDockViewModel.MinDockHeight);
+        vm.SetDockHeight(300);
+        vm.DockHeight.ShouldBe(300);
+    }
 }

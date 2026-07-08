@@ -27,8 +27,18 @@
                 </Button>
             </DockPanel>
 
-            <!-- Content area: only shown when IsVisible is true -->
-            <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}" Height="240" Background="#161616">
+            <!-- Resize grip: drag to change the dock height (#570 field feedback). -->
+            <Border x:Name="ResizeGrip"
+                    IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
+                    Height="5" Background="#3d3d3d" Cursor="SizeNorthSouth"
+                    ToolTip.Tip="Drag to resize the analysis dock"
+                    PointerPressed="ResizeGrip_PointerPressed"
+                    PointerMoved="ResizeGrip_PointerMoved"
+                    PointerReleased="ResizeGrip_PointerReleased"/>
+
+            <!-- Content area: only shown when IsVisible is true; height is user-adjustable. -->
+            <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
+                    Height="{Binding BottomPanel.Analysis.DockHeight}" Background="#161616">
                 <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}">
                     <TabItem Header="Transient">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">

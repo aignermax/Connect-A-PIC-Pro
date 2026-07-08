@@ -21,6 +21,21 @@ public partial class AnalysisDockViewModel : ObservableObject
     [ObservableProperty]
     private int _selectedTabIndex;
 
+    /// <summary>Minimum dock content height (px) when dragging the resize grip.</summary>
+    public const double MinDockHeight = 120;
+
+    /// <summary>Maximum dock content height (px) when dragging the resize grip.</summary>
+    public const double MaxDockHeight = 640;
+
+    /// <summary>User-adjustable height (px) of the dock's content area; driven by the resize grip.</summary>
+    [ObservableProperty]
+    private double _dockHeight = 260;
+
+    /// <summary>Sets <see cref="DockHeight"/> to <paramref name="height"/>, clamped to
+    /// [<see cref="MinDockHeight"/>, <see cref="MaxDockHeight"/>].</summary>
+    public void SetDockHeight(double height) =>
+        DockHeight = System.Math.Clamp(height, MinDockHeight, MaxDockHeight);
+
     /// <summary>Initializes a new instance of <see cref="AnalysisDockViewModel"/>.</summary>
     /// <param name="transient">Transient (time-domain) analysis tab ViewModel.</param>
     /// <param name="eye">Eye-diagram / BER analysis tab ViewModel.</param>

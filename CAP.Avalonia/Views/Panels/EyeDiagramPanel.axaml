@@ -14,29 +14,28 @@
             Q-factor and BER with shot / thermal / RIN receiver noise.
         </TextBlock>
 
-        <!-- Bit rate -->
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="Bit rate (Gbps):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.BitRateGbps}"
-                           Minimum="1" Maximum="1000" Increment="5"
-                           Width="110" FormatString="F1"/>
-        </StackPanel>
-
-        <!-- PRBS pattern -->
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
-            <TextBlock Text="PRBS pattern:" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <ComboBox ItemsSource="{Binding BottomPanel.Analysis.Eye.PrbsOrders}"
-                      SelectedItem="{Binding BottomPanel.Analysis.Eye.SelectedPrbsOrder}"
-                      Width="110"/>
-        </StackPanel>
-
-        <!-- Decision threshold -->
-        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="Threshold (rel.):" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
-            <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.ThresholdRelative}"
-                           Minimum="0.05" Maximum="0.95" Increment="0.05"
-                           Width="110" FormatString="F2"/>
-        </StackPanel>
+        <!-- Parameters: laid out side-by-side (wraps as the dock narrows) so the wide dock
+             width is used and each field is wide enough to show its full value (#570 feedback). -->
+        <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Bit rate (Gbps)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.BitRateGbps}"
+                               Minimum="1" Maximum="1000" Increment="5"
+                               Width="150" FormatString="F1"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="PRBS pattern" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <ComboBox ItemsSource="{Binding BottomPanel.Analysis.Eye.PrbsOrders}"
+                          SelectedItem="{Binding BottomPanel.Analysis.Eye.SelectedPrbsOrder}"
+                          Width="130"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,16,6">
+                <TextBlock Text="Threshold (rel.)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.ThresholdRelative}"
+                               Minimum="0.05" Maximum="0.95" Increment="0.05"
+                               Width="130" FormatString="F2"/>
+            </StackPanel>
+        </WrapPanel>
 
         <!-- Run button -->
         <Button Content="Run Eye Analysis"
