@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:vmAnalysis="using:CAP.Avalonia.ViewModels.Analysis"
+             xmlns:panels="using:CAP.Avalonia.Views.Panels"
              xmlns:trace="using:CAP.Avalonia.ViewModels.Analysis.TimeTrace"
              xmlns:oxy="using:OxyPlot.Avalonia"
              x:Class="CAP.Avalonia.Views.Panels.TimeDomainPanel"
@@ -120,11 +121,25 @@
                         Command="{Binding BottomPanel.Analysis.Transient.RunTransientCommand}"
                         IsEnabled="{Binding BottomPanel.Analysis.Transient.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
             </StackPanel>
-            <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom"
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom"
                         IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}">
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
                 <Button Content="Export CSV" Classes="analysis" Background="#3d3d5d"
                         Command="{Binding BottomPanel.Analysis.Transient.ExportCsvCommand}"/>
+            </StackPanel>
+            <!-- Plain-language help (#600 feedback): what transient mode does,
+                 the three sources, and how to read the plot. Non-modal flyout. -->
+            <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="?" Classes="analysis" Background="#3d5d3d" Width="26"
+                        HorizontalContentAlignment="Center"
+                        ToolTip.Tip="What does Transient mode do? (plain-language explainer)">
+                    <Button.Flyout>
+                        <Flyout Placement="Top">
+                            <panels:TransientHelpFlyout/>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </StackPanel>
         </WrapPanel>
 
