@@ -13,7 +13,7 @@
     <BuiltInComInteropSupport Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">true</BuiltInComInteropSupport>
     <!-- Add macOS ARM64 and x64 support alongside Windows and Linux -->
     <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64;osx-x64</RuntimeIdentifiers>
-    <Version>0.10.0</Version>
+    <Version>0.11.0</Version>
     <!-- Windows icon (embedded in the .exe; macOS uses the .icns inside the bundle) -->
     <ApplicationIcon Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">LunimaIcon.ico</ApplicationIcon>
   </PropertyGroup>
