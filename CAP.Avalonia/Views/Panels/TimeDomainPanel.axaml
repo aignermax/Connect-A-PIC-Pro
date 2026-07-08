@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:vmAnalysis="using:CAP.Avalonia.ViewModels.Analysis"
              xmlns:trace="using:CAP.Avalonia.ViewModels.Analysis.TimeTrace"
              xmlns:oxy="using:OxyPlot.Avalonia"
              x:Class="CAP.Avalonia.Views.Panels.TimeDomainPanel"
@@ -37,7 +38,7 @@
     <StackPanel Margin="6,4">
         <!-- No heading/separator: the tab header already reads "Transient". -->
         <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap">
-            IFFT of S-parameters → impulse response → convolve with Gaussian pulse. Linear circuits only.
+            IFFT of S-parameters → impulse response → convolve with the selected source (pulse / CW / PRBS). Linear circuits only.
         </TextBlock>
 
         <!-- Parameters + Run: laid out horizontally, wrapping responsively (right, then down). -->
@@ -58,14 +59,59 @@
                                Minimum="16" Maximum="1024" Increment="64" Width="110" FormatString="F0"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="Source" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <ComboBox ItemsSource="{x:Static vmAnalysis:TransientSourceSettingsViewModel.SourceTypes}"
+                          SelectedItem="{Binding BottomPanel.Analysis.Transient.Source.SourceType}"
+                          Width="130" FontSize="11"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsGaussianPulse}">
                 <TextBlock Text="Pulse centre (ps)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseCenterPs}"
                                Minimum="0" Maximum="100" Increment="0.5" Width="118" FormatString="F2"/>
             </StackPanel>
-            <StackPanel Margin="0,0,12,4">
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsGaussianPulse}">
                 <TextBlock Text="Pulse σ width (ps)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.PulseSigmaPs}"
                                Minimum="0.01" Maximum="50" Increment="0.1" Width="118" FormatString="F2"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="Bitrate (Gbps)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.Source.BitrateGbps}"
+                               Minimum="0.1" Maximum="400" Increment="1" Width="110" FormatString="F1"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="PRBS order" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <ComboBox ItemsSource="{x:Static vmAnalysis:TransientSourceSettingsViewModel.PrbsOrders}"
+                          SelectedItem="{Binding BottomPanel.Analysis.Transient.Source.PrbsOrder}"
+                          Width="80" FontSize="11"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="Samples/symbol" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.Source.SamplesPerSymbol}"
+                               Minimum="16" Maximum="128" Increment="16" Width="110" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="Symbols" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.Source.SymbolCount}"
+                               Minimum="2" Maximum="4096" Increment="16" Width="110" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="Extinction (dB)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.Source.ExtinctionRatioDb}"
+                               Minimum="1" Maximum="40" Increment="1" Width="110" FormatString="F1"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.Transient.Source.IsPrbs}">
+                <TextBlock Text="Seed" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Transient.Source.Seed}"
+                               Minimum="1" Maximum="65535" Increment="1" Width="100" FormatString="F0"/>
             </StackPanel>
             <!-- Run sits to the right of the fields; the spacer aligns it with the field row. -->
             <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom">

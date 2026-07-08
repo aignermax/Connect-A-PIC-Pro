@@ -1,7 +1,7 @@
 # Sample-Mode Transient Driver + Signal-Source Library — Design
 
 **Issue:** #600 · **Epic:** #599 (INTERCONNECT-parity transient) · **Roadmap:** #537 Pillar D
-**Status:** Design pass (authored autonomously 2026-06-23). Decisions below are *proposed with rationale*; items marked ⚠️ should be validated at implementation/first-light, not taken as settled physics.
+**Status:** Implemented 2026-07-08 (same PR, TDD): `Sources/` (`ISignalSource`, `CwSource`, `PulseSource`, `PrbsSource` + `PrbsBitGenerator`), `Sampling/SamplingPolicy`, `ITimeSteppable` seam, `SampleModeTransientDriver` with the passive-equivalence guard (§5.1), and the source selector in `TimeDomainViewModel`/`TimeDomainPanel`. Items marked ⚠️ remain to be validated at first light, not settled physics.
 
 ---
 
