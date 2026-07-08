@@ -5,68 +5,85 @@
              x:Class="CAP.Avalonia.Views.Panels.EyeDiagramPanel"
              x:DataType="vm:MainViewModel">
 
-    <StackPanel>
-        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Eye Diagram / BER:" Foreground="Orchid" Margin="0,0,0,5" FontWeight="SemiBold"/>
+    <UserControl.Styles>
+        <!-- Compact, half-height inputs/buttons for the dense analysis dock (#570 feedback). -->
+        <Style Selector="NumericUpDown">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="4,0"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="FontSize" Value="11"/>
+            <Setter Property="Padding" Value="6,0"/>
+        </Style>
+        <Style Selector="Button.analysis">
+            <Setter Property="Height" Value="24"/>
+            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+    </UserControl.Styles>
 
-        <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
-            PRBS-modulated transient simulation → eye persistence heat map,
-            Q-factor and BER with shot / thermal / RIN receiver noise.
+    <StackPanel Margin="6,4">
+        <!-- No heading/separator: the tab header already reads "Eye / BER". -->
+        <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap">
+            PRBS-modulated transient → eye persistence heat map, Q-factor and BER (shot/thermal/RIN noise).
         </TextBlock>
 
-        <!-- Parameters: laid out side-by-side (wraps as the dock narrows) so the wide dock
-             width is used and each field is wide enough to show its full value (#570 feedback). -->
-        <WrapPanel Orientation="Horizontal" Margin="0,0,0,8">
-            <StackPanel Margin="0,0,16,6">
-                <TextBlock Text="Bit rate (Gbps)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+        <!-- Parameters + Run: laid out horizontally, wrapping responsively (right, then down). -->
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="Bit rate (Gbps)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.BitRateGbps}"
-                               Minimum="1" Maximum="1000" Increment="5"
-                               Width="150" FormatString="F1"/>
+                               Minimum="1" Maximum="1000" Increment="5" Width="120" FormatString="F1"/>
             </StackPanel>
-            <StackPanel Margin="0,0,16,6">
-                <TextBlock Text="PRBS pattern" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="PRBS pattern" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <ComboBox ItemsSource="{Binding BottomPanel.Analysis.Eye.PrbsOrders}"
                           SelectedItem="{Binding BottomPanel.Analysis.Eye.SelectedPrbsOrder}"
-                          Width="130"/>
+                          Width="110"/>
             </StackPanel>
-            <StackPanel Margin="0,0,16,6">
-                <TextBlock Text="Threshold (rel.)" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="Threshold (rel.)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.ThresholdRelative}"
-                               Minimum="0.05" Maximum="0.95" Increment="0.05"
-                               Width="130" FormatString="F2"/>
+                               Minimum="0.05" Maximum="0.95" Increment="0.05" Width="110" FormatString="F2"/>
+            </StackPanel>
+            <!-- Run sits to the right of the fields; the spacer aligns it with the field row. -->
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="Run Eye Analysis" Classes="analysis" Background="#5d3d5d"
+                        Command="{Binding BottomPanel.Analysis.Eye.RunEyeAnalysisCommand}"
+                        IsEnabled="{Binding BottomPanel.Analysis.Eye.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom"
+                        IsVisible="{Binding BottomPanel.Analysis.Eye.HasResult}">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="Export CSV" Classes="analysis" Background="#3d3d5d"
+                        Command="{Binding BottomPanel.Analysis.Eye.ExportCsvCommand}"/>
             </StackPanel>
         </WrapPanel>
 
-        <!-- Run button -->
-        <Button Content="Run Eye Analysis"
-                Command="{Binding BottomPanel.Analysis.Eye.RunEyeAnalysisCommand}"
-                Width="140" Margin="0,0,0,5" Background="#5d3d5d"
-                IsEnabled="{Binding BottomPanel.Analysis.Eye.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
-
         <!-- Status -->
         <TextBlock Text="{Binding BottomPanel.Analysis.Eye.StatusText}"
-                   Foreground="Gray" FontSize="10" Margin="0,0,0,4"
+                   Foreground="Gray" FontSize="9" Margin="0,2,0,2"
                    IsVisible="{Binding BottomPanel.Analysis.Eye.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    TextWrapping="Wrap"/>
 
         <!-- Eye heat map -->
         <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
-                Height="220" Margin="0,4,0,0"
+                Height="200" Margin="0,2,0,0"
                 IsVisible="{Binding BottomPanel.Analysis.Eye.HasResult}">
             <oxy:PlotView Model="{Binding BottomPanel.Analysis.Eye.PlotModel}" Background="Transparent"/>
         </Border>
 
         <!-- Numeric eye metrics -->
         <TextBlock Text="{Binding BottomPanel.Analysis.Eye.MetricsText}"
-                   Foreground="Orchid" FontFamily="Consolas" FontSize="10" Margin="0,4,0,0"
+                   Foreground="Orchid" FontFamily="Consolas" FontSize="10" Margin="0,2,0,0"
                    IsVisible="{Binding BottomPanel.Analysis.Eye.MetricsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    TextWrapping="NoWrap"/>
-
-        <!-- Export -->
-        <Button Content="Export CSV"
-                Command="{Binding BottomPanel.Analysis.Eye.ExportCsvCommand}"
-                Width="110" Margin="0,5,0,0" Background="#3d3d5d"
-                IsVisible="{Binding BottomPanel.Analysis.Eye.HasResult}"/>
     </StackPanel>
 
 </UserControl>

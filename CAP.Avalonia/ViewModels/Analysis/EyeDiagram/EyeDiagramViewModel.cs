@@ -100,17 +100,19 @@ public partial class EyeDiagramViewModel : ObservableObject
 
         try
         {
-            var (histogram, metrics) = await Task.Run(RunAnalysisCore);
-            _lastHistogram = histogram;
-            PlotModel = EyeDiagramPlotBuilder.BuildPlotModel(histogram);
-            MetricsText = FormatMetrics(metrics);
+            var outcome = await Task.Run(RunAnalysisCore);
+            if (outcome.Error != null || outcome.Histogram == null)
+            {
+                // Expected "can't run" conditions (no light source / no output traces) are surfaced
+                // as a status, not thrown — so they don't break under the debugger (#535/#570).
+                StatusText = outcome.Error ?? "Eye analysis produced no result.";
+                return;
+            }
+            _lastHistogram = outcome.Histogram;
+            PlotModel = EyeDiagramPlotBuilder.BuildPlotModel(outcome.Histogram);
+            MetricsText = FormatMetrics(outcome.Metrics!);   // non-null when Histogram != null
             OnPropertyChanged(nameof(HasResult));
             StatusText = "Done";
-        }
-        catch (InvalidOperationException ex)
-        {
-            StatusText = $"Cannot run: {ex.Message}";
-            _errorConsole?.LogError($"Eye-diagram analysis blocked: {ex.Message}", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -153,7 +155,11 @@ public partial class EyeDiagramViewModel : ObservableObject
         }
     }
 
-    private (EyeHistogram Histogram, EyeMetrics Metrics) RunAnalysisCore()
+    /// <summary>Outcome of an eye run: either a result, or a user-facing <see cref="Error"/>
+    /// for an expected "can't run" condition (no light source / no output traces).</summary>
+    private sealed record EyeRunOutcome(EyeHistogram? Histogram, EyeMetrics? Metrics, string? Error);
+
+    private EyeRunOutcome RunAnalysisCore()
     {
         var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
 
@@ -172,9 +178,12 @@ public partial class EyeDiagramViewModel : ObservableObject
             signals[used.AttachedComponentPinId] = PrbsGenerator.ToNrzSamples(bits, plan.SamplesPerBit, amplitude);
         }
         if (signals.Count == 0)
-            throw new InvalidOperationException("No light source found — place an input coupler.");
+            return new EyeRunOutcome(null, null, "No light source found — place an input coupler (e.g. a grating/edge coupler).");
 
         var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
+        if (result.PinTraces.Count == 0)
+            return new EyeRunOutcome(null, null,
+                "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
         var trace = SelectStrongestTrace(result);
 
         // No time bin can be finer than one sample, otherwise bins stay empty.
@@ -187,15 +196,12 @@ public partial class EyeDiagramViewModel : ObservableObject
         var metrics = BerEstimator.Estimate(
             trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, threshold, noise, timeBins);
 
-        return (histogram, metrics);
+        return new EyeRunOutcome(histogram, metrics, null);
     }
 
-    private static double[] SelectStrongestTrace(TimeDomainResult result)
-    {
-        if (result.PinTraces.Count == 0)
-            throw new InvalidOperationException("Simulation produced no output traces.");
-        return result.PinTraces.Values.OrderByDescending(t => t.Length == 0 ? 0 : t.Max()).First();
-    }
+    /// <summary>Picks the highest-peak output trace. The caller guarantees at least one exists.</summary>
+    private static double[] SelectStrongestTrace(TimeDomainResult result) =>
+        result.PinTraces.Values.OrderByDescending(t => t.Length == 0 ? 0 : t.Max()).First();
 
     private static string FormatMetrics(EyeMetrics metrics)
     {
