@@ -5,6 +5,26 @@
   "foundry": "Demo Foundry",
   "version": "2.0.0",
   "defaultWavelengthNm": 1550,
+  "process": {
+    "name": "Demo SOI 220nm",
+    "foundry": "Demo Foundry",
+    "coreThicknessNm": 220,
+    "layers": [],
+    "xsections": [],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": []
+  },
   "components": [
     {
       "name": "1x2 MMI Splitter",
@@ -444,7 +464,7 @@
       }
     },
     {
-      "name": "Straight Waveguide 100\u00C2\u00B5m",
+      "name": "Straight Waveguide 100\u00B5m",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.strt",
       "nazcaParameters": "length=100",
@@ -479,14 +499,14 @@
       }
     },
     {
-      "name": "90\u00C2\u00B0 Bend",
+      "name": "90\u00B0 Bend",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.bend",
       "nazcaParameters": "angle=90",
       "widthMicrometers": 209.4,
       "heightMicrometers": 209.4,
       "nazcaOriginOffsetX": 0,
-      "nazcaOriginOffsetY": 9.400000000000006,
+      "nazcaOriginOffsetY": 200,
       "pins": [
         {
           "name": "a0",

@@ -98,29 +98,97 @@ public class UpdateCheckerTests
     }
 
     [Fact]
-    public void FindPlatformAsset_AllPlatformAssetsPresent_ReturnsCorrectAssetForCurrentOS()
+    public void FindPlatformAsset_MultiPlatformRelease_PicksCurrentOsInstaller()
     {
-        var release = new GitHubReleaseInfo
-        {
-            TagName = "v1.5.0",
-            Assets = new List<GitHubReleaseAsset>
-            {
-                new() { Name = "Lunima-1.5.0.msi",    BrowserDownloadUrl = "https://example.com/Lunima.msi" },
-                new() { Name = "Lunima-1.5.0.dmg",    BrowserDownloadUrl = "https://example.com/Lunima.dmg" },
-                new() { Name = "Lunima-1.5.0.tar.gz", BrowserDownloadUrl = "https://example.com/Lunima.tar.gz" },
-            }
-        };
+        var release = ReleaseWithAllPlatformAssets();
 
         var asset = UpdateChecker.FindPlatformAsset(release);
 
         asset.ShouldNotBeNull();
         if (OperatingSystem.IsWindows())
-            asset!.Name.ShouldEndWith(".msi");
+            asset!.Name.EndsWith(".msi").ShouldBeTrue();
         else if (OperatingSystem.IsMacOS())
-            asset!.Name.ShouldEndWith(".dmg");
+            asset!.Name.EndsWith(".dmg").ShouldBeTrue();
         else
-            asset!.Name.ShouldEndWith(".tar.gz");
+            asset!.Name.EndsWith(".tar.gz").ShouldBeTrue();
     }
+
+    [Fact]
+    public void FindPlatformAsset_OnNonWindows_NeverReturnsTheWindowsMsi()
+    {
+        // Regression for #610: on macOS/Linux the updater used the platform-blind
+        // FindMsiAsset, which matched the Windows .msi shipped alongside the .dmg/.tar.gz.
+        // It downloaded that .msi, handed it to the OS (which cannot install it), and quit
+        // the app — presenting as a crash with the update never applied.
+        if (OperatingSystem.IsWindows()) return;
+
+        var asset = UpdateChecker.FindPlatformAsset(ReleaseWithAllPlatformAssets());
+
+        asset.ShouldNotBeNull();
+        asset!.Name.EndsWith(".msi").ShouldBeFalse();
+    }
+
+    /// <summary>Mirrors a real Lunima release: a Windows .msi, a Windows portable .zip,
+    /// a macOS .dmg, and a Linux .tar.gz, all present at once.</summary>
+    private static GitHubReleaseInfo ReleaseWithAllPlatformAssets() => new()
+    {
+        TagName = "v0.9.0",
+        Assets = new List<GitHubReleaseAsset>
+        {
+            new() { Name = "Lunima-0.9.0-linux-x64.tar.gz", BrowserDownloadUrl = "https://example.com/Lunima-0.9.0-linux-x64.tar.gz" },
+            new() { Name = "Lunima-0.9.0-osx-arm64.dmg",    BrowserDownloadUrl = "https://example.com/Lunima-0.9.0-osx-arm64.dmg" },
+            new() { Name = "Lunima-0.9.0-win-x64.zip",      BrowserDownloadUrl = "https://example.com/Lunima-0.9.0-win-x64.zip" },
+            new() { Name = "Lunima-Setup-0.9.0.msi",        BrowserDownloadUrl = "https://example.com/Lunima-Setup-0.9.0.msi" },
+        }
+    };
+
+    [Fact]
+    public void FindAutoUpdateAsset_PicksCurrentOsAutoUpdateArtifact()
+    {
+        var asset = UpdateChecker.FindAutoUpdateAsset(ReleaseWithAutoUpdateAssets());
+
+        if (OperatingSystem.IsWindows())
+        {
+            // Windows in-place self-update is deferred; the ViewModel falls back to the manual MSI.
+            asset.ShouldBeNull();
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            asset.ShouldNotBeNull();
+            asset!.Name.EndsWith(".zip").ShouldBeTrue();
+        }
+        else
+        {
+            asset.ShouldNotBeNull();
+            asset!.Name.EndsWith(".tar.gz").ShouldBeTrue();
+        }
+    }
+
+    [Fact]
+    public void FindAutoUpdateAsset_OnMac_ChoosesTheArchAppZip_NotTheWindowsZip()
+    {
+        if (!OperatingSystem.IsMacOS()) return;
+
+        var asset = UpdateChecker.FindAutoUpdateAsset(ReleaseWithAutoUpdateAssets());
+
+        asset.ShouldNotBeNull();
+        asset!.Name.ShouldContain("osx");   // the macOS .app zip, never the Windows portable .zip
+    }
+
+    /// <summary>A release carrying every auto-update artifact: the macOS arch zips, the Linux
+    /// tarball, the Windows portable zip, and the Windows MSI, all at once.</summary>
+    private static GitHubReleaseInfo ReleaseWithAutoUpdateAssets() => new()
+    {
+        TagName = "v0.9.0",
+        Assets = new List<GitHubReleaseAsset>
+        {
+            new() { Name = "Lunima-0.9.0-osx-arm64.zip", BrowserDownloadUrl = "https://example.com/a.zip" },
+            new() { Name = "Lunima-0.9.0-osx-x64.zip", BrowserDownloadUrl = "https://example.com/b.zip" },
+            new() { Name = "Lunima-0.9.0-linux-x64.tar.gz", BrowserDownloadUrl = "https://example.com/c.tar.gz" },
+            new() { Name = "Lunima-0.9.0-win-x64.zip", BrowserDownloadUrl = "https://example.com/d.zip" },
+            new() { Name = "Lunima-Setup-0.9.0.msi", BrowserDownloadUrl = "https://example.com/e.msi" },
+        }
+    };
 
     [Fact]
     public void FindPlatformAsset_EmptyAssets_ReturnsNull()

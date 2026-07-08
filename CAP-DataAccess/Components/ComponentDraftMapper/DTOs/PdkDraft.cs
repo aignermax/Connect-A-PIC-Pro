@@ -45,6 +45,18 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public int DefaultWavelengthNm { get; set; } = 1550;
 
         /// <summary>
+        /// True for a process-agnostic tool/utility library (e.g. "Analysis Tools":
+        /// virtual analyzers; and packaged/heterogeneous parts). Its components are usable
+        /// on any chip regardless of the active fabrication process (issue #570).
+        /// Omitted from serialized output when false, so the many existing bundled PDKs
+        /// that don't set it round-trip through <c>PdkJsonSaver</c> byte-for-byte
+        /// (see <c>PdkJsonSaverRoundTripTests</c>).
+        /// </summary>
+        [JsonPropertyName("processAgnostic")]
+        [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+        public bool ProcessAgnostic { get; set; }
+
+        /// <summary>
         /// Python module name for Nazca import (e.g., "amf", "imec").
         /// Used to generate: import {nazcaModuleName} as pdk
         /// </summary>
@@ -67,6 +79,30 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("process")]
         public ProcessDefinition? Process { get; set; }
+
+        /// <summary>
+        /// Layout backend the PDK's components are drawn/exported with: <c>"nazca"</c>
+        /// (default when absent) or <c>"gdsfactory"</c>. gdsfactory-backend components carry a
+        /// <see cref="PdkComponentDraft.GdsFactoryFunction"/> instead of a Nazca function, export
+        /// via the gdsfactory path (not Nazca), and are exempt from Nazca-only requirements such
+        /// as <c>nazcaOriginOffset</c>. Nullable so existing Nazca PDK files round-trip unchanged.
+        /// </summary>
+        [JsonPropertyName("backend")]
+        public string? Backend { get; set; }
+
+        /// <summary>
+        /// gdsfactory cross-section name used to route waveguides between this PDK's components
+        /// (e.g. <c>"xs_nc"</c> — CornerStone SiN C-band, 1.2 µm). gdsfactory-backend only; the
+        /// generic <c>"strip"</c> default does not exist under a nitride PDK, so routed
+        /// straights/bends must name the PDK's own cross-section (#570 field-test fix).
+        /// </summary>
+        [JsonPropertyName("gdsFactoryRoutingCrossSection")]
+        public string? GdsFactoryRoutingCrossSection { get; set; }
+
+        /// <summary>True when this PDK's components are gdsfactory-native (see <see cref="Backend"/>).</summary>
+        [JsonIgnore]
+        public bool IsGdsFactoryBackend =>
+            string.Equals(Backend, "gdsfactory", System.StringComparison.OrdinalIgnoreCase);
 
         /// <summary>
         /// List of component definitions in this PDK.
@@ -94,10 +130,19 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public string Category { get; set; } = "General";
 
         /// <summary>
-        /// Nazca function name to call (e.g., "pdk.mmi2x2").
+        /// Nazca function name to call (e.g., "pdk.mmi2x2"). Null/empty for gdsfactory-backend
+        /// components (they carry <see cref="GdsFactoryFunction"/> instead).
         /// </summary>
         [JsonPropertyName("nazcaFunction")]
         public string NazcaFunction { get; set; }
+
+        /// <summary>
+        /// gdsfactory factory name for gdsfactory-backend PDKs (e.g. "cspdk.sin300.mmi1x2").
+        /// Used to place/export the component via the gdsfactory path instead of Nazca.
+        /// Null for Nazca components.
+        /// </summary>
+        [JsonPropertyName("gdsFactoryFunction")]
+        public string? GdsFactoryFunction { get; set; }
 
         /// <summary>
         /// Optional Nazca function parameters as string (e.g., "length=50, width=5").

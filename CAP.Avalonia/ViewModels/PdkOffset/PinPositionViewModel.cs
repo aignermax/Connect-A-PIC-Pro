@@ -24,8 +24,9 @@ public class PinPositionViewModel
 
     /// <summary>
     /// Pin Y position relative to the Nazca cell origin in Nazca coordinate space.
-    /// Computed as: (ComponentHeight - LocalY) - NazcaOriginOffsetY
-    /// Note: Y is flipped because Nazca uses a top-down Y axis vs Lunima's bottom-up.
+    /// Computed as: NazcaOriginOffsetY - LocalY (mapper convention: the offset is
+    /// the bbox top edge above the cell org, and Nazca's Y axis is flipped
+    /// relative to Lunima's y-down screen space).
     /// </summary>
     public double NazcaRelY { get; }
 
@@ -48,14 +49,12 @@ public class PinPositionViewModel
     /// <param name="pinName">Pin identifier.</param>
     /// <param name="localX">Pin X offset in µm from component origin.</param>
     /// <param name="localY">Pin Y offset in µm from component origin.</param>
-    /// <param name="componentHeight">Component height in µm (for Y-flip).</param>
     /// <param name="nazcaOffsetX">Current NazcaOriginOffsetX in µm.</param>
     /// <param name="nazcaOffsetY">Current NazcaOriginOffsetY in µm.</param>
     public PinPositionViewModel(
         string pinName,
         double localX,
         double localY,
-        double componentHeight,
         double nazcaOffsetX,
         double nazcaOffsetY)
     {
@@ -63,7 +62,7 @@ public class PinPositionViewModel
         LocalX = localX;
         LocalY = localY;
         NazcaRelX = localX - nazcaOffsetX;
-        NazcaRelY = (componentHeight - localY) - nazcaOffsetY;
+        NazcaRelY = nazcaOffsetY - localY;
     }
 }
 

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -65,6 +66,35 @@ public partial class FileOperationsViewModel : ObservableObject
     private bool _hasUnsavedChanges;
 
     /// <summary>
+    /// The fabrication process this design is currently locked to (issue #570).
+    /// Null means no components have been placed yet. Set via <see cref="SetActiveProcess"/>
+    /// (from the New-Design dialog or the process picker), restored on load, or migrated
+    /// from a legacy file's placed-component PDK sources.
+    /// </summary>
+    [ObservableProperty]
+    private ActiveProcessSelection? _activeProcess;
+
+    /// <summary>
+    /// Supplies the current set of installable/loaded process groups. Wired by DI/MainViewModel
+    /// to the live PDK catalog; used to migrate legacy files that predate single-process support.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
+    /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
+    /// analyzer-only tool PDKs never count toward a legacy design's process attribution
+    /// (issue #570 final review).
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? ProcessAgnosticPdkNamesProvider { get; set; }
+
+    /// <summary>
+    /// Callback invoked when loading a legacy file requires falling back to Playground
+    /// because its components could not be attributed to a single installed process.
+    /// </summary>
+    public Action<string>? OnProcessMigrationWarning { get; set; }
+
+    /// <summary>
     /// ViewModel for GDS export functionality.
     /// </summary>
     public GdsExportViewModel GdsExport { get; }
@@ -117,6 +147,13 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Wired by <see cref="MainViewModel"/>; null in headless contexts.
     /// </summary>
     public Func<Type?, Task>? ShowSettingsWindow { get; set; }
+
+    /// <summary>
+    /// Launches the gdsfactory export flow. Wired by <see cref="MainViewModel"/>; invoked when
+    /// the user, prompted about gdsfactory-native components in a Nazca export, chooses to use
+    /// the gdsfactory export instead. Null in headless contexts.
+    /// </summary>
+    public Func<Task>? RequestGdsFactoryExport { get; set; }
 
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
@@ -216,6 +253,23 @@ public partial class FileOperationsViewModel : ObservableObject
     public void ReapplyTemplateOverrides()
     {
         ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
+    }
+
+    /// <summary>
+    /// Sets the active process this design is locked to (issue #570), e.g. from the
+    /// New-Design dialog or a process-picker action.
+    /// </summary>
+    /// <param name="selection">The process to lock the design to (or Playground).</param>
+    /// <param name="markDirty">
+    /// False for the startup / New-Design picker: choosing the baseline process of a
+    /// pristine empty design is not an unsaved change, and marking it dirty made every
+    /// fresh launch answer a spurious "Save changes?" prompt.
+    /// </param>
+    public void SetActiveProcess(ActiveProcessSelection? selection, bool markDirty = true)
+    {
+        ActiveProcess = selection;
+        if (markDirty)
+            HasUnsavedChanges = true;
     }
 
     [RelayCommand]
@@ -333,6 +387,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
+            designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -431,20 +486,8 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Finds the PDK source for a component by matching its NazcaFunctionName against the library.
     /// Returns null if no match is found.
     /// </summary>
-    private string? FindTemplatePdkSource(Component component)
-    {
-        var nazcaFunc = component.NazcaFunctionName;
-        if (string.IsNullOrEmpty(nazcaFunc))
-            return null;
-
-        var match = _componentLibrary.FirstOrDefault(t =>
-        {
-            var templateFunc = t.NazcaFunctionName
-                ?? $"nazca_{t.Name.ToLower().Replace(" ", "_")}";
-            return templateFunc == nazcaFunc;
-        });
-        return match?.PdkSource;
-    }
+    private string? FindTemplatePdkSource(Component component) =>
+        ComponentPdkSourceResolver.Resolve(component, _componentLibrary);
 
     /// <summary>
     /// Recursively serializes a ComponentGroup and all its nested child groups.
@@ -757,6 +800,31 @@ public partial class FileOperationsViewModel : ObservableObject
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
 
+                // Restore the active process (issue #570), or infer one for legacy files
+                // that predate single-process support from the placed components' PDKs.
+                var storedProcess = ActiveProcessResolver.FromData(designData.ActiveProcess);
+                if (storedProcess != null)
+                {
+                    // Re-anchor the stored snapshot to the installed catalog: compatible
+                    // PDKs installed since the save join the process, and a design whose
+                    // PDKs are missing warns instead of silently bricking the library.
+                    var installedCatalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    ActiveProcess = ActiveProcessResolver.Revalidate(
+                        storedProcess, installedCatalog, out var revalidationWarning);
+                    if (revalidationWarning != null)
+                        OnProcessMigrationWarning?.Invoke(revalidationWarning);
+                }
+                else
+                {
+                    var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    var pdkSources = designData.Components.Select(c => c.PdkSource)
+                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                                ?? Enumerable.Empty<string?>());
+                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
+                        ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
+                    if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
+                }
+
                 // Restore imported S-matrices from PIR section
                 StoredSMatrices.Clear();
                 if (designData.SMatrices != null)
@@ -848,7 +916,16 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Exits group edit mode if active before clearing the canvas.
     /// </summary>
     [RelayCommand]
-    private async Task NewProject()
+    private async Task NewProject() => await TryNewProjectAsync();
+
+    /// <summary>
+    /// Command body of File → New, returning whether the new project was actually
+    /// created. False means the user cancelled (save prompt or save dialog) and the
+    /// current design is untouched — callers such as the process picker must NOT
+    /// proceed in that case. An empty canvas is no substitute for this signal: the
+    /// canvas can be empty while the operation was still cancelled.
+    /// </summary>
+    public async Task<bool> TryNewProjectAsync()
     {
         // Check if there are unsaved changes
         if (HasUnsavedChanges && MessageBoxService != null)
@@ -865,13 +942,13 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (HasUnsavedChanges)
                 {
                     // User cancelled the save dialog, so cancel new project
-                    return;
+                    return false;
                 }
             }
             else if (result == SavePromptResult.Cancel)
             {
                 // User cancelled, do nothing
-                return;
+                return false;
             }
             // DontSave: continue to clear
         }
@@ -892,6 +969,7 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+        return true;
     }
 
     /// <summary>
@@ -1255,6 +1333,41 @@ public partial class FileOperationsViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// When the design contains gdsfactory-native components (a Nazca script can't express
+    /// them), asks the user whether to export to Nazca anyway (omitting them) or switch to the
+    /// gdsfactory export. Returns true to proceed with the Nazca export, false to cancel.
+    /// A pure Nazca design (or a headless run with no message box) proceeds without prompting.
+    /// </summary>
+    private async Task<bool> ConfirmNazcaExportDropsGdsFactoryComponentsAsync()
+    {
+        var gdsFactory = CAP.Avalonia.Services.GdsFactoryExport.NazcaExportGuard
+            .CollectGdsFactoryNativeComponents(_canvas);
+        if (gdsFactory.Count == 0 || MessageBoxService == null)
+            return true;
+
+        var message =
+            $"{gdsFactory.Count} component(s) in this design are gdsfactory-native (e.g. CornerStone "
+            + "SiN) and cannot be written to a Nazca script — they would be omitted from the export. "
+            + "Use the gdsfactory export to include them.\n\nExport to Nazca anyway?";
+        const int switchToGdsFactoryIndex = 0;
+        const int exportAnywayIndex = 1;
+        var choice = await MessageBoxService.ShowChoicePromptAsync(
+            message, "gdsfactory components will be omitted",
+            new[] { "Use gdsfactory export instead", "Export to Nazca anyway" });
+
+        if (choice == exportAnywayIndex)
+            return true;
+
+        // "Use gdsfactory export instead" — cancel this Nazca export and open the gdsfactory
+        // export flow so the user isn't left with nothing happening. A dismissed dialog just cancels.
+        if (choice == switchToGdsFactoryIndex && RequestGdsFactoryExport != null)
+            await RequestGdsFactoryExport();
+        else
+            UpdateStatus?.Invoke("Nazca export cancelled — use the gdsfactory export for this design.");
+        return false;
+    }
+
     [RelayCommand]
     private async Task ExportNazca()
     {
@@ -1269,6 +1382,12 @@ public partial class FileOperationsViewModel : ObservableObject
             UpdateStatus?.Invoke("Nothing to export - add some components first");
             return;
         }
+
+        // A gdsfactory-native design (e.g. CornerStone SiN) cannot be expressed in a Nazca
+        // script — those components would be silently omitted. Make the user choose consciously:
+        // continue anyway, or switch to the gdsfactory export that can include them (#570).
+        if (!await ConfirmNazcaExportDropsGdsFactoryComponentsAsync())
+            return;
 
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to Nazca Python",
@@ -1296,6 +1415,18 @@ public partial class FileOperationsViewModel : ObservableObject
                 // Export Python script
                 var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
+
+                // Warn if any instance has a gdsfactory-backend override: the Nazca export
+                // can't run gdsfactory code, so those instances use their PDK cell here.
+                var gfOverrides = StoredNazcaOverrides
+                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.RawCode)
+                                 && kv.Value.Backend == CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory)
+                    .Select(kv => kv.Key).ToList();
+                if (gfOverrides.Count > 0)
+                    _errorConsole?.LogWarning(
+                        $"Nazca export: {gfOverrides.Count} instance(s) have a gdsfactory override "
+                        + $"not applied here (PDK geometry used instead): {string.Join(", ", gfOverrides)}. "
+                        + "Use the gdsfactory export to honour them.");
 
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.

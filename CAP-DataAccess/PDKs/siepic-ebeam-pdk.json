@@ -6,6 +6,26 @@
   "version": "0.5.4",
   "defaultWavelengthNm": 1550,
   "nazcaModuleName": "siepic_ebeam_pdk",
+  "process": {
+    "name": "SiEPIC EBeam SOI 220nm",
+    "foundry": "Applied Nanotools",
+    "coreThicknessNm": 220,
+    "layers": [],
+    "xsections": [],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": []
+  },
   "components": [
     {
       "name": "Y-Branch 1550",
@@ -4517,7 +4537,7 @@
           "name": "port 2",
           "offsetXMicrometers": 0.7599999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 180
+          "angleDegrees": 90
         },
         {
           "name": "port 3",
@@ -4529,7 +4549,7 @@
           "name": "port 4",
           "offsetXMicrometers": 20.759999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 0
+          "angleDegrees": 90
         }
       ],
       "sMatrix": {

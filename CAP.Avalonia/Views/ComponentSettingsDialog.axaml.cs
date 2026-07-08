@@ -52,13 +52,15 @@ public partial class ComponentSettingsDialog : Window
         });
     }
 
-    /// <summary>Opens the Nazca Design manual in the user's default browser (issue #556).</summary>
+    /// <summary>Opens the backend-appropriate manual (Nazca or gdsfactory) in the browser.</summary>
     private void OnOpenNazcaDocs(object? sender, RoutedEventArgs e)
     {
         var launcher = TopLevel.GetTopLevel(this)?.Launcher;
         if (launcher == null)
             return;
-        _ = launcher.LaunchUriAsync(new Uri("https://nazca-design.org/manual/"));
+        var url = (DataContext as ComponentSettingsDialogViewModel)?.NazcaCodeEditor?.DocsUrl
+                  ?? "https://nazca-design.org/manual/";
+        _ = launcher.LaunchUriAsync(new Uri(url));
     }
 
     /// <summary>Copies the current preview error to the clipboard so it can be pasted into a report.</summary>

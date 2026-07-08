@@ -25,7 +25,8 @@ public static class PdkTemplateConverter
     public static ComponentTemplate ConvertToTemplate(
         PdkComponentDraft pdkComp,
         string pdkName,
-        string? nazcaModuleName)
+        string? nazcaModuleName,
+        string? gdsFactoryRoutingCrossSection = null)
     {
         var pinDefs = pdkComp.Pins.Select(p => new PinDefinition(
             p.Name,
@@ -46,6 +47,8 @@ public static class PdkTemplateConverter
             HeightMicrometers = pdkComp.HeightMicrometers,
             PinDefinitions = pinDefs,
             NazcaFunctionName = pdkComp.NazcaFunction,
+            GdsFactoryFunction = pdkComp.GdsFactoryFunction,
+            GdsFactoryRoutingCrossSection = gdsFactoryRoutingCrossSection,
             NazcaParameters = pdkComp.NazcaParameters,
             HasSlider = pdkComp.Sliders?.Any() ?? false,
             SliderMin = pdkComp.Sliders?.FirstOrDefault()?.MinVal ?? 0,

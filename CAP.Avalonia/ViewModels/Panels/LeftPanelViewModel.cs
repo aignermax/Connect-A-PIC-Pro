@@ -9,6 +9,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -25,6 +26,13 @@ public partial class LeftPanelViewModel : ObservableObject
     private readonly PdkLoader _pdkLoader;
     private readonly UserPreferencesService _preferencesService;
     private readonly ErrorConsoleService? _errorConsole;
+
+    /// <summary>
+    /// Every PDK loaded into the library so far (bundled + user-imported), kept so
+    /// <see cref="GetLoadedPdkProcessEntries"/> can derive process fingerprints for
+    /// the single-process catalog (issue #570).
+    /// </summary>
+    private readonly List<PdkDraft> _loadedPdkDrafts = new();
 
     /// <summary>
     /// ViewModel for the hierarchy panel showing component tree structure.
@@ -176,10 +184,12 @@ public partial class LeftPanelViewModel : ObservableObject
             try
             {
                 var pdk = _pdkLoader.LoadFromFile(pdkFile);
+                _loadedPdkDrafts.Add(pdk);
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)
                 {
-                    var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
+                    var template = ConvertPdkComponentToTemplate(
+                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
                     AllTemplates.Add(template);
                     componentCount++;
                 }
@@ -291,6 +301,11 @@ public partial class LeftPanelViewModel : ObservableObject
 
     private void SavePdkFilterState()
     {
+        // A process-locked enable set is derived state (issue #570) — persisting it
+        // would permanently overwrite the user's own manual PDK selection.
+        if (!PdkManager.ManualTogglesEnabled)
+            return;
+
         var enabledPdks = PdkManager.GetEnabledPdkNames();
         _preferencesService.SetEnabledPdks(enabledPdks);
     }
@@ -361,6 +376,8 @@ public partial class LeftPanelViewModel : ObservableObject
                 return;
             }
 
+            _loadedPdkDrafts.Add(pdk);
+
             int addedCount = 0;
             foreach (var pdkComp in pdk.Components)
             {
@@ -374,6 +391,9 @@ public partial class LeftPanelViewModel : ObservableObject
             PdkManager.RegisterPdk(pdk.Name, filePath, false, addedCount);
             _preferencesService.AddUserPdkPath(filePath);
 
+            // A PDK imported while a process is locked must not escape the lock:
+            // re-apply so a foreign PDK registers disabled (issue #570).
+            ReapplyActiveProcessAfterPdkChange();
             FilterComponents();
             UpdateStatus?.Invoke($"Loaded PDK '{pdk.Name}' with {addedCount} components");
         }
@@ -384,6 +404,80 @@ public partial class LeftPanelViewModel : ObservableObject
         }
     }
 
-    private static ComponentTemplate ConvertPdkComponentToTemplate(PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName)
-        => PdkTemplateConverter.ConvertToTemplate(pdkComp, pdkName, nazcaModuleName);
+    private static ComponentTemplate ConvertPdkComponentToTemplate(
+        PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName,
+        string? gdsFactoryRoutingCrossSection = null)
+        => PdkTemplateConverter.ConvertToTemplate(
+            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
+
+    /// <summary>
+    /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).
+    /// Excludes process-agnostic tool PDKs (e.g. "Analysis Tools") — they are not a
+    /// fabrication process and must not appear as a selectable process in the catalog.
+    /// </summary>
+    public IReadOnlyList<PdkProcessEntry> GetLoadedPdkProcessEntries() =>
+        _loadedPdkDrafts.Where(d => !d.ProcessAgnostic)
+            .Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
+
+    /// <summary>
+    /// All currently loaded PDK drafts. The Fabrication Process details dialog reads the
+    /// members' <c>process</c> blocks from here so it always reflects the live PDK state
+    /// (issue #660) instead of keeping its own copy.
+    /// </summary>
+    public IReadOnlyList<PdkDraft> GetLoadedPdkDrafts() => _loadedPdkDrafts;
+
+    /// <summary>
+    /// Names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools" — virtual analyzers
+    /// and other tool libraries). These stay usable regardless of the active fabrication process
+    /// (issue #570).
+    /// </summary>
+    public IReadOnlyList<string> GetProcessAgnosticPdkNames() =>
+        _loadedPdkDrafts.Where(d => d.ProcessAgnostic).Select(d => d.Name).ToList();
+
+    /// <summary>
+    /// Drives the library filter to the active process's PDKs (issue #570). A real (non-Playground)
+    /// process locks the enabled set to its member PDKs plus any process-agnostic tool PDKs, and
+    /// disallows manual toggling; Playground or no selection restores manual control and brings the
+    /// user's own (persisted) enable selection back — the locked set is derived state and must
+    /// never replace it.
+    /// </summary>
+    public void ApplyActiveProcess(ActiveProcessSelection? active)
+    {
+        _lastAppliedProcess = active;
+        if (active is { IsPlayground: false })
+        {
+            // Order matters: the lock flag must be set BEFORE ApplyProcessLock — that call
+            // triggers FilterComponents → SavePdkFilterState, whose guard reads the flag.
+            // Reversed, the locked set would be persisted over the user's own selection.
+            PdkManager.ManualTogglesEnabled = false;
+            // Member + tool PDKs stay individually toggleable (library filtering);
+            // only foreign-process PDKs get their checkbox locked.
+            PdkManager.ApplyProcessLock(active.MemberPdkNames.Concat(GetProcessAgnosticPdkNames()));
+            FilterComponents();
+        }
+        else
+        {
+            PdkManager.ManualTogglesEnabled = true;
+            PdkManager.ClearProcessLock();
+            // Leaving a locked process: restore the user's persisted selection instead of
+            // keeping the previous process's enable set (which would silently hide every
+            // other PDK in Playground). RestorePdkFilterState already re-filters.
+            RestorePdkFilterState();
+            FilterComponents();
+        }
+    }
+
+    /// <summary>
+    /// The most recently applied process selection. Re-applied when a PDK is loaded
+    /// afterwards, so importing a PDK while a process is locked cannot slip foreign
+    /// components into the library (issue #570).
+    /// </summary>
+    private ActiveProcessSelection? _lastAppliedProcess;
+
+    /// <summary>Re-applies the current process lock after a PDK load/import.</summary>
+    internal void ReapplyActiveProcessAfterPdkChange()
+    {
+        if (_lastAppliedProcess is { IsPlayground: false })
+            ApplyActiveProcess(_lastAppliedProcess);
+    }
 }
