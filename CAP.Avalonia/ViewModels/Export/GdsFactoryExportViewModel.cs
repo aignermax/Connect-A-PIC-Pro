@@ -101,6 +101,26 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
+        // A GDS is one fabrication process. Playground lets you place components from different
+        // processes (e.g. CornerStone SiN + SiEPIC SOI) together, but they cannot be exported into
+        // one gdsfactory GDS — the script activates a single PDK and the foreign cells fail to
+        // resolve. Detect this up front and refuse with a clear message instead of a raw Python
+        // crash at runtime (#570).
+        var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
+            _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
+        if (backendConflicts.Count > 0)
+        {
+            var message =
+                "Cannot export: this design mixes incompatible fabrication processes ("
+                + string.Join(" + ", backendConflicts)
+                + "). A single GDS is one process — keep one PDK's components per design and export "
+                + "each separately. (Playground lets you place mixed components for experimentation, "
+                + "but they can't be exported together.)";
+            StatusText = message;
+            _errorConsole?.LogError(message);
+            return;
+        }
+
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to gdsfactory Python", "py", "Python Files|*.py|All Files|*.*");
         if (filePath == null)
