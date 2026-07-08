@@ -53,6 +53,41 @@ public class UiScreenshotTests
         TryCapture(() => new RoutingDiagnosticsPanel(), vm, 600, 700, outputDir, "RoutingDiagnosticsPanel.png", captured, skipped);
         TryCapture(() => new SelectedComponentPropertiesPanel(), vm, 450, 600, outputDir, "SelectedComponentPropertiesPanel.png", captured, skipped);
 
+        // Settings content: the environment manager moved from the Properties sidebar to a
+        // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).
+        // Seed one active, healthy managed environment so the unified list renders a real row
+        // (active marker + status badge + versions + Check / remove buttons) rather than the
+        // empty state (issue #645).
+        var envRegistry = new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentRegistry(
+            Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-registry-{Guid.NewGuid():N}.json"));
+        envRegistry.AddOrUpdate(new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironment
+        {
+            Name = "nazca",
+            VenvPath = Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca"),
+            Status = CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentStatus.Healthy,
+            PythonVersion = "3.11.9", NazcaVersion = "0.6.1", GdsFactoryVersion = "9.5.3", HasPyclipper = true,
+        });
+        // A second, inactive environment so the "Set Active" button state renders alongside
+        // the active "✓ Active" indicator.
+        envRegistry.AddOrUpdate(new CAP_Core.Export.PythonEnvironmentManager.PythonEnvironment
+        {
+            Name = "nazca-py312",
+            VenvPath = Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca-py312"),
+            Status = CAP_Core.Export.PythonEnvironmentManager.PythonEnvironmentStatus.Healthy,
+            PythonVersion = "3.12.4", NazcaVersion = "0.6.1", GdsFactoryVersion = null, HasPyclipper = true,
+        });
+        envRegistry.SetActive("nazca");
+        var envVm = new CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager.PythonEnvironmentManagerViewModel(
+            envRegistry,
+            new CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper(),
+            new CAP_Core.Export.PythonEnvironmentManager.NazcaPackageInstaller(),
+            new CAP_Core.Export.PythonEnvironmentManager.EnvironmentHealthChecker(
+                new CAP_Core.Export.PythonDiscoveryService()),
+            new CAP_Core.Export.PythonDiscoveryService(),
+            () => Path.Combine(CAP_Core.Export.PythonEnvironmentManager.UvBootstrapper.EnvironmentsBaseDir, "nazca",
+                OperatingSystem.IsWindows() ? @"Scripts\python.exe" : "bin/python"));
+        TryCapture(() => new PythonEnvironmentManagerPanel(), envVm, 500, 700, outputDir, "PythonEnvironmentManagerPanel.png", captured, skipped);
+
         foreach (var (name, reason) in skipped)
             Console.WriteLine($"[SKIPPED] {name}: {reason}");
 

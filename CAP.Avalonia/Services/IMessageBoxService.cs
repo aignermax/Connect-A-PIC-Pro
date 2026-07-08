@@ -23,4 +23,13 @@ public interface IMessageBoxService
     /// <param name="title">Dialog title</param>
     /// <returns>User's choice</returns>
     Task<SavePromptResult> ShowSavePromptAsync(string message, string title);
+
+    /// <summary>
+    /// Shows a dialog with one button per entry in <paramref name="buttonLabels"/>.
+    /// </summary>
+    /// <param name="message">Message to display.</param>
+    /// <param name="title">Dialog title.</param>
+    /// <param name="buttonLabels">Button captions, left to right.</param>
+    /// <returns>Index of the clicked button, or -1 if the dialog was closed.</returns>
+    Task<int> ShowChoicePromptAsync(string message, string title, IReadOnlyList<string> buttonLabels);
 }

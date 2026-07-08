@@ -42,7 +42,8 @@ public class InstanceNazcaCodeEditorViewModelTests
         Dictionary<string, NazcaCodeOverride>? store = null,
         Component? live = null,
         Func<double, double, IReadOnlyList<string>>? overlapCheck = null,
-        Action? onChanged = null)
+        Action? onChanged = null,
+        NazcaComponentPreviewService? gdsFactoryService = null)
     {
         return new InstanceNazcaCodeEditorViewModel(
             componentKey: "comp-1",
@@ -55,7 +56,51 @@ public class InstanceNazcaCodeEditorViewModelTests
             previewService: service,
             overlapCheck: overlapCheck,
             onDimensionsChanged: null,
-            onChanged: onChanged);
+            onChanged: onChanged,
+            gdsFactoryPreviewService: gdsFactoryService);
+    }
+
+    // ---------------------------------------------------------------------------
+    // Backend toggle (#637): gdsfactory routes to the gdsfactory preview service.
+    // ---------------------------------------------------------------------------
+
+    [Fact]
+    public async Task GdsFactoryBackend_RunPreview_UsesGdsFactoryServiceNotNazca()
+    {
+        var nazca = MockService();
+        nazca.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NazcaPreviewResult.Fail("nazca should not be called"));
+        var gf = MockService();
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OkResult(w: 25, h: 3));
+        var vm = BuildVm(nazca.Object, gdsFactoryService: gf.Object);
+
+        vm.UseGdsFactoryBackend = true;
+        vm.Code = "component = gf.components.straight(length=25)";
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        vm.IsValid.ShouldBeTrue();
+        gf.Verify(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
+        nazca.Verify(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Never);
+        vm.BackendHelp.ShouldContain("gdsfactory");
+    }
+
+    [Fact]
+    public async Task GdsFactoryBackend_Apply_TagsOverrideBackend()
+    {
+        var gf = MockService();
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(OkResult(w: 25, h: 3));
+        var store = new Dictionary<string, NazcaCodeOverride>();
+        var vm = BuildVm(MockService().Object, store: store, gdsFactoryService: gf.Object);
+
+        vm.UseGdsFactoryBackend = true;
+        vm.Code = "component = gf.components.straight(length=25)";
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        vm.ApplyOverrideCommand.Execute(null);
+
+        store["comp-1"].Backend.ShouldBe(OverrideBackend.GdsFactory);
+        store["comp-1"].RawCode.ShouldContain("gf.components.straight");
     }
 
     [Fact]

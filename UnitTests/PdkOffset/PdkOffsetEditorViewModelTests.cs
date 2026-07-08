@@ -1,9 +1,12 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
+using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+using Moq;
 using Shouldly;
 using System.IO;
+using System.Threading;
 
 namespace UnitTests.PdkOffset;
 
@@ -13,6 +16,57 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class PdkOffsetEditorViewModelTests
 {
+    [Fact]
+    public void BuildPreviewSource_GdsFactoryNativeDraft_EmitsFactoryCode_NotDemoCall()
+    {
+        // Before the fix, a gdsfactory-native draft (empty NazcaFunction) resolved to demo.(),
+        // whose Nazca render crashed the offset editor. It must now emit real gdsfactory code (#570).
+        var draft = new PdkComponentDraft
+        {
+            Name = "SiN MMI",
+            NazcaFunction = "",
+            GdsFactoryFunction = "cspdk.sin300.mmi1x2",
+        };
+
+        var source = PdkOffsetEditorViewModel.BuildPreviewSource(draft);
+
+        source.ShouldContain("import cspdk.sin300");
+        source.ShouldContain("component = gf.get_component('mmi1x2')");
+        source.ShouldNotContain("demo.()");   // the broken empty-function Nazca call
+    }
+
+    [Fact]
+    public async Task RenderForBatch_GdsFactoryNativeDraft_RoutesToGdsFactoryService_NotNazca()
+    {
+        // Check-All / Try-Fix-All render via RenderForBatch. It must use the same gdsfactory
+        // routing as the interactive path — otherwise every gdsfactory component reports
+        // RenderFailed ("module 'nazca.demofab' has no attribute ''") in the batch (#570).
+        var nazca = new Mock<NazcaComponentPreviewService>(
+            "py", "nazca.py", (System.TimeSpan?)null, (ProcessLaunchFactory?)null);
+        var gf = new Mock<NazcaComponentPreviewService>(
+            "py", "gf.py", (System.TimeSpan?)null, (ProcessLaunchFactory?)null);
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NazcaPreviewResult { Success = true });
+
+        var vm = new PdkOffsetEditorViewModel(
+            new PdkLoader(), new PdkJsonSaver(), new PdkManagerViewModel(), nazca.Object, gf.Object);
+        var draft = new PdkComponentDraft
+        {
+            Name = "SiN MMI",
+            NazcaFunction = "",
+            GdsFactoryFunction = "cspdk.sin300.mmi1x2",
+        };
+
+        var result = await vm.RenderForBatch(draft, CancellationToken.None);
+
+        result.ShouldNotBeNull();
+        result!.Success.ShouldBeTrue();
+        gf.Verify(s => s.RenderRawCodeAsync(
+            It.Is<string>(c => c.Contains("gf.get_component('mmi1x2')")), It.IsAny<CancellationToken>()), Times.Once);
+        nazca.Verify(s => s.RenderAsync(
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
     private static PdkDraft BuildTestPdk(string pdkName = "Test PDK") => new()
     {
         Name = pdkName,
@@ -155,26 +209,27 @@ public class PdkOffsetEditorViewModelTests
     [Fact]
     public void PinPosition_NazcaRelX_IsLocalXMinusOffsetX()
     {
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5, componentHeight: 20,
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5,
                                            nazcaOffsetX: 5, nazcaOffsetY: 10);
 
         pin.NazcaRelX.ShouldBe(-5.0);  // 0 - 5
     }
 
     [Fact]
-    public void PinPosition_NazcaRelY_UsesFlippedYMinusOffsetY()
+    public void PinPosition_NazcaRelY_IsOffsetYMinusLocalY()
     {
-        // NazcaRelY = (height - localY) - offsetY
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5, componentHeight: 20,
+        // Mapper convention: NazcaOriginOffsetY is the org's distance below
+        // the bbox top edge, so NazcaRelY = offsetY - localY.
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 5,
                                            nazcaOffsetX: 5, nazcaOffsetY: 10);
 
-        pin.NazcaRelY.ShouldBe(5.0);   // (20 - 5) - 10 = 5
+        pin.NazcaRelY.ShouldBe(5.0);   // 10 - 5 = 5
     }
 
     [Fact]
     public void PinPosition_WhenZeroOffset_NazcaRelXEqualsLocalX()
     {
-        var pin = new PinPositionViewModel("a0", localX: 15.0, localY: 5, componentHeight: 20,
+        var pin = new PinPositionViewModel("a0", localX: 15.0, localY: 5,
                                            nazcaOffsetX: 0, nazcaOffsetY: 0);
 
         pin.NazcaRelX.ShouldBe(15.0);
@@ -184,14 +239,14 @@ public class PdkOffsetEditorViewModelTests
     public void PinPosition_WithNegativeOffsetAndPinAtOrigin_ComputesCorrectly()
     {
         // Covers the negative-offset arithmetic path that the positive-only
-        // tests above skip. Pin at (0, 0), 10 µm-tall component, offset (-3, -4):
+        // tests above skip. Pin at (0, 0), offset (-3, -4):
         //   NazcaRelX = 0 - (-3) = 3
-        //   NazcaRelY = (10 - 0) - (-4) = 14
-        var pin = new PinPositionViewModel("a0", localX: 0, localY: 0, componentHeight: 10,
+        //   NazcaRelY = -4 - 0 = -4
+        var pin = new PinPositionViewModel("a0", localX: 0, localY: 0,
                                            nazcaOffsetX: -3, nazcaOffsetY: -4);
 
         pin.NazcaRelX.ShouldBe(3.0);
-        pin.NazcaRelY.ShouldBe(14.0);
+        pin.NazcaRelY.ShouldBe(-4.0);
     }
 
     // ─── PdkOffsetEditorViewModel ──────────────────────────────────────────────
@@ -314,11 +369,11 @@ public class PdkOffsetEditorViewModelTests
         vm.OffsetY = 0.0;
         vm.ApplyOffsetCommand.Execute(null);
 
-        // Pin a0: localX=0, localY=5, height=20, offset=(0,0)
+        // Pin a0: localX=0, localY=5, offset=(0,0)
         // NazcaRelX = 0 - 0 = 0
-        // NazcaRelY = (20 - 5) - 0 = 15
+        // NazcaRelY = 0 - 5 = -5 (mapper convention: offsetY - localY)
         vm.PinPositions[0].NazcaRelX.ShouldBe(0.0);
-        vm.PinPositions[0].NazcaRelY.ShouldBe(15.0);
+        vm.PinPositions[0].NazcaRelY.ShouldBe(-5.0);
     }
 
     [Fact]

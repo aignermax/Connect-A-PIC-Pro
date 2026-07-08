@@ -164,8 +164,11 @@ public class FileSizeLimitTests
 
     private static string GetRepositoryRoot()
     {
+        // `.git` is a directory in a normal checkout but a *file* in a git worktree.
         var dir = Directory.GetCurrentDirectory();
-        while (dir != null && !Directory.Exists(Path.Combine(dir, ".git")))
+        while (dir != null
+               && !Directory.Exists(Path.Combine(dir, ".git"))
+               && !File.Exists(Path.Combine(dir, ".git")))
         {
             dir = Directory.GetParent(dir)?.FullName;
         }

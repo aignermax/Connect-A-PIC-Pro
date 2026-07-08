@@ -28,12 +28,14 @@ public partial class App : Application
         services.AddUpdateFeature();
         services.AddAiAssistantFeature();
         services.AddExportFeature();
+        services.AddPythonEnvFeature();
         services.AddCoreServices();
         services.AddCanvasAndPanels();
         services.AddSettingsFeature();
         services.AddPdkOffsetFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
+        services.AddNotificationFeature();
 
         services.AddSingleton<MainViewModel>();
     }

@@ -27,6 +27,29 @@ public class ComponentClipboard
     public bool HasContent => _entries.Count > 0;
 
     /// <summary>
+    /// Resolves a component's PDK source from the loaded library when the ViewModel-level
+    /// <c>TemplatePdkSource</c> is missing (pasted copies, group children, undo-recreated
+    /// VMs). Wired by <c>MainViewModel</c>; null keeps the previous VM-only behaviour.
+    /// </summary>
+    public Func<Component, string?>? PdkSourceResolver { get; set; }
+
+    /// <summary>
+    /// PDK sources of every copied LEAF component, in copy order (issues #570/#653).
+    /// Groups are expanded to their recursive non-group children — a group carries no PDK
+    /// source of its own, and treating it as one entry let foreign-process components
+    /// smuggle past the paste guard. Lets callers (e.g.
+    /// <c>CanvasInteractionViewModel.PasteSelected</c>) check the active-process policy
+    /// against clipboard contents before executing the paste command.
+    /// </summary>
+    public IReadOnlyList<string?> PeekPdkSources() =>
+        _entries.SelectMany(e => e.OriginalComponent is ComponentGroup group
+                ? group.GetAllComponentsRecursive()
+                    .Where(child => child is not ComponentGroup)
+                    .Select(child => PdkSourceResolver?.Invoke(child))
+                : new[] { e.PdkSource ?? PdkSourceResolver?.Invoke(e.OriginalComponent) })
+            .ToList();
+
+    /// <summary>
     /// Copies the given components and their internal connections.
     /// </summary>
     public void Copy(
@@ -45,7 +68,11 @@ public class ComponentClipboard
                 comp.Component,
                 comp.TemplateName,
                 comp.X,
-                comp.Y));
+                comp.Y,
+                // Pasted copies, undo-recreated VMs and ungrouped children legitimately
+                // lack TemplatePdkSource — fall back to the library lookup so process
+                // enforcement never sees a false "built-in" (issue #570).
+                comp.TemplatePdkSource ?? PdkSourceResolver?.Invoke(comp.Component)));
         }
 
         // Capture internal connections (both endpoints inside selection)
@@ -182,7 +209,9 @@ public class ComponentClipboard
             }
 
             clonedComps.Add(cloned);
-            var vm = canvas.AddComponent(cloned, entry.TemplateName);
+            // Thread the PDK source onto the new VM — dropping it here made every
+            // pasted component read as "built-in" and bypass process enforcement (#570).
+            var vm = canvas.AddComponent(cloned, entry.TemplateName, entry.PdkSource);
             newComponents.Add(vm);
         }
 
@@ -336,7 +365,8 @@ public class ComponentClipboard
         Component OriginalComponent,
         string? TemplateName,
         double OriginalX,
-        double OriginalY);
+        double OriginalY,
+        string? PdkSource);
 
     /// <summary>
     /// Data stored for an internal connection between copied components.

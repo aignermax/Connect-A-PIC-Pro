@@ -48,6 +48,18 @@ public partial class GdsExportViewModel : ObservableObject
     [ObservableProperty]
     private string _pythonPathSource = string.Empty;
 
+    [ObservableProperty]
+    private ObservableCollection<ManagedEnvCandidate> _managedCandidates = new();
+
+    [ObservableProperty]
+    private bool _showNazcaInstallOffer;
+
+    [ObservableProperty]
+    private ObservableCollection<InterpreterOption> _interpreterOptions = new();
+
+    [ObservableProperty]
+    private bool _showCreateEnvironmentButton;
+
     /// <summary>
     /// True if both Python and Nazca are available and ready.
     /// </summary>
@@ -57,6 +69,18 @@ public partial class GdsExportViewModel : ObservableObject
     /// Callback to save Python path to preferences when changed.
     /// </summary>
     public Action<string?>? OnPythonPathChanged { get; set; }
+
+    /// <summary>
+    /// Supplies the managed environments that carry Nazca (wired by the DI layer;
+    /// the GDS-export slice never references the environment-manager slice directly).
+    /// </summary>
+    public Func<IReadOnlyList<ManagedEnvCandidate>>? ManagedEnvironmentsProvider { get; set; }
+
+    /// <summary>Activates a managed environment by name (wired by the DI layer).</summary>
+    public Action<string>? ActivateManagedEnvironment { get; set; }
+
+    /// <summary>Starts the default Nazca environment installation (wired by the DI layer).</summary>
+    public Action? RequestNazcaInstall { get; set; }
 
     private readonly ErrorConsoleService? _errorConsole;
 
@@ -71,9 +95,11 @@ public partial class GdsExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Initializes the ViewModel with saved preferences.
+    /// Initializes the ViewModel with saved preferences. A null path clears the
+    /// configuration (e.g. the active managed environment was deleted) so a stale
+    /// interpreter path never lingers; the next refresh picks a fallback.
     /// </summary>
-    /// <param name="savedPythonPath">Previously saved Python path from preferences.</param>
+    /// <param name="savedPythonPath">Previously saved Python path, or null to clear.</param>
     public void Initialize(string? savedPythonPath)
     {
         if (!string.IsNullOrEmpty(savedPythonPath))
@@ -81,7 +107,12 @@ public partial class GdsExportViewModel : ObservableObject
             CustomPythonPath = savedPythonPath;
             _exportService.SetCustomPythonPath(savedPythonPath);
             PythonPathSource = "Custom";
+            return;
         }
+
+        CustomPythonPath = string.Empty;
+        _exportService.SetCustomPythonPath(null);
+        PythonPathSource = string.Empty;
     }
 
     /// <summary>
@@ -127,6 +158,7 @@ public partial class GdsExportViewModel : ObservableObject
             }
 
             OnPropertyChanged(nameof(IsEnvironmentReady));
+            RefreshManagedCandidates();
         }
         catch (Exception ex)
         {
@@ -136,11 +168,144 @@ public partial class GdsExportViewModel : ObservableObject
             NazcaStatus = "✗ Check failed";
             _errorConsole?.LogError($"Python environment check failed: {ex.Message}", ex);
             OnPropertyChanged(nameof(IsEnvironmentReady));
+            RefreshManagedCandidates();
         }
         finally
         {
             IsChecking = false;
         }
+    }
+
+    /// <summary>
+    /// Rebuilds <see cref="ManagedCandidates"/> from <see cref="ManagedEnvironmentsProvider"/>
+    /// and recomputes whether the "install Nazca" offer should be shown (no Nazca in the
+    /// active interpreter AND no managed environment to switch to).
+    /// </summary>
+    public void RefreshManagedCandidates()
+    {
+        ManagedCandidates.Clear();
+        foreach (var candidate in ManagedEnvironmentsProvider?.Invoke() ?? Array.Empty<ManagedEnvCandidate>())
+            ManagedCandidates.Add(candidate);
+
+        ShowNazcaInstallOffer = !NazcaAvailable && ManagedCandidates.Count == 0;
+        // The one-click create stays available whenever no managed environment exists,
+        // even if a system Python happens to carry Nazca.
+        ShowCreateEnvironmentButton = ManagedCandidates.Count == 0;
+        RebuildInterpreterOptions();
+    }
+
+    /// <summary>
+    /// Rebuilds the unified interpreter list (managed environments first, then discovered
+    /// system Pythons), marking the entry that matches the configured interpreter path.
+    /// </summary>
+    private void RebuildInterpreterOptions()
+    {
+        InterpreterOptions.Clear();
+        foreach (var candidate in ManagedCandidates)
+            InterpreterOptions.Add(new InterpreterOption(
+                candidate.DisplayText,
+                candidate.PythonExecutable,
+                IsConfiguredPath(candidate.PythonExecutable),
+                candidate.Name));
+
+        foreach (var python in AvailablePythons)
+            InterpreterOptions.Add(new InterpreterOption(
+                $"{python.Source} · Python {python.PythonVersion ?? "?"} · Nazca {python.NazcaVersion ?? "—"}",
+                python.Path,
+                IsConfiguredPath(python.Path),
+                ManagedName: null));
+    }
+
+    private bool IsConfiguredPath(string path) =>
+        string.Equals(path, CustomPythonPath, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Selects an interpreter from the unified list: managed environments are activated
+    /// through the registry (persists + updates the running pipeline), system Pythons via
+    /// the classic path selection. Both re-check the environment afterwards.
+    /// </summary>
+    /// <param name="option">The interpreter the user clicked.</param>
+    [RelayCommand]
+    public async Task SelectInterpreter(InterpreterOption option)
+    {
+        if (option.ManagedName != null)
+        {
+            ActivateManagedEnvironment?.Invoke(option.ManagedName);
+            await CheckEnvironmentAsync();
+            return;
+        }
+
+        await SetPythonPathAsync(option.Path);
+    }
+
+    /// <summary>
+    /// One-stop refresh for the settings page: discovers system Pythons with Nazca
+    /// (auto-selecting the first hit when nothing is configured yet — the "first start"
+    /// default), then re-checks the configured interpreter and rebuilds the list.
+    /// </summary>
+    [RelayCommand]
+    public async Task RefreshInterpretersAsync()
+    {
+        await SearchForPythonAsync();
+        await CheckEnvironmentAsync();
+        await TrySelectFallbackInterpreterAsync();
+    }
+
+    /// <summary>
+    /// When no interpreter is configured — or the configured one no longer exists on
+    /// disk (e.g. its managed environment was deleted) — falls back to the first
+    /// available candidate (managed environments come first) instead of showing
+    /// "not found" while working alternatives sit in the list.
+    /// </summary>
+    public async Task TrySelectFallbackInterpreterAsync()
+    {
+        var configuredIsUsable = !string.IsNullOrEmpty(CustomPythonPath) && File.Exists(CustomPythonPath);
+        if (configuredIsUsable) return;
+
+        var fallback = InterpreterOptions.FirstOrDefault();
+        if (fallback != null)
+            await SelectInterpreter(fallback);
+    }
+
+    /// <summary>
+    /// Activates a managed environment: the registry callback (DI layer) persists the
+    /// interpreter and pushes it into this ViewModel, then the status is re-checked.
+    /// </summary>
+    /// <param name="candidate">The managed environment to activate.</param>
+    [RelayCommand]
+    public async Task SelectManagedEnvironment(ManagedEnvCandidate candidate)
+    {
+        ActivateManagedEnvironment?.Invoke(candidate.Name);
+        await CheckEnvironmentAsync();
+    }
+
+    /// <summary>Requests creation + installation of the default Nazca environment.</summary>
+    [RelayCommand]
+    public void InstallNazca() => RequestNazcaInstall?.Invoke();
+
+    /// <summary>
+    /// Decides how to proceed with GDS generation based on the current environment
+    /// state. Callers refresh the state (<see cref="CheckEnvironmentAsync"/>) first;
+    /// this method only maps state + user choice to a decision.
+    /// </summary>
+    /// <param name="messageBox">Dialog service; null (headless) proceeds like before.</param>
+    public async Task<GdsPreflightDecision> PreflightGdsAsync(Services.IMessageBoxService? messageBox)
+    {
+        if (!GenerateGdsEnabled || IsEnvironmentReady || messageBox == null)
+            return GdsPreflightDecision.Proceed;
+
+        var choice = await messageBox.ShowChoicePromptAsync(
+            "Nazca is required to generate a GDS file, but no Python environment with Nazca is available. "
+            + "The Nazca Python script itself has been exported.",
+            "Nazca required",
+            new[] { "Install Nazca now", "Open Settings", "Skip GDS" });
+
+        return choice switch
+        {
+            0 => GdsPreflightDecision.InstallRequested,
+            1 => GdsPreflightDecision.OpenSettingsRequested,
+            _ => GdsPreflightDecision.SkipGds,
+        };
     }
 
     /// <summary>
@@ -155,19 +320,33 @@ public partial class GdsExportViewModel : ObservableObject
         return result;
     }
 
+    private int _searchGeneration;
+
+    /// <summary>
+    /// Runs the actual interpreter discovery. Virtual so tests can substitute a
+    /// controllable discovery to exercise overlapping-search behavior.
+    /// </summary>
+    protected virtual Task<List<PythonDiscoveryService.PythonInstallation>> DiscoverPythonsAsync() =>
+        _discoveryService.DiscoverPythonWithNazcaAsync();
+
     /// <summary>
     /// Searches for Python installations with Nazca and updates the available list.
+    /// Starting a new search supersedes any still-running one: the stale run discards
+    /// its results, so rapid page switches can never duplicate the list.
     /// </summary>
     [RelayCommand]
     public async Task SearchForPythonAsync()
     {
+        var generation = ++_searchGeneration;
         IsSearching = true;
-        AvailablePythons.Clear();
 
         try
         {
-            var found = await _discoveryService.DiscoverPythonWithNazcaAsync();
+            var found = await DiscoverPythonsAsync();
+            if (generation != _searchGeneration)
+                return;   // a newer search owns the list now
 
+            AvailablePythons.Clear();
             foreach (var installation in found)
             {
                 AvailablePythons.Add(installation);
@@ -189,12 +368,16 @@ public partial class GdsExportViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            _errorConsole?.LogError($"Python discovery failed: {ex.Message}", ex);
-            PythonStatus = $"✗ Search failed: {ex.Message}";
+            if (generation == _searchGeneration)
+            {
+                _errorConsole?.LogError($"Python discovery failed: {ex.Message}", ex);
+                PythonStatus = $"✗ Search failed: {ex.Message}";
+            }
         }
         finally
         {
-            IsSearching = false;
+            if (generation == _searchGeneration)
+                IsSearching = false;
         }
     }
 

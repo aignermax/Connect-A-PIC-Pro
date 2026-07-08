@@ -82,11 +82,14 @@ public static class PdkOffsetCalibration
         MatchPinsByGreedyNearest(PdkComponentDraft draft, NazcaPreviewResult result)
     {
         var pairs = new List<(PhysicalPinDraft, NazcaPreviewPin)>();
+        // Lunima→Nazca projection per the NazcaCoordinateMapper contract:
+        // NazcaOriginOffsetY is the bbox TOP edge above the cell org (YMax),
+        // so a pin's cell-local Nazca position is (OffsetX - ox, oy - OffsetY).
         var projections = draft.Pins
             .Select(lp => (
                 lp,
                 x: lp.OffsetXMicrometers - (draft.NazcaOriginOffsetX ?? 0),
-                y: (draft.HeightMicrometers - lp.OffsetYMicrometers) - (draft.NazcaOriginOffsetY ?? 0)))
+                y: (draft.NazcaOriginOffsetY ?? 0) - lp.OffsetYMicrometers))
             .ToList();
         var availableNazca = result.Pins.ToList();
 
@@ -181,8 +184,13 @@ public static class PdkOffsetCalibration
         var pairs = MatchPinsByGreedyNearest(draft, result);
         draft.WidthMicrometers   = result.XMax - result.XMin;
         draft.HeightMicrometers  = result.YMax - result.YMin;
+        // Export contract (NazcaCoordinateMapper): the origin offset is the cell
+        // org measured from the bbox TOP-LEFT corner — ox = -XMin, oy = YMax.
+        // Writing -YMin here (the bottom edge) only coincides with YMax for
+        // Y-symmetric cells and shifted asymmetric ones (demo.shallow.bend:
+        // bbox Y ∈ [-9.4, 200]) by YMax + YMin ≈ 190.6 µm in the GDS (issue #635).
         draft.NazcaOriginOffsetX = -result.XMin;
-        draft.NazcaOriginOffsetY = -result.YMin;
+        draft.NazcaOriginOffsetY = result.YMax;
         foreach (var (lp, np) in pairs)
         {
             lp.OffsetXMicrometers = np.X - result.XMin;
@@ -229,7 +237,7 @@ public static class PdkOffsetCalibration
         {
             // Same projection as MatchPinsByGreedyNearest: Lunima→Nazca-space.
             var x = lp.OffsetXMicrometers - (draft.NazcaOriginOffsetX ?? 0);
-            var y = (draft.HeightMicrometers - lp.OffsetYMicrometers) - (draft.NazcaOriginOffsetY ?? 0);
+            var y = (draft.NazcaOriginOffsetY ?? 0) - lp.OffsetYMicrometers;
             var d = Math.Sqrt((np.X - x) * (np.X - x) + (np.Y - y) * (np.Y - y));
             if (d > worst) worst = d;
         }

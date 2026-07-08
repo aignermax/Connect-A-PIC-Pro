@@ -4,6 +4,14 @@ C# / Avalonia / MVVM photonic simulation tool. Stability, clarity, and architect
 
 ---
 
+## User Personas (UX North Star)
+
+**Before any UX/UI design, redesign, or feature-prioritization work, read [`docs/PERSONAS.md`](docs/PERSONAS.md).**
+
+It defines who Lunima is built for — Peter (Figma-precision GDS layout engineer), Priya (academic lab with own fab, GDSFactory + Tidy3D, measurement feedback), Mirko (full-stack system simulation, open formats, netlist export, photonic IR), and Ingrid (investor, demo path) — including per-persona design implications and the priority order when they conflict. Justify UX decisions against these personas in issues and PRs.
+
+---
+
 ## Implementation Guidelines: When to Include UI
 
 **User-Facing Features (with UI):** Keywords: "add button", "implement dialog", "user can", "add panel"
@@ -341,6 +349,7 @@ python scripts/compare_gds_coords.py /tmp/ref_coords.json /tmp/test_coords.json
 
 | Purpose | Path |
 |---------|------|
+| User personas (UX reference) | `docs/PERSONAS.md` |
 | DI container setup | `CAP.Avalonia/App.axaml.cs` |
 | Main ViewModel | `CAP.Avalonia/ViewModels/MainViewModel.cs` |
 | Main Window layout | `CAP.Avalonia/Views/MainWindow.axaml` |

@@ -31,4 +31,11 @@ public class GdsExportSettingsPage : ISettingsPage
     {
         ViewModel = gdsExportViewModel;
     }
+
+    /// <summary>
+    /// Navigating to this page refreshes the interpreter list automatically —
+    /// no manual "check environment" click needed.
+    /// </summary>
+    public void OnSelected() =>
+        ((GdsExportViewModel)ViewModel).RefreshInterpretersCommand.Execute(null);
 }

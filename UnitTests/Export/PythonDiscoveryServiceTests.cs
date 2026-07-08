@@ -107,7 +107,8 @@ public class PythonDiscoveryServiceTests
             Path = "/home/user/.venvs/nazca/bin/python",
             Source = "venv: nazca",
             PythonVersion = "3.12.3",
-            NazcaVersion = "0.6.1"
+            NazcaVersion = "0.6.1",
+            GdsFactoryVersion = "9.5.3"
         };
 
         // Act
@@ -117,25 +118,29 @@ public class PythonDiscoveryServiceTests
         displayText.ShouldContain("venv: nazca");
         displayText.ShouldContain("Python 3.12.3");
         displayText.ShouldContain("Nazca 0.6.1");
+        displayText.ShouldContain("gdsfactory 9.5.3");
     }
 
     [Fact]
-    public void PythonInstallation_DisplayText_HandlesNullVersions()
+    public void PythonInstallation_DisplayText_ShowsNotInstalledForAbsentPackages()
     {
-        // Arrange
+        // Both package slots are always shown so a Nazca-only interpreter is
+        // distinguishable from a gdsfactory-capable one at a glance (issue #645).
         var installation = new PythonDiscoveryService.PythonInstallation
         {
             Path = "/usr/bin/python3",
             Source = "System",
-            PythonVersion = null,
-            NazcaVersion = null
+            PythonVersion = "3.12.3",
+            NazcaVersion = "0.6.1",
+            GdsFactoryVersion = null
         };
 
         // Act
         var displayText = installation.DisplayText;
 
         // Assert
-        displayText.ShouldBe("System");
+        displayText.ShouldContain("Nazca 0.6.1");
+        displayText.ShouldContain("gdsfactory not installed");
     }
 
     [Fact]

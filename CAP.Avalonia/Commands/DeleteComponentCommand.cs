@@ -14,6 +14,7 @@ public class DeleteComponentCommand : IUndoableCommand
     private ComponentViewModel _componentViewModel;
     private readonly Component _component;
     private readonly string? _templateName;
+    private readonly string? _templatePdkSource;
     private readonly double _x;
     private readonly double _y;
     private readonly List<(WaveguideConnection connection, WaveguideConnectionViewModel vm)> _deletedConnections = new();
@@ -26,6 +27,7 @@ public class DeleteComponentCommand : IUndoableCommand
         _componentViewModel = componentViewModel;
         _component = componentViewModel.Component;
         _templateName = componentViewModel.TemplateName;
+        _templatePdkSource = componentViewModel.TemplatePdkSource;
         _x = componentViewModel.X;
         _y = componentViewModel.Y;
     }
@@ -57,10 +59,12 @@ public class DeleteComponentCommand : IUndoableCommand
 
     public void Undo()
     {
-        // Re-add the component (creates a new VM - update our reference for redo)
+        // Re-add the component (creates a new VM - update our reference for redo).
+        // Keep the PDK source: a VM recreated without it would read as "built-in"
+        // and slip through single-process enforcement on later copy/paste (#570).
         _component.PhysicalX = _x;
         _component.PhysicalY = _y;
-        _componentViewModel = _canvas.AddComponent(_component, _templateName);
+        _componentViewModel = _canvas.AddComponent(_component, _templateName, _templatePdkSource);
 
         // Re-add connections
         foreach (var (connection, _) in _deletedConnections)

@@ -1,0 +1,58 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:panels="using:CAP.Avalonia.Views.Panels"
+             x:Class="CAP.Avalonia.Views.Panels.AnalysisDockPanel"
+             x:DataType="vm:MainViewModel">
+
+    <!-- Analysis dock (collapsible, above the Error Console, #570/#535).
+         Hosts the Transient and Eye/BER tabs re-homed from the properties panel. -->
+    <Border Background="#161616" BorderThickness="0,1,0,0" BorderBrush="#3d3d3d">
+        <StackPanel>
+            <!-- Header bar: always visible, click to toggle -->
+            <DockPanel Height="26" Background="#252526">
+                <Button Command="{Binding BottomPanel.Analysis.ToggleCommand}"
+                        Background="Transparent"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
+                        Height="26" Padding="8,0"
+                        ToolTip.Tip="Toggle analysis dock">
+                    <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                        <TextBlock Text="▶" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
+                                   IsVisible="{Binding BottomPanel.Analysis.IsVisible, Converter={x:Static BoolConverters.Not}}"/>
+                        <TextBlock Text="▼" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
+                                   IsVisible="{Binding BottomPanel.Analysis.IsVisible}"/>
+                        <TextBlock Text="Analysis" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </DockPanel>
+
+            <!-- Resize grip: drag to change the dock height (#570 field feedback). -->
+            <Border x:Name="ResizeGrip"
+                    IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
+                    Height="5" Background="#3d3d3d" Cursor="SizeNorthSouth"
+                    ToolTip.Tip="Drag to resize the analysis dock"
+                    PointerPressed="ResizeGrip_PointerPressed"
+                    PointerMoved="ResizeGrip_PointerMoved"
+                    PointerReleased="ResizeGrip_PointerReleased"/>
+
+            <!-- Content area: only shown when IsVisible is true; height is user-adjustable. -->
+            <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
+                    Height="{Binding BottomPanel.Analysis.DockHeight}" Background="#161616">
+                <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}">
+                    <TabItem Header="Transient">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <panels:TimeDomainPanel/>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="Eye / BER">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <panels:EyeDiagramPanel/>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </Border>
+        </StackPanel>
+    </Border>
+
+</UserControl>
