@@ -232,6 +232,20 @@
           "offsetXMicrometers": 500,
           "offsetYMicrometers": 30,
           "angleDegrees": 0
+        },
+        {
+          "name": "elec1",
+          "offsetXMicrometers": 125,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "elec2",
+          "offsetXMicrometers": 375,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
@@ -323,6 +337,20 @@
           "offsetXMicrometers": 0,
           "offsetYMicrometers": 27.5,
           "angleDegrees": 180
+        },
+        {
+          "name": "anode",
+          "offsetXMicrometers": 35,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "cathode",
+          "offsetXMicrometers": 35,
+          "offsetYMicrometers": 55,
+          "angleDegrees": 90,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
