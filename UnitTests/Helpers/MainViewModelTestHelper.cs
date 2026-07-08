@@ -5,6 +5,7 @@ using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -148,8 +149,7 @@ public static class MainViewModelTestHelper
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
                 new GenericComponentEditorProvider()
-            }),
-            new TimeDomainViewModel());
+            }));
     }
 
     /// <summary>
@@ -168,6 +168,7 @@ public static class MainViewModelTestHelper
             commandManager,
             new WaveguideLengthViewModel(),
             new ElementLockViewModel(),
-            new ErrorConsoleViewModel(errorConsoleService));
+            new ErrorConsoleViewModel(errorConsoleService),
+            new AnalysisDockViewModel(new TimeDomainViewModel(), new EyeDiagramViewModel()));
     }
 }
