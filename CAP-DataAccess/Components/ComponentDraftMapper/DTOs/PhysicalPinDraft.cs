@@ -41,5 +41,13 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("logicalPinNumber")]
         public int? LogicalPinNumber { get; set; }
+
+        /// <summary>
+        /// Signal domain of the pin: "Optical" (default) or "Electrical".
+        /// Absent/null values in legacy PDKs are treated as optical.
+        /// Electrical pins correspond to GDS layer 1/11 (ElecRec) metal contacts.
+        /// </summary>
+        [JsonPropertyName("pinKind")]
+        public string? PinKind { get; set; }
     }
 }

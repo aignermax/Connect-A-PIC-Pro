@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Process;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -310,15 +311,20 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
         else
         {
-            if (_connectionStartPin != pin && _connectionStartPin.ParentComponent != pin.ParentComponent)
+            if (_connectionStartPin == pin || _connectionStartPin.ParentComponent == pin.ParentComponent)
+            {
+                UpdateStatus?.Invoke("Cannot connect pin to itself or same component");
+            }
+            else if (!PinKindHelper.AreKindsCompatible(_connectionStartPin, pin))
+            {
+                // Cross-domain connection (optical ↔ electrical) is physically meaningless — reject.
+                UpdateStatus?.Invoke(PinKindHelper.DescribeIncompatibility(_connectionStartPin, pin));
+            }
+            else
             {
                 var cmd = new CreateConnectionCommand(_canvas, _connectionStartPin, pin);
                 _commandManager.ExecuteCommand(cmd);
                 UpdateStatus?.Invoke($"Connected {_connectionStartPin.Name} to {pin.Name}");
-            }
-            else
-            {
-                UpdateStatus?.Invoke("Cannot connect pin to itself or same component");
             }
             _connectionStartPin = null;
         }
