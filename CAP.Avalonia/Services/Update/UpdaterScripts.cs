@@ -104,10 +104,16 @@ public static class UpdaterScripts
         echo "=== update OK ==="
         """;
 
+    // The Linux build is a portable single-file binary, so TARGET is wherever the user put it —
+    // possibly a folder that also holds unrelated files. The updater therefore replaces ONLY the
+    // files the new release ships (the entries under NEWDIR), file by file, and never moves or
+    // removes the TARGET directory itself. Any file in TARGET that is not part of the release is
+    // left untouched; the backup holds only the app files we replaced, so cleaning it up can
+    // never delete the user's data (issue #616).
     private const string LinuxTemplate =
         """
         #!/usr/bin/env bash
-        # Lunima in-place updater (Linux) — generated. Replaces the install directory and relaunches.
+        # Lunima in-place updater (Linux) — generated. Replaces the app's files in place and relaunches.
         set -uo pipefail
         OLD_PID=__OLD_PID__
         TARGET=__TARGET__
@@ -117,17 +123,23 @@ public static class UpdaterScripts
         exec >>"$LOG" 2>&1
         echo "=== lunima update $(date) pid=$OLD_PID target=$TARGET ==="
         PARENT="$(dirname "$TARGET")"
-        BACKUP="$TARGET.bak.$$"
+        BACKUP="$TARGET/.lunima-backup.$$"
         STAGEROOT="$PARENT/.lunima-update.$$"
-        SWAPPED=0
+
+        cleanup_stage() { [ -d "$STAGEROOT" ] && rm -rf "$STAGEROOT"; }
 
         rollback() {
           echo "ROLLBACK: $1"
-          [ -d "$STAGEROOT" ] && rm -rf "$STAGEROOT"
-          if [ "$SWAPPED" = "1" ]; then
-            [ -e "$TARGET" ] && mv "$TARGET" "$TARGET.failed.$$" 2>/dev/null
-            [ -d "$BACKUP" ] && mv "$BACKUP" "$TARGET"
+          # Restore every file we backed up over whatever partial install is in place.
+          if [ -d "$BACKUP" ]; then
+            ( cd "$BACKUP" && find . -mindepth 1 -maxdepth 1 -print0 ) | while IFS= read -r -d '' n; do
+              n="${n#./}"
+              rm -rf "$TARGET/$n" 2>/dev/null
+              mv "$BACKUP/$n" "$TARGET/$n" 2>/dev/null
+            done
+            rm -rf "$BACKUP"
           fi
+          cleanup_stage
           [ -x "$TARGET/$EXE_NAME" ] && ( "$TARGET/$EXE_NAME" >/dev/null 2>&1 & )
           exit 1
         }
@@ -136,25 +148,30 @@ public static class UpdaterScripts
         for _ in $(seq 1 60); do kill -0 "$OLD_PID" 2>/dev/null || break; sleep 0.5; done
         if kill -0 "$OLD_PID" 2>/dev/null; then echo "app did not exit; aborting"; exit 1; fi
 
-        mkdir -p "$STAGEROOT" || rollback "mkdir stage failed"
-        tar -xzf "$ARCHIVE" -C "$STAGEROOT" || rollback "extract failed"
+        mkdir -p "$STAGEROOT" || { echo "mkdir stage failed"; exit 1; }
+        tar -xzf "$ARCHIVE" -C "$STAGEROOT" || { cleanup_stage; echo "extract failed"; exit 1; }
         # The tarball may hold files at its root or inside one folder; locate the executable.
-        # Keep STAGEROOT for cleanup and track the located dir separately so cleanup never orphans it.
         NEWDIR="$STAGEROOT"
         if [ ! -f "$STAGEROOT/$EXE_NAME" ]; then
           SUB="$(find "$STAGEROOT" -maxdepth 2 -type f -name "$EXE_NAME" | head -1)"
           [ -n "$SUB" ] && NEWDIR="$(dirname "$SUB")"
         fi
-        [ -f "$NEWDIR/$EXE_NAME" ] || rollback "executable not found in archive"
-        chmod +x "$NEWDIR/$EXE_NAME" 2>/dev/null || true
+        [ -f "$NEWDIR/$EXE_NAME" ] || { cleanup_stage; echo "executable not found in archive"; exit 1; }
 
-        mv "$TARGET" "$BACKUP" || rollback "could not move old install aside"
-        mv "$NEWDIR" "$TARGET" || rollback "could not move new install into place"
-        SWAPPED=1
+        # Replace the release's files one by one; back up only what we overwrite.
+        mkdir -p "$BACKUP" || { cleanup_stage; echo "mkdir backup failed"; exit 1; }
+        ( cd "$NEWDIR" && find . -mindepth 1 -maxdepth 1 -print0 ) | while IFS= read -r -d '' n; do
+          n="${n#./}"
+          if [ -e "$TARGET/$n" ]; then
+            mv "$TARGET/$n" "$BACKUP/$n" || rollback "backup of $n failed"
+          fi
+          mv "$NEWDIR/$n" "$TARGET/$n" || rollback "install of $n failed"
+        done
+        chmod +x "$TARGET/$EXE_NAME" 2>/dev/null || true
 
         ( "$TARGET/$EXE_NAME" >/dev/null 2>&1 & ) || rollback "relaunch failed"
-        [ -d "$STAGEROOT" ] && rm -rf "$STAGEROOT"
         rm -rf "$BACKUP"
+        cleanup_stage
         rm -f "$ARCHIVE" 2>/dev/null || true
         echo "=== update OK ==="
         """;

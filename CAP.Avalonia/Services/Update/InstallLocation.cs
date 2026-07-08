@@ -58,6 +58,58 @@ public sealed class InstallLocation
     }
 
     /// <summary>
+    /// True when <paramref name="directory"/> is a shared user directory that the app does not
+    /// own exclusively (the user's home, its standard subfolders like Downloads/Desktop/Documents,
+    /// the temp directory, or a filesystem root). The in-place updater must never treat such a
+    /// directory as a replaceable install root — the Linux portable build is a loose binary whose
+    /// "install dir" is wherever the user dropped it, and replacing/removing the whole directory
+    /// would destroy unrelated files (issue #616).
+    /// </summary>
+    internal static bool IsSharedUserDirectory(string directory)
+    {
+        if (string.IsNullOrEmpty(directory))
+            return false;
+
+        var norm = Normalize(directory);
+
+        // Filesystem root (e.g. "/", "C:\").
+        var root = Path.GetPathRoot(directory);
+        if (!string.IsNullOrEmpty(root) && Normalize(root) == norm)
+            return true;
+
+        if (norm == Normalize(Path.GetTempPath()))
+            return true;
+
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        if (!string.IsNullOrEmpty(home))
+        {
+            if (norm == Normalize(home))
+                return true;
+
+            // Standard per-user folders. Downloads has no SpecialFolder enum, so it is matched
+            // by name; the rest resolve through the OS so localized/XDG-redirected paths count too.
+            var shared = new[]
+            {
+                Path.Combine(home, "Downloads"),
+                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+                Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
+            };
+            foreach (var s in shared)
+                if (!string.IsNullOrEmpty(s) && Normalize(s) == norm)
+                    return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>Case-preserving path normalization for comparison: trims trailing separators.</summary>
+    private static string Normalize(string path) =>
+        path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+
+    /// <summary>
     /// Walks up from <paramref name="executablePath"/> to the nearest enclosing <c>*.app</c>
     /// bundle directory, or null if the executable is not inside a bundle.
     /// </summary>

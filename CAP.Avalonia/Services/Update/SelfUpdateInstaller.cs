@@ -32,6 +32,16 @@ public class SelfUpdateInstaller : IInstaller
             return false;
         }
 
+        // Never treat a shared user directory (home, Downloads, …) as a replaceable install
+        // root — updating in place there could delete the user's unrelated files (issue #616).
+        // On macOS the root is the .app bundle, which is app-owned, so this never trips there.
+        if (InstallLocation.IsSharedUserDirectory(location.Root))
+        {
+            reason = "the app runs from a shared folder (e.g. Downloads); move it into its own "
+                + "folder to enable in-place updates";
+            return false;
+        }
+
         reason = string.Empty;
         return true;
     }

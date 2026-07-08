@@ -46,7 +46,7 @@ public class UpdaterScriptsTests
     }
 
     [Fact]
-    public void BuildLinux_ExtractsTarballSwapsDirAndRelaunches()
+    public void BuildLinux_ReplacesFilesInPlaceWithoutMovingOrRemovingTargetDir()
     {
         var target = new InstallLocation("/opt/lunima", "/opt/lunima/Lunima", 55);
 
@@ -58,6 +58,12 @@ public class UpdaterScriptsTests
         script.ShouldContain("EXE_NAME='Lunima'");
         script.ShouldContain("tar -xzf");
         script.ShouldContain("rollback");
+        // Data-loss guard (#616): the target directory is a possibly-shared folder, so the
+        // updater must replace the release's files one by one — never move or remove the whole
+        // TARGET directory (that would take unrelated files with it).
+        script.ShouldNotContain("mv \"$TARGET\" ");   // no whole-directory move-aside
+        script.ShouldNotContain("rm -rf \"$TARGET\""); // no whole-directory delete
+        script.ShouldContain("find . -mindepth 1 -maxdepth 1 -print0"); // per-entry replace loop
     }
 
     [Fact]
