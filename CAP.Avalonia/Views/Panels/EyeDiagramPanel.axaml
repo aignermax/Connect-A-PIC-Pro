@@ -6,23 +6,22 @@
              x:DataType="vm:MainViewModel">
 
     <UserControl.Styles>
-        <!-- Compact, half-height inputs/buttons for the dense analysis dock (#570 feedback). -->
+        <!-- Compact inputs for the dense analysis dock (#570 feedback): no spinner buttons
+             (type values; arrow keys still increment), natural height, centered content so the
+             number is not clipped. Do NOT force Height on NumericUpDown — it clips the inner text. -->
         <Style Selector="NumericUpDown">
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="MinHeight" Value="24"/>
+            <Setter Property="ShowButtonSpinner" Value="False"/>
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Padding" Value="4,0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="ComboBox">
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="MinHeight" Value="24"/>
             <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Padding" Value="6,0"/>
+            <Setter Property="Padding" Value="6,2"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.analysis">
-            <Setter Property="Height" Value="24"/>
-            <Setter Property="MinHeight" Value="24"/>
-            <Setter Property="Padding" Value="10,0"/>
+            <Setter Property="Padding" Value="10,3"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
     </UserControl.Styles>
