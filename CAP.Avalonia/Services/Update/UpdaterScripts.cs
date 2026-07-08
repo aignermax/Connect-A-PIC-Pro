@@ -91,10 +91,13 @@ public static class UpdaterScripts
         codesign --force --deep --sign - "$NEW" || rollback "codesign failed"
         codesign --verify --deep --strict "$NEW" || rollback "signature verify failed"
 
-        # 5. Near-atomic swap: move old aside, new into place.
+        # 5. Near-atomic swap: move old aside, new into place. Set SWAPPED as soon as the old
+        #    bundle has moved — if the SECOND mv fails, TARGET no longer exists, and the rollback
+        #    must restore from BACKUP (which the SWAPPED branch does). Setting it only after both
+        #    moves would strand the working app at BACKUP with TARGET gone.
         mv "$TARGET" "$BACKUP" || rollback "could not move old bundle aside"
-        mv "$NEW" "$TARGET" || rollback "could not move new bundle into place"
         SWAPPED=1
+        mv "$NEW" "$TARGET" || rollback "could not move new bundle into place"
 
         # 6. Relaunch the new version, then clean up.
         open -n "$TARGET" || rollback "relaunch failed"
@@ -130,14 +133,20 @@ public static class UpdaterScripts
 
         rollback() {
           echo "ROLLBACK: $1"
-          # Restore every file we backed up over whatever partial install is in place.
+          # Restore every file we backed up over whatever partial install is in place. Use process
+          # substitution (not a pipe) so this loop runs in THIS shell, and track failures so a file
+          # that cannot be restored is not then deleted with the backup (it stays recoverable).
+          restore_failed=0
           if [ -d "$BACKUP" ]; then
-            ( cd "$BACKUP" && find . -mindepth 1 -maxdepth 1 -print0 ) | while IFS= read -r -d '' n; do
+            while IFS= read -r -d '' n; do
               n="${n#./}"
               rm -rf "$TARGET/$n" 2>/dev/null
-              mv "$BACKUP/$n" "$TARGET/$n" 2>/dev/null
-            done
-            rm -rf "$BACKUP"
+              if ! mv "$BACKUP/$n" "$TARGET/$n" 2>/dev/null; then
+                echo "WARN: could not restore $n; kept in $BACKUP"
+                restore_failed=1
+              fi
+            done < <(cd "$BACKUP" && find . -mindepth 1 -maxdepth 1 -print0)
+            if [ "$restore_failed" = "0" ]; then rm -rf "$BACKUP"; else echo "backup kept at $BACKUP"; fi
           fi
           cleanup_stage
           [ -x "$TARGET/$EXE_NAME" ] && ( "$TARGET/$EXE_NAME" >/dev/null 2>&1 & )
@@ -158,15 +167,18 @@ public static class UpdaterScripts
         fi
         [ -f "$NEWDIR/$EXE_NAME" ] || { cleanup_stage; echo "executable not found in archive"; exit 1; }
 
-        # Replace the release's files one by one; back up only what we overwrite.
+        # Replace the release's files one by one; back up only what we overwrite. Process
+        # substitution (not a pipe) keeps this loop in THIS shell — a piped `while` runs in a
+        # subshell, where rollback's `exit` would only leave the subshell and the script would
+        # then fall through to the success path (relaunching twice, printing "update OK").
         mkdir -p "$BACKUP" || { cleanup_stage; echo "mkdir backup failed"; exit 1; }
-        ( cd "$NEWDIR" && find . -mindepth 1 -maxdepth 1 -print0 ) | while IFS= read -r -d '' n; do
+        while IFS= read -r -d '' n; do
           n="${n#./}"
           if [ -e "$TARGET/$n" ]; then
             mv "$TARGET/$n" "$BACKUP/$n" || rollback "backup of $n failed"
           fi
           mv "$NEWDIR/$n" "$TARGET/$n" || rollback "install of $n failed"
-        done
+        done < <(cd "$NEWDIR" && find . -mindepth 1 -maxdepth 1 -print0)
         chmod +x "$TARGET/$EXE_NAME" 2>/dev/null || true
 
         ( "$TARGET/$EXE_NAME" >/dev/null 2>&1 & ) || rollback "relaunch failed"

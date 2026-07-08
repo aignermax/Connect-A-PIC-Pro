@@ -25,10 +25,20 @@ public class SelfUpdateInstaller : IInstaller
             return false;
         }
 
+        // The macOS bundle swap writes in the parent (moves the .app aside); the Linux file-by-file
+        // updater writes INSIDE the root (its backup dir + the replaced files). Require both to be
+        // writable so a parent-writable-but-root-read-only layout fails the check up front rather
+        // than mid-install.
         var parent = Path.GetDirectoryName(location.Root);
         if (string.IsNullOrEmpty(parent) || !IsDirectoryWritable(parent))
         {
             reason = "the install location is not writable without elevation";
+            return false;
+        }
+
+        if (Directory.Exists(location.Root) && !IsDirectoryWritable(location.Root))
+        {
+            reason = "the install directory is not writable without elevation";
             return false;
         }
 

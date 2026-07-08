@@ -70,43 +70,112 @@ public sealed class InstallLocation
         if (string.IsNullOrEmpty(directory))
             return false;
 
-        var norm = Normalize(directory);
+        var target = Canonical(directory);
 
         // Filesystem root (e.g. "/", "C:\").
         var root = Path.GetPathRoot(directory);
-        if (!string.IsNullOrEmpty(root) && Normalize(root) == norm)
+        if (!string.IsNullOrEmpty(root) && Canonical(root) == target)
             return true;
 
-        if (norm == Normalize(Path.GetTempPath()))
+        if (target == Canonical(Path.GetTempPath()))
             return true;
 
         var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-        if (!string.IsNullOrEmpty(home))
-        {
-            if (norm == Normalize(home))
-                return true;
+        if (!string.IsNullOrEmpty(home) && Canonical(home) == target)
+            return true;
 
-            // Standard per-user folders. Downloads has no SpecialFolder enum, so it is matched
-            // by name; the rest resolve through the OS so localized/XDG-redirected paths count too.
-            var shared = new[]
-            {
-                Path.Combine(home, "Downloads"),
-                Environment.GetFolderPath(Environment.SpecialFolder.Desktop),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyMusic),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
-                Environment.GetFolderPath(Environment.SpecialFolder.MyVideos),
-            };
-            foreach (var s in shared)
-                if (!string.IsNullOrEmpty(s) && Normalize(s) == norm)
-                    return true;
-        }
+        foreach (var s in SharedSubdirectories(home))
+            if (!string.IsNullOrEmpty(s) && Canonical(s) == target)
+                return true;
 
         return false;
     }
 
-    /// <summary>Case-preserving path normalization for comparison: trims trailing separators.</summary>
-    private static string Normalize(string path) =>
+    /// <summary>
+    /// Standard per-user folders that are never an app's exclusive install root. Resolves through
+    /// the OS SpecialFolder enum (localized/redirected paths included) and, on Linux, honours the
+    /// XDG user-dirs config so e.g. a localized "Téléchargements" download folder is recognised.
+    /// </summary>
+    private static IEnumerable<string> SharedSubdirectories(string? home)
+    {
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.Desktop);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.MyMusic);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+        yield return Environment.GetFolderPath(Environment.SpecialFolder.MyVideos);
+
+        // Downloads has no SpecialFolder enum. English default under home…
+        if (!string.IsNullOrEmpty(home))
+            yield return Path.Combine(home, "Downloads");
+
+        // …plus the XDG-configured (possibly localized) download/desktop/documents dirs on Linux.
+        if (OperatingSystem.IsLinux())
+        {
+            foreach (var d in XdgUserDirs())
+                yield return d;
+        }
+    }
+
+    /// <summary>
+    /// Reads the XDG user-dirs (env var first, then <c>~/.config/user-dirs.dirs</c>) and returns the
+    /// resolved Download/Desktop/Documents paths. Best-effort: returns nothing on any parse error.
+    /// </summary>
+    private static IEnumerable<string> XdgUserDirs()
+    {
+        var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var results = new List<string>();
+
+        void AddFromEnv(string var)
+        {
+            var v = Environment.GetEnvironmentVariable(var);
+            if (!string.IsNullOrEmpty(v)) results.Add(v);
+        }
+        AddFromEnv("XDG_DOWNLOAD_DIR");
+        AddFromEnv("XDG_DESKTOP_DIR");
+        AddFromEnv("XDG_DOCUMENTS_DIR");
+
+        try
+        {
+            var config = Path.Combine(home, ".config", "user-dirs.dirs");
+            if (File.Exists(config))
+            {
+                foreach (var raw in File.ReadAllLines(config))
+                {
+                    var line = raw.Trim();
+                    // Format: XDG_DOWNLOAD_DIR="$HOME/Downloads"
+                    if (!line.StartsWith("XDG_", StringComparison.Ordinal)) continue;
+                    var eq = line.IndexOf('=');
+                    if (eq < 0) continue;
+                    var value = line[(eq + 1)..].Trim().Trim('"');
+                    value = value.Replace("$HOME", home).Replace("${HOME}", home);
+                    if (!string.IsNullOrEmpty(value)) results.Add(value);
+                }
+            }
+        }
+        catch { /* best-effort — the file-by-file updater is the primary safeguard */ }
+
+        return results;
+    }
+
+    /// <summary>
+    /// Canonical path for comparison: absolute, trailing separators trimmed, and symlinks resolved
+    /// to their final target when the path exists (so a symlinked shared dir still matches).
+    /// </summary>
+    private static string Canonical(string path)
+    {
+        try
+        {
+            var full = Path.GetFullPath(path);
+            var resolved = Directory.ResolveLinkTarget(full, returnFinalTarget: true);
+            return Trim(resolved?.FullName ?? full);
+        }
+        catch
+        {
+            return Trim(path);
+        }
+    }
+
+    private static string Trim(string path) =>
         path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
 
     /// <summary>
