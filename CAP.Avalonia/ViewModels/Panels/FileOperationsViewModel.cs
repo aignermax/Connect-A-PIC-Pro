@@ -81,6 +81,14 @@ public partial class FileOperationsViewModel : ObservableObject
     public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
 
     /// <summary>
+    /// Supplies the process-derived metal routing parameters (trace width, GDS layer,
+    /// crossing policy) for electrical connections at export time (issue #682). Wired by
+    /// MainViewModel to the active process' PDK definitions; null falls back to
+    /// <see cref="CAP_Core.Routing.MetalRouting.MetalRoutingSpec.Default"/>.
+    /// </summary>
+    public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? MetalRoutingSpecProvider { get; set; }
+
+    /// <summary>
     /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
     /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
     /// analyzer-only tool PDKs never count toward a legacy design's process attribution
@@ -1412,8 +1420,10 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script
-                var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
+                // Export Python script (metal spec: process-derived electrical routing, #682)
+                var nazcaCode = _nazcaExporter.Export(
+                    _canvas, overrides: StoredNazcaOverrides,
+                    metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
                 // Warn if any instance has a gdsfactory-backend override: the Nazca export

@@ -3,6 +3,8 @@ using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_Core.Routing;
+using CAP_Core.Routing.MetalRouting;
 using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
@@ -21,12 +23,19 @@ public class GdsFactoryExporter
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
     /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
     /// component factories. Null skips override handling.</param>
+    /// <param name="metalSpec">
+    /// Process-derived metal routing parameters for electrical connections (issue #682).
+    /// Null uses <see cref="MetalRoutingSpec.Default"/>.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
+        MetalRoutingSpec? metalSpec = null)
     {
         var sb = new StringBuilder();
+        var metal = metalSpec ?? MetalRoutingSpec.Default;
         AppendHeader(sb, canvas, options);
+        GdsFactoryMetalTraceWriter.AppendHeaderConstants(sb, metal);
         AppendOverrideFactories(sb, canvas, overrides);
         AppendStubs(sb, canvas, options, overrides);
         var refIndex = 0;
@@ -36,7 +45,7 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas));
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metal);
         AppendFooter(sb);
         return sb.ToString();
     }
@@ -299,43 +308,94 @@ public class GdsFactoryExporter
             ? comp.NazcaFunctionParameters
             : string.Empty;
 
-    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg)
+    private static void AppendConnections(
+        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metal)
     {
         sb.AppendLine("# Waveguide connections");
+        var opticalPaths = new List<IReadOnlyList<PathSegment>>();
+        var electrical = new List<CAP_Core.Components.Connections.WaveguideConnection>();
+
         foreach (var connVm in canvas.Connections)
         {
             var conn = connVm.Connection;
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // Electrical connections export as metal traces below, not as waveguides (#682).
+            if (conn.IsElectrical)
+            {
+                electrical.Add(conn);
+                continue;
+            }
+
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
+            {
                 GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg);
+                opticalPaths.Add(segments);
+            }
             else if (conn.StartPin != null && conn.EndPin != null)
+            {
                 GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg);
+            }
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg, opticalPaths);
         }
+
+        AppendMetalConnections(sb, electrical, opticalPaths, metal);
         sb.AppendLine();
     }
 
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, string waveguideKwarg)
+    /// <summary>
+    /// Emits electrical connections as metal traces, plus bridge markers at
+    /// metal/waveguide crossings when the process requires them (#682).
+    /// </summary>
+    private static void AppendMetalConnections(
+        StringBuilder sb,
+        IReadOnlyList<CAP_Core.Components.Connections.WaveguideConnection> electrical,
+        IReadOnlyList<IReadOnlyList<PathSegment>> opticalPaths,
+        MetalRoutingSpec metal)
+    {
+        if (electrical.Count == 0)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine("# Electrical metal traces");
+        foreach (var conn in electrical)
+        {
+            var segments = conn.GetPathSegments();
+            GdsFactoryMetalTraceWriter.AppendMetalConnection(sb, segments, conn.StartPin, conn.EndPin);
+
+            if (metal.CrossingPolicy == ElectricalCrossingPolicy.BridgeRequired && segments.Count > 0)
+            {
+                var crossings = WaveguideCrossingDetector.FindCrossings(segments, opticalPaths);
+                GdsFactoryMetalTraceWriter.AppendBridges(sb, crossings, metal);
+            }
+        }
+    }
+
+    private static void AppendGroupFrozenPaths(
+        StringBuilder sb, ComponentGroup group, string waveguideKwarg,
+        List<IReadOnlyList<PathSegment>> opticalPaths)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
+            {
                 GdsFactorySegmentWriter.AppendSegments(
                     sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg);
+                opticalPaths.Add(frozenPath.Path.Segments);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, opticalPaths);
         }
     }
 

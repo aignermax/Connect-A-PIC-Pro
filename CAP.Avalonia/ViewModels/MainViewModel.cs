@@ -235,6 +235,13 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport = gdsFactoryExport;
         // gdsfactory export honours gdsfactory-backend overrides from the design's store.
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // Electrical metal routing spec (#682): trace width / layers / crossing policy come
+        // from the active process's metal cross-section; both exporters share one provider.
+        Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec> metalSpecProvider = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.MetalRoutingSpecFactory.FromActiveProcess(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+        FileOperations.MetalRoutingSpecProvider = metalSpecProvider;
+        GdsFactoryExport.MetalRoutingSpecProvider = metalSpecProvider;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
