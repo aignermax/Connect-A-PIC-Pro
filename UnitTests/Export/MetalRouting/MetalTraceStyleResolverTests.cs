@@ -69,6 +69,27 @@ public class MetalTraceStyleResolverTests
     }
 
     [Fact]
+    public void Resolve_MetalXsectionWithoutLinkedLayer_FallsBackToMetalNamedLayer()
+    {
+        // A user may add a metal xsection and a "METAL-1" layer without wiring them together;
+        // the resolver still finds the metal-named layer for the trace.
+        var process = new ProcessDefinition
+        {
+            Layers =
+            {
+                new ProcessLayer { Name = "WAVEGUIDE", Layer = 1, Datatype = 0 },
+                new ProcessLayer { Name = "METAL-1", Layer = 41, Datatype = 0 },
+            },
+            Xsections = { new ProcessXsection { Name = "M", Kind = XsectionKind.Metal, WidthUm = 6.0 } },
+        };
+
+        var style = MetalTraceStyleResolver.Resolve(process);
+
+        style.GdsLayer.ShouldBe(41);
+        style.WidthUm.ShouldBe(6.0);
+    }
+
+    [Fact]
     public void Resolve_ActiveProcess_MatchesMemberPdkDraftsByName()
     {
         var draft = new PdkDraft

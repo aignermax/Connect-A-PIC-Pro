@@ -91,6 +91,10 @@ public partial class MainWindow : Window
                 vm.ShowProcessManagerRequested = () =>
                 {
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
+                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
+                    // persisted, using the same loaded-PDK registry the offset editor writes through.
+                    processVm.PdkFilePathResolver = name => vm.LeftPanel.PdkManager.LoadedPdks
+                        .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
                     var processWindow = new ProcessManagementWindow
                     {

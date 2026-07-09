@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services;
+using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -22,6 +23,18 @@ public partial class ProcessManagementViewModel : ObservableObject
 {
     private readonly IFileDialogService _fileDialog;
     private readonly IReadOnlyList<IProcessImporter> _importers;
+    private readonly PdkJsonSaver _pdkSaver;
+
+    /// <summary>Member PDK drafts of the active process, captured on open, used to persist edits.</summary>
+    private IReadOnlyList<PdkDraft> _memberDrafts = new List<PdkDraft>();
+
+    /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
+    public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
+        new[] { XsectionKind.Optical, XsectionKind.Metal };
+
+    /// <summary>Resolves a PDK name to its source JSON path so edits can be persisted; wired by the
+    /// UI layer to the loaded-PDK registry. Null (e.g. in tests/headless) disables saving.</summary>
+    public Func<string, string?>? PdkFilePathResolver { get; set; }
 
     /// <summary>Name of the loaded process.</summary>
     [ObservableProperty]
@@ -55,10 +68,12 @@ public partial class ProcessManagementViewModel : ObservableObject
     }
 
     /// <summary>Initialises the ViewModel with a specific importer set (tests).</summary>
-    public ProcessManagementViewModel(IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers)
+    public ProcessManagementViewModel(
+        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers, PdkJsonSaver? pdkSaver = null)
     {
         _fileDialog = fileDialog;
         _importers = importers;
+        _pdkSaver = pdkSaver ?? new PdkJsonSaver();
     }
 
     /// <summary>Populates the editable collections from a process definition.</summary>
@@ -165,6 +180,77 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// <summary>Adds an empty cross-section row for manual entry.</summary>
     [RelayCommand]
     private void AddXsection() => Xsections.Add(new ProcessXsection { Name = "new_xs" });
+
+    /// <summary>
+    /// Adds a metal cross-section preset for electrical routing (issue #682) plus a matching
+    /// METAL layer if the stack has none, so a user can define electrical routing in one click.
+    /// </summary>
+    [RelayCommand]
+    private void AddMetalXsection()
+    {
+        if (Layers.All(l => !l.Name.Contains("METAL", StringComparison.OrdinalIgnoreCase)))
+            Layers.Add(new ProcessLayer { Name = "METAL-1", Layer = 11, Datatype = 0, Description = "Electrical routing metal" });
+
+        Xsections.Add(new ProcessXsection
+        {
+            Name = "metal",
+            Kind = XsectionKind.Metal,
+            WidthUm = MetalTraceStyle.DefaultWidthUm,
+            Layers = { "METAL-1" },
+            Description = "Electrical routing trace",
+        });
+        HasProcess = true;
+        StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
+    }
+
+    /// <summary>
+    /// Persists the edited process back to its PDK JSON so the export picks up the metal
+    /// cross-section (issue #682). Only unambiguous single-member processes are written; the
+    /// PDK's fingerprint fields (thickness, materials, angles) are preserved — only the layer
+    /// stack, cross-sections and materials are updated.
+    /// </summary>
+    [RelayCommand]
+    private void SaveProcess()
+    {
+        if (_memberDrafts.Count == 0)
+        {
+            StatusText = "Nothing to save — this process has no editable member PDK (Playground or import-only).";
+            return;
+        }
+        if (_memberDrafts.Count > 1)
+        {
+            StatusText = "This process merges several PDKs; pick which one owns the edit by saving to that PDK "
+                       + "directly (multi-PDK target selection is not implemented yet).";
+            return;
+        }
+
+        var draft = _memberDrafts[0];
+        var path = PdkFilePathResolver?.Invoke(draft.Name);
+        if (string.IsNullOrEmpty(path))
+        {
+            StatusText = $"Could not locate the PDK file for '{draft.Name}' — save unavailable.";
+            return;
+        }
+
+        try
+        {
+            // Preserve the fingerprint-bearing fields (thickness, foundry, angles); only the
+            // user-editable stack/xsections/materials change, and update the in-memory draft so
+            // the next export uses the new metal cross-section without a reload.
+            var process = draft.Process ?? new ProcessDefinition { Name = ProcessName };
+            process.Layers = Layers.ToList();
+            process.Xsections = Xsections.ToList();
+            process.Materials = Materials.ToList();
+            draft.Process = process;
+
+            _pdkSaver.SaveToFile(draft, path);
+            StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Save failed: {ex.Message}";
+        }
+    }
 
     /// <summary>Adds an empty material row for manual entry.</summary>
     [RelayCommand]

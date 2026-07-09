@@ -70,11 +70,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
         private static MetalTraceStyle BuildStyle(ProcessDefinition process, ProcessXsection metal)
         {
             var width = metal.WidthUm > 0 ? metal.WidthUm : MetalTraceStyle.DefaultWidthUm;
-
-            var layerName = metal.Layers?.FirstOrDefault();
-            var layer = layerName == null
-                ? null
-                : process.Layers?.FirstOrDefault(l => l.Name == layerName);
+            var layer = ResolveLayer(process, metal);
 
             return new MetalTraceStyle
             {
@@ -82,6 +78,29 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 GdsLayer = layer?.Layer ?? MetalTraceStyle.DefaultGdsLayer,
                 GdsDatatype = layer?.Datatype ?? 0,
             };
+        }
+
+        /// <summary>
+        /// Finds the GDS layer for a metal cross-section: first the layer it explicitly lists,
+        /// otherwise a metal-named layer in the stack (so a user can just add a "METAL" layer
+        /// and a metal xsection without wiring them together). Null falls back to the default.
+        /// </summary>
+        private static ProcessLayer? ResolveLayer(ProcessDefinition process, ProcessXsection metal)
+        {
+            var layers = process.Layers;
+            if (layers == null || layers.Count == 0)
+                return null;
+
+            var layerName = metal.Layers?.FirstOrDefault();
+            if (layerName != null)
+            {
+                var named = layers.FirstOrDefault(l => l.Name == layerName);
+                if (named != null)
+                    return named;
+            }
+
+            return layers.FirstOrDefault(
+                l => l.Name != null && l.Name.Contains("METAL", System.StringComparison.OrdinalIgnoreCase));
         }
     }
 }

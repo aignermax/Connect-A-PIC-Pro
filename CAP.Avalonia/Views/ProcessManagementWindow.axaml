@@ -39,6 +39,9 @@
                 <Button Content="New" Command="{Binding NewProcessCommand}"
                         Padding="12,6" Background="#3d3d3d"
                         ToolTip.Tip="Start a blank process (seeded with public SOI material defaults)"/>
+                <Button Content="Save to PDK" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
+                        Padding="12,6" Background="#2a4a2a"
+                        ToolTip.Tip="Persist the edited layer stack / cross-sections back to this process's PDK JSON (single-PDK processes)"/>
                 <TextBlock Text="Process:" VerticalAlignment="Center" Foreground="#aaa"/>
                 <TextBox Text="{Binding ProcessName}" Width="220" VerticalAlignment="Center"/>
             </StackPanel>
@@ -78,6 +81,8 @@
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="Cross-sections (waveguide / metal)" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
                     <Button Content="+ Cross-section" Command="{Binding AddXsectionCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                    <Button Content="+ Metal (electrical)" Command="{Binding AddMetalXsectionCommand}" FontSize="10" Padding="6,1" Background="#4a3a2a"
+                            ToolTip.Tip="Adds a metal cross-section (and a METAL layer) used to route electrical connections in the GDS export (#682)"/>
                 </StackPanel>
                 <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*">
                     <TextBlock Grid.Column="0" Text="Name" Foreground="#888" FontSize="10"/>
@@ -92,7 +97,10 @@
                         <DataTemplate>
                             <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*" Margin="0,1">
                                 <TextBox Grid.Column="0" Text="{Binding Name}" FontSize="11" Margin="0,0,2,0"/>
-                                <TextBlock Grid.Column="1" Text="{Binding Kind}" FontSize="11" VerticalAlignment="Center" Foreground="#ccc"/>
+                                <ComboBox Grid.Column="1" FontSize="11" Margin="0,0,2,0" HorizontalAlignment="Stretch"
+                                          ItemsSource="{x:Static vm:ProcessManagementViewModel.XsectionKinds}"
+                                          SelectedItem="{Binding Kind}"
+                                          ToolTip.Tip="Metal cross-sections route electrical connections (#682); optical route waveguides."/>
                                 <TextBox Grid.Column="2" Text="{Binding WidthUm}" FontSize="11" Margin="0,0,2,0"/>
                                 <TextBox Grid.Column="3" Text="{Binding MinRadiusUm}" FontSize="11" Margin="0,0,2,0"/>
                                 <TextBox Grid.Column="4" Text="{Binding RecommendedRadiusUm}" FontSize="11" Margin="0,0,2,0"/>

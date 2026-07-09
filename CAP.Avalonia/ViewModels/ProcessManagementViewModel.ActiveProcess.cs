@@ -65,7 +65,11 @@ public partial class ProcessManagementViewModel
             ? string.Join(", ", active.MemberPdkNames)
             : "(none loaded)";
 
-        var definitions = MemberProcessDefinitions(active, loadedPdks);
+        // Keep the member drafts so edits (e.g. a metal cross-section, #682) can be persisted
+        // back to their PDK JSON via SaveProcess.
+        _memberDrafts = MemberDrafts(active, loadedPdks);
+
+        var definitions = _memberDrafts.Select(d => d.Process).Where(p => p != null).Select(p => p!).ToList();
         foreach (var definition in definitions)
             Merge(definition);
 
@@ -81,13 +85,13 @@ public partial class ProcessManagementViewModel
               "showing the fingerprint only; data can be imported or entered below.";
     }
 
-    private static IReadOnlyList<ProcessDefinition> MemberProcessDefinitions(
+    private static IReadOnlyList<PdkDraft> MemberDrafts(
         ActiveProcessSelection active, IReadOnlyList<PdkDraft> loadedPdks) =>
         active.MemberPdkNames
             .Select(name => loadedPdks.FirstOrDefault(
-                d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
-            .Where(p => p != null)
-            .Select(p => p!)
+                d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .Where(d => d != null)
+            .Select(d => d!)
             .ToList();
 
     private static string FormatFingerprint(ProcessFingerprint? fp)
