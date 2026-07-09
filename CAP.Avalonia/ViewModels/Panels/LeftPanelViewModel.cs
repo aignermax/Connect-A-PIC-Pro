@@ -426,7 +426,7 @@ public partial class LeftPanelViewModel : ObservableObject
     }
     /// <summary>Registers a saved custom component into the library; see <see cref="CustomComponentLibraryRegistrar"/>.</summary>
     public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath) =>
-        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, FilterComponents);
+        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
     /// <summary>
     /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).
     /// Excludes process-agnostic tool PDKs (e.g. "Analysis Tools") — they are not a

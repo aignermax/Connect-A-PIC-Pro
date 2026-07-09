@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -7,6 +8,8 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP.Avalonia.Services;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.Process;
+using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using Shouldly;
@@ -18,8 +21,10 @@ namespace UnitTests.Components.AddCustomComponent;
 /// Covers <see cref="LeftPanelViewModel.RegisterSavedCustomComponent"/>: the headless-testable
 /// half of the "add custom component" flow (the window itself cannot be opened in a unit test).
 /// </summary>
-public class LeftPanelNewComponentTests
+public class LeftPanelNewComponentTests : IDisposable
 {
+    private readonly List<string> _tempDirs = new();
+
     /// <summary>Builds a <see cref="LeftPanelViewModel"/> the same way <c>LeftPanelViewModelTests</c> does.</summary>
     private static LeftPanelViewModel CreateLeftPanelViewModel()
     {
@@ -34,6 +39,43 @@ public class LeftPanelNewComponentTests
             new HierarchyPanelViewModel(canvas),
             new PdkManagerViewModel(),
             new ComponentLibraryViewModel(libraryManager));
+    }
+
+    private static PdkComponentDraft SampleDraft() => new()
+    {
+        Name = "My Coupler", Category = "Custom",
+        GdsFactoryFunction = "cspdk.sin300.coupler",
+        WidthMicrometers = 10, HeightMicrometers = 2,
+        Pins = new List<PhysicalPinDraft>
+        {
+            new() { Name = "o1", OffsetXMicrometers = 0, OffsetYMicrometers = 1, AngleDegrees = 180 },
+            new() { Name = "o2", OffsetXMicrometers = 10, OffsetYMicrometers = 1, AngleDegrees = 0 },
+        }
+    };
+
+    /// <summary>
+    /// Writes a real user-PDK file for <paramref name="processName"/> containing the sample
+    /// component (exactly as <see cref="UserPdkStore"/> does at runtime) and returns its
+    /// on-disk path plus the PDK display name the store assigned it.
+    /// </summary>
+    private (string filePath, string pdkName, PdkComponentDraft draft) SaveUserPdk(string processName)
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"lunima-lp-nc-{Guid.NewGuid():N}");
+        _tempDirs.Add(root);
+        var store = new UserPdkStore(root, new PdkJsonSaver(), new PdkLoader());
+        var process = new ProcessDefinition { Name = processName };
+        var draft = SampleDraft();
+        var path = store.Save(process, draft, "gdsfactory", null);
+        var pdkName = new PdkLoader().LoadFromFileForEditing(path).Name;
+        return (path, pdkName, draft);
+    }
+
+    public void Dispose()
+    {
+        foreach (var dir in _tempDirs.Where(Directory.Exists))
+        {
+            try { Directory.Delete(dir, true); } catch { /* best effort */ }
+        }
     }
 
     [Fact]
@@ -52,5 +94,42 @@ public class LeftPanelNewComponentTests
 
         vm.AllTemplates.Count.ShouldBe(before + 1);
         vm.AllTemplates.ShouldContain(t => t.Name == "My Coupler");
+    }
+
+    [Fact]
+    public void RegisterSavedCustomComponent_forNonActiveProcess_isHiddenWhileProcessLocked()
+    {
+        var vm = CreateLeftPanelViewModel();
+        var (filePath, pdkName, draft) = SaveUserPdk("OtherProc");
+
+        // A different process is active and locked — its member set does NOT include the
+        // user PDK we are about to save.
+        vm.ApplyActiveProcess(new ActiveProcessSelection(
+            DisplayName: "Active Process", Fingerprint: null,
+            MemberPdkNames: new List<string> { "Some Foundry PDK" }, IsPlayground: false));
+
+        vm.RegisterSavedCustomComponent(draft, pdkName, filePath);
+
+        // Added to the catalog, but the active-process lock must keep it out of the visible list
+        // (issue #570): a component saved for a non-active process cannot leak into the library.
+        vm.AllTemplates.ShouldContain(t => t.Name == "My Coupler");
+        vm.FilteredTemplates.ShouldNotContain(t => t.Name == "My Coupler");
+    }
+
+    [Fact]
+    public void RegisterSavedCustomComponent_forActiveProcess_appearsImmediately()
+    {
+        var vm = CreateLeftPanelViewModel();
+        var (filePath, pdkName, draft) = SaveUserPdk("ActiveProc");
+
+        // The active process's member set includes this user PDK, so its component must show up
+        // right away — no manual re-enable needed.
+        vm.ApplyActiveProcess(new ActiveProcessSelection(
+            DisplayName: "Active Process", Fingerprint: null,
+            MemberPdkNames: new List<string> { pdkName }, IsPlayground: false));
+
+        vm.RegisterSavedCustomComponent(draft, pdkName, filePath);
+
+        vm.FilteredTemplates.ShouldContain(t => t.Name == "My Coupler");
     }
 }
