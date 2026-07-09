@@ -60,6 +60,22 @@
             <ContentControl Content="{Binding SelectedPage.ViewModel}">
                 <ContentControl.DataTemplates>
 
+                    <!-- General -->
+                    <DataTemplate DataType="{x:Type settings:GeneralSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="General" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="Routing" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
+                            <CheckBox Content="Adaptive crossing insertion"
+                                      IsChecked="{Binding CrossingInsertionEnabled}"
+                                      Foreground="White"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                After routing, replaces a detouring waveguide with a real PDK crossing component
+                                where that lowers insertion loss. Turn off for classic avoid-only routing —
+                                faster on large designs, and no crossings are inserted.
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+
                     <!-- Grid Snap & Alignment -->
                     <DataTemplate DataType="{x:Type settings:GridSnapSettingsViewModel}">
                         <StackPanel Spacing="8">
@@ -142,32 +158,26 @@
                             <TextBlock Text="GDS Export" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
                             <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
                                 Configures how the "Export" top-toolbar action generates a GDS file
-                                from the exported Nazca Python script.
+                                from the exported Nazca Python script. The gdsfactory export is a separate
+                                Export-menu entry; install gdsfactory below via "Install gdsfactory".
                             </TextBlock>
 
-                            <CheckBox Content="Generate GDS file after Nazca export (requires Python + Nazca)"
+                            <CheckBox Content="Generate GDS file after Nazca export (Nazca export requires Python + Nazca; gdsfactory export requires gdsfactory)"
                                       IsChecked="{Binding GenerateGdsEnabled}"
                                       Foreground="White" Margin="0,4,0,0"/>
 
                             <Separator Margin="0,12,0,4" Background="#3d3d3d"/>
                             <TextBlock Text="Python Environment" FontSize="14" FontWeight="SemiBold" Foreground="LightGray"/>
                             <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
-                                Python interpreter used to run the exported Nazca script.
-                                Pick one from the list below — the selection is remembered.
+                                The interpreter used to run the exported Nazca script is chosen in the
+                                Python Environments page — one place lists managed environments and
+                                discovered system Pythons with their Nazca and gdsfactory versions.
                             </TextBlock>
 
                             <TextBlock Text="Active interpreter:" Foreground="Gray" FontSize="12" Margin="0,4,0,3"/>
-                            <Grid ColumnDefinitions="*,Auto">
-                                <TextBox Grid.Column="0"
-                                         Text="{Binding CustomPythonPath}"
-                                         IsReadOnly="True"
-                                         Watermark="No interpreter selected yet"
-                                         Margin="0,0,6,0"/>
-                                <Button Grid.Column="1" Content="🔄" Width="32" Padding="4"
-                                        Command="{Binding RefreshInterpretersCommand}"
-                                        ToolTip.Tip="Refresh: discover Pythons with Nazca and re-check the environment"
-                                        IsEnabled="{Binding IsSearching, Converter={x:Static BoolConverters.Not}}"/>
-                            </Grid>
+                            <TextBox Text="{Binding CustomPythonPath}"
+                                     IsReadOnly="True"
+                                     Watermark="No interpreter selected yet"/>
 
                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <TextBlock Text="Python: " Foreground="Gray" Width="70"/>
@@ -178,56 +188,11 @@
                                 <TextBlock Text="{Binding NazcaStatus}" Foreground="White"/>
                             </StackPanel>
 
-                            <!-- Unified interpreter list: managed environments + discovered system
-                                 Pythons. Scrolls beyond ~5 entries instead of growing unbounded. -->
-                            <ScrollViewer MaxHeight="240" Margin="0,6,0,0"
-                                          VerticalScrollBarVisibility="Auto"
-                                          IsVisible="{Binding InterpreterOptions.Count}">
-                                <ItemsControl ItemsSource="{Binding InterpreterOptions}"
-                                              x:Name="InterpreterOptionsList">
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <Button Command="{Binding #InterpreterOptionsList.DataContext.SelectInterpreterCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    HorizontalAlignment="Stretch"
-                                                    HorizontalContentAlignment="Left"
-                                                    Margin="0,2,4,0" Padding="6,3"
-                                                    Background="#2d2d2d" FontSize="11">
-                                                <StackPanel>
-                                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                                        <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold"
-                                                                   IsVisible="{Binding IsActive}"/>
-                                                        <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"/>
-                                                    </StackPanel>
-                                                    <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                                               TextWrapping="Wrap"/>
-                                                </StackPanel>
-                                            </Button>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </ScrollViewer>
-
-                            <!-- No managed environment yet: offer the one-click create (warning text
-                                 only when Nazca is missing everywhere) -->
-                            <Border IsVisible="{Binding ShowCreateEnvironmentButton}"
-                                    Background="#2a2a20" CornerRadius="4" Padding="10" Margin="0,10,0,0">
-                                <Grid ColumnDefinitions="*,Auto">
-                                    <StackPanel Grid.Column="0" Spacing="4" VerticalAlignment="Center"
-                                                Margin="0,0,10,0">
-                                        <TextBlock Text="No Nazca environment found."
-                                                   Foreground="#e8c872" FontWeight="SemiBold" FontSize="12"
-                                                   IsVisible="{Binding ShowNazcaInstallOffer}"/>
-                                        <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap"
-                                                   Text="Lunima can create a managed Python environment with Nazca automatically."/>
-                                    </StackPanel>
-                                    <Button Grid.Column="1" Content="Install new"
-                                            Click="OnCreateNazcaEnvironmentClick"
-                                            ToolTip.Tip="Create a managed Python environment and install Nazca into it"
-                                            Background="#3d5d3d" FontSize="11" Padding="10,2"
-                                            MinHeight="0" VerticalAlignment="Center"/>
-                                </Grid>
-                            </Border>
+                            <Button Content="Manage in Python Environments →"
+                                    Click="OnManageInterpretersClick"
+                                    HorizontalAlignment="Left" Margin="0,10,0,0"
+                                    Padding="12,4" Background="#3d4d5d" FontSize="11"
+                                    ToolTip.Tip="Open the Python Environments page to select or create an interpreter"/>
                         </StackPanel>
                     </DataTemplate>
 

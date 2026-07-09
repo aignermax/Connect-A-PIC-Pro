@@ -68,6 +68,27 @@ public class GdsExportAlignmentTests
     }
 
     [Fact]
+    public async Task DemoShallowBend_AllRotations_PinsAlignInGds()
+    {
+        var (python, _) = await GdsAlignmentTestSetup.ResolveEnvironmentAsync();
+        if (python == null) return;   // env skip (CI without nazca)
+
+        // Issue #635: demo.shallow.bend is the only bundled demofab cell with a
+        // Y-ASYMMETRIC bbox (Y ∈ [-9.4, 200], org = a0 at the cell origin). The
+        // stale bottom-edge calibration (NazcaOriginOffsetY = -YMin = 9.4)
+        // placed the rendered bend 190.6 µm above its canvas rectangle; the
+        // engine-reported pins expose that here — a Y-symmetric DUT like
+        // mmi2x2_dp can never catch this convention mismatch.
+        var template = _library.First(t => t.NazcaFunctionName == "demo.shallow.bend");
+        var canvas = new DesignCanvasViewModel();
+        var dut = ComponentTemplates.CreateFromTemplate(template, 100, 400);
+        dut.Identifier = "bend_dut";
+        var dutVm = canvas.AddComponent(dut, template.Name);
+
+        await RunRotationMatrixAsync(canvas, dutVm, dut, python, overrides: null);
+    }
+
+    [Fact]
     public async Task OverrideComponent_AllRotations_PinsAlignInGds()
     {
         var (python, previewScript) = await GdsAlignmentTestSetup.ResolveEnvironmentAsync();
@@ -178,7 +199,10 @@ public class GdsExportAlignmentTests
             var (pins, scriptPath, tempDir) = await RunScriptAsync(script, python, rotationSteps);
 
             AssertDutPinsAlign(dut, pins["comp_0"], rotationSteps, scriptPath);
-            AssertConnectionHitsPins(canvas, script, rotationSteps);
+            // Connection-less designs (single-DUT placement checks) skip the
+            // waveguide assertions — there is no route to verify.
+            if (canvas.Connections.Count > 0)
+                AssertConnectionHitsPins(canvas, script, rotationSteps);
 
             // Reached only when this rotation passed — failures keep the script,
             // .gds and .pins.json on disk for analysis.

@@ -27,4 +27,12 @@ public class PythonEnvironmentsSettingsPage : ISettingsPage
     {
         ViewModel = viewModel;
     }
+
+    /// <summary>
+    /// Navigating to this page discovers system interpreters so the unified list (managed
+    /// environments + system Pythons, each with Nazca and gdsfactory versions) is populated
+    /// without a manual refresh (issue #645).
+    /// </summary>
+    public void OnSelected() =>
+        ((PythonEnvironmentManagerViewModel)ViewModel).RefreshInterpretersCommand.Execute(null);
 }

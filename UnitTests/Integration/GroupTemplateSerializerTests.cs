@@ -2,6 +2,7 @@ using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
+using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
 
@@ -214,6 +215,33 @@ public class GroupTemplateSerializerTests
     /// <summary>
     /// Creates a group with the specified number of children, each with 2 pins.
     /// </summary>
+    [Fact]
+    public void SerializeAndDeserialize_ElectricalPin_PreservesMatterType()
+    {
+        // A group template with an electrical pin must keep it electrical on reload — the
+        // serializer used to hardcode MatterType.Light, silently turning every pin optical
+        // and defeating the cross-kind connection guard (#519 review).
+        var group = new ComponentGroup("HeaterGroup") { PhysicalX = 0, PhysicalY = 0 };
+        var comp = new Component(
+            new Dictionary<int, SMatrix>(), new List<Slider>(), "heater", "",
+            new Part[1, 1] { { new Part() } }, -1, $"heater_{Guid.NewGuid():N}", DiscreteRotation.R0,
+            new List<PhysicalPin>
+            {
+                new() { Name = "opt", OffsetXMicrometers = 0, OffsetYMicrometers = 0, AngleDegrees = 180,
+                    LogicalPin = new Pin("opt", 0, MatterType.Light, RectSide.Left, Guid.NewGuid(), Guid.NewGuid()) },
+                new() { Name = "elec", OffsetXMicrometers = 25, OffsetYMicrometers = 0, AngleDegrees = 270,
+                    LogicalPin = new Pin("elec", 1, MatterType.Electricity, RectSide.Up, Guid.NewGuid(), Guid.NewGuid()) },
+            })
+        { PhysicalX = 0, PhysicalY = 0, WidthMicrometers = 50, HeightMicrometers = 30 };
+        group.AddChild(comp);
+
+        var result = GroupTemplateSerializer.Deserialize(GroupTemplateSerializer.Serialize(group));
+
+        var pins = result!.ChildComponents[0].PhysicalPins;
+        pins.First(p => p.Name == "opt").MatterType.ShouldBe(MatterType.Light);
+        pins.First(p => p.Name == "elec").MatterType.ShouldBe(MatterType.Electricity);
+    }
+
     private ComponentGroup CreateGroupWithChildren(int count)
     {
         var group = new ComponentGroup("TestGroup")
