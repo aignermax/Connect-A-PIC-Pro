@@ -52,6 +52,31 @@ CIRCUIT_MODEL_COMPONENTS = {"mzi"}
 # so a pass-through would be a wrong model — it gets its real sax model above (#665).
 PASS_THROUGH_COMPONENTS = {"straight", "taper", "bend_euler", "bend_s", "wire_corner"}
 
+# Curated subset of cspdk.sin300's LayerMapCornerstone (issue #570 follow-up): the physical
+# fabrication layers relevant to a placed/routed design. Excludes label/error-marker layers
+# (LABEL_SETTINGS/LABEL_INSTANCE duplicate LBL; routing_error_marker is a diagnostic, not a
+# fabrication layer). Numbers are read from LAYER at generation time — never hand-typed here.
+PROCESS_LAYER_NAMES = ["NITRIDE", "NITRIDE_ETCH", "HEATER", "PAD", "CLAD_OPEN", "FLOORPLAN", "LBL"]
+LAYER_DESCRIPTIONS = {
+    "NITRIDE": "Waveguide core (Si3N4)",
+    "NITRIDE_ETCH": "Nitride etch region",
+    "HEATER": "Heater metal (TiN)",
+    "PAD": "Bond-pad / routing metal (Aluminum)",
+    "CLAD_OPEN": "Cladding opening",
+    "FLOORPLAN": "Chip floorplan / die outline",
+    "LBL": "Label",
+}
+
+# Routing cross-sections cspdk.sin300 actually defines (xs_nc/xs_no optical, metal_routing/
+# heater_metal electrical — see cspdk.sin300.tech). kind 0 = Optical, 1 = Metal (ProcessDefinition.
+# XsectionKind's default int serialization — no JsonStringEnumConverter is registered).
+XSECTION_SPECS = [
+    ("xs_nc", 0, "NITRIDE", "SiN C-band strip waveguide"),
+    ("xs_no", 0, "NITRIDE", "SiN O-band strip waveguide"),
+    ("metal_routing", 1, "PAD", "Electrical routing metal"),
+    ("heater_metal", 1, "HEATER", "Heater trace metal"),
+]
+
 
 def _num(v):
     """kdb.DBox left/right/top/bottom are float properties; width()/height() are methods;
@@ -265,6 +290,40 @@ def build_smatrix(pdk, name, pins):
     return None
 
 
+def build_layers(sin):
+    """Real GDS layer/datatype numbers read from cspdk.sin300's LayerMapCornerstone — never
+    hand-typed, so a cspdk layer renumbering is caught by re-running this generator."""
+    layer = sin.LAYER
+    return [
+        {
+            "name": name,
+            "layer": int(getattr(layer, name)[0]),
+            "datatype": int(getattr(layer, name)[1]),
+            "description": LAYER_DESCRIPTIONS[name],
+        }
+        for name in PROCESS_LAYER_NAMES
+    ]
+
+
+def build_xsections():
+    """Real cross-section width/bend-radius numbers from cspdk.sin300's activated PDK
+    (gf.get_cross_section), not invented — see XSECTION_SPECS."""
+    import gdsfactory as gf
+    xsections = []
+    for name, kind, layer_name, description in XSECTION_SPECS:
+        xs = gf.get_cross_section(name)
+        xsections.append({
+            "name": name,
+            "kind": kind,
+            "widthUm": round(float(xs.width), 3),
+            "minRadiusUm": round(float(xs.radius_min or 0), 3),
+            "recommendedRadiusUm": round(float(xs.radius or 0), 3),
+            "layers": [layer_name],
+            "description": description,
+        })
+    return xsections
+
+
 def main():
     import cspdk.sin300 as sin
     pdk = sin.PDK
@@ -306,6 +365,8 @@ def main():
             "name": "CornerStone SiN 300nm",
             "foundry": "CornerStone",
             "coreThicknessNm": 300,
+            "layers": build_layers(sin),
+            "xsections": build_xsections(),
             "materials": [
                 {"name": "Si3N4", "role": "core"},
                 {"name": "SiO2", "role": "cladding"},

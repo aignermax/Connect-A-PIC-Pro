@@ -38,6 +38,7 @@ public partial class ProcessManagementViewModel
     public void ShowActiveProcess(ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks)
     {
         ResetState();
+        SetAvailablePresets(loadedPdks);
 
         if (active == null)
         {

@@ -171,6 +171,16 @@
                 <Button Content="New" Command="{Binding NewProcessCommand}"
                         Padding="12,6" Background="#3d3d3d"
                         ToolTip.Tip="Start a blank process (seeded with public SOI material defaults)"/>
+                <TextBlock Text="Load preset ▾" VerticalAlignment="Center" Foreground="#aaa" FontSize="11"/>
+                <ComboBox ItemsSource="{Binding AvailablePresets}" SelectedItem="{Binding SelectedPreset}" Width="220"
+                          PlaceholderText="Choose a bundled PDK…"
+                          ToolTip.Tip="Loads a bundled/loaded PDK's fabrication process (layer stack, cross-sections, materials) into the editor as a starting point">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate>
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
                 <Button Content="Save to PDK" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
                         Padding="12,6" Background="#2a4a2a"
                         ToolTip.Tip="Persist the edited layer stack / cross-sections back to this process's PDK JSON (single-PDK processes)"/>

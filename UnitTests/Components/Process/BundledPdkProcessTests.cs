@@ -2,6 +2,7 @@ using System.IO;
 using System.Linq;
 using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using Shouldly;
 using Xunit;
 
@@ -192,5 +193,45 @@ public class BundledPdkProcessTests
         groups.Count.ShouldBe(2);   // SOI (demo+siepic) + SiN (cornerstone)
         groups.ShouldContain(g => g.MemberPdkNames.Contains("CornerStone SiN 300nm")
                                   && g.MemberPdkNames.Count == 1);
+    }
+
+    [Fact]
+    public void SiepicEbeam_DeclaresRealLayerStackAndCrossSections()
+    {
+        // Real ubcpdk layer numbers / cross-section widths+radii (issue #570 process-preset
+        // follow-up) — not the empty stack the PDK shipped with previously.
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "siepic-ebeam-pdk.json"));
+        var process = draft.Process!;
+
+        process.Layers.ShouldNotBeEmpty();
+        process.Layers.ShouldContain(l => l.Name == "WG" && l.Layer == 1);
+        process.Layers.ShouldContain(l => l.Name == "M2_ROUTER");
+
+        process.Xsections.ShouldNotBeEmpty();
+        var strip = process.Xsections.Single(x => x.Name == "strip");
+        strip.Kind.ShouldBe(XsectionKind.Optical);
+        strip.WidthUm.ShouldBe(0.5);
+
+        process.Xsections.ShouldContain(x => x.Kind == XsectionKind.Metal && x.WidthUm > 0);
+    }
+
+    [Fact]
+    public void CornerStoneSin_DeclaresRealLayerStackAndCrossSections()
+    {
+        // Real cspdk.sin300 layer numbers / cross-section widths+radii, read from the
+        // activated PDK by scripts/generate_cspdk_sin300_pdk.py — not the empty stack the
+        // gdsfactory-backend PDK previously shipped with.
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var process = draft.Process!;
+
+        process.Layers.ShouldNotBeEmpty();
+        process.Layers.ShouldContain(l => l.Name == "NITRIDE" && l.Layer == 203);
+
+        process.Xsections.ShouldNotBeEmpty();
+        var xsNc = process.Xsections.Single(x => x.Name == "xs_nc");
+        xsNc.Kind.ShouldBe(XsectionKind.Optical);
+        xsNc.WidthUm.ShouldBe(1.2);
+
+        process.Xsections.ShouldContain(x => x.Kind == XsectionKind.Metal && x.WidthUm > 0);
     }
 }

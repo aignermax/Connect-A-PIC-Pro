@@ -49,6 +49,22 @@ public partial class ProcessManagementViewModel : ObservableObject
     public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
         new[] { XsectionKind.Optical, XsectionKind.Metal };
 
+    /// <summary>
+    /// Bundled/loaded PDKs whose fabrication process can be loaded into the editor as a preset
+    /// (issue #570 follow-up): SiEPIC EBeam, CornerStone SiN, Demo, and any other loaded PDK that
+    /// declares a <see cref="ProcessDefinition"/>. Populated by <see cref="SetAvailablePresets"/>,
+    /// which <see cref="ShowActiveProcess"/> calls with every loaded PDK each time the dialog opens.
+    /// </summary>
+    public ObservableCollection<PdkDraft> AvailablePresets { get; } = new();
+
+    /// <summary>
+    /// The preset picked in the "Load preset" dropdown; selecting one loads its process via
+    /// <see cref="OnSelectedPresetChanged"/> (same pattern as <c>PdkOffsetEditorViewModel</c>'s
+    /// installed-PDK picker — a plain property setter, no extra command/behavior wiring needed).
+    /// </summary>
+    [ObservableProperty]
+    private PdkDraft? _selectedPreset;
+
     /// <summary>Resolves a PDK name to its source JSON path so edits can be persisted; wired by the
     /// UI layer to the loaded-PDK registry. Null (e.g. in tests/headless) disables saving.</summary>
     public Func<string, string?>? PdkFilePathResolver { get; set; }
@@ -102,6 +118,36 @@ public partial class ProcessManagementViewModel : ObservableObject
         Replace(Materials, process.Materials);
         MarkAllRowsOwned();
         HasProcess = true;
+    }
+
+    /// <summary>
+    /// Refreshes <see cref="AvailablePresets"/> from the currently loaded PDKs: any PDK that
+    /// declares a <see cref="ProcessDefinition"/> (bundled or user-loaded) can seed the editor.
+    /// Called by <see cref="ShowActiveProcess"/> every time the dialog opens, so the picker
+    /// always reflects the live PDK set instead of a stale snapshot.
+    /// </summary>
+    public void SetAvailablePresets(IReadOnlyList<PdkDraft> loadedPdks)
+    {
+        AvailablePresets.Clear();
+        foreach (var pdk in loadedPdks.Where(p => p.Process != null))
+            AvailablePresets.Add(pdk);
+    }
+
+    /// <summary>
+    /// Loads a bundled/loaded PDK's fabrication process into the editor as a starting point
+    /// (issue #570 follow-up), triggered by picking an entry in the "Load preset" dropdown
+    /// (<see cref="SelectedPreset"/>). The picked PDK's <see cref="ProcessDefinition"/> replaces
+    /// the current editable state via <see cref="Load"/>, so every row is marked owned by this
+    /// preset (issue #686 provenance) and can be edited and saved back to it.
+    /// </summary>
+    partial void OnSelectedPresetChanged(PdkDraft? value)
+    {
+        if (value == null)
+            return;
+
+        Load(value.Process ?? new ProcessDefinition { Name = value.Name });
+        _memberDrafts = new List<PdkDraft> { value };
+        StatusText = $"Loaded '{value.Name}' as a starting process. Adjust as needed, then Save to PDK.";
     }
 
     /// <summary>
