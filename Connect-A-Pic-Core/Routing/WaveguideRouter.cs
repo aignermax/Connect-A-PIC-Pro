@@ -63,6 +63,15 @@ public class WaveguideRouter
     public bool UseHierarchicalPathfinding { get; set; } = false;
 
     /// <summary>
+    /// Whether the A* search may use 45° diagonal moves (octile routing).
+    /// Diagonals yield shorter, more compact routes but roughly double the
+    /// per-cell state space, making every re-route noticeably more expensive.
+    /// Library default is true; the application layer decides the product
+    /// default (currently opt-in via the Routing settings page).
+    /// </summary>
+    public bool UseDiagonalRouting { get; set; } = true;
+
+    /// <summary>
     /// Maximum nodes for Phase 1 (quick) pathfinding.
     /// Phase 1 provides fast results for simple and medium-complexity routes.
     /// </summary>
@@ -276,6 +285,9 @@ public class WaveguideRouter
 
             List<AStarNode>? gridPath = null;
 
+            // The heuristic's distance metric must match the movement model.
+            CostCalculator.UseDiagonals = UseDiagonalRouting;
+
             if (_hierarchicalPathfinder != null && UseHierarchicalPathfinding)
             {
                 gridPath = _hierarchicalPathfinder.FindPath(
@@ -287,7 +299,8 @@ public class WaveguideRouter
                 // Phase 1: Quick search with limited node budget for fast results
                 var phase1 = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
                 {
-                    MaxNodesExpanded = Phase1MaxNodes
+                    MaxNodesExpanded = Phase1MaxNodes,
+                    UseDiagonals = UseDiagonalRouting
                 };
                 gridPath = phase1.FindPath(gridStartX, gridStartY, startDir,
                                            gridEndX, gridEndY, endDir, cancellationToken);
@@ -298,7 +311,8 @@ public class WaveguideRouter
                     OnComplexRouteStarted?.Invoke();
                     var phase2 = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
                     {
-                        MaxNodesExpanded = Phase2MaxNodes
+                        MaxNodesExpanded = Phase2MaxNodes,
+                        UseDiagonals = UseDiagonalRouting
                     };
                     gridPath = phase2.FindPath(gridStartX, gridStartY, startDir,
                                                gridEndX, gridEndY, endDir, cancellationToken);
@@ -316,7 +330,8 @@ public class WaveguideRouter
                 var tolerantRetry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
                 {
                     MaxNodesExpanded = Phase1MaxNodes,
-                    AllowLateralGoalTolerance = true
+                    AllowLateralGoalTolerance = true,
+                    UseDiagonals = UseDiagonalRouting
                 };
                 gridPath = tolerantRetry.FindPath(gridStartX, gridStartY, startDir,
                                                   gridEndX, gridEndY, endDir, cancellationToken);
@@ -327,7 +342,10 @@ public class WaveguideRouter
             {
                 CostCalculator.MinPinEscapeCells = 2;
                 CostCalculator.MinStraightRunCells = 2;
-                var retry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator);
+                var retry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
+                {
+                    UseDiagonals = UseDiagonalRouting
+                };
                 var retryPath = retry.FindPath(gridStartX, gridStartY, startDir,
                                                gridEndX, gridEndY, endDir, cancellationToken);
                 if (retryPath != null && retryPath.Count < gridPath.Count)
@@ -338,7 +356,10 @@ public class WaveguideRouter
             {
                 CostCalculator.MinPinEscapeCells = 2;
                 CostCalculator.MinStraightRunCells = 2;
-                var fallback = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator);
+                var fallback = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
+                {
+                    UseDiagonals = UseDiagonalRouting
+                };
                 gridPath = fallback.FindPath(gridStartX, gridStartY, startDir,
                                              gridEndX, gridEndY, endDir, cancellationToken);
             }

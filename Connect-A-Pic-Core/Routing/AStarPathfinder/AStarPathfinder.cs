@@ -33,6 +33,13 @@ public class AStarPathfinder
     /// </summary>
     public bool AllowLateralGoalTolerance { get; set; }
 
+    /// <summary>
+    /// When true (default), the search expands all 8 directions including 45°
+    /// diagonals (octile routing). When false, only the 4 cardinal directions
+    /// are expanded — a much smaller search space for faster everyday routing.
+    /// </summary>
+    public bool UseDiagonals { get; set; } = true;
+
     public AStarPathfinder(PathfindingGrid grid, RoutingCostCalculator costCalculator)
     {
         _grid = grid;
@@ -180,7 +187,11 @@ public class AStarPathfinder
         // Get distance from start for pin escape enforcement
         int distanceFromStart = distFromStart.GetValueOrDefault(StateKey(current), 0);
 
-        foreach (var dir in GridDirectionExtensions.GetAllDirections())
+        var directions = UseDiagonals
+            ? GridDirectionExtensions.GetAllDirections()
+            : GridDirectionExtensions.GetCardinalDirections();
+
+        foreach (var dir in directions)
         {
             var (dx, dy) = dir.GetDelta();
             int newX = current.X + dx;

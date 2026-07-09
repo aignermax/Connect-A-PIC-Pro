@@ -126,10 +126,19 @@ public class RoutingCostCalculator
     private static readonly double Sqrt2 = Math.Sqrt(2.0);
 
     /// <summary>
+    /// Whether the search may use 45° diagonal moves. Must match the
+    /// pathfinder's setting: it selects the distance metric of the heuristic
+    /// (octile when diagonals are allowed, Manhattan otherwise — Manhattan is
+    /// tighter and inadmissible-free for pure 4-direction movement).
+    /// </summary>
+    public bool UseDiagonals { get; set; } = true;
+
+    /// <summary>
     /// Calculates heuristic cost from current position to goal.
-    /// Uses the octile distance (admissible for 8-direction movement):
-    /// h = ((dMax − dMin) + √2·dMin) · cellSize · straightCost, plus a
-    /// conservative bend estimate that never overestimates the true cost.
+    /// With diagonals: octile distance (admissible for 8-direction movement),
+    /// h = ((dMax − dMin) + √2·dMin) · cellSize · straightCost. Without
+    /// diagonals: Manhattan distance. Plus a conservative bend estimate that
+    /// never overestimates the true cost.
     /// </summary>
     public double CalculateHeuristic(int fromX, int fromY, GridDirection fromDir,
                                       int toX, int toY, GridDirection toDir)
@@ -139,17 +148,20 @@ public class RoutingCostCalculator
         int dMin = Math.Min(dx, dy);
         int dMax = Math.Max(dx, dy);
 
-        // Octile distance
-        double distance = ((dMax - dMin) + Sqrt2 * dMin) * CellSizeMicrometers;
+        // Octile distance for 8-direction search, Manhattan for 4-direction
+        double distance = UseDiagonals
+            ? ((dMax - dMin) + Sqrt2 * dMin) * CellSizeMicrometers
+            : (dx + dy) * CellSizeMicrometers;
 
         // Estimate turns needed
         double turnEstimate = 0;
 
-        // Mixed straight + diagonal displacement requires at least one 45° turn.
-        // Use half of a 45° turn cost to stay safely admissible near the goal tolerance.
+        // Mixed displacement requires at least one turn: a 45° turn with
+        // diagonals (use half its cost to stay safely admissible near the
+        // goal tolerance), a full 90° turn without.
         if (dMin > 0 && dMax > dMin)
         {
-            turnEstimate += TurnCostPer90Degrees * 0.25;
+            turnEstimate += TurnCostPer90Degrees * (UseDiagonals ? 0.25 : 0.5);
         }
 
         // If final direction doesn't match current direction, we may need another turn

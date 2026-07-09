@@ -123,9 +123,21 @@ public static class GridDirectionExtensions
         GridDirection.South, GridDirection.SouthEast
     };
 
+    private static readonly GridDirection[] CardinalDirections =
+    {
+        GridDirection.East, GridDirection.North,
+        GridDirection.West, GridDirection.South
+    };
+
     /// <summary>
     /// Returns all 8 directions (cardinals and diagonals).
     /// The returned array is shared — callers must not mutate it.
     /// </summary>
     public static GridDirection[] GetAllDirections() => AllDirections;
+
+    /// <summary>
+    /// Returns the 4 cardinal directions (no diagonals), used when diagonal
+    /// routing is disabled. The returned array is shared — do not mutate.
+    /// </summary>
+    public static GridDirection[] GetCardinalDirections() => CardinalDirections;
 }

@@ -103,6 +103,22 @@
                         </StackPanel>
                     </DataTemplate>
 
+                    <!-- Routing -->
+                    <DataTemplate DataType="{x:Type settings:RoutingSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Routing" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <CheckBox Content="Enable diagonal routing (45° waveguides)"
+                                      IsChecked="{Binding Canvas.UseDiagonalRouting}"
+                                      Foreground="White"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                Octile A* with 45° diagonals produces shorter, more compact routes,
+                                but every re-route needs considerably more compute. When disabled,
+                                the fast 4-direction (Manhattan) search is used. Toggling this
+                                re-routes all connections immediately.
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+
                     <!-- Software Updates -->
                     <DataTemplate DataType="{x:Type vmUpdate:UpdateViewModel}">
                         <StackPanel Spacing="8">

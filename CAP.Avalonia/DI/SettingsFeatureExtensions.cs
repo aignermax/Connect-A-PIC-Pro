@@ -17,6 +17,7 @@ internal static class SettingsFeatureExtensions
     {
         services.AddTransient<ISettingsPage, GeneralSettingsPage>();
         services.AddTransient<ISettingsPage, GridSnapSettingsPage>();
+        services.AddTransient<ISettingsPage, RoutingSettingsPage>();
         services.AddTransient<ISettingsPage, UpdateSettingsPage>();
         services.AddTransient<ISettingsPage, GdsExportSettingsPage>();
         services.AddTransient<ISettingsPage, PythonEnvironmentsSettingsPage>();
