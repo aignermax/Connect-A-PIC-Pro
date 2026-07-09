@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels"
+        xmlns:controls="using:CAP.Avalonia.Controls"
         x:Class="CAP.Avalonia.Views.ProcessManagementWindow"
         x:CompileBindings="False"
         Title="Fabrication Process"
@@ -13,7 +14,62 @@
 
         <!-- Header -->
         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
-            <TextBlock Text="Fabrication Process" FontWeight="SemiBold" FontSize="16" Foreground="LightBlue"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="Fabrication Process" FontWeight="SemiBold" FontSize="16" Foreground="LightBlue"/>
+                <!-- Plain-language explainer for non-physicists (#682 / #570): what a process,
+                     layers, cross-sections and materials are, and why electrical routing needs
+                     its own metal cross-section. -->
+                <controls:HelpFlyoutButton Title="Fabrication process — what is this?" VerticalAlignment="Center">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="What is a fabrication process?" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                It is the foundry's recipe: which material layers get deposited or
+                                etched, in what order, and with what shapes. Your whole chip -
+                                every waveguide and every wire - is built in ONE process. That is
+                                why picking a process up front matters: a design only makes sense,
+                                and can only be manufactured, within the process it was built for.
+                            </TextBlock>
+
+                            <TextBlock Text="Layers" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                A layer is one physical sheet of material in the chip, for example
+                                the waveguide core that guides light, or a metal layer used for
+                                electrical wiring. The "Layer stack" table lists every sheet the
+                                foundry can pattern, each with its own GDS layer/datatype number.
+                            </TextBlock>
+
+                            <TextBlock Text="Cross-sections" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                A cross-section is the width and shape a routed connection gets on
+                                a given layer. An optical waveguide is typically very narrow
+                                (around 0.5 µm) so it only carries one mode of light cleanly; a
+                                metal trace is usually much wider (around 10 µm) so it can carry
+                                current without excessive resistance. The same "wire" behaves very
+                                differently depending on which cross-section routes it.
+                            </TextBlock>
+
+                            <TextBlock Text="Materials" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                Materials describe what each layer is actually made of: silicon or
+                                silicon nitride for waveguides, metal for electrical wiring, and so
+                                on. The material sets how light bends and travels (its refractive
+                                index) or how easily current flows, so getting it right is what
+                                makes the simulation physically meaningful.
+                            </TextBlock>
+
+                            <TextBlock Text="Electrical routing needs its own metal cross-section" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                Electrical connections (for example to a heater or a modulator)
+                                cannot travel on an optical waveguide - they need a conductive metal
+                                layer instead, routed at a much wider metal cross-section. Use
+                                "+ Metal (electrical)" below to add one; it also adds the METAL
+                                layer that carries it in the GDS export.
+                            </TextBlock>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </StackPanel>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#9999bb"
                        Text="A chip is built in one fabrication process — chosen for this design at startup / File → New Design. Here you inspect and edit what that process is: layer stack and materials (future FDTD input) and design rules (why a fab may reject certain components). Import details from a foundry PDK (uPDK YAML / CSV tables) and adjust as needed."/>
 
