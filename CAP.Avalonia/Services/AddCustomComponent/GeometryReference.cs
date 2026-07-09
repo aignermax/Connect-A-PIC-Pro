@@ -30,6 +30,15 @@ public sealed record GeometryReference(GeometryBackend Backend, string? Module, 
     /// Wraps the reference in a raw-code snippet the gdsfactory preview script understands:
     /// it imports the module and assigns the built cell to a variable named <c>component</c>.
     /// </summary>
+    /// <remarks>
+    /// When <see cref="Module"/> is set, the emitted code is
+    /// <c>import &lt;Module&gt;\ncomponent = &lt;Module&gt;.&lt;Function&gt;(&lt;Parameters&gt;)</c>.
+    /// When <see cref="Module"/> is null/empty only <c>import gdsfactory as gf</c> is emitted,
+    /// so <see cref="Function"/> MUST then be gf-qualified (e.g. "gf.components.straight");
+    /// a bare name like "straight" would produce <c>component = straight()</c> with no import
+    /// that resolves it, raising a Python <c>NameError</c>. A later UI task enforces/derives
+    /// this qualification — here the contract is only documented, not validated.
+    /// </remarks>
     public string ToGdsFactoryRawCode()
     {
         var import = string.IsNullOrWhiteSpace(Module) ? "import gdsfactory as gf" : $"import {Module}";
