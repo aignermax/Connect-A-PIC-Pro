@@ -61,7 +61,18 @@
             <!-- Content area: only shown when IsVisible is true; height is user-adjustable. -->
             <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
                     Height="{Binding BottomPanel.Analysis.DockHeight}" Background="#161616">
-                <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}">
+                <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}"
+                            Padding="0">
+                    <TabControl.Styles>
+                        <!-- Compact tab headers (#695): the Fluent default wastes ~20 px of plot height. Scoped to this TabControl only. -->
+                        <Style Selector="TabItem">
+                            <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="MinHeight" Value="26"/>
+                            <Setter Property="Height" Value="26"/>
+                            <Setter Property="Padding" Value="10,0"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        </Style>
+                    </TabControl.Styles>
                     <TabItem Header="{loc:Localize AnalysisDock.TabTransient}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <panels:TimeDomainPanel/>
