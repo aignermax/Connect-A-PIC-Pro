@@ -74,13 +74,27 @@ public partial class NewComponentViewModel : ObservableObject
         Processes = processes;
     }
 
-    // A change to any input the preview was rendered from invalidates HasPreview — otherwise
-    // a saved draft could be built from a preview that no longer matches the current
+    // A change to any input the preview was rendered from invalidates the preview — otherwise
+    // a saved draft could be built from a rendered preview that no longer matches the current
     // Module/Function/Parameters/Backend (drift between the last render and what gets saved).
-    partial void OnSelectedBackendChanged(GeometryBackend value) => HasPreview = false;
-    partial void OnModuleChanged(string? value) => HasPreview = false;
-    partial void OnFunctionChanged(string value) => HasPreview = false;
-    partial void OnParametersChanged(string? value) => HasPreview = false;
+    // Clearing _lastPreview is the load-bearing part: Save gates on that field, so a stale
+    // preview cannot be saved; HasPreview (which drives the Save button's enablement) tracks it.
+    partial void OnSelectedBackendChanged(GeometryBackend value) => InvalidatePreview();
+    partial void OnModuleChanged(string? value) => InvalidatePreview();
+    partial void OnFunctionChanged(string value) => InvalidatePreview();
+    partial void OnParametersChanged(string? value) => InvalidatePreview();
+
+    private void InvalidatePreview()
+    {
+        _lastPreview = null;
+        HasPreview = false;
+    }
+
+    /// <summary>Save is only possible once a matching preview has been rendered and no work is in flight.</summary>
+    private bool CanSave => HasPreview && !IsBusy;
+
+    partial void OnHasPreviewChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
+    partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>Renders the configured geometry reference and extracts its size and pins.</summary>
     [RelayCommand]
@@ -166,7 +180,7 @@ public partial class NewComponentViewModel : ObservableObject
     /// failure explaining why the save is a black box) and prefixes it with a save confirmation,
     /// so the user always gets confirmation without losing the reason there is no model.
     /// </summary>
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task Save()
     {
         if (IsBusy) return;

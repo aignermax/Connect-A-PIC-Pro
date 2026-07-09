@@ -100,5 +100,26 @@ public class NewComponentViewModelTests : IDisposable
         vm.SavedDraft.ShouldBeNull();
     }
 
+    [Fact]
+    public async Task Changing_the_geometry_after_preview_invalidates_it_and_blocks_save()
+    {
+        var (vm, _) = Build(withFdtd: false);
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        vm.HasPreview.ShouldBeTrue();
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+
+        // Edit the function reference without re-previewing: the rendered geometry no longer
+        // matches what would be saved, so Save must become impossible (drift guard, #656 review).
+        vm.Function = "mmi1x2";
+
+        vm.HasPreview.ShouldBeFalse();
+        vm.SaveCommand.CanExecute(null).ShouldBeFalse();
+
+        // Even if the command body is invoked directly (bypassing CanExecute), the cleared
+        // preview makes Save bail out — no mixed-geometry draft is ever persisted.
+        await vm.SaveCommand.ExecuteAsync(null);
+        vm.SavedDraft.ShouldBeNull();
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }
