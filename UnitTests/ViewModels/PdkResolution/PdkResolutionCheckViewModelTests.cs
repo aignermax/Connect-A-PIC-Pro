@@ -142,6 +142,69 @@ public class PdkResolutionCheckViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task RunCheck_ComponentWithBothFunctions_PrefersNazca()
+    {
+        // Precedence decision: a component declaring BOTH functions is checked as nazca.
+        File.WriteAllText(Path.Combine(_pdkDir, "both-pdk.json"),
+            """
+            { "name": "Both PDK", "components": [ {
+                "name": "Dual", "nazcaFunction": "demo.strt", "gdsFactoryFunction": "cspdk.sin300.straight",
+                "widthMicrometers": 100, "heightMicrometers": 50,
+                "pins": [ { "name": "a0", "offsetXMicrometers": 0, "offsetYMicrometers": 25, "angleDegrees": 180 } ]
+            } ] }
+            """);
+        IReadOnlyList<PdkResolutionEntry>? captured = null;
+        var service = MockService();
+        service.Setup(s => s.ResolveAsync(It.IsAny<IReadOnlyList<PdkResolutionEntry>>(), default))
+            .Callback<IReadOnlyList<PdkResolutionEntry>, CancellationToken>((e, _) => captured = e)
+            .ReturnsAsync(new PdkResolutionReport
+            { Success = true, Results = new[] { new PdkResolutionResult { Name = "Dual", Status = PdkResolutionStatus.Ok } } });
+        var vm = CreateViewModel(service.Object);
+
+        await vm.RunCheckCommand.ExecuteAsync(null);
+
+        var entry = captured.ShouldNotBeNull().ShouldHaveSingleItem();
+        entry.Backend.ShouldBe("nazca");
+        entry.Module.ShouldBe("demo");
+        entry.Function.ShouldBe("strt");
+    }
+
+    [Fact]
+    public async Task RunCheck_MixedBackendsInOneFile_AlignsBackendPathAndName()
+    {
+        // The routing uses index-aligned lists (useGdsFactory[i]/functionPaths[i]/components[i]);
+        // a nazca + a gdsfactory component in one file must not desync backend, path and name.
+        File.WriteAllText(Path.Combine(_pdkDir, "mixed2.json"),
+            """
+            { "name": "Mixed", "components": [
+              { "name": "NazcaComp", "nazcaFunction": "ebeam_y_1550",
+                "widthMicrometers": 100, "heightMicrometers": 50,
+                "pins": [ { "name": "a0", "offsetXMicrometers": 0, "offsetYMicrometers": 25, "angleDegrees": 180 } ] },
+              { "name": "GfComp", "nazcaFunction": "", "gdsFactoryFunction": "cspdk.sin300.mmi1x2",
+                "widthMicrometers": 100, "heightMicrometers": 50,
+                "pins": [ { "name": "a0", "offsetXMicrometers": 0, "offsetYMicrometers": 25, "angleDegrees": 180 } ] } ] }
+            """);
+        IReadOnlyList<PdkResolutionEntry>? captured = null;
+        var service = MockService();
+        service.Setup(s => s.ResolveAsync(It.IsAny<IReadOnlyList<PdkResolutionEntry>>(), default))
+            .Callback<IReadOnlyList<PdkResolutionEntry>, CancellationToken>((e, _) => captured = e)
+            .ReturnsAsync(new PdkResolutionReport { Success = true });
+        var vm = CreateViewModel(service.Object);
+
+        await vm.RunCheckCommand.ExecuteAsync(null);
+
+        captured.ShouldNotBeNull();
+        captured.Count.ShouldBe(2);
+        captured[0].Name.ShouldBe("NazcaComp");
+        captured[0].Backend.ShouldBe("nazca");
+        captured[0].Function.ShouldBe("ebeam_y_1550");
+        captured[1].Name.ShouldBe("GfComp");
+        captured[1].Backend.ShouldBe("gdsfactory");
+        captured[1].Module.ShouldBe("cspdk.sin300");
+        captured[1].Function.ShouldBe("mmi1x2");
+    }
+
+    [Fact]
     public async Task RunCheck_AnalyzerSentinel_IsSkipped()
     {
         WritePdk("tools-pdk.json", ("ONA Analyzer", "__analyzer__"));

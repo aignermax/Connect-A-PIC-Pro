@@ -68,6 +68,22 @@ public class PdkFunctionResolutionServiceTests
     }
 
     [Fact]
+    public void ParseOutput_NoJsonButStderr_SurfacesPythonErrorExcerpt()
+    {
+        // #515 review fix: a run that prints a traceback to stderr and no JSON must surface the
+        // Python error, not a bare "no JSON output". Also exercises LastLines (trims, keeps tail).
+        var stderr = "Traceback (most recent call last):\n"
+                   + "  File \"list_pdk_resolution.py\", line 1, in <module>\n"
+                   + "ModuleNotFoundError: No module named 'nazca'\n";
+
+        var report = PdkFunctionResolutionService.ParseOutput(stdout: "chatter but no json", stderr: stderr);
+
+        report.Success.ShouldBeFalse();
+        report.Error.ShouldContain("Python error");
+        report.Error.ShouldContain("No module named 'nazca'");
+    }
+
+    [Fact]
     public void ParseOutput_UnknownStatus_MapsToError()
     {
         var report = PdkFunctionResolutionService.ParseOutput(

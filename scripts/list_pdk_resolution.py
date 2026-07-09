@@ -140,26 +140,33 @@ def _resolve_generic(name, module, function):
 
 def _resolve_gdsfactory(name, module, cell):
     """Verify a gdsfactory-native cell the way the export/preview does
-    (GdsFactoryPreviewCode): import the PDK module, activate its PDK, then look
-    the cell up via the active PDK's registry / gf.get_component — NOT as a plain
-    module attribute (cspdk cells are registered, not module-level functions)."""
+    (GdsFactoryPreviewCode): import the PDK module, activate its PDK, then
+    instantiate the cell via gf.get_component. cspdk cells are registered in the
+    active PDK, not module-level attributes. The real error text is always
+    surfaced, and a registered-but-broken cell is distinguished from an
+    unknown one (issue #515 review)."""
     import importlib
     import gdsfactory as gf
     mod = importlib.import_module(module)  # ImportError bubbles to _resolve_entry
     pdk = getattr(mod, "PDK", None)
-    if pdk is not None and hasattr(pdk, "activate"):
-        pdk.activate()
+    if pdk is None or not hasattr(pdk, "activate"):
+        # The export does '<module>.PDK.activate()'; a module without it would crash
+        # there too. Report that instead of silently querying a stale active PDK.
+        return _result(name, STATUS_ERROR, "",
+                       f"module '{module}' exposes no activatable PDK (cannot mirror the export)")
+    pdk.activate()
     active = gf.get_active_pdk()
     pdk_name = getattr(active, "name", "?")
-    if cell in getattr(active, "cells", {}):
-        return _result(name, STATUS_OK, "pcell",
-                       f"'{cell}' is a cell in the active PDK '{pdk_name}'")
+    in_registry = cell in getattr(active, "cells", {})
     try:
-        gf.get_component(cell)
-        return _result(name, STATUS_OK, "callable", f"gf.get_component('{cell}') resolves")
-    except Exception:
+        gf.get_component(cell)  # instantiate exactly like the export does
+        return _result(name, STATUS_OK, "pcell", f"'{cell}' resolves in the active PDK '{pdk_name}'")
+    except Exception as exc:
+        if in_registry:
+            return _result(name, STATUS_WARNING, "attribute",
+                           f"'{cell}' is registered in PDK '{pdk_name}' but failed to build: {exc}")
         return _result(name, STATUS_ERROR, "",
-                       f"'{cell}' is not a cell in the active PDK '{pdk_name}'")
+                       f"'{cell}' is not a cell in the active PDK '{pdk_name}': {exc}")
 
 
 def _resolve_entry(entry):

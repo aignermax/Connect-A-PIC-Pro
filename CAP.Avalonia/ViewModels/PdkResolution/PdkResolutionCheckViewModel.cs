@@ -86,6 +86,13 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
             HasFailures = errors > 0 || warnings > 0 || Pdks.Any(p => p.HasError);
             StatusText = $"Checked {Pdks.Count} PDK file(s): {errors} dead reference(s), {warnings} warning(s).";
         }
+        catch (Exception ex)
+        {
+            // e.g. Directory.GetFiles throwing (permissions / TOCTOU) — without this the async
+            // command would fault unobserved, leaving the UI stuck on "Checking…" (#515 review).
+            HasFailures = true;
+            StatusText = $"PDK check failed: {ex.Message}";
+        }
         finally
         {
             IsRunning = false;
@@ -163,11 +170,15 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
     private async Task CopyFailingListAsync()
     {
         var text = BuildFailingListText();
-        if (CopyToClipboard != null && text.Length > 0)
+        if (text.Length == 0)
+            return;
+        if (CopyToClipboard == null)
         {
-            await CopyToClipboard(text);
-            StatusText = "Failing list copied to clipboard.";
+            StatusText = "Clipboard is unavailable in this context.";
+            return;
         }
+        await CopyToClipboard(text);
+        StatusText = "Failing list copied to clipboard.";
     }
 
     /// <summary>

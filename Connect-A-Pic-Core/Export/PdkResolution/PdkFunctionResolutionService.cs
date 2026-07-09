@@ -99,13 +99,24 @@ public class PdkFunctionResolutionService
             if (completed == timeoutTask || ct.IsCancellationRequested)
             {
                 TryKill(process);
-                return ct.IsCancellationRequested
-                    ? PdkResolutionReport.Fail("Operation was cancelled.")
-                    : PdkResolutionReport.Fail($"Resolution script timed out after {_timeout.TotalSeconds:F0}s.");
+                if (ct.IsCancellationRequested)
+                    return PdkResolutionReport.Fail("Operation was cancelled.");
+
+                // Surface whatever the script had emitted to stderr before hanging — a bare
+                // "timed out" is nearly undebuggable across a many-import batch (#515 review).
+                var errTail = LastLines(await DrainAsync(stderrTask), 5);
+                var msg = $"Resolution script timed out after {_timeout.TotalSeconds:F0}s.";
+                return PdkResolutionReport.Fail(
+                    string.IsNullOrEmpty(errTail) ? msg : $"{msg} Last output:\n{errTail}");
             }
 
             await process.WaitForExitAsync(ct);
             return ParseOutput(await stdoutTask, await stderrTask);
+        }
+        catch (OperationCanceledException)
+        {
+            // Cancellation during WaitForExitAsync must read as cancelled, not "unexpected".
+            return PdkResolutionReport.Fail("Operation was cancelled.");
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -114,6 +125,23 @@ public class PdkFunctionResolutionService
         catch (Exception ex)
         {
             return PdkResolutionReport.Fail($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    /// <summary>Awaits a stream read but gives up after a short bound so a hung/killed
+    /// process can't stall the timeout path; returns "" if it doesn't complete in time.</summary>
+    private static async Task<string> DrainAsync(Task<string> streamTask)
+    {
+        const int drainBudgetMs = 500;
+        try
+        {
+            return await Task.WhenAny(streamTask, Task.Delay(drainBudgetMs)) == streamTask
+                ? await streamTask
+                : string.Empty;
+        }
+        catch
+        {
+            return string.Empty;
         }
     }
 

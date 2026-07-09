@@ -12,13 +12,14 @@ namespace UnitTests.Export.PdkResolution;
 /// </summary>
 public class PdkResolutionScriptExecutionTests
 {
-    [Fact]
+    [SkippableFact]
     public async Task GdsFactoryCornerStoneCells_ResolveViaActivePdk_MissingCellFails()
     {
         var python = FindCspdkPython();
         var script = FindResolutionScript();
-        if (python == null || script == null)
-            return;   // no cspdk env / script — covered locally, skipped on CI
+        // Real skip (not a silent pass) so CI shows the gap explicitly (#515 review).
+        Skip.If(python == null || script == null,
+            "No cspdk-capable Python env found (expected on CI); covered on a dev machine with cspdk.");
 
         var service = new PdkFunctionResolutionService(python, script);
         var report = await service.ResolveAsync(new[]
