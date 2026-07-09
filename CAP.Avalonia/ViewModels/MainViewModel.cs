@@ -298,6 +298,10 @@ public partial class MainViewModel : ObservableObject
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+            // Same raw-code override seeding as manual placement (#701).
+            aiGrid.OnComponentPlaced = (component, template) =>
+                Services.AddCustomComponent.RawCodeOverrideSeeder.Seed(
+                    component, template, FileOperations.StoredNazcaOverrides);
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
@@ -349,6 +353,12 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.OnComponentsPasted = identifierMap =>
             Selection.NazcaOverridePropagator.Propagate(
                 identifierMap, FileOperations.StoredNazcaOverrides);
+
+        // Raw-code authored custom components (#701): placing one seeds its per-instance
+        // raw-code override, so the #559/#637 pipeline previews and exports the real geometry.
+        CanvasInteraction.OnComponentPlaced = (component, template) =>
+            Services.AddCustomComponent.RawCodeOverrideSeeder.Seed(
+                component, template, FileOperations.StoredNazcaOverrides);
 
         // Wire rename from hierarchy panel through undo-aware command manager
         LeftPanel.HierarchyPanel.RenameComponent = (component, newName) =>

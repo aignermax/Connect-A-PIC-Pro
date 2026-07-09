@@ -82,6 +82,25 @@ public sealed class ComponentGeometryExtractor
             ? await _gdsFactory.RenderRawCodeAsync(reference.ToGdsFactoryRawCode(), ct)
             : await _nazca.RenderAsync(reference.Module, reference.Function, reference.Parameters, ct);
 
+        return ToResult(preview);
+    }
+
+    /// <summary>
+    /// Renders user-authored raw cell code on the given backend and extracts size + pins —
+    /// the raw-code authoring path of issue #701, reusing the same render pipeline the
+    /// per-instance override editor (#559/#637) uses. On render failure, Success is false.
+    /// </summary>
+    public async Task<GeometryExtractResult> ExtractRawCodeAsync(
+        GeometryBackend backend, string rawCode, CancellationToken ct = default)
+    {
+        var renderer = backend == GeometryBackend.GdsFactory ? _gdsFactory : _nazca;
+        var preview = await renderer.RenderRawCodeAsync(rawCode, ct);
+        return ToResult(preview);
+    }
+
+    /// <summary>Maps a raw preview result to the extractor's size/pins result shape.</summary>
+    private static GeometryExtractResult ToResult(NazcaPreviewResult preview)
+    {
         if (!preview.Success)
             return new GeometryExtractResult(false, preview.Error, 0, 0, Array.Empty<OverridePinData>(), preview);
 

@@ -5,8 +5,8 @@
         x:Class="CAP.Avalonia.Views.NewComponentWindow"
         x:DataType="vm:NewComponentViewModel"
         Title="New Component"
-        Width="480" Height="620"
-        MinWidth="420" MinHeight="520"
+        Width="480" Height="700"
+        MinWidth="420" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
         Foreground="White">
@@ -32,11 +32,11 @@
 
                 <TextBlock Text="New Component" FontSize="15" FontWeight="SemiBold" Foreground="LightBlue"/>
                 <TextBlock TextWrapping="Wrap" Foreground="Gray" FontSize="10"
-                           Text="Renders a component's geometry from a Python module/function reference, optionally recomputes its S-matrix via FDTD, and saves it into a fabrication process's own user PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
+                           Text="Renders a component's geometry from a Python module/function reference or pasted cell code, optionally recomputes its S-matrix via FDTD, and saves it into a fabrication process's own user PDK. The S-matrix is never fabricated: FDTD result, lossless 2-port ideal, or black box only."/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto,8,Auto,8,Auto">
+                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto">
                     <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding ComponentName}"
                              Background="#2d2d2d" Foreground="White"/>
@@ -46,19 +46,43 @@
                               ItemsSource="{x:Static vm:NewComponentViewModel.AvailableBackends}"
                               SelectedItem="{Binding SelectedBackend}"
                               Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
+                </Grid>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Module:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding Module}"
+                <CheckBox IsChecked="{Binding UseRawCode}" Foreground="White" FontSize="11"
+                          Content="Author raw cell code instead of a function reference"
+                          ToolTip.Tip="Paste a complete gdsfactory/nazca cell — placed instances export via the same raw-code pipeline as per-instance overrides"/>
+
+                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto"
+                      IsVisible="{Binding !UseRawCode}">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Module:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding Module}"
                              Watermark="e.g. cspdk.sin300" Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Function:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="6" Grid.Column="2" Text="{Binding Function}"
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Function:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding Function}"
                              Watermark="e.g. coupler" Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Parameters:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="8" Grid.Column="2" Text="{Binding Parameters}"
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Parameters:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding Parameters}"
                              Watermark="e.g. length=10" Background="#2d2d2d" Foreground="White"/>
                 </Grid>
+
+                <StackPanel Spacing="4" IsVisible="{Binding UseRawCode}">
+                    <TextBlock Text="Cell code:" Foreground="Gray" FontSize="11"/>
+                    <TextBox Text="{Binding RawCode}" AcceptsReturn="True" TextWrapping="NoWrap"
+                             Height="140" FontFamily="Consolas,Menlo,monospace" FontSize="11"
+                             Watermark="Complete cell code for the selected backend (gdsfactory: assign your component to a 'component' variable; nazca: define a cell)"
+                             Background="#2d2d2d" Foreground="White"/>
+                </StackPanel>
+
+                <Separator Background="#3d3d3d"/>
+
+                <TextBlock Text="S-matrix model" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <ComboBox ItemsSource="{x:Static vm:NewComponentViewModel.SMatrixOptions}"
+                          SelectedItem="{Binding SelectedSMatrixOption}"
+                          Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
+                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#777799"
+                           Text="FDTD requires a computed result from this session; the lossless pass-through ideal is only offered honestly for pure 2-port routing geometry (it is physically exact there, not an assumption)."/>
 
                 <Separator Background="#3d3d3d"/>
 

@@ -122,12 +122,12 @@ public class NewComponentViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Only_GdsFactory_backend_is_selectable_in_v1()
+    public void Both_backends_are_selectable_in_v2()
     {
-        // v1 scope: nazca custom components need NazcaOriginOffset derivation (v2), so the UI
-        // must offer gdsfactory only. The enum + extractor's nazca branch remain for tests/v2.
-        NewComponentViewModel.AvailableBackends.ShouldHaveSingleItem();
-        NewComponentViewModel.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
+        // v2 (#701): the NazcaOriginOffset is derived from the rendered preview, so the
+        // nazca backend is offered alongside gdsfactory.
+        NewComponentViewModel.AvailableBackends.ShouldBe(
+            new[] { GeometryBackend.GdsFactory, GeometryBackend.Nazca });
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

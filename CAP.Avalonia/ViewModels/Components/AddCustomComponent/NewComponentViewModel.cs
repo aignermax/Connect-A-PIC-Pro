@@ -34,6 +34,9 @@ public partial class NewComponentViewModel : ObservableObject
     [ObservableProperty] private string? _module;
     [ObservableProperty] private string _function = string.Empty;
     [ObservableProperty] private string? _parameters;
+    [ObservableProperty] private bool _useRawCode;
+    [ObservableProperty] private string _rawCode = string.Empty;
+    [ObservableProperty] private SMatrixSourceOption _selectedSMatrixOption = SMatrixSourceOption.For(SMatrixSource.BlackBox);
     [ObservableProperty] private ProcessDefinition? _selectedProcess;
     [ObservableProperty] private string _statusText = string.Empty;
     [ObservableProperty] private bool _isBusy;
@@ -43,13 +46,16 @@ public partial class NewComponentViewModel : ObservableObject
     public IReadOnlyList<ProcessDefinition> Processes { get; }
 
     /// <summary>
-    /// Geometry backends selectable in the UI. v1 offers gdsfactory only: a nazca custom
-    /// component saved without a derived <c>NazcaOriginOffset</c> has no clean export/sim path,
-    /// so nazca custom components are deferred to v2 (needs NazcaOriginOffset derivation). The
-    /// <see cref="GeometryBackend"/> enum and the extractor's nazca branch stay for tests/v2.
+    /// Geometry backends selectable in the UI. v2 (issue #701) enables nazca alongside
+    /// gdsfactory: the required <c>NazcaOriginOffset</c> is derived from the rendered
+    /// preview's bounding box (same formula as the PDK Offset Editor's Auto-Calibrate),
+    /// so nazca custom components load and export cleanly.
     /// </summary>
     public static IReadOnlyList<GeometryBackend> AvailableBackends { get; } =
-        new[] { GeometryBackend.GdsFactory };
+        new[] { GeometryBackend.GdsFactory, GeometryBackend.Nazca };
+
+    /// <summary>The S-matrix choices offered in the UI (black box / FDTD / lossless 2-port ideal).</summary>
+    public static IReadOnlyList<SMatrixSourceOption> SMatrixOptions => SMatrixSourceOption.All;
 
     /// <summary>The draft last written by <see cref="Save"/>, or null before a successful save.</summary>
     public PdkComponentDraft? SavedDraft { get; private set; }
@@ -89,11 +95,18 @@ public partial class NewComponentViewModel : ObservableObject
     partial void OnModuleChanged(string? value) => InvalidatePreview();
     partial void OnFunctionChanged(string value) => InvalidatePreview();
     partial void OnParametersChanged(string? value) => InvalidatePreview();
+    partial void OnUseRawCodeChanged(bool value) => InvalidatePreview();
+    partial void OnRawCodeChanged(string value) => InvalidatePreview();
 
     private void InvalidatePreview()
     {
         _lastPreview = null;
         HasPreview = false;
+        // An FDTD result computed for the previous geometry must not be attached to a
+        // re-rendered one (same drift guard as the preview itself, #656 review).
+        _computedModel = null;
+        if (SelectedSMatrixOption.Value == SMatrixSource.Fdtd)
+            SelectedSMatrixOption = SMatrixSourceOption.For(SMatrixSource.BlackBox);
     }
 
     /// <summary>Save is only possible once a matching preview has been rendered and no work is in flight.</summary>
@@ -110,8 +123,9 @@ public partial class NewComponentViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
-            var result = await _extractor.ExtractAsync(reference);
+            var result = UseRawCode
+                ? await _extractor.ExtractRawCodeAsync(SelectedBackend, RawCode)
+                : await _extractor.ExtractAsync(new GeometryReference(SelectedBackend, Module, Function, Parameters));
             _lastPreview = result;
             HasPreview = result.Success;
             StatusText = result.Success
@@ -167,6 +181,7 @@ public partial class NewComponentViewModel : ObservableObject
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
+            SelectedSMatrixOption = SMatrixSourceOption.For(SMatrixSource.Fdtd);
             StatusText = "S-matrix computed.";
         }
         finally
@@ -180,8 +195,10 @@ public partial class NewComponentViewModel : ObservableObject
     /// process's user PDK. Requires a name, a rendered preview, and a selected process —
     /// missing any of these reports why via <see cref="StatusText"/> and leaves
     /// <see cref="SavedDraft"/> null. A name collision is reported via <see cref="StatusText"/>
-    /// unless <see cref="ConfirmOverwrite"/> confirms the overwrite. On success the S-matrix is
-    /// either the last FDTD result or a black box when none was computed — never fabricated. A
+    /// unless <see cref="ConfirmOverwrite"/> confirms the overwrite. The S-matrix comes from the
+    /// user's <see cref="SelectedSMatrixOption"/> resolved by <see cref="SMatrixSourceResolver"/>
+    /// (black box, the session's FDTD result, or the lossless 2-port ideal) — never fabricated;
+    /// an inapplicable choice aborts the save with an explanation. A
     /// black-box save preserves any pending diagnostic in <see cref="StatusText"/> (e.g. an FDTD
     /// failure explaining why the save is a black box) and prefixes it with a save confirmation,
     /// so the user always gets confirmation without losing the reason there is no model.
@@ -225,20 +242,32 @@ public partial class NewComponentViewModel : ObservableObject
                 }
             }
 
-            var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
-            var sMatrix = _computedModel is null
-                ? FdtdSMatrixToDraftConverter.BlackBox()
-                : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
-            var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix);
+            var resolution = SMatrixSourceResolver.Resolve(
+                SelectedSMatrixOption.Value, _computedModel, preview.Pins);
+            if (!resolution.Success)
+            {
+                StatusText = resolution.Error ?? "The selected S-matrix source is not applicable.";
+                return;
+            }
+
+            var draft = UseRawCode
+                ? CustomComponentDraftFactory.BuildFromRawCode(
+                    name, SelectedBackend, RawCode, preview, resolution.Draft)
+                : CustomComponentDraftFactory.Build(
+                    name, new GeometryReference(SelectedBackend, Module, Function, Parameters),
+                    preview, resolution.Draft);
 
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             _store.Save(process, draft, backend, null);
 
             SavedDraft = draft;
             SavedProcessName = process.Name;
-            StatusText = _computedModel is null
-                ? $"Saved as black box. {StatusText}".Trim()
-                : "Saved with FDTD S-matrix.";
+            StatusText = SelectedSMatrixOption.Value switch
+            {
+                SMatrixSource.Fdtd => "Saved with FDTD S-matrix.",
+                SMatrixSource.LosslessTwoPort => "Saved with the lossless 2-port pass-through ideal.",
+                _ => $"Saved as black box. {StatusText}".Trim(),
+            };
             Saved?.Invoke(this, EventArgs.Empty);
         }
         finally

@@ -59,6 +59,13 @@ public class PlaceComponentCommand : IUndoableCommand
 
     public string Description => $"Place {_template.Name}";
 
+    /// <summary>
+    /// The component instance this command places (created once in the constructor, so it
+    /// survives undo/redo). Lets callers post-process the placement — e.g. seeding the
+    /// raw-code override for raw-code authored custom components (#701).
+    /// </summary>
+    public Component? PlacedComponent => _component;
+
     public void Execute()
     {
         if (_isValid && _component != null)

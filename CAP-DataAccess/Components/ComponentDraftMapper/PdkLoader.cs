@@ -127,10 +127,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             // gdsfactory PDK still needs its offset.
             bool isGdsFactoryComponent = !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction);
 
+            // Raw-code authored components (#701) export via the per-instance rawcode
+            // override pipeline (#559/#637), not via a module/function reference, so the
+            // function-reference requirement below does not apply to them.
+            bool isRawCode = !string.IsNullOrWhiteSpace(comp.RawCode);
+
             // Every non-analysis component must be exportable by *some* backend: a
             // gdsfactory PDK component with neither a gdsFactoryFunction nor a nazcaFunction
             // would silently export as an empty/misplaced cell.
-            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent
+            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent && !isRawCode
                 && string.IsNullOrWhiteSpace(comp.NazcaFunction))
             {
                 errors.Add($"[{pdkName}/{compLabel}] gdsfactory-backend component must declare a gdsFactoryFunction (or a nazcaFunction)");

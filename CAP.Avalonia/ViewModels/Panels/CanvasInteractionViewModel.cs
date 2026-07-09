@@ -94,6 +94,13 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
 
     /// <summary>
+    /// Callback invoked after a component is placed from a template, with the placed
+    /// instance and its source template. Wired by <c>MainViewModel</c> to seed the
+    /// per-instance raw-code override for raw-code authored custom components (#701).
+    /// </summary>
+    public Action<CAP_Core.Components.Core.Component, ComponentTemplate>? OnComponentPlaced { get; set; }
+
+    /// <summary>
     /// Callback invoked when the user probes an element in Probe mode (issue #691):
     /// carries the classified probe target plus the click position in canvas coordinates.
     /// Wired by <c>MainViewModel</c> to open the mode-slice flyout at the click point.
@@ -366,6 +373,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         _commandManager.ExecuteCommand(cmd);
+        if (cmd.PlacedComponent is { } placed)
+            OnComponentPlaced?.Invoke(placed, SelectedTemplate);
         UpdateStatus?.Invoke($"Placed {SelectedTemplate.Name} at ({x:F0}, {y:F0})µm");
     }
 

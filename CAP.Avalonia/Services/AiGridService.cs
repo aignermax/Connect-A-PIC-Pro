@@ -36,6 +36,13 @@ public class AiGridService : IAiGridService
     /// </summary>
     public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
 
+    /// <summary>
+    /// Callback invoked after a component is placed from a template, mirroring
+    /// <c>CanvasInteractionViewModel.OnComponentPlaced</c> — the AI placement path must
+    /// seed raw-code custom-component overrides (#701) just like manual placement.
+    /// </summary>
+    public Action<Component, ViewModels.Library.ComponentTemplate>? OnComponentPlaced { get; set; }
+
     private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
         SingleProcessPolicy.CheckPlacement(
             GetActiveProcess?.Invoke(), pdkSource,
@@ -131,6 +138,8 @@ public class AiGridService : IAiGridService
             return $"Cannot place '{componentType}' — no valid position found near ({x:F0}, {y:F0})µm. Try a different position.";
 
         cmd.Execute();
+        if (cmd.PlacedComponent is { } placedComponent)
+            OnComponentPlaced?.Invoke(placedComponent, template);
 
         var placed = _canvas.Components.LastOrDefault();
         if (placed == null)

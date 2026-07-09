@@ -151,6 +151,22 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public string? NazcaParameters { get; set; }
 
         /// <summary>
+        /// Complete self-contained geometry cell code for raw-code authored user components
+        /// (issue #701). When set, the component has no function reference; placing an
+        /// instance seeds a per-instance raw-code override (the #559/#637 pipeline) that
+        /// drives its preview and export. Null for all function-reference components.
+        /// </summary>
+        [JsonPropertyName("rawCode")]
+        public string? RawCode { get; set; }
+
+        /// <summary>
+        /// Layout backend <see cref="RawCode"/> is written for: <c>"nazca"</c> or
+        /// <c>"gdsfactory"</c>. Only meaningful when <see cref="RawCode"/> is set.
+        /// </summary>
+        [JsonPropertyName("rawCodeBackend")]
+        public string? RawCodeBackend { get; set; }
+
+        /// <summary>
         /// Physical width in micrometers.
         /// </summary>
         [JsonPropertyName("widthMicrometers")]

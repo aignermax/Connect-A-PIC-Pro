@@ -203,6 +203,20 @@ public partial class ComponentTemplate : ObservableObject
     /// under the activated gdsfactory PDK (#570 field-test fix).
     /// </summary>
     public string? GdsFactoryRoutingCrossSection { get; set; }
+
+    /// <summary>
+    /// Raw Python cell code for raw-code authored custom components (#701); null for
+    /// normal PDK components. On placement, <see cref="Services.AddCustomComponent.RawCodeOverrideSeeder"/>
+    /// turns it into a per-instance <c>NazcaCodeOverride</c> so the #559/#637 rawcode
+    /// export pipeline renders the real geometry.
+    /// </summary>
+    public string? RawCode { get; set; }
+
+    /// <summary>
+    /// Backend of <see cref="RawCode"/>: "gdsfactory" or "nazca"; null when
+    /// <see cref="RawCode"/> is null.
+    /// </summary>
+    public string? RawCodeBackend { get; set; }
 }
 
 public class PinDefinition
