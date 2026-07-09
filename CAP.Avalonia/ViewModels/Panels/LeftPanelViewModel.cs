@@ -150,6 +150,7 @@ public partial class LeftPanelViewModel : ObservableObject
     public void Initialize()
     {
         LoadComponentLibrary();
+        RestoreUserPdks();
         RestorePdkFilterState();
         RestoreLeftPanelWidth();
     }
@@ -326,95 +327,6 @@ public partial class LeftPanelViewModel : ObservableObject
     {
         _preferencesService.SetLeftPanelWidth(LeftPanelWidth.Value);
     }
-
-    [RelayCommand]
-    private async Task LoadPdk()
-    {
-        if (FileDialogService == null) return;
-
-        var filePath = await FileDialogService.ShowOpenFileDialogAsync(
-            "Open PDK",
-            "PDK Files (*.json;*.py)|*.json;*.py|PDK JSON (*.json)|*.json|Nazca Python (*.py)|*.py|All Files (*.*)|*.*");
-
-        if (string.IsNullOrEmpty(filePath)) return;
-
-        // Python file: open the Import Wizard to parse and convert it first
-        if (filePath.EndsWith(".py", StringComparison.OrdinalIgnoreCase))
-        {
-            await LoadPdkFromPythonFileAsync(filePath);
-            return;
-        }
-
-        await LoadPdkFromJsonFileAsync(filePath);
-    }
-
-    private async Task LoadPdkFromPythonFileAsync(string pyFilePath)
-    {
-        if (ShowImportWizardAsync == null)
-        {
-            UpdateStatus?.Invoke("PDK Import Wizard is not available in this context.");
-            return;
-        }
-
-        UpdateStatus?.Invoke($"Opening PDK Import Wizard for '{Path.GetFileName(pyFilePath)}'...");
-        var savedJsonPath = await ShowImportWizardAsync(pyFilePath);
-
-        if (string.IsNullOrEmpty(savedJsonPath)) return; // User cancelled
-
-        await LoadPdkFromJsonFileAsync(savedJsonPath);
-    }
-
-    private async Task LoadPdkFromJsonFileAsync(string filePath)
-    {
-        if (PdkManager.IsPdkLoaded(filePath))
-        {
-            UpdateStatus?.Invoke("PDK already loaded from this file");
-            return;
-        }
-
-        try
-        {
-            var pdk = _pdkLoader.LoadFromFile(filePath);
-
-            if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
-            {
-                UpdateStatus?.Invoke($"PDK '{pdk.Name}' is already loaded");
-                return;
-            }
-
-            _loadedPdkDrafts.Add(pdk);
-
-            int addedCount = 0;
-            foreach (var pdkComp in pdk.Components)
-            {
-                var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
-                AllTemplates.Add(template);
-                if (!Categories.Contains(template.Category))
-                    Categories.Add(template.Category);
-                addedCount++;
-            }
-
-            PdkManager.RegisterPdk(pdk.Name, filePath, false, addedCount);
-            _preferencesService.AddUserPdkPath(filePath);
-
-            // A PDK imported while a process is locked must not escape the lock:
-            // re-apply so a foreign PDK registers disabled (issue #570).
-            ReapplyActiveProcessAfterPdkChange();
-            FilterComponents();
-            UpdateStatus?.Invoke($"Loaded PDK '{pdk.Name}' with {addedCount} components");
-        }
-        catch (Exception ex)
-        {
-            _errorConsole?.LogError($"Failed to load PDK: {ex.Message}", ex);
-            UpdateStatus?.Invoke($"Failed to load PDK: {ex.Message}");
-        }
-    }
-
-    private static ComponentTemplate ConvertPdkComponentToTemplate(
-        PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName,
-        string? gdsFactoryRoutingCrossSection = null)
-        => PdkTemplateConverter.ConvertToTemplate(
-            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
 
     /// <summary>Opens the "New Component" window (issue #656); see <see cref="NewComponentWindowLauncher"/>.</summary>
     [RelayCommand]
