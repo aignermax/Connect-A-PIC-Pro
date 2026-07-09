@@ -148,6 +148,7 @@ public static class MainViewModelTestHelper
             new PdkConsistencyViewModel(),
             new AiAssistantViewModel(Mock.Of<IAiService>(), preferencesService),
             new OnaSweepViewModel(),
+            new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
                 new GenericComponentEditorProvider()

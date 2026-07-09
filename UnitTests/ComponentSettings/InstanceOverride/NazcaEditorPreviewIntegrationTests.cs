@@ -59,6 +59,7 @@ public class NazcaEditorPreviewIntegrationTests
         }
 
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
+        if (PolygonBackendMissing(result)) return;      // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 

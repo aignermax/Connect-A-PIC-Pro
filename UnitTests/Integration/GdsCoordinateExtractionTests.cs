@@ -109,21 +109,23 @@ public class GdsCoordinateExtractionTests
             var doc = JsonDocument.Parse(json!);
             var root = doc.RootElement;
 
-            root.TryGetProperty("database_unit", out _).ShouldBeTrue(
-                "Output JSON must contain 'database_unit'");
-            root.TryGetProperty("cells", out _).ShouldBeTrue(
+            root.TryGetProperty("units", out var units).ShouldBeTrue(
+                "Output JSON must contain 'units'");
+            units.TryGetProperty("db_unit_m", out _).ShouldBeTrue(
+                "'units' must contain 'db_unit_m' (database unit in meters)");
+            root.TryGetProperty("cells", out var cells).ShouldBeTrue(
                 "Output JSON must contain 'cells'");
 
-            // Each cell must have polygons and paths arrays
-            if (root.TryGetProperty("cells", out var cells))
+            // Each cell entry must have a name plus polygons and paths arrays
+            cells.ValueKind.ShouldBe(JsonValueKind.Array, "'cells' must be an array");
+            foreach (var cell in cells.EnumerateArray())
             {
-                foreach (var cell in cells.EnumerateObject())
-                {
-                    cell.Value.TryGetProperty("polygons", out _).ShouldBeTrue(
-                        $"Cell '{cell.Name}' must have 'polygons' array");
-                    cell.Value.TryGetProperty("paths", out _).ShouldBeTrue(
-                        $"Cell '{cell.Name}' must have 'paths' array");
-                }
+                cell.TryGetProperty("name", out var name).ShouldBeTrue(
+                    "Each cell must have a 'name'");
+                cell.TryGetProperty("polygons", out _).ShouldBeTrue(
+                    $"Cell '{name}' must have 'polygons' array");
+                cell.TryGetProperty("paths", out _).ShouldBeTrue(
+                    $"Cell '{name}' must have 'paths' array");
             }
         }
         finally

@@ -50,6 +50,7 @@ public partial class MainWindow : Window
                 if (onaEditorProvider != null)
                     onaEditorProvider.OpenSweepAsync = analyzer => OpenOnaAnalyzerWindow(analyzer, vm);
                 vm.RightPanel.RoutingDiagnostics.FileDialogService = vm.FileDialogService;
+                vm.RightPanel.Netlist.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Transient.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Eye.FileDialogService = vm.FileDialogService;
                 ExportDialogWiring.Wire(vm, this, vm.ErrorConsole);
@@ -142,6 +143,16 @@ public partial class MainWindow : Window
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
+                {
+                    var clipboard = Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                };
+
+                // Wire up clipboard for the Netlist panel (#687)
+                vm.RightPanel.Netlist.CopyToClipboard = async (text) =>
                 {
                     var clipboard = Clipboard;
                     if (clipboard != null)
@@ -462,6 +473,18 @@ public partial class MainWindow : Window
         dialog.Show(this);
     }
 
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
     private void ZoomToFitButton_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
@@ -642,6 +665,10 @@ public partial class MainWindow : Window
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
+        // Guided Docker setup (issue #649): shown when the availability probe
+        // reports Docker missing or its engine stopped.
+        var dockerSetupDialog = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.IDockerSetupDialogService))
+            as CAP.Avalonia.Services.Solvers.IDockerSetupDialogService;
         var notificationService = App.Services.GetService(typeof(INotificationService))
             as INotificationService;
 
@@ -652,7 +679,8 @@ public partial class MainWindow : Window
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
             fdtdRequestFactory: fdtdRequestFactory,
-            notificationService: notificationService);
+            notificationService: notificationService,
+            dockerSetupDialog: dockerSetupDialog);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
@@ -774,6 +802,35 @@ public partial class MainWindow : Window
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
+        // the user-global template override — but only while the instance geometry
+        // still matches the template draft (no Nazca override active). Everything
+        // is checked at invoke time so mid-session geometry edits are honoured.
+        Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
+        if (liveComponent != null && userStore != null)
+        {
+            propagateToTemplate = data =>
+            {
+                var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
+                if (templateKey == null)
+                    return false; // no matching PDK template (e.g. user group)
+
+                vm.FileOperations.StoredNazcaOverrides
+                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
+                if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
+                        liveComponent, nazcaOverride,
+                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                    return false;
+
+                userStore.Overrides[templateKey] = data;
+                userStore.Save();
+                vm.FileOperations.ReapplyTemplateOverrides();
+                vm.LeftPanel.HierarchyPanel.RefreshOverrideMarkers();
+                RefreshTemplateOverrideBadges(vm);
+                return true;
+            };
+        }
+
         dialogVm.Configure(
             entityKey,
             smatrixKey,
@@ -795,6 +852,7 @@ public partial class MainWindow : Window
             nazcaDimensionsChanged: nazcaDimensionsChanged,
             nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
+            propagateToTemplate: propagateToTemplate,
             gdsFactoryPreviewService: gdsFactoryPreviewService);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };

@@ -58,7 +58,7 @@
     "xsections": [
       {
         "name": "xs_nc",
-        "kind": 0,
+        "kind": "Optical",
         "widthUm": 1.2,
         "minRadiusUm": 30.0,
         "recommendedRadiusUm": 30.0,
@@ -69,7 +69,7 @@
       },
       {
         "name": "xs_no",
-        "kind": 0,
+        "kind": "Optical",
         "widthUm": 0.95,
         "minRadiusUm": 30.0,
         "recommendedRadiusUm": 30.0,
@@ -80,7 +80,7 @@
       },
       {
         "name": "metal_routing",
-        "kind": 1,
+        "kind": "Metal",
         "widthUm": 10.0,
         "minRadiusUm": 0.0,
         "recommendedRadiusUm": 0.0,
@@ -91,7 +91,7 @@
       },
       {
         "name": "heater_metal",
-        "kind": 1,
+        "kind": "Metal",
         "widthUm": 4.0,
         "minRadiusUm": 0.0,
         "recommendedRadiusUm": 0.0,

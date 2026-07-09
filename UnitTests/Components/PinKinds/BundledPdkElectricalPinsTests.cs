@@ -68,7 +68,7 @@ namespace UnitTests.Components.PinKinds
         /// outside the known active set may declare an electrical pin.
         /// </summary>
         [Theory]
-        [InlineData("demo-pdk.json", "Phase Shifter", "Photodetector")]
+        [InlineData("demo-pdk.json", "Phase Shifter", "Photodetector", "Probe Pad")]
         [InlineData("siepic-ebeam-pdk.json", "Bond Pad")]
         [InlineData("cornerstone-sin-pdk.json")]
         public void BundledPdks_PassiveComponents_HaveNoElectricalPins(

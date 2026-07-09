@@ -181,7 +181,17 @@ public static class UpdaterScripts
         done < <(cd "$NEWDIR" && find . -mindepth 1 -maxdepth 1 -print0)
         chmod +x "$TARGET/$EXE_NAME" 2>/dev/null || true
 
-        ( "$TARGET/$EXE_NAME" >/dev/null 2>&1 & ) || rollback "relaunch failed"
+        # Relaunch the new binary and verify it comes up before the backup is deleted.
+        # A backgrounded subshell always exits 0, so the previous `( … & ) || rollback`
+        # guard could never fire — probe the spawned PID instead. Still running after a
+        # second (the normal GUI case) or exited cleanly counts as up; a failed exec or
+        # early crash (missing libs, wrong arch, truncated binary) rolls back.
+        "$TARGET/$EXE_NAME" >/dev/null 2>&1 &
+        NEW_PID=$!
+        sleep 1
+        if ! kill -0 "$NEW_PID" 2>/dev/null; then
+          wait "$NEW_PID" || rollback "relaunch failed"
+        fi
         rm -rf "$BACKUP"
         cleanup_stage
         rm -f "$ARCHIVE" 2>/dev/null || true
