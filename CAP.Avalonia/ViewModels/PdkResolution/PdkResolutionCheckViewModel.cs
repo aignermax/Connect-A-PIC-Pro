@@ -117,15 +117,24 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
         // CornerStone — via its gdsFactoryFunction (e.g. "cspdk.sin300.coupler"). Check whichever
         // it actually uses; otherwise gdsfactory PDKs would show every row red "empty nazcaFunction"
         // (#515 review). The generic importlib resolver handles the gdsfactory dotted path.
+        var useGdsFactory = components
+            .Select(c => string.IsNullOrWhiteSpace(c.NazcaFunction) && !string.IsNullOrWhiteSpace(c.GdsFactoryFunction))
+            .ToList();
         var functionPaths = components
-            .Select(c => !string.IsNullOrWhiteSpace(c.NazcaFunction) ? c.NazcaFunction : c.GdsFactoryFunction ?? "")
+            .Select((c, i) => useGdsFactory[i] ? c.GdsFactoryFunction! : c.NazcaFunction ?? "")
             .ToList();
 
         var entries = functionPaths
             .Select((path, i) =>
             {
                 var (module, function) = NazcaFunctionPath.Split(path);
-                return new PdkResolutionEntry { Name = components[i].Name, Module = module, Function = function };
+                return new PdkResolutionEntry
+                {
+                    Name = components[i].Name,
+                    Module = module,
+                    Function = function,
+                    Backend = useGdsFactory[i] ? "gdsfactory" : "nazca"
+                };
             })
             .ToList();
 

@@ -26,11 +26,19 @@ public class PdkResolutionEntry
     /// <summary>Display name of the component the entry belongs to.</summary>
     public string Name { get; init; } = "";
 
-    /// <summary>Python module path (e.g. "demo", "siepic_ebeam_pdk").</summary>
+    /// <summary>Python module path (e.g. "demo", "siepic_ebeam_pdk", "cspdk.sin300").</summary>
     public string Module { get; init; } = "";
 
     /// <summary>Bare function/cell name to look up in the module.</summary>
     public string Function { get; init; } = "";
+
+    /// <summary>
+    /// Which backend resolves this entry: <c>"nazca"</c> (default — demofab / SiEPIC) or
+    /// <c>"gdsfactory"</c> for gdsfactory-native PDKs. A gdsfactory entry is verified the way
+    /// the export does it (import the module, activate its PDK, look the cell up via
+    /// <c>gf.get_component</c>), not by a plain module attribute (issue #515 review).
+    /// </summary>
+    public string Backend { get; init; } = "nazca";
 }
 
 /// <summary>Per-entry outcome returned by the resolution helper script.</summary>

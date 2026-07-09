@@ -138,13 +138,40 @@ def _resolve_generic(name, module, function):
                    f"{walked}.{function} exists but is not callable")
 
 
+def _resolve_gdsfactory(name, module, cell):
+    """Verify a gdsfactory-native cell the way the export/preview does
+    (GdsFactoryPreviewCode): import the PDK module, activate its PDK, then look
+    the cell up via the active PDK's registry / gf.get_component — NOT as a plain
+    module attribute (cspdk cells are registered, not module-level functions)."""
+    import importlib
+    import gdsfactory as gf
+    mod = importlib.import_module(module)  # ImportError bubbles to _resolve_entry
+    pdk = getattr(mod, "PDK", None)
+    if pdk is not None and hasattr(pdk, "activate"):
+        pdk.activate()
+    active = gf.get_active_pdk()
+    pdk_name = getattr(active, "name", "?")
+    if cell in getattr(active, "cells", {}):
+        return _result(name, STATUS_OK, "pcell",
+                       f"'{cell}' is a cell in the active PDK '{pdk_name}'")
+    try:
+        gf.get_component(cell)
+        return _result(name, STATUS_OK, "callable", f"gf.get_component('{cell}') resolves")
+    except Exception:
+        return _result(name, STATUS_ERROR, "",
+                       f"'{cell}' is not a cell in the active PDK '{pdk_name}'")
+
+
 def _resolve_entry(entry):
     name = entry.get("name", "")
     module = (entry.get("module") or "").strip()
     function = (entry.get("function") or "").strip()
+    backend = (entry.get("backend") or "nazca").strip().lower()
     if not function:
-        return _result(name, STATUS_ERROR, "", "empty nazcaFunction")
+        return _result(name, STATUS_ERROR, "", "empty function (no nazcaFunction or gdsFactoryFunction)")
     try:
+        if backend == "gdsfactory":
+            return _resolve_gdsfactory(name, module, function)
         if module.lower().startswith("siepic"):
             return _resolve_siepic(name, module, function)
         if module == "demo" or module.startswith("demo."):

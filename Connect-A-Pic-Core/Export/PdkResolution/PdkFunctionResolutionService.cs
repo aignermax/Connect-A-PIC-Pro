@@ -68,7 +68,8 @@ public class PdkFunctionResolutionService
         {
             name = e.Name,
             module = e.Module,
-            function = e.Function
+            function = e.Function,
+            backend = e.Backend
         }));
 
     private async Task<PdkResolutionReport> RunProcessAsync(string inputFile, CancellationToken ct)

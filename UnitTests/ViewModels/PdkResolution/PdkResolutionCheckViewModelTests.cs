@@ -136,6 +136,7 @@ public class PdkResolutionCheckViewModelTests : IDisposable
         var entry = captured.ShouldHaveSingleItem();
         entry.Module.ShouldBe("cspdk.sin300");
         entry.Function.ShouldBe("coupler");
+        entry.Backend.ShouldBe("gdsfactory");
         var row = vm.Pdks[0].Rows.ShouldHaveSingleItem();
         row.FunctionPath.ShouldBe("cspdk.sin300.coupler");   // shows gdsFactoryFunction, not empty
     }
