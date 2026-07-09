@@ -462,6 +462,18 @@ public partial class MainWindow : Window
         dialog.Show(this);
     }
 
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
     private void ZoomToFitButton_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)

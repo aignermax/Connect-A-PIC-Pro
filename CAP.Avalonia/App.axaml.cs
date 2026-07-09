@@ -34,6 +34,7 @@ public partial class App : Application
         services.AddCrossingInsertionFeature();
         services.AddSettingsFeature();
         services.AddPdkOffsetFeature();
+        services.AddPdkResolutionFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
