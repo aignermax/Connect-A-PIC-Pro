@@ -103,6 +103,7 @@ public partial class ComponentSettingsDialogViewModel
                 if (_recalcCts?.IsCancellationRequested == true)
                 {
                     SolverStatus = "FDTD recompute cancelled.";
+                    NotifyCancelled();
                     return;
                 }
 
@@ -120,10 +121,13 @@ public partial class ComponentSettingsDialogViewModel
             var applyResult = SMatrixOverrideApplicator.Apply(_liveComponent, data, _errorConsole);
             SolverStatus = BuildSolverStatus(result, applyResult);
             StatusText = $"Recomputed S-matrix via FDTD ({note}).";
+            _notificationService?.ShowSuccess(
+                $"S-matrix for '{_displayName}' recomputed via {note} and applied.");
         }
         catch (OperationCanceledException)
         {
             SolverStatus = "FDTD recompute cancelled.";
+            NotifyCancelled();
         }
         catch (Exception ex)
         {
@@ -168,6 +172,14 @@ public partial class ComponentSettingsDialogViewModel
             timer.Stop();
         }
     }
+
+    /// <summary>
+    /// Cancelling (usually by closing the dialog) is intentional, so surface it
+    /// as a transient toast on the main window — the dialog's status text may
+    /// already be gone and the error console would be far too heavy (#586).
+    /// </summary>
+    private void NotifyCancelled() =>
+        _notificationService?.ShowInfo($"FDTD recompute for '{_displayName}' cancelled.");
 
     private static string Shorten(string s) => s.Length <= 80 ? s : s[..80] + "…";
 

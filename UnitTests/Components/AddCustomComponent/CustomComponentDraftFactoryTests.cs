@@ -1,0 +1,58 @@
+using System;
+using System.Collections.Generic;
+using CAP.Avalonia.Services.AddCustomComponent;
+using CAP_Core.Export;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+using CAP_DataAccess.Persistence.PIR;
+using Shouldly;
+using Xunit;
+
+namespace UnitTests.Components.AddCustomComponent;
+
+/// <summary>
+/// Covers <see cref="CustomComponentDraftFactory"/>: the pure draft/pin assembly extracted out of
+/// <see cref="CAP.Avalonia.ViewModels.Components.AddCustomComponent.NewComponentViewModel"/> to
+/// keep that view model under the 250-line new-file cap.
+/// </summary>
+public class CustomComponentDraftFactoryTests
+{
+    private static GeometryExtractResult Preview() => new(
+        Success: true, Error: null, WidthUm: 10, HeightUm: 2,
+        Pins: new List<OverridePinData>
+        {
+            new() { Name = "o1", OffsetXMicrometers = 0, OffsetYMicrometers = 1, AngleDegrees = 180 },
+            new() { Name = "o2", OffsetXMicrometers = 10, OffsetYMicrometers = 1, AngleDegrees = 0 },
+        },
+        Raw: new NazcaPreviewResult { Success = true, XMin = 0, YMin = 0, XMax = 10, YMax = 2 });
+
+    [Fact]
+    public void Build_gdsfactory_maps_size_pins_and_routes_function_to_gdsfactory_field()
+    {
+        var reference = new GeometryReference(GeometryBackend.GdsFactory, "cspdk.sin300", "coupler", null);
+
+        var draft = CustomComponentDraftFactory.Build("My Coupler", reference, Preview(), sMatrix: null);
+
+        draft.Name.ShouldBe("My Coupler");
+        draft.WidthMicrometers.ShouldBe(10);
+        draft.HeightMicrometers.ShouldBe(2);
+        draft.GdsFactoryFunction.ShouldBe("cspdk.sin300.coupler");
+        draft.NazcaFunction.ShouldBeNull();
+        draft.SMatrix.ShouldBeNull();                     // null in => black box, never fabricated
+        draft.Pins.Count.ShouldBe(2);
+        draft.Pins[0].Name.ShouldBe("o1");
+        draft.Pins[0].AngleDegrees.ShouldBe(180);
+    }
+
+    [Fact]
+    public void Build_nazca_routes_function_to_the_nazca_field_and_keeps_the_sMatrix()
+    {
+        var reference = new GeometryReference(GeometryBackend.Nazca, "demo", "mmi", null);
+        var sMatrix = new PdkSMatrixDraft { WavelengthNm = 1550 };
+
+        var draft = CustomComponentDraftFactory.Build("MMI", reference, Preview(), sMatrix);
+
+        draft.NazcaFunction.ShouldBe("demo.mmi");
+        draft.GdsFactoryFunction.ShouldBeNull();
+        draft.SMatrix.ShouldBe(sMatrix);
+    }
+}

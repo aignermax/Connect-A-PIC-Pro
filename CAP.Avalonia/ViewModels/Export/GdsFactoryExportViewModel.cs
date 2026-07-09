@@ -45,6 +45,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// stored overrides); gdsfactory-backend ones are emitted as factories.</summary>
     public Func<IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>>? OverridesProvider { get; set; }
 
+    /// <summary>Supplies the metal trace style for electrical routing (issue #682), resolved
+    /// from the design's active process. Null falls back to <see cref="MetalTraceStyle.Default"/>.</summary>
+    public Func<MetalTraceStyle>? MetalStyleProvider { get; set; }
+
     /// <summary>
     /// Ensures gdsfactory is installed into a managed environment (creating one if needed)
     /// and returns true when it is available afterwards. Wired by the DI layer to the
@@ -101,6 +105,26 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
+        // A GDS is one fabrication process. Playground lets you place components from different
+        // processes (e.g. CornerStone SiN + SiEPIC SOI) together, but they cannot be exported into
+        // one gdsfactory GDS — the script activates a single PDK and the foreign cells fail to
+        // resolve. Detect this up front and refuse with a clear message instead of a raw Python
+        // crash at runtime (#570).
+        var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
+            _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
+        if (backendConflicts.Count > 0)
+        {
+            var message =
+                "Cannot export: this design mixes incompatible fabrication processes ("
+                + string.Join(" + ", backendConflicts)
+                + "). A single GDS is one process — keep one PDK's components per design and export "
+                + "each separately. (Playground lets you place mixed components for experimentation, "
+                + "but they can't be exported together.)";
+            StatusText = message;
+            _errorConsole?.LogError(message);
+            return;
+        }
+
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to gdsfactory Python", "py", "Python Files|*.py|All Files|*.*");
         if (filePath == null)
@@ -127,7 +151,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             // back to ubcpdk/stub (surfaced as a mismatch warning).
             await File.WriteAllTextAsync(filePath,
                 _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                    OverridesProvider?.Invoke()));
+                    OverridesProvider?.Invoke(), MetalStyleProvider?.Invoke()));
 
             StatusText = "Running gdsfactory to generate the GDS...";
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
@@ -161,7 +185,13 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     private static bool IsGdsFactoryMissing(string? errorMessage) =>
-        errorMessage?.Contains("No module named 'gdsfactory'", StringComparison.OrdinalIgnoreCase) == true;
+        // Any package the gdsfactory export env is expected to provide — gdsfactory itself,
+        // ubcpdk, or cspdk (CornerStone SiN, #661). Environments provisioned before a package
+        // was added report "No module named '<pkg>'"; the same reinstall fixes all of them.
+        errorMessage != null &&
+        (errorMessage.Contains("No module named 'gdsfactory'", StringComparison.OrdinalIgnoreCase) ||
+         errorMessage.Contains("No module named 'ubcpdk'", StringComparison.OrdinalIgnoreCase) ||
+         errorMessage.Contains("No module named 'cspdk'", StringComparison.OrdinalIgnoreCase));
 
     /// <summary>Opens the generated GDS in the default viewer (KLayout etc.), best-effort.</summary>
     private void TryOpenGds(string gdsPath)

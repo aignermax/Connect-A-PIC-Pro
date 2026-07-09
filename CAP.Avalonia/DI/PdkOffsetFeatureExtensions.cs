@@ -56,7 +56,8 @@ internal static class PdkOffsetFeatureExtensions
             sp.GetRequiredService<PdkLoader>(),
             sp.GetRequiredService<PdkJsonSaver>(),
             sp.GetRequiredService<PdkManagerViewModel>(),
-            sp.GetRequiredService<NazcaComponentPreviewService>()));
+            sp.GetRequiredService<NazcaComponentPreviewService>(),
+            sp.GetRequiredService<GdsFactoryComponentPreviewService>()));
 
         return services;
     }

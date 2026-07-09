@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_DataAccess.Persistence.PIR;
 
@@ -21,12 +22,16 @@ public class GdsFactoryExporter
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
     /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
     /// component factories. Null skips override handling.</param>
+    /// <param name="metalStyle">Width and GDS layer for electrical (metal) routing traces
+    /// (issue #682); electrical connections are emitted as metal on this layer instead of as
+    /// optical waveguides. Null falls back to <see cref="MetalTraceStyle.Default"/>.</param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
+        MetalTraceStyle? metalStyle = null)
     {
         var sb = new StringBuilder();
-        AppendHeader(sb, options);
+        AppendHeader(sb, canvas, options);
         AppendOverrideFactories(sb, canvas, overrides);
         AppendStubs(sb, canvas, options, overrides);
         var refIndex = 0;
@@ -36,9 +41,34 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
-        AppendConnections(sb, canvas);
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metalStyle ?? MetalTraceStyle.Default);
         AppendFooter(sb);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review
+    /// — the earlier "either pin" predicate would draw a mixed connection wholly on the metal
+    /// layer, silently dropping the optical waveguide).
+    /// </summary>
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
+
+    /// <summary>
+    /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
+    /// designs route with the PDK's cross-section (e.g. <c>cross_section='xs_nc'</c>): the
+    /// generic <c>gf.components.straight(width=…)</c> resolves the 'strip' cross-section, which
+    /// does not exist under a nitride PDK and crashed every export with a connection (#570 field
+    /// test). Nazca/generic designs keep the explicit <c>width=WG_WIDTH</c>.
+    /// </summary>
+    private static string RoutingWaveguideKwarg(DesignCanvasViewModel canvas)
+    {
+        var crossSection = EnumerateExportableComponents(canvas)
+            .Select(c => c.GdsFactoryRoutingCrossSection)
+            .FirstOrDefault(x => !string.IsNullOrEmpty(x));
+        return string.IsNullOrEmpty(crossSection) ? "width=WG_WIDTH" : $"cross_section='{crossSection}'";
     }
 
     /// <summary>
@@ -47,10 +77,35 @@ public class GdsFactoryExporter
     /// </summary>
     public static IReadOnlyList<string> CollectUnmappedComponents(DesignCanvasViewModel canvas) =>
         EnumerateExportableComponents(canvas)
+            // Components exported via a real gdsfactory factory are not stubs — don't report
+            // them as "no gdsfactory equivalent". Use the SAME predicate as the placement path
+            // so a bare (dotless) gdsFactoryFunction, which DOES fall through to a stub, is
+            // still surfaced here (#570 review).
+            .Where(comp => !UsesGdsFactoryFactory(comp))
             .Select(comp => comp.NazcaFunctionName)
             .Where(name => !string.IsNullOrEmpty(name) && UbcPdkCellMap.MapToUbcPdkCell(name) == null)
             .Distinct(StringComparer.Ordinal)
             .ToList()!;
+
+    /// <summary>
+    /// Detects an unsupported mixed-backend design: a gdsfactory-native PDK activates its own
+    /// PDK in the export header (one process per chip), which makes ubcpdk cell lookups and a
+    /// second gdsfactory module unresolvable. Returns the conflicting module names when more
+    /// than one gdsfactory module is present, or a gdsfactory module coexists with
+    /// ubcpdk-mapped components; empty when the design is single-backend (#570 review).
+    /// </summary>
+    public static IReadOnlyList<string> CollectBackendConflicts(
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+    {
+        var modules = GdsFactoryModules(canvas).ToList();
+        var conflicts = new List<string>();
+        if (modules.Count > 1)
+            conflicts.AddRange(modules);
+        else if (modules.Count == 1 &&
+                 EnumerateExportableComponents(canvas).Any(c => UsesUbcPdkCell(c, options)))
+            conflicts.Add(modules[0] + " + ubcpdk cells");
+        return conflicts;
+    }
 
     /// <summary>
     /// Identifiers of instances whose override is written for Nazca — the gdsfactory export
@@ -127,11 +182,25 @@ public class GdsFactoryExporter
         }
     }
 
-    private static void AppendHeader(StringBuilder sb, GdsFactoryExportOptions options)
+    private static void AppendHeader(StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
     {
         sb.AppendLine("import os");
         sb.AppendLine("import gdsfactory as gf");
-        if (options.Mode == GdsFactoryComponentMode.UbcPdkCells)
+
+        var gdsfactoryModules = GdsFactoryModules(canvas).ToList();
+        if (gdsfactoryModules.Count > 0)
+        {
+            // gdsfactory-backend design (e.g. CornerStone SiN via cspdk.sin300, #570): one
+            // process per chip, so its own PDK is the active one — import and activate the
+            // referenced module(s). We deliberately do NOT also activate ubcpdk/gpdk here: a
+            // second activate would win and break these factories' layer lookups.
+            foreach (var module in gdsfactoryModules)
+            {
+                sb.AppendLine($"import {module}");
+                sb.AppendLine($"{module}.PDK.activate()");
+            }
+        }
+        else if (options.Mode == GdsFactoryComponentMode.UbcPdkCells)
         {
             sb.AppendLine("from ubcpdk import PDK");
             sb.AppendLine("PDK.activate()");
@@ -154,8 +223,10 @@ public class GdsFactoryExporter
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
-            // A gdsfactory override provides the geometry itself; a ubcpdk cell replaces the stub.
-            if (GdsFactoryOverrideCode(comp, overrides) != null || UsesUbcPdkCell(comp, options))
+            // A gdsfactory override / real gdsfactory factory / ubcpdk cell all replace the stub.
+            if (GdsFactoryOverrideCode(comp, overrides) != null
+                || UsesGdsFactoryFactory(comp)
+                || UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
         }
@@ -164,6 +235,42 @@ public class GdsFactoryExporter
     private static bool UsesUbcPdkCell(Component comp, GdsFactoryExportOptions options) =>
         options.Mode == GdsFactoryComponentMode.UbcPdkCells
         && UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName) != null;
+
+    /// <summary>
+    /// True when the component exports via a real gdsfactory factory: it has a
+    /// <see cref="Component.GdsFactoryFunction"/> that is module-qualified (contains a '.', e.g.
+    /// "cspdk.sin300.mmi1x2"), so the header imports+activates its module and the placement can
+    /// resolve the cell from the active PDK. A bare (dotless) name has no importable module and
+    /// falls through to a stub rather than emitting an unresolvable call (#570).
+    /// </summary>
+    private static bool UsesGdsFactoryFactory(Component comp) =>
+        GdsFactoryModuleOf(comp.GdsFactoryFunction) != null;
+
+    /// <summary>
+    /// The Python module part of a module-qualified gdsfactory function ("cspdk.sin300" from
+    /// "cspdk.sin300.mmi1x2"), or null when the name is empty/bare. Single definition of the
+    /// module-qualification rule, shared by the header import, the factory call, and the
+    /// stub-vs-factory decision so they can never disagree (#570 review).
+    /// </summary>
+    private static string? GdsFactoryModuleOf(string? gdsFactoryFunction) =>
+        !string.IsNullOrEmpty(gdsFactoryFunction) && gdsFactoryFunction!.Contains('.')
+            ? gdsFactoryFunction.Substring(0, gdsFactoryFunction.LastIndexOf('.'))
+            : null;
+
+    /// <summary>The cell name of a module-qualified gdsfactory function ("mmi1x2" from "cspdk.sin300.mmi1x2").</summary>
+    private static string GdsFactoryCellOf(string gdsFactoryFunction) =>
+        gdsFactoryFunction.Substring(gdsFactoryFunction.LastIndexOf('.') + 1);
+
+    /// <summary>
+    /// Distinct Python modules of the design's gdsfactory-backend components. Each is imported
+    /// and PDK-activated in the header (#570).
+    /// </summary>
+    private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
+        EnumerateExportableComponents(canvas)
+            .Select(c => GdsFactoryModuleOf(c.GdsFactoryFunction))
+            .Where(m => m != null)
+            .Select(m => m!)
+            .Distinct(StringComparer.Ordinal);
 
     /// <summary>
     /// Places one component: <c>rotate</c> about the cell origin, then <c>move</c> the
@@ -183,6 +290,11 @@ public class GdsFactoryExporter
         string factory;
         if (GdsFactoryOverrideCode(comp, overrides) != null)
             factory = $"{OverrideFactoryName(comp)}()";
+        else if (UsesGdsFactoryFactory(comp))
+            // gdsfactory-backend component: resolve the cell from the PDK activated in the header.
+            // cspdk exposes cells via the PDK registry (cspdk.sin300.cells / gf.get_component),
+            // NOT as module attributes — "cspdk.sin300.mmi1x2()" raises AttributeError (#570 review).
+            factory = $"gf.get_component('{GdsFactoryCellOf(comp.GdsFactoryFunction!)}')";
         else if (UsesUbcPdkCell(comp, options))
             factory = $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')";
         else
@@ -202,7 +314,8 @@ public class GdsFactoryExporter
             ? comp.NazcaFunctionParameters
             : string.Empty;
 
-    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas)
+    private static void AppendConnections(
+        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         sb.AppendLine("# Waveguide connections");
         foreach (var connVm in canvas.Connections)
@@ -211,34 +324,50 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // Electrical connections are metal traces, not optical waveguides — draw them as a
+            // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed or all-optical
+            // connection stays a waveguide (issue #686 review).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
+
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
             else if (conn.StartPin != null && conn.EndPin != null)
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle);
         }
         sb.AppendLine();
     }
 
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group)
+    /// <summary>
+    /// Exports frozen waveguide paths from a ComponentGroup (and nested groups). A frozen path
+    /// between two electrical pins is a metal trace, not a waveguide — mirrors the live
+    /// connection loop above (issue #686 review: this frozen-group path used to always emit a
+    /// waveguide regardless of pin kind, the same gap as the Nazca exporter's frozen-group export).
+    /// </summary>
+    private static void AppendGroupFrozenPaths(
+        StringBuilder sb, ComponentGroup group, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
                 GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin);
+                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle);
         }
     }
 
