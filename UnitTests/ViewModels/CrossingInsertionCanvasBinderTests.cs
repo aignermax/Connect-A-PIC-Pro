@@ -30,7 +30,10 @@ public class CrossingInsertionCanvasBinderTests
             canvas,
             () => new CrossingComponentInstance(
                 CrossingTestCircuit.CreateCrossingComponent(), "Crossing 4-Port", "SiEPIC EBeam"),
-            uiDispatch: action => action());
+            uiDispatch: action => action())
+        {
+            IsEnabled = true // crossing insertion is opt-in; these tests exercise it
+        };
 
         var aLeft = CrossingTestCircuit.CreateTerminal("A_left", 0, 95, 0, sourceCoupling: 1.0);
         var aRight = CrossingTestCircuit.CreateTerminal("A_right", 390, 95, 180);
@@ -47,13 +50,14 @@ public class CrossingInsertionCanvasBinderTests
     }
 
     [Fact]
-    public void Binder_AttachesServiceToConnectionManager()
+    public void Binder_DefaultsToDetached_NewFeaturesAreOptIn()
     {
         var canvas = new DesignCanvasViewModel();
         var binder = new CrossingInsertionCanvasBinder(
             canvas, () => null, uiDispatch: action => action());
 
-        canvas.ConnectionManager.CrossingInsertion.ShouldBeSameAs(binder.Service);
+        binder.IsEnabled.ShouldBeFalse();
+        canvas.ConnectionManager.CrossingInsertion.ShouldBeNull();
     }
 
     [Fact]
@@ -63,15 +67,13 @@ public class CrossingInsertionCanvasBinderTests
         var binder = new CrossingInsertionCanvasBinder(
             canvas, () => null, uiDispatch: action => action());
 
-        binder.IsEnabled.ShouldBeTrue();
+        // On → service attached to the connection manager.
+        binder.IsEnabled = true;
+        canvas.ConnectionManager.CrossingInsertion.ShouldBeSameAs(binder.Service);
 
         // Off → classic avoid-only routing (service detached from the manager).
         binder.IsEnabled = false;
         canvas.ConnectionManager.CrossingInsertion.ShouldBeNull();
-
-        // On → service re-attached.
-        binder.IsEnabled = true;
-        canvas.ConnectionManager.CrossingInsertion.ShouldBeSameAs(binder.Service);
     }
 
     [Fact]

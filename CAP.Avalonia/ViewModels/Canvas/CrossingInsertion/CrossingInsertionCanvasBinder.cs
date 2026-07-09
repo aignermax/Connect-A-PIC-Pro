@@ -52,15 +52,16 @@ public class CrossingInsertionCanvasBinder
             ComponentAdded = OnCrossingAdded,
             ComponentRemoved = OnCrossingRemoved,
         };
-        canvas.ConnectionManager.CrossingInsertion = Service;
+        // New features default to OFF: the service is not attached until the
+        // user enables crossing insertion (Settings → Routing → Crossings).
     }
 
     /// <summary>
-    /// Whether adaptive crossing insertion runs after routing (Issue #553). Toggling off
-    /// detaches the service from the connection manager, so routing immediately reverts to
-    /// classic avoid-only behavior (no extra post-routing pass); toggling on re-attaches it.
-    /// Already-inserted crossings persist until the next recalculation. Bound to the General
-    /// settings toggle so users can trade crossing insertion for routing speed.
+    /// Whether adaptive crossing insertion runs after routing (Issue #553). Off by
+    /// default. Toggling on attaches the service to the connection manager; toggling
+    /// off detaches it, so routing immediately reverts to classic avoid-only behavior
+    /// (no extra post-routing pass). Already-inserted crossings persist until the next
+    /// recalculation. Bound to the Routing settings page.
     /// </summary>
     public bool IsEnabled
     {

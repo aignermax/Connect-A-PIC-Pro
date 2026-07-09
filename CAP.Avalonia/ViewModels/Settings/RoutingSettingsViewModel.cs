@@ -30,7 +30,7 @@ public partial class RoutingSettingsViewModel : ObservableObject
     {
         Canvas = canvas;
         _crossingBinder = crossingBinder;
-        _crossingInsertionEnabled = crossingBinder?.IsEnabled ?? true;
+        _crossingInsertionEnabled = crossingBinder?.IsEnabled ?? false;
     }
 
     /// <summary>
