@@ -19,6 +19,7 @@ public partial class ComponentSettingsDialogViewModel
 {
     private readonly IFdtdSMatrixService? _fdtdService;
     private readonly Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? _fdtdRequestFactory;
+    private readonly IDockerSetupDialogService? _dockerSetupDialog;
     private CancellationTokenSource? _recalcCts;
 
     /// <summary>True while an FDTD recompute is running.</summary>
@@ -71,7 +72,17 @@ public partial class ComponentSettingsDialogViewModel
             if (!availability.IsAvailable)
             {
                 SolverStatus = availability.Message;
-                return;
+                // Guided setup (issue #649): open the "Set up FDTD" dialog with
+                // platform-specific install/start guidance and a re-check button.
+                // Headless/test consumers without the dialog service keep the
+                // plain error-string behaviour above.
+                if (_dockerSetupDialog == null)
+                    return;
+                var ready = await _dockerSetupDialog.ShowAsync(
+                    availability, ct => _fdtdService.CheckAvailabilityAsync(ct));
+                if (!ready)
+                    return;
+                SolverStatus = "Docker is ready — continuing FDTD recompute…";
             }
 
             SolverStatus = "Preparing component geometry…";

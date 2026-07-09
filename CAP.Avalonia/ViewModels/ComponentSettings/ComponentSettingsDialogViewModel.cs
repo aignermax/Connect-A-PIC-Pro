@@ -104,6 +104,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// (renders its geometry and ports). Required alongside <paramref name="fdtdService"/>
     /// for recompute to be available.
     /// </param>
+    /// <param name="dockerSetupDialog">
+    /// Optional guided "Set up FDTD" dialog shown when the Docker backend is
+    /// unavailable (issue #649). When null (tests, headless) the recompute
+    /// surfaces the plain availability error string instead.
+    /// </param>
     /// <param name="notificationService">
     /// Optional toast service for transient, non-error feedback (e.g. "FDTD
     /// recompute cancelled") that outlives the dialog window. When null, the
@@ -116,7 +121,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IPortMappingDialogService? portMappingDialog = null,
         IFdtdSMatrixService? fdtdService = null,
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -124,6 +130,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _notificationService = notificationService;
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
+        _dockerSetupDialog = dockerSetupDialog;
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),
