@@ -30,6 +30,13 @@ namespace CAP_Core.Components.Core
         /// </summary>
         public MatterType MatterType => LogicalPin?.MatterType ?? MatterType.Light;
 
+        /// <summary>
+        /// Polarization of this physical port, derived from the linked logical
+        /// pin. Physical pins without a logical pin default to the
+        /// backward-compatible <see cref="PolarizationKind.TE"/>.
+        /// </summary>
+        public PolarizationKind Polarization => LogicalPin?.Polarization ?? PolarizationKind.TE;
+
         public (double x, double y) GetAbsolutePosition()
         {
             return (
