@@ -255,8 +255,7 @@ public class GroupLibraryManager
     /// </summary>
     private static string GetDefaultLibraryPath()
     {
-        var appData = Environment.GetFolderPath(
-            Environment.SpecialFolder.LocalApplicationData);
+        var appData = Helpers.AppDataFolders.LocalApplicationData;
         return Path.Combine(appData, "ConnectAPICPro", DefaultLibraryFolder);
     }
 

@@ -142,6 +142,10 @@ public class PhotonTorchExporter
             foreach (var pin in comp.PhysicalPins)
             {
                 if (connectedPins.Contains(pin.PinId)) continue;
+                // Only optical pins terminate as photonic Source/Detector — an electrical pin
+                // is not an optical port, and auto-terminating it would inject/measure light on
+                // a metal contact and corrupt the optical netlist (#519).
+                if (pin.MatterType != MatterType.Light) continue;
 
                 var compVar = nameMap[comp.Identifier];
                 var portIndex = pinIndexMap[pin.PinId];

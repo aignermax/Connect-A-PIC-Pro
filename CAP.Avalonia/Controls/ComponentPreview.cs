@@ -30,6 +30,9 @@ public class ComponentPreview : Control
     public static readonly StyledProperty<string?> NazcaFunctionNameProperty =
         AvaloniaProperty.Register<ComponentPreview, string?>(nameof(NazcaFunctionName));
 
+    public static readonly StyledProperty<string?> GdsFactoryFunctionProperty =
+        AvaloniaProperty.Register<ComponentPreview, string?>(nameof(GdsFactoryFunction));
+
     /// <summary>Attached service, set once on an ancestor so all thumbnails inherit it.</summary>
     public static readonly AttachedProperty<GdsPreviewRenderService?> RenderServiceProperty =
         AvaloniaProperty.RegisterAttached<ComponentPreview, Control, GdsPreviewRenderService?>("RenderService", inherits: true);
@@ -68,6 +71,14 @@ public class ComponentPreview : Control
         set => SetValue(NazcaFunctionNameProperty, value);
     }
 
+    /// <summary>Module-qualified gdsfactory factory name for gdsfactory-native components
+    /// (e.g. "cspdk.sin300.mmi1x2"); drives the gdsfactory geometry preview (#570).</summary>
+    public string? GdsFactoryFunction
+    {
+        get => GetValue(GdsFactoryFunctionProperty);
+        set => SetValue(GdsFactoryFunctionProperty, value);
+    }
+
     private GdsPreviewRenderService? _service;
 
     static ComponentPreview()
@@ -77,7 +88,8 @@ public class ComponentPreview : Control
             HeightMicrometersProperty,
             PinDefinitionsProperty,
             NazcaModuleNameProperty,
-            NazcaFunctionNameProperty);
+            NazcaFunctionNameProperty,
+            GdsFactoryFunctionProperty);
     }
 
     /// <inheritdoc/>
@@ -118,7 +130,8 @@ public class ComponentPreview : Control
         double offsetX = pad + (availW - drawW) / 2;
         double offsetY = pad + (availH - drawH) / 2;
 
-        var geometry = _service?.TryGetGeometry(new GdsPreviewKey(NazcaModuleName, NazcaFunctionName, null));
+        var geometry = _service?.TryGetGeometry(
+            new GdsPreviewKey(NazcaModuleName, NazcaFunctionName, null) { GdsFactoryFunction = GdsFactoryFunction });
         if (geometry != null && geometry.Polygons.Count > 0)
             GdsPolygonRenderer.DrawPolygonsAsGeometry(context, geometry, offsetX, offsetY, drawW, drawH);
         else

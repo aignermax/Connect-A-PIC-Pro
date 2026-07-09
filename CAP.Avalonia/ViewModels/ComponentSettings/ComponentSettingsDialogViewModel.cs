@@ -5,6 +5,7 @@ using CAP_Core.LightCalculation;
 using CAP_DataAccess.Import;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
@@ -25,6 +26,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private readonly ErrorConsoleService? _errorConsole;
     private readonly IReadOnlyList<ISParameterImporter> _importers;
     private readonly IPortMappingDialogService? _portMappingDialog;
+    private readonly INotificationService? _notificationService;
 
     private Dictionary<string, ComponentSMatrixData>? _storedSMatrices;
     private Component? _liveComponent;
@@ -103,17 +105,24 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// (renders its geometry and ports). Required alongside <paramref name="fdtdService"/>
     /// for recompute to be available.
     /// </param>
+    /// <param name="notificationService">
+    /// Optional toast service for transient, non-error feedback (e.g. "FDTD
+    /// recompute cancelled") that outlives the dialog window. When null, the
+    /// feedback stays in the in-dialog status text only.
+    /// </param>
     public ComponentSettingsDialogViewModel(
         IFileDialogService fileDialogService,
         ErrorConsoleService? errorConsole = null,
         IReadOnlyList<ISParameterImporter>? importers = null,
         IPortMappingDialogService? portMappingDialog = null,
         IFdtdSMatrixService? fdtdService = null,
-        Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null)
+        Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
+        INotificationService? notificationService = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
         _portMappingDialog = portMappingDialog;
+        _notificationService = notificationService;
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
         _importers = importers ?? new ISParameterImporter[]
@@ -221,7 +230,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Action? nazcaDimensionsChanged = null,
         Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
         Func<string>? smatrixKeyResolver = null,
-        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _smatrixKey = smatrixKey;
         _smatrixKeyResolver = smatrixKeyResolver;
@@ -276,7 +286,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
                 nazcaOverlapCheck,
                 nazcaDimensionsChanged,
                 OnNazcaGeometryChanged,
-                nazcaPinsChanged);
+                nazcaPinsChanged,
+                gdsFactoryPreviewService);
         }
         else
         {

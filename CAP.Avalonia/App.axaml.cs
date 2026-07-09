@@ -35,6 +35,8 @@ public partial class App : Application
         services.AddPdkOffsetFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
+        services.AddNotificationFeature();
+        services.AddAddCustomComponentFeature();
 
         services.AddSingleton<MainViewModel>();
     }

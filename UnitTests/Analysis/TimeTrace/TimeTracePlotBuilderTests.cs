@@ -109,6 +109,35 @@ public class TimeTracePlotBuilderTests
     }
 
     [Fact]
+    public void BuildPlotModel_ShortWindow_LabelsAxisInPicoseconds()
+    {
+        var pin = Guid.NewGuid();
+        var result = MakeResult(new[] { 0.0, 1e-12, 2e-12 }, (pin, new[] { 0.0, 0.5, 0.2 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Axes.Single(a => a.Title.Contains("Time")).Title.ShouldBe("Time (ps)");
+    }
+
+    [Fact]
+    public void BuildPlotModel_LongWindow_SwitchesAxisToNanoseconds()
+    {
+        // A PRBS run spans ~1600 ps — the axis must read in ns, not "1600"
+        // in an easily-missed ps unit (user feedback on #600).
+        var pin = Guid.NewGuid();
+        var timeAxis = Enumerable.Range(0, 5).Select(n => n * 0.4e-9).ToArray(); // 0…1.6 ns
+        var result = MakeResult(timeAxis, (pin, new[] { 0.0, 0.5, 0.2, 0.7, 0.1 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Axes.Single(a => a.Title.Contains("Time")).Title.ShouldBe("Time (ns)");
+        var series = model.Series.OfType<LineSeries>().Single();
+        series.Points[4].X.ShouldBe(1.6, 1e-9, "X values must be rescaled to ns");
+    }
+
+    [Fact]
     public void BuildPlotModel_OmitsHiddenSeries()
     {
         var a = Guid.NewGuid();
