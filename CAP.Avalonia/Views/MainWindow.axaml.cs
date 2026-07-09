@@ -97,6 +97,16 @@ public partial class MainWindow : Window
                     processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
                         .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
+                    // the exact file so a real PDK can't be edited by accident.
+                    processVm.ConfirmSaveToPdk = async path =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
+                            "Save to PDK file?", new[] { "Cancel", "Save" });
+                        return choice == 1;
+                    };
                     var processWindow = new ProcessManagementWindow
                     {
                         DataContext = processVm

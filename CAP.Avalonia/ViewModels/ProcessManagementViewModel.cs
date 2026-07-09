@@ -318,8 +318,16 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// <see cref="ImportFromPdk"/> for reference must never be written into this PDK's file
     /// (issue #686 review, Finding 2).
     /// </summary>
+    /// <summary>
+    /// Optional confirmation gate before writing the process back to a PDK file on disk. The UI
+    /// wires this to a yes/no prompt naming the target file, so a user cannot overwrite a PDK's
+    /// JSON by accident. Receives the file path; returns true to proceed. Null (tests/headless)
+    /// proceeds without prompting.
+    /// </summary>
+    public Func<string, Task<bool>>? ConfirmSaveToPdk { get; set; }
+
     [RelayCommand]
-    private void SaveProcess()
+    private async Task SaveProcess()
     {
         if (_memberDrafts.Count == 0)
         {
@@ -338,6 +346,15 @@ public partial class ProcessManagementViewModel : ObservableObject
         if (string.IsNullOrEmpty(path))
         {
             StatusText = $"Could not locate the PDK file for '{draft.Name}' — save unavailable.";
+            return;
+        }
+
+        // Writing edits back to a PDK's JSON on disk is a deliberate act — confirm first so a
+        // real PDK cannot be overwritten by accident (user field feedback). Only this process's
+        // own rows are written regardless; the prompt makes the file target explicit.
+        if (ConfirmSaveToPdk != null && !await ConfirmSaveToPdk(path))
+        {
+            StatusText = "Save cancelled — the PDK file was not changed.";
             return;
         }
 

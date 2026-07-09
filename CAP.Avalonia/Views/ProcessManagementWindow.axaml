@@ -181,9 +181,9 @@
                         </DataTemplate>
                     </ComboBox.ItemTemplate>
                 </ComboBox>
-                <Button Content="Save to PDK" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
+                <Button Content="Save to PDK file…" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
                         Padding="12,6" Background="#2a4a2a"
-                        ToolTip.Tip="Persist the edited layer stack / cross-sections back to this process's PDK JSON (single-PDK processes)"/>
+                        ToolTip.Tip="Write the edited layer stack / cross-sections back into this process's PDK JSON on disk (asks for confirmation; only single-PDK processes; only this process's own rows are written)"/>
                 <TextBlock Text="Process:" VerticalAlignment="Center" Foreground="#aaa"/>
                 <TextBox Text="{Binding ProcessName}" Width="220" VerticalAlignment="Center"/>
             </StackPanel>
