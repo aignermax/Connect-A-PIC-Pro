@@ -78,8 +78,8 @@
                         Command="{Binding CopyPermissionCommandCommand}"
                         Background="#3d3d3d" Foreground="White"/>
             </Grid>
-            <TextBlock Text="Group membership only takes effect after you log out and back in (a terminal 'newgrp docker' works for that shell only). Then check again."
-                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <TextBlock Text="⚠ Group membership only takes effect after you log out and back in (a terminal 'newgrp docker' works for that shell only). Then check again."
+                       Foreground="#e5c07b" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap"/>
         </StackPanel>
 
         <!-- Windows / macOS: engine stopped — start hint -->
