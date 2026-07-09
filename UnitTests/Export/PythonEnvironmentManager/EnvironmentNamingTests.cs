@@ -67,6 +67,49 @@ public class EnvironmentNamingTests
         EnvironmentNaming.IsValidPythonVersion(version).ShouldBeFalse();
     }
 
+    [Theory]
+    [InlineData("3.11", "py3.11")]
+    [InlineData("3", "py3")]
+    [InlineData("3.11.4", "py3.11.4")]
+    [InlineData(" 3.12 ", "py3.12")]   // surrounding whitespace is trimmed
+    public void GenerateName_NoCollision_UsesVersionBasedName(string version, string expected)
+    {
+        EnvironmentNaming.GenerateName(version, _ => false).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void GenerateName_Collision_AppendsNumericSuffix()
+    {
+        var taken = new HashSet<string> { "py3.11", "py3.11-2" };
+
+        EnvironmentNaming.GenerateName("3.11", taken.Contains).ShouldBe("py3.11-3");
+    }
+
+    [Theory]
+    [InlineData("3.11")]
+    [InlineData("3.11.4")]
+    [InlineData("3")]
+    public void GenerateName_Result_IsValidByConstruction(string version)
+    {
+        // Even the suffixed collision names must pass the security validation gate.
+        var first = EnvironmentNaming.GenerateName(version, _ => false);
+        var suffixed = EnvironmentNaming.GenerateName(version, n => n == first);
+
+        EnvironmentNaming.IsValidName(first).ShouldBeTrue();
+        EnvironmentNaming.IsValidName(suffixed).ShouldBeTrue();
+        suffixed.ShouldNotBe(first);
+    }
+
+    [Theory]
+    [InlineData("3.11 --seed")]
+    [InlineData("latest")]
+    [InlineData("")]
+    public void GenerateName_InvalidVersion_Throws(string version)
+    {
+        Should.Throw<ArgumentException>(() =>
+            EnvironmentNaming.GenerateName(version, _ => false));
+    }
+
     [Fact]
     public void IsInsideDirectory_ChildPath_ReturnsTrue()
     {

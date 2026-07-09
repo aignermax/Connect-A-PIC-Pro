@@ -11,21 +11,16 @@
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"
                    Text="{loc:Localize PyEnvMgr.Description}"/>
 
-        <!-- Create new managed environment (installs Nazca + gdsfactory together, #645) -->
+        <!-- Create new managed environment (#645); the name is auto-generated from the version (#698). -->
         <TextBlock Text="{loc:Localize PyEnvMgr.CreateHeading}" Foreground="Gray" FontSize="10"
                    Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-            <TextBlock Text="{loc:Localize PyEnvMgr.Name}" Foreground="Gray" FontSize="11"
-                       VerticalAlignment="Center" Width="50"/>
-            <TextBox Text="{Binding NewEnvironmentName}"
-                     Width="150" FontSize="11" Watermark="{loc:Localize PyEnvMgr.NameWatermark}"/>
-        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <TextBlock Text="Python:" Foreground="Gray" FontSize="11"
                        VerticalAlignment="Center" Width="50"/>
             <ComboBox ItemsSource="{Binding PythonVersionChoices}"
                       SelectedItem="{Binding PythonVersion}"
-                      Width="90" FontSize="11"/>
+                      Width="90" FontSize="11"
+                      ToolTip.Tip="{loc:Localize PyEnvMgr.AutoNameTip}"/>
         </StackPanel>
         <Button Content="{loc:Localize PyEnvMgr.CreateInstall}"
                 Command="{Binding CreateAndInstallCommand}"

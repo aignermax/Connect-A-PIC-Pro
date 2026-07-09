@@ -23,36 +23,35 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
             new NazcaPackageInstaller(),
             new EnvironmentHealthChecker(new PythonDiscoveryService()));
 
-    [Theory]
-    [InlineData("..")]
-    [InlineData("../escape")]
-    [InlineData(@"..\escape")]
-    [InlineData(@"C:\Windows")]
-    public async Task CreateAndInstall_PathLikeName_IsRejectedWithoutSideEffects(string name)
-    {
-        var registry = CreateRegistry();
-        var vm = CreateViewModel(registry);
-        vm.NewEnvironmentName = name;
-
-        await vm.CreateAndInstallCommand.ExecuteAsync(null);
-
-        registry.GetAll().ShouldBeEmpty();          // nothing was registered
-        vm.IsBusy.ShouldBeFalse();                  // no long operation started
-        vm.ProgressText.ShouldContain("name");      // the user is told why
-    }
-
     [Fact]
     public async Task CreateAndInstall_InvalidPythonVersion_IsRejectedWithoutSideEffects()
     {
+        // The create flow takes no name input (issue #698) — the version is the only
+        // user-supplied value, so it is the only validation gate left.
         var registry = CreateRegistry();
         var vm = CreateViewModel(registry);
-        vm.NewEnvironmentName = "valid-name";
         vm.PythonVersion = "3.11 --seed";
 
         await vm.CreateAndInstallCommand.ExecuteAsync(null);
 
         registry.GetAll().ShouldBeEmpty();
+        vm.IsBusy.ShouldBeFalse();                  // no long operation started
         vm.ProgressText.ShouldContain("version");
+    }
+
+    [Fact]
+    public void GenerateName_AgainstRegistryWithExistingEnvironments_ProducesUniqueName()
+    {
+        // Legacy hand-named environments and previously generated ones coexist in the
+        // registry; a new generated name must never collide with either (issue #698).
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("py3.11"));
+        registry.AddOrUpdate(MakeEnv("py3.11-2"));
+
+        var name = EnvironmentNaming.GenerateName("3.11", registry.Exists);
+
+        name.ShouldBe("py3.11-3");
+        registry.Exists(name).ShouldBeFalse();
     }
 
     [Fact]

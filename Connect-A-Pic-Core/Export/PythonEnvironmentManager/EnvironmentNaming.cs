@@ -36,6 +36,35 @@ public static partial class EnvironmentNaming
         !string.IsNullOrWhiteSpace(version) && PythonVersionRegex().IsMatch(version);
 
     /// <summary>
+    /// Generates a unique, valid environment name from a Python version, e.g.
+    /// <c>py3.11</c>. On collision a numeric suffix is appended (<c>py3.11-2</c>,
+    /// <c>py3.11-3</c>, …). Because the version is restricted to digits and dots by
+    /// <see cref="IsValidPythonVersion"/>, the result passes <see cref="IsValidName"/>
+    /// by construction.
+    /// </summary>
+    /// <param name="pythonVersion">A version accepted by <see cref="IsValidPythonVersion"/>.</param>
+    /// <param name="nameExists">Returns true when a candidate name is already taken.</param>
+    /// <exception cref="ArgumentException">If the version is not a plain Python version.</exception>
+    public static string GenerateName(string pythonVersion, Func<string, bool> nameExists)
+    {
+        var version = pythonVersion.Trim();
+        if (!IsValidPythonVersion(version))
+            throw new ArgumentException(
+                $"'{pythonVersion}' is not a plain Python version.", nameof(pythonVersion));
+
+        var baseName = $"py{version}";
+        if (!nameExists(baseName))
+            return baseName;
+
+        for (var suffix = 2; ; suffix++)
+        {
+            var candidate = $"{baseName}-{suffix}";
+            if (!nameExists(candidate))
+                return candidate;
+        }
+    }
+
+    /// <summary>
     /// True when <paramref name="path"/> resolves to a location strictly inside
     /// <paramref name="baseDir"/> (never the base directory itself). Use this as the
     /// guard before any destructive operation on a stored environment path.

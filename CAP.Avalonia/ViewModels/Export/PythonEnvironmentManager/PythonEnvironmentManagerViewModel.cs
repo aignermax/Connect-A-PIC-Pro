@@ -24,9 +24,6 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
     private CancellationTokenSource? _cts;
 
     [ObservableProperty]
-    private string _newEnvironmentName = string.Empty;
-
-    [ObservableProperty]
     private string _pythonVersion = UvBootstrapper.DefaultPythonVersion;
 
     /// <summary>
@@ -93,39 +90,36 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
             return;
         }
 
-        NewEnvironmentName = DefaultEnvironmentName;
         PythonVersion = UvBootstrapper.DefaultPythonVersion;
-        await CreateAndInstallCommand.ExecuteAsync(null);
+        await CreateAndInstallCoreAsync(DefaultEnvironmentName, UvBootstrapper.DefaultPythonVersion);
     }
 
     /// <summary>
     /// Creates a new venv and installs the full dependency set — Nazca + pyclipper and
     /// gdsfactory + ubcpdk — so a freshly created environment works for both the Nazca and
-    /// the gdsfactory export without a separate install step (issue #645).
+    /// the gdsfactory export without a separate install step (issue #645). The user only
+    /// picks the Python version; the environment name is generated automatically
+    /// (e.g. <c>py3.11</c>, with a numeric suffix on collision — issue #698).
     /// </summary>
     [RelayCommand]
     private async Task CreateAndInstallAsync()
     {
-        var name = NewEnvironmentName.Trim();
-        if (!EnvironmentNaming.IsValidName(name))
-        {
-            ProgressText = "Please enter a valid environment name "
-                + "(letters, digits, '-', '_', '.'; no path characters).";
-            return;
-        }
-
-        if (!EnvironmentNaming.IsValidPythonVersion(PythonVersion.Trim()))
+        var version = PythonVersion.Trim();
+        if (!EnvironmentNaming.IsValidPythonVersion(version))
         {
             ProgressText = "Please enter a plain Python version, e.g. 3.11 or 3.11.4.";
             return;
         }
 
-        if (_registry.Exists(name))
-        {
-            ProgressText = $"An environment named '{name}' already exists.";
-            return;
-        }
+        var name = EnvironmentNaming.GenerateName(version, _registry.Exists);
+        await CreateAndInstallCoreAsync(name, version);
+    }
 
+    /// <summary>
+    /// Shared create + install flow for a validated, non-colliding environment name.
+    /// </summary>
+    private async Task CreateAndInstallCoreAsync(string name, string pythonVersion)
+    {
         var venvPath = Path.Combine(UvBootstrapper.EnvironmentsBaseDir, name);
         var env = new PythonEnvironment { Name = name, VenvPath = venvPath };
 
@@ -141,7 +135,7 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
 
             var uvPath = await _bootstrapper.EnsureUvAsync(progress, ct);
 
-            await _bootstrapper.CreateVenvAsync(uvPath, venvPath, PythonVersion.Trim(), progress, ct);
+            await _bootstrapper.CreateVenvAsync(uvPath, venvPath, pythonVersion, progress, ct);
 
             env.Status = PythonEnvironmentStatus.Installing;
             await _installer.InstallAsync(uvPath, venvPath, progress, ct);
