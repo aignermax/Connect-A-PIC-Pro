@@ -211,6 +211,16 @@ public partial class DesignCanvasViewModel : ObservableObject
     {
         var vm = new ComponentViewModel(component, templateName, templatePdkSource);
         vm.OnSliderChanged = () => RequestResimulation();
+        if (vm.LaserConfig != null)
+        {
+            // Laser changes (on/off #690, wavelength, power) re-simulate the live
+            // overlay and repaint the canvas laser icon.
+            vm.LaserConfig.PropertyChanged += (_, _) =>
+            {
+                RequestResimulation();
+                RepaintRequested?.Invoke();
+            };
+        }
         Components.Add(vm);
         Router.AddComponentObstacle(component);
 

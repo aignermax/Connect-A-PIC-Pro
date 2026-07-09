@@ -428,6 +428,7 @@ public partial class FileOperationsViewModel : ObservableObject
             SliderValue = c.HasSliders ? c.SliderValue : null,
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
+            LaserEnabled = c.LaserConfig?.IsEnabled,
             IsLocked = c.Component.IsLocked ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
@@ -1103,6 +1104,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.WavelengthNm = compData.LaserWavelengthNm.Value;
             if (compData.LaserPower.HasValue)
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
+            if (compData.LaserEnabled.HasValue)
+                vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
         }
 
         // Restore lock state

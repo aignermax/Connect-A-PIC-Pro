@@ -10,6 +10,14 @@ namespace CAP.Avalonia.ViewModels.Simulation;
 public partial class LaserConfig : ObservableObject
 {
     /// <summary>
+    /// Whether this coupler's laser emits light (Issue #690). A coupler with its
+    /// laser ON is an input; with the laser OFF it is listen-only, i.e. an output.
+    /// Defaults to true so existing designs keep today's behaviour.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isEnabled = true;
+
+    /// <summary>
     /// Selected wavelength in nanometers.
     /// </summary>
     [ObservableProperty]

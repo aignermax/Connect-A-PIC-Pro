@@ -110,6 +110,14 @@ public class SimulationService
     {
         var configs = new List<SourceConfigInfo>();
 
+        // Couplers whose laser is switched off (#690) act as listen-only outputs.
+        // LaserConfig lives on the top-level ViewModel, so only top-level couplers
+        // can be disabled; components inside groups keep the default (enabled).
+        var disabledLasers = canvas.Components
+            .Where(c => c.LaserConfig is { IsEnabled: false })
+            .Select(c => c.Component)
+            .ToHashSet();
+
         // Collect all components, including those inside groups (recursively)
         var allComponents = GetAllComponentsRecursively(canvas.Components);
 
@@ -134,6 +142,9 @@ public class SimulationService
             }
 
             if (!IsLightSource(component))
+                continue;
+
+            if (disabledLasers.Contains(component))
                 continue;
 
             // For components inside groups, we don't have LaserConfig, so use defaults

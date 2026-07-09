@@ -67,6 +67,27 @@ public class DesignCanvasHitTesting
     }
 
     /// <summary>
+    /// Checks if a point is within a light-source component's laser on/off icon (#690).
+    /// Only icons that are currently visible are hit (enabled lasers always; disabled
+    /// ones only while a simulation mode is active). Returns the component if hit.
+    /// This should be checked BEFORE HitTestComponent for prioritized icon interaction.
+    /// </summary>
+    public static ComponentViewModel? HitTestLaserIcon(Point canvasPoint, DesignCanvasViewModel? vm)
+    {
+        if (vm == null) return null;
+
+        for (int i = vm.Components.Count - 1; i >= 0; i--)
+        {
+            var comp = vm.Components[i];
+            if (!LaserIndicatorRenderer.IsIconVisible(comp, vm.ShowPowerFlow)) continue;
+            if (LaserIndicatorRenderer.CalculateIconBounds(comp).Contains(canvasPoint))
+                return comp;
+        }
+
+        return null;
+    }
+
+    /// <summary>
     /// Finds the component at the given canvas point (topmost first).
     /// For ComponentGroups, checks if the point is within the group's bounding box.
     /// In group edit mode, only tests child components of the current edit group.

@@ -35,6 +35,18 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         if (mainVm?.CanvasInteraction.CurrentMode != InteractionMode.Select) return false;
         if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return false;
 
+        var laserComp = DesignCanvasHitTesting.HitTestLaserIcon(canvasPoint, canvas);
+        if (laserComp?.LaserConfig != null)
+        {
+            // Single-click direct manipulation (#690): toggle this coupler's laser.
+            laserComp.LaserConfig.IsEnabled = !laserComp.LaserConfig.IsEnabled;
+            mainVm.StatusText = laserComp.LaserConfig.IsEnabled
+                ? $"Laser ON — '{laserComp.Name}' is an input"
+                : $"Laser OFF — '{laserComp.Name}' is an output (listen-only)";
+            _invalidate();
+            return true;
+        }
+
         var lockGroup = DesignCanvasHitTesting.HitTestGroupLockIcon(canvasPoint, canvas);
         if (lockGroup != null)
         {
@@ -114,6 +126,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
     public void UpdatePassiveState(Point canvasPoint, DesignCanvasViewModel canvas, MainViewModel? mainVm)
     {
         UpdateGroupHover(canvasPoint, canvas);
+        UpdateLaserIconHover(canvasPoint, canvas);
         if (canvas.ShowPowerFlow)
         {
             var prev = _state.HoveredConnection;
@@ -121,6 +134,16 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
             if (_state.HoveredConnection != prev) _invalidate();
         }
         else _state.HoveredConnection = null;
+    }
+
+    /// <summary>Tracks hover over a laser on/off icon (#690) for highlight + hand cursor.</summary>
+    private void UpdateLaserIconHover(Point canvasPoint, DesignCanvasViewModel canvas)
+    {
+        var prev = _state.HoveredLaserIconComponent;
+        var comp = DesignCanvasHitTesting.HitTestLaserIcon(canvasPoint, canvas);
+        _state.HoveredLaserIconComponent = comp;
+        if (comp != null) _setCursor(new Cursor(StandardCursorType.Hand));
+        if (comp != prev) _invalidate();
     }
 
     private void UpdateGroupHover(Point canvasPoint, DesignCanvasViewModel canvas)

@@ -136,6 +136,11 @@
                 inputs, and the plot shows how much power arrives at each output —
                 moment by moment, not just the final steady value.
             </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Light enters at couplers with the laser switched on; couplers with
+                the laser switched off are your outputs (toggle the laser icon on
+                the canvas or the switch in the properties panel).
+            </TextBlock>
 
             <TextBlock Text="Why does it exist?" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>

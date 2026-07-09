@@ -994,6 +994,10 @@ public class ChildComponentData
     public double? SliderValue { get; set; }
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
+
+    /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
+    public bool? LaserEnabled { get; set; }
+
     public bool? IsLocked { get; set; }
     public string? HumanReadableName { get; set; }
 }
@@ -1016,6 +1020,10 @@ public class ComponentData
     public double? SliderValue { get; set; }
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
+
+    /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
+    public bool? LaserEnabled { get; set; }
+
     public bool? IsLocked { get; set; }
     public string? HumanReadableName { get; set; }
 }
