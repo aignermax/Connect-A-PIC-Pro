@@ -106,7 +106,19 @@ public partial class MainWindow : Window
                     // persisted, using the same loaded-PDK registry the offset editor writes through.
                     processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
                         .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
-                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // "Use preset" = USE, not edit (issue #696): picking a preset sets it as the
+                    // design's active process (persisted in the .lun file, restored on reopen);
+                    // field edits become design-only overrides committed alongside.
+                    processVm.UseAsDesignProcess = (selection, presetPdkName) =>
+                    {
+                        vm.FileOperations.SetActiveProcess(selection);
+                        vm.FileOperations.SetActiveProcessPreset(presetPdkName,
+                            System.Array.Empty<ViewModels.Process.ProcessPropertyOverrideData>());
+                    };
+                    processVm.CommitOverrides = (presetPdkName, overrides) =>
+                        vm.FileOperations.SetActiveProcessPreset(presetPdkName, overrides);
+                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts(),
+                        vm.FileOperations.ActiveProcessPresetPdkName, vm.FileOperations.ActiveProcessOverrides);
                     // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
                     // the exact file so a real PDK can't be edited by accident.
                     processVm.ConfirmSaveToPdk = async path =>

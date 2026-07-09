@@ -15,6 +15,7 @@ using CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride;
 using CAP.Avalonia.ViewModels.Converters;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Export;
+using CAP.Avalonia.ViewModels.Process;
 using CAP_Core.Export;
 
 namespace CAP.Avalonia.ViewModels.Panels;
@@ -73,6 +74,20 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private ActiveProcessSelection? _activeProcess;
+
+    /// <summary>
+    /// Name of the PDK preset <see cref="ActiveProcess"/> was picked from in the Fabrication
+    /// Process window ("Load preset" = USE, issue #696); null when the process was chosen
+    /// elsewhere (New-Design picker, migration). Persisted with the design.
+    /// </summary>
+    public string? ActiveProcessPresetPdkName { get; private set; }
+
+    /// <summary>
+    /// Design-specific property overrides on top of the preset process (issue #696).
+    /// Empty when the preset is used as-is. Persisted with the design.
+    /// </summary>
+    public IReadOnlyList<ProcessPropertyOverrideData> ActiveProcessOverrides { get; private set; } =
+        System.Array.Empty<ProcessPropertyOverrideData>();
 
     /// <summary>
     /// Supplies the current set of installable/loaded process groups. Wired by DI/MainViewModel
@@ -272,6 +287,26 @@ public partial class FileOperationsViewModel : ObservableObject
     public void SetActiveProcess(ActiveProcessSelection? selection, bool markDirty = true)
     {
         ActiveProcess = selection;
+        // A selection made outside the preset flow invalidates any stored preset reference;
+        // the preset flow re-establishes it via SetActiveProcessPreset right after (#696).
+        ActiveProcessPresetPdkName = null;
+        ActiveProcessOverrides = System.Array.Empty<ProcessPropertyOverrideData>();
+        if (markDirty)
+            HasUnsavedChanges = true;
+    }
+
+    /// <summary>
+    /// Records that <see cref="ActiveProcess"/> was picked from a PDK preset, plus the design's
+    /// property overrides on top of it (issue #696). Both round-trip through the .lun file.
+    /// </summary>
+    /// <param name="presetPdkName">Name of the preset PDK the process comes from.</param>
+    /// <param name="overrides">Design-specific overrides on top of the preset (may be empty).</param>
+    /// <param name="markDirty">False only when restoring state that is already persisted.</param>
+    public void SetActiveProcessPreset(
+        string presetPdkName, IReadOnlyList<ProcessPropertyOverrideData> overrides, bool markDirty = true)
+    {
+        ActiveProcessPresetPdkName = presetPdkName;
+        ActiveProcessOverrides = overrides;
         if (markDirty)
             HasUnsavedChanges = true;
     }
@@ -392,6 +427,14 @@ public partial class FileOperationsViewModel : ObservableObject
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
             designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
+            if (designData.ActiveProcess != null && ActiveProcessPresetPdkName != null)
+            {
+                // The process was picked as a PDK preset (#696): persist the preset reference
+                // and the design's overrides so close/reopen and save/load restore them.
+                designData.ActiveProcess.PresetPdkName = ActiveProcessPresetPdkName;
+                if (ActiveProcessOverrides.Count > 0)
+                    designData.ActiveProcess.Overrides = ActiveProcessOverrides.ToList();
+            }
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -817,9 +860,17 @@ public partial class FileOperationsViewModel : ObservableObject
                         storedProcess, installedCatalog, out var revalidationWarning);
                     if (revalidationWarning != null)
                         OnProcessMigrationWarning?.Invoke(revalidationWarning);
+
+                    // Restore the preset reference + design overrides (#696); both are null
+                    // for files saved before preset-use support and load exactly as before.
+                    ActiveProcessPresetPdkName = designData.ActiveProcess!.PresetPdkName;
+                    ActiveProcessOverrides = designData.ActiveProcess.Overrides
+                        ?? (IReadOnlyList<ProcessPropertyOverrideData>)System.Array.Empty<ProcessPropertyOverrideData>();
                 }
                 else
                 {
+                    ActiveProcessPresetPdkName = null;
+                    ActiveProcessOverrides = System.Array.Empty<ProcessPropertyOverrideData>();
                     var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
                     var pdkSources = designData.Components.Select(c => c.PdkSource)
                         .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))

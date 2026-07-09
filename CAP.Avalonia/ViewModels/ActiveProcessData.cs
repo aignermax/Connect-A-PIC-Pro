@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CAP.Avalonia.ViewModels.Process;
 
 namespace CAP.Avalonia.ViewModels;
 
@@ -19,4 +20,17 @@ public class ActiveProcessData
         CAP_Core.Components.Process.ProcessFingerprint.DefaultDesignWavelengthNm;
     public string? ProcessName { get; set; }
     public List<string> MemberPdkNames { get; set; } = new();
+
+    /// <summary>
+    /// Name of the PDK preset the process was picked from in the Fabrication Process window
+    /// ("Load preset" = USE, issue #696). Null for processes chosen via the New-Design/startup
+    /// picker and for legacy files, which load exactly as before.
+    /// </summary>
+    public string? PresetPdkName { get; set; }
+
+    /// <summary>
+    /// Design-specific property overrides on top of <see cref="PresetPdkName"/>'s process
+    /// definition (issue #696). Null/empty means the preset is used as-is.
+    /// </summary>
+    public List<ProcessPropertyOverrideData>? Overrides { get; set; }
 }

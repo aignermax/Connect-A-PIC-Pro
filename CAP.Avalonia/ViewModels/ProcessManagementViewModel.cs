@@ -58,9 +58,9 @@ public partial class ProcessManagementViewModel : ObservableObject
     public ObservableCollection<PdkDraft> AvailablePresets { get; } = new();
 
     /// <summary>
-    /// The preset picked in the "Load preset" dropdown; selecting one loads its process via
-    /// <see cref="OnSelectedPresetChanged"/> (same pattern as <c>PdkOffsetEditorViewModel</c>'s
-    /// installed-PDK picker — a plain property setter, no extra command/behavior wiring needed).
+    /// The preset picked in the "Use preset" dropdown. Selecting one USES that PDK's process
+    /// as the design's active fabrication process via <see cref="OnSelectedPresetChanged"/>
+    /// (implemented in <c>ProcessManagementViewModel.PresetUse.cs</c>, issue #696).
     /// </summary>
     [ObservableProperty]
     private PdkDraft? _selectedPreset;
@@ -131,23 +131,6 @@ public partial class ProcessManagementViewModel : ObservableObject
         AvailablePresets.Clear();
         foreach (var pdk in loadedPdks.Where(p => p.Process != null))
             AvailablePresets.Add(pdk);
-    }
-
-    /// <summary>
-    /// Loads a bundled/loaded PDK's fabrication process into the editor as a starting point
-    /// (issue #570 follow-up), triggered by picking an entry in the "Load preset" dropdown
-    /// (<see cref="SelectedPreset"/>). The picked PDK's <see cref="ProcessDefinition"/> replaces
-    /// the current editable state via <see cref="Load"/>, so every row is marked owned by this
-    /// preset (issue #686 provenance) and can be edited and saved back to it.
-    /// </summary>
-    partial void OnSelectedPresetChanged(PdkDraft? value)
-    {
-        if (value == null)
-            return;
-
-        Load(value.Process ?? new ProcessDefinition { Name = value.Name });
-        _memberDrafts = new List<PdkDraft> { value };
-        StatusText = $"Loaded '{value.Name}' as a starting process. Adjust as needed, then Save to PDK.";
     }
 
     /// <summary>

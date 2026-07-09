@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CAP.Avalonia.ViewModels.Process;
 using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -35,8 +36,17 @@ public partial class ProcessManagementViewModel
     /// <c>process</c> blocks of those members; Playground and "no process" show explicit
     /// explanations instead of an empty page.
     /// </summary>
-    public void ShowActiveProcess(ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks)
+    /// <param name="active">The design's active process selection, or null.</param>
+    /// <param name="loadedPdks">All currently loaded PDK drafts.</param>
+    /// <param name="presetPdkName">
+    /// Name of the PDK preset the process was picked from ("Use preset", issue #696), or null
+    /// when the process was chosen elsewhere. Restores the preset banner + override state.
+    /// </param>
+    /// <param name="presetOverrides">The design's stored overrides on top of the preset.</param>
+    public void ShowActiveProcess(ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks,
+        string? presetPdkName = null, IReadOnlyList<ProcessPropertyOverrideData>? presetOverrides = null)
     {
+        _loadedPdks = loadedPdks;
         ResetState();
         SetAvailablePresets(loadedPdks);
 
@@ -57,6 +67,7 @@ public partial class ProcessManagementViewModel
         }
 
         ShowLockedProcess(active, loadedPdks);
+        InitialisePresetState(presetPdkName, presetOverrides);
     }
 
     private void ShowLockedProcess(ActiveProcessSelection active, IReadOnlyList<PdkDraft> loadedPdks)
@@ -125,5 +136,6 @@ public partial class ProcessManagementViewModel
         Materials.Clear();
         _memberDrafts = new List<PdkDraft>();
         MarkAllRowsOwned();
+        ResetPresetState();
     }
 }

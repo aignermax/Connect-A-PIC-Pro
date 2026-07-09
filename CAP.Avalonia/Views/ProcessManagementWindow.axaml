@@ -155,6 +155,13 @@
                            Text="⚠ Playground — this design mixes components freely and has no single fabrication process. It is not manufacturable. Choose a real process via File → New Design to see its details here."/>
             </Border>
 
+            <!-- Preset in use (#696): the design's process comes from a PDK preset; field edits
+                 become design-only overrides — the PDK file on disk is never changed as a side
+                 effect (only via the explicit "Save to PDK file…" action). -->
+            <Border IsVisible="{Binding IsPresetInUse}" Background="#1e3a4d" CornerRadius="4" Padding="8,6" Margin="0,4,0,0">
+                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#7fd0ff" Text="{Binding PresetStateText}"/>
+            </Border>
+
             <!-- Active process identity (#660) -->
             <StackPanel IsVisible="{Binding HasProcess}" Spacing="2" Margin="0,4,0,0">
                 <TextBlock Text="{Binding FingerprintSummary}" FontSize="12" Foreground="#aaccee"/>
@@ -171,10 +178,10 @@
                 <Button Content="New" Command="{Binding NewProcessCommand}"
                         Padding="12,6" Background="#3d3d3d"
                         ToolTip.Tip="Start a blank process (seeded with public SOI material defaults)"/>
-                <TextBlock Text="Load preset ▾" VerticalAlignment="Center" Foreground="#aaa" FontSize="11"/>
+                <TextBlock Text="Use preset ▾" VerticalAlignment="Center" Foreground="#aaa" FontSize="11"/>
                 <ComboBox ItemsSource="{Binding AvailablePresets}" SelectedItem="{Binding SelectedPreset}" Width="220"
                           PlaceholderText="Choose a bundled PDK…"
-                          ToolTip.Tip="Loads a bundled/loaded PDK's fabrication process (layer stack, cross-sections, materials) into the editor as a starting point">
+                          ToolTip.Tip="Uses this PDK's fabrication process for the design (persisted with the design, restored on reopen). Edits afterwards become design-only overrides — the PDK file changes only via 'Save to PDK file…' (#696)">
                     <ComboBox.ItemTemplate>
                         <DataTemplate>
                             <TextBlock Text="{Binding Name}"/>
