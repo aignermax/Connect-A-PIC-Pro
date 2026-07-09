@@ -59,6 +59,9 @@ public class PinHighlightService
             {
                 if (pinVm.Pin == excludePin) continue;
                 if (pinVm.Pin.ParentComponent == excludePin.ParentComponent) continue;
+                // Polarization-incompatible pins (TE↔TM) are never valid
+                // connection targets, so don't highlight them during a drag.
+                if (!PolarizationRules.CanConnect(excludePin.Polarization, pinVm.Pin.Polarization)) continue;
             }
 
             var (pinX, pinY) = pinVm.Pin.GetAbsolutePosition();

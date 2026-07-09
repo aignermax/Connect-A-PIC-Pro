@@ -9,8 +9,33 @@
     "name": "Demo SOI 220nm",
     "foundry": "Demo Foundry",
     "coreThicknessNm": 220,
-    "layers": [],
-    "xsections": [],
+    "layers": [
+      {
+        "name": "WAVEGUIDE",
+        "layer": 1,
+        "datatype": 0,
+        "description": "Waveguide core layer"
+      },
+      {
+        "name": "METAL1",
+        "layer": 11,
+        "datatype": 0,
+        "description": "DC metal routing layer (ElecRec)"
+      }
+    ],
+    "xsections": [
+      {
+        "name": "MetalDC",
+        "kind": "Metal",
+        "widthUm": 10,
+        "minRadiusUm": 0,
+        "recommendedRadiusUm": 0,
+        "layers": [
+          "METAL1"
+        ],
+        "description": "DC metal line for electrical routing (heaters, detectors, probe pads)"
+      }
+    ],
     "materials": [
       {
         "name": "Si",
@@ -23,7 +48,8 @@
         "role": "cladding"
       }
     ],
-    "allowedAngles": []
+    "allowedAngles": [],
+    "electricalBridgeRequired": false
   },
   "components": [
     {
@@ -560,6 +586,24 @@
           }
         ]
       }
+    },
+    {
+      "name": "Probe Pad",
+      "category": "Electrical",
+      "nazcaFunction": "demo_pdk.probe_pad",
+      "widthMicrometers": 100,
+      "heightMicrometers": 100,
+      "nazcaOriginOffsetX": 0,
+      "nazcaOriginOffsetY": 50,
+      "pins": [
+        {
+          "name": "pad",
+          "offsetXMicrometers": 50,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        }
+      ]
     }
   ]
 }

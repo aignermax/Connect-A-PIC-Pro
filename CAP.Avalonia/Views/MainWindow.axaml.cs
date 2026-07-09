@@ -75,6 +75,16 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the "New Component" window (issue #656) — non-modal, like the
+                // Fabrication Process and ONA Analyzer tool windows, so the user can keep
+                // iterating on the design while it stays open.
+                vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
+                {
+                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    window.Show(this);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                };
+
                 // Wire up PDK Offset Editor window
                 vm.ShowPdkOffsetEditorRequested = () =>
                 {
@@ -460,6 +470,18 @@ public partial class MainWindow : Window
         var vm = App.Services.GetService(typeof(ModeSolverViewModel)) as ModeSolverViewModel;
         if (vm == null) return;
         var dialog = new ModeSolverDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
         dialog.Show(this);
     }
 

@@ -169,6 +169,13 @@ public partial class MainViewModel : ObservableObject
     public GdsPreviewRenderService GdsPreviewRenderService { get; }
 
     /// <summary>
+    /// Adaptive crossing-insertion wiring (Issue #553). Held so the binder —
+    /// which attaches the crossing-insertion service to the canvas — lives for
+    /// the application lifetime. Null in tests that bypass DI.
+    /// </summary>
+    public ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? CrossingInsertionBinder { get; }
+
+    /// <summary>
     /// Bottom-panel error console service. Exposed so view-layer wiring helpers
     /// (e.g. <see cref="CAP.Avalonia.Views.Dialogs.ExportDialogWiring"/>) can persist
     /// failures that would otherwise only flash through the ephemeral status bar.
@@ -205,9 +212,13 @@ public partial class MainViewModel : ObservableObject
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
         Services.IUrlLauncher? urlLauncher = null,
-        Services.IAiGridService? aiGridService = null)
+        Services.IAiGridService? aiGridService = null,
+        ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
+        // Injected for activation: constructing the binder wires the adaptive
+        // crossing-insertion service (Issue #553) into the canvas' connection manager.
+        CrossingInsertionBinder = crossingInsertionBinder;
         Simulation = simulationService;
         CommandManager = commandManager;
         _canvas = canvas;
@@ -235,15 +246,15 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport = gdsFactoryExport;
         // gdsfactory export honours gdsfactory-backend overrides from the design's store.
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // Electrical metal routing spec (#682): trace width / layers / crossing policy come
+        // from the active process's metal cross-section; both exporters share one provider.
+        Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec> metalSpecProvider = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.MetalRoutingSpecFactory.FromActiveProcess(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+        FileOperations.MetalRoutingSpecProvider = metalSpecProvider;
+        GdsFactoryExport.MetalRoutingSpecProvider = metalSpecProvider;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
-        // Electrical connections export as metal traces (#682); resolve the metal layer/width from
-        // the design's active process (its member PDKs' metal cross-section), else a safe default.
-        Func<CAP_Core.Export.MetalTraceStyle> resolveMetalStyle = () =>
-            CAP_DataAccess.Components.ComponentDraftMapper.MetalTraceStyleResolver.Resolve(
-                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
-        GdsFactoryExport.MetalStyleProvider = resolveMetalStyle;
-        FileOperations.MetalStyleProvider = resolveMetalStyle;
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),
