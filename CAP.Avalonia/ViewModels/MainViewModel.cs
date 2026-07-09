@@ -91,6 +91,12 @@ public partial class MainViewModel : ObservableObject
     public ViewportControlViewModel ViewportControl { get; }
 
     /// <summary>
+    /// ViewModel for the mode-slice probe flyout (issue #691); null when the mode-solver
+    /// feature is not registered (e.g. lightweight test construction).
+    /// </summary>
+    public ViewModels.Solvers.ModeProbe.ModeProbeViewModel? ModeProbe { get; }
+
+    /// <summary>
     /// ViewModel for the left sidebar panel (component library, PDK management).
     /// </summary>
     public LeftPanelViewModel LeftPanel { get; }
@@ -213,7 +219,8 @@ public partial class MainViewModel : ObservableObject
         GdsPreviewRenderService gdsPreviewRenderService,
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
-        ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null)
+        ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
+        ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         // Injected for activation: constructing the binder wires the adaptive
@@ -318,6 +325,22 @@ public partial class MainViewModel : ObservableObject
             RightPanel.Sweep.ConfigureForComponent(comp, Canvas);
             LeftPanel.HierarchyPanel.SyncSelectionFromCanvas(comp);
         };
+
+        // Mode-slice probe (issue #691): clicking an element in Probe mode opens the
+        // non-modal flyout at the click point, auto-filled from PDK/connection data.
+        ModeProbe = modeProbe;
+        if (ModeProbe != null)
+        {
+            ModeProbe.GetActiveProcessFingerprint = () => FileOperations.ActiveProcess?.Fingerprint;
+            ModeProbe.GetSimulationWavelengthNm = () =>
+                Canvas.Components.FirstOrDefault(c => c.IsLightSource)?.LaserConfig?.WavelengthNm;
+            CanvasInteraction.ProbeRequested = (target, canvasX, canvasY) =>
+            {
+                // Canvas → control pixels, so the flyout opens where the user clicked.
+                var zoom = ViewportControl.ZoomLevel;
+                ModeProbe.Open(target, canvasX * zoom + Canvas.PanX, canvasY * zoom + Canvas.PanY);
+            };
+        }
 
         // Carry per-instance Nazca overrides onto pasted copies so their raw-code
         // preview and export geometry follow the duplicated component.
@@ -560,6 +583,9 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void SetDeleteMode() => CanvasInteraction.SetDeleteModeCommand.Execute(null);
+
+    [RelayCommand]
+    private void SetProbeMode() => CanvasInteraction.SetProbeModeCommand.Execute(null);
 
     [RelayCommand]
     private void DeleteSelected() => CanvasInteraction.DeleteSelectedCommand.Execute(null);

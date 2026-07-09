@@ -81,12 +81,20 @@ public partial class ModeSolverViewModel : ObservableObject
     // ── dependencies ────────────────────────────────────────────────────────
 
     private readonly IModeSolverService _service;
+    private readonly CAP_Core.Solvers.ModeProbe.CrossSectionDefaultsStore? _defaultsStore;
     private CancellationTokenSource? _cts;
 
-    /// <summary>Initialises the ViewModel with its solver service.</summary>
-    public ModeSolverViewModel(IModeSolverService service)
+    /// <summary>
+    /// Initialises the ViewModel with its solver service. The optional
+    /// <paramref name="defaultsStore"/> records each manually entered cross-section
+    /// so the canvas mode probe (issue #691) can fall back to it.
+    /// </summary>
+    public ModeSolverViewModel(
+        IModeSolverService service,
+        CAP_Core.Solvers.ModeProbe.CrossSectionDefaultsStore? defaultsStore = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
+        _defaultsStore = defaultsStore;
     }
 
     // ── commands ─────────────────────────────────────────────────────────────
@@ -107,6 +115,9 @@ public partial class ModeSolverViewModel : ObservableObject
         try
         {
             var request = BuildRequest();
+            // Remember the manual entry so the canvas mode probe can fall back to it
+            // when the active PDK carries no geometry/material data (issue #691).
+            _defaultsStore?.RecordManualEntry(Width, Height, SlabHeight, CoreIndex, CladIndex);
             var result  = await _service.SolveAsync(request, _cts.Token);
 
             if (result.Success)
