@@ -49,8 +49,10 @@ public class GdsFactoryMetalExportTests
 
         var result = Export(canvas);
 
-        result.ShouldContain("gf.path.straight(");
-        result.ShouldContain(".extrude(width=METAL_WIDTH, layer=METAL_LAYER)");
+        // Metal traces are polygons on the metal layer (gf.components.straight() has no
+        // layer= kwarg — #686 review, verified against the installed gdsfactory).
+        result.ShouldContain("layer=(11, 0)");
+        result.ShouldNotMatch(@"gf\.components\.straight\([^)]*layer=");
     }
 
     [Fact]

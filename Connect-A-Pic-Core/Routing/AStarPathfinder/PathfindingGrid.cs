@@ -680,6 +680,46 @@ public class PathfindingGrid
     }
 
     /// <summary>
+    /// Checks whether a physical bounding box (micrometers) is free for placing a
+    /// crossing component: no component or frozen-path cells inside, and any
+    /// waveguide cells must belong exclusively to the allowed connections (the two
+    /// nets being crossed). Used by adaptive crossing insertion.
+    /// </summary>
+    /// <param name="minX">Left edge of the box in micrometers.</param>
+    /// <param name="minY">Top edge of the box in micrometers.</param>
+    /// <param name="maxX">Right edge of the box in micrometers.</param>
+    /// <param name="maxY">Bottom edge of the box in micrometers.</param>
+    /// <param name="allowedConnectionIds">Connection IDs whose waveguide cells may occupy the box.</param>
+    public bool IsAreaClearForCrossing(
+        double minX, double minY, double maxX, double maxY, ISet<Guid> allowedConnectionIds)
+    {
+        var (gx1, gy1) = PhysicalToGrid(minX, minY);
+        var (gx2, gy2) = PhysicalToGrid(maxX, maxY);
+
+        HashSet<(int, int)> allowedCells = new();
+        lock (_waveguideCellsLock)
+        {
+            foreach (var id in allowedConnectionIds)
+            {
+                if (_waveguideCells.TryGetValue(id, out var cells))
+                    allowedCells.UnionWith(cells);
+            }
+        }
+
+        for (int gx = gx1; gx <= gx2; gx++)
+        {
+            for (int gy = gy1; gy <= gy2; gy++)
+            {
+                byte state = GetCellState(gx, gy);
+                if (state == 0) continue;
+                if (state != 2) return false; // component or frozen path
+                if (!allowedCells.Contains((gx, gy))) return false; // third-party waveguide
+            }
+        }
+        return true;
+    }
+
+    /// <summary>
     /// Checks if a cell is in a pin reservation zone (soft penalty, not blocked).
     /// </summary>
     public bool IsPinReservationZone(int gridX, int gridY)

@@ -82,10 +82,11 @@ public class RoutingCostCalculator
     /// <returns>Movement cost</returns>
     public double CalculateMoveCost(AStarNode from, int toX, int toY, GridDirection toDirection)
     {
-        // Base movement cost (distance)
-        double cost = CellSizeMicrometers * StraightCostPerMicrometer;
+        // Base movement cost (distance): diagonal steps cover √2 × cell size
+        double stepLength = toDirection.IsDiagonal() ? Sqrt2 * CellSizeMicrometers : CellSizeMicrometers;
+        double cost = stepLength * StraightCostPerMicrometer;
 
-        // Turn cost
+        // Turn cost, proportional to the turn angle (a 45° turn costs half a 90° turn)
         if (from.Direction != GridDirection.None && from.Direction != toDirection)
         {
             double turnAngle = Math.Abs(GridDirectionExtensions.GetTurnAngle(from.Direction, toDirection));
@@ -97,6 +98,8 @@ public class RoutingCostCalculator
 
     /// <summary>
     /// Checks if a turn is valid (respects minimum straight run).
+    /// A 45° turn needs less run-up than a 90° turn because the bend
+    /// tangent length is r·tan(22.5°) ≈ 0.414·r instead of r.
     /// </summary>
     /// <param name="from">Current node</param>
     /// <param name="toDirection">Proposed direction</param>
@@ -109,30 +112,56 @@ public class RoutingCostCalculator
             return true;
         }
 
-        // Check minimum straight run before turning
-        return from.StraightRunLength >= MinStraightRunCells;
+        // Check minimum straight run before turning (halved for gentle 45° turns)
+        double turnAngle = Math.Abs(GridDirectionExtensions.GetTurnAngle(from.Direction, toDirection));
+        int requiredRun = turnAngle <= GridDirectionExtensions.AngleStepDegrees
+            ? (MinStraightRunCells + 1) / 2
+            : MinStraightRunCells;
+        return from.StraightRunLength >= requiredRun;
     }
 
     /// <summary>
+    /// Square root of 2, the length ratio of a diagonal grid step.
+    /// </summary>
+    private static readonly double Sqrt2 = Math.Sqrt(2.0);
+
+    /// <summary>
+    /// Whether the search may use 45° diagonal moves. Must match the
+    /// pathfinder's setting: it selects the distance metric of the heuristic
+    /// (octile when diagonals are allowed, Manhattan otherwise — Manhattan is
+    /// tighter and inadmissible-free for pure 4-direction movement).
+    /// </summary>
+    public bool UseDiagonals { get; set; } = true;
+
+    /// <summary>
     /// Calculates heuristic cost from current position to goal.
-    /// Uses Manhattan distance (appropriate for 4-direction movement).
+    /// With diagonals: octile distance (admissible for 8-direction movement),
+    /// h = ((dMax − dMin) + √2·dMin) · cellSize · straightCost. Without
+    /// diagonals: Manhattan distance. Plus a conservative bend estimate that
+    /// never overestimates the true cost.
     /// </summary>
     public double CalculateHeuristic(int fromX, int fromY, GridDirection fromDir,
                                       int toX, int toY, GridDirection toDir)
     {
         int dx = Math.Abs(toX - fromX);
         int dy = Math.Abs(toY - fromY);
+        int dMin = Math.Min(dx, dy);
+        int dMax = Math.Max(dx, dy);
 
-        // Manhattan distance
-        double distance = (dx + dy) * CellSizeMicrometers;
+        // Octile distance for 8-direction search, Manhattan for 4-direction
+        double distance = UseDiagonals
+            ? ((dMax - dMin) + Sqrt2 * dMin) * CellSizeMicrometers
+            : (dx + dy) * CellSizeMicrometers;
 
         // Estimate turns needed
         double turnEstimate = 0;
 
-        // If we need to move in both X and Y, we need at least one turn
-        if (dx > 0 && dy > 0)
+        // Mixed displacement requires at least one turn: a 45° turn with
+        // diagonals (use half its cost to stay safely admissible near the
+        // goal tolerance), a full 90° turn without.
+        if (dMin > 0 && dMax > dMin)
         {
-            turnEstimate += TurnCostPer90Degrees * 0.5; // Partial weight to keep heuristic admissible
+            turnEstimate += TurnCostPer90Degrees * (UseDiagonals ? 0.25 : 0.5);
         }
 
         // If final direction doesn't match current direction, we may need another turn

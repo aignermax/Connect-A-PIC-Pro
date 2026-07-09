@@ -1,3 +1,5 @@
+using CAP_Core.Export;
+
 namespace CAP_Core.Routing.MetalRouting;
 
 /// <summary>
@@ -30,6 +32,18 @@ public sealed record MetalRoutingSpec(
 
     /// <summary>Fallback GDS layer for bridge markers.</summary>
     public const int DefaultBridgeGdsLayer = 12;
+
+    /// <summary>
+    /// The trace-drawing subset of this spec (width, GDS layer/datatype) as the
+    /// <see cref="MetalTraceStyle"/> the segment exporters consume for inline
+    /// metal-trace emission. Crossing policy and bridge layer stay spec-only.
+    /// </summary>
+    public MetalTraceStyle ToTraceStyle() => new()
+    {
+        WidthUm = TraceWidthMicrometers,
+        GdsLayer = MetalGdsLayer,
+        GdsDatatype = MetalGdsDatatype,
+    };
 
     /// <summary>
     /// Conservative fallback spec used when no process information is available:

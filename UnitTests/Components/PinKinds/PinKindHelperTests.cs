@@ -123,6 +123,23 @@ namespace UnitTests.Components.PinKinds
             clone.MatterType.ShouldBe(MatterType.Electricity);
         }
 
+        [Fact]
+        public void IsElectrical_PhysicalPin_TrueOnlyForElectricalKind()
+        {
+            // Single source of the pin-domain check the exporters used to re-implement
+            // individually (SimpleNazcaExporter, GdsFactoryExporter, GdsFactoryStubWriter);
+            // now they all route through here (#682/#686 review, Finding 8).
+            PinKindHelper.IsElectrical(CreatePhysicalPin(MatterType.Electricity)).ShouldBeTrue();
+            PinKindHelper.IsElectrical(CreatePhysicalPin(MatterType.Light)).ShouldBeFalse();
+            PinKindHelper.IsElectrical(CreatePhysicalPin(MatterType.None)).ShouldBeFalse();
+        }
+
+        [Fact]
+        public void IsElectrical_NullPin_ReturnsFalse()
+        {
+            PinKindHelper.IsElectrical(null).ShouldBeFalse();
+        }
+
         private static PhysicalPin CreatePhysicalPin(MatterType matterType) => new()
         {
             Name = "p0",

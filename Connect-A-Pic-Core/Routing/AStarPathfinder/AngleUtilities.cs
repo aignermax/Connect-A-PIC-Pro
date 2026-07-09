@@ -99,37 +99,38 @@ public static class AngleUtilities
     }
 
     /// <summary>
-    /// Converts a GridDirection to angle in degrees.
+    /// Quantizes an angle to the nearest 45° step (0°, 45°, 90°, ..., 315°).
     /// </summary>
-    /// <param name="direction">Grid direction</param>
-    /// <returns>Angle in degrees (0=East, 90=North, 180=West, 270=South)</returns>
-    public static double DirectionToAngle(GridDirection direction)
+    /// <param name="angle">Input angle in degrees</param>
+    /// <returns>Nearest 45° multiple in the range [0, 360)</returns>
+    public static double QuantizeTo45(double angle)
     {
-        return direction switch
-        {
-            GridDirection.East => 0,
-            GridDirection.North => 90,
-            GridDirection.West => 180,
-            GridDirection.South => 270,
-            _ => 0
-        };
+        // Normalize to [0, 360)
+        angle %= 360;
+        if (angle < 0) angle += 360;
+
+        double quantized = Math.Round(angle / GridDirectionExtensions.AngleStepDegrees)
+                           * GridDirectionExtensions.AngleStepDegrees;
+        return quantized % 360;
     }
 
     /// <summary>
-    /// Converts an angle in degrees to a GridDirection.
+    /// Converts a GridDirection to angle in degrees.
+    /// </summary>
+    /// <param name="direction">Grid direction</param>
+    /// <returns>Angle in degrees (0=East, 45=NorthEast, 90=North, ...)</returns>
+    public static double DirectionToAngle(GridDirection direction)
+    {
+        return direction.GetAngleDegrees();
+    }
+
+    /// <summary>
+    /// Converts an angle in degrees to the nearest of the 8 grid directions.
     /// </summary>
     /// <param name="angle">Angle in degrees</param>
-    /// <returns>Nearest grid direction</returns>
+    /// <returns>Nearest grid direction (45° sectors)</returns>
     public static GridDirection AngleToDirection(double angle)
     {
-        double quantized = QuantizeToCardinal(angle);
-        return quantized switch
-        {
-            0 => GridDirection.East,
-            90 => GridDirection.North,
-            180 => GridDirection.West,
-            270 => GridDirection.South,
-            _ => GridDirection.East
-        };
+        return GridDirectionExtensions.FromAngle(angle);
     }
 }

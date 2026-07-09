@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CAP_Core.Components.Process;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -37,6 +38,7 @@ public partial class ProcessManagementViewModel
     public void ShowActiveProcess(ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks)
     {
         ResetState();
+        SetAvailablePresets(loadedPdks);
 
         if (active == null)
         {
@@ -65,9 +67,18 @@ public partial class ProcessManagementViewModel
             ? string.Join(", ", active.MemberPdkNames)
             : "(none loaded)";
 
-        var definitions = MemberProcessDefinitions(active, loadedPdks);
+        // Keep the member drafts so edits (e.g. a metal cross-section, #682) can be persisted
+        // back to their PDK JSON via SaveProcess.
+        _memberDrafts = MemberDrafts(active, loadedPdks);
+
+        var definitions = _memberDrafts.Select(d => d.Process).Where(p => p != null).Select(p => p!).ToList();
         foreach (var definition in definitions)
             Merge(definition);
+
+        // Only rows merged from the member PDKs' OWN process definitions above are "owned" by
+        // this process — a later ImportFromPdk (reference import) must not be able to sneak
+        // unrelated rows into SaveProcess's output (issue #686 review, Finding 2).
+        MarkAllRowsOwned();
 
         // Merge() may adopt the PDK-declared process name; the dialog reflects the
         // active selection, so its display name always wins.
@@ -81,13 +92,12 @@ public partial class ProcessManagementViewModel
               "showing the fingerprint only; data can be imported or entered below.";
     }
 
-    private static IReadOnlyList<ProcessDefinition> MemberProcessDefinitions(
+    private static IReadOnlyList<PdkDraft> MemberDrafts(
         ActiveProcessSelection active, IReadOnlyList<PdkDraft> loadedPdks) =>
         active.MemberPdkNames
-            .Select(name => loadedPdks.FirstOrDefault(
-                d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
-            .Where(p => p != null)
-            .Select(p => p!)
+            .Select(name => MetalTraceStyleResolver.FindByName(loadedPdks, name, d => d.Name))
+            .Where(d => d != null)
+            .Select(d => d!)
             .ToList();
 
     private static string FormatFingerprint(ProcessFingerprint? fp)
@@ -113,5 +123,7 @@ public partial class ProcessManagementViewModel
         Layers.Clear();
         Xsections.Clear();
         Materials.Clear();
+        _memberDrafts = new List<PdkDraft>();
+        MarkAllRowsOwned();
     }
 }

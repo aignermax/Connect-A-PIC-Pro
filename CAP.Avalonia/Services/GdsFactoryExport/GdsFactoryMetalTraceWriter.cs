@@ -29,43 +29,6 @@ public static class GdsFactoryMetalTraceWriter
         sb.AppendLine();
     }
 
-    /// <summary>
-    /// Appends one electrical connection as extruded metal path segments. Route-less
-    /// (or single-straight) connections are emitted pin-to-pin.
-    /// </summary>
-    public static void AppendMetalConnection(
-        StringBuilder sb, IReadOnlyList<PathSegment> segments,
-        PhysicalPin? startPin, PhysicalPin? endPin)
-    {
-        bool isSingleStraight = segments.Count == 0
-            || (segments.Count == 1 && segments[0] is StraightSegment);
-        if (isSingleStraight && startPin != null && endPin != null)
-        {
-            var (sx, sy) = NazcaCoordinateMapper.GetPinNazcaPosition(startPin);
-            var (ex, ey) = NazcaCoordinateMapper.GetPinNazcaPosition(endPin);
-            AppendStraight(sb, sx, sy, ex, ey);
-            return;
-        }
-
-        foreach (var segment in segments)
-        {
-            var (nsx, nsy) = NazcaCoordinateMapper.ToNazca(segment.StartPoint.X, segment.StartPoint.Y);
-            switch (segment)
-            {
-                case StraightSegment:
-                    var (nex, ney) = NazcaCoordinateMapper.ToNazca(segment.EndPoint.X, segment.EndPoint.Y);
-                    AppendStraight(sb, nsx, nsy, nex, ney);
-                    break;
-                case BendSegment bend:
-                    AppendBend(sb, bend, nsx, nsy);
-                    break;
-                default:
-                    sb.AppendLine($"# Unknown segment type: {segment.GetType().Name}");
-                    break;
-            }
-        }
-    }
-
     /// <summary>Appends a bridge marker polygon at every metal/waveguide crossing point (app coordinates).</summary>
     public static void AppendBridges(
         StringBuilder sb, IReadOnlyList<(double X, double Y)> crossings, MetalRoutingSpec spec)

@@ -8,6 +8,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
@@ -73,6 +74,16 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the "New Component" window (issue #656) — non-modal, like the
+                // Fabrication Process and ONA Analyzer tool windows, so the user can keep
+                // iterating on the design while it stays open.
+                vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
+                {
+                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    window.Show(this);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                };
+
                 // Wire up PDK Offset Editor window
                 vm.ShowPdkOffsetEditorRequested = () =>
                 {
@@ -91,7 +102,21 @@ public partial class MainWindow : Window
                 vm.ShowProcessManagerRequested = () =>
                 {
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
+                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
+                    // persisted, using the same loaded-PDK registry the offset editor writes through.
+                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
+                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
+                    // the exact file so a real PDK can't be edited by accident.
+                    processVm.ConfirmSaveToPdk = async path =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
+                            "Save to PDK file?", new[] { "Cancel", "Save" });
+                        return choice == 1;
+                    };
                     var processWindow = new ProcessManagementWindow
                     {
                         DataContext = processVm

@@ -10,8 +10,79 @@
     "name": "SiEPIC EBeam SOI 220nm",
     "foundry": "Applied Nanotools",
     "coreThicknessNm": 220,
-    "layers": [],
-    "xsections": [],
+    "layers": [
+      {
+        "name": "WG",
+        "layer": 1,
+        "datatype": 0,
+        "description": "Waveguide core (Si)"
+      },
+      {
+        "name": "SLAB150",
+        "layer": 2,
+        "datatype": 0,
+        "description": "150 nm slab (rib waveguide)"
+      },
+      {
+        "name": "M1_HEATER",
+        "layer": 11,
+        "datatype": 0,
+        "description": "Heater metal (TiN)"
+      },
+      {
+        "name": "M2_ROUTER",
+        "layer": 12,
+        "datatype": 0,
+        "description": "Routing metal (Aluminum)"
+      },
+      {
+        "name": "PAD_OPEN",
+        "layer": 13,
+        "datatype": 0,
+        "description": "Bond-pad opening"
+      },
+      {
+        "name": "DEVREC",
+        "layer": 68,
+        "datatype": 0,
+        "description": "Device recognition / bounding box"
+      }
+    ],
+    "xsections": [
+      {
+        "name": "strip",
+        "kind": "Optical",
+        "widthUm": 0.5,
+        "minRadiusUm": 5,
+        "recommendedRadiusUm": 10,
+        "layers": [
+          "WG"
+        ],
+        "description": "SOI strip waveguide"
+      },
+      {
+        "name": "metal_routing",
+        "kind": "Metal",
+        "widthUm": 10,
+        "minRadiusUm": 7,
+        "recommendedRadiusUm": 10,
+        "layers": [
+          "M2_ROUTER"
+        ],
+        "description": "Electrical routing metal"
+      },
+      {
+        "name": "heater_metal",
+        "kind": "Metal",
+        "widthUm": 4,
+        "minRadiusUm": 7,
+        "recommendedRadiusUm": 4,
+        "layers": [
+          "M1_HEATER"
+        ],
+        "description": "Heater trace metal"
+      }
+    ],
     "materials": [
       {
         "name": "Si",
@@ -10847,8 +10918,9 @@
         {
           "name": "elec",
           "offsetXMicrometers": 50,
-          "offsetYMicrometers": 50,
-          "angleDegrees": 0
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {

@@ -51,8 +51,10 @@ public class NazcaMetalExportTests
 
         var result = new SimpleNazcaExporter().Export(canvas);
 
-        result.ShouldContain("# Electrical Metal Traces");
-        result.ShouldContain("width=METAL_WIDTH, layer=METAL_LAYER");
+        // Metal traces are emitted inline on the process metal layer (unified with
+        // the #686 part-1 emission), not in a separate section.
+        result.ShouldContain("layer=(11, 0)");
+        result.ShouldContain("width=10.00");
         result.ShouldNotContain("ic.sbend_p2p"); // electrical must not fall back to a waveguide
     }
 
