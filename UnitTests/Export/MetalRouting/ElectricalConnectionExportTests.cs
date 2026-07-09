@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_Core.Routing.MetalRouting;
 using CAP_Core.Routing;
 using CAP_Core.Tiles;
 using Shouldly;
@@ -92,7 +93,7 @@ public class ElectricalConnectionExportTests
     {
         var canvas = CanvasWithConnection(MatterType.Electricity);
 
-        var script = new SimpleNazcaExporter().Export(canvas, metalStyle: MetalTraceStyle.Default);
+        var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         // Metal trace: a straight on the metal layer with the metal width.
         script.ShouldContain("layer=(11, 0)");
@@ -106,7 +107,7 @@ public class ElectricalConnectionExportTests
     {
         var canvas = CanvasWithConnection(MatterType.Light);
 
-        var script = new SimpleNazcaExporter().Export(canvas, metalStyle: MetalTraceStyle.Default);
+        var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
         script.ShouldContain("ic.sbend_p2p");
@@ -120,7 +121,7 @@ public class ElectricalConnectionExportTests
         // must still stay an optical waveguide, not silently become a metal trace.
         var canvas = CanvasWithConnection(MatterType.Light, MatterType.Electricity);
 
-        var script = new SimpleNazcaExporter().Export(canvas, metalStyle: MetalTraceStyle.Default);
+        var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
         script.ShouldContain("ic.sbend_p2p");
@@ -133,7 +134,7 @@ public class ElectricalConnectionExportTests
         // optical waveguide because AppendGroupFrozenPaths never received the metal style.
         var canvas = CanvasWithFrozenGroupPath(MatterType.Electricity);
 
-        var script = new SimpleNazcaExporter().Export(canvas, metalStyle: MetalTraceStyle.Default);
+        var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldContain("layer=(11, 0)");
         script.ShouldContain("width=10.00");
@@ -144,7 +145,7 @@ public class ElectricalConnectionExportTests
     {
         var canvas = CanvasWithFrozenGroupPath(MatterType.Light);
 
-        var script = new SimpleNazcaExporter().Export(canvas, metalStyle: MetalTraceStyle.Default);
+        var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
     }
@@ -158,7 +159,7 @@ public class ElectricalConnectionExportTests
 
         var script = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalStyle: MetalTraceStyle.Default);
+            metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldContain("c.add_polygon(");
         script.ShouldContain("layer=(11, 0)");
@@ -170,13 +171,13 @@ public class ElectricalConnectionExportTests
     public void GdsFactoryExport_ElectricalConnection_PolygonSizeReflectsMetalWidth()
     {
         var canvas = CanvasWithConnection(MatterType.Electricity);
-        var narrow = new MetalTraceStyle { WidthUm = 2, GdsLayer = 11, GdsDatatype = 0 };
-        var wide = new MetalTraceStyle { WidthUm = 20, GdsLayer = 11, GdsDatatype = 0 };
+        var narrow = MetalRoutingSpec.Default with { TraceWidthMicrometers = 2 };
+        var wide = MetalRoutingSpec.Default with { TraceWidthMicrometers = 20 };
 
         var narrowScript = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), metalStyle: narrow);
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), metalSpec: narrow);
         var wideScript = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), metalStyle: wide);
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs), metalSpec: wide);
 
         // Different trace widths must produce different polygon coordinates.
         narrowScript.ShouldNotBe(wideScript);
@@ -189,7 +190,7 @@ public class ElectricalConnectionExportTests
 
         var script = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalStyle: MetalTraceStyle.Default);
+            metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
         script.ShouldContain("width=WG_WIDTH");
@@ -202,7 +203,7 @@ public class ElectricalConnectionExportTests
 
         var script = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalStyle: MetalTraceStyle.Default);
+            metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
         script.ShouldContain("width=WG_WIDTH");
@@ -216,7 +217,7 @@ public class ElectricalConnectionExportTests
 
         var script = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalStyle: MetalTraceStyle.Default);
+            metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldContain("c.add_polygon(");
         script.ShouldContain("layer=(11, 0)");
@@ -229,7 +230,7 @@ public class ElectricalConnectionExportTests
 
         var script = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalStyle: MetalTraceStyle.Default);
+            metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
     }

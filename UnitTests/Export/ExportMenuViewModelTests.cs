@@ -204,11 +204,11 @@ public class ExportMenuViewModelTests
     }
 
     [Fact]
-    public void MainViewModel_ExportMenu_HasFiveFormatsInExpectedOrder()
+    public void MainViewModel_ExportMenu_HasSixFormatsInExpectedOrder()
     {
         var vm = MainViewModelTestHelper.CreateMainViewModel();
 
-        vm.ExportMenu.Formats.Count.ShouldBe(5);
+        vm.ExportMenu.Formats.Count.ShouldBe(6);
         vm.ExportMenu.Formats.Select(f => f.Name).ShouldBe(new[]
         {
             "Nazca Python + GDS",
@@ -216,6 +216,7 @@ public class ExportMenuViewModelTests
             "SAX (Simphony)",
             "PhotonTorch",
             "Verilog-A / SPICE",
+            "Netlist (YAML)",
         });
     }
 }

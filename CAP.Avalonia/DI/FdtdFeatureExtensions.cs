@@ -29,6 +29,9 @@ internal static class FdtdFeatureExtensions
                 "lunima-meep:1", dockerfile, buildContext,
                 launchFactory: sp.GetRequiredService<ProcessLaunchFactory>());
         });
+        // Guided "Set up FDTD" dialog (issue #649): shown when Docker is missing
+        // or its engine is stopped, with platform-specific install/start guidance.
+        services.AddSingleton<IDockerSetupDialogService, DockerSetupDialogService>();
         return services;
     }
 }

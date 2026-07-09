@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Solvers;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
 using CAP_Core.Solvers.Fdtd;
@@ -96,6 +97,81 @@ public class ComponentSettingsDialogFdtdTests
     }
 
     [Fact]
+    public async Task RecalculateSMatrix_OnSuccess_PropagatesToTemplate_WhenSinkAccepts()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(SuccessResult());
+        var store = new Dictionary<string, ComponentSMatrixData>();
+        ComponentSMatrixData? propagatedData = null;
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", store,
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins(),
+            propagateToTemplate: data => { propagatedData = data; return true; });
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        // The sink receives exactly the stored data, so template + instance stay in sync.
+        propagatedData.ShouldBeSameAs(store["comp"]);
+        vm.SolverStatus.ShouldContain("all instances of this component type");
+        vm.StatusText.ShouldContain("all instances of this component type");
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_OnSuccess_StaysInstanceScoped_WhenSinkDeclines()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(SuccessResult());
+        var store = new Dictionary<string, ComponentSMatrixData>();
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", store,
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins(),
+            propagateToTemplate: _ => false);
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        store.ShouldContainKey("comp");
+        vm.SolverStatus.ShouldNotContain("all instances");
+        vm.StatusText.ShouldNotContain("all instances");
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_OnFailure_DoesNotPropagateToTemplate()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdSMatrixResult.Fail("boom"));
+        var propagateCalled = false;
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins(),
+            propagateToTemplate: _ => propagateCalled = true);
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        propagateCalled.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task RecalculateSMatrix_WhenDockerUnavailable_ShowsHintAndDoesNotSolve()
     {
         var service = new Mock<IFdtdSMatrixService>();
@@ -117,5 +193,66 @@ public class ComponentSettingsDialogFdtdTests
         vm.IsComputing.ShouldBeFalse();
         // The solver must not be invoked when the backend isn't available.
         service.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenDockerUnavailable_OpensGuidedSetupDialog()
+    {
+        var unavailable = FdtdAvailability.Unavailable(
+            "Docker is not installed.", FdtdUnavailableReason.NotInstalled);
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(unavailable);
+        var setupDialog = new Mock<IDockerSetupDialogService>();
+        setupDialog.Setup(d => d.ShowAsync(
+                It.IsAny<FdtdAvailability>(),
+                It.IsAny<Func<CancellationToken, Task<FdtdAvailability>>>()))
+            .ReturnsAsync(false); // user cancelled — Docker still missing
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory(),
+            dockerSetupDialog: setupDialog.Object);
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        setupDialog.Verify(d => d.ShowAsync(
+            unavailable,
+            It.IsAny<Func<CancellationToken, Task<FdtdAvailability>>>()), Times.Once);
+        service.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
+        vm.SolverStatus.ShouldContain("Docker is not installed");
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenSetupDialogFixesDocker_ContinuesRecompute()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Unavailable(
+                   "Engine isn't running.", FdtdUnavailableReason.EngineNotRunning));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(SuccessResult());
+        var setupDialog = new Mock<IDockerSetupDialogService>();
+        setupDialog.Setup(d => d.ShowAsync(
+                It.IsAny<FdtdAvailability>(),
+                It.IsAny<Func<CancellationToken, Task<FdtdAvailability>>>()))
+            .ReturnsAsync(true); // user started Docker; re-check succeeded
+        var store = new Dictionary<string, ComponentSMatrixData>();
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory(),
+            dockerSetupDialog: setupDialog.Object);
+        vm.Configure("comp", "comp", "Comp", store,
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        store.ShouldContainKey("comp");
+        vm.SolverStatus.ShouldContain("FDTD done");
     }
 }

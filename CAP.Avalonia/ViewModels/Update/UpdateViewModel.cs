@@ -382,10 +382,13 @@ public partial class UpdateViewModel : ObservableObject
             return;
         }
 
-        // A running app with no desktop lifetime (e.g. a single-view host): the detached updater is
-        // already waiting for this process to exit, so exit hard rather than leaving it to time out.
-        // When Application.Current is null (unit tests / headless) do nothing — never kill the host.
-        if (app is not null)
+        // A running app with a non-desktop lifetime (e.g. a single-view host): the detached updater
+        // is already waiting for this process to exit, so exit hard rather than leaving it to time
+        // out. Gate on the LIFETIME, not on Application.Current: headless unit-test sessions
+        // (Avalonia.Headless.XUnit) set Application.Current process-wide but never assign a
+        // lifetime, so exiting on a mere non-null Application intermittently killed the xUnit
+        // test host ("Test host process crashed") whenever this ran after any [AvaloniaFact].
+        if (app?.ApplicationLifetime is not null)
             Environment.Exit(0);
     }
 }

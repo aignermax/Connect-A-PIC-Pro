@@ -22,7 +22,8 @@ public enum InteractionMode
     PlaceComponent,
     PlaceGroupTemplate,
     Connect,
-    Delete
+    Delete,
+    Probe
 }
 
 /// <summary>
@@ -91,6 +92,13 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
     /// </summary>
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
+
+    /// <summary>
+    /// Callback invoked when the user probes an element in Probe mode (issue #691):
+    /// carries the classified probe target plus the click position in canvas coordinates.
+    /// Wired by <c>MainViewModel</c> to open the mode-slice flyout at the click point.
+    /// </summary>
+    public Action<CAP_Core.Solvers.ModeProbe.ProbeTarget, double, double>? ProbeRequested { get; set; }
 
     /// <summary>
     /// Callback returning the design's active process (issue #570), consulted before
@@ -197,6 +205,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             InteractionMode.PlaceGroupTemplate => "Place mode: Select a group from Saved Groups",
             InteractionMode.Connect => "Connect mode: Move near a pin to start connection",
             InteractionMode.Delete => "Delete mode: Click on component or connection to delete",
+            InteractionMode.Probe => "Probe mode: Click a waveguide or coupler to inspect its mode slice",
             _ => "Ready"
         };
 
@@ -249,6 +258,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 break;
             case InteractionMode.Delete:
                 DeleteAt(canvasX, canvasY);
+                break;
+            case InteractionMode.Probe:
+                ProbeAt(canvasX, canvasY);
                 break;
         }
     }
@@ -508,6 +520,39 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Probes the element at the given canvas position (issue #691): a clicked waveguide
+    /// connection carries its own width; a clicked component is classified as fiber
+    /// coupler / interference region and borrows the width of an attached connection.
+    /// Raises <see cref="ProbeRequested"/> so the host opens the mode-slice flyout.
+    /// </summary>
+    private void ProbeAt(double x, double y)
+    {
+        var component = ComponentAt(x, y);
+        if (component != null)
+        {
+            var attachedWidth = _canvas.Connections
+                .Where(c => c.Connection.StartPin.ParentComponent == component.Component
+                         || c.Connection.EndPin.ParentComponent == component.Component)
+                .Select(c => (double?)c.Connection.WidthMicrometers)
+                .FirstOrDefault();
+            var target = CAP_Core.Solvers.ModeProbe.ProbeTarget.ForComponent(component.Name, attachedWidth);
+            ProbeRequested?.Invoke(target, x, y);
+            return;
+        }
+
+        var connection = FindConnectionAt(x, y);
+        if (connection != null)
+        {
+            var target = CAP_Core.Solvers.ModeProbe.ProbeTarget.ForConnection(
+                connection.Connection.WidthMicrometers, connection.PathLength);
+            ProbeRequested?.Invoke(target, x, y);
+            return;
+        }
+
+        UpdateStatus?.Invoke("Probe mode: Click a waveguide or coupler to inspect its mode slice");
+    }
+
     private WaveguideConnectionViewModel? FindConnectionAt(double x, double y)
     {
         const double hitTolerance = 10.0;
@@ -639,6 +684,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private void SetConnectMode()
     {
         CurrentMode = InteractionMode.Connect;
+        SelectedTemplate = null;
+        SelectedGroupTemplate = null;
+        _connectionStartPin = null;
+    }
+
+    [RelayCommand]
+    private void SetProbeMode()
+    {
+        CurrentMode = InteractionMode.Probe;
         SelectedTemplate = null;
         SelectedGroupTemplate = null;
         _connectionStartPin = null;

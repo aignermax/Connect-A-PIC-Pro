@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels.Solvers.ModeProbe"
+             x:Class="CAP.Avalonia.Views.Panels.ModeProbePanel"
+             x:DataType="vm:ModeProbeViewModel">
+
+  <!-- Non-modal mode-slice probe flyout (issue #691). Opens at the canvas click
+       point; the user keeps full access to the canvas while it is shown. -->
+  <Border Background="#2b2b33" BorderBrush="#5a5a6a" BorderThickness="1"
+          CornerRadius="6" Padding="10" Width="300"
+          BoxShadow="0 4 12 0 #99000000">
+    <StackPanel Spacing="6">
+
+      <!-- Header -->
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="✕" Padding="4,0"
+                Background="Transparent" Foreground="#aaaaaa"
+                Command="{Binding CloseCommand}"
+                ToolTip.Tip="Close probe"/>
+        <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold"
+                   Foreground="White" TextTrimming="CharacterEllipsis"
+                   VerticalAlignment="Center"/>
+      </DockPanel>
+
+      <!-- Interference-region notice (MMI etc.) -->
+      <Border Background="#4a3520" BorderBrush="#c98a3d" BorderThickness="1"
+              CornerRadius="4" Padding="8"
+              IsVisible="{Binding IsInterferenceRegion}">
+        <TextBlock TextWrapping="Wrap" Foreground="#f0c987" FontSize="11"
+                   Text="Interference region — the field here is a multimode superposition, not a single guided mode. A mode slice would be misleading; use FDTD for this component."/>
+      </Border>
+
+      <!-- Probe inputs + results (hidden for interference regions) -->
+      <StackPanel Spacing="6" IsVisible="{Binding !IsInterferenceRegion}">
+
+        <!-- Cross-section provenance -->
+        <TextBlock Text="{Binding CrossSectionText}" Foreground="#9ad1ff" FontSize="11"/>
+        <Border Background="#4a3520" BorderBrush="#c98a3d" BorderThickness="1"
+                CornerRadius="4" Padding="6"
+                IsVisible="{Binding IsGeometryAssumed}">
+          <StackPanel Spacing="2">
+            <TextBlock Text="⚠ Geometry assumed — check values" Foreground="#f0c987"
+                       FontSize="11" FontWeight="SemiBold"/>
+            <TextBlock Text="{Binding GeometrySourceText}" Foreground="#c9b18a"
+                       FontSize="10" TextWrapping="Wrap"/>
+          </StackPanel>
+        </Border>
+
+        <!-- Wavelength + backend, editable inline -->
+        <Grid ColumnDefinitions="Auto,*,Auto" RowDefinitions="Auto,Auto" Margin="0,2,0,0">
+          <TextBlock Grid.Row="0" Grid.Column="0" Text="λ (nm):" Foreground="Gray"
+                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+          <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding WavelengthNm}"
+                         Minimum="400" Maximum="20000" Increment="10"
+                         FontSize="11" Height="28"/>
+          <Button Grid.Row="0" Grid.Column="2" Content="Solve" Margin="6,0,0,0"
+                  Command="{Binding SolveCommand}"
+                  IsEnabled="{Binding !IsSolving}"/>
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="Backend:" Foreground="Gray"
+                     VerticalAlignment="Center" Margin="0,4,6,0"/>
+          <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,4,0,0"
+                    ItemsSource="{x:Static vm:ModeProbeViewModel.AvailableBackends}"
+                    SelectedItem="{Binding SelectedBackend}"
+                    FontSize="11" HorizontalAlignment="Stretch"/>
+        </Grid>
+
+        <!-- Result block -->
+        <StackPanel Spacing="4" IsVisible="{Binding HasResult}">
+          <Image Source="{Binding ModeFieldImage}" MaxHeight="140"
+                 Stretch="Uniform"
+                 IsVisible="{Binding ModeFieldImage, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+          <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto,Auto">
+            <TextBlock Grid.Row="0" Grid.Column="0" Text="n_eff:" Foreground="Gray" Margin="0,0,8,0"/>
+            <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding NEff, StringFormat={}{0:F4}}" Foreground="White"/>
+            <TextBlock Grid.Row="1" Grid.Column="0" Text="n_g:" Foreground="Gray" Margin="0,0,8,0"/>
+            <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NGroup, StringFormat={}{0:F4}}" Foreground="White"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="Polarisation:" Foreground="Gray" Margin="0,0,8,0"/>
+            <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Polarisation}" Foreground="White"/>
+            <TextBlock Grid.Row="3" Grid.Column="0" Text="MFD:" Foreground="Gray" Margin="0,0,8,0"/>
+            <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding MfdText}" Foreground="White"/>
+          </Grid>
+
+          <!-- Fiber overlap (grating/edge couplers only) -->
+          <Border Background="#20323e" BorderBrush="#3d6a8a" BorderThickness="1"
+                  CornerRadius="4" Padding="6"
+                  IsVisible="{Binding ShowFiberOverlap}">
+            <StackPanel Spacing="3">
+              <TextBlock Text="Fiber overlap (Gaussian approx.)" Foreground="#9ad1ff"
+                         FontSize="11" FontWeight="SemiBold"/>
+              <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="Fiber MFD (µm):" Foreground="Gray"
+                           VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding FiberMfdUm}"
+                               Minimum="1" Maximum="50" Increment="0.1"
+                               FormatString="F1" FontSize="11" Height="28"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="Efficiency:" Foreground="Gray" Margin="0,4,8,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" Foreground="White"
+                           Text="{Binding OverlapPercent, StringFormat={}{0:F1} %}"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="Coupling loss:" Foreground="Gray" Margin="0,0,8,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="1" Foreground="White"
+                           Text="{Binding OverlapLossDb, StringFormat={}{0:F2} dB}"/>
+              </Grid>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+
+        <ProgressBar IsIndeterminate="True" Height="4" IsVisible="{Binding IsSolving}"/>
+      </StackPanel>
+
+      <!-- Status / errors -->
+      <TextBlock Text="{Binding StatusText}" Foreground="#c9c9c9" FontSize="11"
+                 TextWrapping="Wrap"
+                 IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+    </StackPanel>
+  </Border>
+</UserControl>

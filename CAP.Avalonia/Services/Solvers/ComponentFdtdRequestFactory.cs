@@ -45,7 +45,12 @@ public class ComponentFdtdRequestFactory
     /// </summary>
     public async Task<FdtdSMatrixRequest?> BuildAsync(Component component, CancellationToken ct = default)
     {
-        var preview = await _preview.RenderAsync(component.NazcaModuleName, component.NazcaFunctionName, null, ct);
+        // Render the ACTUAL parametrised geometry (e.g. length=3.5), not the function's
+        // defaults — otherwise the FDTD S-matrix is computed for the wrong shape, and #580 E's
+        // template promotion would spread that default-geometry matrix to every instance of a
+        // parametrised type (#580 review). Every other RenderAsync call site passes params too.
+        var preview = await _preview.RenderAsync(
+            component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters, ct);
         if (!preview.Success || preview.Polygons.Count == 0 || preview.Pins.Count == 0)
             return null;
 
