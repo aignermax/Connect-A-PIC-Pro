@@ -39,7 +39,10 @@ public static class NewComponentWindowLauncher
         if (vm.SavedDraft is null || vm.SelectedProcess is null) return;
 
         var filePath = userPdkStore.ResolvePath(vm.SelectedProcess);
-        var pdk = pdkLoader.LoadFromFile(filePath);
+        // Edit-tolerant load (matches CustomComponentLibraryRegistrar): a freshly-saved user
+        // PDK may lack a Nazca origin offset, which the strict LoadFromFile would reject —
+        // that rejection would silently skip registration while the UI still says "Saved".
+        var pdk = pdkLoader.LoadFromFileForEditing(filePath);
         register(vm.SavedDraft, pdk.Name, filePath);
     }
 }
