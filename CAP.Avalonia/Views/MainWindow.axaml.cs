@@ -802,6 +802,35 @@ public partial class MainWindow : Window
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
+        // the user-global template override — but only while the instance geometry
+        // still matches the template draft (no Nazca override active). Everything
+        // is checked at invoke time so mid-session geometry edits are honoured.
+        Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
+        if (liveComponent != null && userStore != null)
+        {
+            propagateToTemplate = data =>
+            {
+                var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
+                if (templateKey == null)
+                    return false; // no matching PDK template (e.g. user group)
+
+                vm.FileOperations.StoredNazcaOverrides
+                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
+                if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
+                        liveComponent, nazcaOverride,
+                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                    return false;
+
+                userStore.Overrides[templateKey] = data;
+                userStore.Save();
+                vm.FileOperations.ReapplyTemplateOverrides();
+                vm.LeftPanel.HierarchyPanel.RefreshOverrideMarkers();
+                RefreshTemplateOverrideBadges(vm);
+                return true;
+            };
+        }
+
         dialogVm.Configure(
             entityKey,
             smatrixKey,
@@ -823,6 +852,7 @@ public partial class MainWindow : Window
             nazcaDimensionsChanged: nazcaDimensionsChanged,
             nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
+            propagateToTemplate: propagateToTemplate,
             gdsFactoryPreviewService: gdsFactoryPreviewService);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };

@@ -451,7 +451,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// fallback lookup in <see cref="Services.SMatrixOverrideApplicator.ApplyAll"/> so PDK-template
     /// overrides reach every instance of the template.
     /// </summary>
-    private string? ResolveTemplateKey(Component component)
+    public string? ResolveTemplateKey(Component component)
     {
         var pdkSource = FindTemplatePdkSource(component);
         if (pdkSource == null) return null;
