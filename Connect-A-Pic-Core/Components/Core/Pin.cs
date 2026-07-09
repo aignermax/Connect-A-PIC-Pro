@@ -32,6 +32,13 @@ namespace CAP_Core.Components.Core
                 SetMatterType(value);
             }
         }
+
+        /// <summary>
+        /// Polarization mode of the light carried by this pin. Defaults to
+        /// <see cref="PolarizationKind.TE"/> — the historical implicit kind —
+        /// so old PDKs and designs keep their exact behaviour.
+        /// </summary>
+        public PolarizationKind Polarization { get; set; } = PolarizationKind.TE;
         public Pin(string Name, int pinNumber, MatterType newMatterType, RectSide side, Guid idInFlow, Guid idOutFlow) : this(Name, pinNumber,newMatterType, side)
         {
             IDInFlow = idInFlow;
@@ -68,7 +75,10 @@ namespace CAP_Core.Components.Core
 
         public object Clone()
         {
-            var clonedPin = new Pin(Name, PinNumber, MatterType, Side, IDInFlow , IDOutFlow);
+            var clonedPin = new Pin(Name, PinNumber, MatterType, Side, IDInFlow , IDOutFlow)
+            {
+                Polarization = Polarization
+            };
             return clonedPin;
         }
     }

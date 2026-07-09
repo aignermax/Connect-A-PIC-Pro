@@ -5,6 +5,7 @@
   "foundry": "Lunima",
   "version": "1.0.0",
   "defaultWavelengthNm": 1550,
+  "processAgnostic": true,
   "components": [
     {
       "name": "ONA Analyzer",

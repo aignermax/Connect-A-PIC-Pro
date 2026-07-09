@@ -1,6 +1,7 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.FormulaReading;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -25,13 +26,16 @@ public static class PdkTemplateConverter
     public static ComponentTemplate ConvertToTemplate(
         PdkComponentDraft pdkComp,
         string pdkName,
-        string? nazcaModuleName)
+        string? nazcaModuleName,
+        string? gdsFactoryRoutingCrossSection = null)
     {
         var pinDefs = pdkComp.Pins.Select(p => new PinDefinition(
             p.Name,
             p.OffsetXMicrometers,
             p.OffsetYMicrometers,
-            p.AngleDegrees
+            p.AngleDegrees,
+            PinKindHelper.Parse(p.PinKind),
+            PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction)
         )).ToArray();
 
         // NazcaOriginOffset is required — validated by PdkLoader.
@@ -46,6 +50,8 @@ public static class PdkTemplateConverter
             HeightMicrometers = pdkComp.HeightMicrometers,
             PinDefinitions = pinDefs,
             NazcaFunctionName = pdkComp.NazcaFunction,
+            GdsFactoryFunction = pdkComp.GdsFactoryFunction,
+            GdsFactoryRoutingCrossSection = gdsFactoryRoutingCrossSection,
             NazcaParameters = pdkComp.NazcaParameters,
             HasSlider = pdkComp.Sliders?.Any() ?? false,
             SliderMin = pdkComp.Sliders?.FirstOrDefault()?.MinVal ?? 0,

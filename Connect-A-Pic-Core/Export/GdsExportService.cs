@@ -152,7 +152,7 @@ public class GdsExportService
     /// <param name="scriptPath">Path to the Python script to execute.</param>
     /// <param name="generateGds">If true, attempts to generate GDS from the script.</param>
     /// <returns>Export result with status information.</returns>
-    public async Task<ExportResult> ExportToGdsAsync(string scriptPath, bool generateGds)
+    public virtual async Task<ExportResult> ExportToGdsAsync(string scriptPath, bool generateGds)
     {
         if (!File.Exists(scriptPath))
         {

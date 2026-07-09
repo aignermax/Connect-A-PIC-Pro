@@ -1,5 +1,15 @@
 namespace CAP_DataAccess.Persistence.PIR;
 
+/// <summary>Layout backend a raw-code override is written for (issue #637).</summary>
+public enum OverrideBackend
+{
+    /// <summary>Nazca cell code (default; every override saved before #637 is Nazca).</summary>
+    Nazca = 0,
+
+    /// <summary>gdsfactory component code (declares a <c>component</c> variable).</summary>
+    GdsFactory = 1,
+}
+
 /// <summary>
 /// Per-instance Nazca function parameter override for a single canvas component.
 /// All override fields are optional; a null value means "use the PDK template value".
@@ -56,6 +66,13 @@ public class NazcaCodeOverride
     /// (see <see cref="OverridePins"/> and <see cref="HasNoSimulationModel"/>).
     /// </summary>
     public string? RawCode { get; set; }
+
+    /// <summary>
+    /// Layout backend the <see cref="RawCode"/> is written for. Defaults to
+    /// <see cref="OverrideBackend.Nazca"/> so overrides saved before #637 keep working.
+    /// The matching export/preview backend is selected from this.
+    /// </summary>
+    public OverrideBackend Backend { get; set; } = OverrideBackend.Nazca;
 
     /// <summary>
     /// Component width (µm) recomputed from the rendered raw-code geometry's bounding box.
@@ -154,6 +171,7 @@ public class NazcaCodeOverride
         TemplateFunctionParameters = TemplateFunctionParameters,
         TemplateModuleName = TemplateModuleName,
         RawCode = RawCode,
+        Backend = Backend,
         OverrideWidthMicrometers = OverrideWidthMicrometers,
         OverrideHeightMicrometers = OverrideHeightMicrometers,
         OverridePins = OverridePins?.Select(p => p.Clone()).ToList(),

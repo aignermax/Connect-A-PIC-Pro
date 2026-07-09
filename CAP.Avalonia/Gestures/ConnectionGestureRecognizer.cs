@@ -5,6 +5,8 @@ using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
+using CAP_Core.Components.Core;
+using CAP_Core.Components.PinKinds;
 
 namespace CAP.Avalonia.Gestures;
 
@@ -76,7 +78,14 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
             targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
         {
             if (mainVm != null)
-                mainVm.StatusText = $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}";
+            {
+                mainVm.StatusText =
+                    !PinKindHelper.AreKindsCompatible(_state.ConnectionDragStartPin, targetPin)
+                        ? PinKindHelper.DescribeIncompatibility(_state.ConnectionDragStartPin, targetPin)
+                    : !PolarizationRules.CanConnect(_state.ConnectionDragStartPin.Polarization, targetPin.Polarization)
+                        ? PolarizationRules.GetMismatchMessage(_state.ConnectionDragStartPin, targetPin)
+                    : $"Release to connect {_state.ConnectionDragStartPin.Name} to {targetPin.Name}";
+            }
         }
         else
         {
@@ -92,11 +101,30 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
     {
         if (_state.ConnectionDragStartPin == null) return;
 
+        var startPin = _state.ConnectionDragStartPin;
         var targetPin = canvas.HighlightedPin?.Pin;
+        bool isValidTarget = targetPin != null && targetPin != startPin &&
+            targetPin.ParentComponent != startPin.ParentComponent;
 
-        if (targetPin != null && targetPin != _state.ConnectionDragStartPin &&
-            targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
+        if (isValidTarget && !PinKindHelper.AreKindsCompatible(startPin, targetPin!))
         {
+            // Cross-domain connection (optical ↔ electrical) is physically meaningless — reject.
+            if (mainVm != null)
+                mainVm.StatusText = PinKindHelper.DescribeIncompatibility(startPin, targetPin!);
+        }
+        else if (isValidTarget)
+        {
+            // TE↔TM connections are physically meaningless — refuse at the
+            // gesture layer with an inline message (issue #534).
+            if (!PolarizationRules.CanConnect(_state.ConnectionDragStartPin.Polarization, targetPin.Polarization))
+            {
+                if (mainVm != null)
+                    mainVm.StatusText = PolarizationRules.GetMismatchMessage(_state.ConnectionDragStartPin, targetPin);
+                _state.ConnectionDragStartPin = null;
+                _invalidate();
+                return;
+            }
+
             var cmd = new CreateConnectionCommand(canvas, _state.ConnectionDragStartPin, targetPin);
             mainVm?.CommandManager.ExecuteCommand(cmd);
             if (mainVm != null)

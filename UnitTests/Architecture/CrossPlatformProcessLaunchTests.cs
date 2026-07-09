@@ -50,6 +50,9 @@ public class CrossPlatformProcessLaunchTests
         // 1. Sanctioned abstractions
         "Connect-A-Pic-Core/Export/ProcessLaunchFactory.cs",
         "CAP.Avalonia/Services/PlatformShellLauncher.cs",
+        // The single sanctioned launcher for the self-update feature: it must start a DETACHED
+        // helper that outlives the quitting app, which a ProcessLaunchFactory (awaited) launch can't.
+        "CAP.Avalonia/Services/Update/DetachedUpdaterLauncher.cs",
         // 2. Grandfathered platform-aware launchers (pre-existing — do NOT add new entries here)
         "CAP.Avalonia/Services/PythonResolution.cs",
         "CAP.Avalonia/Services/Solvers/PythonModeSolverService.cs",
