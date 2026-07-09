@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using CAP.Avalonia.Controls.Plotting;
 
 namespace CAP.Avalonia.Views.Panels;
 
@@ -12,5 +13,7 @@ public partial class EyeDiagramPanel : UserControl
     public EyeDiagramPanel()
     {
         InitializeComponent();
+        // #693: plain wheel scrolls the analysis dock; Ctrl(/Cmd)+wheel zooms the plot.
+        EyePlot.Controller = ScrollFriendlyPlotController.Create();
     }
 }

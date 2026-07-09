@@ -163,6 +163,8 @@
                        Foreground="White" Margin="0,4,0,0"/>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                        Text="{loc:Localize TransientHelp.ReadingBody}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.ZoomNote}"/>
 
         </StackPanel>
     </ScrollViewer>

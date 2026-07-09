@@ -137,11 +137,15 @@
                    IsVisible="{Binding BottomPanel.Analysis.Transient.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                    TextWrapping="Wrap"/>
 
-        <!-- Waveform plot: power vs time, one series per output pin. -->
+        <!-- Waveform plot: power vs time, one series per output pin.
+             Plain wheel scrolls the analysis dock; Ctrl(/Cmd)+wheel zooms (#693,
+             see ScrollFriendlyPlotController assigned in code-behind). -->
         <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
                 Height="200" Margin="0,2,0,0"
-                IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}">
-            <oxy:PlotView Model="{Binding BottomPanel.Analysis.Transient.PlotModel}" Background="Transparent"/>
+                IsVisible="{Binding BottomPanel.Analysis.Transient.HasResult}"
+                ToolTip.Tip="Ctrl+scroll to zoom (Cmd on macOS) · right-drag to pan · scroll to move the panel">
+            <oxy:PlotView x:Name="WaveformPlot"
+                          Model="{Binding BottomPanel.Analysis.Transient.PlotModel}" Background="Transparent"/>
         </Border>
 
         <!-- Per-pin visibility toggles (legend): flow horizontally, wrap down (responsive). -->

@@ -905,6 +905,7 @@
   "TransientHelp.Intro2": "Licht tritt an Kopplern mit eingeschaltetem Laser ein; Koppler mit ausgeschaltetem Laser sind deine Ausgänge (schalte das Laser-Symbol auf der Arbeitsfläche oder den Schalter im Eigenschaftenpanel um).",
   "TransientHelp.PrbsBody": " — ein pseudozufälliger Strom von 0/1-Datenbits, wie echter Netzwerkverkehr (z. B. 25 Gbit/s). Damit beurteilst du die Signalqualität: Sind die Einsen und Nullen am Ausgang noch klar getrennt? Derselbe Seed erzeugt immer dasselbe Bitmuster, sodass die Ergebnisse reproduzierbar sind.",
   "TransientHelp.ReadingBody": "X-Achse: Zeit, in Pikosekunden oder Nanosekunden (siehe Achsenbeschriftung — 1000 ps = 1 ns). Y-Achse: die optische Leistung, die an diesem Ausgang ankommt. Jede farbige Linie ist ein Ausgangspin deiner Schaltung; über die Kontrollkästchen unter dem Diagramm kannst du Linien ein- oder ausblenden.",
+  "TransientHelp.ZoomNote": "Zoomen: Strg (Cmd auf macOS) gedrückt halten und über dem Diagramm scrollen; normales Scrollen bewegt das Panel. Mit der rechten Maustaste ziehen, um zu verschieben.",
   "TransientHelp.ReadingTitle": "So liest du das Diagramm",
   "TransientHelp.SourcesTitle": "Die drei Lichtquellen",
   "TransientHelp.Title": "Was macht der Transient-Modus?",
