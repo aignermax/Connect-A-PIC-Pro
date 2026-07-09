@@ -10,7 +10,7 @@
         xmlns:panels="using:CAP.Avalonia.Views.Panels"
         x:Class="CAP.Avalonia.Views.MainWindow"
         x:DataType="vm:MainViewModel"
-        Title="Lunima"
+        Title="{Binding WindowTitle}"
         Width="1800" Height="900">
 
     <Window.KeyBindings>
@@ -33,6 +33,7 @@
         </Style>
     </Window.Styles>
 
+    <Grid>
     <DockPanel>
         <!-- Toolbar -->
         <ScrollViewer DockPanel.Dock="Top"
@@ -41,8 +42,18 @@
                       Background="#2d2d2d"
                       Height="40">
             <StackPanel Orientation="Horizontal">
+                <!-- Home -->
+                <Button Command="{Binding ShowHomeCommand}"
+                        Width="36" Margin="10,2,2,2" Background="#3d3d3d"
+                        ToolTip.Tip="Home — recent projects, new/open project">
+                    <PathIcon Data="M8,1.5 L15,7.5 L13.5,7.5 L13.5,14 L9.5,14 L9.5,10 L6.5,10 L6.5,14 L2.5,14 L2.5,7.5 L1,7.5 Z"
+                              Width="16" Height="16" Foreground="LightBlue"/>
+                </Button>
+
+                <Separator Width="1" Background="Gray" Margin="10,5"/>
+
                 <!-- Mode Buttons — icon-only, tooltips name the mode and its shortcut -->
-                <TextBlock Text="Mode:" VerticalAlignment="Center" Margin="10,0,5,0" Foreground="White"/>
+                <TextBlock Text="Mode:" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="White"/>
                 <Button Command="{Binding SetSelectModeCommand}"
                         Width="36" Margin="2" Background="#3d3d3d"
                         ToolTip.Tip="Select mode (S) — click to select, drag to move">
@@ -1005,4 +1016,11 @@
             </controls:DesignCanvas>
         </DockPanel>
     </DockPanel>
+
+    <!-- Home screen overlay: compact centered card over the dimmed editor,
+         shown until a project is opened/created; reopenable via the Home button -->
+    <Border IsVisible="{Binding Home.IsHomeVisible}" Background="#B3141414">
+        <views:HomeView DataContext="{Binding Home}"/>
+    </Border>
+    </Grid>
 </Window>

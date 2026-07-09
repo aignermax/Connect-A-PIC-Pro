@@ -24,9 +24,18 @@ public partial class MainWindow : Window
 {
     private SettingsWindow? _settingsWindow;
 
+    /// <summary>Set once the user confirmed closing so the guard lets the re-issued Close() through.</summary>
+    private bool _forceClose;
+
+    /// <summary>Suppresses a second save prompt while the first close confirmation is still open.</summary>
+    private bool _confirmingClose;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        // Guard against losing unsaved changes when the window is closed
+        Closing += OnWindowClosing;
 
         // Set up the FileDialogService when the window is loaded
         Loaded += async (_, _) =>
@@ -108,12 +117,25 @@ public partial class MainWindow : Window
                     return pvm.Result;
                 };
 
-                // Prompt for the fabrication process once at startup (issue #570). Deferred so
-                // the main window is fully shown before the modal picker opens; dismissing it
-                // starts in Playground.
-                global::Avalonia.Threading.Dispatcher.UIThread.Post(
-                    async () => await vm.PromptForInitialProcessAsync(),
-                    global::Avalonia.Threading.DispatcherPriority.Background);
+                // Prompt for the fabrication process (issue #570) once the Home screen
+                // is dismissed. A design opened from Home/startup restores its own
+                // active process, so only a truly fresh start still needs the picker;
+                // prompting over the Home card would be premature and redundant.
+                var processPromptShown = false;
+                void MaybePromptForInitialProcess()
+                {
+                    if (processPromptShown || vm.Home.IsHomeVisible || vm.FileOperations.ActiveProcess != null)
+                        return;
+                    processPromptShown = true;
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                        async () => await vm.PromptForInitialProcessAsync(),
+                        global::Avalonia.Threading.DispatcherPriority.Background);
+                }
+                vm.Home.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(vm.Home.IsHomeVisible))
+                        MaybePromptForInitialProcess();
+                };
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
@@ -202,8 +224,62 @@ public partial class MainWindow : Window
                         UpdateGroupTemplateListBoxSelections(vm.LeftPanel.SelectedGroupTemplate);
                     }
                 };
+
+                // Startup project — LAST, after every service/callback above is
+                // wired (dialogs, hierarchy override badges). A command-line
+                // .lun file wins; otherwise honor the reopen-last preference.
+                // The Home card is disabled while the load is in flight.
+                vm.Home.IsStartupLoadInProgress = true;
+                try
+                {
+                    if (vm.StartupDesignFile is { } startupFile)
+                    {
+                        await vm.FileOperations.LoadDesignFromPathAsync(startupFile);
+                    }
+                    else
+                    {
+                        await vm.Home.TryReopenLastProjectAsync();
+                    }
+                }
+                finally
+                {
+                    vm.Home.IsStartupLoadInProgress = false;
+                }
+
+                // Covers the startup-load path: Home is already dismissed, but a
+                // legacy design may not have restored an active process.
+                MaybePromptForInitialProcess();
             }
         };
+    }
+
+    /// <summary>
+    /// Prompts to save unsaved changes before the window closes. Cancels the
+    /// close, asks via <see cref="ViewModels.Panels.FileOperationsViewModel.ConfirmCloseAsync"/>,
+    /// and re-issues Close() when the user confirmed (saved or discarded).
+    /// </summary>
+    private async void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_forceClose || DataContext is not MainViewModel vm || !vm.FileOperations.HasUnsavedChanges)
+            return;
+
+        e.Cancel = true;
+        if (_confirmingClose)
+            return;
+
+        _confirmingClose = true;
+        try
+        {
+            if (await vm.FileOperations.ConfirmCloseAsync())
+            {
+                _forceClose = true;
+                Close();
+            }
+        }
+        finally
+        {
+            _confirmingClose = false;
+        }
     }
 
     /// <summary>
@@ -288,6 +364,19 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
         if (DataContext is not MainViewModel mainVm) return;
+
+        // While the Home screen overlay is shown, canvas shortcuts don't apply.
+        // Escape dismisses it (same as "Continue without a project") — checked
+        // BEFORE the TextBox guard so it also works from the recents search box.
+        if (mainVm.Home.IsHomeVisible)
+        {
+            if (e.Key == Key.Escape)
+            {
+                mainVm.Home.ContinueWithoutProjectCommand.Execute(null);
+                e.Handled = true;
+            }
+            return;
+        }
 
         // Don't intercept keystrokes when a text input has focus (e.g., search box)
         if (FocusManager?.GetFocusedElement() is TextBox)

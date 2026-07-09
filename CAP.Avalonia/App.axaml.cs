@@ -36,6 +36,7 @@ public partial class App : Application
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
+        services.AddHomeFeature();
 
         services.AddSingleton<MainViewModel>();
     }
@@ -49,6 +50,10 @@ public partial class App : Application
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             var mainVm = Services.GetRequiredService<MainViewModel>();
+            // A .lun file passed on the command line (or via OS file association)
+            // is opened by MainWindow's Loaded handler.
+            mainVm.StartupDesignFile = CAP.Avalonia.Services.DesignFileArguments
+                .FindDesignFile(desktop.Args ?? Array.Empty<string>());
             desktop.MainWindow = new MainWindow
             {
                 DataContext = mainVm
