@@ -39,11 +39,12 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         if (laserComp?.LaserConfig != null)
         {
             // Single-click direct manipulation (#690): toggle this coupler's laser.
-            laserComp.LaserConfig.IsEnabled = !laserComp.LaserConfig.IsEnabled;
+            // Runs as an undoable command like the group-lock icon below; repaint and
+            // resimulation are triggered by the LaserConfig.PropertyChanged handler.
+            mainVm.CommandManager.ExecuteCommand(new ToggleLaserCommand(laserComp));
             mainVm.StatusText = laserComp.LaserConfig.IsEnabled
                 ? $"Laser ON — '{laserComp.Name}' is an input"
                 : $"Laser OFF — '{laserComp.Name}' is an output (listen-only)";
-            _invalidate();
             return true;
         }
 

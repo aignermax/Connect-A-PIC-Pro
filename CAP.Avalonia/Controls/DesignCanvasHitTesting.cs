@@ -79,9 +79,15 @@ public class DesignCanvasHitTesting
         for (int i = vm.Components.Count - 1; i >= 0; i--)
         {
             var comp = vm.Components[i];
-            if (!LaserIndicatorRenderer.IsIconVisible(comp, vm.IsSimulationModeActive)) continue;
-            if (LaserIndicatorRenderer.CalculateIconBounds(comp).Contains(canvasPoint))
+            if (LaserIndicatorRenderer.IsIconVisible(comp, vm.IsSimulationModeActive)
+                && LaserIndicatorRenderer.CalculateIconBounds(comp).Contains(canvasPoint))
                 return comp;
+
+            // Components are drawn bottom-up, so this loop walks topmost-first: once
+            // the point lies inside this component's body, anything below is occluded
+            // and must not receive a hidden laser toggle.
+            if (new Rect(comp.X, comp.Y, comp.Width, comp.Height).Contains(canvasPoint))
+                return null;
         }
 
         return null;

@@ -428,7 +428,7 @@ public partial class FileOperationsViewModel : ObservableObject
             SliderValue = c.HasSliders ? c.SliderValue : null,
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
-            LaserEnabled = c.LaserConfig?.IsEnabled,
+            LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
             IsLocked = c.Component.IsLocked ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };

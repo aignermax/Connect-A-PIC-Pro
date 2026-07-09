@@ -56,6 +56,12 @@ public partial class ComponentViewModel : ObservableObject
     /// </summary>
     public bool IsLightSource => LaserConfig != null;
 
+    /// <summary>
+    /// Light source whose laser is switched off — a listen-only output coupler (#690).
+    /// The single predicate every simulation consumer must use to skip the source.
+    /// </summary>
+    public bool IsLaserOff => LaserConfig is { IsEnabled: false };
+
     public double Width => Component.WidthMicrometers;
     public double Height => Component.HeightMicrometers;
     public string Name => Component.HumanReadableName ?? Component.Identifier;
@@ -151,8 +157,9 @@ public partial class ComponentViewModel : ObservableObject
         _x = component.PhysicalX;
         _y = component.PhysicalY;
 
-        if (LightSourceClassifier.IsLightInjectingCoupler(templateName))
-            LaserConfig = new LaserConfig();
+        if (LightSourceClassifier.IsLightInjectingCoupler(templateName)
+            || LightSourceClassifier.IsLightInjectingCoupler(component))
+            LaserConfig = new LaserConfig(component);
     }
 
     public void NotifyDimensionsChanged()

@@ -244,8 +244,12 @@ public partial class DesignCanvasViewModel : ObservableObject
         {
             // Laser changes (on/off #690, wavelength, power) re-simulate the live
             // overlay and repaint the canvas laser icon.
-            vm.LaserConfig.PropertyChanged += (_, _) =>
+            vm.LaserConfig.PropertyChanged += (_, e) =>
             {
+                // InputPower streams continuously from the panel slider while the CW
+                // overlay ignores it — only role/wavelength changes need work here.
+                if (e.PropertyName == nameof(ViewModels.Simulation.LaserConfig.InputPower))
+                    return;
                 RequestResimulation();
                 RepaintRequested?.Invoke();
             };

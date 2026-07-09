@@ -8,6 +8,8 @@ using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.ViewModels.Canvas;
 
+using CAP.Avalonia.Services;
+
 namespace CAP.Avalonia.ViewModels.Analysis;
 
 /// <summary>
@@ -52,7 +54,7 @@ internal static class TransientCircuitFactory
         var pinIds = new HashSet<Guid>();
         foreach (var compVm in canvas.Components)
         {
-            if (compVm.LaserConfig is not { IsEnabled: false }) continue;
+            if (!compVm.IsLaserOff) continue;
             foreach (var pin in compVm.Component.PhysicalPins)
             {
                 if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
@@ -73,15 +75,12 @@ internal static class TransientCircuitFactory
         foreach (var compVm in canvas.Components)
         {
             if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
-            if (compVm.LaserConfig is { IsEnabled: false }) continue;
+            if (compVm.IsLaserOff) continue;
 
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
+            var laserType = SimulationService.GetLaserTypeForWavelength(
+                laserConfig?.WavelengthNm ?? StandardWaveLengths.RedNM);
 
             foreach (var pin in compVm.Component.PhysicalPins)
             {

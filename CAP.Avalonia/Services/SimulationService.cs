@@ -110,14 +110,6 @@ public class SimulationService
     {
         var configs = new List<SourceConfigInfo>();
 
-        // Couplers whose laser is switched off (#690) act as listen-only outputs.
-        // LaserConfig lives on the top-level ViewModel, so only top-level couplers
-        // can be disabled; components inside groups keep the default (enabled).
-        var disabledLasers = canvas.Components
-            .Where(c => c.LaserConfig is { IsEnabled: false })
-            .Select(c => c.Component)
-            .ToHashSet();
-
         // Collect all components, including those inside groups (recursively)
         var allComponents = GetAllComponentsRecursively(canvas.Components);
 
@@ -144,7 +136,9 @@ public class SimulationService
             if (!IsLightSource(component))
                 continue;
 
-            if (disabledLasers.Contains(component))
+            // Couplers whose laser is switched off (#690) act as listen-only outputs.
+            // The flag lives on the core component, so it also covers group children.
+            if (!component.LaserEnabled)
                 continue;
 
             // For components inside groups, we don't have LaserConfig, so use defaults
@@ -268,19 +262,8 @@ public class SimulationService
         return sourcePin?.LogicalPin?.MatterType == MatterType.Light ? sourcePin : null;
     }
 
-    public static bool IsLightSource(Component component)
-    {
-        var id = component.Identifier?.ToLowerInvariant() ?? "";
-        if (id.Contains("grating") || id.Contains("edge coupler"))
-            return true;
-
-        // Check NazcaFunctionName (e.g., "ebeam_gc_te1550") — this is reliable because
-        // it comes from the PDK and is not user-editable (unlike HumanReadableName).
-        // After prefab serialize/deserialize, Identifier may be GUID-based while
-        // NazcaFunctionName preserves the PDK template.
-        var nazcaName = component.NazcaFunctionName?.ToLowerInvariant() ?? "";
-        return nazcaName.Contains("_gc_") || nazcaName.Contains("edge_coupler") || nazcaName.Contains("grating");
-    }
+    public static bool IsLightSource(Component component) =>
+        LightSourceClassifier.IsLightInjectingCoupler(component);
 
     internal static LaserType GetLaserTypeForWavelength(int wavelengthNm)
     {
