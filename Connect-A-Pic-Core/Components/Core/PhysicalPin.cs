@@ -22,6 +22,7 @@ namespace CAP_Core.Components.Core
         /// </summary>
         public Pin LogicalPin { get; set; }
 
+        /// <summary>
         /// The signal domain of this pin, derived from the linked logical pin.
         /// Pins without a logical pin are treated as optical (the historic default).
         /// Because <see cref="LogicalPin"/> is re-linked after cloning, clones
