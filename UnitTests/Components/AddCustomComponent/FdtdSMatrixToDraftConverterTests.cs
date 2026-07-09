@@ -62,6 +62,26 @@ public class FdtdSMatrixToDraftConverterTests
     }
 
     [Fact]
+    public void FromFdtd_throws_ArgumentException_on_length_mismatch()
+    {
+        var data = new ComponentSMatrixData
+        {
+            Wavelengths = new()
+            {
+                ["1550"] = new SMatrixWavelengthEntry
+                {
+                    Rows = 2, Cols = 2,
+                    Real = new() { 0, 1, 1 }, // 3 entries, but 2x2 needs 4
+                    Imag = new() { 0, 0, 0, 0 },
+                    PortNames = new() { "o1", "o2" }
+                }
+            }
+        };
+
+        Should.Throw<System.ArgumentException>(() => FdtdSMatrixToDraftConverter.FromFdtd(data));
+    }
+
+    [Fact]
     public void FromFdtd_returns_null_when_no_wavelengths()
     {
         var data = new ComponentSMatrixData { Wavelengths = new() };
