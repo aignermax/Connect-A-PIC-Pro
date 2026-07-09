@@ -27,6 +27,14 @@ public static class ExportDialogWiring
         vm.VerilogAExportFormat.ShowOptionsDialogAsync = () =>
             ShowSafelyAsync(vm, owner, errorConsole, "Verilog-A",
                 () => new VerilogAExportDialog { DataContext = vm.VerilogAExportFormat.OptionsViewModel });
+
+        vm.GdsFactoryExportFormat.ShowOptionsDialogAsync = () =>
+        {
+            // Recompute the stub-fallback list against the current canvas on every open.
+            vm.GdsFactoryExport.RefreshUnmappedComponents();
+            return ShowSafelyAsync(vm, owner, errorConsole, "gdsfactory",
+                () => new GdsFactoryExportDialog { DataContext = vm.GdsFactoryExport });
+        };
     }
 
     private static async Task ShowSafelyAsync(MainViewModel vm, Window owner, ErrorConsoleService? errorConsole, string formatName, Func<Window> dialogFactory)

@@ -59,6 +59,64 @@ public sealed class GdsPreviewRenderServiceTests
         key1.ShouldNotBe(key2);
     }
 
+    [Fact]
+    public void BuildCacheKey_GdsFactoryNativeComponent_ReturnsGdsfactoryKey()
+    {
+        // A gdsfactory-native component (no Nazca function, a gdsfactory factory) must still get
+        // a cache key so it renders a real preview instead of falling back to a rectangle (#570).
+        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "");
+        comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+
+        var key = GdsPreviewRenderService.BuildCacheKey(comp);
+
+        key.ShouldNotBeNull();
+        key!.ShouldStartWith("gdsfactory|cspdk.sin300.mmi1x2|");
+    }
+
+    [Fact]
+    public void BuildCacheKey_GdsFactoryNativeComponent_WithSynthesizedNazcaName_StillReturnsGdsfactoryKey()
+    {
+        // On placement, a gdsfactory-native component is given a synthesized nazcaFunction
+        // ("nazca_<name>") that no Nazca script can render. The gdsfactory factory must take
+        // precedence so the placed component previews via gdsfactory, not a dead Nazca call —
+        // otherwise the canvas grid stays blank (#570 field test).
+        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_mmi1x2");
+        comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+
+        var key = GdsPreviewRenderService.BuildCacheKey(comp);
+
+        key.ShouldNotBeNull();
+        key!.ShouldStartWith("gdsfactory|cspdk.sin300.mmi1x2|");
+    }
+
+    [Fact]
+    public async Task GetGeometry_GdsFactoryKey_RendersViaGdsFactoryServiceNotNazca()
+    {
+        // A gdsfactory-native render identity must be resolved by the gdsfactory preview
+        // back-end (RenderRawCodeAsync with generated get_component code), never Nazca (#570).
+        var nazca = new Mock<NazcaComponentPreviewService>("python", "nazca.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        // The gdsfactory back-end is typed as the base service (mockable, sealed derived type isn't).
+        var gf = new Mock<NazcaComponentPreviewService>("python", "gf.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Ok());
+
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-gf-" + Guid.NewGuid().ToString("N"));
+        var svc = new GdsPreviewRenderService(nazca.Object, new GdsPreviewDiskCache(diskDir), gf.Object);
+        var key = new GdsPreviewKey(null, null, null) { GdsFactoryFunction = "cspdk.sin300.mmi1x2" };
+
+        key.IsRenderable.ShouldBeTrue();
+        svc.TryGetGeometry(key).ShouldBeNull();       // miss → async render kicked off
+        await svc.WaitForPendingAsync();
+        svc.TryGetGeometry(key).ShouldNotBeNull();    // rendered via gdsfactory service
+
+        gf.Verify(s => s.RenderRawCodeAsync(
+            It.Is<string>(c => c.Contains("gf.get_component('mmi1x2')")), It.IsAny<CancellationToken>()), Times.Once);
+        nazca.Verify(s => s.RenderAsync(
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
     // ── TryGetPreview — fallback behaviour ─────────────────────────────────
 
     [Fact]
@@ -228,6 +286,60 @@ public sealed class GdsPreviewRenderServiceTests
         await svc.WaitForPendingAsync();
         svc.TryGetGeometry(key).ShouldNotBeNull();   // now in memory
         mock.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
+    [Fact]
+    public async Task GetGeometry_RenderFails_IsNotPersisted_AndRetriesOnNextInstance()
+    {
+        // A failed render (broken/half-provisioned interpreter) must NOT be persisted as an
+        // empty marker — otherwise the component stays blank forever, even after the env is
+        // fixed. A fresh instance must re-attempt the render (#570 field test).
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-fail-" + Guid.NewGuid().ToString("N"));
+        var key = new GdsPreviewKey("m", "f", "p");
+
+        var failing = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        failing.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NazcaPreviewResult.Fail("interpreter not ready"));
+        var svc1 = new GdsPreviewRenderService(failing.Object, new GdsPreviewDiskCache(diskDir));
+        svc1.TryGetGeometry(key);
+        await svc1.WaitForPendingAsync();
+
+        // A new instance (e.g. after the env is fixed) must render, not serve a persisted "empty".
+        var ok = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        ok.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(Ok());
+        var svc2 = new GdsPreviewRenderService(ok.Object, new GdsPreviewDiskCache(diskDir));
+        svc2.TryGetGeometry(key);
+        await svc2.WaitForPendingAsync();
+
+        svc2.TryGetGeometry(key).ShouldNotBeNull();
+        ok.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+
+        try { Directory.Delete(diskDir, true); } catch { }
+    }
+
+    [Fact]
+    public async Task GetGeometry_GenuinelyEmptyRender_PersistsEmpty_NoRetry()
+    {
+        // A successful render with 0 polygons is genuinely empty (not a failure) — persist it so
+        // a second instance does not pointlessly re-render nothing.
+        var diskDir = Path.Combine(Path.GetTempPath(), "lunima-empty-" + Guid.NewGuid().ToString("N"));
+        var key = new GdsPreviewKey("m", "f", "p");
+
+        var empty = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        empty.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NazcaPreviewResult { Success = true, Polygons = new List<NazcaPreviewPolygon>() });
+        var svc1 = new GdsPreviewRenderService(empty.Object, new GdsPreviewDiskCache(diskDir));
+        svc1.TryGetGeometry(key);
+        await svc1.WaitForPendingAsync();
+
+        var mock2 = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        var svc2 = new GdsPreviewRenderService(mock2.Object, new GdsPreviewDiskCache(diskDir));
+        svc2.TryGetGeometry(key);
+        await svc2.WaitForPendingAsync();
+        mock2.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
 
         try { Directory.Delete(diskDir, true); } catch { }
     }

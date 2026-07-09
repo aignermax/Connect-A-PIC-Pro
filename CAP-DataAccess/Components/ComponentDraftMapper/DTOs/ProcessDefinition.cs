@@ -25,6 +25,13 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("version")]
         public string? Version { get; set; }
 
+        /// <summary>
+        /// Defining waveguide-core thickness in nm (e.g. 220 for 220 nm SOI). The key
+        /// physical axis for process compatibility (issue #570); optional so old PDKs parse.
+        /// </summary>
+        [JsonPropertyName("coreThicknessNm")]
+        public double? CoreThicknessNm { get; set; }
+
         /// <summary>GDS layer stack.</summary>
         [JsonPropertyName("layers")]
         public List<ProcessLayer> Layers { get; set; } = new();

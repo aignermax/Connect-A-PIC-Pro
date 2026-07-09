@@ -5,6 +5,26 @@
   "foundry": "Demo Foundry",
   "version": "2.0.0",
   "defaultWavelengthNm": 1550,
+  "process": {
+    "name": "Demo SOI 220nm",
+    "foundry": "Demo Foundry",
+    "coreThicknessNm": 220,
+    "layers": [],
+    "xsections": [],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": []
+  },
   "components": [
     {
       "name": "1x2 MMI Splitter",
@@ -212,6 +232,20 @@
           "offsetXMicrometers": 500,
           "offsetYMicrometers": 30,
           "angleDegrees": 0
+        },
+        {
+          "name": "elec1",
+          "offsetXMicrometers": 200,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "elec2",
+          "offsetXMicrometers": 300,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
@@ -303,6 +337,20 @@
           "offsetXMicrometers": 0,
           "offsetYMicrometers": 27.5,
           "angleDegrees": 180
+        },
+        {
+          "name": "anode",
+          "offsetXMicrometers": 45,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "cathode",
+          "offsetXMicrometers": 45,
+          "offsetYMicrometers": 55,
+          "angleDegrees": 90,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
@@ -444,7 +492,7 @@
       }
     },
     {
-      "name": "Straight Waveguide 100\u00C2\u00B5m",
+      "name": "Straight Waveguide 100\u00B5m",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.strt",
       "nazcaParameters": "length=100",
@@ -479,14 +527,14 @@
       }
     },
     {
-      "name": "90\u00C2\u00B0 Bend",
+      "name": "90\u00B0 Bend",
       "category": "Waveguides",
       "nazcaFunction": "demo.shallow.bend",
       "nazcaParameters": "angle=90",
       "widthMicrometers": 209.4,
       "heightMicrometers": 209.4,
       "nazcaOriginOffsetX": 0,
-      "nazcaOriginOffsetY": 9.400000000000006,
+      "nazcaOriginOffsetY": 200,
       "pins": [
         {
           "name": "a0",

@@ -43,6 +43,14 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public int? LogicalPinNumber { get; set; }
 
         /// <summary>
+        /// Signal domain of the pin: "Optical" (default) or "Electrical".
+        /// Absent/null values in legacy PDKs are treated as optical.
+        /// Electrical pins correspond to GDS layer 1/11 (ElecRec) metal contacts.
+        /// </summary>
+        [JsonPropertyName("pinKind")]
+        public string? PinKind { get; set; }
+
+        /// <summary>
         /// Optional polarization kind of this pin: "TE", "TM" or "Both"
         /// (case-insensitive). When omitted (old PDKs), the pin defaults to TE
         /// unless the component name carries a SiEPIC-style "TM" token

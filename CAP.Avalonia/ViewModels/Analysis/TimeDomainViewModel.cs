@@ -1,10 +1,4 @@
-using System.Numerics;
-using CAP_Core.Components;
-using CAP_Core.Components.Core;
-using CAP_Core.Components.ComponentHelpers;
-using CAP_Core.ExternalPorts;
 using CAP_Core.Grid;
-using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -39,15 +33,14 @@ public partial class TimeDomainViewModel : ObservableObject
     [ObservableProperty]
     private double _pulseSigmaPs = 0.5;
 
+    /// <summary>
+    /// Signal-source selection + parameters (issue #600): Gaussian pulse
+    /// (default, back-compat), CW, or PRBS-NRZ on a signal-driven time grid.
+    /// </summary>
+    public TransientSourceSettingsViewModel Source { get; } = new();
+
     [ObservableProperty]
     private bool _isRunning;
-
-    /// <summary>
-    /// True = Time Domain (Transient) mode active; False = Frequency Domain (CW) mode active.
-    /// Controls which simulation mode is visible in the panel.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isTimeDomainMode = true;
 
     [ObservableProperty]
     private string _statusText = "";
@@ -177,57 +170,17 @@ public partial class TimeDomainViewModel : ObservableObject
 
     private TimeDomainResult RunSimulationCore()
     {
-        var tileManager = new ComponentListTileManager();
-        foreach (var compVm in _canvas!.Components)
-            tileManager.AddComponent(compVm.Component);
+        var (simulator, portManager) = TransientCircuitFactory.Create(_canvas!);
 
-        var portManager = new PhysicalExternalPortManager();
-        ConfigureLightSources(portManager);
-
-        var gridManager = GridManager.CreateForSimulation(
-            tileManager, _canvas.ConnectionManager, portManager);
-
-        var builder = new SystemMatrixBuilder(gridManager);
-        var simulator = new TimeDomainSimulator(builder);
-
-        var timeDef = TimeSignalDefinition.FromWavelengthSweep(
-            CenterWavelengthNm, SpanNm, FreqPoints);
+        var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 
         var inputSignals = BuildInputSignals(portManager, timeDef);
         return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
     }
 
-    private void ConfigureLightSources(PhysicalExternalPortManager portManager)
-    {
-        foreach (var compVm in _canvas!.Components)
-        {
-            if (compVm.TemplateName == null) continue;
-            if (!compVm.TemplateName.Contains("Coupler", StringComparison.OrdinalIgnoreCase)) continue;
-            if (compVm.TemplateName.Contains("Directional", StringComparison.OrdinalIgnoreCase)) continue;
-
-            var laserConfig = compVm.LaserConfig;
-            double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
-
-            foreach (var pin in compVm.Component.PhysicalPins)
-            {
-                if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
-                var input = new ExternalInput(
-                    $"src_{compVm.Component.Identifier}_{pin.Name}",
-                    laserType, 0, new Complex(power, 0));
-                portManager.AddLightSource(input, pin.LogicalPin.IDInFlow);
-            }
-        }
-    }
-
     private Dictionary<Guid, double[]> BuildInputSignals(
         PhysicalExternalPortManager portManager, TimeSignalDefinition timeDef)
     {
-        double centerSeconds = timeDef.DurationSeconds * 0.3;
         double sigmaSeconds = PulseSigmaPs * 1e-12;
         double centerInput = PulseCenterPs * 1e-12;
         double pulseCenter = Math.Max(centerInput, 3 * sigmaSeconds);
@@ -236,8 +189,8 @@ public partial class TimeDomainViewModel : ObservableObject
         foreach (var usedInput in portManager.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(usedInput.Input.InFlowPower.Magnitude);
-            var pulse = timeDef.CreateGaussianPulse(pulseCenter, sigmaSeconds, amplitude);
-            signals[usedInput.AttachedComponentPinId] = pulse;
+            var source = Source.CreateSource(amplitude, pulseCenter, sigmaSeconds);
+            signals[usedInput.AttachedComponentPinId] = source.Generate(timeDef);
         }
         return signals;
     }

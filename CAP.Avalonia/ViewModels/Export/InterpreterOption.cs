@@ -1,9 +1,9 @@
 namespace CAP.Avalonia.ViewModels.Export;
 
 /// <summary>
-/// One selectable interpreter in the unified list on the GDS-Export settings page —
-/// either a managed environment or a discovered system Python. The interpreter path
-/// is shown as a label so entries with equal names stay distinguishable.
+/// One selectable interpreter in the unified list on the Python Environments settings
+/// page — either a managed environment or a discovered system Python. The interpreter
+/// path is shown as a label so entries with equal names stay distinguishable.
 /// </summary>
 /// <param name="DisplayText">Primary line, e.g. "Managed · nazca · Python 3.11 · Nazca 0.6.1".</param>
 /// <param name="Path">Full path to the interpreter executable (secondary label).</param>

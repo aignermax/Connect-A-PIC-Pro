@@ -3,6 +3,7 @@ using Avalonia.Media;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Visualization;
 using CAP_Core.Components.ComponentHelpers;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Routing;
 
 namespace CAP.Avalonia.Controls.Rendering;
@@ -46,10 +47,34 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         DrawConnectionLabel(context, conn, vm);
     }
 
+    /// <summary>Copper/gold marking electrical (metal) connections, matching the electrical
+    /// pin colour in <see cref="PinRenderer"/> (#519/#682).</summary>
+    private static readonly Color ElectricalTraceColor = Color.FromRgb(218, 165, 32);
+
+    /// <summary>Metal traces are drawn markedly thicker than optical waveguides so they read as
+    /// physical metal strips on the canvas, not thin light paths (#682 field feedback).</summary>
+    private const double ElectricalTraceThickness = 5;
+
+    /// <summary>True when both endpoints are electrical pins — i.e. this is a metal trace,
+    /// not an optical waveguide (matches the export classification in the exporters).</summary>
+    private static bool IsElectricalTrace(WaveguideConnectionViewModel conn) =>
+        PinKindHelper.IsElectrical(conn.Connection.StartPin)
+        && PinKindHelper.IsElectrical(conn.Connection.EndPin);
+
     private static Pen CreateWaveguidePen(WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
     {
         if (conn.IsSelected)
             return new Pen(Brushes.Yellow, 3);
+
+        // Electrical connections are metal traces: a thick copper/gold strip, distinct from
+        // optical waveguides. They carry no optical power flow, so this takes precedence over the
+        // power-flow styling below.
+        if (IsElectricalTrace(conn))
+            return new Pen(new SolidColorBrush(ElectricalTraceColor), ElectricalTraceThickness)
+            {
+                LineCap = PenLineCap.Round,
+                LineJoin = PenLineJoin.Round,
+            };
 
         if (vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null)
         {

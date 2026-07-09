@@ -22,6 +22,13 @@ namespace CAP_Core.Components.Core
         /// </summary>
         public Pin LogicalPin { get; set; }
 
+        /// The signal domain of this pin, derived from the linked logical pin.
+        /// Pins without a logical pin are treated as optical (the historic default).
+        /// Because <see cref="LogicalPin"/> is re-linked after cloning, clones
+        /// automatically preserve the kind.
+        /// </summary>
+        public MatterType MatterType => LogicalPin?.MatterType ?? MatterType.Light;
+
         /// <summary>
         /// Polarization of this physical port, derived from the linked logical
         /// pin. Physical pins without a logical pin default to the

@@ -159,6 +159,7 @@ public static class GroupTemplateSerializer
             AngleDegrees = p.AngleDegrees,
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
             LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
+            MatterType = p.MatterType,
             Polarization = p.LogicalPin?.Polarization.ToString()
         }).ToList();
 
@@ -193,6 +194,7 @@ public static class GroupTemplateSerializer
             NazcaFunctionName = comp.NazcaFunctionName,
             NazcaFunctionParameters = comp.NazcaFunctionParameters,
             NazcaModuleName = comp.NazcaModuleName,
+            GdsFactoryFunction = comp.GdsFactoryFunction,
             TypeNumber = comp.TypeNumber,
             PhysicalX = comp.PhysicalX,
             PhysicalY = comp.PhysicalY,
@@ -217,7 +219,7 @@ public static class GroupTemplateSerializer
             if (p.LogicalPinIdInFlow != Guid.Empty)
             {
                 PolarizationRules.TryParse(p.Polarization, out var polarization);
-                logicalPin = new Pin(p.Name, 0, MatterType.Light, RectSide.Left,
+                logicalPin = new Pin(p.Name, 0, p.MatterType, RectSide.Left,
                     p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow)
                 {
                     Polarization = polarization
@@ -262,6 +264,7 @@ public static class GroupTemplateSerializer
             WidthMicrometers = dto.WidthMicrometers,
             HeightMicrometers = dto.HeightMicrometers,
             NazcaModuleName = dto.NazcaModuleName,
+            GdsFactoryFunction = dto.GdsFactoryFunction,
             HumanReadableName = dto.HumanReadableName
         };
     }
@@ -459,6 +462,13 @@ public class ChildComponentDto
     public string? NazcaFunctionName { get; set; }
     public string? NazcaFunctionParameters { get; set; }
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend components (e.g. "cspdk.sin300.mmi1x2").
+    /// Persisted so a saved group template keeps its backend across reloads (#570/#661 review).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
     public int TypeNumber { get; set; }
     public double PhysicalX { get; set; }
     public double PhysicalY { get; set; }
@@ -487,6 +497,14 @@ public class PinDto
     public double AngleDegrees { get; set; }
     public Guid LogicalPinIdInFlow { get; set; }
     public Guid LogicalPinIdOutFlow { get; set; }
+
+    /// <summary>
+    /// Signal domain of the pin (optical vs. electrical). Persisted so a saved group template
+    /// keeps its electrical pins electrical on reload — without it every pin reverted to optical
+    /// and cross-kind connection guards were defeated (#519). Defaults to Light for older
+    /// templates that predate the field.
+    /// </summary>
+    public MatterType MatterType { get; set; } = MatterType.Light;
 
     /// <summary>
     /// Polarization kind of the logical pin ("TE", "TM", "Both").

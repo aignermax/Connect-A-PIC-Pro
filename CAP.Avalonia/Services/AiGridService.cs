@@ -5,6 +5,7 @@ using CAP.Avalonia.Selection;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Process;
 
 namespace CAP.Avalonia.Services;
 
@@ -17,6 +18,28 @@ public class AiGridService : IAiGridService
     private readonly DesignCanvasViewModel _canvas;
     private readonly LeftPanelViewModel _leftPanel;
     private readonly SimulationService _simulationService;
+
+    /// <summary>
+    /// Returns the design's active process. Wired by <c>MainViewModel</c> alongside the
+    /// identical wires on <c>CanvasInteractionViewModel</c> — the AI placement path must
+    /// obey the same single-process enforcement as manual placement (issue #570).
+    /// </summary>
+    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
+
+    /// <summary>Names of loaded process-agnostic tool PDKs (see CanvasInteractionViewModel).</summary>
+    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
+
+    /// <summary>
+    /// Resolves a placed core component's PDK source from the loaded library
+    /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
+    /// path checks the group's children instead of the group's null source (#653).
+    /// </summary>
+    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+
+    private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
+        SingleProcessPolicy.CheckPlacement(
+            GetActiveProcess?.Invoke(), pdkSource,
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -92,6 +115,12 @@ public class AiGridService : IAiGridService
             var available = GetAvailableComponentTypes().Take(15).ToList();
             return $"Component type '{componentType}' not found. Available types include: {string.Join(", ", available)}";
         }
+
+        // Single-process enforcement (issue #570): the AI path must not bypass the
+        // same gate manual placement goes through.
+        var (isAllowed, blockReason) = CheckProcess(template.PdkSource);
+        if (!isAllowed)
+            return blockReason ?? $"Cannot place '{componentType}' — it belongs to another process.";
 
         // Center the component on the requested position
         var centeredX = x - template.WidthMicrometers / 2;
@@ -180,7 +209,9 @@ public class AiGridService : IAiGridService
 
     /// <inheritdoc/>
     public IReadOnlyList<string> GetAvailableComponentTypes() =>
-        _leftPanel.AllTemplates.Select(t => t.Name).Distinct().ToList();
+        _leftPanel.AllTemplates
+            .Where(t => CheckProcess(t.PdkSource).IsAllowed)
+            .Select(t => t.Name).Distinct().ToList();
 
     /// <inheritdoc/>
     public string CreateGroup(IReadOnlyList<string> componentIds, string? groupName = null)
@@ -293,8 +324,18 @@ public class AiGridService : IAiGridService
         if (sourceVm == null)
             return Task.FromResult($"Component '{sourceId}' not found.");
 
-        var tempClipboard = new ComponentClipboard();
+        var tempClipboard = new ComponentClipboard { PdkSourceResolver = ResolveComponentPdkSource };
         tempClipboard.Copy(new[] { sourceVm }, _canvas.Connections);
+
+        // Single-process enforcement (issues #570/#653) — mirrors the paste gate;
+        // PeekPdkSources expands groups to their resolved children.
+        var copyBlockReason = tempClipboard.PeekPdkSources()
+            .Select(pdk => CheckProcess(pdk))
+            .Where(check => !check.IsAllowed)
+            .Select(check => check.BlockReason)
+            .FirstOrDefault();
+        if (copyBlockReason != null)
+            return Task.FromResult(copyBlockReason);
 
         var result = tempClipboard.Paste(_canvas, x, y);
         if (result == null || result.Components.Count == 0)

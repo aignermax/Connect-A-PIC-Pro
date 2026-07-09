@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CAP_Core.LightCalculation.TimeDomainSimulation.CompactModels;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP_DataAccess.Components.ComponentDraftMapper
@@ -102,7 +103,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             var errors = new List<string>();
             foreach (var comp in pdk.Components)
             {
-                ValidateComponent(comp, pdk.Name, errors, requireNazcaOffset);
+                ValidateComponent(comp, pdk.Name, errors, requireNazcaOffset, pdk.IsGdsFactoryBackend);
             }
 
             if (errors.Count > 0)
@@ -111,7 +112,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             }
         }
 
-        private static void ValidateComponent(PdkComponentDraft comp, string pdkName, List<string> errors, bool requireNazcaOffset)
+        private static void ValidateComponent(PdkComponentDraft comp, string pdkName, List<string> errors, bool requireNazcaOffset, bool pdkIsGdsFactory)
         {
             var compLabel = !string.IsNullOrWhiteSpace(comp.Name) ? comp.Name : "(unnamed)";
 
@@ -119,6 +120,21 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             // are not exported to GDS, so the GDS-only validations below do not
             // apply to them. Detected via the sentinel nazcaFunction value.
             bool isAnalysisTool = comp.NazcaFunction == "__analyzer__";
+
+            // gdsfactory-native components export via their gdsFactoryFunction (not Nazca),
+            // so the Nazca-only nazcaOriginOffset requirement does not apply to them (#570).
+            // Exemption is per-component (not whole-PDK): a Nazca component mixed into a
+            // gdsfactory PDK still needs its offset.
+            bool isGdsFactoryComponent = !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction);
+
+            // Every non-analysis component must be exportable by *some* backend: a
+            // gdsfactory PDK component with neither a gdsFactoryFunction nor a nazcaFunction
+            // would silently export as an empty/misplaced cell.
+            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent
+                && string.IsNullOrWhiteSpace(comp.NazcaFunction))
+            {
+                errors.Add($"[{pdkName}/{compLabel}] gdsfactory-backend component must declare a gdsFactoryFunction (or a nazcaFunction)");
+            }
 
             if (string.IsNullOrWhiteSpace(comp.Name))
             {
@@ -144,8 +160,9 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             // fallback allowed. Without it, GDS export produces misaligned
             // waveguides. The Offset Editor bypasses this check (it exists
             // precisely to fix PDKs in this state). Analysis tools are also
-            // exempt because they are never exported.
-            if (requireNazcaOffset && !isAnalysisTool)
+            // exempt because they are never exported; gdsfactory-native components are
+            // exempt because they export via gdsfactory, not Nazca (#570).
+            if (requireNazcaOffset && !isAnalysisTool && !isGdsFactoryComponent)
             {
                 if (comp.NazcaOriginOffsetX == null)
                 {
@@ -166,6 +183,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                         errors.Add($"[{pdkName}/{compLabel}] Pin must have a name");
                     }
 
+                    if (!CAP_Core.Components.PinKinds.PinKindHelper.TryParse(pin.PinKind, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid pinKind '{pin.PinKind}' (expected 'Optical' or 'Electrical')");
+                    }
+
                     const double tolerance = 1.0;
                     if (pin.OffsetXMicrometers < -tolerance || pin.OffsetXMicrometers > comp.WidthMicrometers + tolerance)
                     {
@@ -183,6 +205,18 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                         errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid polarization '{pin.Polarization}' (expected TE, TM or Both)");
                     }
                 }
+            }
+
+            // Active components (issue #529): the compactModel name must
+            // resolve in the registry. Failing loudly here prevents an
+            // unknown/misspelled model from silently degrading an active
+            // component to passive S-matrix behaviour.
+            if (!string.IsNullOrWhiteSpace(comp.CompactModel) &&
+                !CompactModelRegistry.IsRegistered(comp.CompactModel))
+            {
+                errors.Add(
+                    $"[{pdkName}/{compLabel}] Unknown compactModel '{comp.CompactModel}'. " +
+                    $"Known models: {string.Join(", ", CompactModelRegistry.RegisteredNames)}");
             }
 
             // Validate parametric S-Matrix if present. Pass the component's
