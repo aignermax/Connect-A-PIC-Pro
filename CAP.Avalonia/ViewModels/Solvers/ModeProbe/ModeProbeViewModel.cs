@@ -121,6 +121,10 @@ public partial class ModeProbeViewModel : ObservableObject
     /// </summary>
     public void Open(ProbeTarget target, double panelX, double panelY)
     {
+        // Cancel any in-flight solve from a previous probe — otherwise its continuation would
+        // later overwrite this target's status (e.g. a stale "Solved…" over the interference
+        // notice) (#691 review).
+        _cts?.Cancel();
         _target = target;
         PanelX = panelX;
         PanelY = panelY;

@@ -137,9 +137,12 @@ public partial class ModeProbeViewModel
             using var stream = new MemoryStream(Convert.FromBase64String(base64Png));
             return new global::Avalonia.Media.Imaging.Bitmap(stream);
         }
-        catch (FormatException)
+        catch (Exception)
         {
-            return null; // malformed image data — show numbers without the slice picture
+            // Malformed image data — bad base64 (FormatException) OR valid base64 that isn't a
+            // decodable PNG (Avalonia/Skia throws its own type). Either way: show the numbers
+            // without the slice picture instead of faulting the solve (#691 review).
+            return null;
         }
     }
 }
