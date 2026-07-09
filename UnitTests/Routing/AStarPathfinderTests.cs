@@ -249,10 +249,14 @@ public class GridDirectionTests
     [InlineData(270, GridDirection.South)]
     [InlineData(-90, GridDirection.South)]
     [InlineData(360, GridDirection.East)]
-    [InlineData(44, GridDirection.East)] // Just under 45, rounds to East
-    [InlineData(46, GridDirection.North)] // Just over 45, rounds to North
-    [InlineData(134, GridDirection.North)] // Just under 135, rounds to North
-    [InlineData(136, GridDirection.West)] // Just over 135, rounds to West
+    [InlineData(45, GridDirection.NorthEast)]
+    [InlineData(135, GridDirection.NorthWest)]
+    [InlineData(225, GridDirection.SouthWest)]
+    [InlineData(315, GridDirection.SouthEast)]
+    [InlineData(20, GridDirection.East)] // Just under 22.5, rounds to East
+    [InlineData(25, GridDirection.NorthEast)] // Just over 22.5, rounds to NorthEast
+    [InlineData(110, GridDirection.North)] // Just under 112.5, rounds to North
+    [InlineData(115, GridDirection.NorthWest)] // Just over 112.5, rounds to NorthWest
     public void FromAngle_ReturnsCorrectDirection(double angle, GridDirection expected)
     {
         var result = GridDirectionExtensions.FromAngle(angle);
@@ -264,6 +268,10 @@ public class GridDirectionTests
     [InlineData(GridDirection.North, 0, 1)]
     [InlineData(GridDirection.West, -1, 0)]
     [InlineData(GridDirection.South, 0, -1)]
+    [InlineData(GridDirection.NorthEast, 1, 1)]
+    [InlineData(GridDirection.NorthWest, -1, 1)]
+    [InlineData(GridDirection.SouthWest, -1, -1)]
+    [InlineData(GridDirection.SouthEast, 1, -1)]
     public void GetDelta_ReturnsCorrectDelta(GridDirection dir, int expectedDx, int expectedDy)
     {
         var (dx, dy) = dir.GetDelta();
@@ -276,6 +284,10 @@ public class GridDirectionTests
     [InlineData(GridDirection.East, GridDirection.South, -90)]
     [InlineData(GridDirection.East, GridDirection.West, 180)]
     [InlineData(GridDirection.North, GridDirection.East, -90)]
+    [InlineData(GridDirection.East, GridDirection.NorthEast, 45)]
+    [InlineData(GridDirection.East, GridDirection.SouthEast, -45)]
+    [InlineData(GridDirection.NorthEast, GridDirection.NorthWest, 90)]
+    [InlineData(GridDirection.SouthEast, GridDirection.East, 45)]
     public void GetTurnAngle_CalculatesCorrectly(GridDirection from, GridDirection to, double expected)
     {
         var result = GridDirectionExtensions.GetTurnAngle(from, to);
@@ -289,6 +301,10 @@ public class GridDirectionTests
         GridDirection.West.GetOpposite().ShouldBe(GridDirection.East);
         GridDirection.North.GetOpposite().ShouldBe(GridDirection.South);
         GridDirection.South.GetOpposite().ShouldBe(GridDirection.North);
+        GridDirection.NorthEast.GetOpposite().ShouldBe(GridDirection.SouthWest);
+        GridDirection.NorthWest.GetOpposite().ShouldBe(GridDirection.SouthEast);
+        GridDirection.SouthWest.GetOpposite().ShouldBe(GridDirection.NorthEast);
+        GridDirection.SouthEast.GetOpposite().ShouldBe(GridDirection.NorthWest);
     }
 }
 

@@ -45,9 +45,7 @@ internal static class TransientCircuitFactory
     {
         foreach (var compVm in canvas.Components)
         {
-            if (compVm.TemplateName == null) continue;
-            if (!compVm.TemplateName.Contains("Coupler", StringComparison.OrdinalIgnoreCase)) continue;
-            if (compVm.TemplateName.Contains("Directional", StringComparison.OrdinalIgnoreCase)) continue;
+            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
 
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;

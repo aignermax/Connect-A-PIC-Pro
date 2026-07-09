@@ -50,6 +50,7 @@ public partial class MainWindow : Window
                 if (onaEditorProvider != null)
                     onaEditorProvider.OpenSweepAsync = analyzer => OpenOnaAnalyzerWindow(analyzer, vm);
                 vm.RightPanel.RoutingDiagnostics.FileDialogService = vm.FileDialogService;
+                vm.RightPanel.Netlist.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Transient.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Eye.FileDialogService = vm.FileDialogService;
                 ExportDialogWiring.Wire(vm, this, vm.ErrorConsole);
@@ -142,6 +143,16 @@ public partial class MainWindow : Window
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
+                {
+                    var clipboard = Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                };
+
+                // Wire up clipboard for the Netlist panel (#687)
+                vm.RightPanel.Netlist.CopyToClipboard = async (text) =>
                 {
                     var clipboard = Clipboard;
                     if (clipboard != null)
@@ -459,6 +470,18 @@ public partial class MainWindow : Window
         var vm = App.Services.GetService(typeof(ModeSolverViewModel)) as ModeSolverViewModel;
         if (vm == null) return;
         var dialog = new ModeSolverDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
         dialog.Show(this);
     }
 

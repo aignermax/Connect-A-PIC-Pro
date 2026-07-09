@@ -67,6 +67,22 @@ public class UpdaterScriptsTests
     }
 
     [Fact]
+    public void BuildLinux_RelaunchGuard_ProbesTheSpawnedPidBeforeDeletingTheBackup()
+    {
+        var target = new InstallLocation("/opt/lunima", "/opt/lunima/Lunima", 55);
+
+        var script = UpdaterScripts.BuildLinux(target, "/tmp/lunima.tar.gz");
+
+        // A backgrounded subshell always exits 0, so `( … & ) || rollback` could never
+        // fire — the guard must probe the spawned PID instead, and only then delete
+        // the backup (a non-starting binary rolls back to the known-good files).
+        script.ShouldContain("NEW_PID=$!");
+        script.ShouldContain("if ! kill -0 \"$NEW_PID\" 2>/dev/null; then");
+        script.ShouldContain("wait \"$NEW_PID\" || rollback \"relaunch failed\"");
+        script.ShouldNotContain("( \"$TARGET/$EXE_NAME\" >/dev/null 2>&1 & ) ||");
+    }
+
+    [Fact]
     public void BuildWindows_WaitsForExitRunsMsiexecAndRelaunches()
     {
         var target = new InstallLocation(

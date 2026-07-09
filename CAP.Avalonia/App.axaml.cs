@@ -31,8 +31,10 @@ public partial class App : Application
         services.AddPythonEnvFeature();
         services.AddCoreServices();
         services.AddCanvasAndPanels();
+        services.AddCrossingInsertionFeature();
         services.AddSettingsFeature();
         services.AddPdkOffsetFeature();
+        services.AddPdkResolutionFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
