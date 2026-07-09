@@ -64,6 +64,24 @@
             </Grid>
         </StackPanel>
 
+        <!-- Linux: engine running but socket access denied — group / re-login guidance -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxPermission}">
+            <TextBlock Text="Docker is running, but your user may not access it yet. Make sure your user is in the 'docker' group:"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxPermissionCommandText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="Copy" VerticalAlignment="Top"
+                        Command="{Binding CopyPermissionCommandCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+            <TextBlock Text="Group membership only takes effect after you log out and back in (a terminal 'newgrp docker' works for that shell only). Then check again."
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
         <!-- Windows / macOS: engine stopped — start hint -->
         <StackPanel Spacing="6" IsVisible="{Binding ShowDesktopStart}">
             <TextBlock Text="Docker is installed but the engine isn't running. Start Docker Desktop and wait until it reports 'Engine running', then check again."

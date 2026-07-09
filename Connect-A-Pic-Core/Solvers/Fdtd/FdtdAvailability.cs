@@ -15,6 +15,13 @@ public enum FdtdUnavailableReason
 
     /// <summary>The backend is installed but its engine/daemon is not running.</summary>
     EngineNotRunning,
+
+    /// <summary>
+    /// The engine is running but the current user may not access it (e.g. Linux:
+    /// not in the docker group yet — group membership only applies after
+    /// logging out and back in). "Start the engine" would be wrong guidance.
+    /// </summary>
+    PermissionDenied,
 }
 
 /// <summary>

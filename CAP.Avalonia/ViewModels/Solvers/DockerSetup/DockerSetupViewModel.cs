@@ -24,6 +24,9 @@ public partial class DockerSetupViewModel : ObservableObject
     /// <summary>Copyable Linux command to start a stopped Docker engine.</summary>
     public const string LinuxStartCommand = "sudo systemctl start docker";
 
+    /// <summary>Copyable Linux command to grant the current user Docker access.</summary>
+    public const string LinuxPermissionCommand = "sudo usermod -aG docker $USER";
+
     private readonly Func<CancellationToken, Task<FdtdAvailability>> _checkAvailability;
     private readonly IUrlLauncher _urlLauncher;
 
@@ -58,6 +61,11 @@ public partial class DockerSetupViewModel : ObservableObject
     [ObservableProperty]
     private bool _isEngineStopped;
 
+    /// <summary>True when the engine runs but the user lacks Docker socket access
+    /// (Linux: docker-group membership pending until re-login).</summary>
+    [ObservableProperty]
+    private bool _isPermissionDenied;
+
     /// <summary>One-shot feedback after a copy action ("Copied to clipboard.").</summary>
     [ObservableProperty]
     private string _copyFeedback = string.Empty;
@@ -74,11 +82,17 @@ public partial class DockerSetupViewModel : ObservableObject
     /// <summary>Windows/macOS + engine stopped: show the "Start Docker Desktop" hint.</summary>
     public bool ShowDesktopStart => !IsLinux && IsEngineStopped;
 
+    /// <summary>Linux + socket permission denied: show the docker-group / re-login guidance.</summary>
+    public bool ShowLinuxPermission => IsLinux && IsPermissionDenied;
+
     /// <summary>Install commands exposed for AXAML binding.</summary>
     public string LinuxInstallCommandsText => LinuxInstallCommands;
 
     /// <summary>Start command exposed for AXAML binding.</summary>
     public string LinuxStartCommandText => LinuxStartCommand;
+
+    /// <summary>Permission command exposed for AXAML binding.</summary>
+    public string LinuxPermissionCommandText => LinuxPermissionCommand;
 
     /// <summary>Initialises the ViewModel.</summary>
     /// <param name="checkAvailability">Re-probe used by the "Check again" command
@@ -105,6 +119,10 @@ public partial class DockerSetupViewModel : ObservableObject
     /// <summary>Copies the Linux engine-start command to the clipboard.</summary>
     [RelayCommand]
     private Task CopyStartCommand() => CopyAsync(LinuxStartCommand);
+
+    /// <summary>Copies the Linux docker-group command to the clipboard.</summary>
+    [RelayCommand]
+    private Task CopyPermissionCommand() => CopyAsync(LinuxPermissionCommand);
 
     /// <summary>Opens the Docker Desktop download page in the default browser.</summary>
     [RelayCommand]
@@ -153,9 +171,11 @@ public partial class DockerSetupViewModel : ObservableObject
         StatusMessage = availability.Message;
         IsNotInstalled = !availability.IsAvailable
             && availability.Reason == FdtdUnavailableReason.NotInstalled;
+        IsPermissionDenied = !availability.IsAvailable
+            && availability.Reason == FdtdUnavailableReason.PermissionDenied;
         // Treat an unknown reason like a stopped engine: Docker responded enough to
         // be found, so "start it" is the safest actionable hint.
-        IsEngineStopped = !availability.IsAvailable && !IsNotInstalled;
+        IsEngineStopped = !availability.IsAvailable && !IsNotInstalled && !IsPermissionDenied;
     }
 
     partial void OnIsNotInstalledChanged(bool value)
@@ -169,4 +189,7 @@ public partial class DockerSetupViewModel : ObservableObject
         OnPropertyChanged(nameof(ShowLinuxStart));
         OnPropertyChanged(nameof(ShowDesktopStart));
     }
+
+    partial void OnIsPermissionDeniedChanged(bool value)
+        => OnPropertyChanged(nameof(ShowLinuxPermission));
 }

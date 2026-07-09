@@ -87,6 +87,23 @@ public class DockerSetupViewModelTests
     }
 
     [Fact]
+    public void PermissionDenied_ShowsGroupGuidance_NotEngineStart()
+    {
+        // Field test (#649): daemon running, user not yet in the docker group —
+        // "start the engine" was the wrong hint; the dialog must show the
+        // group / re-login guidance instead.
+        var vm = CreateVm(isLinux: true);
+        vm.Initialize(FdtdAvailability.Unavailable(
+            "permission denied", FdtdUnavailableReason.PermissionDenied));
+
+        vm.IsPermissionDenied.ShouldBeTrue();
+        vm.ShowLinuxPermission.ShouldBeTrue();
+        vm.IsEngineStopped.ShouldBeFalse();
+        vm.ShowLinuxStart.ShouldBeFalse();
+        vm.IsNotInstalled.ShouldBeFalse();
+    }
+
+    [Fact]
     public void OpenDownloadPage_InvokesUrlLauncherWithInstallPage()
     {
         var launcher = new Mock<IUrlLauncher>();
