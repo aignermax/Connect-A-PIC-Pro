@@ -9,15 +9,18 @@ namespace CAP_Core.Components.ComponentHelpers;
 public static class LightSourceClassifier
 {
     /// <summary>
-    /// Returns true when the template name denotes a coupler that injects light
-    /// into the circuit (e.g. "Grating Coupler TE 1550", "Edge Coupler").
-    /// Directional couplers are passive splitters and return false.
+    /// Returns true when the template name denotes a fiber-interface coupler
+    /// that injects light into the circuit: a grating or edge coupler in any
+    /// PDK naming variant (e.g. "Grating Coupler TE 1550", "Grating Coupler
+    /// Elliptical", "Edge Coupler"). On-chip splitters whose names also contain
+    /// "Coupler" — directional, adiabatic, MMI, generic "Coupler" — are passive
+    /// components, not sources, and return false.
     /// </summary>
     /// <param name="templateName">The component template name, may be null.</param>
     public static bool IsLightInjectingCoupler(string? templateName)
     {
         if (string.IsNullOrWhiteSpace(templateName)) return false;
-        if (!templateName.Contains("Coupler", StringComparison.OrdinalIgnoreCase)) return false;
-        return !templateName.Contains("Directional", StringComparison.OrdinalIgnoreCase);
+        return templateName.Contains("Grating Coupler", StringComparison.OrdinalIgnoreCase)
+            || templateName.Contains("Edge Coupler", StringComparison.OrdinalIgnoreCase);
     }
 }

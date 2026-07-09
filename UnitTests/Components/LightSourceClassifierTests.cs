@@ -14,22 +14,26 @@ namespace UnitTests.Components;
 public class LightSourceClassifierTests
 {
     [Theory]
-    // Bundled demo PDK
+    // Fiber-interface couplers — the only true light-injection points.
     [InlineData("Grating Coupler", true)]
     [InlineData("Edge Coupler", true)]
-    [InlineData("Directional Coupler", false)]
-    // SiEPIC eBeam PDK
     [InlineData("Grating Coupler TE 1550", true)]
     [InlineData("Grating Coupler TE 1310", true)]
     [InlineData("Grating Coupler TE 895", true)]
-    [InlineData("adiabatic coupler TE1550", true)]
-    [InlineData("Adiabatic Coupler TM 1550", true)]
+    [InlineData("grating coupler te 1550", true)]
+    [InlineData("Grating Coupler Elliptical", true)]
+    [InlineData("Grating Coupler Rectangular", true)]
+    // On-chip splitters that also carry "Coupler" in their name — passive
+    // components, never light sources (misclassified before this fix).
+    [InlineData("Directional Coupler", false)]
     [InlineData("Directional Coupler TE 1550", false)]
     [InlineData("Directional Coupler TE 1550 (Lc=5um)", false)]
     [InlineData("Contra-Directional Coupler", false)]
-    // Cornerstone SiN PDK
-    [InlineData("Grating Coupler Elliptical", true)]
-    [InlineData("Grating Coupler Rectangular", true)]
+    [InlineData("adiabatic coupler TE1550", false)]
+    [InlineData("Adiabatic Coupler TM 1550", false)]
+    [InlineData("2x2 MMI Coupler", false)]
+    [InlineData("Coupler", false)]
+    [InlineData("Coupler Straight", false)]
     // Non-couplers
     [InlineData("Straight Waveguide", false)]
     [InlineData("Phase Shifter", false)]
