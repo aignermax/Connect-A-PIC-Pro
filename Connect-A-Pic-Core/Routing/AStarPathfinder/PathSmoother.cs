@@ -51,12 +51,11 @@ public class PathSmoother
 
             if (i == lastTurnIndex)
             {
-                // Snap the last turning corner onto the pin's entry axis
-                // (only meaningful for cardinal entry directions)
-                if (newAngle == 0 || newAngle == 180)
-                    cornerY = endY;
-                else if (newAngle == 90 || newAngle == 270)
-                    cornerX = endX;
+                // Snap the last turning corner onto the pin's entry axis so the
+                // final approach lies exactly on it. The projection handles
+                // cardinal and diagonal entry directions alike; the A* goal
+                // check tolerates small lateral offsets and relies on this snap.
+                (cornerX, cornerY) = ProjectOntoEntryAxis(cornerX, cornerY, endX, endY, newAngle);
             }
 
             double dx = cornerX - x;

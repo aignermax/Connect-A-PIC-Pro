@@ -59,14 +59,6 @@ public class AStarPathfinder
         var visited = new Dictionary<(int, int, GridDirection, int), AStarNode>();
         var distanceFromStart = new Dictionary<(int, int, GridDirection, int), int>();
 
-        // The straight-run length is part of the search state: a cheap arrival
-        // with a short run must not shadow a costlier arrival with a long run,
-        // because only the latter may be allowed to turn (IsTurnValid).
-        // Runs are capped at the largest value IsTurnValid ever requires.
-        int runCap = _costCalculator.MinStraightRunCells;
-        (int, int, GridDirection, int) StateKey(AStarNode n) =>
-            (n.X, n.Y, n.Direction, Math.Min(n.StraightRunLength, runCap));
-
         // Create start node
         // StraightRunLength = 0 forces the path to go straight first before turning
         // This ensures waveguides exit components properly before bending
@@ -101,7 +93,7 @@ public class AStarPathfinder
 
             // Expand neighbors
             foreach (var neighbor in GetNeighbors(current, endX, endY, endDirection,
-                                                   distanceFromStart, StateKey))
+                                                   distanceFromStart))
             {
                 var key = StateKey(neighbor);
 
@@ -122,11 +114,22 @@ public class AStarPathfinder
     }
 
     /// <summary>
+    /// State identity of a node in the octile search. The straight-run length
+    /// is part of the state: a cheap arrival with a short run must not shadow
+    /// a costlier arrival with a long run, because only the latter may be
+    /// allowed to turn (IsTurnValid). Runs are capped at the largest value
+    /// IsTurnValid ever requires.
+    /// </summary>
+    private (int X, int Y, GridDirection Dir, int Run) StateKey(AStarNode n) =>
+        (n.X, n.Y, n.Direction, Math.Min(n.StraightRunLength, _costCalculator.MinStraightRunCells));
+
+    /// <summary>
     /// Checks if the current node has reached the goal.
-    /// The node must be ON the pin's entry axis (zero perpendicular offset) —
-    /// tolerance applies only along the approach direction. This prevents the
-    /// octile search from landing laterally offset next to the pin, which the
-    /// path smoother could not correct so close to the terminal.
+    /// Small lateral offsets from the pin's entry axis are accepted (within
+    /// GoalTolerance): the path smoother projects the final approach onto the
+    /// entry axis. Requiring an exact on-axis arrival would make pins whose
+    /// entry axis is crossed by another waveguide unreachable, burning the
+    /// whole node budget before falling back to the blocked route.
     /// </summary>
     private bool IsGoalReached(AStarNode node, int endX, int endY, GridDirection endDirection)
     {
@@ -140,9 +143,9 @@ public class AStarPathfinder
 
         var (ux, uy) = endDirection.GetDelta();
 
-        // Perpendicular offset from the entry axis must be exactly zero
+        // Perpendicular offset from the entry axis, within tolerance
         int cross = dx * uy - dy * ux;
-        if (cross != 0)
+        if (Math.Abs(cross) > GoalTolerance)
             return false;
 
         // Goal must lie ahead along the entry direction, within tolerance
@@ -159,11 +162,10 @@ public class AStarPathfinder
     /// </summary>
     private IEnumerable<AStarNode> GetNeighbors(AStarNode current,
                                                   int goalX, int goalY, GridDirection goalDir,
-                                                  Dictionary<(int, int, GridDirection, int), int> distFromStart,
-                                                  Func<AStarNode, (int, int, GridDirection, int)> stateKey)
+                                                  Dictionary<(int, int, GridDirection, int), int> distFromStart)
     {
         // Get distance from start for pin escape enforcement
-        int distanceFromStart = distFromStart.GetValueOrDefault(stateKey(current), 0);
+        int distanceFromStart = distFromStart.GetValueOrDefault(StateKey(current), 0);
 
         foreach (var dir in GridDirectionExtensions.GetAllDirections())
         {
@@ -232,7 +234,7 @@ public class AStarPathfinder
             };
 
             // Track distance from start for this neighbor
-            distFromStart[stateKey(neighbor)] = distanceFromStart + 1;
+            distFromStart[StateKey(neighbor)] = distanceFromStart + 1;
 
             yield return neighbor;
         }

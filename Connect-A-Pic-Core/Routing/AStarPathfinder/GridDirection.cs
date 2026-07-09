@@ -115,17 +115,17 @@ public static class GridDirectionExtensions
         return (GridDirection)(((int)dir + DirectionCount / 2) % DirectionCount);
     }
 
+    private static readonly GridDirection[] AllDirections =
+    {
+        GridDirection.East, GridDirection.NorthEast,
+        GridDirection.North, GridDirection.NorthWest,
+        GridDirection.West, GridDirection.SouthWest,
+        GridDirection.South, GridDirection.SouthEast
+    };
+
     /// <summary>
     /// Returns all 8 directions (cardinals and diagonals).
+    /// The returned array is shared — callers must not mutate it.
     /// </summary>
-    public static GridDirection[] GetAllDirections()
-    {
-        return new[]
-        {
-            GridDirection.East, GridDirection.NorthEast,
-            GridDirection.North, GridDirection.NorthWest,
-            GridDirection.West, GridDirection.SouthWest,
-            GridDirection.South, GridDirection.SouthEast
-        };
-    }
+    public static GridDirection[] GetAllDirections() => AllDirections;
 }
