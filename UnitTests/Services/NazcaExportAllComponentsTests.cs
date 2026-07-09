@@ -21,8 +21,10 @@ public class NazcaExportAllComponentsTests
         // Analysis tools (e.g. ONA Analyzer) are intentionally skipped during
         // GDS / Nazca export — they have no physical counterpart. Filter them
         // out before placing so the per-index assertion below stays in sync.
+        // Also skip gdsfactory-backend components (no Nazca function) — they export via the
+        // gdsfactory path, not Nazca (issue #570).
         var templates = TestPdkLoader.LoadAllTemplates()
-            .Where(t => t.NazcaFunctionName != "__analyzer__")
+            .Where(t => !string.IsNullOrEmpty(t.NazcaFunctionName) && t.NazcaFunctionName != "__analyzer__")
             .ToList();
 
         double xOffset = 0;

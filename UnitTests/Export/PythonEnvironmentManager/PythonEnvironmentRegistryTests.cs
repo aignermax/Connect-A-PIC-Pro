@@ -95,6 +95,25 @@ public class PythonEnvironmentRegistryTests : IDisposable
     }
 
     [Fact]
+    public void SetActiveExternalPath_ClearsManagedActive_AndFiresCallbackWithThatPath()
+    {
+        // Activating a discovered system interpreter (issue #645) must clear any managed
+        // active selection and push the external path through the same callback managed
+        // activation uses — so there is exactly one active interpreter downstream.
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("managed-a"));
+        registry.SetActive("managed-a");
+
+        string? notifiedPath = null;
+        registry.OnActiveEnvironmentChanged = p => notifiedPath = p;
+
+        registry.SetActiveExternalPath(@"/usr/bin/python3.12");
+
+        notifiedPath.ShouldBe(@"/usr/bin/python3.12");
+        registry.GetActive().ShouldBeNull();     // managed active selection cleared
+    }
+
+    [Fact]
     public void Exists_AfterAdd_ReturnsTrue()
     {
         var registry = CreateRegistry();

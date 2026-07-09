@@ -1,4 +1,3 @@
-using System.Collections.Specialized;
 using CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager;
 using CAP_Core.Export;
 using CAP_Core.Export.PythonEnvironmentManager;
@@ -7,9 +6,9 @@ using Shouldly;
 namespace UnitTests.Export.PythonEnvironmentManager;
 
 /// <summary>
-/// Tests for <see cref="PythonEnvironmentManagerViewModel"/> covering the input
-/// validation gates and the SetActive/RefreshList interaction with a ListBox-style
-/// two-way binding (which nulls the selection whenever the collection is cleared).
+/// Tests for <see cref="PythonEnvironmentManagerViewModel"/> covering the input validation
+/// gates and the unified interpreter list (issue #645): activating managed vs system rows,
+/// removing a managed environment, and the create/install-guard behaviour.
 /// </summary>
 public class PythonEnvironmentManagerViewModelTests : IDisposable
 {
@@ -57,33 +56,23 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
     }
 
     [Fact]
-    public void SetActive_BindingClearsSelectionDuringRefresh_ActivatesWithoutThrowing()
+    public void SetActiveInterpreter_ManagedRow_ActivatesThatEnvironment()
     {
-        // Avalonia's ListBox pushes SelectedItem = null into the two-way binding as soon
-        // as RefreshList() clears the collection. Simulate that here: any reset/removal
-        // nulls the selection, exactly like the real panel does.
         var registry = CreateRegistry();
         registry.AddOrUpdate(MakeEnv("env-a"));
         var vm = CreateViewModel(registry);
-        vm.Environments.CollectionChanged += (_, e) =>
-        {
-            if (e.Action is NotifyCollectionChangedAction.Reset or NotifyCollectionChangedAction.Remove)
-                vm.SelectedEnvironment = null;
-        };
-        vm.SelectedEnvironment = vm.Environments.Single();
 
-        Should.NotThrow(() => vm.SetActiveCommand.Execute(null));
+        var managed = vm.Interpreters.Single(i => i.ManagedName == "env-a");
+        vm.SetActiveInterpreterCommand.Execute(managed);
 
         registry.GetActive()?.Name.ShouldBe("env-a");
-        vm.ProgressText.ShouldContain("env-a");
-        // The selection survives the refresh, so the action buttons stay visible
-        // and the active badge is reflected on the selected item.
-        vm.SelectedEnvironment.ShouldNotBeNull();
-        vm.SelectedEnvironment!.IsActive.ShouldBeTrue();
+        // The rebuilt row reflects the active marker.
+        vm.Interpreters.Single(i => i.ManagedName == "env-a").IsActive.ShouldBeTrue();
+        vm.ProgressText.ShouldContain(managed.Path);
     }
 
     [Fact]
-    public async Task Remove_VenvPathOutsideEnvsBaseDir_RefusesToDeleteTheDirectory()
+    public async Task RemoveInterpreter_VenvPathOutsideEnvsBaseDir_RefusesToDeleteTheDirectory()
     {
         // A tampered registry entry (or a legacy entry created before name validation)
         // must never lead to a recursive delete outside the managed envs directory.
@@ -94,9 +83,9 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
             var registry = CreateRegistry();
             registry.AddOrUpdate(new PythonEnvironment { Name = "tampered", VenvPath = outsideDir });
             var vm = CreateViewModel(registry);
-            vm.SelectedEnvironment = vm.Environments.Single();
+            var entry = vm.Interpreters.Single(i => i.ManagedName == "tampered");
 
-            await vm.RemoveCommand.ExecuteAsync(null);
+            await vm.RemoveInterpreterCommand.ExecuteAsync(entry);
 
             Directory.Exists(outsideDir).ShouldBeTrue();     // nothing outside envs/ was deleted
             registry.Exists("tampered").ShouldBeFalse();     // the registry entry is still cleaned up
@@ -138,6 +127,47 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         await vm.StartDefaultNazcaInstallAsync();
 
         registry.GetAll().ShouldBeEmpty();                   // nichts registriert
+    }
+
+    [Fact]
+    public void GdsFactoryVersion_RoundTripsThroughRegistryPersistence()
+    {
+        var registry = CreateRegistry();
+        var env = MakeEnv("gf-env");
+        env.GdsFactoryVersion = "9.34.2";
+        registry.AddOrUpdate(env);
+
+        var reloaded = new PythonEnvironmentRegistry(_tempRegistryFile);
+
+        reloaded.GetAll().Single().GdsFactoryVersion.ShouldBe("9.34.2");
+    }
+
+    [Fact]
+    public void SetActiveInterpreter_SystemRow_ClearsManagedActive_AndPushesPathThroughRegistryCallback()
+    {
+        // Activating a discovered system interpreter in the tab (issue #645) must route the
+        // path through the registry callback — the same channel export/preview listen on —
+        // and clear any managed active selection so exactly one interpreter is active.
+        var registry = CreateRegistry();
+        registry.AddOrUpdate(MakeEnv("managed-a"));
+        registry.SetActive("managed-a");
+
+        string? pushedPath = null;
+        registry.OnActiveEnvironmentChanged = p => pushedPath = p;
+
+        var vm = CreateViewModel(registry);
+        var install = new PythonDiscoveryService.PythonInstallation
+        {
+            Path = @"/usr/bin/python3.12", Source = "System",
+            PythonVersion = "3.12.0", NazcaVersion = "0.6.1",
+        };
+        var systemRow = new InterpreterEntryViewModel(install, isActive: false);
+
+        vm.SetActiveInterpreterCommand.Execute(systemRow);
+
+        pushedPath.ShouldBe(@"/usr/bin/python3.12");
+        registry.GetActive().ShouldBeNull();
+        vm.ProgressText.ShouldContain(@"/usr/bin/python3.12");
     }
 
     private static PythonEnvironment MakeEnv(string name) => new()

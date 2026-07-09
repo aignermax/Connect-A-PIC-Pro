@@ -656,6 +656,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             NazcaOriginOffsetX = source.NazcaOriginOffsetX,
             NazcaOriginOffsetY = source.NazcaOriginOffsetY,
             NazcaModuleName = source.NazcaModuleName,
+            // gdsfactory-backend marker must survive group copy/paste, else the clone
+            // exports as a stub and loses its PDK/process attribution (#570/#661 review).
+            GdsFactoryFunction = source.GdsFactoryFunction,
             HumanReadableName = source.HumanReadableName, // Preserve human-readable name
             IsLocked = false // Don't copy lock state
         };

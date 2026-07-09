@@ -40,7 +40,7 @@ public static class ComponentTemplates
                 270 => RectSide.Down,
                 _ => RectSide.Right
             };
-            logicalPins.Add(new Pin(def.Name, i, MatterType.Light, side));
+            logicalPins.Add(new Pin(def.Name, i, def.Kind, side) { Polarization = def.Polarization });
         }
 
         // Create parts array (simplified: single part)
@@ -118,6 +118,8 @@ public static class ComponentTemplates
         component.NazcaOriginOffsetX = template.NazcaOriginOffsetX;
         component.NazcaOriginOffsetY = template.NazcaOriginOffsetY;
         component.NazcaModuleName = template.NazcaModuleName;
+        component.GdsFactoryFunction = template.GdsFactoryFunction;
+        component.GdsFactoryRoutingCrossSection = template.GdsFactoryRoutingCrossSection;
 
         // Set human-readable display name from the template's display name.
         // This ensures components placed from the library show their PDK display name
@@ -187,6 +189,20 @@ public partial class ComponentTemplate : ObservableObject
     /// Python module name for Nazca import (e.g., "siepic_ebeam_pdk").
     /// </summary>
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend PDK components
+    /// (e.g. "cspdk.sin300.mmi1x2"); null for Nazca components. Flows to the placed
+    /// component so the gdsfactory export can call the real factory (#570).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
+    /// <summary>
+    /// gdsfactory routing cross-section for this PDK (e.g. "xs_nc"); null for Nazca PDKs.
+    /// Flows to the placed component so routed waveguides use a cross-section that exists
+    /// under the activated gdsfactory PDK (#570 field-test fix).
+    /// </summary>
+    public string? GdsFactoryRoutingCrossSection { get; set; }
 }
 
 public class PinDefinition
@@ -196,11 +212,25 @@ public class PinDefinition
     public double OffsetY { get; }
     public double AngleDegrees { get; }
 
-    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees)
+    /// Signal domain of the pin: <see cref="MatterType.Light"/> (optical, default)
+    /// or <see cref="MatterType.Electricity"/> (electrical metal contact).
+    /// </summary>
+    public MatterType Kind { get; }
+
+    /// <summary>
+    /// Polarization mode of this pin. Defaults to the backward-compatible
+    /// <see cref="PolarizationKind.TE"/> for templates that do not declare it.
+    /// </summary>
+    public PolarizationKind Polarization { get; }
+
+    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees,
+        MatterType kind = MatterType.Light, PolarizationKind polarization = PolarizationKind.TE)
     {
         Name = name;
         OffsetX = offsetX;
         OffsetY = offsetY;
         AngleDegrees = angleDegrees;
+        Kind = kind;
+        Polarization = polarization;
     }
 }

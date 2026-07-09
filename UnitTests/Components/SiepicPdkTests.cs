@@ -59,6 +59,28 @@ public class SiepicPdkTests
     }
 
     [Fact]
+    public void LoadSiepicPdk_DcHalfringStraight_UpperRingPortsFaceUp()
+    {
+        // #636: DC Halfring-Straight is a half-ring — the waveguide enters from the top,
+        // arcs down, and exits at the top again. Its two upper ports (the ring-arc ends,
+        // port 2 and port 4 at offsetY≈0) must face up (90°), not left/right; the lower
+        // straight-bus ports (port 1/3) stay horizontal. The arc connects port 2↔port 4,
+        // which is why the S-matrix shows strong transmission between them.
+        var path = GetSiepicPdkPath();
+        if (!File.Exists(path)) return;
+
+        var loader = new PdkLoader();
+        var pdk = loader.LoadFromFile(path);
+
+        var halfring = pdk.Components.First(c => c.NazcaFunction == "ebeam_dc_halfring_straight");
+        halfring.Pins.First(p => p.Name == "port 2").AngleDegrees.ShouldBe(90);
+        halfring.Pins.First(p => p.Name == "port 4").AngleDegrees.ShouldBe(90);
+        // Lower straight-bus ports remain horizontal.
+        halfring.Pins.First(p => p.Name == "port 1").AngleDegrees.ShouldBe(180);
+        halfring.Pins.First(p => p.Name == "port 3").AngleDegrees.ShouldBe(0);
+    }
+
+    [Fact]
     public void LoadSiepicPdk_HasMultiWavelengthData()
     {
         var path = GetSiepicPdkPath();

@@ -18,6 +18,7 @@ using CAP.Avalonia.ViewModels.Export.Formats;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Export;
 using CAP.Avalonia.ViewModels.PdkOffset;
+using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels;
@@ -34,6 +35,42 @@ public partial class MainViewModel : ObservableObject
 
     [ObservableProperty]
     private string _statusText = "Ready";
+
+    /// <summary>
+    /// Human-readable label for the design's active fabrication process (issue #570),
+    /// e.g. "Process: Generic SOI 220 nm" or "Playground — not manufacturable". Kept in
+    /// sync with <see cref="FileOperationsViewModel.ActiveProcess"/> by
+    /// <see cref="RefreshProcessIndicator"/>. Bound by the toolbar indicator chip.
+    /// </summary>
+    [ObservableProperty]
+    private string _activeProcessLabel = "No process selected";
+
+    /// <summary>
+    /// True when the active process is Playground (mixing PDKs allowed, chip not
+    /// manufacturable). Drives the warning styling on the toolbar indicator chip.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isPlayground;
+
+    /// <summary>Active simulation mode; the toolbar selector binds here and Run(L) dispatches on it.</summary>
+    [ObservableProperty]
+    private CAP.Avalonia.ViewModels.Analysis.SimulationMode _simulationMode = CAP.Avalonia.ViewModels.Analysis.SimulationMode.Cw;
+
+    /// <summary>
+    /// Zero-based index view of <see cref="SimulationMode"/> (0 = Cw, 1 = Transient) for the
+    /// toolbar <c>ComboBox</c>, which binds <c>SelectedIndex</c> directly with no converter.
+    /// </summary>
+    public int SimulationModeIndex
+    {
+        get => (int)SimulationMode;
+        set => SimulationMode = (CAP.Avalonia.ViewModels.Analysis.SimulationMode)value;
+    }
+
+    /// <summary>Keeps <see cref="SimulationModeIndex"/> in sync when <see cref="SimulationMode"/> changes.</summary>
+    partial void OnSimulationModeChanged(CAP.Avalonia.ViewModels.Analysis.SimulationMode value)
+    {
+        OnPropertyChanged(nameof(SimulationModeIndex));
+    }
 
     public Commands.CommandManager CommandManager { get; }
     public SimulationService Simulation { get; }
@@ -92,6 +129,12 @@ public partial class MainViewModel : ObservableObject
     /// <summary>PhotonTorch format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
     public PhotonTorchExportFormat PhotonTorchExportFormat { get; private set; } = null!;
 
+    /// <summary>gdsfactory format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
+    public GdsFactoryExportFormat GdsFactoryExportFormat { get; private set; } = null!;
+
+    /// <summary>gdsfactory export options/executor ViewModel (dialog DataContext).</summary>
+    public ViewModels.Export.GdsFactoryExportViewModel GdsFactoryExport { get; private set; } = null!;
+
     /// <summary>Verilog-A format — exposes <c>ShowOptionsDialogAsync</c> for code-behind wiring.</summary>
     public VerilogAExportFormat VerilogAExportFormat { get; private set; } = null!;
 
@@ -103,6 +146,7 @@ public partial class MainViewModel : ObservableObject
             FileOperations.FileDialogService = value;
             FileOperations.PhotonTorchExport.FileDialogService = value;
             FileOperations.VerilogAExport.FileDialogService = value;
+            GdsFactoryExport.FileDialogService = value;
             LeftPanel.FileDialogService = value;
         }
     }
@@ -123,6 +167,13 @@ public partial class MainViewModel : ObservableObject
     /// repaint callback and pass the service into the render context.
     /// </summary>
     public GdsPreviewRenderService GdsPreviewRenderService { get; }
+
+    /// <summary>
+    /// Adaptive crossing-insertion wiring (Issue #553). Held so the binder —
+    /// which attaches the crossing-insertion service to the canvas — lives for
+    /// the application lifetime. Null in tests that bypass DI.
+    /// </summary>
+    public ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? CrossingInsertionBinder { get; }
 
     /// <summary>
     /// Bottom-panel error console service. Exposed so view-layer wiring helpers
@@ -156,12 +207,18 @@ public partial class MainViewModel : ObservableObject
         PdkOffsetEditorViewModel pdkOffsetEditor,
         ViewModels.Export.PhotonTorchExportViewModel photonTorchExport,
         ViewModels.Export.VerilogAExportViewModel verilogAExport,
+        ViewModels.Export.GdsFactoryExportViewModel gdsFactoryExport,
         ViewModels.Canvas.ChipSizeViewModel chipSize,
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
-        Services.IUrlLauncher? urlLauncher = null)
+        Services.IUrlLauncher? urlLauncher = null,
+        Services.IAiGridService? aiGridService = null,
+        ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
+        // Injected for activation: constructing the binder wires the adaptive
+        // crossing-insertion service (Issue #553) into the canvas' connection manager.
+        CrossingInsertionBinder = crossingInsertionBinder;
         Simulation = simulationService;
         CommandManager = commandManager;
         _canvas = canvas;
@@ -185,9 +242,23 @@ public partial class MainViewModel : ObservableObject
         // Build the unified Export menu (add new IExportFormat here for new formats)
         PhotonTorchExportFormat = new PhotonTorchExportFormat();
         VerilogAExportFormat = new VerilogAExportFormat(verilogAExport);
+        GdsFactoryExportFormat = new GdsFactoryExportFormat();
+        GdsFactoryExport = gdsFactoryExport;
+        // gdsfactory export honours gdsfactory-backend overrides from the design's store.
+        GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
+        FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
+        // Electrical connections export as metal traces (#682); resolve the metal layer/width from
+        // the design's active process (its member PDKs' metal cross-section), else a safe default.
+        Func<CAP_Core.Export.MetalTraceStyle> resolveMetalStyle = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.MetalTraceStyleResolver.Resolve(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+        GdsFactoryExport.MetalStyleProvider = resolveMetalStyle;
+        FileOperations.MetalStyleProvider = resolveMetalStyle;
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),
+            GdsFactoryExportFormat,
             new SaxExportFormat(FileOperations.ExportSaxCommand),
             PhotonTorchExportFormat,
             VerilogAExportFormat,
@@ -198,6 +269,27 @@ public partial class MainViewModel : ObservableObject
         FileOperations.UpdateStatus = UpdateStatusText;
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
+
+        // Single-process enforcement (issues #570/#653): every placement surface — manual
+        // placement/paste, saved group templates, and the AI assistant — consults the
+        // same active process, the same process-agnostic tool PDKs, and the same
+        // library-based PDK-source resolver (groups/pasted copies carry no source of
+        // their own, so children are resolved against the loaded library).
+        Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
+        Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+        Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
+            ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
+
+        CanvasInteraction.GetActiveProcess = getActiveProcess;
+        CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+        CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
+        _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+        if (aiGridService is Services.AiGridService aiGrid)
+        {
+            aiGrid.GetActiveProcess = getActiveProcess;
+            aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+            aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+        }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
         // page when Nazca is missing); ShowSettingsWindowAsync is wired later by MainWindow.
@@ -388,6 +480,23 @@ public partial class MainViewModel : ObservableObject
         FileOperations.PhotonTorchExport.UpdateStatus = UpdateStatusText;
         FileOperations.RebuildHierarchy = LeftPanel.HierarchyPanel.RebuildTree;
 
+        // Single-process wiring (issue #570): supply the live PDK catalog for the
+        // New-Design picker and legacy-file migration, route migration warnings to
+        // the status bar, and keep the toolbar indicator in sync with the active process.
+        FileOperations.ProcessCatalogProvider = BuildProcessCatalog;
+        FileOperations.ProcessAgnosticPdkNamesProvider = () => LeftPanel.GetProcessAgnosticPdkNames();
+        // Migration/revalidation warnings must survive the next status update — the
+        // status bar is overwritten by the load-complete message an instant later.
+        FileOperations.OnProcessMigrationWarning = warning =>
+        {
+            UpdateStatusText(warning);
+            ErrorConsole.LogWarning(warning);
+        };
+        FileOperations.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
+        };
+
         // Export validation must run against the SAME per-instance Nazca overrides the
         // production export uses; FileOperations owns the live store (issue #565 F1).
         RightPanel.ExportValidation.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
@@ -412,6 +521,21 @@ public partial class MainViewModel : ObservableObject
         {
             _ = gdsExport.CheckEnvironmentAsync();
         }
+    }
+
+    /// <summary>
+    /// Updates <see cref="ActiveProcessLabel"/> and <see cref="IsPlayground"/> from
+    /// <see cref="FileOperationsViewModel.ActiveProcess"/> (issue #570). Invoked whenever
+    /// the active process changes (New-Design selection, load, or migration).
+    /// </summary>
+    private void RefreshProcessIndicator()
+    {
+        var p = FileOperations.ActiveProcess;
+        IsPlayground = p?.IsPlayground == true;
+        ActiveProcessLabel = p == null ? "No process selected"
+            : p.IsPlayground ? "Playground — not manufacturable"
+            : $"Process: {p.DisplayName}";
+        LeftPanel.ApplyActiveProcess(p);
     }
 
     // Canvas interaction delegates
@@ -476,8 +600,71 @@ public partial class MainViewModel : ObservableObject
     [RelayCommand]
     private async Task LoadDesign() => await FileOperations.LoadDesignCommand.ExecuteAsync(null);
 
+    /// <summary>
+    /// Starts a new design: first clears the canvas via
+    /// <see cref="FileOperationsViewModel.NewProjectCommand"/> — which prompts to save
+    /// unsaved changes and silently no-ops if the user cancels that prompt — and only
+    /// once the canvas is confirmed empty does it ask which fabrication process to lock
+    /// the fresh design to (or Playground), issue #570. This ordering is required so a
+    /// picked process is never applied to a design that failed to clear (the exact
+    /// data-integrity bug the process lock exists to prevent). Cancelling the process
+    /// picker after a successful clear simply leaves the new, empty design with no
+    /// process set. When no picker is wired (headless/test contexts), the canvas is
+    /// cleared and no process is set.
+    /// </summary>
     [RelayCommand]
-    private async Task NewProject() => await FileOperations.NewProjectCommand.ExecuteAsync(null);
+    private async Task NewProject()
+    {
+        // TryNewProjectAsync reports cancellation explicitly. An empty canvas is NOT a
+        // usable success signal: the canvas can already be empty while the user cancels
+        // the unsaved-changes prompt, and showing the picker then would overwrite the
+        // process of a design the user explicitly chose to keep (issue #570).
+        var created = await FileOperations.TryNewProjectAsync();
+        if (!created)
+            return;
+
+        await PickAndApplyProcessAsync();
+    }
+
+    /// <summary>
+    /// Prompts once at startup for the fabrication process (the same picker as New Design),
+    /// unless a design that already carries a process was loaded first. Invoked by the view
+    /// after the window opens (issue #570). Dismissing the picker starts in Playground.
+    /// </summary>
+    public async Task PromptForInitialProcessAsync()
+    {
+        if (FileOperations.ActiveProcess != null)
+            return;   // a design (with its process) is already established
+
+        await PickAndApplyProcessAsync();
+    }
+
+    /// <summary>
+    /// Builds the live process catalog from the loaded PDKs. Single definition shared by
+    /// the New-Design/startup picker and the file-load migration path, so the two can
+    /// never diverge on how the catalog is constructed.
+    /// </summary>
+    private IReadOnlyList<ProcessGroup> BuildProcessCatalog() =>
+        ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries());
+
+    /// <summary>
+    /// Shows the process picker and applies the result to the design. Dismissing the picker
+    /// defaults to Playground (not manufacturable) rather than leaving the process undefined,
+    /// so the design is always in a known state (issue #570). No-op when no picker is wired
+    /// (headless/tests), leaving the process unset.
+    /// </summary>
+    private async Task PickAndApplyProcessAsync()
+    {
+        if (ShowProcessSelectionAsync == null)
+            return;
+
+        var groups = BuildProcessCatalog();
+        var selection = await ShowProcessSelectionAsync(groups);
+        // markDirty: false — picking the baseline process of a fresh, empty design is
+        // not an unsaved change; marking it dirty made every launch (and every File→New)
+        // answer a spurious "Save changes?" prompt for an untouched design.
+        FileOperations.SetActiveProcess(selection ?? ActiveProcessSelection.Playground(), markDirty: false);
+    }
 
     [RelayCommand]
     private async Task ExportNazca() => await FileOperations.ExportNazcaCommand.ExecuteAsync(null);
@@ -511,6 +698,15 @@ public partial class MainViewModel : ObservableObject
     {
         ShowProcessManagerRequested?.Invoke();
     }
+
+    /// <summary>
+    /// Shows the New-Design process-selection dialog (issue #570) and returns the
+    /// user's choice, or null if the user cancelled. Wired by
+    /// <see cref="CAP.Avalonia.Views.MainWindow"/>; left null in headless/test
+    /// contexts, in which case <see cref="NewProject"/> skips the dialog and
+    /// proceeds without locking a process.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>, Task<ActiveProcessSelection?>>? ShowProcessSelectionAsync { get; set; }
 
     [RelayCommand]
     private void OpenPdkHelp()
@@ -584,6 +780,21 @@ public partial class MainViewModel : ObservableObject
     private async Task RunSimulation()
     {
         if (_isSimulating) return;
+
+        if (SimulationMode == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient)
+        {
+            // Clear any stale CW power-flow overlay so it doesn't render on top of
+            // the transient results (matches the CW toggle-off below).
+            if (Canvas.ShowPowerFlow)
+            {
+                Canvas.ShowPowerFlow = false;
+                Canvas.PowerFlowVisualizer.IsEnabled = false;
+            }
+
+            BottomPanel.Analysis.OpenTransient();
+            await BottomPanel.Analysis.Transient.RunTransientCommand.ExecuteAsync(null);
+            return;
+        }
 
         // Toggle off if overlay is already showing
         if (Canvas.ShowPowerFlow)
@@ -731,6 +942,12 @@ public class DesignFileData
     /// Null for files saved before chip-size support was added (defaults to 5000 μm on load).
     /// </summary>
     public double? ChipHeightMicrometers { get; set; }
+
+    /// <summary>
+    /// The fabrication process this design is locked to (issue #570 — one process per chip).
+    /// Null for legacy files saved before single-process support; migrated on load.
+    /// </summary>
+    public ActiveProcessData? ActiveProcess { get; set; }
 }
 
 /// <summary>
