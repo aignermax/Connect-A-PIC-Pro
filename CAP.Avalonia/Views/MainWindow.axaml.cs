@@ -50,6 +50,7 @@ public partial class MainWindow : Window
                 if (onaEditorProvider != null)
                     onaEditorProvider.OpenSweepAsync = analyzer => OpenOnaAnalyzerWindow(analyzer, vm);
                 vm.RightPanel.RoutingDiagnostics.FileDialogService = vm.FileDialogService;
+                vm.RightPanel.Netlist.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Transient.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Eye.FileDialogService = vm.FileDialogService;
                 ExportDialogWiring.Wire(vm, this, vm.ErrorConsole);
@@ -132,6 +133,16 @@ public partial class MainWindow : Window
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
+                {
+                    var clipboard = Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                };
+
+                // Wire up clipboard for the Netlist panel (#687)
+                vm.RightPanel.Netlist.CopyToClipboard = async (text) =>
                 {
                     var clipboard = Clipboard;
                     if (clipboard != null)

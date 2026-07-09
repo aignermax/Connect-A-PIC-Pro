@@ -251,6 +251,8 @@ public partial class MainViewModel : ObservableObject
             new SaxExportFormat(FileOperations.ExportSaxCommand),
             PhotonTorchExportFormat,
             VerilogAExportFormat,
+            // Circuit-topology netlist (gdsfactory YAML, #687) — same save flow as the panel.
+            new NetlistExportFormat(RightPanel.Netlist.SaveYamlCommand),
         });
 
         // Wire up status callbacks
