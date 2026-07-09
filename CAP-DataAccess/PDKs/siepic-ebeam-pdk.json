@@ -10847,8 +10847,9 @@
         {
           "name": "elec",
           "offsetXMicrometers": 50,
-          "offsetYMicrometers": 50,
-          "angleDegrees": 0
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
