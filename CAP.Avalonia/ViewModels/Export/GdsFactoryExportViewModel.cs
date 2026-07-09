@@ -45,6 +45,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// stored overrides); gdsfactory-backend ones are emitted as factories.</summary>
     public Func<IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>>? OverridesProvider { get; set; }
 
+    /// <summary>Supplies the metal trace style for electrical routing (issue #682), resolved
+    /// from the design's active process. Null falls back to <see cref="MetalTraceStyle.Default"/>.</summary>
+    public Func<MetalTraceStyle>? MetalStyleProvider { get; set; }
+
     /// <summary>
     /// Ensures gdsfactory is installed into a managed environment (creating one if needed)
     /// and returns true when it is available afterwards. Wired by the DI layer to the
@@ -147,7 +151,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             // back to ubcpdk/stub (surfaced as a mismatch warning).
             await File.WriteAllTextAsync(filePath,
                 _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                    OverridesProvider?.Invoke()));
+                    OverridesProvider?.Invoke(), MetalStyleProvider?.Invoke()));
 
             StatusText = "Running gdsfactory to generate the GDS...";
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);

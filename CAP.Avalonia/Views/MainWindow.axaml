@@ -231,6 +231,16 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
+                <!-- Fabrication process (layer stack, cross-sections, materials) — top-level
+                     shortcut so it doesn't require scrolling the right panel (#682/#570). -->
+                <Button Command="{Binding OpenProcessManagerCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Fabrication process — layer stack, cross-sections, materials (opens the process manager)">
+                    <TextBlock Text="🧱" FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
+                </Button>
+
+                <Separator Width="1" Background="Gray" Margin="10,5"/>
+
                 <!-- Settings -->
                 <Button Command="{Binding OpenSettingsWindowCommand}"
                         Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Open Settings (grid snap, updates, Python environment, AI key)">
@@ -662,11 +672,7 @@
                                        Margin="2,8,2,0" TextWrapping="Wrap"
                                        ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
 
-                            <!-- Fabrication process (layer stack, cross-sections, materials) — #570 -->
-                            <Button Content="Fabrication Process…" Command="{Binding OpenProcessManagerCommand}"
-                                    HorizontalAlignment="Stretch" Height="24" Margin="2,6,2,0" FontSize="10"
-                                    Background="#3d4d6d"
-                                    ToolTip.Tip="View and adjust the fabrication process; import it from a foundry PDK"/>
+                            <!-- Fabrication process now opens from the top toolbar icon (#570). -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

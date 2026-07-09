@@ -72,6 +72,16 @@ namespace CAP_Core.Components.PinKinds
             => matterType == MatterType.Electricity;
 
         /// <summary>
+        /// True when the pin carries electrical current (a metal contact), not light. Single
+        /// source of the pin-domain check for exporters, which used to re-implement this
+        /// individually (<c>SimpleNazcaExporter</c>, <c>GdsFactoryExporter</c>,
+        /// <c>GdsFactoryStubWriter</c>) and could drift apart (#682/#686 review).
+        /// </summary>
+        /// <param name="pin">The physical pin to check; null is treated as not electrical.</param>
+        public static bool IsElectrical(PhysicalPin? pin)
+            => pin is { MatterType: MatterType.Electricity };
+
+        /// <summary>
         /// User-facing message explaining why two pins of different signal domains cannot be
         /// connected. Single source of the wording, shared by every connect path (both gesture
         /// recognizers and click-to-connect) so the text can't drift between them (#519 review).
