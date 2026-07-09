@@ -140,14 +140,29 @@ public class SettingsRegistryTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void GeneralSettingsPage_StableContract()
+    public void RoutingSettingsPage_StableContract()
     {
-        ISettingsPage page = new GeneralSettingsPage();
+        ISettingsPage page = new RoutingSettingsPage(new DesignCanvasViewModel());
 
-        page.Title.ShouldBe("General");
-        page.Icon.ShouldBe("⚙");
-        page.Category.ShouldBeNull();
-        page.ViewModel.ShouldBeOfType<GeneralSettingsViewModel>();
+        page.Title.ShouldBe("Routing");
+        page.Icon.ShouldBe("⤢");
+        page.Category.ShouldBe("Canvas");
+        page.ViewModel.ShouldBeOfType<RoutingSettingsViewModel>();
+    }
+
+    [Fact]
+    public void RoutingSettingsPage_DiagonalToggle_AffectsCanvasAndRouter()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var page = new RoutingSettingsPage(canvas);
+        var vm = (RoutingSettingsViewModel)page.ViewModel;
+
+        canvas.UseDiagonalRouting.ShouldBeFalse("diagonal routing is opt-in");
+        canvas.Router.UseDiagonalRouting.ShouldBeFalse();
+
+        vm.Canvas.UseDiagonalRouting = true;
+
+        canvas.Router.UseDiagonalRouting.ShouldBeTrue();
     }
 
     [Fact]

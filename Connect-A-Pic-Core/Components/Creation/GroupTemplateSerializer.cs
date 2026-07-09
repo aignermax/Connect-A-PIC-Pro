@@ -159,7 +159,8 @@ public static class GroupTemplateSerializer
             AngleDegrees = p.AngleDegrees,
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
             LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
-            MatterType = p.MatterType
+            MatterType = p.MatterType,
+            Polarization = p.LogicalPin?.Polarization.ToString()
         }).ToList();
 
         // Serialize S-Matrices so child components keep their simulation data after reload.
@@ -217,8 +218,12 @@ public static class GroupTemplateSerializer
             Pin? logicalPin = null;
             if (p.LogicalPinIdInFlow != Guid.Empty)
             {
+                PolarizationRules.TryParse(p.Polarization, out var polarization);
                 logicalPin = new Pin(p.Name, 0, p.MatterType, RectSide.Left,
-                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow);
+                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow)
+                {
+                    Polarization = polarization
+                };
             }
 
             return new PhysicalPin
@@ -500,6 +505,12 @@ public class PinDto
     /// templates that predate the field.
     /// </summary>
     public MatterType MatterType { get; set; } = MatterType.Light;
+
+    /// <summary>
+    /// Polarization kind of the logical pin ("TE", "TM", "Both").
+    /// Null in old prefab files — deserializes to the TE default.
+    /// </summary>
+    public string? Polarization { get; set; }
 }
 
 /// <summary>
