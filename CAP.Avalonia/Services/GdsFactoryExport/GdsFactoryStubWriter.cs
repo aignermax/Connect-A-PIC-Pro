@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.Text;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
@@ -66,7 +67,7 @@ public static class GdsFactoryStubWriter
         {
             // Electrical pins are metal contacts, not optical ports — never declare them on the
             // waveguide layer (issue #682); their wiring is emitted as metal traces instead.
-            if (pin.MatterType == MatterType.Electricity) continue;
+            if (PinKindHelper.IsElectrical(pin)) continue;
 
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
@@ -102,7 +103,7 @@ public static class GdsFactoryStubWriter
         {
             // Electrical pins are metal contacts, not optical ports — never declare them on the
             // waveguide layer (issue #682); their wiring is emitted as metal traces instead.
-            if (pin.MatterType == MatterType.Electricity) continue;
+            if (PinKindHelper.IsElectrical(pin)) continue;
 
             var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - ox).ToString("F2", ci);
             var py = NazcaCoordinateMapper.NormalizeZero(oy - pin.OffsetYMicrometers).ToString("F2", ci);

@@ -21,8 +21,13 @@ public sealed record MetalTraceStyle
     /// <summary>GDS datatype of the metal layer.</summary>
     public int GdsDatatype { get; init; }
 
-    /// <summary>Default metal trace width in µm when the process defines no metal cross-section.</summary>
-    public const double DefaultWidthUm = 2.0;
+    /// <summary>
+    /// Default metal trace width in µm when the process defines no metal cross-section. 10 µm
+    /// keeps a placeholder trace visually distinct from an optical waveguide (field feedback:
+    /// the earlier 2 µm default looked like a waveguide); a real process overrides this via its
+    /// metal cross-section.
+    /// </summary>
+    public const double DefaultWidthUm = 10.0;
 
     /// <summary>
     /// Default metal GDS layer when the process defines none. Chosen distinct from the
@@ -33,7 +38,7 @@ public sealed record MetalTraceStyle
 
     /// <summary>
     /// Fallback style used when the active process declares no metal cross-section:
-    /// a 2 µm trace on layer 11/0. Overridden by a process's metal cross-section.
+    /// a 10 µm trace on layer 11/0. Overridden by a process's metal cross-section.
     /// </summary>
     public static MetalTraceStyle Default { get; } = new()
     {

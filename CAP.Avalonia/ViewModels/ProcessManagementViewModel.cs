@@ -28,6 +28,23 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// <summary>Member PDK drafts of the active process, captured on open, used to persist edits.</summary>
     private IReadOnlyList<PdkDraft> _memberDrafts = new List<PdkDraft>();
 
+    /// <summary>
+    /// Names of the layer/cross-section/material rows that belong to the currently loaded member
+    /// PDK(s), as opposed to rows pulled in later by <see cref="ImportFromPdk"/>'s <see cref="Merge"/>
+    /// from an unrelated reference PDK. <see cref="SaveProcess"/> only ever writes rows in these
+    /// sets, so an ad-hoc reference import can never corrupt the member PDK's own layer stack
+    /// (issue #686 review, Finding 2). Populated by <see cref="Load"/> / <see cref="ShowLockedProcess"/>
+    /// and by the manual Add* commands; a later <see cref="Merge"/> call (the import path) does
+    /// NOT add to these sets.
+    /// </summary>
+    private readonly HashSet<string> _ownLayerNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Cross-section names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
+    private readonly HashSet<string> _ownXsectionNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Material names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
+    private readonly HashSet<string> _ownMaterialNames = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
     public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
         new[] { XsectionKind.Optical, XsectionKind.Metal };
@@ -83,7 +100,27 @@ public partial class ProcessManagementViewModel : ObservableObject
         Replace(Layers, process.Layers);
         Replace(Xsections, process.Xsections);
         Replace(Materials, process.Materials);
+        MarkAllRowsOwned();
         HasProcess = true;
+    }
+
+    /// <summary>
+    /// Snapshots the names currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
+    /// as belonging to the process being edited (issue #686 review, Finding 2) — called right after
+    /// the collections are populated from the process's OWN definition(s), before any later
+    /// <see cref="ImportFromPdk"/> reference import can add unrelated rows.
+    /// </summary>
+    private void MarkAllRowsOwned()
+    {
+        _ownLayerNames.Clear();
+        _ownXsectionNames.Clear();
+        _ownMaterialNames.Clear();
+        foreach (var layer in Layers)
+            if (layer.Name != null) _ownLayerNames.Add(layer.Name);
+        foreach (var xs in Xsections)
+            if (xs.Name != null) _ownXsectionNames.Add(xs.Name);
+        foreach (var mat in Materials)
+            if (mat.Name != null) _ownMaterialNames.Add(mat.Name);
     }
 
     /// <summary>Builds a process definition from the current editable state.</summary>
@@ -175,11 +212,21 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Adds an empty layer row for manual entry.</summary>
     [RelayCommand]
-    private void AddLayer() => Layers.Add(new ProcessLayer { Name = "NEW_LAYER" });
+    private void AddLayer()
+    {
+        var layer = new ProcessLayer { Name = "NEW_LAYER" };
+        Layers.Add(layer);
+        _ownLayerNames.Add(layer.Name);
+    }
 
     /// <summary>Adds an empty cross-section row for manual entry.</summary>
     [RelayCommand]
-    private void AddXsection() => Xsections.Add(new ProcessXsection { Name = "new_xs" });
+    private void AddXsection()
+    {
+        var xsection = new ProcessXsection { Name = "new_xs" };
+        Xsections.Add(xsection);
+        _ownXsectionNames.Add(xsection.Name);
+    }
 
     /// <summary>
     /// Adds a metal cross-section preset for electrical routing (issue #682) plus a matching
@@ -188,17 +235,30 @@ public partial class ProcessManagementViewModel : ObservableObject
     [RelayCommand]
     private void AddMetalXsection()
     {
-        if (Layers.All(l => !l.Name.Contains("METAL", StringComparison.OrdinalIgnoreCase)))
-            Layers.Add(new ProcessLayer { Name = "METAL-1", Layer = 11, Datatype = 0, Description = "Electrical routing metal" });
+        // A legacy/imported row can have a null Name despite the DTO's non-nullable declaration
+        // (e.g. deserialized from JSON that omitted "name") — guard like the resolver does
+        // (issue #686 review, Finding 3) so this command doesn't throw an NRE.
+        if (Layers.All(l => l.Name == null || !l.Name.Contains("METAL", StringComparison.OrdinalIgnoreCase)))
+        {
+            var metalLayer = new ProcessLayer
+            {
+                Name = "METAL-1", Layer = MetalTraceStyle.DefaultGdsLayer, Datatype = 0,
+                Description = "Electrical routing metal",
+            };
+            Layers.Add(metalLayer);
+            _ownLayerNames.Add(metalLayer.Name);
+        }
 
-        Xsections.Add(new ProcessXsection
+        var metalXsection = new ProcessXsection
         {
             Name = "metal",
             Kind = XsectionKind.Metal,
             WidthUm = MetalTraceStyle.DefaultWidthUm,
             Layers = { "METAL-1" },
             Description = "Electrical routing trace",
-        });
+        };
+        Xsections.Add(metalXsection);
+        _ownXsectionNames.Add(metalXsection.Name);
         HasProcess = true;
         StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
     }
@@ -207,7 +267,10 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// Persists the edited process back to its PDK JSON so the export picks up the metal
     /// cross-section (issue #682). Only unambiguous single-member processes are written; the
     /// PDK's fingerprint fields (thickness, materials, angles) are preserved — only the layer
-    /// stack, cross-sections and materials are updated.
+    /// stack, cross-sections and materials are updated, and only the rows that belong to this
+    /// member PDK (<see cref="_ownLayerNames"/> etc.) — an unrelated PDK pulled in via
+    /// <see cref="ImportFromPdk"/> for reference must never be written into this PDK's file
+    /// (issue #686 review, Finding 2).
     /// </summary>
     [RelayCommand]
     private void SaveProcess()
@@ -238,9 +301,9 @@ public partial class ProcessManagementViewModel : ObservableObject
             // user-editable stack/xsections/materials change, and update the in-memory draft so
             // the next export uses the new metal cross-section without a reload.
             var process = draft.Process ?? new ProcessDefinition { Name = ProcessName };
-            process.Layers = Layers.ToList();
-            process.Xsections = Xsections.ToList();
-            process.Materials = Materials.ToList();
+            process.Layers = Layers.Where(l => l.Name != null && _ownLayerNames.Contains(l.Name)).ToList();
+            process.Xsections = Xsections.Where(x => x.Name != null && _ownXsectionNames.Contains(x.Name)).ToList();
+            process.Materials = Materials.Where(m => m.Name != null && _ownMaterialNames.Contains(m.Name)).ToList();
             draft.Process = process;
 
             _pdkSaver.SaveToFile(draft, path);
@@ -254,7 +317,12 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Adds an empty material row for manual entry.</summary>
     [RelayCommand]
-    private void AddMaterial() => Materials.Add(new ProcessMaterial { Name = "NewMaterial" });
+    private void AddMaterial()
+    {
+        var material = new ProcessMaterial { Name = "NewMaterial" };
+        Materials.Add(material);
+        _ownMaterialNames.Add(material.Name);
+    }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)
     {

@@ -61,10 +61,32 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 return MetalTraceStyle.Default;
 
             var definitions = active.MemberPdkNames
-                .Select(name => loadedPdks.FirstOrDefault(
-                    d => string.Equals(d.Name, name, System.StringComparison.OrdinalIgnoreCase))?.Process);
+                .Select(name => FindByName(loadedPdks, name, d => d.Name)?.Process);
 
             return Resolve(definitions);
+        }
+
+        /// <summary>
+        /// Finds the item whose name matches (ordinal, case-insensitive) — the PDK/member-draft
+        /// name lookup this resolver, the Fabrication Process dialog
+        /// (<c>ProcessManagementViewModel.ActiveProcess</c>) and the MainWindow PDK-path wiring
+        /// all need, previously copy-pasted in each (#682/#686 review).
+        /// </summary>
+        /// <param name="items">Candidates to search; null yields no match.</param>
+        /// <param name="name">The name to match.</param>
+        /// <param name="getName">Extracts the comparable name from an item.</param>
+        public static T? FindByName<T>(IEnumerable<T>? items, string name, Func<T, string?> getName)
+            where T : class
+        {
+            if (items == null)
+                return null;
+
+            foreach (var item in items)
+            {
+                if (string.Equals(getName(item), name, System.StringComparison.OrdinalIgnoreCase))
+                    return item;
+            }
+            return null;
         }
 
         private static MetalTraceStyle BuildStyle(ProcessDefinition process, ProcessXsection metal)

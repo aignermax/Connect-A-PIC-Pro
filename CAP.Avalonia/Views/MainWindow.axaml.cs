@@ -8,6 +8,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
@@ -93,8 +94,8 @@ public partial class MainWindow : Window
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
                     // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
                     // persisted, using the same loaded-PDK registry the offset editor writes through.
-                    processVm.PdkFilePathResolver = name => vm.LeftPanel.PdkManager.LoadedPdks
-                        .FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))?.FilePath;
+                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
+                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
                     var processWindow = new ProcessManagementWindow
                     {

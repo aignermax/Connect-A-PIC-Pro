@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using CAP_Core.Components.Process;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -73,6 +74,11 @@ public partial class ProcessManagementViewModel
         foreach (var definition in definitions)
             Merge(definition);
 
+        // Only rows merged from the member PDKs' OWN process definitions above are "owned" by
+        // this process — a later ImportFromPdk (reference import) must not be able to sneak
+        // unrelated rows into SaveProcess's output (issue #686 review, Finding 2).
+        MarkAllRowsOwned();
+
         // Merge() may adopt the PDK-declared process name; the dialog reflects the
         // active selection, so its display name always wins.
         ProcessName = active.DisplayName;
@@ -88,8 +94,7 @@ public partial class ProcessManagementViewModel
     private static IReadOnlyList<PdkDraft> MemberDrafts(
         ActiveProcessSelection active, IReadOnlyList<PdkDraft> loadedPdks) =>
         active.MemberPdkNames
-            .Select(name => loadedPdks.FirstOrDefault(
-                d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase)))
+            .Select(name => MetalTraceStyleResolver.FindByName(loadedPdks, name, d => d.Name))
             .Where(d => d != null)
             .Select(d => d!)
             .ToList();
@@ -117,5 +122,7 @@ public partial class ProcessManagementViewModel
         Layers.Clear();
         Xsections.Clear();
         Materials.Clear();
+        _memberDrafts = new List<PdkDraft>();
+        MarkAllRowsOwned();
     }
 }

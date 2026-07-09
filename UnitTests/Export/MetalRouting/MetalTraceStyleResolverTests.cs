@@ -120,4 +120,33 @@ public class MetalTraceStyleResolverTests
         var playground = ActiveProcessSelection.Playground();
         MetalTraceStyleResolver.Resolve(playground, new List<PdkDraft>()).ShouldBe(MetalTraceStyle.Default);
     }
+
+    /// <summary>
+    /// Finding 7: the by-name PDK/draft lookup was copy-pasted across three call sites
+    /// (this resolver, the Fabrication Process dialog, MainWindow's PDK-path wiring) — now a
+    /// single shared helper all three call.
+    /// </summary>
+    [Fact]
+    public void FindByName_MatchesCaseInsensitively()
+    {
+        var drafts = new[]
+        {
+            new PdkDraft { Name = "FabA" },
+            new PdkDraft { Name = "FabB" },
+        };
+
+        var found = MetalTraceStyleResolver.FindByName(drafts, "fabb", (PdkDraft d) => d.Name);
+
+        found.ShouldNotBeNull();
+        found!.Name.ShouldBe("FabB");
+    }
+
+    [Fact]
+    public void FindByName_NoMatchOrNullItems_ReturnsNull()
+    {
+        var drafts = new[] { new PdkDraft { Name = "FabA" } };
+
+        MetalTraceStyleResolver.FindByName(drafts, "Unknown", (PdkDraft d) => d.Name).ShouldBeNull();
+        MetalTraceStyleResolver.FindByName((List<PdkDraft>?)null, "FabA", (PdkDraft d) => d.Name).ShouldBeNull();
+    }
 }

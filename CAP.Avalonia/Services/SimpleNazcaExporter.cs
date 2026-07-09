@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_Core.Routing;
 using CAP_DataAccess.Persistence.PIR;
@@ -459,12 +460,12 @@ public class SimpleNazcaExporter
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
             // Electrical connections are metal traces, not optical waveguides — emit them on
-            // the process metal layer/width instead of the waveguide layer (issue #682). The
-            // cross-kind connection guard (#519) ensures both pins share a domain, so testing
-            // either pin is enough.
-            var metal = IsElectrical(conn.StartPin) || IsElectrical(conn.EndPin)
-                ? metalStyle
-                : null;
+            // the process metal layer/width instead of the waveguide layer (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed optical+electrical
+            // or all-optical connection stays a waveguide (issue #686 review — the earlier
+            // "either pin" predicate would draw a mixed connection wholly on the metal layer,
+            // silently dropping the optical waveguide).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
 
             // Issue #561: connections touching raw-code–overridden instances export
             // their REAL routed segments like any other connection — the override
@@ -483,27 +484,34 @@ public class SimpleNazcaExporter
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group);
+                AppendGroupFrozenPaths(sb, group, metalStyle);
         }
 
         sb.AppendLine();
     }
 
     /// <summary>
-    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca segments.
+    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca
+    /// segments. A frozen path between two electrical pins is a metal trace, not an optical
+    /// waveguide — the same classification the live connection loop above applies (issue #686
+    /// review: this frozen-group path used to call <see cref="AppendSegmentExport"/> without the
+    /// metal style at all, so a frozen electrical route always rendered as a waveguide).
     /// </summary>
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group)
+    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
-                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin);
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
-                AppendGroupFrozenPaths(sb, nestedGroup);
+                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle);
         }
     }
 
@@ -549,9 +557,13 @@ public class SimpleNazcaExporter
     private static string MetalKwargs(MetalTraceStyle? metal) =>
         metal is null ? string.Empty : $", width={metal.WidthLiteral}, layer={metal.LayerTuple}";
 
-    /// <summary>True when the pin carries electrical current (a metal contact), not light.</summary>
-    private static bool IsElectrical(PhysicalPin? pin) =>
-        pin is { MatterType: MatterType.Electricity };
+    /// <summary>
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review).
+    /// </summary>
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
     /// Formats a path segment (straight or bend) with absolute Nazca positions.

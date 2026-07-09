@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_DataAccess.Persistence.PIR;
 
@@ -46,16 +47,14 @@ public class GdsFactoryExporter
     }
 
     /// <summary>
-    /// The gdsfactory sizing kwargs that place a routed segment on the metal layer:
-    /// <c>width=…, layer=(…, …)</c>. Used for electrical connections in place of the
-    /// optical waveguide cross-section (issue #682).
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review
+    /// — the earlier "either pin" predicate would draw a mixed connection wholly on the metal
+    /// layer, silently dropping the optical waveguide).
     /// </summary>
-    private static string MetalKwarg(MetalTraceStyle metal) =>
-        $"width={metal.WidthLiteral}, layer={metal.LayerTuple}";
-
-    /// <summary>True when the pin carries electrical current (a metal contact), not light.</summary>
-    private static bool IsElectrical(PhysicalPin? pin) =>
-        pin is { MatterType: MatterType.Electricity };
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
     /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
@@ -325,41 +324,50 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
-            // Electrical connections are metal traces, not optical waveguides — size them with
-            // the metal layer/width instead of the waveguide cross-section (issue #682). The
-            // cross-kind guard (#519) keeps both pins in one domain, so either pin suffices.
-            var kwarg = IsElectrical(conn.StartPin) || IsElectrical(conn.EndPin)
-                ? MetalKwarg(metalStyle)
-                : waveguideKwarg;
+            // Electrical connections are metal traces, not optical waveguides — draw them as a
+            // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed or all-optical
+            // connection stays a waveguide (issue #686 review).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
 
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, kwarg);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
             else if (conn.StartPin != null && conn.EndPin != null)
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, kwarg);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle);
         }
         sb.AppendLine();
     }
 
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, string waveguideKwarg)
+    /// <summary>
+    /// Exports frozen waveguide paths from a ComponentGroup (and nested groups). A frozen path
+    /// between two electrical pins is a metal trace, not a waveguide — mirrors the live
+    /// connection loop above (issue #686 review: this frozen-group path used to always emit a
+    /// waveguide regardless of pin kind, the same gap as the Nazca exporter's frozen-group export).
+    /// </summary>
+    private static void AppendGroupFrozenPaths(
+        StringBuilder sb, ComponentGroup group, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
                 GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg);
+                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle);
         }
     }
 
