@@ -21,6 +21,14 @@ public class WaveguideConnectionManager
     public List<WaveguideConnection> Connections { get; } = new();
 
     /// <summary>
+    /// Guards structural mutations of <see cref="Connections"/> that happen on the
+    /// routing thread (crossing insertion / dissolution) against UI-thread consumers
+    /// that enumerate the list (S-matrix building, save, drop). Hold this lock while
+    /// swapping connections structurally or while snapshotting for enumeration.
+    /// </summary>
+    public object SyncRoot { get; } = new();
+
+    /// <summary>
     /// Default propagation loss applied to new connections (dB/cm).
     /// Default: 0.5 dB/cm (high-quality strip waveguide)
     /// </summary>
@@ -121,7 +129,10 @@ public class WaveguideConnectionManager
             PropagationLossDbPerCm = DefaultPropagationLossDbPerCm,
             BendLossDbPer90Deg = DefaultBendLossDbPer90Deg
         };
-        Connections.Add(connection);
+        lock (SyncRoot)
+        {
+            Connections.Add(connection);
+        }
         return connection;
     }
 
@@ -168,9 +179,12 @@ public class WaveguideConnectionManager
             }
         }
 
-        Connections.RemoveAll(c =>
-            c.StartPin.ParentComponent == component ||
-            c.EndPin.ParentComponent == component);
+        lock (SyncRoot)
+        {
+            Connections.RemoveAll(c =>
+                c.StartPin.ParentComponent == component ||
+                c.EndPin.ParentComponent == component);
+        }
     }
 
     public void RemoveConnection(WaveguideConnection connection)
@@ -190,12 +204,15 @@ public class WaveguideConnectionManager
 
         // Remove waveguide obstacle from pathfinding grid
         var router = _router;
-        if (router.PathfindingGrid != null)
+        lock (SyncRoot)
         {
-            router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
-        }
+            if (router.PathfindingGrid != null)
+            {
+                router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            }
 
-        Connections.Remove(connection);
+            Connections.Remove(connection);
+        }
 
         // Recalculate remaining connections - they might find better routes now
         if (Connections.Count > 0)
@@ -207,28 +224,51 @@ public class WaveguideConnectionManager
     /// <summary>
     /// Removes a connection without triggering route recalculation.
     /// Used for async routing: remove connection first, then route asynchronously.
+    /// When the connection participates in an inserted crossing (as a sub-connection
+    /// or as a split original), the crossing is dissolved instead: the crossing
+    /// component and all four sub-connections are removed and the other original is
+    /// restored unsplit — no delete path may leave an orphaned crossing behind.
     /// </summary>
     public void RemoveConnectionDeferred(WaveguideConnection connection)
     {
-        var router = _router;
-        if (router.PathfindingGrid != null)
+        if (CrossingInsertion != null &&
+            CrossingInsertion.TryDissolveForConnection(connection, this, _router))
         {
-            router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            return;
         }
-        Connections.Remove(connection);
+
+        var router = _router;
+        lock (SyncRoot)
+        {
+            if (router.PathfindingGrid != null)
+            {
+                router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            }
+            Connections.Remove(connection);
+        }
     }
 
     public void AddExistingConnection(WaveguideConnection connection)
     {
-        if (!Connections.Contains(connection))
+        lock (SyncRoot)
         {
-            Connections.Add(connection);
+            if (!Connections.Contains(connection))
+            {
+                Connections.Add(connection);
+            }
         }
     }
 
     public void Clear()
     {
-        Connections.Clear();
+        // Drop crossing bookkeeping with the design: stale records must never
+        // resurrect dissolved originals into a fresh/loaded design (File → New,
+        // project load, group-edit canvas swap).
+        CrossingInsertion?.Reset();
+        lock (SyncRoot)
+        {
+            Connections.Clear();
+        }
     }
 
     /// <summary>
@@ -253,6 +293,14 @@ public class WaveguideConnectionManager
         Action? progressCallback = null,
         CancellationToken cancellationToken = default)
     {
+        // Re-evaluate existing crossings first: when a net endpoint moved, the
+        // crossing is dissolved so its originals are routed from scratch below and
+        // the insertion pass re-inserts a crossing only if it is still beneficial.
+        if (CrossingInsertion != null && !_isCrossingPassRunning)
+        {
+            CrossingInsertion.DissolveStaleRecords(this, _router);
+        }
+
         RouteAllConnections(progressCallback, cancellationToken);
         RunCrossingInsertionPass(cancellationToken);
     }
@@ -637,8 +685,16 @@ public class WaveguideConnectionManager
     /// </summary>
     public Dictionary<(Guid PinIdInflow, Guid PinIdOutflow), Complex> GetConnectionTransfers()
     {
+        // Snapshot under the lock: the crossing pass may swap connections
+        // structurally on the routing thread while the S-matrix is being built.
+        List<WaveguideConnection> snapshot;
+        lock (SyncRoot)
+        {
+            snapshot = Connections.ToList();
+        }
+
         var transfers = new Dictionary<(Guid, Guid), Complex>();
-        foreach (var conn in Connections)
+        foreach (var conn in snapshot)
         {
             // Only include connections where both physical pins have linked logical pins
             if (conn.StartPin.LogicalPin == null || conn.EndPin.LogicalPin == null)

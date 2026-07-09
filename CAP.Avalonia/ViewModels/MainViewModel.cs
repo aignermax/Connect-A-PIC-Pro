@@ -1056,6 +1056,14 @@ public class ComponentData
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
     public bool? IsLocked { get; set; }
+
+    /// <summary>
+    /// True only for crossing components the crossing-insertion pass placed
+    /// automatically (#705); null otherwise and in old files. Used after load
+    /// to rebuild the crossings' dissolution records.
+    /// </summary>
+    public bool? IsInsertedCrossing { get; set; }
+
     public string? HumanReadableName { get; set; }
 }
 

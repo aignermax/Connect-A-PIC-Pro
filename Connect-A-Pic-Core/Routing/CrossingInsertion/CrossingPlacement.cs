@@ -67,6 +67,8 @@ public class CrossingPlacement
             OriginalB = candidate.ExistingConnection,
             SubConnectionsA = newIsHorizontal ? subsHorizontal : subsVertical,
             SubConnectionsB = newIsHorizontal ? subsVertical : subsHorizontal,
+            AnchorPositions = CrossingRecord.CaptureAnchors(
+                candidate.NewConnection, candidate.ExistingConnection),
         };
     }
 

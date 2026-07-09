@@ -433,6 +433,7 @@ public partial class FileOperationsViewModel : ObservableObject
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
             IsLocked = c.Component.IsLocked ? true : null,
+            IsInsertedCrossing = c.Component.IsInsertedCrossing ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
     }
@@ -781,6 +782,10 @@ public partial class FileOperationsViewModel : ObservableObject
                     LoadConnectionFromData(connData);
                 }
 
+                // Rebuild dissolution records for loaded auto-inserted crossings (#705)
+                // so they dissolve/re-evaluate exactly like ones inserted this session.
+                RebuildCrossingRecords();
+
                 // Notify all connections about their paths for UI rendering
                 foreach (var conn in _canvas.Connections)
                 {
@@ -1113,6 +1118,11 @@ public partial class FileOperationsViewModel : ObservableObject
         if (compData.IsLocked == true)
             component.IsLocked = true;
 
+        // Restore the auto-inserted-crossing marker so its dissolution record
+        // can be rebuilt once all connections are loaded (#705)
+        if (compData.IsInsertedCrossing == true)
+            component.IsInsertedCrossing = true;
+
         return vm;
     }
 
@@ -1287,6 +1297,23 @@ public partial class FileOperationsViewModel : ObservableObject
             return _canvas.Components[fallbackIndex];
 
         return null;
+    }
+
+    /// <summary>
+    /// Rebuilds crossing dissolution records for auto-inserted crossings restored
+    /// from a saved design (#705). No-op when the crossing feature is disabled;
+    /// re-enabling it later triggers the same rebuild via the canvas binder.
+    /// </summary>
+    private void RebuildCrossingRecords()
+    {
+        var crossing = _canvas.ConnectionManager.CrossingInsertion;
+        if (crossing == null)
+            return;
+
+        CAP_Core.Routing.CrossingInsertion.CrossingRecordRebuilder.Rebuild(
+            crossing,
+            _canvas.ConnectionManager,
+            _canvas.Components.Select(vm => vm.Component));
     }
 
     /// <summary>
