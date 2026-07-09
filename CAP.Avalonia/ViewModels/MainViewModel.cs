@@ -237,6 +237,13 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
+        // Electrical connections export as metal traces (#682); resolve the metal layer/width from
+        // the design's active process (its member PDKs' metal cross-section), else a safe default.
+        Func<CAP_Core.Export.MetalTraceStyle> resolveMetalStyle = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.MetalTraceStyleResolver.Resolve(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+        GdsFactoryExport.MetalStyleProvider = resolveMetalStyle;
+        FileOperations.MetalStyleProvider = resolveMetalStyle;
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
         {
             new NazcaExportFormat(FileOperations.ExportNazcaCommand),

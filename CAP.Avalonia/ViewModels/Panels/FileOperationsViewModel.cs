@@ -155,6 +155,10 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Func<Task>? RequestGdsFactoryExport { get; set; }
 
+    /// <summary>Supplies the metal trace style for electrical routing (issue #682), resolved
+    /// from the design's active process. Null falls back to <see cref="MetalTraceStyle.Default"/>.</summary>
+    public Func<MetalTraceStyle>? MetalStyleProvider { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -1413,7 +1417,8 @@ public partial class FileOperationsViewModel : ObservableObject
             try
             {
                 // Export Python script
-                var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
+                var nazcaCode = _nazcaExporter.Export(
+                    _canvas, overrides: StoredNazcaOverrides, metalStyle: MetalStyleProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
                 // Warn if any instance has a gdsfactory-backend override: the Nazca export

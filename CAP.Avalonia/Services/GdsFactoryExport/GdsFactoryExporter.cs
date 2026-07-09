@@ -21,9 +21,13 @@ public class GdsFactoryExporter
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
     /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
     /// component factories. Null skips override handling.</param>
+    /// <param name="metalStyle">Width and GDS layer for electrical (metal) routing traces
+    /// (issue #682); electrical connections are emitted as metal on this layer instead of as
+    /// optical waveguides. Null falls back to <see cref="MetalTraceStyle.Default"/>.</param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
+        MetalTraceStyle? metalStyle = null)
     {
         var sb = new StringBuilder();
         AppendHeader(sb, canvas, options);
@@ -36,10 +40,22 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas));
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metalStyle ?? MetalTraceStyle.Default);
         AppendFooter(sb);
         return sb.ToString();
     }
+
+    /// <summary>
+    /// The gdsfactory sizing kwargs that place a routed segment on the metal layer:
+    /// <c>width=…, layer=(…, …)</c>. Used for electrical connections in place of the
+    /// optical waveguide cross-section (issue #682).
+    /// </summary>
+    private static string MetalKwarg(MetalTraceStyle metal) =>
+        $"width={metal.WidthLiteral}, layer={metal.LayerTuple}";
+
+    /// <summary>True when the pin carries electrical current (a metal contact), not light.</summary>
+    private static bool IsElectrical(PhysicalPin? pin) =>
+        pin is { MatterType: MatterType.Electricity };
 
     /// <summary>
     /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
@@ -299,7 +315,8 @@ public class GdsFactoryExporter
             ? comp.NazcaFunctionParameters
             : string.Empty;
 
-    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg)
+    private static void AppendConnections(
+        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         sb.AppendLine("# Waveguide connections");
         foreach (var connVm in canvas.Connections)
@@ -308,11 +325,18 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // Electrical connections are metal traces, not optical waveguides — size them with
+            // the metal layer/width instead of the waveguide cross-section (issue #682). The
+            // cross-kind guard (#519) keeps both pins in one domain, so either pin suffices.
+            var kwarg = IsElectrical(conn.StartPin) || IsElectrical(conn.EndPin)
+                ? MetalKwarg(metalStyle)
+                : waveguideKwarg;
+
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, kwarg);
             else if (conn.StartPin != null && conn.EndPin != null)
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, kwarg);
         }
 
         foreach (var compVm in canvas.Components)

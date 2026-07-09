@@ -64,6 +64,10 @@ public static class GdsFactoryStubWriter
 
         foreach (var pin in comp.PhysicalPins)
         {
+            // Electrical pins are metal contacts, not optical ports — never declare them on the
+            // waveguide layer (issue #682); their wiring is emitted as metal traces instead.
+            if (pin.MatterType == MatterType.Electricity) continue;
+
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -96,6 +100,10 @@ public static class GdsFactoryStubWriter
 
         foreach (var pin in comp.PhysicalPins)
         {
+            // Electrical pins are metal contacts, not optical ports — never declare them on the
+            // waveguide layer (issue #682); their wiring is emitted as metal traces instead.
+            if (pin.MatterType == MatterType.Electricity) continue;
+
             var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - ox).ToString("F2", ci);
             var py = NazcaCoordinateMapper.NormalizeZero(oy - pin.OffsetYMicrometers).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
