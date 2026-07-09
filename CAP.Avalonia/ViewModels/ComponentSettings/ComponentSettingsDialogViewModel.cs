@@ -109,6 +109,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// recompute cancelled") that outlives the dialog window. When null, the
     /// feedback stays in the in-dialog status text only.
     /// </param>
+    /// <param name="backendSelection">
+    /// Optional FDTD backend picker (Meep/Docker vs Tidy3D cloud). When supplied
+    /// it takes precedence over <paramref name="fdtdService"/> and the dialog
+    /// shows a backend ComboBox next to the recompute button.
+    /// </param>
     public ComponentSettingsDialogViewModel(
         IFileDialogService fileDialogService,
         ErrorConsoleService? errorConsole = null,
@@ -116,7 +121,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IPortMappingDialogService? portMappingDialog = null,
         IFdtdSMatrixService? fdtdService = null,
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        ViewModels.Solvers.FdtdBackendSelectionViewModel? backendSelection = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -124,6 +130,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _notificationService = notificationService;
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
+        BackendSelection = backendSelection;
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),

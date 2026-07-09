@@ -259,6 +259,44 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Gets the API key for the Tidy3D cloud solver (shared by the FDTD S-matrix
+    /// backend and the Tidy3D mode-solver backend). Empty when not configured.
+    /// </summary>
+    public string GetTidy3dApiKey()
+    {
+        return _preferences.Tidy3dApiKey;
+    }
+
+    /// <summary>
+    /// Sets the Tidy3D API key and saves preferences.
+    /// </summary>
+    public void SetTidy3dApiKey(string apiKey)
+    {
+        _preferences.Tidy3dApiKey = apiKey ?? "";
+        Save();
+    }
+
+    /// <summary>
+    /// Gets the persisted FDTD S-matrix backend choice (defaults to local Meep/Docker
+    /// when unset or unparseable, so existing installs keep their behaviour).
+    /// </summary>
+    public CAP_Core.Solvers.Fdtd.FdtdBackendType GetFdtdBackend()
+    {
+        return Enum.TryParse<CAP_Core.Solvers.Fdtd.FdtdBackendType>(_preferences.FdtdBackend, out var backend)
+            ? backend
+            : CAP_Core.Solvers.Fdtd.FdtdBackendType.MeepDocker;
+    }
+
+    /// <summary>
+    /// Persists the FDTD S-matrix backend choice.
+    /// </summary>
+    public void SetFdtdBackend(CAP_Core.Solvers.Fdtd.FdtdBackendType backend)
+    {
+        _preferences.FdtdBackend = backend.ToString();
+        Save();
+    }
+
+    /// <summary>
     /// Gets the default chip width in millimeters used for new projects.
     /// Falls back to 5 mm if not configured.
     /// </summary>
@@ -358,6 +396,18 @@ public class UserPreferences
     /// Empty string means no key is configured.
     /// </summary>
     public string AiApiKey { get; set; } = "";
+
+    /// <summary>
+    /// API key for the Tidy3D cloud solver (FDTD S-matrix + mode solver).
+    /// Empty string means no key is configured.
+    /// </summary>
+    public string Tidy3dApiKey { get; set; } = "";
+
+    /// <summary>
+    /// Persisted FDTD S-matrix backend choice as an <c>FdtdBackendType</c> name
+    /// (e.g. "MeepDocker" or "Tidy3D"). Null/unknown falls back to Meep/Docker.
+    /// </summary>
+    public string? FdtdBackend { get; set; }
 
     /// <summary>
     /// Default chip width in millimeters for new projects (default 5 mm).

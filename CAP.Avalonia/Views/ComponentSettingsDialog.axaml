@@ -254,19 +254,61 @@
         </Border>
 
         <!-- Load + Recalculate side by side. Recalculate (FDTD) computes the S-matrix from
-             the component geometry with the open-source Meep solver instead of importing. -->
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-            <Button Content="Load S-matrix from file…"
-                    Command="{Binding LoadFromFileCommand}"
-                    Padding="12,2"
-                    Background="#3d5d3d"
-                    ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
-                    IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="Recalculate S-matrix (FDTD)…"
-                    Command="{Binding RecalculateSMatrixCommand}"
-                    Padding="12,2"
-                    Background="#3d4d6d"
-                    IsVisible="{Binding CanRecalculate}"/>
+             the component geometry with the selected FDTD backend instead of importing. -->
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,4,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="Load S-matrix from file…"
+                        Command="{Binding LoadFromFileCommand}"
+                        Padding="12,2"
+                        Background="#3d5d3d"
+                        ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
+                        IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
+                <Button Content="Recalculate S-matrix (FDTD)…"
+                        Command="{Binding RecalculateSMatrixCommand}"
+                        Padding="12,2"
+                        Background="#3d4d6d"
+                        IsVisible="{Binding CanRecalculate}"/>
+                <!-- FDTD backend picker: Meep (local Docker) vs Tidy3D (cloud).
+                     Only shown when the dialog was wired with a backend registry. -->
+                <ComboBox ItemsSource="{Binding BackendSelection.AvailableBackendNames}"
+                          SelectedItem="{Binding BackendSelection.SelectedBackendName}"
+                          MinWidth="150" FontSize="11"
+                          VerticalAlignment="Center"
+                          ToolTip.Tip="FDTD solver backend. Meep runs locally in Docker (free, slow); Tidy3D runs in the cloud (fast, costs credits, needs an API key — see Settings → Tidy3D Cloud)."
+                          IsVisible="{Binding BackendSelection, Converter={x:Static ObjectConverters.IsNotNull}}">
+                    <ComboBox.IsEnabled>
+                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                            <Binding Path="IsComputing" Converter="{x:Static BoolConverters.Not}"/>
+                            <Binding Path="IsAwaitingCloudConfirmation" Converter="{x:Static BoolConverters.Not}"/>
+                        </MultiBinding>
+                    </ComboBox.IsEnabled>
+                </ComboBox>
+            </StackPanel>
+
+            <!-- Actionable hint when the selected backend can't run yet
+                 (Docker not running / tidy3d not installed / API key missing). -->
+            <TextBlock Text="{Binding BackendSelection.AvailabilityHint, FallbackValue=''}"
+                       Foreground="#ccaa66" FontSize="10" TextWrapping="Wrap"
+                       IsVisible="{Binding BackendSelection.AvailabilityHint, FallbackValue='', Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <!-- Cloud cost confirmation: Tidy3D runs consume credits, so nothing is
+                 submitted until the user reviews the estimate and confirms. -->
+            <Border Background="#26261a" BorderBrush="#5d5330" BorderThickness="1"
+                    CornerRadius="4" Padding="8,6"
+                    IsVisible="{Binding IsAwaitingCloudConfirmation}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding CloudCostText}"
+                               Foreground="#ddcc88" FontSize="11" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="Submit cloud job"
+                                Command="{Binding ConfirmCloudSubmitCommand}"
+                                Padding="12,2" Background="#5d4330"/>
+                        <Button Content="Cancel"
+                                Command="{Binding CancelCloudSubmitCommand}"
+                                Padding="12,2" Background="#3d3d3d"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <!-- Solver / simulation status -->

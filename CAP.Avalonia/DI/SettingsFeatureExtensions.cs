@@ -22,6 +22,8 @@ internal static class SettingsFeatureExtensions
         services.AddTransient<ISettingsPage, PythonEnvironmentsSettingsPage>();
         services.AddTransient<ISettingsPage, ChipSizeSettingsPage>();
         services.AddTransient<ISettingsPage, AiAssistantSettingsPage>();
+        services.AddTransient<ViewModels.Solvers.Tidy3dSettingsViewModel>();
+        services.AddTransient<ISettingsPage, Tidy3dSettingsPage>();
         services.AddTransient<SettingsWindowViewModel>();
 
         return services;

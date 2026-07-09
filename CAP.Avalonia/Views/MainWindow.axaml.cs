@@ -643,8 +643,14 @@ public partial class MainWindow : Window
         // FDTD "Recalculate S-matrix": wire the solver service and a factory that
         // renders the component's geometry/pins into an FDTD request. Both are
         // optional — the dialog hides the recompute button when they're absent.
-        var fdtdService = App.Services.GetService(typeof(CAP_Core.Solvers.Fdtd.IFdtdSMatrixService))
-            as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
+        var backendRegistry = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.FdtdBackendRegistry))
+            as CAP.Avalonia.Services.Solvers.FdtdBackendRegistry;
+        var backendSelection = backendRegistry != null
+            ? new CAP.Avalonia.ViewModels.Solvers.FdtdBackendSelectionViewModel(backendRegistry)
+            : null;
+        var fdtdService = backendRegistry?.CurrentService
+            ?? App.Services.GetService(typeof(CAP_Core.Solvers.Fdtd.IFdtdSMatrixService))
+               as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
         var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
         Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
@@ -664,7 +670,8 @@ public partial class MainWindow : Window
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
             fdtdRequestFactory: fdtdRequestFactory,
-            notificationService: notificationService);
+            notificationService: notificationService,
+            backendSelection: backendSelection);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode

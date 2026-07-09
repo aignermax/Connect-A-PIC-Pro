@@ -6,6 +6,7 @@
         xmlns:vmExport="using:CAP.Avalonia.ViewModels.Export"
         xmlns:vmAi="using:CAP.Avalonia.ViewModels.AI"
         xmlns:vmPyEnv="using:CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager"
+        xmlns:vmSolvers="using:CAP.Avalonia.ViewModels.Solvers"
         xmlns:panels="using:CAP.Avalonia.Views.Panels"
         x:Class="CAP.Avalonia.Views.SettingsWindow"
         x:DataType="settings:SettingsWindowViewModel"
@@ -230,6 +231,34 @@
                             <TextBlock Text="{Binding StatusText}"
                                        Foreground="Gray" FontSize="11"
                                        IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Tidy3D Cloud — API key shared by FDTD S-matrix + mode solver -->
+                    <DataTemplate DataType="{x:Type vmSolvers:Tidy3dSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Tidy3D Cloud" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
+                                Configure the Tidy3D (Flexcompute) API key used by the cloud FDTD
+                                S-matrix backend and the Tidy3D mode solver. Cloud runs consume
+                                FlexCredits from your Tidy3D account; the app always shows a cost
+                                estimate and asks for confirmation before submitting. The key is
+                                stored locally and only passed to the tidy3d Python package.
+                            </TextBlock>
+
+                            <TextBlock Text="API Key:" Foreground="Gray" FontSize="12" Margin="0,0,0,3"/>
+                            <TextBox Text="{Binding ApiKey}"
+                                     Watermark="Paste your key from tidy3d.simulation.cloud → Account"
+                                     PasswordChar="•"/>
+
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap"
+                                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0">
+                                Requires the tidy3d package in the selected Python environment
+                                (pip install tidy3d — see Settings → Python Environments).
+                            </TextBlock>
                         </StackPanel>
                     </DataTemplate>
 
