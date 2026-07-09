@@ -54,6 +54,30 @@ public class TemplateGeometryMatchTests
     }
 
     [Fact]
+    public void Matches_IsFalse_WhenFunctionNameOverrideIsActive()
+    {
+        var component = CreateComponent();
+        var nazcaOverride = new NazcaCodeOverride { FunctionName = "other_cell" };
+
+        TemplateGeometryMatch.Matches(
+                component, nazcaOverride,
+                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
+            .ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Matches_IsFalse_WhenModuleNameOverrideIsActive()
+    {
+        var component = CreateComponent();
+        var nazcaOverride = new NazcaCodeOverride { ModuleName = "other_pdk" };
+
+        TemplateGeometryMatch.Matches(
+                component, nazcaOverride,
+                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
+            .ShouldBeFalse();
+    }
+
+    [Fact]
     public void Matches_IsFalse_WhenParameterOverrideIsActive()
     {
         var component = CreateComponent();
