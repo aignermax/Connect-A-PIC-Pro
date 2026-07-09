@@ -110,11 +110,6 @@ public partial class RightPanelViewModel : ObservableObject
     public AiAssistantViewModel AiAssistant { get; }
 
     /// <summary>
-    /// ViewModel for the time-domain (transient) simulation panel.
-    /// </summary>
-    public TimeDomainViewModel TimeDomain { get; }
-
-    /// <summary>
     /// ViewModel for the read-only photonic registry browser panel (issue #656).
     /// </summary>
     public RegistryBrowserViewModel Registry { get; }
@@ -155,7 +150,6 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistantViewModel aiAssistant,
         OnaSweepViewModel onaAnalysis,
         ComponentEditorFactory editorFactory,
-        TimeDomainViewModel timeDomain,
         RegistryBrowserViewModel registry)
     {
         _preferencesService = preferencesService;
@@ -173,7 +167,6 @@ public partial class RightPanelViewModel : ObservableObject
         ArchitectureReport = architectureReport;
         PdkConsistency = pdkConsistency;
         AiAssistant = aiAssistant;
-        TimeDomain = timeDomain;
         OnaAnalysis = onaAnalysis;
         Registry = registry;
 
@@ -181,7 +174,6 @@ public partial class RightPanelViewModel : ObservableObject
         RoutingDiagnostics.Configure(canvas);
         DimensionValidator.Configure(canvas);
         CompressLayout.Configure(canvas);
-        TimeDomain.Configure(canvas);
         OnaAnalysis.Configure(canvas);
 
         // Drive the per-component property editor from canvas selection.

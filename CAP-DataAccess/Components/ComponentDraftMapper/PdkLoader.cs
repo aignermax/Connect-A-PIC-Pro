@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CAP_Core.LightCalculation.TimeDomainSimulation.CompactModels;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP_DataAccess.Components.ComponentDraftMapper
@@ -182,6 +183,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                         errors.Add($"[{pdkName}/{compLabel}] Pin must have a name");
                     }
 
+                    if (!CAP_Core.Components.PinKinds.PinKindHelper.TryParse(pin.PinKind, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid pinKind '{pin.PinKind}' (expected 'Optical' or 'Electrical')");
+                    }
+
                     const double tolerance = 1.0;
                     if (pin.OffsetXMicrometers < -tolerance || pin.OffsetXMicrometers > comp.WidthMicrometers + tolerance)
                     {
@@ -191,7 +197,26 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                     {
                         errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' Y={pin.OffsetYMicrometers} outside bounds [0, {comp.HeightMicrometers}]");
                     }
+
+                    // Reject unknown polarization values at load time instead of
+                    // silently defaulting to TE and producing a wrong simulation.
+                    if (!CAP_Core.Components.Core.PolarizationRules.TryParse(pin.Polarization, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid polarization '{pin.Polarization}' (expected TE, TM or Both)");
+                    }
                 }
+            }
+
+            // Active components (issue #529): the compactModel name must
+            // resolve in the registry. Failing loudly here prevents an
+            // unknown/misspelled model from silently degrading an active
+            // component to passive S-matrix behaviour.
+            if (!string.IsNullOrWhiteSpace(comp.CompactModel) &&
+                !CompactModelRegistry.IsRegistered(comp.CompactModel))
+            {
+                errors.Add(
+                    $"[{pdkName}/{compLabel}] Unknown compactModel '{comp.CompactModel}'. " +
+                    $"Known models: {string.Join(", ", CompactModelRegistry.RegisteredNames)}");
             }
 
             // Validate parametric S-Matrix if present. Pass the component's

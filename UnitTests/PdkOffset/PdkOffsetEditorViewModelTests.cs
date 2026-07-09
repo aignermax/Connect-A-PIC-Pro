@@ -1,9 +1,12 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
+using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+using Moq;
 using Shouldly;
 using System.IO;
+using System.Threading;
 
 namespace UnitTests.PdkOffset;
 
@@ -30,6 +33,38 @@ public class PdkOffsetEditorViewModelTests
         source.ShouldContain("import cspdk.sin300");
         source.ShouldContain("component = gf.get_component('mmi1x2')");
         source.ShouldNotContain("demo.()");   // the broken empty-function Nazca call
+    }
+
+    [Fact]
+    public async Task RenderForBatch_GdsFactoryNativeDraft_RoutesToGdsFactoryService_NotNazca()
+    {
+        // Check-All / Try-Fix-All render via RenderForBatch. It must use the same gdsfactory
+        // routing as the interactive path — otherwise every gdsfactory component reports
+        // RenderFailed ("module 'nazca.demofab' has no attribute ''") in the batch (#570).
+        var nazca = new Mock<NazcaComponentPreviewService>(
+            "py", "nazca.py", (System.TimeSpan?)null, (ProcessLaunchFactory?)null);
+        var gf = new Mock<NazcaComponentPreviewService>(
+            "py", "gf.py", (System.TimeSpan?)null, (ProcessLaunchFactory?)null);
+        gf.Setup(s => s.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NazcaPreviewResult { Success = true });
+
+        var vm = new PdkOffsetEditorViewModel(
+            new PdkLoader(), new PdkJsonSaver(), new PdkManagerViewModel(), nazca.Object, gf.Object);
+        var draft = new PdkComponentDraft
+        {
+            Name = "SiN MMI",
+            NazcaFunction = "",
+            GdsFactoryFunction = "cspdk.sin300.mmi1x2",
+        };
+
+        var result = await vm.RenderForBatch(draft, CancellationToken.None);
+
+        result.ShouldNotBeNull();
+        result!.Success.ShouldBeTrue();
+        gf.Verify(s => s.RenderRawCodeAsync(
+            It.Is<string>(c => c.Contains("gf.get_component('mmi1x2')")), It.IsAny<CancellationToken>()), Times.Once);
+        nazca.Verify(s => s.RenderAsync(
+            It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 
     private static PdkDraft BuildTestPdk(string pdkName = "Test PDK") => new()

@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_Core.Routing;
 using CAP_DataAccess.Persistence.PIR;
@@ -33,11 +34,17 @@ public class SimpleNazcaExporter
     /// every placed instance's ACTUAL world pin positions — reported by the same nazca
     /// engine that writes the GDS — to '&lt;script&gt;.pins.json' next to the script.
     /// </param>
+    /// <param name="metalStyle">
+    /// Width and GDS layer for electrical (metal) routing traces (issue #682). Electrical
+    /// connections are emitted as metal on this layer instead of as optical waveguides;
+    /// null falls back to <see cref="MetalTraceStyle.Default"/>.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
-        bool emitVerification = false)
+        bool emitVerification = false,
+        MetalTraceStyle? metalStyle = null)
     {
         var sb = new StringBuilder();
 
@@ -48,7 +55,7 @@ public class SimpleNazcaExporter
         NazcaOverrideFactory.AppendFactories(sb, rawOverrides);
         AppendPdkComponentStubs(sb, canvas, rawOverrides);
         var componentNames = AppendComponents(sb, canvas, rawOverrides, overrides, emitVerification);
-        AppendConnections(sb, canvas, componentNames, rawOverrides);
+        AppendConnections(sb, canvas, componentNames, rawOverrides, metalStyle ?? MetalTraceStyle.Default);
         AppendFooter(sb);
         if (emitVerification)
             AppendVerificationEpilog(sb);
@@ -193,6 +200,10 @@ public class SimpleNazcaExporter
         // a straight's pins share the centre line, so their local Y is oy - OffsetY = 0.
         foreach (var pin in comp.PhysicalPins)
         {
+            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
+            // must not be emitted as waveguide stubs (#519). Metal routing is a separate feature.
+            if (pin.MatterType != MatterType.Light) continue;
+
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -247,6 +258,9 @@ public class SimpleNazcaExporter
         // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
         foreach (var pin in comp.PhysicalPins)
         {
+            // Optical ports only — see the straight-stub loop above (#519).
+            if (pin.MatterType != MatterType.Light) continue;
+
             var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - offsetX).ToString("F2", ci);
             var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -428,7 +442,8 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        IReadOnlyDictionary<string, string> rawOverrides,
+        MetalTraceStyle metalStyle)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -444,6 +459,14 @@ public class SimpleNazcaExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // Electrical connections are metal traces, not optical waveguides — emit them on
+            // the process metal layer/width instead of the waveguide layer (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed optical+electrical
+            // or all-optical connection stays a waveguide (issue #686 review — the earlier
+            // "either pin" predicate would draw a mixed connection wholly on the metal layer,
+            // silently dropping the optical waveguide).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
+
             // Issue #561: connections touching raw-code–overridden instances export
             // their REAL routed segments like any other connection — the override
             // cell is bbox-anchored, so app-space segment coordinates line up with
@@ -452,36 +475,43 @@ public class SimpleNazcaExporter
             var segments = conn.GetPathSegments();
 
             if (segments.Count > 0)
-                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin);
+                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin, metal);
             else
-                AppendFallbackExport(sb, conn, componentNames, rawOverrides);
+                AppendFallbackExport(sb, conn, componentNames, rawOverrides, metal);
         }
 
         // Export frozen waveguide paths from ComponentGroups
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group);
+                AppendGroupFrozenPaths(sb, group, metalStyle);
         }
 
         sb.AppendLine();
     }
 
     /// <summary>
-    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca segments.
+    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca
+    /// segments. A frozen path between two electrical pins is a metal trace, not an optical
+    /// waveguide — the same classification the live connection loop above applies (issue #686
+    /// review: this frozen-group path used to call <see cref="AppendSegmentExport"/> without the
+    /// metal style at all, so a frozen electrical route always rendered as a waveguide).
     /// </summary>
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group)
+    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
-                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin);
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
-                AppendGroupFrozenPaths(sb, nestedGroup);
+                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle);
         }
     }
 
@@ -500,13 +530,14 @@ public class SimpleNazcaExporter
     /// <param name="endPin">End pin, used for single-straight pin-to-pin geometry.</param>
     internal static void AppendSegmentExport(
         StringBuilder sb, IReadOnlyList<PathSegment> segments,
-        PhysicalPin? startPin = null, PhysicalPin? endPin = null)
+        PhysicalPin? startPin = null, PhysicalPin? endPin = null,
+        MetalTraceStyle? metal = null)
     {
         // Single straight segment: compute geometry directly from both pin positions
         // so the waveguide hits both pins exactly even if the stored segment drifts.
         if (segments.Count == 1 && segments[0] is StraightSegment && startPin != null && endPin != null)
         {
-            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin));
+            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal));
             return;
         }
 
@@ -515,9 +546,24 @@ public class SimpleNazcaExporter
             var (nStartX, nStartY) = NazcaCoordinateMapper.ToNazca(segment.StartPoint.X, segment.StartPoint.Y);
             var (nEndX, nEndY) = NazcaCoordinateMapper.ToNazca(segment.EndPoint.X, segment.EndPoint.Y);
 
-            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY));
+            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY, metal));
         }
     }
+
+    /// <summary>
+    /// The trailing <c>width=…, layer=(…, …)</c> kwargs that place a segment on the metal
+    /// routing layer; empty for optical segments (which use the Nazca default layer).
+    /// </summary>
+    private static string MetalKwargs(MetalTraceStyle? metal) =>
+        metal is null ? string.Empty : $", width={metal.WidthLiteral}, layer={metal.LayerTuple}";
+
+    /// <summary>
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review).
+    /// </summary>
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
     /// Formats a path segment (straight or bend) with absolute Nazca positions.
@@ -527,14 +573,14 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatSegmentAbsolute(
         PathSegment segment, double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY)
+        double nazcaEndX, double nazcaEndY, MetalTraceStyle? metal = null)
     {
         var ci = CultureInfo.InvariantCulture;
         return segment switch
         {
             StraightSegment => FormatStraightAbsolute(
-                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci),
-            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci),
+                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci, metal),
+            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci, metal),
             _ => $"        # Unknown segment type: {segment.GetType().Name}"
         };
     }
@@ -546,7 +592,7 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatStraightAbsolute(
         double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY, CultureInfo ci)
+        double nazcaEndX, double nazcaEndY, CultureInfo ci, MetalTraceStyle? metal = null)
     {
         double dx = nazcaEndX - nazcaStartX;
         double dy = nazcaEndY - nazcaStartY;
@@ -557,7 +603,7 @@ public class SimpleNazcaExporter
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaStartX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaStartY).ToString("F2", ci);
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
-        return $"        nd.strt(length={l}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -565,14 +611,14 @@ public class SimpleNazcaExporter
     /// The radius is invariant under Y-flip; the sweep angle and start angle are negated.
     /// </summary>
     private static string FormatBendAbsolute(
-        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci)
+        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci, MetalTraceStyle? metal = null)
     {
         var radius = bend.RadiusMicrometers.ToString("F2", ci);
         var sweepAngle = NazcaCoordinateMapper.NormalizeZero(-bend.SweepAngleDegrees).ToString("F2", ci);
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaY).ToString("F2", ci);
         var angle = NazcaCoordinateMapper.NormalizeZero(-bend.StartAngleDegrees).ToString("F2", ci);
-        return $"        nd.bend(radius={radius}, angle={sweepAngle}).put({x}, {y}, {angle})";
+        return $"        nd.bend(radius={radius}, angle={sweepAngle}{MetalKwargs(metal)}).put({x}, {y}, {angle})";
     }
 
     /// <summary>
@@ -580,7 +626,8 @@ public class SimpleNazcaExporter
     /// Computes length and angle from start pin to end pin in Nazca coordinates,
     /// ensuring the waveguide reaches both pins exactly.
     /// </summary>
-    private static string FormatStraightSegmentFromPins(PhysicalPin startPin, PhysicalPin endPin)
+    private static string FormatStraightSegmentFromPins(
+        PhysicalPin startPin, PhysicalPin endPin, MetalTraceStyle? metal = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var (sx, sy) = NazcaCoordinateMapper.GetPinNazcaPosition(startPin);
@@ -596,7 +643,7 @@ public class SimpleNazcaExporter
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
         var l = length.ToString("F2", ci);
 
-        return $"        nd.strt(length={l}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -702,8 +749,17 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         WaveguideConnection conn,
         Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        IReadOnlyDictionary<string, string> rawOverrides,
+        MetalTraceStyle? metal = null)
     {
+        // A routeless electrical connection is a direct metal straight between both pins on the
+        // metal layer — the optical sbend interconnect (ic) would draw it as a waveguide (#682).
+        if (metal != null && conn.StartPin != null && conn.EndPin != null)
+        {
+            sb.AppendLine(FormatStraightSegmentFromPins(conn.StartPin, conn.EndPin, metal));
+            return;
+        }
+
         var startRef = BuildEndpointReference(conn.StartPin, componentNames, rawOverrides);
         var endRef = BuildEndpointReference(conn.EndPin, componentNames, rawOverrides);
 

@@ -81,6 +81,14 @@
                               Width="16" Height="16" Foreground="LightGreen"/>
                 </Button>
 
+                <!-- Simulation mode: CW vs Transient. Run (L) executes the active mode. -->
+                <ComboBox Width="120" Margin="2" VerticalAlignment="Center"
+                          SelectedIndex="{Binding SimulationModeIndex}"
+                          ToolTip.Tip="Simulation mode: CW (steady-state) or Transient (time-domain). Run (L) executes this mode.">
+                    <ComboBoxItem>CW</ComboBoxItem>
+                    <ComboBoxItem>Transient</ComboBoxItem>
+                </ComboBox>
+
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
                 <!-- Undo/Redo -->
@@ -216,9 +224,30 @@
                                                    Foreground="White" FontSize="12"/>
                                     </StackPanel>
                                 </Button>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,7"
+                                        Background="#3d3d5d"
+                                        Click="OpenPdkResolutionCheckDialog_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🔎" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Check PDKs against Python…"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
+                </Button>
+
+                <Separator Width="1" Background="Gray" Margin="10,5"/>
+
+                <!-- Fabrication process (layer stack, cross-sections, materials) — top-level
+                     shortcut so it doesn't require scrolling the right panel (#682/#570). -->
+                <Button Command="{Binding OpenProcessManagerCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Fabrication process — layer stack, cross-sections, materials (opens the process manager)">
+                    <TextBlock Text="🧱" FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
@@ -331,6 +360,9 @@
                 </Border>
             </StackPanel>
         </Border>
+
+        <!-- Analysis Dock Panel (collapsible, above the Error Console, #570/#535) -->
+        <panels:AnalysisDockPanel DockPanel.Dock="Bottom"/>
 
         <!-- Left Panel - Hierarchy + Component Library -->
         <Grid DockPanel.Dock="Left" ColumnDefinitions="*,Auto" Name="LeftPanelGrid">
@@ -535,8 +567,13 @@
 
                 <!-- Component Library -->
                 <DockPanel Grid.Row="4">
-                    <TextBlock DockPanel.Dock="Top" Text="Component Library"
-                               FontWeight="Bold" Margin="10,6,10,4" Foreground="White"/>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="10,6,10,4">
+                        <TextBlock Grid.Column="0" Text="Component Library"
+                                   FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
+                                Padding="8,0" FontWeight="Bold" Background="#2a4a2a"
+                                ToolTip.Tip="Neue Komponente…"/>
+                    </Grid>
                     <TextBox DockPanel.Dock="Top" Watermark="Search components..."
                              Text="{Binding LeftPanel.SearchText}"
                              Margin="10,0,10,6" FontSize="11"
@@ -651,11 +688,7 @@
                                        Margin="2,8,2,0" TextWrapping="Wrap"
                                        ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
 
-                            <!-- Fabrication process (layer stack, cross-sections, materials) — #570 -->
-                            <Button Content="Fabrication Process…" Command="{Binding OpenProcessManagerCommand}"
-                                    HorizontalAlignment="Stretch" Height="24" Margin="2,6,2,0" FontSize="10"
-                                    Background="#3d4d6d"
-                                    ToolTip.Tip="View and adjust the fabrication process; import it from a foundry PDK"/>
+                            <!-- Fabrication process now opens from the top toolbar icon (#570). -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -785,9 +818,6 @@
 
                     <!-- Design Checks Panel -->
                     <panels:DesignChecksPanel/>
-
-                    <!-- Time-Domain (Transient) Simulation Panel -->
-                    <panels:TimeDomainPanel/>
 
                     <!-- Photonic Registry browser (read-only, issue #656) -->
                     <panels:RegistryBrowserPanel/>

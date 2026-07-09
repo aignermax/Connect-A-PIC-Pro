@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_DataAccess.Persistence.PIR;
 
@@ -21,9 +22,13 @@ public class GdsFactoryExporter
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
     /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
     /// component factories. Null skips override handling.</param>
+    /// <param name="metalStyle">Width and GDS layer for electrical (metal) routing traces
+    /// (issue #682); electrical connections are emitted as metal on this layer instead of as
+    /// optical waveguides. Null falls back to <see cref="MetalTraceStyle.Default"/>.</param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null)
+        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
+        MetalTraceStyle? metalStyle = null)
     {
         var sb = new StringBuilder();
         AppendHeader(sb, canvas, options);
@@ -36,10 +41,20 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, overrides, ref refIndex);
         sb.AppendLine();
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas));
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metalStyle ?? MetalTraceStyle.Default);
         AppendFooter(sb);
         return sb.ToString();
     }
+
+    /// <summary>
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review
+    /// — the earlier "either pin" predicate would draw a mixed connection wholly on the metal
+    /// layer, silently dropping the optical waveguide).
+    /// </summary>
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
     /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
@@ -299,7 +314,8 @@ public class GdsFactoryExporter
             ? comp.NazcaFunctionParameters
             : string.Empty;
 
-    private static void AppendConnections(StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg)
+    private static void AppendConnections(
+        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         sb.AppendLine("# Waveguide connections");
         foreach (var connVm in canvas.Connections)
@@ -308,34 +324,50 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // Electrical connections are metal traces, not optical waveguides — draw them as a
+            // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed or all-optical
+            // connection stays a waveguide (issue #686 review).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
+
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
             else if (conn.StartPin != null && conn.EndPin != null)
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle);
         }
         sb.AppendLine();
     }
 
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, string waveguideKwarg)
+    /// <summary>
+    /// Exports frozen waveguide paths from a ComponentGroup (and nested groups). A frozen path
+    /// between two electrical pins is a metal trace, not a waveguide — mirrors the live
+    /// connection loop above (issue #686 review: this frozen-group path used to always emit a
+    /// waveguide regardless of pin kind, the same gap as the Nazca exporter's frozen-group export).
+    /// </summary>
+    private static void AppendGroupFrozenPaths(
+        StringBuilder sb, ComponentGroup group, string waveguideKwarg, MetalTraceStyle metalStyle)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
                 GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg);
+                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle);
         }
     }
 

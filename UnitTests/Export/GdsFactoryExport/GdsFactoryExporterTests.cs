@@ -345,6 +345,30 @@ public class GdsFactoryExporterTests
     }
 
     [Fact]
+    public void CollectBackendConflicts_GdsFactoryPlusSiepicUbcpdkCell_ReportsConflict()
+    {
+        // Playground lets the user mix a gdsfactory-native PDK (CornerStone SiN) with a SiEPIC
+        // (ubcpdk) component. The export activates the cspdk PDK, so `gf.get_component('ebeam_…')`
+        // can't resolve the SiEPIC cell → a runtime crash. This must be detected up front (#570).
+        var canvas = new DesignCanvasViewModel();
+        var sin = TestComponentFactory.CreateBasicComponent();
+        sin.Identifier = "SIN1";
+        sin.NazcaFunctionName = "";
+        sin.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(sin, "SiN");
+        var siepic = TestComponentFactory.CreateBasicComponent();
+        siepic.Identifier = "EB1";
+        siepic.NazcaFunctionName = "ebeam_adiabatic_te1550";   // maps to a ubcpdk cell
+        canvas.AddComponent(siepic, "Adiabatic");
+
+        var conflicts = GdsFactoryExporter.CollectBackendConflicts(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
+
+        conflicts.ShouldNotBeEmpty();
+        conflicts.ShouldContain(c => c.Contains("cspdk.sin300"));
+    }
+
+    [Fact]
     public void BareGdsFactoryFunction_FallsToStubAndIsReportedUnmapped()
     {
         // A dotless gdsFactoryFunction has no importable module → it must fall through to a

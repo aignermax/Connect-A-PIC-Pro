@@ -78,7 +78,6 @@ public class PanelWidthPersistenceTests : IDisposable
             {
                 new GenericComponentEditorProvider()
             }),
-            new TimeDomainViewModel(),
             // Registry browser backed by the committed fixtures — no network access.
             new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
                 new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()));

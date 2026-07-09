@@ -316,12 +316,14 @@ public partial class PdkOffsetEditorViewModel
         }
     }
 
-    private async Task<NazcaPreviewResult?> RenderForBatch(PdkComponentDraft draft, CancellationToken token)
+    internal async Task<NazcaPreviewResult?> RenderForBatch(PdkComponentDraft draft, CancellationToken token)
     {
         try
         {
-            var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
-            return await _previewService!.RenderAsync(module, function, draft.NazcaParameters, token);
+            // Same render routing as the interactive path: gdsfactory-native components go through
+            // the gdsfactory back-end, not the Nazca demo.() path — otherwise Check-All / Try-Fix-All
+            // report every gdsfactory component as RenderFailed (#570).
+            return await RenderDraftAsync(draft, token);
         }
         catch (OperationCanceledException) { return null; }
         catch (Exception ex)
