@@ -819,6 +819,9 @@
                     <!-- Design Checks Panel -->
                     <panels:DesignChecksPanel/>
 
+                    <!-- Netlist Panel (gdsfactory YAML view/export, #687) -->
+                    <panels:NetlistPanel/>
+
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
                     <TextBlock Text="Lock Elements:" Foreground="Gold" Margin="0,0,0,5" FontWeight="SemiBold"/>
