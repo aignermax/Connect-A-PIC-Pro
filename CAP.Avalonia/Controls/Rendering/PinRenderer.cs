@@ -23,12 +23,20 @@ internal sealed class PinRenderer
     {
         bool isConnectMode = rc.MainViewModel?.CanvasInteraction.CurrentMode == InteractionMode.Connect;
         var highlightedPin = rc.ViewModel.HighlightedPin?.Pin;
-        byte alpha = (byte)(isDimmed ? 128 : 255);
+        var dragStartPin = rc.InteractionState.ConnectionDragStartPin;
+        byte baseAlpha = (byte)(isDimmed ? 128 : 255);
 
         foreach (var pin in comp.Component.PhysicalPins)
         {
             var (pinX, pinY) = pin.GetAbsolutePosition();
             bool isHighlighted = pin == highlightedPin;
+
+            // During a connection drag, dim polarization-incompatible pins so
+            // the user sees which targets are valid (issue #534).
+            bool isIncompatibleTarget = dragStartPin != null && pin != dragStartPin &&
+                !PolarizationRules.CanConnect(dragStartPin.Polarization, pin.Polarization);
+            byte alpha = isIncompatibleTarget ? (byte)(baseAlpha / 3) : baseAlpha;
+
             double pinSize = isConnectMode ? 8 : 5;
             IBrush pinBrush = GetPinBrush(isHighlighted, isConnectMode, pin, alpha);
 
@@ -39,7 +47,7 @@ internal sealed class PinRenderer
                 context.DrawEllipse(glowBrush, null, new Point(pinX, pinY), pinSize * 1.5, pinSize * 1.5);
             }
 
-            DrawPinShape(context, pin, pinBrush, pinX, pinY, pinSize);
+            DrawPinShape(context, pin, pinBrush, pinX, pinY, pinSize, alpha);
             DrawPinDirectionIndicator(context, pin, pinX, pinY, isHighlighted, isDimmed);
 
             if (isHighlighted)
@@ -70,6 +78,32 @@ internal sealed class PinRenderer
             12,
             new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
         context.DrawText(text, new Point(comp.X + 5, comp.Y + 5));
+    }
+
+    /// <summary>
+    /// Draws the pin marker with a polarization-specific shape:
+    /// TE = solid circle (historical default), TM = solid square,
+    /// Both = circle with a square outline (accepts either polarization).
+    /// </summary>
+    private static void DrawPinShape(DrawingContext context, PhysicalPin pin, IBrush brush,
+        double pinX, double pinY, double pinSize, byte alpha)
+    {
+        switch (pin.Polarization)
+        {
+            case PolarizationKind.TM:
+                context.DrawRectangle(brush, null,
+                    new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
+                break;
+            case PolarizationKind.Both:
+                context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
+                var outlinePen = new Pen(new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)), 1);
+                context.DrawRectangle(null, outlinePen,
+                    new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
+                break;
+            default:
+                context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
+                break;
+        }
     }
 
     private static IBrush GetPinBrush(bool isHighlighted, bool isConnectMode, PhysicalPin pin, byte alpha)

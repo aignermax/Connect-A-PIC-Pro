@@ -1,0 +1,85 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.Components.AddCustomComponent"
+        xmlns:dto="using:CAP_DataAccess.Components.ComponentDraftMapper.DTOs"
+        x:Class="CAP.Avalonia.Views.NewComponentWindow"
+        x:DataType="vm:NewComponentViewModel"
+        Title="New Component"
+        Width="480" Height="620"
+        MinWidth="420" MinHeight="520"
+        WindowStartupLocation="CenterOwner"
+        Background="#1e1e1e"
+        Foreground="White">
+
+    <DockPanel Margin="16" LastChildFill="True">
+
+        <!-- Buttons — always visible at the bottom -->
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
+                    HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
+            <Button Content="Preview" Command="{Binding RunPreviewCommand}"
+                    Width="90" Background="#3d4d6d"
+                    ToolTip.Tip="Renders the geometry reference below and extracts its size and pins"/>
+            <Button Content="Compute S-Matrix" Command="{Binding ComputeSMatrixCommand}"
+                    Width="140" Background="#3d4d6d"
+                    ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
+            <Button Content="Save" Command="{Binding SaveCommand}"
+                    Width="80" Background="#2a4a2a"
+                    ToolTip.Tip="Saves the component into the selected fabrication process's user PDK"/>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+            <StackPanel Spacing="10">
+
+                <TextBlock Text="New Component" FontSize="15" FontWeight="SemiBold" Foreground="LightBlue"/>
+                <TextBlock TextWrapping="Wrap" Foreground="Gray" FontSize="10"
+                           Text="Renders a component's geometry from a Python module/function reference, optionally recomputes its S-matrix via FDTD, and saves it into a fabrication process's own user PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
+
+                <Separator Background="#3d3d3d"/>
+
+                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto,8,Auto,8,Auto">
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding ComponentName}"
+                             Background="#2d2d2d" Foreground="White"/>
+
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Row="2" Grid.Column="2"
+                              ItemsSource="{x:Static vm:NewComponentViewModel.AvailableBackends}"
+                              SelectedItem="{Binding SelectedBackend}"
+                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
+
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Module:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding Module}"
+                             Watermark="e.g. cspdk.sin300" Background="#2d2d2d" Foreground="White"/>
+
+                    <TextBlock Grid.Row="6" Grid.Column="0" Text="Function:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="6" Grid.Column="2" Text="{Binding Function}"
+                             Watermark="e.g. coupler" Background="#2d2d2d" Foreground="White"/>
+
+                    <TextBlock Grid.Row="8" Grid.Column="0" Text="Parameters:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBox Grid.Row="8" Grid.Column="2" Text="{Binding Parameters}"
+                             Watermark="e.g. length=10" Background="#2d2d2d" Foreground="White"/>
+                </Grid>
+
+                <Separator Background="#3d3d3d"/>
+
+                <TextBlock Text="Save to fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}"
+                          Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="dto:ProcessDefinition">
+                            <TextBlock Text="{Binding Name}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
+                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#777799"
+                           Text="Only fabrication processes from currently loaded PDKs are listed — import or configure one via the Fabrication Process window if none appear."/>
+
+                <Separator Background="#3d3d3d"/>
+
+                <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" Background="#2d2d2d"/>
+                <TextBlock Text="{Binding StatusText}" Foreground="#dddddd" FontSize="11" TextWrapping="Wrap"/>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>
