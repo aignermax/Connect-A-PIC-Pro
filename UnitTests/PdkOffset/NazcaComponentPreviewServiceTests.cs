@@ -614,9 +614,10 @@ public class NazcaComponentPreviewServiceTests
     [Fact]
     public void ComputePinAlignment_PinAtNazcaOrigin_ReportsZeroDistance()
     {
-        // Lunima pin sits at OffsetX=5, OffsetY=7 from the bbox top-left in y-down.
-        // ComponentHeight=10, NazcaOriginOffset=(5,3). The Nazca origin is therefore
-        // at (5, 10-3) = (5, 7) in the same y-down system → exactly where the pin is.
+        // Lunima pin sits at OffsetX=5, OffsetY=3 from the bbox top-left in y-down.
+        // NazcaOriginOffset=(5,3) — the offset is the org measured from the bbox
+        // TOP-LEFT corner (mapper convention), so the Nazca origin is at (5, 3)
+        // in the same y-down system → exactly where the pin is.
         // In Nazca-space (y-up) the pin should land at (0, 0).
         var draft = new PdkComponentDraft
         {
@@ -626,7 +627,7 @@ public class NazcaComponentPreviewServiceTests
             NazcaOriginOffsetY = 3,
             Pins = new List<PhysicalPinDraft>
             {
-                new() { Name = "in", OffsetXMicrometers = 5, OffsetYMicrometers = 7 }
+                new() { Name = "in", OffsetXMicrometers = 5, OffsetYMicrometers = 3 }
             }
         };
         var result = new NazcaPreviewResult
@@ -713,7 +714,8 @@ public class NazcaComponentPreviewServiceTests
     public void AutoCalibrate_AppliesNazcaBboxToWidthHeightAndOrigin()
     {
         // Nazca bbox: x ∈ [-2, 8], y ∈ [-3, 7]. Origin (0,0) sits 2 µm from
-        // the left edge and 3 µm from the bottom edge → NazcaOriginOffset=(2,3).
+        // the left edge and 7 µm below the TOP edge → NazcaOriginOffset=(2,7)
+        // per the NazcaCoordinateMapper contract (ox = -XMin, oy = YMax).
         var draft = new PdkComponentDraft
         {
             Name = "test_comp", NazcaFunction = "pdk.test",
@@ -740,7 +742,7 @@ public class NazcaComponentPreviewServiceTests
         draft.WidthMicrometers.ShouldBe(10.0, tolerance: 0.001);
         draft.HeightMicrometers.ShouldBe(10.0, tolerance: 0.001);
         draft.NazcaOriginOffsetX!.Value.ShouldBe(2.0, tolerance: 0.001);
-        draft.NazcaOriginOffsetY!.Value.ShouldBe(3.0, tolerance: 0.001);
+        draft.NazcaOriginOffsetY!.Value.ShouldBe(7.0, tolerance: 0.001);
         // The single Lunima pin gets snapped to the Nazca pin position:
         //   OffsetX = nazcaX - XMin = 5 - (-2) = 7
         //   OffsetY = YMax - nazcaY = 7 - 4 = 3
@@ -987,7 +989,9 @@ public class NazcaComponentPreviewServiceTests
         {
             Name = "twin", NazcaFunction = "x",
             WidthMicrometers = 12, HeightMicrometers = 1,
-            NazcaOriginOffsetX = 0, NazcaOriginOffsetY = 0,
+            // Calibrated per mapper contract: oy = YMax (1), so a draft pin at
+            // OffsetY 0 projects to Nazca y = oy - 0 = 1 (the pins' row).
+            NazcaOriginOffsetX = 0, NazcaOriginOffsetY = 1,
             Pins = new List<PhysicalPinDraft>
             {
                 new() { Name = "in",  OffsetXMicrometers = 0,    OffsetYMicrometers = 0 },
@@ -1101,7 +1105,8 @@ public class NazcaComponentPreviewServiceTests
         var draft = new PdkComponentDraft
         {
             Name = "perfect", WidthMicrometers = 10, HeightMicrometers = 10,
-            NazcaOriginOffsetX = 0, NazcaOriginOffsetY = 0,
+            // oy = YMax (10); pin at OffsetY 10 projects to y = 10 - 10 = 0.
+            NazcaOriginOffsetX = 0, NazcaOriginOffsetY = 10,
             Pins = new() { new() { Name = "in", OffsetXMicrometers = 0, OffsetYMicrometers = 10 } }
         };
         var result = new NazcaPreviewResult
@@ -1123,7 +1128,8 @@ public class NazcaComponentPreviewServiceTests
         var draft = new PdkComponentDraft
         {
             Name = "shifted", WidthMicrometers = 10, HeightMicrometers = 10,
-            NazcaOriginOffsetX = 3, NazcaOriginOffsetY = 0,
+            // oy = YMax (10) keeps Y aligned; the ox = 3 shift is the 3 µm error.
+            NazcaOriginOffsetX = 3, NazcaOriginOffsetY = 10,
             Pins = new() { new() { Name = "in", OffsetXMicrometers = 0, OffsetYMicrometers = 10 } }
         };
         var result = new NazcaPreviewResult

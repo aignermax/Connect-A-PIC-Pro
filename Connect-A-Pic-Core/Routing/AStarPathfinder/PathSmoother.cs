@@ -31,9 +31,9 @@ public class PathSmoother
 
         var (startX, startY) = startPin.GetAbsolutePosition();
         var (endX, endY) = endPin.GetAbsolutePosition();
-        double currentAngle = AngleUtilities.QuantizeToCardinal(startPin.GetAbsoluteAngle());
+        double currentAngle = AngleUtilities.QuantizeTo45(startPin.GetAbsoluteAngle());
         double endEntryAngle = AngleUtilities.NormalizeAngle(endPin.GetAbsoluteAngle() + 180);
-        endEntryAngle = AngleUtilities.QuantizeToCardinal(endEntryAngle);
+        endEntryAngle = AngleUtilities.QuantizeTo45(endEntryAngle);
 
         double x = startX;
         double y = startY;
@@ -41,7 +41,7 @@ public class PathSmoother
         var corners = ExtractCorners(gridPath);
         int lastTurnIndex = FindLastTurningCorner(corners, currentAngle);
 
-        // Process Manhattan routing through corners
+        // Process octile routing (45° steps) through corners
         for (int i = 1; i < corners.Count; i++)
         {
             var (cornerX, cornerY) = _grid.GridToPhysical(corners[i].X, corners[i].Y);
@@ -51,33 +51,51 @@ public class PathSmoother
 
             if (i == lastTurnIndex)
             {
-                if (newAngle == 0 || newAngle == 180)
-                    cornerY = endY;
-                else if (newAngle == 90 || newAngle == 270)
-                    cornerX = endX;
+                // Snap the last turning corner onto the pin's entry axis so the
+                // final approach lies exactly on it. The projection handles
+                // cardinal and diagonal entry directions alike; the A* goal
+                // check tolerates small lateral offsets and relies on this snap.
+                (cornerX, cornerY) = ProjectOntoEntryAxis(cornerX, cornerY, endX, endY, newAngle);
             }
 
             double dx = cornerX - x;
             double dy = cornerY - y;
-            bool isHorizontal = (currentAngle == 0 || currentAngle == 180);
-            bool isVertical = (currentAngle == 90 || currentAngle == 270);
-            double projectedDistance = isHorizontal ? Math.Abs(dx) : Math.Abs(dy);
 
             double angleRad = currentAngle * Math.PI / 180;
             double dot = dx * Math.Cos(angleRad) + dy * Math.Sin(angleRad);
             if (dot < -0.01 && !willTurn)
                 continue;
 
-            double straightDistance = willTurn
-                ? Math.Max(0, projectedDistance - _minBendRadius)
-                : projectedDistance;
+            double straightDistance;
+            if (willTurn)
+            {
+                // Distance to the exact intersection of the current heading line
+                // with the outgoing corner line. Using the intersection (instead of
+                // the raw corner cell) makes the bend land exactly on the outgoing
+                // line, eliminating lateral drift at 45° corners.
+                double distanceToApex = DistanceToLineIntersection(
+                    x, y, currentAngle, cornerX, cornerY, newAngle) ?? dot;
 
-            double minSegmentLength = Math.Max(0.5, _grid.CellSizeMicrometers * 0.5);
+                // Setback before the bend: the tangent length of a circular arc
+                // is r·tan(sweep/2) — r for 90° turns, ≈0.414·r for 45° turns.
+                double turnAngle = Math.Abs(AngleUtilities.NormalizeAngle(newAngle - currentAngle));
+                double bendSetback = _minBendRadius * Math.Tan(turnAngle * Math.PI / 360.0);
+                straightDistance = Math.Max(0, distanceToApex - bendSetback);
+            }
+            else
+            {
+                straightDistance = dot;
+            }
+
+            // Before a turn even a sub-cell straight matters: dropping it would
+            // shift the bend start and drift off the outgoing corner line.
+            double minSegmentLength = willTurn
+                ? 0.01
+                : Math.Max(0.5, _grid.CellSizeMicrometers * 0.5);
             if (straightDistance > minSegmentLength && dot > 0.01)
             {
-                double dirSign = isHorizontal ? (dx > 0 ? 1 : -1) : (dy > 0 ? 1 : -1);
-                double endStraightX = isHorizontal ? x + dirSign * straightDistance : x;
-                double endStraightY = isVertical ? y + dirSign * straightDistance : y;
+                double endStraightX = x + straightDistance * Math.Cos(angleRad);
+                double endStraightY = y + straightDistance * Math.Sin(angleRad);
 
                 routedPath.Segments.Add(new StraightSegment(x, y, endStraightX, endStraightY, currentAngle));
                 x = endStraightX;
@@ -86,7 +104,7 @@ public class PathSmoother
 
             if (willTurn)
             {
-                var bend = _bendBuilder.BuildBend(x, y, currentAngle, newAngle, BendMode.Cardinal90);
+                var bend = _bendBuilder.BuildBend(x, y, currentAngle, newAngle, BendMode.Diagonal45);
                 if (bend != null)
                 {
                     routedPath.Segments.Add(bend);
@@ -131,20 +149,10 @@ public class PathSmoother
         if (distance < 0.1)
             return true; // Already at pin
 
-        // Calculate position on entry axis (where final straight should start)
-        double entryAxisX, entryAxisY;
-        if (endEntryAngle == 0 || endEntryAngle == 180)
-        {
-            // Horizontal entry - must be on line y = endY
-            entryAxisX = x;
-            entryAxisY = endY;
-        }
-        else
-        {
-            // Vertical entry - must be on line x = endX
-            entryAxisX = endX;
-            entryAxisY = y;
-        }
+        // Calculate position on entry axis (where final straight should start).
+        // Project the current point onto the entry line through the end pin;
+        // works for cardinal AND diagonal entry directions.
+        var (entryAxisX, entryAxisY) = ProjectOntoEntryAxis(x, y, endX, endY, endEntryAngle);
 
         double lateralOffset = CalculateLateralOffset(x, y, currentAngle, endX, endY);
         double forwardDistance = CalculateForwardDistance(x, y, currentAngle, endX, endY);
@@ -269,18 +277,8 @@ public class PathSmoother
             y = bend2.EndPoint.Y;
             currentAngle = endEntryAngle;
 
-            // Straight to entry axis
-            double toAxisX, toAxisY;
-            if (endEntryAngle == 0 || endEntryAngle == 180)
-            {
-                toAxisX = x;
-                toAxisY = endY;
-            }
-            else
-            {
-                toAxisX = endX;
-                toAxisY = y;
-            }
+            // Straight to entry axis (projection handles diagonal entries too)
+            var (toAxisX, toAxisY) = ProjectOntoEntryAxis(x, y, endX, endY, endEntryAngle);
 
             double distToAxis = Math.Sqrt(Math.Pow(toAxisX - x, 2) + Math.Pow(toAxisY - y, 2));
             if (distToAxis > 0.5)
@@ -353,6 +351,45 @@ public class PathSmoother
         double angleDiff = Math.Abs(AngleUtilities.NormalizeAngle(actualAngle - declaredAngle));
 
         return angleDiff < toleranceDeg;
+    }
+
+    /// <summary>
+    /// Computes the signed distance along the current heading from (x, y) to the
+    /// intersection with the line through (cornerX, cornerY) at cornerAngle.
+    /// Returns null when the lines are (nearly) parallel.
+    /// </summary>
+    private static double? DistanceToLineIntersection(
+        double x, double y, double headingDegrees,
+        double cornerX, double cornerY, double cornerAngleDegrees)
+    {
+        double headingRad = headingDegrees * Math.PI / 180;
+        double cornerRad = cornerAngleDegrees * Math.PI / 180;
+        double ux = Math.Cos(headingRad);
+        double uy = Math.Sin(headingRad);
+        double vx = Math.Cos(cornerRad);
+        double vy = Math.Sin(cornerRad);
+
+        double cross = ux * vy - uy * vx;
+        if (Math.Abs(cross) < 1e-9)
+            return null; // Parallel lines — no unique intersection
+
+        double wx = cornerX - x;
+        double wy = cornerY - y;
+        return (wx * vy - wy * vx) / cross;
+    }
+
+    /// <summary>
+    /// Projects a point onto the pin entry axis: the line through the end pin
+    /// along the entry direction. Supports cardinal and diagonal entry angles.
+    /// </summary>
+    private static (double X, double Y) ProjectOntoEntryAxis(
+        double x, double y, double endX, double endY, double entryAngle)
+    {
+        double entryRad = entryAngle * Math.PI / 180;
+        double ux = Math.Cos(entryRad);
+        double uy = Math.Sin(entryRad);
+        double t = (x - endX) * ux + (y - endY) * uy;
+        return (endX + t * ux, endY + t * uy);
     }
 
     private static double CalculateLateralOffset(double x, double y, double angle, double endX, double endY)

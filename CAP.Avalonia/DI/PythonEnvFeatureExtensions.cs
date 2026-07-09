@@ -40,7 +40,16 @@ internal static class PythonEnvFeatureExtensions
             return registry;
         });
 
-        services.AddSingleton<PythonEnvironmentManagerViewModel>();
+        services.AddSingleton<PythonEnvironmentManagerViewModel>(sp =>
+            new PythonEnvironmentManagerViewModel(
+                sp.GetRequiredService<PythonEnvironmentRegistry>(),
+                sp.GetRequiredService<UvBootstrapper>(),
+                sp.GetRequiredService<NazcaPackageInstaller>(),
+                sp.GetRequiredService<EnvironmentHealthChecker>(),
+                sp.GetRequiredService<PythonDiscoveryService>(),
+                // The active interpreter path is the shared preference the registry callback
+                // keeps in sync — reuse it to mark the active system interpreter (issue #645).
+                () => sp.GetRequiredService<UserPreferencesService>().GetCustomPythonPath()));
 
         return services;
     }

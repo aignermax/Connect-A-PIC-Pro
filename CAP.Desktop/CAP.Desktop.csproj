@@ -13,7 +13,7 @@
     <BuiltInComInteropSupport Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">true</BuiltInComInteropSupport>
     <!-- Add macOS ARM64 and x64 support alongside Windows and Linux -->
     <RuntimeIdentifiers>win-x64;linux-x64;osx-arm64;osx-x64</RuntimeIdentifiers>
-    <Version>0.9.0</Version>
+    <Version>0.11.0</Version>
     <!-- Windows icon (embedded in the .exe; macOS uses the .icns inside the bundle) -->
     <ApplicationIcon Condition="'$(RuntimeIdentifier)' == '' Or $(RuntimeIdentifier.StartsWith('win'))">LunimaIcon.ico</ApplicationIcon>
   </PropertyGroup>
@@ -34,6 +34,21 @@
   <ItemGroup>
     <Content Include="..\scripts\render_component_preview.py"
              Link="scripts\render_component_preview.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+    <!-- gdsfactory preview renderer (issue #637): same code-file CLI + JSON
+         contract as render_component_preview.py, so the preview parser is shared. -->
+    <Content Include="..\scripts\render_gdsfactory_preview.py"
+             Link="scripts\render_gdsfactory_preview.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- Python helper for "Tools → Check PDKs against Python" (issue #515).
+       PdkFunctionResolutionService looks for `<baseDir>/scripts/list_pdk_resolution.py`. -->
+  <ItemGroup>
+    <Content Include="..\scripts\list_pdk_resolution.py"
+             Link="scripts\list_pdk_resolution.py"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>

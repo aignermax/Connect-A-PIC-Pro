@@ -1,14 +1,18 @@
 using Avalonia.Controls;
+using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
+using CAP.Avalonia.ViewModels.Process;
 using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
@@ -31,6 +35,7 @@ public partial class MainWindow : Window
             if (DataContext is MainViewModel vm)
             {
                 WireSettingsOpener(vm); // see MainWindow.SettingsOpener.cs
+                AttachNotificationHost();
 
                 vm.FileDialogService = new FileDialogService(this);
                 vm.FileOperations.MessageBoxService = new MessageBoxService();
@@ -45,7 +50,8 @@ public partial class MainWindow : Window
                 if (onaEditorProvider != null)
                     onaEditorProvider.OpenSweepAsync = analyzer => OpenOnaAnalyzerWindow(analyzer, vm);
                 vm.RightPanel.RoutingDiagnostics.FileDialogService = vm.FileDialogService;
-                vm.RightPanel.TimeDomain.FileDialogService = vm.FileDialogService;
+                vm.BottomPanel.Analysis.Transient.FileDialogService = vm.FileDialogService;
+                vm.BottomPanel.Analysis.Eye.FileDialogService = vm.FileDialogService;
                 ExportDialogWiring.Wire(vm, this, vm.ErrorConsole);
                 vm.ViewportControl.GetViewportSize = GetActualViewportSize;
 
@@ -68,6 +74,16 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the "New Component" window (issue #656) — non-modal, like the
+                // Fabrication Process and ONA Analyzer tool windows, so the user can keep
+                // iterating on the design while it stays open.
+                vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
+                {
+                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    window.Show(this);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                };
+
                 // Wire up PDK Offset Editor window
                 vm.ShowPdkOffsetEditorRequested = () =>
                 {
@@ -80,16 +96,49 @@ public partial class MainWindow : Window
                     editorWindow.Show(this);
                 };
 
-                // Wire up Fabrication Process window (process model — #570)
+                // Wire up Fabrication Process window (process model — #570). The dialog derives
+                // its state from the design's active process + loaded PDKs at open time, so a
+                // reopened dialog always reflects the current selection (#660).
                 vm.ShowProcessManagerRequested = () =>
                 {
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
+                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
+                    // persisted, using the same loaded-PDK registry the offset editor writes through.
+                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
+                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
+                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
+                    // the exact file so a real PDK can't be edited by accident.
+                    processVm.ConfirmSaveToPdk = async path =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
+                            "Save to PDK file?", new[] { "Cancel", "Save" });
+                        return choice == 1;
+                    };
                     var processWindow = new ProcessManagementWindow
                     {
                         DataContext = processVm
                     };
                     processWindow.Show(this);
                 };
+
+                // Wire up the New-Design process-selection dialog (issue #570)
+                vm.ShowProcessSelectionAsync = async groups =>
+                {
+                    var pvm = new ProcessSelectionViewModel(groups);
+                    var dlg = new ProcessSelectionDialog { DataContext = pvm };
+                    await dlg.ShowDialog(this);
+                    return pvm.Result;
+                };
+
+                // Prompt for the fabrication process once at startup (issue #570). Deferred so
+                // the main window is fully shown before the modal picker opens; dismissing it
+                // starts in Playground.
+                global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                    async () => await vm.PromptForInitialProcessAsync(),
+                    global::Avalonia.Threading.DispatcherPriority.Background);
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
@@ -180,6 +229,25 @@ public partial class MainWindow : Window
                 };
             }
         };
+    }
+
+    /// <summary>
+    /// Creates the toast host for transient, non-error feedback (issue #586)
+    /// and connects it to the app-wide <see cref="NotificationService"/> so
+    /// ViewModels can raise auto-dismissing popups on the right side of the
+    /// window instead of opening the error console.
+    /// </summary>
+    private void AttachNotificationHost()
+    {
+        const int maxVisibleToasts = 3;
+        var manager = new WindowNotificationManager(this)
+        {
+            Position = NotificationPosition.BottomRight,
+            MaxItems = maxVisibleToasts
+        };
+
+        var service = App.Services.GetService(typeof(NotificationService)) as NotificationService;
+        service?.Attach(manager);
     }
 
     /// <summary>
@@ -394,6 +462,18 @@ public partial class MainWindow : Window
         dialog.Show(this);
     }
 
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
     private void ZoomToFitButton_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
@@ -574,13 +654,17 @@ public partial class MainWindow : Window
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
+        var notificationService = App.Services.GetService(typeof(INotificationService))
+            as INotificationService;
+
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
             importers: null,
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
-            fdtdRequestFactory: fdtdRequestFactory);
+            fdtdRequestFactory: fdtdRequestFactory,
+            notificationService: notificationService);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
@@ -660,6 +744,8 @@ public partial class MainWindow : Window
         // Per-instance raw Nazca code editor (issue #556) — only in per-instance mode.
         var nazcaPreviewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
+        var gdsFactoryPreviewService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
+            as CAP_Core.Export.GdsFactoryComponentPreviewService;
         string? nazcaTemplateCode = null;
         Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null;
         Action? nazcaDimensionsChanged = null;
@@ -720,7 +806,8 @@ public partial class MainWindow : Window
             nazcaOverlapCheck: nazcaOverlapCheck,
             nazcaDimensionsChanged: nazcaDimensionsChanged,
             nazcaPinsChanged: nazcaPinsChanged,
-            smatrixKeyResolver: smatrixKeyResolver);
+            smatrixKeyResolver: smatrixKeyResolver,
+            gdsFactoryPreviewService: gdsFactoryPreviewService);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         dialog.Show(this);

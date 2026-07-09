@@ -41,24 +41,53 @@
                       Background="#2d2d2d"
                       Height="40">
             <StackPanel Orientation="Horizontal">
-                <!-- Mode Buttons -->
+                <!-- Mode Buttons — icon-only, tooltips name the mode and its shortcut -->
                 <TextBlock Text="Mode:" VerticalAlignment="Center" Margin="10,0,5,0" Foreground="White"/>
-                <Button Content="[S] Select" Command="{Binding SetSelectModeCommand}"
-                        Width="80" Margin="2" Background="#3d3d3d" Foreground="LightBlue"/>
-                <Button Content="[C] Connect" Command="{Binding SetConnectModeCommand}"
-                        Width="85" Margin="2" Background="#3d3d3d" Foreground="Orange"/>
-                <Button Content="[D] Delete" Command="{Binding SetDeleteModeCommand}"
-                        Width="80" Margin="2" Background="#3d3d3d" Foreground="Red"/>
+                <Button Command="{Binding SetSelectModeCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Select mode (S) — click to select, drag to move">
+                    <PathIcon Data="M5,2 L5,13.5 L8,10.8 L9.8,14.6 L11.7,13.7 L9.9,10 L13.5,9.6 Z"
+                              Width="16" Height="16" Foreground="LightBlue"/>
+                </Button>
+                <Button Command="{Binding SetConnectModeCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Connect mode (C) — click two pins to route a waveguide between them">
+                    <PathIcon Data="M2,10 L5,10 L5,13 L2,13 Z M11,3 L14,3 L14,6 L11,6 Z M4.6,11.2 L11.2,4.6 L12.4,5.8 L5.8,12.4 Z"
+                              Width="16" Height="16" Foreground="Orange"/>
+                </Button>
+                <Button Command="{Binding SetDeleteModeCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Delete mode (D) — click components or connections to remove them (Del deletes the current selection)">
+                    <PathIcon Data="M3,4.4 L4.4,3 L8,6.6 L11.6,3 L13,4.4 L9.4,8 L13,11.6 L11.6,13 L8,9.4 L4.4,13 L3,11.6 L6.6,8 Z"
+                              Width="16" Height="16" Foreground="Red"/>
+                </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
                 <!-- Zoom Controls -->
                 <Button Content="+" Command="{Binding ZoomInCommand}" Width="30" Margin="2"/>
                 <Button Content="-" Command="{Binding ZoomOutCommand}" Width="30" Margin="2"/>
-                <Button Content="[F] Fit" x:Name="ZoomToFitButton" Click="ZoomToFitButton_Click"
-                        Width="50" Margin="2" Background="#3d3d3d" ToolTip.Tip="Zoom to fit all components (F)"/>
-                <Button Content="1:1" Command="{Binding ResetZoomCommand}"
-                        Width="35" Margin="2" ToolTip.Tip="Reset zoom to 100%"/>
+                <Button x:Name="ZoomToFitButton" Click="ZoomToFitButton_Click"
+                        Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Zoom to fit all components (F)">
+                    <PathIcon Data="M2,2 L6,2 L6,4 L4,4 L4,6 L2,6 Z M10,2 L14,2 L14,6 L12,6 L12,4 L10,4 Z M2,10 L4,10 L4,12 L6,12 L6,14 L2,14 Z M12,10 L14,10 L14,14 L10,14 L10,12 L12,12 Z M6.5,6.5 L9.5,6.5 L9.5,9.5 L6.5,9.5 Z"
+                              Width="16" Height="16" Foreground="White"/>
+                </Button>
+
+                <!-- Simulation — icon-only (play triangle), next to Fit per field feedback -->
+                <Button Command="{Binding RunSimulationCommand}"
+                        Width="36" Margin="2" Background="#3d5d3d"
+                        ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes.">
+                    <PathIcon Data="M4.5,2.5 L13.5,8 L4.5,13.5 Z"
+                              Width="16" Height="16" Foreground="LightGreen"/>
+                </Button>
+
+                <!-- Simulation mode: CW vs Transient. Run (L) executes the active mode. -->
+                <ComboBox Width="120" Margin="2" VerticalAlignment="Center"
+                          SelectedIndex="{Binding SimulationModeIndex}"
+                          ToolTip.Tip="Simulation mode: CW (steady-state) or Transient (time-domain). Run (L) executes this mode.">
+                    <ComboBoxItem>CW</ComboBoxItem>
+                    <ComboBoxItem>Transient</ComboBoxItem>
+                </ComboBox>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
@@ -70,29 +99,17 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
-                <!-- Actions -->
-                <Button Content="❌" Command="{Binding DeleteSelectedCommand}"
-                        Width="36" Margin="2" Background="#4d3d3d" ToolTip.Tip="Delete Selected (Del)"/>
-
-                <Separator Width="1" Background="Gray" Margin="10,5"/>
-
-                <!-- Group/Ungroup -->
+                <!-- Group/Ungroup — icon-only, the tooltips carry the label -->
                 <Button Command="{Binding CreateGroupCommand}"
-                        Width="85" Margin="2" Background="#3d3d3d" ToolTip.Tip="Create Group (Ctrl+G)">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <PathIcon Data="M4,4 L12,4 L12,12 L4,12 Z M6,6 L10,6 L10,10 L6,10 Z"
-                                  Width="16" Height="16" Foreground="LightBlue"/>
-                        <TextBlock Text="Group" Foreground="LightBlue"/>
-                    </StackPanel>
+                        Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Create Group (Ctrl+G)">
+                    <PathIcon Data="M4,4 L12,4 L12,12 L4,12 Z M6,6 L10,6 L10,10 L6,10 Z"
+                              Width="16" Height="16" Foreground="LightBlue"/>
                 </Button>
 
                 <Button Command="{Binding UngroupCommand}"
-                        Width="95" Margin="2" Background="#3d3d3d" ToolTip.Tip="Ungroup (Ctrl+Shift+G)">
-                    <StackPanel Orientation="Horizontal" Spacing="4">
-                        <PathIcon Data="M4,4 L6,4 L6,6 L4,6 Z M10,4 L12,4 L12,6 L10,6 Z M4,10 L6,10 L6,12 L4,12 Z M10,10 L12,10 L12,12 L10,12 Z"
-                                  Width="16" Height="16" Foreground="Orange"/>
-                        <TextBlock Text="Ungroup" Foreground="Orange"/>
-                    </StackPanel>
+                        Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Ungroup (Ctrl+Shift+G)">
+                    <PathIcon Data="M4,4 L6,4 L6,6 L4,6 Z M10,4 L12,4 L12,6 L10,6 Z M4,10 L6,10 L6,12 L4,12 Z M10,10 L12,10 L12,12 L10,12 Z"
+                              Width="16" Height="16" Foreground="Orange"/>
                 </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
@@ -152,22 +169,6 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
-                <!-- PDK -->
-                <Button Content="📦 Load PDK" Command="{Binding LoadPdkCommand}"
-                        MinWidth="95" Margin="2" Padding="8,4" Background="#3d3d5d" ToolTip.Tip="Load PDK component library"/>
-                <Button Content="📐 Offset Editor" Command="{Binding OpenPdkOffsetEditorCommand}"
-                        MinWidth="110" Margin="2" Padding="8,4" Background="#3d3d5d" ToolTip.Tip="Open PDK Component Offset Editor — calibrate NazcaOriginOffset per component"/>
-                <Button Content="❓" Command="{Binding OpenPdkHelpCommand}"
-                        Width="28" Margin="0,2,2,2" Padding="2,4" Background="#3d3d5d" ToolTip.Tip="PDK JSON format help and AI assistance guide"/>
-
-                <Separator Width="1" Background="Gray" Margin="10,5"/>
-
-                <!-- Simulation -->
-                <Button Content="[L] Simulate" Command="{Binding RunSimulationCommand}"
-                        Width="90" Margin="2" Background="#3d5d3d" ToolTip.Tip="Run light simulation (L). Press P to toggle power overlay. Overlay auto-updates on circuit changes."/>
-
-                <Separator Width="1" Background="Gray" Margin="10,5"/>
-
                 <!-- Tools -->
                 <Button MinWidth="80" Margin="2" Padding="8,4" Background="#3d3d5d"
                         ToolTip.Tip="Tools">
@@ -176,7 +177,42 @@
                     </Button.Content>
                     <Button.Flyout>
                         <Flyout Placement="BottomEdgeAlignedLeft">
-                            <StackPanel MinWidth="200" Margin="6">
+                            <StackPanel MinWidth="230" Margin="6">
+                                <!-- Load PDK + format help share one row: the ❓ opens the
+                                     PDK JSON documentation the loader expects. -->
+                                <Grid ColumnDefinitions="*,Auto" Margin="0,2">
+                                    <Button Grid.Column="0" HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            Padding="10,7"
+                                            Background="#3d3d5d"
+                                            Command="{Binding LoadPdkCommand}"
+                                            ToolTip.Tip="Load a PDK component library (JSON)">
+                                        <StackPanel Orientation="Horizontal" Spacing="10">
+                                            <TextBlock Text="📦" FontSize="15" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Load PDK…"
+                                                       Foreground="White" FontSize="12"/>
+                                        </StackPanel>
+                                    </Button>
+                                    <Button Grid.Column="1" Width="32" Margin="4,0,0,0" Padding="2,7"
+                                            Background="#3d3d5d"
+                                            Command="{Binding OpenPdkHelpCommand}"
+                                            ToolTip.Tip="PDK JSON format help and AI assistance guide"
+                                            Content="❓"/>
+                                </Grid>
+
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,7"
+                                        Background="#3d3d5d"
+                                        Command="{Binding OpenPdkOffsetEditorCommand}"
+                                        ToolTip.Tip="Calibrate NazcaOriginOffset per component and verify pin alignment against the rendered GDS">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="📐" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="PDK Offset Editor…"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
+
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
                                         Margin="0,2" Padding="10,7"
@@ -188,9 +224,30 @@
                                                    Foreground="White" FontSize="12"/>
                                     </StackPanel>
                                 </Button>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,7"
+                                        Background="#3d3d5d"
+                                        Click="OpenPdkResolutionCheckDialog_Click">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🔎" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="Check PDKs against Python…"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
+                </Button>
+
+                <Separator Width="1" Background="Gray" Margin="10,5"/>
+
+                <!-- Fabrication process (layer stack, cross-sections, materials) — top-level
+                     shortcut so it doesn't require scrolling the right panel (#682/#570). -->
+                <Button Command="{Binding OpenProcessManagerCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="Fabrication process — layer stack, cross-sections, materials (opens the process manager)">
+                    <TextBlock Text="🧱" FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
                 </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
@@ -205,13 +262,31 @@
 
         <!-- Status Bar -->
         <Border DockPanel.Dock="Bottom" Background="#1e1e1e" Height="25">
-            <StackPanel Orientation="Horizontal">
-                <TextBlock Text="{Binding StatusText}"
-                           VerticalAlignment="Center" Margin="10,0" Foreground="LightGray"/>
-                <TextBlock VerticalAlignment="Center" Margin="20,0,0,0" Foreground="Gray">
-                    <Run Text="S=Select  C=Connect  D=Delete  R=Rotate  G=Grid Snap  F=Fit  L=Simulate  P=Toggle Overlay  Del=Remove  Ctrl+G=Group  Ctrl+Shift+G=Ungroup  Ctrl+L=Lock/Unlock  Ctrl+Z/Y=Undo/Redo  Ctrl+C/V=Copy/Paste  F12=Error Console"/>
-                </TextBlock>
-            </StackPanel>
+            <DockPanel LastChildFill="True">
+                <!-- Active process indicator (issue #570): persistent, low-clutter home in the
+                     status bar (right) rather than the crowded top toolbar. Green = a real
+                     process; amber = Playground (not manufacturable); "No process selected" until
+                     one is chosen via File → New. -->
+                <Border DockPanel.Dock="Right" x:Name="ActiveProcessIndicator"
+                        Margin="6,3" Padding="8,1" CornerRadius="3" VerticalAlignment="Center"
+                        Background="#2d4d2d" Classes.playground="{Binding IsPlayground}"
+                        ToolTip.Tip="The fabrication process this design is locked to (set via File → New). Amber = Playground: not manufacturable.">
+                    <Border.Styles>
+                        <Style Selector="Border.playground">
+                            <Setter Property="Background" Value="#5d4510"/>
+                        </Style>
+                    </Border.Styles>
+                    <TextBlock Text="{Binding ActiveProcessLabel}"
+                               Foreground="White" FontSize="10" VerticalAlignment="Center"/>
+                </Border>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="{Binding StatusText}"
+                               VerticalAlignment="Center" Margin="10,0" Foreground="LightGray"/>
+                    <TextBlock VerticalAlignment="Center" Margin="20,0,0,0" Foreground="Gray">
+                        <Run Text="S=Select  C=Connect  D=Delete  R=Rotate  G=Grid Snap  F=Fit  L=Simulate  P=Toggle Overlay  Del=Remove  Ctrl+G=Group  Ctrl+Shift+G=Ungroup  Ctrl+L=Lock/Unlock  Ctrl+Z/Y=Undo/Redo  Ctrl+C/V=Copy/Paste  F12=Error Console"/>
+                    </TextBlock>
+                </StackPanel>
+            </DockPanel>
         </Border>
 
         <!-- Error Console Panel (collapsible, above status bar, toggled via F12) -->
@@ -285,6 +360,9 @@
                 </Border>
             </StackPanel>
         </Border>
+
+        <!-- Analysis Dock Panel (collapsible, above the Error Console, #570/#535) -->
+        <panels:AnalysisDockPanel DockPanel.Dock="Bottom"/>
 
         <!-- Left Panel - Hierarchy + Component Library -->
         <Grid DockPanel.Dock="Left" ColumnDefinitions="*,Auto" Name="LeftPanelGrid">
@@ -489,8 +567,13 @@
 
                 <!-- Component Library -->
                 <DockPanel Grid.Row="4">
-                    <TextBlock DockPanel.Dock="Top" Text="Component Library"
-                               FontWeight="Bold" Margin="10,6,10,4" Foreground="White"/>
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="10,6,10,4">
+                        <TextBlock Grid.Column="0" Text="Component Library"
+                                   FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
+                        <Button Grid.Column="1" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
+                                Padding="8,0" FontWeight="Bold" Background="#2a4a2a"
+                                ToolTip.Tip="Neue Komponente…"/>
+                    </Grid>
                     <TextBox DockPanel.Dock="Top" Watermark="Search components..."
                              Text="{Binding LeftPanel.SearchText}"
                              Margin="10,0,10,6" FontSize="11"
@@ -524,6 +607,7 @@
                                             PinDefinitions="{Binding PinDefinitions}"
                                             NazcaModuleName="{Binding NazcaModuleName}"
                                             NazcaFunctionName="{Binding NazcaFunctionName}"
+                                            GdsFactoryFunction="{Binding GdsFactoryFunction}"
                                             Margin="0,0,6,0"/>
                                         <StackPanel VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal">
@@ -571,7 +655,11 @@
                                                 <CheckBox IsChecked="{Binding IsEnabled}"
                                                           Content="{Binding Name}"
                                                           FontSize="10"
-                                                          Margin="0,0,5,0"/>
+                                                          Margin="0,0,5,0"
+                                                          IsEnabled="{Binding !IsLockedByProcess}"/>
+                                                <TextBlock Text="🔒" FontSize="9" VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsLockedByProcess}"
+                                                           ToolTip.Tip="Belongs to another fabrication process — locked while this design's process is active."/>
                                             </StackPanel>
                                             <StackPanel Orientation="Horizontal" Margin="20,0,0,0">
                                                 <TextBlock Text="{Binding SourceBadge}"
@@ -594,11 +682,13 @@
                                         Background="#3d3d3d"/>
                             </StackPanel>
 
-                            <!-- Fabrication process (layer stack, cross-sections, materials) — #570 -->
-                            <Button Content="Fabrication Process…" Command="{Binding OpenProcessManagerCommand}"
-                                    HorizontalAlignment="Stretch" Height="24" Margin="2,6,2,0" FontSize="10"
-                                    Background="#3d4d6d"
-                                    ToolTip.Tip="View and adjust the fabrication process; import it from a foundry PDK"/>
+                            <!-- Active fabrication process of this design (issue #570) -->
+                            <TextBlock Text="{Binding ActiveProcessLabel}"
+                                       FontSize="10" FontWeight="SemiBold" Foreground="LightSkyBlue"
+                                       Margin="2,8,2,0" TextWrapping="Wrap"
+                                       ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
+
+                            <!-- Fabrication process now opens from the top toolbar icon (#570). -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -779,9 +869,6 @@
 
                     <!-- Design Checks Panel -->
                     <panels:DesignChecksPanel/>
-
-                    <!-- Time-Domain (Transient) Simulation Panel -->
-                    <panels:TimeDomainPanel/>
 
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>

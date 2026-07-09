@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP_Core.Routing;
+using CAP_Core.Routing.CrossingInsertion;
 using CAP_Core.Components.Core;
 
 namespace CAP_Core.Components.Connections;
@@ -42,6 +43,17 @@ public class WaveguideConnectionManager
     /// Typical: 0.5µm core + 2µm clearance on each side = ~4.5µm total.
     /// </summary>
     public double WaveguideWidthMicrometers { get; set; } = 4.0;
+
+    /// <summary>
+    /// Optional adaptive crossing-insertion service. When set, a crossing pass runs
+    /// after every routing pass and detours may be replaced by real PDK crossing
+    /// components (see <see cref="CrossingInsertionService"/>). Null (default) keeps
+    /// the classic avoid-only behavior.
+    /// </summary>
+    public CrossingInsertionService? CrossingInsertion { get; set; }
+
+    /// <summary>Re-entrancy guard: sub-connection recalcs must not trigger nested crossing passes.</summary>
+    private bool _isCrossingPassRunning;
 
     public WaveguideConnection AddConnection(PhysicalPin startPin, PhysicalPin endPin)
     {
@@ -137,6 +149,10 @@ public class WaveguideConnectionManager
     /// </summary>
     public void RemoveConnectionsForComponent(Component component)
     {
+        // Dissolve any crossings touching this component first so their crossing
+        // components and sub-connections are cleaned up (no orphaned crossings).
+        CrossingInsertion?.DissolveForComponent(component, this, _router);
+
         var router = _router;
         var connectionsToRemove = Connections
             .Where(c => c.StartPin.ParentComponent == component ||
@@ -159,6 +175,19 @@ public class WaveguideConnectionManager
 
     public void RemoveConnection(WaveguideConnection connection)
     {
+        // If the connection is part of an inserted crossing, dissolve the crossing:
+        // the crossing component and all four sub-connections are removed and the
+        // other original connection is restored unsplit.
+        if (CrossingInsertion != null &&
+            CrossingInsertion.TryDissolveForConnection(connection, this, _router))
+        {
+            if (Connections.Count > 0)
+            {
+                RecalculateAllTransmissions();
+            }
+            return;
+        }
+
         // Remove waveguide obstacle from pathfinding grid
         var router = _router;
         if (router.PathfindingGrid != null)
@@ -221,6 +250,38 @@ public class WaveguideConnectionManager
     /// <param name="progressCallback">Optional callback invoked after each connection is routed.</param>
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     public void RecalculateAllTransmissions(
+        Action? progressCallback = null,
+        CancellationToken cancellationToken = default)
+    {
+        RouteAllConnections(progressCallback, cancellationToken);
+        RunCrossingInsertionPass(cancellationToken);
+    }
+
+    /// <summary>
+    /// Runs the adaptive crossing-insertion pass after routing when a
+    /// <see cref="CrossingInsertion"/> service is configured.
+    /// </summary>
+    private void RunCrossingInsertionPass(CancellationToken cancellationToken)
+    {
+        if (CrossingInsertion == null || !UseSequentialRouting || _router.PathfindingGrid == null) return;
+        if (cancellationToken.IsCancellationRequested || _isCrossingPassRunning) return;
+
+        _isCrossingPassRunning = true;
+        try
+        {
+            CrossingInsertion.InsertBeneficialCrossings(this, _router, cancellationToken);
+        }
+        finally
+        {
+            _isCrossingPassRunning = false;
+        }
+    }
+
+    /// <summary>
+    /// Routes all connections (incremental first, then full re-route with ordering
+    /// strategies) without running the crossing-insertion pass.
+    /// </summary>
+    private void RouteAllConnections(
         Action? progressCallback = null,
         CancellationToken cancellationToken = default)
     {

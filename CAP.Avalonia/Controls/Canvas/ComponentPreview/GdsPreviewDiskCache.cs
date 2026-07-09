@@ -17,7 +17,7 @@ public sealed class GdsPreviewDiskCache
     /// <summary>Production ctor: uses the platform-neutral local app-data location.</summary>
     public GdsPreviewDiskCache()
         : this(Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            CAP_Core.Helpers.AppDataFolders.LocalApplicationData,
             "Lunima", "gds-preview-cache"))
     {
     }

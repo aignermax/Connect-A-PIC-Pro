@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services;
+using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -22,6 +23,51 @@ public partial class ProcessManagementViewModel : ObservableObject
 {
     private readonly IFileDialogService _fileDialog;
     private readonly IReadOnlyList<IProcessImporter> _importers;
+    private readonly PdkJsonSaver _pdkSaver;
+
+    /// <summary>Member PDK drafts of the active process, captured on open, used to persist edits.</summary>
+    private IReadOnlyList<PdkDraft> _memberDrafts = new List<PdkDraft>();
+
+    /// <summary>
+    /// Names of the layer/cross-section/material rows that belong to the currently loaded member
+    /// PDK(s), as opposed to rows pulled in later by <see cref="ImportFromPdk"/>'s <see cref="Merge"/>
+    /// from an unrelated reference PDK. <see cref="SaveProcess"/> only ever writes rows in these
+    /// sets, so an ad-hoc reference import can never corrupt the member PDK's own layer stack
+    /// (issue #686 review, Finding 2). Populated by <see cref="Load"/> / <see cref="ShowLockedProcess"/>
+    /// and by the manual Add* commands; a later <see cref="Merge"/> call (the import path) does
+    /// NOT add to these sets.
+    /// </summary>
+    private readonly HashSet<string> _ownLayerNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Cross-section names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
+    private readonly HashSet<string> _ownXsectionNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Material names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
+    private readonly HashSet<string> _ownMaterialNames = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
+    public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
+        new[] { XsectionKind.Optical, XsectionKind.Metal };
+
+    /// <summary>
+    /// Bundled/loaded PDKs whose fabrication process can be loaded into the editor as a preset
+    /// (issue #570 follow-up): SiEPIC EBeam, CornerStone SiN, Demo, and any other loaded PDK that
+    /// declares a <see cref="ProcessDefinition"/>. Populated by <see cref="SetAvailablePresets"/>,
+    /// which <see cref="ShowActiveProcess"/> calls with every loaded PDK each time the dialog opens.
+    /// </summary>
+    public ObservableCollection<PdkDraft> AvailablePresets { get; } = new();
+
+    /// <summary>
+    /// The preset picked in the "Load preset" dropdown; selecting one loads its process via
+    /// <see cref="OnSelectedPresetChanged"/> (same pattern as <c>PdkOffsetEditorViewModel</c>'s
+    /// installed-PDK picker — a plain property setter, no extra command/behavior wiring needed).
+    /// </summary>
+    [ObservableProperty]
+    private PdkDraft? _selectedPreset;
+
+    /// <summary>Resolves a PDK name to its source JSON path so edits can be persisted; wired by the
+    /// UI layer to the loaded-PDK registry. Null (e.g. in tests/headless) disables saving.</summary>
+    public Func<string, string?>? PdkFilePathResolver { get; set; }
 
     /// <summary>Name of the loaded process.</summary>
     [ObservableProperty]
@@ -55,10 +101,12 @@ public partial class ProcessManagementViewModel : ObservableObject
     }
 
     /// <summary>Initialises the ViewModel with a specific importer set (tests).</summary>
-    public ProcessManagementViewModel(IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers)
+    public ProcessManagementViewModel(
+        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers, PdkJsonSaver? pdkSaver = null)
     {
         _fileDialog = fileDialog;
         _importers = importers;
+        _pdkSaver = pdkSaver ?? new PdkJsonSaver();
     }
 
     /// <summary>Populates the editable collections from a process definition.</summary>
@@ -68,7 +116,57 @@ public partial class ProcessManagementViewModel : ObservableObject
         Replace(Layers, process.Layers);
         Replace(Xsections, process.Xsections);
         Replace(Materials, process.Materials);
+        MarkAllRowsOwned();
         HasProcess = true;
+    }
+
+    /// <summary>
+    /// Refreshes <see cref="AvailablePresets"/> from the currently loaded PDKs: any PDK that
+    /// declares a <see cref="ProcessDefinition"/> (bundled or user-loaded) can seed the editor.
+    /// Called by <see cref="ShowActiveProcess"/> every time the dialog opens, so the picker
+    /// always reflects the live PDK set instead of a stale snapshot.
+    /// </summary>
+    public void SetAvailablePresets(IReadOnlyList<PdkDraft> loadedPdks)
+    {
+        AvailablePresets.Clear();
+        foreach (var pdk in loadedPdks.Where(p => p.Process != null))
+            AvailablePresets.Add(pdk);
+    }
+
+    /// <summary>
+    /// Loads a bundled/loaded PDK's fabrication process into the editor as a starting point
+    /// (issue #570 follow-up), triggered by picking an entry in the "Load preset" dropdown
+    /// (<see cref="SelectedPreset"/>). The picked PDK's <see cref="ProcessDefinition"/> replaces
+    /// the current editable state via <see cref="Load"/>, so every row is marked owned by this
+    /// preset (issue #686 provenance) and can be edited and saved back to it.
+    /// </summary>
+    partial void OnSelectedPresetChanged(PdkDraft? value)
+    {
+        if (value == null)
+            return;
+
+        Load(value.Process ?? new ProcessDefinition { Name = value.Name });
+        _memberDrafts = new List<PdkDraft> { value };
+        StatusText = $"Loaded '{value.Name}' as a starting process. Adjust as needed, then Save to PDK.";
+    }
+
+    /// <summary>
+    /// Snapshots the names currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
+    /// as belonging to the process being edited (issue #686 review, Finding 2) — called right after
+    /// the collections are populated from the process's OWN definition(s), before any later
+    /// <see cref="ImportFromPdk"/> reference import can add unrelated rows.
+    /// </summary>
+    private void MarkAllRowsOwned()
+    {
+        _ownLayerNames.Clear();
+        _ownXsectionNames.Clear();
+        _ownMaterialNames.Clear();
+        foreach (var layer in Layers)
+            if (layer.Name != null) _ownLayerNames.Add(layer.Name);
+        foreach (var xs in Xsections)
+            if (xs.Name != null) _ownXsectionNames.Add(xs.Name);
+        foreach (var mat in Materials)
+            if (mat.Name != null) _ownMaterialNames.Add(mat.Name);
     }
 
     /// <summary>Builds a process definition from the current editable state.</summary>
@@ -160,15 +258,134 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Adds an empty layer row for manual entry.</summary>
     [RelayCommand]
-    private void AddLayer() => Layers.Add(new ProcessLayer { Name = "NEW_LAYER" });
+    private void AddLayer()
+    {
+        var layer = new ProcessLayer { Name = "NEW_LAYER" };
+        Layers.Add(layer);
+        _ownLayerNames.Add(layer.Name);
+    }
 
     /// <summary>Adds an empty cross-section row for manual entry.</summary>
     [RelayCommand]
-    private void AddXsection() => Xsections.Add(new ProcessXsection { Name = "new_xs" });
+    private void AddXsection()
+    {
+        var xsection = new ProcessXsection { Name = "new_xs" };
+        Xsections.Add(xsection);
+        _ownXsectionNames.Add(xsection.Name);
+    }
+
+    /// <summary>
+    /// Adds a metal cross-section preset for electrical routing (issue #682) plus a matching
+    /// METAL layer if the stack has none, so a user can define electrical routing in one click.
+    /// </summary>
+    [RelayCommand]
+    private void AddMetalXsection()
+    {
+        // A legacy/imported row can have a null Name despite the DTO's non-nullable declaration
+        // (e.g. deserialized from JSON that omitted "name") — guard like the resolver does
+        // (issue #686 review, Finding 3) so this command doesn't throw an NRE.
+        if (Layers.All(l => l.Name == null || !l.Name.Contains("METAL", StringComparison.OrdinalIgnoreCase)))
+        {
+            var metalLayer = new ProcessLayer
+            {
+                Name = "METAL-1", Layer = MetalTraceStyle.DefaultGdsLayer, Datatype = 0,
+                Description = "Electrical routing metal",
+            };
+            Layers.Add(metalLayer);
+            _ownLayerNames.Add(metalLayer.Name);
+        }
+
+        var metalXsection = new ProcessXsection
+        {
+            Name = "metal",
+            Kind = XsectionKind.Metal,
+            WidthUm = MetalTraceStyle.DefaultWidthUm,
+            Layers = { "METAL-1" },
+            Description = "Electrical routing trace",
+        };
+        Xsections.Add(metalXsection);
+        _ownXsectionNames.Add(metalXsection.Name);
+        HasProcess = true;
+        StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
+    }
+
+    /// <summary>
+    /// Persists the edited process back to its PDK JSON so the export picks up the metal
+    /// cross-section (issue #682). Only unambiguous single-member processes are written; the
+    /// PDK's fingerprint fields (thickness, materials, angles) are preserved — only the layer
+    /// stack, cross-sections and materials are updated, and only the rows that belong to this
+    /// member PDK (<see cref="_ownLayerNames"/> etc.) — an unrelated PDK pulled in via
+    /// <see cref="ImportFromPdk"/> for reference must never be written into this PDK's file
+    /// (issue #686 review, Finding 2).
+    /// </summary>
+    /// <summary>
+    /// Optional confirmation gate before writing the process back to a PDK file on disk. The UI
+    /// wires this to a yes/no prompt naming the target file, so a user cannot overwrite a PDK's
+    /// JSON by accident. Receives the file path; returns true to proceed. Null (tests/headless)
+    /// proceeds without prompting.
+    /// </summary>
+    public Func<string, Task<bool>>? ConfirmSaveToPdk { get; set; }
+
+    [RelayCommand]
+    private async Task SaveProcess()
+    {
+        if (_memberDrafts.Count == 0)
+        {
+            StatusText = "Nothing to save — this process has no editable member PDK (Playground or import-only).";
+            return;
+        }
+        if (_memberDrafts.Count > 1)
+        {
+            StatusText = "This process merges several PDKs; pick which one owns the edit by saving to that PDK "
+                       + "directly (multi-PDK target selection is not implemented yet).";
+            return;
+        }
+
+        var draft = _memberDrafts[0];
+        var path = PdkFilePathResolver?.Invoke(draft.Name);
+        if (string.IsNullOrEmpty(path))
+        {
+            StatusText = $"Could not locate the PDK file for '{draft.Name}' — save unavailable.";
+            return;
+        }
+
+        // Writing edits back to a PDK's JSON on disk is a deliberate act — confirm first so a
+        // real PDK cannot be overwritten by accident (user field feedback). Only this process's
+        // own rows are written regardless; the prompt makes the file target explicit.
+        if (ConfirmSaveToPdk != null && !await ConfirmSaveToPdk(path))
+        {
+            StatusText = "Save cancelled — the PDK file was not changed.";
+            return;
+        }
+
+        try
+        {
+            // Preserve the fingerprint-bearing fields (thickness, foundry, angles); only the
+            // user-editable stack/xsections/materials change, and update the in-memory draft so
+            // the next export uses the new metal cross-section without a reload.
+            var process = draft.Process ?? new ProcessDefinition { Name = ProcessName };
+            process.Layers = Layers.Where(l => l.Name != null && _ownLayerNames.Contains(l.Name)).ToList();
+            process.Xsections = Xsections.Where(x => x.Name != null && _ownXsectionNames.Contains(x.Name)).ToList();
+            process.Materials = Materials.Where(m => m.Name != null && _ownMaterialNames.Contains(m.Name)).ToList();
+            draft.Process = process;
+
+            _pdkSaver.SaveToFile(draft, path);
+            StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Save failed: {ex.Message}";
+        }
+    }
 
     /// <summary>Adds an empty material row for manual entry.</summary>
     [RelayCommand]
-    private void AddMaterial() => Materials.Add(new ProcessMaterial { Name = "NewMaterial" });
+    private void AddMaterial()
+    {
+        var material = new ProcessMaterial { Name = "NewMaterial" };
+        Materials.Add(material);
+        _ownMaterialNames.Add(material.Name);
+    }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)
     {

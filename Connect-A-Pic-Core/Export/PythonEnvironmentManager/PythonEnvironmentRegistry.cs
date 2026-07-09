@@ -11,7 +11,7 @@ namespace CAP_Core.Export.PythonEnvironmentManager;
 public class PythonEnvironmentRegistry
 {
     private static readonly string DefaultRegistryFilePath = Path.Combine(
-        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        Helpers.AppDataFolders.LocalApplicationData,
         "Lunima", "python-environments.json");
 
     private readonly string _registryFilePath;
@@ -83,6 +83,21 @@ public class PythonEnvironmentRegistry
         Save();
 
         var pythonPath = GetActive()?.PythonExecutable;
+        OnActiveEnvironmentChanged?.Invoke(pythonPath);
+    }
+
+    /// <summary>
+    /// Selects a discovered system interpreter (not a managed environment) as the active
+    /// Python for export and preview (issue #645). Clears any managed active selection so
+    /// there is exactly one active interpreter, then fires
+    /// <see cref="OnActiveEnvironmentChanged"/> with the given path — the same channel a
+    /// managed activation uses, so downstream consumers need no special case.
+    /// </summary>
+    /// <param name="pythonPath">Full path of the system interpreter to activate.</param>
+    public void SetActiveExternalPath(string pythonPath)
+    {
+        _data.ActiveName = null;
+        Save();
         OnActiveEnvironmentChanged?.Invoke(pythonPath);
     }
 

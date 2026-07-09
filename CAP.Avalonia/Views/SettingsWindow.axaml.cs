@@ -16,15 +16,12 @@ public partial class SettingsWindow : Window
     }
 
     /// <summary>
-    /// "Create + install Nazca now" on the GDS-Export page: starts the default
-    /// install (via the GdsExportViewModel delegate) and navigates to the
-    /// Python-Environments page so the progress is visible there.
+    /// "Manage in Python Environments →" on the GDS-Export page: navigates to the
+    /// Python-Environments page, the single place where interpreters (managed
+    /// environments + discovered system Pythons) are listed and activated (issue #645).
     /// </summary>
-    private void OnCreateNazcaEnvironmentClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
+    private void OnManageInterpretersClick(object? sender, global::Avalonia.Interactivity.RoutedEventArgs e)
     {
-        if ((sender as Button)?.DataContext is ViewModels.Export.GdsExportViewModel gdsExport)
-            gdsExport.InstallNazcaCommand.Execute(null);
-
         if (DataContext is SettingsWindowViewModel vm)
             vm.SelectPage(typeof(PythonEnvironmentsSettingsPage));
     }

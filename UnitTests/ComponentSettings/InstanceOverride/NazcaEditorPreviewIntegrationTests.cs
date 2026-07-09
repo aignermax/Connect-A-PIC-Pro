@@ -30,18 +30,6 @@ public class NazcaEditorPreviewIntegrationTests
     private static NazcaComponentPreviewService CreateService(string python, string script)
         => new(python, script, CiRenderTimeout);
 
-    /// <summary>
-    /// True when the render succeeded but the interpreter has neither gdstk nor
-    /// gdspy, so the script could not populate the polygon overlay (it reports
-    /// this via <see cref="NazcaPreviewResult.PolygonWarning"/>). Treated as an
-    /// environment skip — same philosophy as skipping when nazca itself is
-    /// missing — so runners with a nazca-only interpreter stay green.
-    /// </summary>
-    private static bool PolygonToolchainMissing(NazcaPreviewResult result) =>
-        result.Success
-        && result.Polygons.Count == 0
-        && result.PolygonWarning?.Contains("gdstk", StringComparison.OrdinalIgnoreCase) == true;
-
     [Fact]
     public async Task DemoPdkComponent_RendersPreviewGeometry()
     {
@@ -55,7 +43,7 @@ public class NazcaEditorPreviewIntegrationTests
 
         result.Success.ShouldBeTrue($"demo component must render in the editor. Error: {result.Error}");
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
-        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
+        if (PolygonBackendMissing(result)) return;      // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 
@@ -81,7 +69,7 @@ public class NazcaEditorPreviewIntegrationTests
         }
 
         result.XMax.ShouldBeGreaterThan(result.XMin, "preview bbox must be non-degenerate");
-        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
+        if (PolygonBackendMissing(result)) return;      // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0, "a preview image needs polygons");
     }
 
@@ -146,9 +134,18 @@ public class NazcaEditorPreviewIntegrationTests
         var result = await svc.RenderRawCodeAsync(NazcaCodeExamples.Complex);
 
         result.Success.ShouldBeTrue($"the showcase example must render. Error: {result.Error}");
-        if (PolygonToolchainMissing(result)) return;   // env skip (no gdstk/gdspy)
+        if (PolygonBackendMissing(result)) return;      // env skip (no gdstk/gdspy)
         result.Polygons.Count.ShouldBeGreaterThan(0);
     }
+
+    /// <summary>
+    /// True when the render succeeded but the interpreter has neither gdstk nor gdspy,
+    /// so the preview script legitimately returned zero polygons (pin stubs only).
+    /// GitHub CI installs gdstk, so the strict polygon assertions still run there.
+    /// </summary>
+    private static bool PolygonBackendMissing(NazcaPreviewResult result) =>
+        result.Polygons.Count == 0
+        && result.PolygonWarning?.Contains("gdstk", StringComparison.OrdinalIgnoreCase) == true;
 
     private static InstanceNazcaCodeEditorViewModel BuildEditorVm(
         string? module, string function, NazcaComponentPreviewService svc)

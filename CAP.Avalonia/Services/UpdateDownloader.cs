@@ -4,7 +4,8 @@ using CAP_Core.Update;
 namespace CAP.Avalonia.Services;
 
 /// <summary>
-/// Downloads a platform-appropriate installer from a GitHub release asset URL with progress reporting.
+/// Downloads a release artifact (installer or app archive) from a GitHub release asset URL,
+/// with progress reporting. The temp file's extension is derived from the asset filename.
 /// </summary>
 public class UpdateDownloader
 {
@@ -22,7 +23,7 @@ public class UpdateDownloader
     /// reporting fractional progress (0.0–1.0) via <paramref name="progress"/>.
     /// The temporary file extension is derived from the asset filename in <paramref name="downloadUrl"/>.
     /// </summary>
-    /// <returns>Local file path to the downloaded installer.</returns>
+    /// <returns>Local file path to the downloaded artifact.</returns>
     public async Task<string> DownloadInstallerAsync(
         string downloadUrl,
         long expectedSize,

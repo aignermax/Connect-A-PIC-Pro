@@ -180,6 +180,36 @@ public class NazcaCoordinateMapperTests
     }
 
     [Fact]
+    public void GetCellPlacement_DemoShallowBend_RenderedPinsCoincideWithAppPins()
+    {
+        // Regression for #635: the demofab 90° bend (demo.shallow.bend, angle=90) has a real
+        // cell — verified against nazca 0.6.1 — with org == a0 at cell (0,0) and b0 at cell
+        // (200,200); its bbox is [0,-9.4,209.4,200]. The org offset above the box top is
+        // therefore ymax = 200 (NOT |ymin| = 9.4, the value that placed the bend 190.6 µm
+        // too high). With the corrected data the org-placed cell's pins must land exactly on
+        // the app pins.
+        var comp = CreateComponent(30, 20, 209.4, 209.4, nazcaFunctionName: "demo.shallow.bend");
+        comp.PhysicalPins.Clear();
+        comp.NazcaOriginOffsetX = 0;
+        comp.NazcaOriginOffsetY = 200;
+        comp.PhysicalPins.Add(new PhysicalPin
+        { Name = "a0", ParentComponent = comp, OffsetXMicrometers = 0, OffsetYMicrometers = 200, AngleDegrees = 180 });
+        comp.PhysicalPins.Add(new PhysicalPin
+        { Name = "b0", ParentComponent = comp, OffsetXMicrometers = 200, OffsetYMicrometers = 0, AngleDegrees = 270 });
+
+        var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
+
+        // Real cell: a0 is org, b0 sits at org + (200, 200).
+        var (a0x, a0y) = NazcaCoordinateMapper.GetPinNazcaPosition(comp.PhysicalPins[0]);
+        (placement.X + 0).ShouldBe(a0x, Tolerance);
+        (placement.Y + 0).ShouldBe(a0y, Tolerance);
+
+        var (b0x, b0y) = NazcaCoordinateMapper.GetPinNazcaPosition(comp.PhysicalPins[1]);
+        (placement.X + 200).ShouldBe(b0x, Tolerance);
+        (placement.Y + 200).ShouldBe(b0y, Tolerance);
+    }
+
+    [Fact]
     public void GetPinNazcaPosition_RotatedComponent_UsesPreRotatedOffsets()
     {
         // The app pre-rotates pin offsets about the box centre: pin (0, 5.5) on a 45x11 box
