@@ -22,7 +22,13 @@ public enum BendMode
     /// <summary>
     /// Limited to ±45° for gentle S-bend corrections.
     /// </summary>
-    Limited45
+    Limited45,
+
+    /// <summary>
+    /// Sweep snapped to the nearest ±45° multiple (max ±90°).
+    /// Used for octile routing where corners are 45° or 90°.
+    /// </summary>
+    Diagonal45
 }
 
 /// <summary>
@@ -80,6 +86,7 @@ public class BendBuilder
         {
             BendMode.Cardinal90 => Math.Sign(sweepAngle) * 90.0,
             BendMode.Limited45 => Math.Clamp(sweepAngle, -45, 45),
+            BendMode.Diagonal45 => Math.Clamp(Math.Round(sweepAngle / 45.0) * 45.0, -90, 90),
             BendMode.Flexible => sweepAngle,
             _ => sweepAngle
         };

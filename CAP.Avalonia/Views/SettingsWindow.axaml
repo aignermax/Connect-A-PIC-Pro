@@ -60,21 +60,6 @@
             <ContentControl Content="{Binding SelectedPage.ViewModel}">
                 <ContentControl.DataTemplates>
 
-                    <!-- General -->
-                    <DataTemplate DataType="{x:Type settings:GeneralSettingsViewModel}">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="General" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <TextBlock Text="Routing" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
-                            <CheckBox Content="Adaptive crossing insertion"
-                                      IsChecked="{Binding CrossingInsertionEnabled}"
-                                      Foreground="White"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
-                                After routing, replaces a detouring waveguide with a real PDK crossing component
-                                where that lowers insertion loss. Turn off for classic avoid-only routing —
-                                faster on large designs, and no crossings are inserted.
-                            </TextBlock>
-                        </StackPanel>
-                    </DataTemplate>
 
                     <!-- Grid Snap & Alignment -->
                     <DataTemplate DataType="{x:Type settings:GridSnapSettingsViewModel}">
@@ -99,6 +84,33 @@
                             <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
                                 Displays cyan guide lines when component pins share an X or Y axis.
                                 The component snaps to alignment when released nearby.
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Routing -->
+                    <DataTemplate DataType="{x:Type settings:RoutingSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="Routing" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <CheckBox Content="Enable diagonal routing (45° waveguides)"
+                                      IsChecked="{Binding Canvas.UseDiagonalRouting}"
+                                      Foreground="White"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                Octile A* with 45° diagonals produces shorter, more compact routes,
+                                but every re-route needs considerably more compute. When disabled,
+                                the fast 4-direction (Manhattan) search is used. Toggling this
+                                re-routes all connections immediately.
+                            </TextBlock>
+
+                            <Separator Margin="0,16,0,8" Background="#3d3d3d"/>
+                            <TextBlock Text="Crossings" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
+                            <CheckBox Content="Adaptive crossing insertion"
+                                      IsChecked="{Binding CrossingInsertionEnabled}"
+                                      Foreground="White"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                After routing, replaces a detouring waveguide with a real PDK crossing component
+                                where that lowers insertion loss. Turn off for classic avoid-only routing —
+                                faster on large designs, and no crossings are inserted.
                             </TextBlock>
                         </StackPanel>
                     </DataTemplate>
@@ -266,17 +278,6 @@
                             <TextBlock Text="{Binding StatusText}"
                                        Foreground="LightGreen" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
                                        IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                        </StackPanel>
-                    </DataTemplate>
-
-                    <!-- General (placeholder — GDS config lives on the GDS Export page) -->
-                    <DataTemplate DataType="{x:Type settings:GeneralSettingsViewModel}">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="General" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap">
-                                General application preferences. Additional settings will appear here
-                                as new features are added.
-                            </TextBlock>
                         </StackPanel>
                     </DataTemplate>
 

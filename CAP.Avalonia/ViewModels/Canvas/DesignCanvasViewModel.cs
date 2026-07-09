@@ -43,6 +43,7 @@ public partial class DesignCanvasViewModel : ObservableObject
     // ── Observable properties (for AXAML bindings) ────────────────────────
     [ObservableProperty] private bool _showPowerFlow;
     [ObservableProperty] private bool _useAStarRouting = true;
+    [ObservableProperty] private bool _useDiagonalRouting;
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
     [ObservableProperty] private ComponentViewModel? _selectedComponent;
@@ -132,6 +133,10 @@ public partial class DesignCanvasViewModel : ObservableObject
                 ShowPowerFlow = value;
         };
 
+        // Product default: diagonal routing is opt-in (Settings → Routing);
+        // the library-level router default is true, so sync it explicitly.
+        Router.UseDiagonalRouting = UseDiagonalRouting;
+
         Routing.InitializeAStarRouting();
     }
 
@@ -144,6 +149,12 @@ public partial class DesignCanvasViewModel : ObservableObject
     }
 
     partial void OnUseAStarRoutingChanged(bool value) => _ = RecalculateRoutesAsync();
+
+    partial void OnUseDiagonalRoutingChanged(bool value)
+    {
+        Router.UseDiagonalRouting = value;
+        _ = RecalculateRoutesAsync();
+    }
 
     // ── Simulation delegation ─────────────────────────────────────────────
 
