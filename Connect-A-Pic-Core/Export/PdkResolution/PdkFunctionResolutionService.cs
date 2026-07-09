@@ -104,7 +104,7 @@ public class PdkFunctionResolutionService
             }
 
             await process.WaitForExitAsync(ct);
-            return ParseOutput(await stdoutTask);
+            return ParseOutput(await stdoutTask, await stderrTask);
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
@@ -121,11 +121,19 @@ public class PdkFunctionResolutionService
     /// as internal so unit tests can exercise the JSON path without spawning
     /// a real subprocess (the CI Linux box may lack nazca).
     /// </summary>
-    internal static PdkResolutionReport ParseOutput(string stdout)
+    internal static PdkResolutionReport ParseOutput(string stdout, string? stderr = null)
     {
         var jsonLine = ExtractTrailingJsonLine(stdout);
         if (jsonLine == null)
-            return PdkResolutionReport.Fail("Resolution script produced no JSON output.");
+        {
+            // Surface the interpreter's own error (e.g. a traceback printed to stderr before
+            // any JSON) instead of a bare "no output" — otherwise the failure is undebuggable
+            // from the UI (#515 review).
+            var detail = LastLines(stderr, 5);
+            return PdkResolutionReport.Fail(string.IsNullOrEmpty(detail)
+                ? "Resolution script produced no JSON output."
+                : $"Resolution script produced no JSON output. Python error:\n{detail}");
+        }
 
         try
         {
@@ -164,6 +172,18 @@ public class PdkFunctionResolutionService
         "warning" => PdkResolutionStatus.Warning,
         _ => PdkResolutionStatus.Error
     };
+
+    /// <summary>Returns the last <paramref name="count"/> non-empty lines of text, trimmed.</summary>
+    private static string LastLines(string? text, int count)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return string.Empty;
+        var lines = text.Replace("\r\n", "\n").Split('\n')
+            .Select(l => l.TrimEnd())
+            .Where(l => l.Length > 0)
+            .ToList();
+        return string.Join("\n", lines.Skip(Math.Max(0, lines.Count - count)));
+    }
 
     /// <summary>
     /// Walks the stdout from the bottom up and returns the first line that

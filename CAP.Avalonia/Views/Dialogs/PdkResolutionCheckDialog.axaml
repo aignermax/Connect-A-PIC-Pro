@@ -37,7 +37,7 @@
 
                 <TextBlock Text="PDK Consistency Check" FontSize="15" FontWeight="SemiBold"
                            Foreground="LightBlue"/>
-                <TextBlock Text="Verifies that every nazcaFunction string in the loaded PDK JSON files resolves against the installed Python packages (nazca / klayout / siepic_ebeam_pdk). Dead references only surface at render or export time otherwise."
+                <TextBlock Text="Verifies that every component's export function — nazcaFunction, or gdsFactoryFunction for gdsfactory-native PDKs — resolves against the installed Python packages (nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk). Dead references only surface at render or export time otherwise."
                            Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
 
                 <Separator Background="#3d3d3d"/>
@@ -70,7 +70,7 @@
                                                     <TextBlock Grid.Column="1" Text="{Binding ComponentName}"
                                                                Foreground="White" FontSize="11"
                                                                TextTrimming="CharacterEllipsis"/>
-                                                    <TextBlock Grid.Column="2" Text="{Binding NazcaFunction}"
+                                                    <TextBlock Grid.Column="2" Text="{Binding FunctionPath}"
                                                                Foreground="#bbbbbb" FontSize="11" FontFamily="Monospace"
                                                                TextTrimming="CharacterEllipsis"/>
                                                     <TextBlock Grid.Column="3" Text="{Binding Message}"

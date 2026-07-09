@@ -113,11 +113,19 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
         if (components.Count == 0)
             return group;
 
-        var entries = components
-            .Select(c =>
+        // A component exports via its nazcaFunction, or — for gdsfactory-native PDKs like
+        // CornerStone — via its gdsFactoryFunction (e.g. "cspdk.sin300.coupler"). Check whichever
+        // it actually uses; otherwise gdsfactory PDKs would show every row red "empty nazcaFunction"
+        // (#515 review). The generic importlib resolver handles the gdsfactory dotted path.
+        var functionPaths = components
+            .Select(c => !string.IsNullOrWhiteSpace(c.NazcaFunction) ? c.NazcaFunction : c.GdsFactoryFunction ?? "")
+            .ToList();
+
+        var entries = functionPaths
+            .Select((path, i) =>
             {
-                var (module, function) = NazcaFunctionPath.Split(c.NazcaFunction);
-                return new PdkResolutionEntry { Name = c.Name, Module = module, Function = function };
+                var (module, function) = NazcaFunctionPath.Split(path);
+                return new PdkResolutionEntry { Name = components[i].Name, Module = module, Function = function };
             })
             .ToList();
 
@@ -133,7 +141,7 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
             group.Rows.Add(new PdkResolutionRowViewModel
             {
                 ComponentName = components[i].Name,
-                NazcaFunction = components[i].NazcaFunction,
+                FunctionPath = functionPaths[i],
                 Status = result?.Status ?? PdkResolutionStatus.Error,
                 Message = result?.Message ?? "No result returned by resolution script."
             });
@@ -169,7 +177,7 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
             if (pdk.Error != null)
                 sb.AppendLine($"  ERROR: {pdk.Error}");
             foreach (var row in failures)
-                sb.AppendLine($"  {row.StatusBadge} {row.ComponentName} → \"{row.NazcaFunction}\": {row.Message}");
+                sb.AppendLine($"  {row.StatusBadge} {row.ComponentName} → \"{row.FunctionPath}\": {row.Message}");
         }
         return sb.ToString();
     }

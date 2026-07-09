@@ -76,7 +76,7 @@ public class PdkResolutionCheckViewModelTests : IDisposable
         var row = vm.Pdks[0].Rows.ShouldHaveSingleItem();
         row.Status.ShouldBe(PdkResolutionStatus.Error);
         row.StatusBadge.ShouldBe("❌");
-        row.NazcaFunction.ShouldBe("demo_pdk.ring_resonator");
+        row.FunctionPath.ShouldBe("demo_pdk.ring_resonator");
         vm.HasFailures.ShouldBeTrue();
         vm.StatusText.ShouldContain("1 dead reference");
     }
@@ -102,6 +102,42 @@ public class PdkResolutionCheckViewModelTests : IDisposable
         captured[0].Function.ShouldBe("ring_resonator");
         captured[1].Module.ShouldBe("siepic_ebeam_pdk");
         captured[1].Function.ShouldBe("ebeam_y_1550");
+    }
+
+    [Fact]
+    public async Task RunCheck_GdsFactoryNativeComponent_ChecksGdsFactoryFunction()
+    {
+        // CornerStone-style component: nazcaFunction empty, gdsFactoryFunction set. The check
+        // must verify the gdsfactory path instead of reporting "empty nazcaFunction" (#515 review).
+        File.WriteAllText(Path.Combine(_pdkDir, "gf-pdk.json"),
+            """
+            { "name": "GF PDK", "components": [ {
+                "name": "Coupler",
+                "nazcaFunction": "",
+                "gdsFactoryFunction": "cspdk.sin300.coupler",
+                "widthMicrometers": 100, "heightMicrometers": 50,
+                "pins": [ { "name": "a0", "offsetXMicrometers": 0, "offsetYMicrometers": 25, "angleDegrees": 180 } ]
+            } ] }
+            """);
+        IReadOnlyList<PdkResolutionEntry>? captured = null;
+        var service = MockService();
+        service.Setup(s => s.ResolveAsync(It.IsAny<IReadOnlyList<PdkResolutionEntry>>(), default))
+            .Callback<IReadOnlyList<PdkResolutionEntry>, CancellationToken>((e, _) => captured = e)
+            .ReturnsAsync(new PdkResolutionReport
+            {
+                Success = true,
+                Results = new[] { new PdkResolutionResult { Name = "Coupler", Status = PdkResolutionStatus.Ok } }
+            });
+        var vm = CreateViewModel(service.Object);
+
+        await vm.RunCheckCommand.ExecuteAsync(null);
+
+        captured.ShouldNotBeNull();
+        var entry = captured.ShouldHaveSingleItem();
+        entry.Module.ShouldBe("cspdk.sin300");
+        entry.Function.ShouldBe("coupler");
+        var row = vm.Pdks[0].Rows.ShouldHaveSingleItem();
+        row.FunctionPath.ShouldBe("cspdk.sin300.coupler");   // shows gdsFactoryFunction, not empty
     }
 
     [Fact]

@@ -4,16 +4,18 @@ using CAP_Core.Export.PdkResolution;
 namespace CAP.Avalonia.ViewModels.PdkResolution;
 
 /// <summary>
-/// One row in the PDK resolution report — a single component's
-/// <c>nazcaFunction</c> and how it resolved against Python (issue #515).
+/// One row in the PDK resolution report — a single component's export function
+/// (<c>nazcaFunction</c> or, for gdsfactory-native PDKs, <c>gdsFactoryFunction</c>)
+/// and how it resolved against the installed Python packages (issue #515).
 /// </summary>
 public class PdkResolutionRowViewModel
 {
     /// <summary>Component display name from the PDK JSON.</summary>
     public string ComponentName { get; init; } = "";
 
-    /// <summary>Raw <c>nazcaFunction</c> string from the PDK JSON.</summary>
-    public string NazcaFunction { get; init; } = "";
+    /// <summary>The export-function string checked — the component's <c>nazcaFunction</c>,
+    /// or its <c>gdsFactoryFunction</c> for gdsfactory-native components.</summary>
+    public string FunctionPath { get; init; } = "";
 
     /// <summary>Resolution status.</summary>
     public PdkResolutionStatus Status { get; init; }
