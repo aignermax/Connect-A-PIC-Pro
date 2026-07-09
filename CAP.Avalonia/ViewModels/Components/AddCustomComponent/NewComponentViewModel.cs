@@ -42,8 +42,14 @@ public partial class NewComponentViewModel : ObservableObject
     /// <summary>Fabrication processes available for the "save to" selection.</summary>
     public IReadOnlyList<ProcessDefinition> Processes { get; }
 
-    /// <summary>The two geometry backends selectable in the UI.</summary>
-    public static IReadOnlyList<GeometryBackend> AvailableBackends { get; } = Enum.GetValues<GeometryBackend>();
+    /// <summary>
+    /// Geometry backends selectable in the UI. v1 offers gdsfactory only: a nazca custom
+    /// component saved without a derived <c>NazcaOriginOffset</c> has no clean export/sim path,
+    /// so nazca custom components are deferred to v2 (needs NazcaOriginOffset derivation). The
+    /// <see cref="GeometryBackend"/> enum and the extractor's nazca branch stay for tests/v2.
+    /// </summary>
+    public static IReadOnlyList<GeometryBackend> AvailableBackends { get; } =
+        new[] { GeometryBackend.GdsFactory };
 
     /// <summary>The draft last written by <see cref="Save"/>, or null before a successful save.</summary>
     public PdkComponentDraft? SavedDraft { get; private set; }
@@ -220,20 +226,10 @@ public partial class NewComponentViewModel : ObservableObject
             }
 
             var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
-            var draft = new PdkComponentDraft
-            {
-                Name = name,
-                WidthMicrometers = preview.WidthUm,
-                HeightMicrometers = preview.HeightUm,
-                Pins = MapPins(preview.Pins),
-                SMatrix = _computedModel is null
-                    ? FdtdSMatrixToDraftConverter.BlackBox()
-                    : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel),
-            };
-            if (SelectedBackend == GeometryBackend.GdsFactory)
-                draft.GdsFactoryFunction = reference.QualifiedFunction;
-            else
-                draft.NazcaFunction = reference.QualifiedFunction;
+            var sMatrix = _computedModel is null
+                ? FdtdSMatrixToDraftConverter.BlackBox()
+                : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
+            var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix);
 
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             _store.Save(process, draft, backend, null);
@@ -250,18 +246,4 @@ public partial class NewComponentViewModel : ObservableObject
             IsBusy = false;
         }
     }
-
-    /// <summary>
-    /// Maps extracted preview pins to PDK physical-pin drafts. Only name/offset/angle are
-    /// derivable from geometry extraction — logical-pin linkage and pin kind have no source
-    /// here and are left at their defaults.
-    /// </summary>
-    private static List<PhysicalPinDraft> MapPins(IReadOnlyList<OverridePinData> pins) =>
-        pins.Select(p => new PhysicalPinDraft
-        {
-            Name = p.Name,
-            OffsetXMicrometers = p.OffsetXMicrometers,
-            OffsetYMicrometers = p.OffsetYMicrometers,
-            AngleDegrees = p.AngleDegrees,
-        }).ToList();
 }

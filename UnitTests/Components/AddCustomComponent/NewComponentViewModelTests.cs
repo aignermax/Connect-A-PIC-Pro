@@ -121,5 +121,14 @@ public class NewComponentViewModelTests : IDisposable
         vm.SavedDraft.ShouldBeNull();
     }
 
+    [Fact]
+    public void Only_GdsFactory_backend_is_selectable_in_v1()
+    {
+        // v1 scope: nazca custom components need NazcaOriginOffset derivation (v2), so the UI
+        // must offer gdsfactory only. The enum + extractor's nazca branch remain for tests/v2.
+        NewComponentViewModel.AvailableBackends.ShouldHaveSingleItem();
+        NewComponentViewModel.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }
