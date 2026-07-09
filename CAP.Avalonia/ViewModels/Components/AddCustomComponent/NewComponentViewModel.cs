@@ -150,9 +150,10 @@ public partial class NewComponentViewModel : ObservableObject
     /// missing any of these reports why via <see cref="StatusText"/> and leaves
     /// <see cref="SavedDraft"/> null. A name collision is reported via <see cref="StatusText"/>
     /// unless <see cref="ConfirmOverwrite"/> confirms the overwrite. On success the S-matrix is
-    /// either the last FDTD result or a black box when none was computed — never fabricated —
-    /// and any diagnostic already in <see cref="StatusText"/> (e.g. an FDTD failure explaining
-    /// why the save is a black box) is left in place rather than overwritten.
+    /// either the last FDTD result or a black box when none was computed — never fabricated. A
+    /// black-box save preserves any pending diagnostic in <see cref="StatusText"/> (e.g. an FDTD
+    /// failure explaining why the save is a black box) and prefixes it with a save confirmation,
+    /// so the user always gets confirmation without losing the reason there is no model.
     /// </summary>
     [RelayCommand]
     private async Task Save()
@@ -175,24 +176,24 @@ public partial class NewComponentViewModel : ObservableObject
             return;
         }
 
-        var process = SelectedProcess;
-        if (_store.ComponentExists(process, name))
-        {
-            if (ConfirmOverwrite is null)
-            {
-                StatusText = $"'{name}' already exists in {process.Name}.";
-                return;
-            }
-            if (!await ConfirmOverwrite(name, process.Name))
-            {
-                StatusText = "Save cancelled.";
-                return;
-            }
-        }
-
         IsBusy = true;
         try
         {
+            var process = SelectedProcess;
+            if (_store.ComponentExists(process, name))
+            {
+                if (ConfirmOverwrite is null)
+                {
+                    StatusText = $"'{name}' already exists in {process.Name}.";
+                    return;
+                }
+                if (!await ConfirmOverwrite(name, process.Name))
+                {
+                    StatusText = "Save cancelled.";
+                    return;
+                }
+            }
+
             var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
             var draft = new PdkComponentDraft
             {
@@ -214,6 +215,9 @@ public partial class NewComponentViewModel : ObservableObject
 
             SavedDraft = draft;
             SavedProcessName = process.Name;
+            StatusText = _computedModel is null
+                ? $"Saved as black box. {StatusText}".Trim()
+                : "Saved with FDTD S-matrix.";
             Saved?.Invoke(this, EventArgs.Empty);
         }
         finally

@@ -80,6 +80,17 @@ public class NewComponentViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_without_fdtd_reports_a_confirmation()
+    {
+        var (vm, _) = Build(withFdtd: false);
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.StatusText.ShouldContain("Saved");   // black-box save still confirms
+    }
+
+    [Fact]
     public async Task Save_requires_a_name()
     {
         var (vm, _) = Build(withFdtd: false);
