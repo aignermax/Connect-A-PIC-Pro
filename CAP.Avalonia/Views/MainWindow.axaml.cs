@@ -74,6 +74,16 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the "New Component" window (issue #656) — non-modal, like the
+                // Fabrication Process and ONA Analyzer tool windows, so the user can keep
+                // iterating on the design while it stays open.
+                vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
+                {
+                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    window.Show(this);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                };
+
                 // Wire up PDK Offset Editor window
                 vm.ShowPdkOffsetEditorRequested = () =>
                 {

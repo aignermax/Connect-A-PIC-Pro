@@ -7,6 +7,7 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.AddCustomComponent;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components;
 using CAP_Core.Components.Process;
@@ -26,6 +27,7 @@ public partial class LeftPanelViewModel : ObservableObject
     private readonly PdkLoader _pdkLoader;
     private readonly UserPreferencesService _preferencesService;
     private readonly ErrorConsoleService? _errorConsole;
+    private readonly AddCustomComponentDependencies? _addCustomComponentDeps;
 
     /// <summary>
     /// Every PDK loaded into the library so far (bundled + user-imported), kept so
@@ -115,6 +117,8 @@ public partial class LeftPanelViewModel : ObservableObject
     /// </summary>
     public Func<string, Task<string?>>? ShowImportWizardAsync { get; set; }
 
+    /// <summary>Shows the "New Component" window (non-modal; set by MainWindow.axaml.cs).</summary>
+    public Func<CAP.Avalonia.ViewModels.Components.AddCustomComponent.NewComponentViewModel, Task>? ShowNewComponentWindowAsync { get; set; }
     /// <summary>Initializes a new instance of <see cref="LeftPanelViewModel"/>.</summary>
     public LeftPanelViewModel(
         DesignCanvasViewModel canvas,
@@ -124,12 +128,14 @@ public partial class LeftPanelViewModel : ObservableObject
         HierarchyPanelViewModel hierarchyPanel,
         PdkManagerViewModel pdkManager,
         ComponentLibraryViewModel componentLibrary,
-        ErrorConsoleService? errorConsole = null)
+        ErrorConsoleService? errorConsole = null,
+        AddCustomComponentDependencies? addCustomComponentDeps = null)
     {
         _canvas = canvas;
         _pdkLoader = pdkLoader;
         _preferencesService = preferencesService;
         _errorConsole = errorConsole;
+        _addCustomComponentDeps = addCustomComponentDeps;
 
         HierarchyPanel = hierarchyPanel;
         PdkManager = pdkManager;
@@ -410,6 +416,17 @@ public partial class LeftPanelViewModel : ObservableObject
         => PdkTemplateConverter.ConvertToTemplate(
             pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
 
+    /// <summary>Opens the "New Component" window (issue #656); see <see cref="NewComponentWindowLauncher"/>.</summary>
+    [RelayCommand]
+    private async Task OpenNewComponent()
+    {
+        if (ShowNewComponentWindowAsync is null || _addCustomComponentDeps is null) return;
+
+        await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
+    }
+    /// <summary>Registers a saved custom component into the library; see <see cref="CustomComponentLibraryRegistrar"/>.</summary>
+    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath) =>
+        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, FilterComponents);
     /// <summary>
     /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).
     /// Excludes process-agnostic tool PDKs (e.g. "Analysis Tools") — they are not a

@@ -42,6 +42,9 @@ public partial class NewComponentViewModel : ObservableObject
     /// <summary>Fabrication processes available for the "save to" selection.</summary>
     public IReadOnlyList<ProcessDefinition> Processes { get; }
 
+    /// <summary>The two geometry backends selectable in the UI.</summary>
+    public static IReadOnlyList<GeometryBackend> AvailableBackends { get; } = Enum.GetValues<GeometryBackend>();
+
     /// <summary>The draft last written by <see cref="Save"/>, or null before a successful save.</summary>
     public PdkComponentDraft? SavedDraft { get; private set; }
 
@@ -70,6 +73,14 @@ public partial class NewComponentViewModel : ObservableObject
         _store = store;
         Processes = processes;
     }
+
+    // A change to any input the preview was rendered from invalidates HasPreview — otherwise
+    // a saved draft could be built from a preview that no longer matches the current
+    // Module/Function/Parameters/Backend (drift between the last render and what gets saved).
+    partial void OnSelectedBackendChanged(GeometryBackend value) => HasPreview = false;
+    partial void OnModuleChanged(string? value) => HasPreview = false;
+    partial void OnFunctionChanged(string value) => HasPreview = false;
+    partial void OnParametersChanged(string? value) => HasPreview = false;
 
     /// <summary>Renders the configured geometry reference and extracts its size and pins.</summary>
     [RelayCommand]
