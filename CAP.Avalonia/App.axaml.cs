@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using CAP.Avalonia.DI;
+using CAP.Avalonia.Services.DialogSizing;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.Views;
 using Microsoft.Extensions.DependencyInjection;
@@ -55,6 +56,10 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
+        // Central fix for issue #697: re-enforces the requested size of every window shortly
+        // after it opens, so small dialogs cannot render collapsed on Linux/X11.
+        DialogSizeGuard.Initialize();
+
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
