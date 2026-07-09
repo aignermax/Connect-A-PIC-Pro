@@ -60,6 +60,22 @@
             <ContentControl Content="{Binding SelectedPage.ViewModel}">
                 <ContentControl.DataTemplates>
 
+                    <!-- General -->
+                    <DataTemplate DataType="{x:Type settings:GeneralSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="General" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="Routing" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
+                            <CheckBox Content="Adaptive crossing insertion"
+                                      IsChecked="{Binding CrossingInsertionEnabled}"
+                                      Foreground="White"/>
+                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
+                                After routing, replaces a detouring waveguide with a real PDK crossing component
+                                where that lowers insertion loss. Turn off for classic avoid-only routing —
+                                faster on large designs, and no crossings are inserted.
+                            </TextBlock>
+                        </StackPanel>
+                    </DataTemplate>
+
                     <!-- Grid Snap & Alignment -->
                     <DataTemplate DataType="{x:Type settings:GridSnapSettingsViewModel}">
                         <StackPanel Spacing="8">

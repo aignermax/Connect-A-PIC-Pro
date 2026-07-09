@@ -65,6 +65,12 @@ public class CrossingInsertionService
         double? crossingLossDb = _inserter.GetCrossingThroughLossDb(draft);
         if (crossingLossDb == null) return; // no usable S-matrix → never insert silently
 
+        // A crossing template that lacks any of the four wired ports would pass the
+        // through-loss guard (W/E only) but throw during placement, mid-way through a
+        // grid mutation — validate all four up front and skip a malformed template
+        // entirely (conservative: keep detours, never corrupt the grid) (#553 review).
+        if (!_inserter.HasAllFourWiredPorts(draft)) return;
+
         int inserted = 0;
         bool changed = true;
         while (changed && inserted < MaxCrossingsPerPass && !cancellationToken.IsCancellationRequested)
@@ -168,43 +174,73 @@ public class CrossingInsertionService
             detourLossDb - StraightLineLossDb(connection) < crossingLossDb)
             return false;
 
-        // Route the direct path on a component-only grid (waveguides removed).
+        // Route the direct path on a component-only grid (waveguides removed) so it passes
+        // THROUGH other waveguides — the crossing is detected geometrically afterwards. The
+        // grid is mutated here, so any failure past this point must restore it (see catch).
         grid.ClearAllWaveguideObstacles();
-        var directPath = router.Route(connection.StartPin, connection.EndPin, cancellationToken);
-
-        // Re-register all other routed connections as obstacles for the checks below.
-        var others = manager.Connections.Where(c => c != connection).ToList();
-        foreach (var other in others)
+        try
         {
-            if (other.IsPathValid && other.RoutedPath != null)
-                grid.AddWaveguideObstacle(other.Id, other.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
-        }
+            var directPath = router.Route(connection.StartPin, connection.EndPin, cancellationToken);
 
-        CrossingCandidate? candidate = null;
-        if (directPath.IsValid && !directPath.IsBlockedFallback && !directPath.IsInvalidGeometry)
+            // Re-register all other routed connections as obstacles for the checks below.
+            var others = manager.Connections.Where(c => c != connection).ToList();
+            foreach (var other in others)
+            {
+                if (other.IsPathValid && other.RoutedPath != null)
+                    grid.AddWaveguideObstacle(other.Id, other.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
+            }
+
+            CrossingCandidate? candidate = null;
+            if (directPath.IsValid && !directPath.IsBlockedFallback && !directPath.IsInvalidGeometry)
+            {
+                candidate = _inserter.FindCandidate(
+                    connection, directPath, others, grid, crossingEdgeMicrometers, crossingLossDb);
+
+                // Never cross a sub-connection of an existing crossing (see guard above).
+                if (candidate != null && IsCrossingSubConnection(candidate.ExistingConnection))
+                    candidate = null;
+            }
+
+            Component? crossing = null;
+            if (candidate != null && _inserter.IsCrossingBeneficial(candidate, detourLossDb))
+                crossing = CrossingComponentFactory();
+
+            if (crossing == null)
+            {
+                // Keep the detour: restore this connection's own obstacle.
+                grid.AddWaveguideObstacle(connection.Id, connection.RoutedPath.Segments,
+                    manager.WaveguideWidthMicrometers);
+                return false;
+            }
+
+            ApplyInsertion(candidate!, crossing, manager, router);
+            return true;
+        }
+        catch
         {
-            candidate = _inserter.FindCandidate(
-                connection, directPath, others, grid, crossingEdgeMicrometers, crossingLossDb);
-
-            // Never cross a sub-connection of an existing crossing (see guard above).
-            if (candidate != null && IsCrossingSubConnection(candidate.ExistingConnection))
-                candidate = null;
+            // Defense-in-depth: a throw after ClearAllWaveguideObstacles must never leave the
+            // grid half-populated for the NEXT routing pass. Rebuild obstacles from the current
+            // connection set, then let the error surface.
+            RebuildAllWaveguideObstacles(manager, router);
+            throw;
         }
+    }
 
-        Component? crossing = null;
-        if (candidate != null && _inserter.IsCrossingBeneficial(candidate, detourLossDb))
-            crossing = CrossingComponentFactory();
-
-        if (crossing == null)
+    /// <summary>
+    /// Rebuilds the pathfinding grid's waveguide obstacles from the manager's current
+    /// connection set — used to recover a consistent grid if a crossing pass throws
+    /// after clearing obstacles.
+    /// </summary>
+    private static void RebuildAllWaveguideObstacles(WaveguideConnectionManager manager, WaveguideRouter router)
+    {
+        var grid = router.PathfindingGrid;
+        if (grid == null) return;
+        grid.ClearAllWaveguideObstacles();
+        foreach (var c in manager.Connections)
         {
-            // Keep the detour: restore this connection's own obstacle.
-            grid.AddWaveguideObstacle(connection.Id, connection.RoutedPath.Segments,
-                manager.WaveguideWidthMicrometers);
-            return false;
+            if (c.IsPathValid && c.RoutedPath != null)
+                grid.AddWaveguideObstacle(c.Id, c.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
         }
-
-        ApplyInsertion(candidate!, crossing, manager, router);
-        return true;
     }
 
     private void ApplyInsertion(

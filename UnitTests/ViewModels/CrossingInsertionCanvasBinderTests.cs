@@ -57,6 +57,24 @@ public class CrossingInsertionCanvasBinderTests
     }
 
     [Fact]
+    public void Binder_IsEnabledToggle_AttachesAndDetachesService()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var binder = new CrossingInsertionCanvasBinder(
+            canvas, () => null, uiDispatch: action => action());
+
+        binder.IsEnabled.ShouldBeTrue();
+
+        // Off → classic avoid-only routing (service detached from the manager).
+        binder.IsEnabled = false;
+        canvas.ConnectionManager.CrossingInsertion.ShouldBeNull();
+
+        // On → service re-attached.
+        binder.IsEnabled = true;
+        canvas.ConnectionManager.CrossingInsertion.ShouldBeSameAs(binder.Service);
+    }
+
+    [Fact]
     public void InsertedCrossing_AppearsAsComponentPinAndConnectionViewModels()
     {
         var (canvas, binder, _, _, _, _) = BuildCanvasWithCrossedNets();

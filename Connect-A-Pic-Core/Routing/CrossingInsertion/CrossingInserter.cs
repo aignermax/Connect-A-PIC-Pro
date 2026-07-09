@@ -49,6 +49,20 @@ public class CrossingInserter
     }
 
     /// <summary>
+    /// True only when the crossing exposes all four wired ports (E/S/W/N) that
+    /// <see cref="CrossingPlacement"/> needs to split the two nets. The through-loss
+    /// guard above reads only the W/E pair, so a template missing (or not linking) the
+    /// N/S port would pass it yet throw inside placement — the pass validates all four
+    /// up front and skips insertion for such a malformed template (#553 review, Finding 1).
+    /// </summary>
+    public bool HasAllFourWiredPorts(Component crossingComponent) =>
+        HasWiredPort(crossingComponent, 0) && HasWiredPort(crossingComponent, 90) &&
+        HasWiredPort(crossingComponent, 180) && HasWiredPort(crossingComponent, 270);
+
+    private static bool HasWiredPort(Component crossingComponent, double angleDegrees) =>
+        CrossingPlacement.FindPinByAngle(crossingComponent, angleDegrees)?.LogicalPin != null;
+
+    /// <summary>
     /// Computes the insertion loss (dB) of a path using the connection's loss parameters
     /// (mirrors <see cref="WaveguideConnection.RecalculateTransmission"/>).
     /// </summary>
