@@ -37,9 +37,11 @@ Vertical Slice `AddCustomComponent`, wiederverwendet die bestehende FDTD-Pipelin
 Geometrie-Editor des Override-Pfads.
 
 ```
-Connect-A-Pic-Core/Components/AddCustomComponent/
+CAP-DataAccess/Components/AddCustomComponent/
   UserPdkStore.cs               — legt/aktualisiert eine beschreibbare User-PDK-Datei pro Prozess
-  ComponentGeometryExtractor.cs — Render→bbox+pins (herausgelöst aus der Override-Apply-Logik)
+CAP.Avalonia/Services/AddCustomComponent/
+  ComponentGeometryExtractor.cs — Render(module,function)→bbox+pins (reuse OverridePinMapper)
+  FdtdSMatrixToDraftConverter.cs— ComponentSMatrixData → PdkSMatrixDraft (+ Blackbox/2-Port-Ideal)
 CAP.Avalonia/ViewModels/Components/AddCustomComponent/
   NewComponentViewModel.cs      — orchestriert Name/Prozess/Geometrie/FDTD/Speichern
 CAP.Avalonia/Views/
@@ -48,6 +50,10 @@ CAP.Avalonia/DI/
   AddCustomComponentFeature.cs  — DI-Extension, aufgerufen aus App.axaml.cs
 UnitTests/Components/AddCustomComponent/
 ```
+
+`UserPdkStore` liegt in CAP-DataAccess (reine Persistenz); die Services, die UI-Preview- und
+FDTD-Bausteine koordinieren, liegen in CAP.Avalonia (dort leben die Preview-Services und
+`OverridePinMapper`).
 
 Wiederverwendete bestehende Bausteine (nicht neu bauen):
 - `IFdtdSMatrixService` / `DockerFdtdSMatrixService` — `CheckAvailabilityAsync`, `SolveAsync`.
@@ -60,36 +66,62 @@ Wiederverwendete bestehende Bausteine (nicht neu bauen):
 - DTOs `PdkDraft` / `PdkComponentDraft` / `PdkSMatrixDraft`
   (`CAP-DataAccess/Components/ComponentDraftMapper/DTOs/PdkDraft.cs`).
 
-## Nutzer-Flow
+## Zuschnitt: Geometrie-Quelle (v1 vs. v2)
 
-Ein `+`-Button in der Component-Library-Panel (links, an `ComponentLibraryViewModel` /
-`LeftPanelViewModel`) öffnet das **„Neue Komponente"-Fenster**:
+**v1 = Funktions-Referenz.** Die Geometrie wird als gdsfactory-/nazca-**Funktionsreferenz**
+angegeben (`module.function` + optionale Parameter, z.B. `cspdk.sin300.mmi2x2`, `ubcpdk.*`
+oder eine Funktion aus einem eigenen installierten Modul). Dieser Pfad ist end-to-end erprobt
+(Render, Platzieren, Export) — genau wie die gebündelten cspdk-Komponenten — und braucht **kein**
+neues Export-/Render-Plumbing. Das löst direkt „CornerStone hat nur 12 Komponenten": jede
+Funktion aus cspdk/ubcpdk/eigenem Modul wird hinzufügbar.
+
+**v2 (Folge-Projekt, hier nur skizziert): Rawcode-Authoring.** Beliebigen gdsfactory-/nazca-Code
+einfügen (wie im #637-Override). Erfordert (a) ein Rawcode-Feld auf `PdkComponentDraft`,
+(b) Seeding eines per-Instanz-`NazcaCodeOverride` aus dem gespeicherten Code beim Platzieren
+(wiederverwendet die bewährte Rawcode-Render-/Export-Pipeline, #559), (c) Export-Verifikation.
+Wegen des Export-Risikos bewusst aus v1 herausgehalten.
+
+## Nutzer-Flow (v1)
+
+Ein `+`-Button an der PDK-Komponenten-Library (links, an `LeftPanelViewModel`, wo `AllTemplates`
+lebt — **nicht** `ComponentLibraryViewModel`, das verwaltet Gruppen) öffnet das
+**„Neue Komponente"-Fenster**:
 
 1. **Name** eingeben.
-2. **Prozess** aus Dropdown wählen (bundled + vorhandene User-Prozesse). Bestimmt den
-   Materialstack für FDTD und das Ziel-User-PDK.
-3. **Geometrie** definieren — Code-Editor + „Run Preview" (gdsfactory oder nazca via Toggle);
-   Bounding-Box + physische Pins werden aus dem Render extrahiert.
-4. **S-Matrix berechnen** — „Mit FDTD (Meep) rechnen" nutzt die vorhandene Pipeline gegen den
-   gewählten Prozess. Oder überspringen → Blackbox.
-5. **Speichern** → schreibt einen `PdkComponentDraft` ins User-PDK des Prozesses, registriert es,
+2. **Prozess** aus Dropdown wählen (bundled + vorhandene User-Prozesse). Bestimmt das Ziel-User-PDK
+   und (soweit die FDTD-Request-Contract es zulässt) Port-Breite/Wellenlängenbereich.
+3. **Geometrie** als Funktionsreferenz angeben (Backend-Toggle gdsfactory/nazca, Modul.Funktion,
+   optionale Parameter) + „Run Preview"; Bounding-Box + physische Pins werden aus dem Render
+   extrahiert.
+4. **S-Matrix berechnen** — „Mit FDTD (Meep) rechnen" nutzt die vorhandene
+   `IFdtdSMatrixService`-Pipeline. Oder überspringen → Blackbox.
+5. **Speichern** → schreibt einen `PdkComponentDraft` (mit `gdsFactoryFunction`/`nazcaFunction`,
+   extrahierten Maßen/Pins, `sMatrix`|leer) ins User-PDK des Prozesses, registriert es,
    Komponente erscheint sofort in der Library.
 
-Wiederöffnen des Fensters für eine User-PDK-Komponente erlaubt Editieren (Geometrie/Name ändern
-→ neu extrahieren → neu rechnen → speichern). Foundry-Komponenten bleiben read-only.
+Wiederöffnen des Fensters für eine User-PDK-Komponente erlaubt Editieren (Referenz/Parameter/Name
+ändern → neu rendern → neu rechnen → speichern). Foundry-Komponenten bleiben read-only.
 
 ## Datenfluss
 
 ```
-Name + Geometrie-Code + Prozess
-  → ComponentGeometryExtractor (Subprozess-Render) → bbox + Pins
-  → transiente Component (Geometrie + Pins, Prozess-gebunden)
-  → [optional] ComponentFdtdRequestFactory → IFdtdSMatrixService.SolveAsync
-       → FdtdSMatrixResult → FdtdSMatrixConverter → PdkSMatrixDraft
-  → PdkComponentDraft (name, backend-Funktion/Rawcode, dims, pins, sMatrix|leer)
-  → UserPdkStore.AddOrUpdate(process, draft) → schreibt user-pdks/<slug>.json
-  → PdkManager.RegisterPdk + AddUserPdkPath → Library aktualisiert
+Name + Funktionsreferenz (module.function[+params]) + Backend + Prozess
+  → ComponentGeometryExtractor: preview.RenderAsync(module, function, params)
+       → NazcaPreviewResult → bbox (XMax-XMin, YMax-YMin) + Pins (OverridePinMapper.BuildOverridePins)
+  → [optional] transiente Component (NazcaModuleName/NazcaFunctionName + PhysicalPins gesetzt)
+       → ComponentFdtdRequestFactory.BuildAsync → IFdtdSMatrixService.SolveAsync
+       → FdtdSMatrixResult → FdtdSMatrixConverter.ToComponentSMatrixData
+       → FdtdSMatrixToDraftConverter → PdkSMatrixDraft (WavelengthData)
+  → PdkComponentDraft (name, gdsFactoryFunction|nazcaFunction, params, dims, pins, sMatrix|leer)
+  → UserPdkStore.AddOrUpdate(process, draft) → schreibt user-pdks/<slug>.json (PdkJsonSaver)
+  → PdkManagerViewModel.RegisterPdk + AddUserPdkPath
+  → LeftPanelViewModel: PdkTemplateConverter.ConvertToTemplate → AllTemplates → Library aktualisiert
 ```
+
+**FDTD-Backend-Hinweis:** Die FDTD-Request-Factory rendert über den DI-`NazcaComponentPreviewService`.
+Ob gdsfactory-Geometrie damit gerendert wird, hängt von der DI-Registrierung ab; falls der
+FDTD-Pfad für gdsfactory-Backends nicht rendert, ist die contained Fix, der Factory den
+gdsfactory-Preview-Service zu geben (kleiner, lokaler Eingriff, in der Umsetzung zu verifizieren).
 
 ## User-PDK-Persistenz & Prozess-Bindung (#570)
 
@@ -117,11 +149,12 @@ Name + Geometrie-Code + Prozess
 
 - `UserPdkStore`: Datei-Anlage/-Naming pro Prozess; `PdkComponentDraft`-Round-trip (save→load
   via `PdkLoader`); Foundry-JSONs werden **nie** geschrieben (Pfad-Assertion).
-- `ComponentGeometryExtractor`: gdsfactory-/nazca-Snippet → bbox + Pins (Subprozess/Preview
-  gemockt). Deckt denselben Extract wie der Override-`Apply`.
-- FDTD-Request-Bau aus eingegebener Geometrie + Prozess (`IFdtdSMatrixService` gemockt).
+- `ComponentGeometryExtractor`: Funktionsreferenz → bbox + Pins (Preview-Service gemockt).
+  Deckt denselben Extract wie der Override-`Apply` (bbox-Größe + `OverridePinMapper`).
+- `FdtdSMatrixToDraftConverter`: `ComponentSMatrixData` → `PdkSMatrixDraft` (WavelengthData korrekt,
+  Portnamen erhalten); Blackbox → leere `sMatrix`; 2-Port-Ideal → verlustfreies Pass-through.
 - `NewComponentViewModel`: Namensvalidierung; „Prozess nötig für Compute"; Blackbox-Speicherpfad;
-  Kollisionsbehandlung; keine Speicherung bei FDTD-Fehler.
+  Kollisionsbehandlung; keine Speicherung bei FDTD-Fehler (`IFdtdSMatrixService` gemockt).
 - Architektur-Test: der Slice hält die Vertical-Slice-Import-Regeln ein.
 - Plattform-abhängige Pfad-Assertions mit `OperatingSystem.IsX()` guarden (Linux-CI grün).
 
