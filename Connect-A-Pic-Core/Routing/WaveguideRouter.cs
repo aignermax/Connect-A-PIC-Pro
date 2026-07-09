@@ -305,6 +305,23 @@ public class WaveguideRouter
                 }
             }
 
+            // Lateral-tolerance retry: the strict phases require an exact
+            // on-axis arrival, which is impossible when another waveguide
+            // crosses the pin's entry axis outside the cleared corridor.
+            // Retry accepting a small lateral offset; the smoother snaps the
+            // final approach onto the axis. Only otherwise-blocked routes
+            // reach this point, so successful routes are unaffected.
+            if (gridPath == null && !cancellationToken.IsCancellationRequested)
+            {
+                var tolerantRetry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
+                {
+                    MaxNodesExpanded = Phase1MaxNodes,
+                    AllowLateralGoalTolerance = true
+                };
+                gridPath = tolerantRetry.FindPath(gridStartX, gridStartY, startDir,
+                                                  gridEndX, gridEndY, endDir, cancellationToken);
+            }
+
             // Loop detection: if path is >2× Manhattan distance, retry with minimal constraints
             if (gridPath != null && gridPath.Count > gridDistance * 2 && scaledEscape > 2)
             {

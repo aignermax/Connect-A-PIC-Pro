@@ -22,6 +22,17 @@ public class AStarPathfinder
     /// </summary>
     public int GoalTolerance { get; set; } = 3;
 
+    /// <summary>
+    /// When true, the goal also accepts arrivals laterally offset from the
+    /// pin's entry axis (within GoalTolerance); the path smoother then snaps
+    /// the final approach onto the axis. Off by default because an exact
+    /// on-axis arrival smooths more reliably. Enabled as a retry when the
+    /// strict search fails, e.g. because another waveguide crosses the entry
+    /// axis — without the retry such pins are unreachable and burn the whole
+    /// node budget before falling back to a blocked route.
+    /// </summary>
+    public bool AllowLateralGoalTolerance { get; set; }
+
     public AStarPathfinder(PathfindingGrid grid, RoutingCostCalculator costCalculator)
     {
         _grid = grid;
@@ -125,11 +136,11 @@ public class AStarPathfinder
 
     /// <summary>
     /// Checks if the current node has reached the goal.
-    /// Small lateral offsets from the pin's entry axis are accepted (within
-    /// GoalTolerance): the path smoother projects the final approach onto the
-    /// entry axis. Requiring an exact on-axis arrival would make pins whose
-    /// entry axis is crossed by another waveguide unreachable, burning the
-    /// whole node budget before falling back to the blocked route.
+    /// By default the node must be ON the pin's entry axis (zero perpendicular
+    /// offset) — tolerance applies only along the approach direction, because
+    /// an off-axis landing so close to the terminal smooths unreliably. With
+    /// <see cref="AllowLateralGoalTolerance"/> small lateral offsets are also
+    /// accepted and the path smoother snaps the approach onto the axis.
     /// </summary>
     private bool IsGoalReached(AStarNode node, int endX, int endY, GridDirection endDirection)
     {
@@ -143,9 +154,11 @@ public class AStarPathfinder
 
         var (ux, uy) = endDirection.GetDelta();
 
-        // Perpendicular offset from the entry axis, within tolerance
+        // Perpendicular offset from the entry axis: exactly zero in strict
+        // mode, within GoalTolerance in the lateral-tolerance retry.
         int cross = dx * uy - dy * ux;
-        if (Math.Abs(cross) > GoalTolerance)
+        int maxCross = AllowLateralGoalTolerance ? GoalTolerance : 0;
+        if (Math.Abs(cross) > maxCross)
             return false;
 
         // Goal must lie ahead along the entry direction, within tolerance
