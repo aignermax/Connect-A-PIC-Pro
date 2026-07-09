@@ -4,8 +4,9 @@ namespace CAP.Avalonia.ViewModels.Export.Formats;
 
 /// <summary>
 /// Export format for the gdsfactory YAML netlist (issue #687): the design's circuit
-/// topology (instances, placements, connections, ports) in the interchange shape
-/// consumed by gdsfactory's <c>from_yaml</c> and SAX's netlist loader.
+/// topology (instances, placements, connections, ports) in the gdsfactory netlist
+/// interchange shape — for SAX and gdsfactory netlist tooling. It is a topology/circuit
+/// netlist, not a drawn-layout round-trip (see <c>GdsFactoryYamlNetlistWriter</c>).
 /// </summary>
 public class NetlistExportFormat : IExportFormat
 {

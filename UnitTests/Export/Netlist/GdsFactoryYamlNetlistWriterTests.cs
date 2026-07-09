@@ -134,4 +134,32 @@ public class GdsFactoryYamlNetlistWriterTests
 
         yaml.ShouldContain("name: 'wg'");
     }
+
+    [Fact]
+    public void Write_ComponentRefWithSpecialChars_IsQuoted()
+    {
+        // A component with neither gdsFactoryFunction nor nazcaFunction falls back to its display
+        // name, which may contain spaces / ':' / '#' — it must be quoted (#687 review).
+        var doc = new NetlistDocument(
+            "d",
+            new[] { new NetlistInstance("X", "MMI 1x2: v2", NoSettings) },
+            Array.Empty<NetlistPlacement>(),
+            Array.Empty<NetlistConnection>(),
+            Array.Empty<NetlistPort>());
+
+        new GdsFactoryYamlNetlistWriter().Write(doc).ShouldContain("component: 'MMI 1x2: v2'");
+    }
+
+    [Fact]
+    public void Write_PlainComponentRef_StaysUnquoted()
+    {
+        var doc = new NetlistDocument(
+            "d",
+            new[] { new NetlistInstance("X", "coupler_straight", NoSettings) },
+            Array.Empty<NetlistPlacement>(),
+            Array.Empty<NetlistConnection>(),
+            Array.Empty<NetlistPort>());
+
+        new GdsFactoryYamlNetlistWriter().Write(doc).ShouldContain("component: coupler_straight");
+    }
 }
