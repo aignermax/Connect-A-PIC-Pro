@@ -64,6 +64,50 @@ public class LinuxUpdaterExecutionTests
     }
 
     [Fact]
+    public void BuildLinux_Run_CrashingNewBinary_RollsBackToTheOldFiles()
+    {
+        if (OperatingSystem.IsWindows()) return;   // no bash
+
+        var sandbox = Path.Combine(Path.GetTempPath(), $"lunima-upd-rb-{Guid.NewGuid():N}");
+        var target = Path.Combine(sandbox, "install");
+        Directory.CreateDirectory(target);
+        try
+        {
+            const string exeName = "Lunima";
+            File.WriteAllText(Path.Combine(target, exeName), "#!/bin/sh\nexit 0\n");   // old, working
+            File.WriteAllText(Path.Combine(target, "libSkiaSharp.so"), "OLD-LIB");
+            File.WriteAllText(Path.Combine(target, "my_notes.txt"), "PRECIOUS USER DATA");
+            MakeExecutable(Path.Combine(target, exeName));
+
+            // New release whose binary crashes on start (truncated download, wrong arch, …).
+            var stage = Path.Combine(sandbox, "release");
+            Directory.CreateDirectory(stage);
+            File.WriteAllText(Path.Combine(stage, exeName), "#!/bin/sh\nexit 1\n");
+            File.WriteAllText(Path.Combine(stage, "libSkiaSharp.so"), "NEW-LIB");
+            var archive = Path.Combine(sandbox, "lunima.tar.gz");
+            Run("tar", $"-czf \"{archive}\" -C \"{stage}\" .", sandbox);
+
+            var location = new InstallLocation(target, Path.Combine(target, exeName), DeadPid());
+            var script = UpdaterScripts.BuildLinux(location, archive);
+            var scriptPath = Path.Combine(sandbox, "update.sh");
+            File.WriteAllText(scriptPath, script);
+            MakeExecutable(scriptPath);
+
+            Run("bash", $"\"{scriptPath}\"", sandbox);
+
+            // The crash-on-start binary must be rolled back to the old, working files…
+            File.ReadAllText(Path.Combine(target, exeName)).ShouldNotContain("exit 1");
+            File.ReadAllText(Path.Combine(target, "libSkiaSharp.so")).ShouldBe("OLD-LIB");
+            // …and the unrelated user file stays untouched either way.
+            File.ReadAllText(Path.Combine(target, "my_notes.txt")).ShouldBe("PRECIOUS USER DATA");
+        }
+        finally
+        {
+            try { Directory.Delete(sandbox, recursive: true); } catch { /* best effort */ }
+        }
+    }
+
+    [Fact]
     public void BuildLinux_Run_MkdirBackupFailure_AbortsWithoutReportingSuccess()
     {
         if (OperatingSystem.IsWindows()) return;   // no bash
