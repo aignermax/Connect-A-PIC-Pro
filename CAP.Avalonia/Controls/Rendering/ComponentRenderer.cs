@@ -62,7 +62,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
         {
             LaserIndicatorRenderer.Draw(context, comp,
                 rc.InteractionState.HoveredLaserIconComponent == comp,
-                rc.ViewModel.ShowPowerFlow);
+                rc.ViewModel.IsSimulationModeActive);
         }
     }
 

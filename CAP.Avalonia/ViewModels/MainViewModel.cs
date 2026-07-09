@@ -70,6 +70,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnSimulationModeChanged(CAP.Avalonia.ViewModels.Analysis.SimulationMode value)
     {
         OnPropertyChanged(nameof(SimulationModeIndex));
+
+        // Surface Transient mode to the canvas so laser on/off icons stay visible
+        // and clickable during the transient/eye workflow (#690) — Transient mode
+        // deliberately clears the CW ShowPowerFlow overlay.
+        if (_canvas != null)
+            _canvas.IsTransientModeActive = value == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient;
     }
 
     public Commands.CommandManager CommandManager { get; }
@@ -994,10 +1000,6 @@ public class ChildComponentData
     public double? SliderValue { get; set; }
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
-
-    /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
-    public bool? LaserEnabled { get; set; }
-
     public bool? IsLocked { get; set; }
     public string? HumanReadableName { get; set; }
 }

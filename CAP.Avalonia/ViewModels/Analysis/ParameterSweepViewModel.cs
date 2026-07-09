@@ -217,6 +217,9 @@ public partial class ParameterSweepViewModel : ObservableObject
         {
             if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
 
+            // Laser off = output coupler (listen-only, #690) — inject no light.
+            if (compVm.LaserConfig is { IsEnabled: false }) continue;
+
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;
             var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM

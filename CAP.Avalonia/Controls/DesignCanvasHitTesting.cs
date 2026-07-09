@@ -79,7 +79,7 @@ public class DesignCanvasHitTesting
         for (int i = vm.Components.Count - 1; i >= 0; i--)
         {
             var comp = vm.Components[i];
-            if (!LaserIndicatorRenderer.IsIconVisible(comp, vm.ShowPowerFlow)) continue;
+            if (!LaserIndicatorRenderer.IsIconVisible(comp, vm.IsSimulationModeActive)) continue;
             if (LaserIndicatorRenderer.CalculateIconBounds(comp).Contains(canvasPoint))
                 return comp;
         }

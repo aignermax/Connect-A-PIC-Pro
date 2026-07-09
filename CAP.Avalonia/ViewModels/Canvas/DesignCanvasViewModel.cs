@@ -42,6 +42,20 @@ public partial class DesignCanvasViewModel : ObservableObject
 
     // ── Observable properties (for AXAML bindings) ────────────────────────
     [ObservableProperty] private bool _showPowerFlow;
+
+    /// <summary>
+    /// True while the Transient simulation mode is selected (#690). Transient mode
+    /// clears the CW <see cref="ShowPowerFlow"/> overlay, so the canvas needs this
+    /// separate flag to keep laser on/off icons visible and clickable during the
+    /// transient/eye workflow. Set by MainViewModel when the mode selector changes.
+    /// </summary>
+    [ObservableProperty] private bool _isTransientModeActive;
+
+    /// <summary>
+    /// True when any simulation mode is active on the canvas (CW power-flow overlay
+    /// or Transient mode). Used as the visibility condition for laser on/off icons.
+    /// </summary>
+    public bool IsSimulationModeActive => ShowPowerFlow || IsTransientModeActive;
     [ObservableProperty] private bool _useAStarRouting = true;
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
@@ -144,6 +158,10 @@ public partial class DesignCanvasViewModel : ObservableObject
     }
 
     partial void OnUseAStarRoutingChanged(bool value) => _ = RecalculateRoutesAsync();
+
+    partial void OnShowPowerFlowChanged(bool value) => OnPropertyChanged(nameof(IsSimulationModeActive));
+
+    partial void OnIsTransientModeActiveChanged(bool value) => OnPropertyChanged(nameof(IsSimulationModeActive));
 
     // ── Simulation delegation ─────────────────────────────────────────────
 
