@@ -85,6 +85,14 @@ public partial class ModeSolverViewModel : ObservableObject
     private CancellationTokenSource? _cts;
 
     /// <summary>
+    /// Optional hook to auto-install a missing mode-solver backend into a managed
+    /// Python environment and activate it; wired by DI. Args: pip package spec,
+    /// progress, cancellation token. Returns true when the backend became available,
+    /// so the solve can be retried. When unset, a missing backend only shows a hint.
+    /// </summary>
+    public Func<string, IProgress<string>, CancellationToken, Task<bool>>? EnsureBackendAsync { get; set; }
+
+    /// <summary>
     /// Initialises the ViewModel with its solver service. The optional
     /// <paramref name="defaultsStore"/> records each manually entered cross-section
     /// so the canvas mode probe (issue #691) can fall back to it.
@@ -120,6 +128,14 @@ public partial class ModeSolverViewModel : ObservableObject
             _defaultsStore?.RecordManualEntry(Width, Height, SlabHeight, CoreIndex, CladIndex);
             var result  = await _service.SolveAsync(request, _cts.Token);
 
+            if (!result.Success && EnsureBackendAsync != null
+                && !string.IsNullOrWhiteSpace(result.MissingBackend))
+            {
+                var retried = await InstallBackendAndRetry(result, request, _cts.Token);
+                if (retried == null) return; // install handled the status itself; don't overwrite
+                result = retried;
+            }
+
             if (result.Success)
             {
                 Modes      = result.Modes;
@@ -150,6 +166,37 @@ public partial class ModeSolverViewModel : ObservableObject
         {
             IsSolving = false;
         }
+    }
+
+    /// <summary>
+    /// Auto-installs the missing backend into a managed environment and, on success,
+    /// re-runs the solve once against the freshly-activated interpreter. Returns the
+    /// retry result to display, or <c>null</c> when it has already set an explanatory
+    /// <see cref="StatusText"/> (install failed/declined, or the backend is still
+    /// unusable after install) and the caller should not overwrite it.
+    /// </summary>
+    private async Task<ModeSolverResult?> InstallBackendAndRetry(
+        ModeSolverResult failure, ModeSolverRequest request, CancellationToken ct)
+    {
+        var progress = new Progress<string>(m => StatusText = m);
+        StatusText = $"Installing {failure.MissingBackend}… (first use can take a few minutes)";
+        var installed = await EnsureBackendAsync!(failure.MissingBackend!, progress, ct);
+        if (!installed)
+        {
+            StatusText = $"Auto-install of '{failure.MissingBackend}' did not complete — see "
+                + $"Settings → Python environment for details, or run: pip install {failure.MissingBackend}";
+            return null;
+        }
+
+        StatusText = "Backend installed — retrying…";
+        var retry = await _service.SolveAsync(request, ct);
+        if (!retry.Success && retry.MissingBackend == failure.MissingBackend)
+        {
+            StatusText = $"Installed '{failure.MissingBackend}' but it is still unavailable — "
+                + "check Settings → Python environment.";
+            return null;
+        }
+        return retry;
     }
 
     /// <summary>Cancels a running solve.</summary>

@@ -205,6 +205,77 @@ public partial class PythonEnvironmentManagerViewModel : ObservableObject
         }
     }
 
+    /// <summary>
+    /// Ensures a single pip package — a mode-solver backend such as "gdsfactory[femwell]",
+    /// "EMpy", or "tidy3d" — is installed in a managed environment and that environment is
+    /// active. Used by the mode-solver dialog and canvas probe to auto-provision a backend
+    /// on first use, mirroring <see cref="EnsureGdsFactoryInstalledAsync"/>. Installs into
+    /// the active managed env, or creates the default environment (Nazca + gdsfactory) when
+    /// none exists, then activates it. Reports progress; returns true when the install
+    /// completed. No-ops to false while another operation runs or the spec is blank.
+    /// </summary>
+    public async Task<bool> EnsureBackendInstalledAsync(
+        string packageSpec, IProgress<string> progress, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(packageSpec)) return false;
+        if (IsBusy)
+        {
+            progress.Report("An environment operation is already running — try again once it finishes.");
+            return false;
+        }
+
+        var active = _registry.GetActive();
+        var target = active ?? _registry.GetAll().FirstOrDefault();
+
+        IsBusy = true;
+        CanCancel = true;
+        _cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        try
+        {
+            var token = _cts.Token;
+            var uvPath = await _bootstrapper.EnsureUvAsync(progress, token);
+
+            if (target == null)
+            {
+                var venvPath = Path.Combine(UvBootstrapper.EnvironmentsBaseDir, DefaultEnvironmentName);
+                target = new PythonEnvironment { Name = DefaultEnvironmentName, VenvPath = venvPath };
+                progress.Report($"Creating managed environment '{DefaultEnvironmentName}'...");
+                await _bootstrapper.CreateVenvAsync(uvPath, venvPath, UvBootstrapper.DefaultPythonVersion, progress, token);
+                await _installer.InstallAsync(uvPath, venvPath, progress, token);
+            }
+
+            await _installer.InstallPackageAsync(uvPath, target.VenvPath, packageSpec, progress, token);
+            await _healthChecker.CheckAsync(target, token);
+            _registry.AddOrUpdate(target);
+            // Activating pushes the env's interpreter into the shared preference the mode
+            // solver resolves lazily, so the retry runs against the freshly-installed env.
+            _registry.SetActive(target.Name);
+            RebuildInterpreters();
+            return true;
+        }
+        catch (OperationCanceledException)
+        {
+            // Let cancellation surface to the caller's own "Cancelled." handler instead of
+            // masquerading as an install failure (#691 review).
+            throw;
+        }
+        catch (Exception ex)
+        {
+            // Surface the real reason (uv stderr) — the caller points the user here.
+            var reason = $"Backend install failed: {ex.Message}";
+            ProgressText = reason;
+            progress.Report(reason);
+            return false;
+        }
+        finally
+        {
+            IsBusy = false;
+            CanCancel = false;
+            _cts?.Dispose();
+            _cts = null;
+        }
+    }
+
     /// <summary>Cancels the in-progress long operation.</summary>
     [RelayCommand]
     private void Cancel()

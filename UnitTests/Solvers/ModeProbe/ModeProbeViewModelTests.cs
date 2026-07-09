@@ -140,6 +140,53 @@ public class ModeProbeViewModelTests
     }
 
     [Fact]
+    public void MissingBackend_WithInstallHook_InstallsAndRetries()
+    {
+        var service = new Mock<IModeSolverService>();
+        service.SetupSequence(s => s.SolveAsync(It.IsAny<ModeSolverRequest>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new ModeSolverResult
+               {
+                   Success = false, Error = "backend missing", MissingBackend = "gdsfactory[femwell]",
+               })
+               .ReturnsAsync(SuccessResult()); // retry after install succeeds
+
+        string? installed = null;
+        var vm = new ModeProbeViewModel(service.Object, new CrossSectionDefaultsStore())
+        {
+            GetActiveProcessFingerprint = () => SoiProcess,
+            EnsureBackendAsync = (pkg, _, _) => { installed = pkg; return Task.FromResult(true); },
+        };
+
+        vm.Open(ProbeTarget.ForConnection(0.5, 10), 0, 0);
+
+        installed.ShouldBe("gdsfactory[femwell]");
+        vm.HasResult.ShouldBeTrue();
+        vm.NEff.ShouldBe(2.4);
+        service.Verify(s => s.SolveAsync(
+            It.IsAny<ModeSolverRequest>(), It.IsAny<CancellationToken>()), Times.Exactly(2));
+    }
+
+    [Fact]
+    public void MissingBackend_InstallDeclined_KeepsActionableMessage()
+    {
+        var vm = new ModeProbeViewModel(
+            CreateVm(new ModeSolverResult
+            {
+                Success = false, Error = "backend missing", MissingBackend = "tidy3d",
+            }).Service.Object,
+            new CrossSectionDefaultsStore())
+        {
+            GetActiveProcessFingerprint = () => SoiProcess,
+            EnsureBackendAsync = (_, _, _) => Task.FromResult(false), // install fails/declined
+        };
+
+        vm.Open(ProbeTarget.ForConnection(0.5, 10), 0, 0);
+
+        vm.HasResult.ShouldBeFalse();
+        vm.StatusText.ShouldContain("pip install tidy3d");
+    }
+
+    [Fact]
     public void Close_HidesPanel()
     {
         var (vm, _) = CreateVm();

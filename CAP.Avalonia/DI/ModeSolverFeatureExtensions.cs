@@ -1,5 +1,6 @@
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Solvers;
+using CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager;
 using CAP.Avalonia.ViewModels.Solvers;
 using CAP.Avalonia.ViewModels.Solvers.ModeProbe;
 using CAP_Core.Solvers.ModeProbe;
@@ -23,19 +24,44 @@ internal static class ModeSolverFeatureExtensions
         services.AddSingleton<IModeSolverService>(sp =>
         {
             var prefs = sp.GetRequiredService<UserPreferencesService>();
-            var python = prefs.GetCustomPythonPath() ?? PythonResolution.ResolvePythonExecutable();
             var script = PythonResolution.FindScript("mode_solve.py");
-            return new PythonModeSolverService(python, script);
+            // Resolve the interpreter lazily on every solve so a newly activated or
+            // freshly auto-installed managed environment is picked up without an app
+            // restart (#691 review).
+            return new PythonModeSolverService(
+                () => prefs.GetCustomPythonPath() ?? PythonResolution.ResolvePythonExecutable(),
+                script);
         });
         // Shared: the manual dialog writes the last-entered cross-section here; the
         // probe falls back to it when the PDK carries no geometry.
         services.AddSingleton<CrossSectionDefaultsStore>();
-        services.AddTransient(sp => new ModeSolverViewModel(
-            sp.GetRequiredService<IModeSolverService>(),
-            sp.GetRequiredService<CrossSectionDefaultsStore>()));
-        services.AddSingleton(sp => new ModeProbeViewModel(
-            sp.GetRequiredService<IModeSolverService>(),
-            sp.GetRequiredService<CrossSectionDefaultsStore>()));
+        services.AddTransient(sp =>
+        {
+            var vm = new ModeSolverViewModel(
+                sp.GetRequiredService<IModeSolverService>(),
+                sp.GetRequiredService<CrossSectionDefaultsStore>());
+            vm.EnsureBackendAsync = MakeEnsureBackend(sp);
+            return vm;
+        });
+        services.AddSingleton(sp =>
+        {
+            var vm = new ModeProbeViewModel(
+                sp.GetRequiredService<IModeSolverService>(),
+                sp.GetRequiredService<CrossSectionDefaultsStore>());
+            vm.EnsureBackendAsync = MakeEnsureBackend(sp);
+            return vm;
+        });
         return services;
     }
+
+    /// <summary>
+    /// Builds the missing-backend auto-install hook, delegating to the Python
+    /// environment manager. Resolved lazily so the mode-solver slice never imports
+    /// the env-manager slice at build time (mirrors the gdsfactory-export wiring).
+    /// </summary>
+    private static Func<string, IProgress<string>, CancellationToken, Task<bool>> MakeEnsureBackend(
+        IServiceProvider sp) =>
+        (packageSpec, progress, ct) =>
+            sp.GetRequiredService<PythonEnvironmentManagerViewModel>()
+                .EnsureBackendInstalledAsync(packageSpec, progress, ct);
 }

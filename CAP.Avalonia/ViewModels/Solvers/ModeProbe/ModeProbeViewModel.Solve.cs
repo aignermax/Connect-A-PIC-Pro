@@ -30,6 +30,13 @@ public partial class ModeProbeViewModel
         try
         {
             var result = await _service.SolveAsync(BuildRequest(crossSection), _cts.Token);
+            if (!result.Success && CanAutoInstall(result))
+            {
+                var retried = await InstallBackendAndRetry(result, crossSection, _cts.Token);
+                if (retried == null) return; // install handled the status itself; do not retry/overwrite
+                result = retried;
+            }
+
             if (result.Success)
                 ApplyResult(result, crossSection);
             else
@@ -113,6 +120,42 @@ public partial class ModeProbeViewModel
         StatusText = result.Error ?? "Solve failed.";
         if (!string.IsNullOrWhiteSpace(result.MissingBackend))
             StatusText += $"  →  pip install {result.MissingBackend} (Settings → Python environment)";
+    }
+
+    private bool CanAutoInstall(ModeSolverResult result) =>
+        EnsureBackendAsync != null && !string.IsNullOrWhiteSpace(result.MissingBackend);
+
+    /// <summary>
+    /// Auto-installs the missing backend into a managed environment and, on success,
+    /// re-runs the solve once against the freshly-activated interpreter. Returns the
+    /// retry result to display, or <c>null</c> when it has already set an explanatory
+    /// <see cref="ModeProbeViewModel.StatusText"/> (install failed/declined, or the
+    /// backend is still unusable after install) and the caller should not overwrite it.
+    /// </summary>
+    private async Task<ModeSolverResult?> InstallBackendAndRetry(
+        ModeSolverResult failure, ProbeCrossSection crossSection, CancellationToken ct)
+    {
+        var progress = new Progress<string>(m => StatusText = m);
+        StatusText = $"Installing {failure.MissingBackend}… (first use can take a few minutes)";
+        var installed = await EnsureBackendAsync!(failure.MissingBackend!, progress, ct);
+        if (!installed)
+        {
+            StatusText = $"Auto-install of '{failure.MissingBackend}' did not complete — see "
+                + $"Settings → Python environment for details, or run: pip install {failure.MissingBackend}";
+            return null;
+        }
+
+        StatusText = "Backend installed — retrying…";
+        var retry = await _service.SolveAsync(BuildRequest(crossSection), ct);
+        if (!retry.Success && retry.MissingBackend == failure.MissingBackend)
+        {
+            // uv reported success but the backend still can't be imported (partial install,
+            // wrong ABI, missing runtime config). Don't loop — say so plainly (#691 review).
+            StatusText = $"Installed '{failure.MissingBackend}' but it is still unavailable — "
+                + "check Settings → Python environment.";
+            return null;
+        }
+        return retry;
     }
 
     /// <summary>Recomputes the fiber-overlap figures from the cached mode MFD.</summary>

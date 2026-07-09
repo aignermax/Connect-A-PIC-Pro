@@ -89,6 +89,28 @@ public class NazcaPackageInstaller
         progress?.Report("gdsfactory installed successfully.");
     }
 
+    /// <summary>
+    /// Installs a single pip package spec into the given venv — used to auto-provision
+    /// a mode-solver backend on first use (e.g. "gdsfactory[femwell]", "EMpy", "tidy3d").
+    /// Surfaces pip/uv stderr on failure — no silent fallback.
+    /// </summary>
+    /// <param name="uvPath">Absolute path to the uv binary.</param>
+    /// <param name="venvPath">Root directory of the target virtual environment.</param>
+    /// <param name="packageSpec">A pip-installable package spec (may carry extras, e.g. "pkg[extra]").</param>
+    /// <param name="progress">Receives human-readable status updates.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task InstallPackageAsync(
+        string uvPath,
+        string venvPath,
+        string packageSpec,
+        IProgress<string>? progress,
+        CancellationToken ct = default)
+    {
+        progress?.Report($"Installing {packageSpec}...");
+        await RunUvPipInstall(uvPath, venvPath, packageSpec, progress, ct);
+        progress?.Report($"{packageSpec} installed successfully.");
+    }
+
     // ── Private helpers ────────────────────────────────────────────────────
 
     private static async Task<string> DownloadNazcaTarballAsync(

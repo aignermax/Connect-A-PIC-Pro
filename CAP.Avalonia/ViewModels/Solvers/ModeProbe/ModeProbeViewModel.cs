@@ -106,6 +106,14 @@ public partial class ModeProbeViewModel : ObservableObject
     /// <summary>Returns the current simulation wavelength in nm; wired by MainViewModel.</summary>
     public Func<double?>? GetSimulationWavelengthNm { get; set; }
 
+    /// <summary>
+    /// Optional hook to auto-install a missing mode-solver backend into a managed
+    /// Python environment and activate it; wired by DI. Args: pip package spec,
+    /// progress, cancellation token. Returns true when the backend became available,
+    /// so the solve can be retried. When unset, a missing backend only shows a hint.
+    /// </summary>
+    public Func<string, IProgress<string>, CancellationToken, Task<bool>>? EnsureBackendAsync { get; set; }
+
     /// <summary>Initialises the probe ViewModel.</summary>
     public ModeProbeViewModel(IModeSolverService service, CrossSectionDefaultsStore defaults)
     {
