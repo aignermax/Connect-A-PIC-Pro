@@ -1,0 +1,238 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
+using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Solvers;
+using CAP_Core.Solvers.Fdtd;
+using CAP_DataAccess.Components.AddCustomComponent;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+using CAP_DataAccess.Persistence.PIR;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
+
+namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
+
+/// <summary>
+/// Orchestrates adding a user-authored component to a fabrication process's user PDK:
+/// renders its geometry (nazca or gdsfactory), optionally recomputes its S-matrix via the
+/// FDTD solver, and saves the result as a <see cref="PdkComponentDraft"/>. Never invents
+/// physics — a missing solver, an unavailable backend, or a failed solve always saves the
+/// component as a black box (no S-matrix), never a fabricated one.
+/// </summary>
+public partial class NewComponentViewModel : ObservableObject
+{
+    private readonly ComponentGeometryExtractor _extractor;
+    private readonly IFdtdSMatrixService? _fdtd;
+    private readonly UserPdkStore _store;
+
+    private GeometryExtractResult? _lastPreview;
+    private ComponentSMatrixData? _computedModel;
+
+    [ObservableProperty] private string _componentName = string.Empty;
+    [ObservableProperty] private GeometryBackend _selectedBackend = GeometryBackend.GdsFactory;
+    [ObservableProperty] private string? _module;
+    [ObservableProperty] private string _function = string.Empty;
+    [ObservableProperty] private string? _parameters;
+    [ObservableProperty] private ProcessDefinition? _selectedProcess;
+    [ObservableProperty] private string _statusText = string.Empty;
+    [ObservableProperty] private bool _isBusy;
+    [ObservableProperty] private bool _hasPreview;
+
+    /// <summary>Fabrication processes available for the "save to" selection.</summary>
+    public IReadOnlyList<ProcessDefinition> Processes { get; }
+
+    /// <summary>The draft last written by <see cref="Save"/>, or null before a successful save.</summary>
+    public PdkComponentDraft? SavedDraft { get; private set; }
+
+    /// <summary>The process name <see cref="SavedDraft"/> was saved under.</summary>
+    public string? SavedProcessName { get; private set; }
+
+    /// <summary>Raised after a successful save, so a listener (e.g. the left panel) can refresh.</summary>
+    public event EventHandler? Saved;
+
+    /// <summary>
+    /// Optional confirmation hook invoked with (componentName, processName) when a save would
+    /// overwrite an existing component; returning true proceeds with the overwrite. When null,
+    /// a collision is reported via <see cref="StatusText"/> and the save is aborted.
+    /// </summary>
+    public Func<string, string, Task<bool>>? ConfirmOverwrite { get; set; }
+
+    /// <summary>Initializes the view model with its collaborators and the available processes.</summary>
+    public NewComponentViewModel(
+        ComponentGeometryExtractor extractor,
+        IFdtdSMatrixService? fdtd,
+        UserPdkStore store,
+        IReadOnlyList<ProcessDefinition> processes)
+    {
+        _extractor = extractor;
+        _fdtd = fdtd;
+        _store = store;
+        Processes = processes;
+    }
+
+    /// <summary>Renders the configured geometry reference and extracts its size and pins.</summary>
+    [RelayCommand]
+    private async Task RunPreview()
+    {
+        if (IsBusy) return;
+        IsBusy = true;
+        try
+        {
+            var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
+            var result = await _extractor.ExtractAsync(reference);
+            _lastPreview = result;
+            HasPreview = result.Success;
+            StatusText = result.Success
+                ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
+                : result.Error ?? "Preview render failed.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Recomputes the S-matrix from the rendered geometry via the FDTD solver. Any failure —
+    /// no solver configured, an unavailable backend, or a failed solve — clears the pending
+    /// model and reports the reason via <see cref="StatusText"/>; a black-box save is the
+    /// only fallback, never a fabricated matrix.
+    /// </summary>
+    [RelayCommand]
+    private async Task ComputeSMatrix()
+    {
+        if (IsBusy) return;
+        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
+        {
+            StatusText = "Render a preview and select a process before computing the S-matrix.";
+            return;
+        }
+        if (_fdtd is null)
+        {
+            StatusText = "FDTD solver is not configured.";
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var availability = await _fdtd.CheckAvailabilityAsync();
+            if (!availability.IsAvailable)
+            {
+                _computedModel = null;
+                StatusText = availability.Message;
+                return;
+            }
+
+            var portNames = preview.Pins.Select(p => p.Name).ToList();
+            var request = ComponentFdtdRequestFactory.BuildFromPreview(preview.Raw, portNames);
+            var result = await _fdtd.SolveAsync(request);
+            if (!result.Success)
+            {
+                _computedModel = null;
+                StatusText = result.Error ?? "FDTD solve failed.";
+                return;
+            }
+
+            _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
+            StatusText = "S-matrix computed.";
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Saves the current component as a <see cref="PdkComponentDraft"/> into the selected
+    /// process's user PDK. Requires a name, a rendered preview, and a selected process —
+    /// missing any of these reports why via <see cref="StatusText"/> and leaves
+    /// <see cref="SavedDraft"/> null. A name collision is reported via <see cref="StatusText"/>
+    /// unless <see cref="ConfirmOverwrite"/> confirms the overwrite. On success the S-matrix is
+    /// either the last FDTD result or a black box when none was computed — never fabricated —
+    /// and any diagnostic already in <see cref="StatusText"/> (e.g. an FDTD failure explaining
+    /// why the save is a black box) is left in place rather than overwritten.
+    /// </summary>
+    [RelayCommand]
+    private async Task Save()
+    {
+        if (IsBusy) return;
+        var name = ComponentName?.Trim();
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            StatusText = "Enter a component name before saving.";
+            return;
+        }
+        if (_lastPreview is not { Success: true } preview)
+        {
+            StatusText = "Render a preview before saving.";
+            return;
+        }
+        if (SelectedProcess is null)
+        {
+            StatusText = "Select a fabrication process before saving.";
+            return;
+        }
+
+        var process = SelectedProcess;
+        if (_store.ComponentExists(process, name))
+        {
+            if (ConfirmOverwrite is null)
+            {
+                StatusText = $"'{name}' already exists in {process.Name}.";
+                return;
+            }
+            if (!await ConfirmOverwrite(name, process.Name))
+            {
+                StatusText = "Save cancelled.";
+                return;
+            }
+        }
+
+        IsBusy = true;
+        try
+        {
+            var reference = new GeometryReference(SelectedBackend, Module, Function, Parameters);
+            var draft = new PdkComponentDraft
+            {
+                Name = name,
+                WidthMicrometers = preview.WidthUm,
+                HeightMicrometers = preview.HeightUm,
+                Pins = MapPins(preview.Pins),
+                SMatrix = _computedModel is null
+                    ? FdtdSMatrixToDraftConverter.BlackBox()
+                    : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel),
+            };
+            if (SelectedBackend == GeometryBackend.GdsFactory)
+                draft.GdsFactoryFunction = reference.QualifiedFunction;
+            else
+                draft.NazcaFunction = reference.QualifiedFunction;
+
+            var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
+            _store.Save(process, draft, backend, null);
+
+            SavedDraft = draft;
+            SavedProcessName = process.Name;
+            Saved?.Invoke(this, EventArgs.Empty);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    /// <summary>
+    /// Maps extracted preview pins to PDK physical-pin drafts. Only name/offset/angle are
+    /// derivable from geometry extraction — logical-pin linkage and pin kind have no source
+    /// here and are left at their defaults.
+    /// </summary>
+    private static List<PhysicalPinDraft> MapPins(IReadOnlyList<OverridePinData> pins) =>
+        pins.Select(p => new PhysicalPinDraft
+        {
+            Name = p.Name,
+            OffsetXMicrometers = p.OffsetXMicrometers,
+            OffsetYMicrometers = p.OffsetYMicrometers,
+            AngleDegrees = p.AngleDegrees,
+        }).ToList();
+}
