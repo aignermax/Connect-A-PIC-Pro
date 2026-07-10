@@ -175,6 +175,7 @@ public class WavelengthSweeperTests
         var grid = CreateMinimalGridManager();
         var component = TestComponentFactory.CreateStraightWaveGuide(); // map: 980/1310/1550
         component.GdsFactoryFunction = "cspdk.sin300.coupler_straight";
+        component.NazcaFunctionName = "nazca_coupler_straight"; // the synthesized placeholder #712 mislabeled with
         grid.ComponentMover.PlaceComponent(0, 0, component);
 
         var sweeper = new WavelengthSweeper(CreateMockBuilder().Object, CreateMockPortManager().Object);
