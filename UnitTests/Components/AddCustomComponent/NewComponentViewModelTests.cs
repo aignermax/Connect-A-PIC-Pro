@@ -44,8 +44,9 @@ public class NewComponentViewModelTests : IDisposable
             new List<ProcessDefinition> { new() { Name = "P" } });
         vm.ComponentName = "My Comp";
         vm.SelectedBackend = GeometryBackend.GdsFactory;
-        vm.Module = "cspdk.sin300"; vm.Function = "coupler";
+        vm.Code = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
         vm.SelectedProcess = vm.Processes[0];
+        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return (vm, fdtd);
     }
 
@@ -59,7 +60,8 @@ public class NewComponentViewModelTests : IDisposable
         vm.SavedDraft.ShouldNotBeNull();
         vm.SavedDraft!.SMatrix.ShouldBeNull();      // black box, no invented physics
         vm.SavedDraft.Pins.Count.ShouldBe(2);
-        vm.SavedDraft.GdsFactoryFunction.ShouldBe("cspdk.sin300.coupler");
+        vm.SavedDraft.RawCode.ShouldContain("gf.components.coupler");
+        vm.SavedDraft.GdsFactoryFunction.ShouldBeNull(); // always own-code now, never a reference
     }
 
     [Fact]
@@ -108,9 +110,9 @@ public class NewComponentViewModelTests : IDisposable
         vm.HasPreview.ShouldBeTrue();
         vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
-        // Edit the function reference without re-previewing: the rendered geometry no longer
-        // matches what would be saved, so Save must become impossible (drift guard, #656 review).
-        vm.Function = "mmi1x2";
+        // Edit the code without re-previewing: the rendered geometry no longer matches what
+        // would be saved, so Save must become impossible (drift guard, #656 review).
+        vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
         vm.HasPreview.ShouldBeFalse();
         vm.SaveCommand.CanExecute(null).ShouldBeFalse();
@@ -119,18 +121,6 @@ public class NewComponentViewModelTests : IDisposable
         // preview makes Save bail out — no mixed-geometry draft is ever persisted.
         await vm.SaveCommand.ExecuteAsync(null);
         vm.SavedDraft.ShouldBeNull();
-    }
-
-    [Fact]
-    public void Only_GdsFactory_backend_is_selectable_in_reference_mode()
-    {
-        // Reference mode: nazca custom components need NazcaOriginOffset derivation (v2), so
-        // the UI must offer gdsfactory only. The enum + extractor's nazca branch remain for
-        // tests/v2. Own-code mode's own AvailableBackends behavior is covered separately
-        // (NewComponentViewModelRawCodeTests).
-        var (vm, _) = Build(withFdtd: false);
-        vm.AvailableBackends.ShouldHaveSingleItem();
-        vm.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

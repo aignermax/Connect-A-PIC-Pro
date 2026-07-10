@@ -42,6 +42,7 @@ public class NewComponentViewModelRawCodeTests : IDisposable
             new List<ProcessDefinition> { new() { Name = "P" } });
         vm.ComponentName = "My Raw Comp";
         vm.SelectedProcess = vm.Processes[0];
+        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return vm;
     }
 
@@ -49,7 +50,6 @@ public class NewComponentViewModelRawCodeTests : IDisposable
     public async Task OwnCodeMode_preview_and_save_writes_a_raw_code_draft()
     {
         var vm = Build();
-        vm.InputMode = NewComponentInputMode.OwnCode;
         vm.SelectedBackend = GeometryBackend.GdsFactory;
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
@@ -68,7 +68,6 @@ public class NewComponentViewModelRawCodeTests : IDisposable
     public async Task LoadCodeFromFile_fills_Code_from_the_injected_picker()
     {
         var vm = Build();
-        vm.InputMode = NewComponentInputMode.OwnCode;
         vm.PickPyFile = () => Task.FromResult<string?>("component = gf.components.straight()");
 
         await vm.LoadCodeFromFileCommand.ExecuteAsync(null);
@@ -86,21 +85,6 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         await vm.LoadCodeFromFileCommand.ExecuteAsync(null);
 
         vm.Code.ShouldBe("unchanged");
-    }
-
-    [Fact]
-    public void AvailableBackends_offers_both_backends_in_own_code_mode_and_only_gdsfactory_in_reference_mode()
-    {
-        var vm = Build();
-
-        vm.AvailableBackends.ShouldHaveSingleItem();
-        vm.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
-
-        vm.InputMode = NewComponentInputMode.OwnCode;
-
-        vm.AvailableBackends.Count.ShouldBe(2);
-        vm.AvailableBackends.ShouldContain(GeometryBackend.GdsFactory);
-        vm.AvailableBackends.ShouldContain(GeometryBackend.Nazca);
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
