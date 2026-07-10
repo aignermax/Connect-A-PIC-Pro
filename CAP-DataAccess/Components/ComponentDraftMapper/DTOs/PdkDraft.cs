@@ -221,6 +221,23 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("compactModelParameters")]
         public Dictionary<string, double>? CompactModelParameters { get; set; }
+
+        /// <summary>
+        /// Optional raw source code authored by the user for this component
+        /// (e.g. a gdsfactory or Nazca script that builds the cell). When set,
+        /// this is the component's authoritative geometry/export source instead
+        /// of <see cref="NazcaFunction"/>/<see cref="GdsFactoryFunction"/>. Null
+        /// for PDK components defined through the normal function-reference path.
+        /// </summary>
+        [JsonPropertyName("rawCode")]
+        public string? RawCode { get; set; }
+
+        /// <summary>
+        /// Backend the <see cref="RawCode"/> targets: <c>"nazca"</c> or
+        /// <c>"gdsfactory"</c>. Null when <see cref="RawCode"/> is not set.
+        /// </summary>
+        [JsonPropertyName("rawCodeBackend")]
+        public string? RawCodeBackend { get; set; }
     }
 
     /// <summary>

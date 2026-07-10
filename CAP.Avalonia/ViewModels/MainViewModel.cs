@@ -70,6 +70,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnSimulationModeChanged(CAP.Avalonia.ViewModels.Analysis.SimulationMode value)
     {
         OnPropertyChanged(nameof(SimulationModeIndex));
+
+        // Surface Transient mode to the canvas so laser on/off icons stay visible
+        // and clickable during the transient/eye workflow (#690) — Transient mode
+        // deliberately clears the CW ShowPowerFlow overlay.
+        if (_canvas != null)
+            _canvas.IsTransientModeActive = value == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient;
     }
 
     public Commands.CommandManager CommandManager { get; }
@@ -293,11 +299,18 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
         CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+
+        // Raw-code placement seeding: manual and AI placement both write into the same
+        // per-instance override store paste-propagation already uses (see
+        // OnComponentsPasted below), so a placed raw-code template's preview/export
+        // override exists without any export-path changes.
+        CanvasInteraction.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         if (aiGridService is Services.AiGridService aiGrid)
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+            aiGrid.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
@@ -1055,6 +1068,10 @@ public class ComponentData
     public double? SliderValue { get; set; }
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
+
+    /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
+    public bool? LaserEnabled { get; set; }
+
     public bool? IsLocked { get; set; }
     public string? HumanReadableName { get; set; }
 }

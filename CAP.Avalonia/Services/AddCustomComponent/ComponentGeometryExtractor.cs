@@ -78,9 +78,7 @@ public sealed class ComponentGeometryExtractor
     /// <summary>Renders the reference and extracts size + pins. On render failure, Success is false.</summary>
     public async Task<GeometryExtractResult> ExtractAsync(GeometryReference reference, CancellationToken ct = default)
     {
-        NazcaPreviewResult preview = reference.Backend == GeometryBackend.GdsFactory
-            ? await _gdsFactory.RenderRawCodeAsync(reference.ToGdsFactoryRawCode(), ct)
-            : await _nazca.RenderAsync(reference.Module, reference.Function, reference.Parameters, ct);
+        NazcaPreviewResult preview = await RenderAsync(reference, ct);
 
         if (!preview.Success)
             return new GeometryExtractResult(false, preview.Error, 0, 0, Array.Empty<OverridePinData>(), preview);
@@ -89,5 +87,23 @@ public sealed class ComponentGeometryExtractor
         double height = preview.YMax - preview.YMin;
         var pins = OverridePinMapper.BuildOverridePins(preview);
         return new GeometryExtractResult(true, null, width, height, pins, preview);
+    }
+
+    /// <summary>
+    /// Picks the backend-appropriate renderer and, when <see cref="GeometryReference.RawSourceCode"/>
+    /// is set, dispatches its verbatim contents to that renderer's raw-code entry point instead of
+    /// the module/function ("v1") path. Rawcode mode never synthesizes an import/wrapper — the
+    /// pasted code is expected to define <c>component</c> itself.
+    /// </summary>
+    private Task<NazcaPreviewResult> RenderAsync(GeometryReference reference, CancellationToken ct)
+    {
+        IComponentPreviewRenderer renderer = reference.Backend == GeometryBackend.GdsFactory ? _gdsFactory : _nazca;
+
+        if (reference.RawSourceCode is not null)
+            return renderer.RenderRawCodeAsync(reference.RawSourceCode, ct);
+
+        return reference.Backend == GeometryBackend.GdsFactory
+            ? _gdsFactory.RenderRawCodeAsync(reference.ToGdsFactoryRawCode(), ct)
+            : _nazca.RenderAsync(reference.Module, reference.Function, reference.Parameters, ct);
     }
 }

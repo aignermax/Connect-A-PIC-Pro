@@ -8,6 +8,7 @@ using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.ExternalPorts;
 using CAP_Core.Grid;
 using CAP_Core.LightCalculation;
+using CAP.Avalonia.Services;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -217,13 +218,13 @@ public partial class ParameterSweepViewModel : ObservableObject
         {
             if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
 
+            // Laser off = output coupler (listen-only, #690) — inject no light.
+            if (compVm.IsLaserOff) continue;
+
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
+            var laserType = SimulationService.GetLaserTypeForWavelength(
+                laserConfig?.WavelengthNm ?? StandardWaveLengths.RedNM);
 
             foreach (var pin in compVm.Component.PhysicalPins)
             {

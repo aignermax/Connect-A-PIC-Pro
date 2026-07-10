@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -78,6 +79,109 @@ public sealed class UserPdkStore
     private static PdkDraft NewPdk(ProcessDefinition process, string backend, string? routingCrossSection) => new()
     {
         Name = $"My {process.Name} Components",
+        Foundry = process.Foundry,
+        Backend = backend,
+        Process = process,
+        GdsFactoryRoutingCrossSection = routingCrossSection,
+        Components = new()
+    };
+
+    /// <summary>
+    /// The file path a named custom PDK would live at. Does not create the file.
+    /// </summary>
+    public string ResolveNamedPath(string pdkName) =>
+        Path.Combine(_root, Slug(pdkName) + ".json");
+
+    /// <summary>True when a named custom PDK file already exists for that name.</summary>
+    public bool NamedPdkExists(string pdkName) => File.Exists(ResolveNamedPath(pdkName));
+
+    /// <summary>True when a component of that name exists in the PDK file at <paramref name="filePath"/>.</summary>
+    public bool ComponentExistsInFile(string filePath, string componentName)
+    {
+        if (!File.Exists(filePath))
+        {
+            return false;
+        }
+
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+        return pdk.Components.Exists(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Lists every named custom PDK found directly under the store root: every
+    /// <c>*.json</c> file that loads successfully and declares a <see cref="ProcessDefinition"/>.
+    /// Unreadable or process-less files (e.g. legacy per-process files predating #570, or
+    /// files damaged outside the app) are silently skipped rather than failing the listing.
+    /// </summary>
+    public IReadOnlyList<UserPdkInfo> ListCustomPdks()
+    {
+        var result = new List<UserPdkInfo>();
+        if (!Directory.Exists(_root))
+        {
+            return result;
+        }
+
+        foreach (var path in Directory.GetFiles(_root, "*.json"))
+        {
+            try
+            {
+                var pdk = _loader.LoadFromFileForEditing(path);
+                if (pdk.Process is not null)
+                {
+                    result.Add(new UserPdkInfo(pdk.Name, path, pdk.Process));
+                }
+            }
+            catch
+            {
+                // Skip files that don't parse as a valid PDK draft — the listing
+                // must stay usable even if one custom PDK file is malformed.
+            }
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Adds or replaces (by name, case-insensitive) the component in a user-named custom
+    /// PDK, independent of any single fabrication process's default file. Creates the file
+    /// (named <c>&lt;slug(pdkName)&gt;.json</c>) on first use. Returns the file path written to.
+    /// </summary>
+    public string SaveToNamedPdk(string pdkName, ProcessDefinition process, PdkComponentDraft component, string backend, string? routingCrossSection)
+    {
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var pdk = File.Exists(path)
+            ? _loader.LoadFromFileForEditing(path)
+            : NewNamedPdk(pdkName, process, backend, routingCrossSection);
+        pdk.Name = pdkName;
+        pdk.Process = process;
+
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        _saver.SaveToFile(pdk, path);
+        return path;
+    }
+
+    /// <summary>
+    /// Adds or replaces (by name, case-insensitive) the component in an already-created
+    /// named custom PDK file. Returns <paramref name="filePath"/> for chaining.
+    /// </summary>
+    public string AppendToExistingPdk(string filePath, PdkComponentDraft component)
+    {
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        _saver.SaveToFile(pdk, filePath);
+        return filePath;
+    }
+
+    private static PdkDraft NewNamedPdk(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection) => new()
+    {
+        Name = pdkName,
         Foundry = process.Foundry,
         Backend = backend,
         Process = process,
