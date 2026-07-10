@@ -15,11 +15,15 @@ public static class CustomComponentDraftFactory
 {
     /// <summary>
     /// Builds the draft for <paramref name="name"/> from the rendered <paramref name="preview"/>,
-    /// routing the qualified function to the gdsfactory or nazca field per the reference's backend
-    /// and attaching <paramref name="sMatrix"/> (null = black box) verbatim.
+    /// attaching <paramref name="sMatrix"/> (null = black box) verbatim. When
+    /// <paramref name="rawCode"/> is set, it (plus <paramref name="rawCodeBackend"/>) becomes the
+    /// draft's authoritative source and <c>GdsFactoryFunction</c>/<c>NazcaFunction</c> are left
+    /// unset; otherwise the qualified function is routed to the gdsfactory or nazca field per the
+    /// reference's backend, as in the module/function reference path.
     /// </summary>
     public static PdkComponentDraft Build(
-        string name, GeometryReference reference, GeometryExtractResult preview, PdkSMatrixDraft? sMatrix)
+        string name, GeometryReference reference, GeometryExtractResult preview, PdkSMatrixDraft? sMatrix,
+        string? rawCode = null, string? rawCodeBackend = null)
     {
         var draft = new PdkComponentDraft
         {
@@ -29,7 +33,12 @@ public static class CustomComponentDraftFactory
             Pins = MapPins(preview.Pins),
             SMatrix = sMatrix,
         };
-        if (reference.Backend == GeometryBackend.GdsFactory)
+        if (rawCode is not null)
+        {
+            draft.RawCode = rawCode;
+            draft.RawCodeBackend = rawCodeBackend;
+        }
+        else if (reference.Backend == GeometryBackend.GdsFactory)
             draft.GdsFactoryFunction = reference.QualifiedFunction;
         else
             draft.NazcaFunction = reference.QualifiedFunction;

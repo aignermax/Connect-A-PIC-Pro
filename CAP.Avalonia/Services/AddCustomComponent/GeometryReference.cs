@@ -23,8 +23,28 @@ public enum GeometryBackend
 /// <param name="Parameters">Optional Python kwargs fragment passed to the function call.</param>
 public sealed record GeometryReference(GeometryBackend Backend, string? Module, string Function, string? Parameters)
 {
+    /// <summary>
+    /// Verbatim Python cell code to render directly ("raw-code mode"). When set, this takes
+    /// precedence over <see cref="Module"/>/<see cref="Function"/>/<see cref="Parameters"/>:
+    /// <see cref="ComponentGeometryExtractor"/> passes it as-is to the backend-appropriate
+    /// renderer's <c>RenderRawCodeAsync</c> — no import/wrapper synthesis, the user's code
+    /// must define <c>component</c> itself. Named <c>RawSourceCode</c> rather than
+    /// <c>RawCode</c> because the static factory below is named <see cref="RawCode"/>; a
+    /// property and a method cannot share one identifier in C# (CS0102).
+    /// </summary>
+    public string? RawSourceCode { get; init; }
+
     /// <summary>The fully-qualified call, e.g. "cspdk.sin300.coupler" or "coupler".</summary>
     public string QualifiedFunction => string.IsNullOrWhiteSpace(Module) ? Function : $"{Module}.{Function}";
+
+    /// <summary>
+    /// Creates a raw-code geometry reference: <paramref name="code"/> is rendered verbatim by
+    /// the <paramref name="backend"/>-appropriate renderer, bypassing module/function dispatch.
+    /// </summary>
+    /// <param name="backend">Which renderer (nazca or gdsfactory) executes <paramref name="code"/>.</param>
+    /// <param name="code">Verbatim Python cell code; must assign a variable named <c>component</c>.</param>
+    public static GeometryReference RawCode(GeometryBackend backend, string code) =>
+        new(backend, null, string.Empty, null) { RawSourceCode = code };
 
     /// <summary>
     /// Wraps the reference in a raw-code snippet the gdsfactory preview script understands:

@@ -10,6 +10,7 @@ using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Services;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
@@ -92,6 +93,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
     /// </summary>
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
+
+    /// <summary>
+    /// Per-instance raw-code override store manual placement seeds into (issue rawcode
+    /// authoring). Wired by <c>MainViewModel</c> to <c>FileOperations.StoredNazcaOverrides</c>
+    /// so placing a raw-code template creates the override the raw-code preview/export path
+    /// reads, without any export-path changes. Null in tests that don't need placement seeding.
+    /// </summary>
+    public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
 
     /// <summary>
     /// Callback invoked when the user probes an element in Probe mode (issue #691):
@@ -358,7 +367,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
 
-        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY);
+        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY, NazcaOverrideStore);
         if (cmd == null)
         {
             UpdateStatus?.Invoke("No space available on chip for this component");

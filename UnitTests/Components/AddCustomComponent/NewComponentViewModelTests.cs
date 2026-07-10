@@ -122,12 +122,15 @@ public class NewComponentViewModelTests : IDisposable
     }
 
     [Fact]
-    public void Only_GdsFactory_backend_is_selectable_in_v1()
+    public void Only_GdsFactory_backend_is_selectable_in_reference_mode()
     {
-        // v1 scope: nazca custom components need NazcaOriginOffset derivation (v2), so the UI
-        // must offer gdsfactory only. The enum + extractor's nazca branch remain for tests/v2.
-        NewComponentViewModel.AvailableBackends.ShouldHaveSingleItem();
-        NewComponentViewModel.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
+        // Reference mode: nazca custom components need NazcaOriginOffset derivation (v2), so
+        // the UI must offer gdsfactory only. The enum + extractor's nazca branch remain for
+        // tests/v2. Own-code mode's own AvailableBackends behavior is covered separately
+        // (NewComponentViewModelRawCodeTests).
+        var (vm, _) = Build(withFdtd: false);
+        vm.AvailableBackends.ShouldHaveSingleItem();
+        vm.AvailableBackends[0].ShouldBe(GeometryBackend.GdsFactory);
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

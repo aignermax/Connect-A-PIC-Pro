@@ -127,10 +127,16 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             // gdsfactory PDK still needs its offset.
             bool isGdsFactoryComponent = !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction);
 
+            // A component authored via raw code (issue #702 rawcode authoring) owns its
+            // own geometry/export path instead of referencing a PDK function, so it is
+            // exempt from the function-reference requirements below just like a
+            // gdsfactory-native or analysis-tool component.
+            bool hasRawCode = !string.IsNullOrWhiteSpace(comp.RawCode);
+
             // Every non-analysis component must be exportable by *some* backend: a
             // gdsfactory PDK component with neither a gdsFactoryFunction nor a nazcaFunction
             // would silently export as an empty/misplaced cell.
-            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent
+            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent && !hasRawCode
                 && string.IsNullOrWhiteSpace(comp.NazcaFunction))
             {
                 errors.Add($"[{pdkName}/{compLabel}] gdsfactory-backend component must declare a gdsFactoryFunction (or a nazcaFunction)");
@@ -161,8 +167,10 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             // waveguides. The Offset Editor bypasses this check (it exists
             // precisely to fix PDKs in this state). Analysis tools are also
             // exempt because they are never exported; gdsfactory-native components are
-            // exempt because they export via gdsfactory, not Nazca (#570).
-            if (requireNazcaOffset && !isAnalysisTool && !isGdsFactoryComponent)
+            // exempt because they export via gdsfactory, not Nazca (#570); raw-code
+            // components are exempt because they are placed/exported via their own
+            // script, not the Nazca put()-with-offset convention (#702).
+            if (requireNazcaOffset && !isAnalysisTool && !isGdsFactoryComponent && !hasRawCode)
             {
                 if (comp.NazcaOriginOffsetX == null)
                 {
