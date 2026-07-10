@@ -17,6 +17,7 @@ using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 
 namespace CAP.Avalonia.Views;
@@ -80,6 +81,15 @@ public partial class MainWindow : Window
                 // iterating on the design while it stays open.
                 vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
                 {
+                    // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the
+                    // view model only knows the file's already-read contents (PickPyFile's
+                    // contract), never a path, so it can't own a FileDialogService itself.
+                    newComponentVm.PickPyFile = async () =>
+                    {
+                        var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
+                            "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
+                        return path is null ? null : await File.ReadAllTextAsync(path);
+                    };
                     var window = new NewComponentWindow { DataContext = newComponentVm };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
