@@ -94,6 +94,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
 
     /// <summary>
+    /// The design's live per-instance Nazca override store, keyed by component identifier.
+    /// Wired by <c>MainViewModel</c> to <c>FileOperationsViewModel.StoredNazcaOverrides</c>.
+    /// Used to carry member overrides into saved group templates and to seed them back
+    /// when a template is placed (issue #720). Null disables override transport.
+    /// </summary>
+    public IDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>? NazcaOverrideStore { get; set; }
+
+    /// <summary>
     /// Callback invoked when the user probes an element in Probe mode (issue #691):
     /// carries the classified probe target plus the click position in canvas coordinates.
     /// Wired by <c>MainViewModel</c> to open the mode-slice flyout at the click point.
@@ -394,7 +402,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         var libraryManager = _libraryViewModel.GetLibraryManager();
-        var cmd = PlaceGroupTemplateCommand.TryCreate(_canvas, libraryManager, SelectedGroupTemplate, x, y);
+        var cmd = PlaceGroupTemplateCommand.TryCreate(
+            _canvas, libraryManager, SelectedGroupTemplate, x, y, NazcaOverrideStore);
 
         if (cmd == null)
         {
@@ -951,7 +960,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
             _previewGenerator ?? new GroupPreviewGenerator(),
             selectedGroup,
             newName,
-            string.IsNullOrWhiteSpace(newDescription) ? null : newDescription);
+            string.IsNullOrWhiteSpace(newDescription) ? null : newDescription,
+            GroupTemplateNazcaOverrides.CreateJsonProvider(NazcaOverrideStore));
 
         _commandManager.ExecuteCommand(cmd);
         UpdateStatus?.Invoke($"Saved group '{newName}' as prefab to library");

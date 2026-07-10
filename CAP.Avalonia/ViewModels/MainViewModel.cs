@@ -356,6 +356,10 @@ public partial class MainViewModel : ObservableObject
             Selection.NazcaOverridePropagator.Propagate(
                 identifierMap, FileOperations.StoredNazcaOverrides);
 
+        // Group templates: carry member overrides into saved prefabs and seed them
+        // back into the design's store when a template is placed (issue #720).
+        CanvasInteraction.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
+
         // Wire rename from hierarchy panel through undo-aware command manager
         LeftPanel.HierarchyPanel.RenameComponent = (component, newName) =>
         {

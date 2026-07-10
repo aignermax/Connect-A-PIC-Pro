@@ -55,6 +55,14 @@ public class GroupTemplate
     public ComponentGroup? TemplateGroup { get; set; }
 
     /// <summary>
+    /// Per-instance Nazca override JSON keyed by template-child identifier (issue #720).
+    /// Captured from the source design's override store when the template is saved, so
+    /// raw-code/override components keep their geometry when the template is re-placed
+    /// in another design. The JSON is opaque to the Core layer.
+    /// </summary>
+    public Dictionary<string, string> NazcaOverridesJson { get; set; } = new();
+
+    /// <summary>
     /// Timestamp when this template was created.
     /// </summary>
     public DateTime CreatedAt { get; set; } = DateTime.Now;

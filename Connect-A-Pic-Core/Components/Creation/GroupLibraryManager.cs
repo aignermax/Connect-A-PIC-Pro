@@ -69,12 +69,17 @@ public class GroupLibraryManager
     /// <param name="name">Display name for the template.</param>
     /// <param name="description">Optional description.</param>
     /// <param name="source">Source category ("User" or "PDK").</param>
+    /// <param name="nazcaOverrideJsonProvider">
+    /// Optional lookup returning the serialized per-instance Nazca override for a child
+    /// component identifier, or null when the child has no override (issue #720).
+    /// </param>
     /// <returns>The created GroupTemplate.</returns>
     public GroupTemplate SaveTemplate(
         ComponentGroup group,
         string name,
         string? description = null,
-        string source = "User")
+        string source = "User",
+        Func<string, string?>? nazcaOverrideJsonProvider = null)
     {
         if (string.IsNullOrWhiteSpace(name))
             throw new ArgumentException("Template name cannot be empty.", nameof(name));
@@ -95,6 +100,11 @@ public class GroupLibraryManager
         // Serialize full group data so it can be reconstructed when loaded from disk
         var groupDataJson = GroupTemplateSerializer.Serialize(group);
 
+        // Capture per-instance Nazca overrides so raw-code geometry survives re-placement (#720)
+        var nazcaOverrides = nazcaOverrideJsonProvider == null
+            ? new Dictionary<string, string>()
+            : GroupTemplateOverrides.Collect(group, nazcaOverrideJsonProvider);
+
         var fileData = new GroupLibraryFileData
         {
             Name = name,
@@ -104,7 +114,8 @@ public class GroupLibraryManager
             ComponentCount = group.ChildComponents.Count,
             WidthMicrometers = group.WidthMicrometers,
             HeightMicrometers = group.HeightMicrometers,
-            GroupData = groupDataJson
+            GroupData = groupDataJson,
+            NazcaOverrides = nazcaOverrides.Count > 0 ? nazcaOverrides : null
         };
 
         var json = JsonSerializer.Serialize(fileData, new JsonSerializerOptions
@@ -126,6 +137,7 @@ public class GroupLibraryManager
             HeightMicrometers = group.HeightMicrometers,
             Source = source,
             TemplateGroup = group,
+            NazcaOverridesJson = nazcaOverrides,
             CreatedAt = DateTime.Now
         };
 
@@ -305,7 +317,8 @@ public class GroupLibraryManager
                     Source = source,
                     CreatedAt = fileData.CreatedAt,
                     PreviewThumbnailBase64 = fileData.PreviewThumbnailBase64,
-                    TemplateGroup = templateGroup
+                    TemplateGroup = templateGroup,
+                    NazcaOverridesJson = fileData.NazcaOverrides ?? new Dictionary<string, string>()
                 };
 
                 _templates.Add(template);
@@ -347,4 +360,10 @@ public class GroupLibraryFileData
     /// Contains all child components, frozen paths, and external pins.
     /// </summary>
     public string? GroupData { get; set; }
+
+    /// <summary>
+    /// Per-instance Nazca override JSON keyed by child component identifier (issue #720).
+    /// Null when no member of the group had an override at save time.
+    /// </summary>
+    public Dictionary<string, string>? NazcaOverrides { get; set; }
 }
