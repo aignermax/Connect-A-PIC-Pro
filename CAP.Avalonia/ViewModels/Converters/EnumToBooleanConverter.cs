@@ -13,9 +13,6 @@ namespace CAP.Avalonia.ViewModels.Converters;
 /// </summary>
 public sealed class EnumToBooleanConverter : IValueConverter
 {
-    /// <summary>Shared instance for use as a static XAML resource.</summary>
-    public static readonly EnumToBooleanConverter Instance = new();
-
     /// <summary>True when <paramref name="value"/>'s enum member name equals <paramref name="parameter"/>.</summary>
     public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
     {
