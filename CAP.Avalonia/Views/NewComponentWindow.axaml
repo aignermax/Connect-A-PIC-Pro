@@ -43,7 +43,7 @@
 
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <ComboBox Grid.Row="2" Grid.Column="2"
-                              ItemsSource="{x:Static vm:NewComponentViewModel.AvailableBackends}"
+                              ItemsSource="{Binding AvailableBackends}"
                               SelectedItem="{Binding SelectedBackend}"
                               Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
 
