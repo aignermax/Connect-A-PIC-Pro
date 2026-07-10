@@ -299,11 +299,18 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
         CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+
+        // Raw-code placement seeding: manual and AI placement both write into the same
+        // per-instance override store paste-propagation already uses (see
+        // OnComponentsPasted below), so a placed raw-code template's preview/export
+        // override exists without any export-path changes.
+        CanvasInteraction.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         if (aiGridService is Services.AiGridService aiGrid)
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+            aiGrid.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments

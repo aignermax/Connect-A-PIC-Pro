@@ -6,6 +6,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Process;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services;
 
@@ -35,6 +36,14 @@ public class AiGridService : IAiGridService
     /// path checks the group's children instead of the group's null source (#653).
     /// </summary>
     public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+
+    /// <summary>
+    /// Per-instance raw-code override store the AI placement path seeds into (issue
+    /// rawcode authoring), mirroring the manual-placement wiring on
+    /// <c>CanvasInteractionViewModel.NazcaOverrideStore</c>. Wired by <c>MainViewModel</c>
+    /// to <c>FileOperations.StoredNazcaOverrides</c>.
+    /// </summary>
+    public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
 
     private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
         SingleProcessPolicy.CheckPlacement(
@@ -126,7 +135,7 @@ public class AiGridService : IAiGridService
         var centeredX = x - template.WidthMicrometers / 2;
         var centeredY = y - template.HeightMicrometers / 2;
 
-        var cmd = PlaceComponentCommand.TryCreate(_canvas, template, centeredX, centeredY);
+        var cmd = PlaceComponentCommand.TryCreate(_canvas, template, centeredX, centeredY, NazcaOverrideStore);
         if (cmd == null)
             return $"Cannot place '{componentType}' — no valid position found near ({x:F0}, {y:F0})µm. Try a different position.";
 
