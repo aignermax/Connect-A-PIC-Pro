@@ -49,9 +49,9 @@
                     <TextBlock Grid.Row="2" Grid.Column="0" Text="Input:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <StackPanel Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Spacing="14">
                         <RadioButton Content="Function reference" GroupName="InputMode" Foreground="White"
-                                     IsChecked="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Reference}"/>
+                                     IsChecked="{Binding InputMode, Mode=TwoWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Reference}"/>
                         <RadioButton Content="Own code" GroupName="InputMode" Foreground="White"
-                                     IsChecked="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=OwnCode}"/>
+                                     IsChecked="{Binding InputMode, Mode=TwoWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=OwnCode}"/>
                     </StackPanel>
 
                     <TextBlock Grid.Row="4" Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
