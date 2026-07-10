@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Update;
 using Shouldly;
@@ -62,7 +63,8 @@ public class UpdateViewModelTests
         string responseJson,
         HttpStatusCode statusCode = HttpStatusCode.OK,
         string? tempPrefsPath = null,
-        IUrlLauncher? urlLauncher = null)
+        IUrlLauncher? urlLauncher = null,
+        IInstaller? installer = null)
     {
         var handler = new FakeHttpMessageHandler(
             new HttpResponseMessage(statusCode)
@@ -77,7 +79,7 @@ public class UpdateViewModelTests
         var prefs = tempPrefsPath != null
             ? new UserPreferencesService(tempPrefsPath)
             : new UserPreferencesService(Path.GetTempFileName());
-        return new UpdateViewModel(checker, downloader, prefs, urlLauncher ?? new FakeUrlLauncher());
+        return new UpdateViewModel(checker, downloader, prefs, urlLauncher ?? new FakeUrlLauncher(), installer ?? new FakeInstaller());
     }
 
     private static UpdateViewModel CreateViewModel(HttpMessageHandler handler, IUrlLauncher urlLauncher)
@@ -87,7 +89,8 @@ public class UpdateViewModelTests
             new UpdateChecker(httpClient, "owner", "repo"),
             new UpdateDownloader(httpClient),
             new UserPreferencesService(Path.GetTempFileName()),
-            urlLauncher);
+            urlLauncher,
+            new FakeInstaller());
     }
 
     [Fact]
@@ -159,7 +162,7 @@ public class UpdateViewModelTests
             var httpClient = new HttpClient(handler);
             var checker = new UpdateChecker(httpClient, "owner", "repo");
             var downloader = new UpdateDownloader(httpClient);
-            var vm = new UpdateViewModel(checker, downloader, prefs, new FakeUrlLauncher());
+            var vm = new UpdateViewModel(checker, downloader, prefs, new FakeUrlLauncher(), new FakeInstaller());
 
             await vm.CheckForUpdatesCommand.ExecuteAsync(null);
 
@@ -185,7 +188,7 @@ public class UpdateViewModelTests
                 });
             var httpClient = new HttpClient(handler);
             var vm = new UpdateViewModel(
-                new UpdateChecker(httpClient, "o", "r"), new UpdateDownloader(httpClient), prefs, new FakeUrlLauncher());
+                new UpdateChecker(httpClient, "o", "r"), new UpdateDownloader(httpClient), prefs, new FakeUrlLauncher(), new FakeInstaller());
 
             await vm.CheckForUpdatesCommand.ExecuteAsync(null);
             vm.UpdateAvailable.ShouldBeTrue();
@@ -217,7 +220,7 @@ public class UpdateViewModelTests
                 });
             var httpClient = new HttpClient(handler);
             var vm = new UpdateViewModel(
-                new UpdateChecker(httpClient, "o", "r"), new UpdateDownloader(httpClient), prefs, new FakeUrlLauncher());
+                new UpdateChecker(httpClient, "o", "r"), new UpdateDownloader(httpClient), prefs, new FakeUrlLauncher(), new FakeInstaller());
 
             await vm.CheckForUpdatesCommand.ExecuteAsync(null);
             vm.UpdateAvailable.ShouldBeTrue();
@@ -263,6 +266,82 @@ public class UpdateViewModelTests
 
         vm.StatusText.ShouldContain("GitHub releases page");
         urlLauncher.LastOpenedUrl.ShouldBe("https://github.com/aignermax/Lunima/releases/tag/v99.0.0");
+    }
+
+    [Fact]
+    public async Task InstallUpdate_OnMacOrLinux_OpensDownloadedInstallerViaLauncher()
+    {
+        // #610: on macOS/Linux the update downloads the platform installer (.dmg/.tar.gz) and
+        // opens it through the PATH-safe launcher — it must not fall back to the browser, and
+        // (unlike Windows) it must not auto-quit the app.
+        if (OperatingSystem.IsWindows()) return; // the Windows branch runs msiexec; not exercised on the Linux CI runner
+
+        var urlLauncher = new FakeUrlLauncher();
+        var vm = CreateViewModelForDownload(MultiPlatformReleaseJson, urlLauncher);
+
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        urlLauncher.LastOpenedPath.ShouldNotBeNull();   // installer opened via the launcher
+        urlLauncher.LastOpenedUrl.ShouldBeNull();       // not the browser fallback
+        var expectedExtension = OperatingSystem.IsMacOS() ? ".dmg" : ".tar.gz";
+        urlLauncher.LastOpenedPath!.EndsWith(expectedExtension).ShouldBeTrue();
+
+        if (File.Exists(urlLauncher.LastOpenedPath!))
+            File.Delete(urlLauncher.LastOpenedPath!);
+    }
+
+    [Fact]
+    public async Task InstallUpdate_WhenSelfUpdatePossible_LaunchesUpdaterWithDownloadedArchive()
+    {
+        // With an installed, writable location AND an auto-update archive for this OS, Download must
+        // perform an in-place update: hand the downloaded archive to the installer, not the browser.
+        if (OperatingSystem.IsWindows()) return; // Windows in-place self-update is deferred (manual MSI)
+        var installer = new FakeInstaller { CanUpdate = true };
+        var urlLauncher = new FakeUrlLauncher();
+        var vm = CreateViewModelForDownload(AutoUpdateReleaseJson, urlLauncher, installer);
+
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        installer.LaunchedArchivePath.ShouldNotBeNull();   // the in-place updater was launched
+        urlLauncher.LastOpenedUrl.ShouldBeNull();          // not the browser fallback
+        urlLauncher.LastOpenedPath.ShouldBeNull();         // not the manual open-installer path
+
+        if (installer.LaunchedArchivePath is not null && File.Exists(installer.LaunchedArchivePath))
+            File.Delete(installer.LaunchedArchivePath);
+    }
+
+    [global::Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task InstallUpdate_SelfUpdateUnderHeadlessAvaloniaSession_MustNotKillTheProcess()
+    {
+        // Regression guard for the intermittent "Test host process crashed" suite abort:
+        // inside the headless Avalonia session Application.Current is non-null (process-wide)
+        // but has NO lifetime. ShutdownApplication used to Environment.Exit(0) on any non-null
+        // Application, killing the whole xUnit host whenever the self-update path ran after
+        // any [AvaloniaFact]. Running the exact same flow *inside* the session makes a
+        // reintroduction fail loudly (and deterministically) instead of aborting random runs.
+        if (OperatingSystem.IsWindows()) return; // Windows in-place self-update is deferred (manual MSI)
+        global::Avalonia.Application.Current.ShouldNotBeNull();          // precondition: session app is set
+        global::Avalonia.Application.Current!.ApplicationLifetime.ShouldBeNull(); // ...with no lifetime
+
+        var installer = new FakeInstaller { CanUpdate = true };
+        var vm = CreateViewModelForDownload(AutoUpdateReleaseJson, new FakeUrlLauncher(), installer);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        // Reaching these asserts at all proves the process survived ShutdownApplication.
+        installer.LaunchedArchivePath.ShouldNotBeNull();
+        vm.StatusText.ShouldContain("Installing update");
+
+        if (installer.LaunchedArchivePath is not null && File.Exists(installer.LaunchedArchivePath))
+            File.Delete(installer.LaunchedArchivePath);
     }
 
     [Fact]
@@ -318,6 +397,49 @@ public class UpdateViewModelTests
         launcher.LastOpenedUrl.ShouldBeNull();    // no browser fallback for a retryable failure
         launcher.LastOpenedPath.ShouldBeNull();   // nothing was opened
         vm.IsDownloading.ShouldBeFalse();         // the Install button is usable again
+    }
+
+    private const string AutoUpdateReleaseJson = """
+        {
+          "tag_name": "v99.0.0",
+          "name": "Version 99.0.0",
+          "body": "Auto-update release.",
+          "prerelease": false,
+          "published_at": "2099-01-01T00:00:00Z",
+          "assets": [
+            { "name": "Lunima-99.0.0-osx-arm64.zip", "browser_download_url": "https://example.com/Lunima-99.0.0-osx-arm64.zip", "size": 4, "content_type": "application/zip" },
+            { "name": "Lunima-99.0.0-osx-x64.zip", "browser_download_url": "https://example.com/Lunima-99.0.0-osx-x64.zip", "size": 4, "content_type": "application/zip" },
+            { "name": "Lunima-99.0.0-linux-x64.tar.gz", "browser_download_url": "https://example.com/Lunima-99.0.0-linux-x64.tar.gz", "size": 4, "content_type": "application/gzip" },
+            { "name": "Lunima-Setup-99.0.0.msi", "browser_download_url": "https://example.com/Lunima-Setup-99.0.0.msi", "size": 4, "content_type": "application/x-msi" }
+          ]
+        }
+        """;
+
+    private const string MultiPlatformReleaseJson = """
+        {
+          "tag_name": "v99.0.0",
+          "name": "Version 99.0.0",
+          "body": "Major update.",
+          "prerelease": false,
+          "published_at": "2099-01-01T00:00:00Z",
+          "assets": [
+            { "name": "Lunima-99.0.0-osx-arm64.dmg", "browser_download_url": "https://example.com/Lunima-99.0.0-osx-arm64.dmg", "size": 4, "content_type": "application/octet-stream" },
+            { "name": "Lunima-99.0.0-linux-x64.tar.gz", "browser_download_url": "https://example.com/Lunima-99.0.0-linux-x64.tar.gz", "size": 4, "content_type": "application/gzip" },
+            { "name": "Lunima-Setup-99.0.0.msi", "browser_download_url": "https://example.com/Lunima-Setup-99.0.0.msi", "size": 4, "content_type": "application/x-msi" }
+          ]
+        }
+        """;
+
+    private static UpdateViewModel CreateViewModelForDownload(
+        string releaseJson, IUrlLauncher urlLauncher, IInstaller? installer = null)
+    {
+        var httpClient = new HttpClient(StubHttpMessageHandler.ReleaseThenBinary(releaseJson));
+        return new UpdateViewModel(
+            new UpdateChecker(httpClient, "owner", "repo"),
+            new UpdateDownloader(httpClient),
+            new UserPreferencesService(Path.GetTempFileName()),
+            urlLauncher,
+            installer ?? new FakeInstaller());
     }
 
     [Fact]
@@ -391,6 +513,22 @@ public class UpdateViewModelTests
         {
             LastRevealedPath = path;
         }
+    }
+
+    /// <summary>Test double for <see cref="IInstaller"/>: records the launch and lets a test
+    /// toggle whether in-place update is available.</summary>
+    private sealed class FakeInstaller : IInstaller
+    {
+        public bool CanUpdate { get; set; }
+        public string? LaunchedArchivePath { get; private set; }
+
+        public bool CanInstallInPlace(out string reason)
+        {
+            reason = CanUpdate ? string.Empty : "test: in-place update disabled";
+            return CanUpdate;
+        }
+
+        public void LaunchUpdater(string downloadedArchivePath) => LaunchedArchivePath = downloadedArchivePath;
     }
 
     // --- Skip for Today tests ---
@@ -542,7 +680,8 @@ public class UpdateViewModelTests
             new UpdateChecker(httpClient, "owner", "repo"),
             new UpdateDownloader(httpClient),
             prefs,
-            new FakeUrlLauncher());
+            new FakeUrlLauncher(),
+            new FakeInstaller());
     }
 
     private sealed class FakeHttpMessageHandler : HttpMessageHandler
@@ -575,6 +714,16 @@ public class UpdateViewModelTests
 
         public static StubHttpMessageHandler RepeatingOk(string body) =>
             new(_ => new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) });
+
+        /// <summary>The release JSON for the GitHub API call and a few bytes for any other
+        /// (asset download) URL, so the download stream is readable on every call.</summary>
+        public static StubHttpMessageHandler ReleaseThenBinary(string releaseJson) =>
+            new(request => new HttpResponseMessage(HttpStatusCode.OK)
+            {
+                Content = request.RequestUri!.Host.Contains("api.github.com")
+                    ? new StringContent(releaseJson)
+                    : new ByteArrayContent(new byte[] { 1, 2, 3, 4 }),
+            });
 
         protected override Task<HttpResponseMessage> SendAsync(
             HttpRequestMessage request, CancellationToken cancellationToken)

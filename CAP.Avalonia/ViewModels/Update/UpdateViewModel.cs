@@ -1,5 +1,6 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Update;
 using CAP_Core.Update;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -18,6 +19,7 @@ public partial class UpdateViewModel : ObservableObject
     private readonly UpdateDownloader _downloader;
     private readonly UserPreferencesService _preferences;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly IInstaller _installer;
     private readonly SemanticVersion _currentVersion;
 
     private GitHubReleaseInfo? _availableRelease;
@@ -56,12 +58,14 @@ public partial class UpdateViewModel : ObservableObject
         UpdateChecker updateChecker,
         UpdateDownloader downloader,
         UserPreferencesService preferences,
-        IUrlLauncher urlLauncher)
+        IUrlLauncher urlLauncher,
+        IInstaller installer)
     {
         _updateChecker = updateChecker;
         _downloader = downloader;
         _preferences = preferences;
         _urlLauncher = urlLauncher;
+        _installer = installer;
         _currentVersion = ResolveCurrentVersion();
     }
 
@@ -116,46 +120,49 @@ public partial class UpdateViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Downloads the platform-appropriate installer from the available release and opens it,
-    /// then shuts down the application on Windows (where msiexec replaces the running binary).
-    /// On macOS and Linux the app stays open so the user can complete the manual install step.
+    /// Downloads the update and applies it. When the app can update in place (installed from a
+    /// writable location and the release ships an auto-update archive) it downloads that archive,
+    /// launches a detached updater that swaps the installation and relaunches the new version, then
+    /// quits. Otherwise it falls back to the manual installer / releases page so the user is never
+    /// left without a path forward.
     /// </summary>
     [RelayCommand]
     private async Task InstallUpdate()
     {
         if (_availableRelease == null || IsDownloading) return;
 
-        var platformAsset = UpdateChecker.FindPlatformAsset(_availableRelease);
-        if (platformAsset == null)
+        var canSelfUpdate = _installer.CanInstallInPlace(out _);
+        var autoUpdateAsset = canSelfUpdate ? UpdateChecker.FindAutoUpdateAsset(_availableRelease) : null;
+
+        // Fall back to the manual installer (macOS .dmg, Windows .msi, …) when in-place update
+        // isn't possible or the release carries no auto-update archive.
+        var asset = autoUpdateAsset ?? UpdateChecker.FindPlatformAsset(_availableRelease);
+        var selfUpdate = autoUpdateAsset != null;
+
+        if (asset == null)
         {
-            // No platform installer found — open GitHub releases page in browser
-            StatusText = "Opening GitHub releases page in browser...";
-            try
-            {
-                _urlLauncher.Open(BuildReleaseUrl(_availableRelease.TagName));
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"Could not open browser: {ex.Message}";
-            }
+            OpenReleasesPageInBrowser();
             return;
         }
 
         IsDownloading = true;
         DownloadProgress = 0;
-        StatusText = "Downloading update...";
+        StatusText = selfUpdate ? "Downloading update..." : "Downloading installer...";
 
-        string installerPath;
+        string downloadedPath;
         try
         {
             var progress = new Progress<double>(p =>
             {
                 DownloadProgress = p;
-                StatusText = $"Downloading... {p:P0}";
+                // Progress callbacks run off the UI thread; guard on IsDownloading so a late one
+                // can't clobber the terminal status set after the download finishes.
+                if (IsDownloading)
+                    StatusText = $"Downloading... {p:P0}";
             });
 
-            installerPath = await _downloader.DownloadInstallerAsync(
-                platformAsset.BrowserDownloadUrl, platformAsset.Size, progress);
+            downloadedPath = await _downloader.DownloadInstallerAsync(
+                asset.BrowserDownloadUrl, asset.Size, progress);
         }
         catch (Exception ex)
         {
@@ -168,8 +175,34 @@ public partial class UpdateViewModel : ObservableObject
             IsDownloading = false;
         }
 
+        if (selfUpdate)
+        {
+            ApplySelfUpdate(downloadedPath);
+            return;
+        }
+
         StatusText = "Download complete. Opening installer...";
-        OpenDownloadedInstaller(installerPath);
+        OpenDownloadedInstaller(downloadedPath);
+    }
+
+    /// <summary>
+    /// Swaps the installation in place and relaunches: the detached updater waits for this
+    /// process to exit before replacing files, so the app shuts down right after launching it.
+    /// When the updater cannot be launched the app keeps running — never quit into a broken swap.
+    /// </summary>
+    private void ApplySelfUpdate(string archivePath)
+    {
+        StatusText = "Installing update and restarting...";
+        try
+        {
+            _installer.LaunchUpdater(archivePath);
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Update failed: {ex.Message}";
+            return;
+        }
+        ShutdownApplication();
     }
 
     /// <summary>
@@ -202,6 +235,20 @@ public partial class UpdateViewModel : ObservableObject
         catch (Exception)
         {
             // The status line already names the full path, so the user can still find the file.
+        }
+    }
+
+    /// <summary>Opens the GitHub releases page for the available release in the default browser.</summary>
+    private void OpenReleasesPageInBrowser()
+    {
+        StatusText = "Opening GitHub releases page in browser...";
+        try
+        {
+            _urlLauncher.Open(BuildReleaseUrl(_availableRelease!.TagName));
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Could not open browser: {ex.Message}";
         }
     }
 
@@ -328,10 +375,20 @@ public partial class UpdateViewModel : ObservableObject
 
     private static void ShutdownApplication()
     {
-        if (global::Avalonia.Application.Current?.ApplicationLifetime
-            is IClassicDesktopStyleApplicationLifetime desktop)
+        var app = global::Avalonia.Application.Current;
+        if (app?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.Shutdown();
+            return;
         }
+
+        // A running app with a non-desktop lifetime (e.g. a single-view host): the detached updater
+        // is already waiting for this process to exit, so exit hard rather than leaving it to time
+        // out. Gate on the LIFETIME, not on Application.Current: headless unit-test sessions
+        // (Avalonia.Headless.XUnit) set Application.Current process-wide but never assign a
+        // lifetime, so exiting on a mere non-null Application intermittently killed the xUnit
+        // test host ("Test host process crashed") whenever this ran after any [AvaloniaFact].
+        if (app?.ApplicationLifetime is not null)
+            Environment.Exit(0);
     }
 }

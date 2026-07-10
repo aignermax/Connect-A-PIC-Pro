@@ -59,6 +59,9 @@ public class CanvasInteractionState
     // ComponentGroup lock icon hover state
     public ComponentGroup? HoveredGroupLockIcon { get; set; }
 
+    // Laser on/off icon hover state (#690)
+    public ComponentViewModel? HoveredLaserIconComponent { get; set; }
+
     // Double-click detection state
     public DateTime LastClickTime { get; set; } = DateTime.MinValue;
     public ComponentViewModel? LastClickedComponent { get; set; }

@@ -1,0 +1,173 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CAP.Avalonia.Views.Panels.EyeHelpFlyout"
+             MaxWidth="420">
+
+    <!-- Plain-language explainer for the Eye/BER tab (companion to
+         TransientHelpFlyout, same "?"-button pattern): a looping animation
+         shows how bit-length slices of the waveform are stacked into an eye,
+         plus non-physicist descriptions of Q factor, BER and the threshold. -->
+
+    <UserControl.Styles>
+        <!-- The four eye trajectories fade in one after another (stacking),
+             then the "eye opening" marker pulses, then the loop restarts. -->
+        <Style Selector="Path.eyeTrace1">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="10%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace2">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="18%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="28%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace3">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="36%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="46%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace4">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="54%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="64%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Ellipse.eyeOpening">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="70%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="80%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer MaxHeight="440">
+        <StackPanel Margin="12" Spacing="8">
+
+            <TextBlock Text="What is an eye diagram?"
+                       FontWeight="Bold" FontSize="13" Foreground="White"/>
+
+            <!-- Looping animation: waveform slices stack up into an eye. -->
+            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                    CornerRadius="4" Padding="4">
+                <Canvas Width="380" Height="90">
+                    <!-- Left: the data waveform, cut into bit-length slices. -->
+                    <Polyline Points="10,25 40,25 44,65 74,65 78,25 108,25 112,65 142,65"
+                              Stroke="#81C784" StrokeThickness="2"/>
+                    <Line StartPoint="42,15" EndPoint="42,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <Line StartPoint="76,15" EndPoint="76,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <Line StartPoint="110,15" EndPoint="110,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <TextBlock Canvas.Left="14" Canvas.Top="76" Text="signal, cut per bit"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Arrow: slices get stacked -->
+                    <Line StartPoint="152,45" EndPoint="200,45" Stroke="#909090" StrokeThickness="2"/>
+                    <Polyline Points="192,39 202,45 192,51" Stroke="#909090" StrokeThickness="2"/>
+                    <TextBlock Canvas.Left="148" Canvas.Top="24" Text="stack" FontSize="9" Foreground="Gray"/>
+                    <!-- Right: the eye forms from overlaid slices. -->
+                    <Path Classes="eyeTrace1" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,25 L 355,25"/>
+                    <Path Classes="eyeTrace2" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,65 L 355,65"/>
+                    <Path Classes="eyeTrace3" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,25 C 265,25 305,65 355,65"/>
+                    <Path Classes="eyeTrace4" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,65 C 265,65 305,25 355,25"/>
+                    <Ellipse Classes="eyeOpening" Canvas.Left="265" Canvas.Top="33"
+                             Width="40" Height="24" Opacity="0"
+                             Stroke="#FFD54F" StrokeThickness="2" StrokeDashArray="3,2"/>
+                    <TextBlock Canvas.Left="248" Canvas.Top="76" Text="the open 'eye'"
+                               FontSize="9" Foreground="Gray"/>
+                </Canvas>
+            </Border>
+
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Signal quality at a glance: the output waveform is cut into slices,
+                one bit long each, and all slices are drawn on top of each other.
+                Where the 1s and 0s stay apart, an open "eye" appears in the middle.
+            </TextBlock>
+
+            <TextBlock Text="Why does it matter?" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                A receiver must decide, in the middle of every bit, whether it sees a
+                1 or a 0. A wide-open eye means that decision is easy and data arrives
+                error-free. Noise, echoes and pulse spreading squeeze the eye shut —
+                this plot shows how much margin your circuit leaves.
+            </TextBlock>
+
+            <TextBlock Text="What does Run Eye Analysis do?" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                It sends a pseudo-random bit stream (PRBS, like real data traffic) at
+                the chosen bit rate through your circuit, stacks the strongest output
+                into a brightness map (bright = the signal passes there often), and
+                computes the quality numbers below the plot — including realistic
+                receiver noise (shot, thermal and laser RIN).
+            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Light enters at couplers with the laser switched on; couplers with
+                the laser switched off are your outputs — the eye is measured there
+                (toggle the laser icon on the canvas or the switch in the properties
+                panel).
+            </TextBlock>
+
+            <TextBlock Text="Reading the numbers" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <StackPanel Spacing="5">
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#4FC3F7">Q factor</Run>
+                    <Run> — how far apart the 1-level and 0-level sit compared to the
+                    noise. Bigger is better; Q ≈ 7 is roughly "error-free" in practice.</Run>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FF8A65">BER</Run>
+                    <Run> — the estimated bit-error rate: the chance a bit is read
+                    wrongly. 1E-12 means about one error per trillion bits (excellent);
+                    1E-3 means the link is unusable without error correction.</Run>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FFD54F">Threshold</Run>
+                    <Run> — the decision level between 0 and 1, as a fraction of the
+                    signal range. 0.5 = exactly in the middle; move it if your 1s and
+                    0s are asymmetric.</Run>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#81C784">Eye height / width / jitter</Run>
+                    <Run> — the vertical and horizontal opening of the eye, and how
+                    much the signal edges wander in time. More opening = more margin.</Run>
+                </TextBlock>
+            </StackPanel>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

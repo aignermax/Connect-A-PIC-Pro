@@ -10,7 +10,8 @@ namespace CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 
 /// <summary>
 /// ViewModel for the eye-diagram / BER panel (#535). Drives a PRBS-modulated
-/// transient simulation (#527 pipeline), folds the strongest output trace into
+/// transient simulation (#527 pipeline), folds the output-coupler trace (the
+/// coupler with its laser off, #690; strongest trace as legacy fallback) into
 /// an eye histogram, and reports Q-factor / BER with a receiver noise model.
 /// </summary>
 public partial class EyeDiagramViewModel : ObservableObject
@@ -112,7 +113,7 @@ public partial class EyeDiagramViewModel : ObservableObject
             PlotModel = EyeDiagramPlotBuilder.BuildPlotModel(outcome.Histogram);
             MetricsText = FormatMetrics(outcome.Metrics!);   // non-null when Histogram != null
             OnPropertyChanged(nameof(HasResult));
-            StatusText = "Done";
+            StatusText = outcome.Warning ?? "Done";
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -155,13 +156,16 @@ public partial class EyeDiagramViewModel : ObservableObject
         }
     }
 
-    /// <summary>Outcome of an eye run: either a result, or a user-facing <see cref="Error"/>
-    /// for an expected "can't run" condition (no light source / no output traces).</summary>
-    private sealed record EyeRunOutcome(EyeHistogram? Histogram, EyeMetrics? Metrics, string? Error);
+    /// <summary>Outcome of an eye run: either a result (optionally with a non-fatal
+    /// <see cref="Warning"/>), or a user-facing <see cref="Error"/> for an expected
+    /// "can't run" condition (no light source / no output traces).</summary>
+    private sealed record EyeRunOutcome(
+        EyeHistogram? Histogram, EyeMetrics? Metrics, string? Error, string? Warning = null);
 
     private EyeRunOutcome RunAnalysisCore()
     {
         var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
+        var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas!);
 
         double bitRateHz = BitRateGbps * GigabitsToBits;
         var sweepDef = TimeSignalDefinition.FromWavelengthSweep(CenterWavelengthNm, SpanNm, FreqPoints);
@@ -178,13 +182,21 @@ public partial class EyeDiagramViewModel : ObservableObject
             signals[used.AttachedComponentPinId] = PrbsGenerator.ToNrzSamples(bits, plan.SamplesPerBit, amplitude);
         }
         if (signals.Count == 0)
-            return new EyeRunOutcome(null, null, "No light source found — place an input coupler (e.g. a grating/edge coupler).");
+            return new EyeRunOutcome(null, null, outputPinIds.Count > 0
+                ? "No laser is switched on — turn the laser on at your input coupler."
+                : "No light source found — place an input coupler (e.g. a grating/edge coupler).");
 
         var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
         if (result.PinTraces.Count == 0)
             return new EyeRunOutcome(null, null,
                 "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
-        var trace = SelectStrongestTrace(result);
+
+        // Analyse the trace at a coupler whose laser is off (a true output, #690);
+        // fall back to the strongest trace (with a warning) for all-lasers-on designs.
+        var selection = EyeTraceSelector.Select(result, outputPinIds);
+        if (selection.Trace == null)
+            return new EyeRunOutcome(null, null, selection.Error);
+        var trace = selection.Trace;
 
         // No time bin can be finer than one sample, otherwise bins stay empty.
         int timeBins = Math.Min(EyeDiagramBuilder.DefaultTimeBins, plan.SamplesPerBit);
@@ -196,12 +208,8 @@ public partial class EyeDiagramViewModel : ObservableObject
         var metrics = BerEstimator.Estimate(
             trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, threshold, noise, timeBins);
 
-        return new EyeRunOutcome(histogram, metrics, null);
+        return new EyeRunOutcome(histogram, metrics, null, selection.Warning);
     }
-
-    /// <summary>Picks the highest-peak output trace. The caller guarantees at least one exists.</summary>
-    private static double[] SelectStrongestTrace(TimeDomainResult result) =>
-        result.PinTraces.Values.OrderByDescending(t => t.Length == 0 ? 0 : t.Max()).First();
 
     private static string FormatMetrics(EyeMetrics metrics)
     {

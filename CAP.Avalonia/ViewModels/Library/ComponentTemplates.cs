@@ -40,7 +40,7 @@ public static class ComponentTemplates
                 270 => RectSide.Down,
                 _ => RectSide.Right
             };
-            logicalPins.Add(new Pin(def.Name, i, MatterType.Light, side));
+            logicalPins.Add(new Pin(def.Name, i, def.Kind, side) { Polarization = def.Polarization });
         }
 
         // Create parts array (simplified: single part)
@@ -203,6 +203,20 @@ public partial class ComponentTemplate : ObservableObject
     /// under the activated gdsfactory PDK (#570 field-test fix).
     /// </summary>
     public string? GdsFactoryRoutingCrossSection { get; set; }
+
+    /// <summary>
+    /// Optional raw source code authored by the user for this component
+    /// (e.g. a gdsfactory or Nazca script that builds the cell). Carried over
+    /// from <see cref="CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft.RawCode"/>.
+    /// Null for components defined through the normal function-reference path.
+    /// </summary>
+    public string? RawCode { get; set; }
+
+    /// <summary>
+    /// Backend the <see cref="RawCode"/> targets: <c>"nazca"</c> or
+    /// <c>"gdsfactory"</c>. Null when <see cref="RawCode"/> is not set.
+    /// </summary>
+    public string? RawCodeBackend { get; set; }
 }
 
 public class PinDefinition
@@ -212,11 +226,25 @@ public class PinDefinition
     public double OffsetY { get; }
     public double AngleDegrees { get; }
 
-    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees)
+    /// Signal domain of the pin: <see cref="MatterType.Light"/> (optical, default)
+    /// or <see cref="MatterType.Electricity"/> (electrical metal contact).
+    /// </summary>
+    public MatterType Kind { get; }
+
+    /// <summary>
+    /// Polarization mode of this pin. Defaults to the backward-compatible
+    /// <see cref="PolarizationKind.TE"/> for templates that do not declare it.
+    /// </summary>
+    public PolarizationKind Polarization { get; }
+
+    public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees,
+        MatterType kind = MatterType.Light, PolarizationKind polarization = PolarizationKind.TE)
     {
         Name = name;
         OffsetX = offsetX;
         OffsetY = offsetY;
         AngleDegrees = angleDegrees;
+        Kind = kind;
+        Polarization = polarization;
     }
 }

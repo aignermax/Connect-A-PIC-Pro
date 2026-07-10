@@ -1,0 +1,188 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="CAP.Avalonia.Views.Panels.TransientHelpFlyout"
+             MaxWidth="420">
+
+    <!-- Plain-language explainer for Transient mode (#600 user feedback):
+         a looping animation (light travels through the chip and splits to the
+         outputs) plus non-physicist descriptions of the mode, the three
+         sources, and how to read the plot. Shown from the panel's "?" button. -->
+
+    <UserControl.Styles>
+        <!-- Pulse entering from the laser to the chip centre, fading out there. -->
+        <Style Selector="Ellipse.pulseIn">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="34"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <!-- Split pulses: appear at the chip centre and travel to one output each. -->
+        <Style Selector="Ellipse.pulseTop">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="96%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="16"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="16"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Ellipse.pulseBottom">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="96%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="52"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="52"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer MaxHeight="440">
+        <StackPanel Margin="12" Spacing="8">
+
+            <TextBlock Text="What does Transient mode do?"
+                       FontWeight="Bold" FontSize="13" Foreground="White"/>
+
+            <!-- Looping animation: laser → chip → split to two outputs. -->
+            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                    CornerRadius="4" Padding="4">
+                <Canvas Width="380" Height="80">
+                    <!-- Laser source -->
+                    <Ellipse Canvas.Left="10" Canvas.Top="30" Width="20" Height="20" Fill="#FFD54F"/>
+                    <TextBlock Canvas.Left="2" Canvas.Top="54" Text="light source"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Waveguides -->
+                    <Line StartPoint="34,40" EndPoint="150,40" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <Line StartPoint="240,30" EndPoint="336,22" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <Line StartPoint="240,50" EndPoint="336,58" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <!-- The user's circuit -->
+                    <Border Canvas.Left="150" Canvas.Top="18" Width="90" Height="44"
+                            Background="#2a2a3d" BorderBrush="#5d5d8d" BorderThickness="1" CornerRadius="4">
+                        <TextBlock Text="your circuit" FontSize="9" Foreground="LightGray"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- Outputs -->
+                    <Ellipse Canvas.Left="338" Canvas.Top="16" Width="12" Height="12"
+                             Fill="Transparent" Stroke="#4FC3F7" StrokeThickness="2"/>
+                    <Ellipse Canvas.Left="338" Canvas.Top="52" Width="12" Height="12"
+                             Fill="Transparent" Stroke="#FF8A65" StrokeThickness="2"/>
+                    <TextBlock Canvas.Left="330" Canvas.Top="0" Text="outputs"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Animated light pulses -->
+                    <Ellipse Classes="pulseIn" Canvas.Top="34" Width="12" Height="12" Fill="#FFF176"/>
+                    <Ellipse Classes="pulseTop" Width="10" Height="10" Fill="#4FC3F7"/>
+                    <Ellipse Classes="pulseBottom" Width="10" Height="10" Fill="#FF8A65"/>
+                </Canvas>
+            </Border>
+
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Think of it as an oscilloscope for your chip: light is sent into the
+                inputs, and the plot shows how much power arrives at each output —
+                moment by moment, not just the final steady value.
+            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Light enters at couplers with the laser switched on; couplers with
+                the laser switched off are your outputs (toggle the laser icon on
+                the canvas or the switch in the properties panel).
+            </TextBlock>
+
+            <TextBlock Text="Why does it exist?" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                The normal simulation (CW mode) only shows the end state. Transient
+                mode shows *when* light arrives, how short pulses spread out on the
+                way, and whether fast data survives the trip through your circuit —
+                the questions that matter for real communication links.
+            </TextBlock>
+
+            <TextBlock Text="The three light sources" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <StackPanel Spacing="5">
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FFD54F">Gaussian pulse</Run>
+                    <Run> — one short flash of light. Use it to see delays and echoes:
+                    each output shows when, and how smeared-out, the flash arrives.</Run>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#81C784">Continuous wave (CW)</Run>
+                    <Run> — light switched on and kept on. Use it to check power splitting:
+                    after a brief settling time, each output holds its share of the input power.</Run>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#4FC3F7">PRBS-NRZ</Run>
+                    <Run> — a pseudo-random stream of 0/1 data bits, like real network
+                    traffic (e.g. 25 Gbit/s). Use it to judge signal quality: are the 1s
+                    and 0s still clearly separated at the output? The same seed always
+                    produces the same bit pattern, so results are reproducible.</Run>
+                </TextBlock>
+            </StackPanel>
+
+            <TextBlock Text="How to read the plot" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                X axis: time, in picoseconds or nanoseconds (see the axis label —
+                1000 ps = 1 ns). Y axis: the optical power arriving at that output.
+                Each coloured line is one output pin of your circuit; use the
+                checkboxes under the plot to show or hide lines.
+            </TextBlock>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

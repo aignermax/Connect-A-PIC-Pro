@@ -87,6 +87,12 @@ public partial class MainViewModel : ObservableObject
     partial void OnSimulationModeChanged(CAP.Avalonia.ViewModels.Analysis.SimulationMode value)
     {
         OnPropertyChanged(nameof(SimulationModeIndex));
+
+        // Surface Transient mode to the canvas so laser on/off icons stay visible
+        // and clickable during the transient/eye workflow (#690) — Transient mode
+        // deliberately clears the CW ShowPowerFlow overlay.
+        if (_canvas != null)
+            _canvas.IsTransientModeActive = value == CAP.Avalonia.ViewModels.Analysis.SimulationMode.Transient;
     }
 
     public Commands.CommandManager CommandManager { get; }
@@ -120,6 +126,12 @@ public partial class MainViewModel : ObservableObject
     /// ViewModel for viewport control (zoom, pan, navigation).
     /// </summary>
     public ViewportControlViewModel ViewportControl { get; }
+
+    /// <summary>
+    /// ViewModel for the mode-slice probe flyout (issue #691); null when the mode-solver
+    /// feature is not registered (e.g. lightweight test construction).
+    /// </summary>
+    public ViewModels.Solvers.ModeProbe.ModeProbeViewModel? ModeProbe { get; }
 
     /// <summary>
     /// ViewModel for the left sidebar panel (component library, PDK management).
@@ -200,6 +212,13 @@ public partial class MainViewModel : ObservableObject
     public GdsPreviewRenderService GdsPreviewRenderService { get; }
 
     /// <summary>
+    /// Adaptive crossing-insertion wiring (Issue #553). Held so the binder —
+    /// which attaches the crossing-insertion service to the canvas — lives for
+    /// the application lifetime. Null in tests that bypass DI.
+    /// </summary>
+    public ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? CrossingInsertionBinder { get; }
+
+    /// <summary>
     /// Bottom-panel error console service. Exposed so view-layer wiring helpers
     /// (e.g. <see cref="CAP.Avalonia.Views.Dialogs.ExportDialogWiring"/>) can persist
     /// failures that would otherwise only flash through the ephemeral status bar.
@@ -238,9 +257,14 @@ public partial class MainViewModel : ObservableObject
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
         Services.RecentProjectsService? recentProjectsService = null,
-        HomeViewModel? homeViewModel = null)
+        HomeViewModel? homeViewModel = null,
+        ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
+        ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
+        // Injected for activation: constructing the binder wires the adaptive
+        // crossing-insertion service (Issue #553) into the canvas' connection manager.
+        CrossingInsertionBinder = crossingInsertionBinder;
         Simulation = simulationService;
         CommandManager = commandManager;
         _canvas = canvas;
@@ -288,6 +312,13 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport = gdsFactoryExport;
         // gdsfactory export honours gdsfactory-backend overrides from the design's store.
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // Electrical metal routing spec (#682): trace width / layers / crossing policy come
+        // from the active process's metal cross-section; both exporters share one provider.
+        Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec> metalSpecProvider = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.MetalRoutingSpecFactory.FromActiveProcess(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+        FileOperations.MetalRoutingSpecProvider = metalSpecProvider;
+        GdsFactoryExport.MetalRoutingSpecProvider = metalSpecProvider;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
@@ -297,6 +328,8 @@ public partial class MainViewModel : ObservableObject
             new SaxExportFormat(FileOperations.ExportSaxCommand),
             PhotonTorchExportFormat,
             VerilogAExportFormat,
+            // Circuit-topology netlist (gdsfactory YAML, #687) — same save flow as the panel.
+            new NetlistExportFormat(RightPanel.Netlist.SaveYamlCommand),
         });
 
         // Wire up status callbacks
@@ -319,11 +352,18 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
         CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+
+        // Raw-code placement seeding: manual and AI placement both write into the same
+        // per-instance override store paste-propagation already uses (see
+        // OnComponentsPasted below), so a placed raw-code template's preview/export
+        // override exists without any export-path changes.
+        CanvasInteraction.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         if (aiGridService is Services.AiGridService aiGrid)
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+            aiGrid.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
@@ -353,6 +393,22 @@ public partial class MainViewModel : ObservableObject
             RightPanel.Sweep.ConfigureForComponent(comp, Canvas);
             LeftPanel.HierarchyPanel.SyncSelectionFromCanvas(comp);
         };
+
+        // Mode-slice probe (issue #691): clicking an element in Probe mode opens the
+        // non-modal flyout at the click point, auto-filled from PDK/connection data.
+        ModeProbe = modeProbe;
+        if (ModeProbe != null)
+        {
+            ModeProbe.GetActiveProcessFingerprint = () => FileOperations.ActiveProcess?.Fingerprint;
+            ModeProbe.GetSimulationWavelengthNm = () =>
+                Canvas.Components.FirstOrDefault(c => c.IsLightSource)?.LaserConfig?.WavelengthNm;
+            CanvasInteraction.ProbeRequested = (target, canvasX, canvasY) =>
+            {
+                // Canvas → control pixels, so the flyout opens where the user clicked.
+                var zoom = ViewportControl.ZoomLevel;
+                ModeProbe.Open(target, canvasX * zoom + Canvas.PanX, canvasY * zoom + Canvas.PanY);
+            };
+        }
 
         // Carry per-instance Nazca overrides onto pasted copies so their raw-code
         // preview and export geometry follow the duplicated component.
@@ -595,6 +651,9 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private void SetDeleteMode() => CanvasInteraction.SetDeleteModeCommand.Execute(null);
+
+    [RelayCommand]
+    private void SetProbeMode() => CanvasInteraction.SetProbeModeCommand.Execute(null);
 
     [RelayCommand]
     private void DeleteSelected() => CanvasInteraction.DeleteSelectedCommand.Execute(null);
@@ -1079,6 +1138,10 @@ public class ComponentData
     public double? SliderValue { get; set; }
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
+
+    /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
+    public bool? LaserEnabled { get; set; }
+
     public bool? IsLocked { get; set; }
     public string? HumanReadableName { get; set; }
 }

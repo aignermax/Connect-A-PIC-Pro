@@ -45,17 +45,51 @@ public class ComponentFdtdRequestFactory
     /// </summary>
     public async Task<FdtdSMatrixRequest?> BuildAsync(Component component, CancellationToken ct = default)
     {
-        var preview = await _preview.RenderAsync(component.NazcaModuleName, component.NazcaFunctionName, null, ct);
+        // Render the ACTUAL parametrised geometry (e.g. length=3.5), not the function's
+        // defaults — otherwise the FDTD S-matrix is computed for the wrong shape, and #580 E's
+        // template promotion would spread that default-geometry matrix to every instance of a
+        // parametrised type (#580 review). Every other RenderAsync call site passes params too.
+        var preview = await _preview.RenderAsync(
+            component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters, ct);
         if (!preview.Success || preview.Polygons.Count == 0 || preview.Pins.Count == 0)
             return null;
 
         var componentPinNames = component.PhysicalPins?.Select(p => p.Name).ToList() ?? new List<string>();
 
+        return BuildFromPreview(preview, componentPinNames, _siliconLayer, _portWidthUm);
+    }
+
+    /// <summary>
+    /// Builds a complete <see cref="FdtdSMatrixRequest"/> directly from an already
+    /// rendered <see cref="NazcaPreviewResult"/>, without re-rendering. Used by flows
+    /// that already hold a preview render (e.g. the custom-PDK "own component" editor)
+    /// so they don't pay for a second Nazca render just to get an FDTD request.
+    /// Polygons are filtered to <paramref name="siliconLayer"/> (falling back to all
+    /// layers when none match) and ports are index-matched to <paramref name="portNames"/>
+    /// (falling back to the preview's own pin names on a count mismatch) — the same
+    /// mapping <see cref="BuildAsync"/> applies.
+    /// </summary>
+    /// <param name="preview">Rendered geometry/pins to build the request from.</param>
+    /// <param name="portNames">
+    /// Port names to assign, index-matched to <paramref name="preview"/>'s pins
+    /// (e.g. the component's own pin names, so the S-matrix is keyed as expected).
+    /// </param>
+    /// <param name="siliconLayer">GDS layer carrying the optical waveguide.</param>
+    /// <param name="portWidthUm">Port (waveguide) width in µm.</param>
+    public static FdtdSMatrixRequest BuildFromPreview(
+        NazcaPreviewResult preview,
+        IReadOnlyList<string> portNames,
+        int siliconLayer = DefaultSiliconLayer,
+        double portWidthUm = DefaultPortWidthUm)
+    {
+        ArgumentNullException.ThrowIfNull(preview);
+        ArgumentNullException.ThrowIfNull(portNames);
+
         return new FdtdSMatrixRequest
         {
-            Polygons = BuildPolygons(preview.Polygons, _siliconLayer),
-            Ports = BuildPorts(preview.Pins, componentPinNames, _portWidthUm),
-            LayerNumber = _siliconLayer,
+            Polygons = BuildPolygons(preview.Polygons, siliconLayer),
+            Ports = BuildPorts(preview.Pins, portNames, portWidthUm),
+            LayerNumber = siliconLayer,
             Is3D = false, // 2D for a quick recompute; a 3D/accuracy toggle can come later
         };
     }

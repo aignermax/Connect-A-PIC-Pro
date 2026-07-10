@@ -269,6 +269,8 @@ public partial class OnaSweepViewModel : ObservableObject
         foreach (var component in allComponents)
         {
             if (!SimulationService.IsLightSource(component)) continue;
+            // Laser off = listen-only output coupler (#690) — inject no sweep light.
+            if (!component.LaserEnabled) continue;
             foreach (var pin in component.PhysicalPins)
             {
                 if (pin.LogicalPin?.MatterType != MatterType.Light) continue;

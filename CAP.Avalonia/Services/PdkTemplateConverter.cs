@@ -1,6 +1,7 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.FormulaReading;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -32,7 +33,9 @@ public static class PdkTemplateConverter
             p.Name,
             p.OffsetXMicrometers,
             p.OffsetYMicrometers,
-            p.AngleDegrees
+            p.AngleDegrees,
+            PinKindHelper.Parse(p.PinKind),
+            PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction)
         )).ToArray();
 
         // NazcaOriginOffset is required — validated by PdkLoader.
@@ -57,6 +60,8 @@ public static class PdkTemplateConverter
             NazcaModuleName = nazcaModuleName,
             NazcaOriginOffsetX = nazcaOriginOffsetX,
             NazcaOriginOffsetY = nazcaOriginOffsetY,
+            RawCode = pdkComp.RawCode,
+            RawCodeBackend = pdkComp.RawCodeBackend,
         };
 
         if (pdkComp.SMatrix?.WavelengthData is { Count: > 0 } wlData)

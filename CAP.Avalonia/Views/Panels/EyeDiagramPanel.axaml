@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:panels="using:CAP.Avalonia.Views.Panels"
              xmlns:oxy="using:OxyPlot.Avalonia"
              x:Class="CAP.Avalonia.Views.Panels.EyeDiagramPanel"
              x:DataType="vm:MainViewModel">
@@ -63,11 +64,26 @@
                         Command="{Binding BottomPanel.Analysis.Eye.RunEyeAnalysisCommand}"
                         IsEnabled="{Binding BottomPanel.Analysis.Eye.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
             </StackPanel>
-            <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom"
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom"
                         IsVisible="{Binding BottomPanel.Analysis.Eye.HasResult}">
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
                 <Button Content="Export CSV" Classes="analysis" Background="#3d3d5d"
                         Command="{Binding BottomPanel.Analysis.Eye.ExportCsvCommand}"/>
+            </StackPanel>
+            <!-- Plain-language help: what an eye diagram is, why the opening
+                 matters, and what Q / BER / threshold mean. Non-modal flyout,
+                 same pattern as the Transient tab's "?" button. -->
+            <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="?" Classes="analysis" Background="#3d5d3d" Width="26"
+                        HorizontalContentAlignment="Center"
+                        ToolTip.Tip="What is an eye diagram? (plain-language explainer)">
+                    <Button.Flyout>
+                        <Flyout Placement="Top">
+                            <panels:EyeHelpFlyout/>
+                        </Flyout>
+                    </Button.Flyout>
+                </Button>
             </StackPanel>
         </WrapPanel>
 

@@ -19,6 +19,7 @@ public partial class ComponentSettingsDialogViewModel
 {
     private readonly IFdtdSMatrixService? _fdtdService;
     private readonly Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? _fdtdRequestFactory;
+    private readonly IDockerSetupDialogService? _dockerSetupDialog;
     private CancellationTokenSource? _recalcCts;
 
     /// <summary>True while an FDTD recompute is running.</summary>
@@ -71,7 +72,17 @@ public partial class ComponentSettingsDialogViewModel
             if (!availability.IsAvailable)
             {
                 SolverStatus = availability.Message;
-                return;
+                // Guided setup (issue #649): open the "Set up FDTD" dialog with
+                // platform-specific install/start guidance and a re-check button.
+                // Headless/test consumers without the dialog service keep the
+                // plain error-string behaviour above.
+                if (_dockerSetupDialog == null)
+                    return;
+                var ready = await _dockerSetupDialog.ShowAsync(
+                    availability, ct => _fdtdService.CheckAvailabilityAsync(ct));
+                if (!ready)
+                    return;
+                SolverStatus = "Docker is ready — continuing FDTD recompute…";
             }
 
             SolverStatus = "Preparing component geometry…";
@@ -108,10 +119,18 @@ public partial class ComponentSettingsDialogViewModel
             _storedSMatrices[_smatrixKey] = data;
 
             var applyResult = SMatrixOverrideApplicator.Apply(_liveComponent, data, _errorConsole);
-            SolverStatus = BuildSolverStatus(result, applyResult);
-            StatusText = $"Recomputed S-matrix via FDTD ({note}).";
-            _notificationService?.ShowSuccess(
-                $"S-matrix for '{_displayName}' recomputed via {note} and applied.");
+
+            // Issue #580 E: when the instance geometry matches the template draft,
+            // the caller-provided sink promotes the result to the template-scoped
+            // (user-global) override so every instance of the type inherits it.
+            var propagated = _propagateToTemplate?.Invoke(data) == true;
+            SolverStatus = BuildSolverStatus(result, applyResult, propagated);
+            StatusText = propagated
+                ? $"Recomputed S-matrix via FDTD ({note}); applied to all instances of this component type."
+                : $"Recomputed S-matrix via FDTD ({note}).";
+            _notificationService?.ShowSuccess(propagated
+                ? $"S-matrix for '{_displayName}' recomputed via {note} and applied to all instances of this type."
+                : $"S-matrix for '{_displayName}' recomputed via {note} and applied.");
         }
         catch (OperationCanceledException)
         {
@@ -172,11 +191,12 @@ public partial class ComponentSettingsDialogViewModel
 
     private static string Shorten(string s) => s.Length <= 80 ? s : s[..80] + "…";
 
-    private static string BuildSolverStatus(FdtdSMatrixResult result, ApplyResult? apply)
+    private static string BuildSolverStatus(FdtdSMatrixResult result, ApplyResult? apply, bool propagatedToTemplate)
     {
         var worst = result.EnergySumPerInput.Count > 0 ? result.EnergySumPerInput.Values.Max() : 0.0;
         var energy = result.EnergySumPerInput.Count > 0 ? $" Energy Σ|S|² ≤ {worst:F3} per input." : "";
         var applied = apply == null ? "" : $" Applied {apply.Applied} wavelength(s).";
-        return $"FDTD done: {result.Wavelengths.Count} wavelength(s).{energy}{applied}";
+        var scope = propagatedToTemplate ? " Applied to all instances of this component type." : "";
+        return $"FDTD done: {result.Wavelengths.Count} wavelength(s).{energy}{applied}{scope}";
     }
 }

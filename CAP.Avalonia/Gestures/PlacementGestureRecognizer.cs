@@ -8,7 +8,7 @@ using CAP.Avalonia.ViewModels.Panels;
 namespace CAP.Avalonia.Gestures;
 
 /// <summary>
-/// Handles one-click placement in PlaceComponent, PlaceGroupTemplate, and Delete interaction modes.
+/// Handles one-click placement in PlaceComponent, PlaceGroupTemplate, Delete, and Probe interaction modes.
 /// Also updates placement preview overlays during pointer movement.
 /// </summary>
 public class PlacementGestureRecognizer : IGestureRecognizer
@@ -37,7 +37,7 @@ public class PlacementGestureRecognizer : IGestureRecognizer
             return true;
         }
 
-        if (mode == InteractionMode.Delete)
+        if (mode == InteractionMode.Delete || mode == InteractionMode.Probe)
         {
             mainVm!.CanvasClicked(canvasPoint.X, canvasPoint.Y);
             _invalidate();

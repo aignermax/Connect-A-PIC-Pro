@@ -38,6 +38,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private Dictionary<int, SMatrix>? _effectiveSMatrices;
     private IReadOnlyList<Pin>? _effectivePins;
     private IReadOnlyList<string>? _availablePinNames;
+    private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
 
     /// <summary>
     /// ViewModel for the per-instance Nazca parameter override section.
@@ -104,6 +105,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// (renders its geometry and ports). Required alongside <paramref name="fdtdService"/>
     /// for recompute to be available.
     /// </param>
+    /// <param name="dockerSetupDialog">
+    /// Optional guided "Set up FDTD" dialog shown when the Docker backend is
+    /// unavailable (issue #649). When null (tests, headless) the recompute
+    /// surfaces the plain availability error string instead.
+    /// </param>
     /// <param name="notificationService">
     /// Optional toast service for transient, non-error feedback (e.g. "FDTD
     /// recompute cancelled") that outlives the dialog window. When null, the
@@ -116,7 +122,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IPortMappingDialogService? portMappingDialog = null,
         IFdtdSMatrixService? fdtdService = null,
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
-        INotificationService? notificationService = null)
+        INotificationService? notificationService = null,
+        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -124,6 +131,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _notificationService = notificationService;
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
+        _dockerSetupDialog = dockerSetupDialog;
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),
@@ -200,6 +208,14 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     /// sync without reopening the dialog. Pass the same expression that produced
     /// <paramref name="smatrixKey"/>; null disables re-resolution (per-template mode).
     /// </param>
+    /// <param name="propagateToTemplate">
+    /// Optional sink invoked after a successful FDTD recompute (issue #580 E).
+    /// The caller decides whether the instance geometry still matches the PDK
+    /// template draft and, if so, writes the data to the template-scoped
+    /// (user-global) override store so every instance of the type inherits it.
+    /// Returns true when the data was propagated (reflected in the status text).
+    /// Null (default) keeps the recompute instance-scoped only.
+    /// </param>
     public void Configure(
         string entityKey,
         string smatrixKey,
@@ -221,10 +237,12 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Action? nazcaDimensionsChanged = null,
         Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
         Func<string>? smatrixKeyResolver = null,
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
         NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _smatrixKey = smatrixKey;
         _smatrixKeyResolver = smatrixKeyResolver;
+        _propagateToTemplate = propagateToTemplate;
         _displayName = displayName;
         _storedSMatrices = storedSMatrices;
         _liveComponent = liveComponent;
@@ -367,69 +385,6 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Returns <paramref name="imported"/> unchanged when port names already
-    /// align, the result of <see cref="PortNameMapping.Remap"/> with a
-    /// user-supplied mapping when they don't, or <c>null</c> when the user
-    /// cancelled the mapping dialog (in which case <see cref="StatusText"/>
-    /// is set so the caller can return without storing anything).
-    /// </summary>
-    private async Task<ImportedSParameters?> ReconcilePortNamesAsync(ImportedSParameters imported)
-    {
-        if (_availablePinNames == null || _availablePinNames.Count == 0)
-            return imported; // caller didn't tell us the pin names — proceed and let Apply complain if anything's wrong
-
-        if (PortNameMapping.NamesAlignWithComponent(imported.PortNames, _availablePinNames))
-            return imported;
-
-        if (imported.PortNames.Count != _availablePinNames.Count)
-        {
-            // Different port counts is structurally unmappable — bail out
-            // loudly rather than open a dialog the user couldn't satisfy.
-            StatusText = $"Cannot import: file has {imported.PortNames.Count} port(s), " +
-                         $"but '{_displayName}' has {_availablePinNames.Count} pin(s).";
-            return null;
-        }
-
-        if (_portMappingDialog == null)
-        {
-            // No interactive surface available (typically test or headless).
-            StatusText = $"Imported port names don't match component pins on '{_displayName}'. " +
-                         $"Re-run with a port-mapping dialog wired up to resolve this interactively.";
-            return null;
-        }
-
-        var mapping = await _portMappingDialog.ShowAsync(_displayName, imported.PortNames, _availablePinNames);
-        if (mapping == null)
-        {
-            StatusText = "Import cancelled — no port mapping was confirmed.";
-            return null;
-        }
-
-        return PortNameMapping.Remap(imported, mapping);
-    }
-
-    private static string BuildImportStatus(
-        string path,
-        ImportedSParameters imported,
-        ApplyResult? applyResult)
-    {
-        var fileName = Path.GetFileName(path);
-        var portInfo = $"{imported.PortCount} ports, {imported.SMatricesByWavelengthNm.Count} wavelengths";
-
-        if (applyResult == null)
-            return $"Imported {portInfo} from '{fileName}'.";
-
-        if (applyResult.IsTotalFailure)
-            return $"Imported {portInfo} from '{fileName}', but no wavelength could be applied to the live component (see Error Console).";
-
-        if (applyResult.IsPartial)
-            return $"Imported {portInfo}; applied {applyResult.Applied} of {applyResult.Applied + applyResult.Skipped.Count} wavelength(s) — {applyResult.Skipped.Count} skipped (see Error Console).";
-
-        var replacedNote = applyResult.Replaced > 0 ? $" ({applyResult.Replaced} replaced)" : "";
-        return $"Imported {portInfo} from '{fileName}'; applied {applyResult.Applied} wavelength(s){replacedNote}.";
-    }
-
-    /// <summary>
     /// Removes a single wavelength entry from the stored S-matrix data and from the live
     /// component's wavelength map (if a live component is configured), so the next
     /// simulation run reflects the deletion immediately.
@@ -449,41 +404,5 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
 
         StatusText = $"Removed wavelength {entry.WavelengthKey} nm. Reload design to restore PDK default.";
         RefreshEntries(notifyChanged: true);
-    }
-
-    private ISParameterImporter? FindImporter(string path)
-    {
-        var ext = Path.GetExtension(path).ToLowerInvariant();
-        if (ext == ".txt")
-            return LooksLikeLumericalTxt(path) ? _importers.First(i => i is LumericalSParameterImporter) : null;
-        return _importers.FirstOrDefault(i => i.SupportedExtensions.Contains(ext));
-    }
-
-    private bool LooksLikeLumericalTxt(string path)
-    {
-        try
-        {
-            foreach (var line in File.ReadLines(path))
-            {
-                var trimmed = line.TrimStart();
-                if (trimmed.Length == 0 || trimmed.StartsWith('#') || trimmed.StartsWith('!'))
-                    continue;
-                if (trimmed.StartsWith('('))
-                    return true;
-                var tokens = trimmed.Split(new[] { '\t', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-                return tokens.Length >= 9 &&
-                       double.TryParse(tokens[0], System.Globalization.NumberStyles.Float,
-                                       System.Globalization.CultureInfo.InvariantCulture, out _);
-            }
-        }
-        catch (IOException ex)
-        {
-            _errorConsole?.LogWarning($"Could not probe '{path}' for Lumerical .txt format: {ex.Message}");
-        }
-        catch (UnauthorizedAccessException ex)
-        {
-            _errorConsole?.LogWarning($"Could not probe '{path}' for Lumerical .txt format: {ex.Message}");
-        }
-        return false;
     }
 }

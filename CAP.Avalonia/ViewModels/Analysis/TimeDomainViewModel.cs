@@ -33,6 +33,12 @@ public partial class TimeDomainViewModel : ObservableObject
     [ObservableProperty]
     private double _pulseSigmaPs = 0.5;
 
+    /// <summary>
+    /// Signal-source selection + parameters (issue #600): Gaussian pulse
+    /// (default, back-compat), CW, or PRBS-NRZ on a signal-driven time grid.
+    /// </summary>
+    public TransientSourceSettingsViewModel Source { get; } = new();
+
     [ObservableProperty]
     private bool _isRunning;
 
@@ -92,6 +98,15 @@ public partial class TimeDomainViewModel : ObservableObject
         if (_canvas == null || _canvas.Components.Count == 0)
         {
             StatusText = "No circuit loaded.";
+            return;
+        }
+
+        // All lasers off means there is no input signal at all — say so instead of
+        // rendering an empty plot with status "Done" (#690, mirrors the eye analysis).
+        if (_canvas.Components.Where(c => c.IsLightSource).All(c => c.IsLaserOff)
+            && _canvas.Components.Any(c => c.IsLightSource))
+        {
+            StatusText = "No laser is switched on — turn the laser on at your input coupler.";
             return;
         }
 
@@ -166,8 +181,7 @@ public partial class TimeDomainViewModel : ObservableObject
     {
         var (simulator, portManager) = TransientCircuitFactory.Create(_canvas!);
 
-        var timeDef = TimeSignalDefinition.FromWavelengthSweep(
-            CenterWavelengthNm, SpanNm, FreqPoints);
+        var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 
         var inputSignals = BuildInputSignals(portManager, timeDef);
         return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
@@ -176,7 +190,6 @@ public partial class TimeDomainViewModel : ObservableObject
     private Dictionary<Guid, double[]> BuildInputSignals(
         PhysicalExternalPortManager portManager, TimeSignalDefinition timeDef)
     {
-        double centerSeconds = timeDef.DurationSeconds * 0.3;
         double sigmaSeconds = PulseSigmaPs * 1e-12;
         double centerInput = PulseCenterPs * 1e-12;
         double pulseCenter = Math.Max(centerInput, 3 * sigmaSeconds);
@@ -185,8 +198,8 @@ public partial class TimeDomainViewModel : ObservableObject
         foreach (var usedInput in portManager.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(usedInput.Input.InFlowPower.Magnitude);
-            var pulse = timeDef.CreateGaussianPulse(pulseCenter, sigmaSeconds, amplitude);
-            signals[usedInput.AttachedComponentPinId] = pulse;
+            var source = Source.CreateSource(amplitude, pulseCenter, sigmaSeconds);
+            signals[usedInput.AttachedComponentPinId] = source.Generate(timeDef);
         }
         return signals;
     }

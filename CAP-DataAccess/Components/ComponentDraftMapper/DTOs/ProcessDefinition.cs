@@ -47,6 +47,16 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// <summary>Allowed placement/connection angles in degrees (e.g. 0/90/180/270).</summary>
         [JsonPropertyName("allowedAngles")]
         public List<int> AllowedAngles { get; set; } = new();
+
+        /// <summary>
+        /// Waveguide-crossing policy for metal routing (issue #682): true when this
+        /// process requires a bridge element (e.g. air bridge) wherever a metal trace
+        /// crosses an optical waveguide; false/absent (default) when metal runs on a
+        /// higher layer and may cross waveguides directly. Nullable so PDKs written
+        /// before this field existed round-trip through the saver byte-identically.
+        /// </summary>
+        [JsonPropertyName("electricalBridgeRequired")]
+        public bool? ElectricalBridgeRequired { get; set; }
     }
 
     /// <summary>A single GDS layer in the process stack.</summary>
@@ -92,8 +102,9 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>Whether this carries light or electrical current.</summary>
+        /// <summary>Whether this carries light or electrical current. Serialized as a string ("Optical"/"Metal").</summary>
         [JsonPropertyName("kind")]
+        [JsonConverter(typeof(JsonStringEnumConverter<XsectionKind>))]
         public XsectionKind Kind { get; set; } = XsectionKind.Optical;
 
         /// <summary>Waveguide / line width in µm.</summary>

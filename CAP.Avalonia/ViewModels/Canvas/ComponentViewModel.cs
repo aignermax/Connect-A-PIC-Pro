@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CAP_Core.Components;
+using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
 using CAP.Avalonia.ViewModels.Simulation;
 
@@ -7,15 +8,6 @@ namespace CAP.Avalonia.ViewModels.Canvas;
 
 public partial class ComponentViewModel : ObservableObject
 {
-    /// <summary>
-    /// Template names treated as light input sources.
-    /// </summary>
-    private static readonly HashSet<string> LightSourceNames = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "Grating Coupler",
-        "Edge Coupler"
-    };
-
     public Component Component { get; }
 
     /// <summary>
@@ -60,9 +52,15 @@ public partial class ComponentViewModel : ObservableObject
     public LaserConfig? LaserConfig { get; }
 
     /// <summary>
-    /// Whether this component is a light source (Grating/Edge Coupler).
+    /// Whether this component is a light source (see <see cref="LightSourceClassifier"/>).
     /// </summary>
     public bool IsLightSource => LaserConfig != null;
+
+    /// <summary>
+    /// Light source whose laser is switched off — a listen-only output coupler (#690).
+    /// The single predicate every simulation consumer must use to skip the source.
+    /// </summary>
+    public bool IsLaserOff => LaserConfig is { IsEnabled: false };
 
     public double Width => Component.WidthMicrometers;
     public double Height => Component.HeightMicrometers;
@@ -159,8 +157,9 @@ public partial class ComponentViewModel : ObservableObject
         _x = component.PhysicalX;
         _y = component.PhysicalY;
 
-        if (templateName != null && LightSourceNames.Contains(templateName))
-            LaserConfig = new LaserConfig();
+        if (LightSourceClassifier.IsLightInjectingCoupler(templateName)
+            || LightSourceClassifier.IsLightInjectingCoupler(component))
+            LaserConfig = new LaserConfig(component);
     }
 
     public void NotifyDimensionsChanged()

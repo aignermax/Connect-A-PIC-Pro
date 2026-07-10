@@ -347,20 +347,34 @@ public class DockerFdtdSMatrixService : IFdtdSMatrixService
         var versionArgs = new[] { "version", "--format", "{{.Server.Version}}" };
         if (!_launchFactory.TryBuild(_dockerExe, versionArgs, null, null, out var si, out _))
             return FdtdAvailability.Unavailable(
-                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.");
+                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.",
+                FdtdUnavailableReason.NotInstalled);
 
         var run = await SubprocessJsonRunner.RunAsync(si, string.Empty, TimeSpan.FromSeconds(20), ct);
 
         if (run.Outcome == SubprocessJsonRunner.Outcome.StartFailed)
             return FdtdAvailability.Unavailable(
-                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.");
+                $"Docker is not installed (or not on PATH). FDTD needs Docker Desktop — install it from {DockerInstallUrl}, then retry.",
+                FdtdUnavailableReason.NotInstalled);
 
         if (run.Outcome == SubprocessJsonRunner.Outcome.Completed && run.ExitCode == 0
             && !string.IsNullOrWhiteSpace(run.Stdout))
             return FdtdAvailability.Available($"Docker engine {run.Stdout.Trim()} ready.");
 
+        // Linux: the daemon may be RUNNING while the CLI is denied on the Docker
+        // socket — the exact state the install commands (get.docker.com + usermod
+        // -aG docker) leave a user in until they log out and back in. "Start the
+        // engine" would be wrong guidance, so classify it separately (#649 field test).
+        if (run.Stderr.Contains("permission denied", StringComparison.OrdinalIgnoreCase))
+            return FdtdAvailability.Unavailable(
+                "Docker is running, but your user is not allowed to access it yet "
+                + "(permission denied on the Docker socket). Make sure your user is in "
+                + "the 'docker' group, then log out and back in and retry.",
+                FdtdUnavailableReason.PermissionDenied);
+
         return FdtdAvailability.Unavailable(
-            "Docker is installed but the engine isn't running. Start Docker Desktop and try again.");
+            "Docker is installed but the engine isn't running. Start Docker Desktop and try again.",
+            FdtdUnavailableReason.EngineNotRunning);
     }
 
     private static string ToDockerPath(string path) => path.Replace('\\', '/');

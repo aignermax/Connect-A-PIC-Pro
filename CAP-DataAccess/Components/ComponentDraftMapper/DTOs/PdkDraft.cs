@@ -203,6 +203,41 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("sliders")]
         public List<SliderDraft>? Sliders { get; set; }
+
+        /// <summary>
+        /// Optional compact-model name for active time-dependent components
+        /// (e.g. "LaserDiodeRateEquation", "PhotodiodeRc",
+        /// "ElectroOpticPhaseModulator"). Must match a registered model in
+        /// <c>CompactModelRegistry</c>; unknown names fail PDK validation —
+        /// there is no silent fallback to passive behaviour (issue #529).
+        /// </summary>
+        [JsonPropertyName("compactModel")]
+        public string? CompactModel { get; set; }
+
+        /// <summary>
+        /// Optional model-specific parameters for <see cref="CompactModel"/>
+        /// (e.g. threshold current, responsivity, V_π). Keys are defined by
+        /// each model; missing keys use the model's defaults.
+        /// </summary>
+        [JsonPropertyName("compactModelParameters")]
+        public Dictionary<string, double>? CompactModelParameters { get; set; }
+
+        /// <summary>
+        /// Optional raw source code authored by the user for this component
+        /// (e.g. a gdsfactory or Nazca script that builds the cell). When set,
+        /// this is the component's authoritative geometry/export source instead
+        /// of <see cref="NazcaFunction"/>/<see cref="GdsFactoryFunction"/>. Null
+        /// for PDK components defined through the normal function-reference path.
+        /// </summary>
+        [JsonPropertyName("rawCode")]
+        public string? RawCode { get; set; }
+
+        /// <summary>
+        /// Backend the <see cref="RawCode"/> targets: <c>"nazca"</c> or
+        /// <c>"gdsfactory"</c>. Null when <see cref="RawCode"/> is not set.
+        /// </summary>
+        [JsonPropertyName("rawCodeBackend")]
+        public string? RawCodeBackend { get; set; }
     }
 
     /// <summary>

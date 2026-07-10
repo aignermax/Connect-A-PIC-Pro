@@ -100,4 +100,42 @@ public class ProcessManagementViewModelTests
 
         vm.HasProcess.ShouldBeFalse();
     }
+
+    [Fact]
+    public void SetAvailablePresets_OnlyListsPdksWithAProcessBlock()
+    {
+        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>());
+        var withProcess = new PdkDraft { Name = "SiEPIC EBeam PDK", Process = new ProcessDefinition { Name = "SOI-220" } };
+        var withoutProcess = new PdkDraft { Name = "Analysis Tools", Process = null };
+
+        vm.SetAvailablePresets(new[] { withProcess, withoutProcess });
+
+        vm.AvailablePresets.ShouldContain(withProcess);
+        vm.AvailablePresets.ShouldNotContain(withoutProcess);
+    }
+
+    [Fact]
+    public void SelectingAPreset_LoadsItsProcessIntoTheEditor()
+    {
+        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>());
+        var preset = new PdkDraft
+        {
+            Name = "CornerStone SiN 300nm",
+            Process = new ProcessDefinition
+            {
+                Name = "CornerStone SiN 300nm",
+                Layers = { new ProcessLayer { Name = "NITRIDE", Layer = 203 } },
+                Xsections = { new ProcessXsection { Name = "xs_nc", Kind = XsectionKind.Optical, WidthUm = 1.2 } },
+            },
+        };
+        vm.SetAvailablePresets(new[] { preset });
+
+        vm.SelectedPreset = preset;
+
+        vm.HasProcess.ShouldBeTrue();
+        vm.ProcessName.ShouldBe("CornerStone SiN 300nm");
+        vm.Layers.ShouldContain(l => l.Name == "NITRIDE");
+        vm.Xsections.ShouldContain(x => x.Name == "xs_nc");
+        vm.StatusText.ShouldContain("CornerStone SiN 300nm");
+    }
 }

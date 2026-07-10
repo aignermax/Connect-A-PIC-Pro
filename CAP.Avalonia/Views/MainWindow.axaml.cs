@@ -8,6 +8,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
@@ -16,6 +17,7 @@ using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 
 namespace CAP.Avalonia.Views;
@@ -58,6 +60,7 @@ public partial class MainWindow : Window
                 if (onaEditorProvider != null)
                     onaEditorProvider.OpenSweepAsync = analyzer => OpenOnaAnalyzerWindow(analyzer, vm);
                 vm.RightPanel.RoutingDiagnostics.FileDialogService = vm.FileDialogService;
+                vm.RightPanel.Netlist.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Transient.FileDialogService = vm.FileDialogService;
                 vm.BottomPanel.Analysis.Eye.FileDialogService = vm.FileDialogService;
                 ExportDialogWiring.Wire(vm, this, vm.ErrorConsole);
@@ -82,6 +85,42 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the "New Component" window (issue #656) — non-modal, like the
+                // Fabrication Process and ONA Analyzer tool windows, so the user can keep
+                // iterating on the design while it stays open.
+                vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
+                {
+                    // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the
+                    // view model only knows the file's already-read contents (PickPyFile's
+                    // contract), never a path, so it can't own a FileDialogService itself.
+                    newComponentVm.PickPyFile = async () =>
+                    {
+                        var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
+                            "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
+                        return path is null ? null : await File.ReadAllTextAsync(path);
+                    };
+                    // Confirm before overwriting an existing component name in the target PDK
+                    // (new or existing custom PDK — the message names whichever applies).
+                    newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
+                            "Overwrite?", new[] { "Cancel", "Overwrite" });
+                        return choice == 1;
+                    };
+                    // Opens the same Fabrication Process editor as the toolbar button (#570).
+                    // No back-channel for a newly-defined process: the user reopens this
+                    // assistant afterwards to pick it up (known limitation).
+                    newComponentVm.OpenProcessEditor = () =>
+                    {
+                        vm.OpenProcessManagerCommand.Execute(null);
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    };
+                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    window.Show(this);
+                    return System.Threading.Tasks.Task.CompletedTask;
+                };
+
                 // Wire up PDK Offset Editor window
                 vm.ShowPdkOffsetEditorRequested = () =>
                 {
@@ -100,7 +139,21 @@ public partial class MainWindow : Window
                 vm.ShowProcessManagerRequested = () =>
                 {
                     var processVm = new ProcessManagementViewModel(new FileDialogService(this));
+                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
+                    // persisted, using the same loaded-PDK registry the offset editor writes through.
+                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
+                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
+                    // the exact file so a real PDK can't be edited by accident.
+                    processVm.ConfirmSaveToPdk = async path =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
+                            "Save to PDK file?", new[] { "Cancel", "Save" });
+                        return choice == 1;
+                    };
                     var processWindow = new ProcessManagementWindow
                     {
                         DataContext = processVm
@@ -139,6 +192,16 @@ public partial class MainWindow : Window
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
+                {
+                    var clipboard = Clipboard;
+                    if (clipboard != null)
+                    {
+                        await clipboard.SetTextAsync(text);
+                    }
+                };
+
+                // Wire up clipboard for the Netlist panel (#687)
+                vm.RightPanel.Netlist.CopyToClipboard = async (text) =>
                 {
                     var clipboard = Clipboard;
                     if (clipboard != null)
@@ -526,6 +589,18 @@ public partial class MainWindow : Window
         dialog.Show(this);
     }
 
+    /// <summary>
+    /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
+    /// </summary>
+    private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
+    {
+        var vm = App.Services.GetService(typeof(ViewModels.PdkResolution.PdkResolutionCheckViewModel))
+            as ViewModels.PdkResolution.PdkResolutionCheckViewModel;
+        if (vm == null) return;
+        var dialog = new PdkResolutionCheckDialog { DataContext = vm };
+        dialog.Show(this);
+    }
+
     private void ZoomToFitButton_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is MainViewModel vm)
@@ -706,6 +781,10 @@ public partial class MainWindow : Window
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
+        // Guided Docker setup (issue #649): shown when the availability probe
+        // reports Docker missing or its engine stopped.
+        var dockerSetupDialog = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.IDockerSetupDialogService))
+            as CAP.Avalonia.Services.Solvers.IDockerSetupDialogService;
         var notificationService = App.Services.GetService(typeof(INotificationService))
             as INotificationService;
 
@@ -716,7 +795,8 @@ public partial class MainWindow : Window
             portMappingDialog: portMappingDialog,
             fdtdService: fdtdService,
             fdtdRequestFactory: fdtdRequestFactory,
-            notificationService: notificationService);
+            notificationService: notificationService,
+            dockerSetupDialog: dockerSetupDialog);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
@@ -838,6 +918,35 @@ public partial class MainWindow : Window
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
+        // the user-global template override — but only while the instance geometry
+        // still matches the template draft (no Nazca override active). Everything
+        // is checked at invoke time so mid-session geometry edits are honoured.
+        Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
+        if (liveComponent != null && userStore != null)
+        {
+            propagateToTemplate = data =>
+            {
+                var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
+                if (templateKey == null)
+                    return false; // no matching PDK template (e.g. user group)
+
+                vm.FileOperations.StoredNazcaOverrides
+                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
+                if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
+                        liveComponent, nazcaOverride,
+                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                    return false;
+
+                userStore.Overrides[templateKey] = data;
+                userStore.Save();
+                vm.FileOperations.ReapplyTemplateOverrides();
+                vm.LeftPanel.HierarchyPanel.RefreshOverrideMarkers();
+                RefreshTemplateOverrideBadges(vm);
+                return true;
+            };
+        }
+
         dialogVm.Configure(
             entityKey,
             smatrixKey,
@@ -859,6 +968,7 @@ public partial class MainWindow : Window
             nazcaDimensionsChanged: nazcaDimensionsChanged,
             nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
+            propagateToTemplate: propagateToTemplate,
             gdsFactoryPreviewService: gdsFactoryPreviewService);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
