@@ -77,6 +77,13 @@ public partial class NewComponentViewModel : ObservableObject
     /// <summary>The process name <see cref="SavedDraft"/> was saved under.</summary>
     public string? SavedProcessName { get; private set; }
 
+    /// <summary>
+    /// The user-PDK file path <c>Save</c> actually wrote to (named custom PDK, new or
+    /// existing) — never derived from <see cref="SelectedProcess"/>, since a process's default
+    /// per-process file is no longer where a PDK-first save lands. Null before a successful save.
+    /// </summary>
+    public string? SavedFilePath { get; private set; }
+
     /// <summary>Raised after a successful save, so a listener (e.g. the left panel) can refresh.</summary>
     public event EventHandler? Saved;
 
@@ -103,7 +110,18 @@ public partial class NewComponentViewModel : ObservableObject
         _store = store;
         Processes = processes;
         AvailableCustomPdks = store.ListCustomPdks();
-        IsNewPdk = AvailableCustomPdks.Count == 0;
+
+        // Pre-select the first existing custom PDK rather than leaving the transient
+        // "one exists but none chosen" state (SelectedCustomPdk null, IsNewPdk false)
+        // hanging around; falls back to "new PDK" only when none exist yet.
+        if (AvailableCustomPdks.Count > 0)
+        {
+            SelectedCustomPdk = AvailableCustomPdks[0];
+        }
+        else
+        {
+            IsNewPdk = true;
+        }
     }
 
     // A change to any input the preview was rendered from invalidates the preview — otherwise

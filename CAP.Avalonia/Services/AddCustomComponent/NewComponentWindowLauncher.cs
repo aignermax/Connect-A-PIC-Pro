@@ -28,17 +28,20 @@ public static class NewComponentWindowLauncher
     {
         var processes = loadedPdks.Where(d => d.Process != null).Select(d => d.Process!).ToList();
         var vm = new NewComponentViewModel(deps.Extractor, deps.Fdtd, deps.UserPdkStore, processes);
-        vm.Saved += (_, _) => OnSaved(vm, deps.UserPdkStore, pdkLoader, register);
+        vm.Saved += (_, _) => OnSaved(vm, pdkLoader, register);
         return vm;
     }
 
     private static void OnSaved(
-        NewComponentViewModel vm, UserPdkStore userPdkStore, PdkLoader pdkLoader,
+        NewComponentViewModel vm, PdkLoader pdkLoader,
         Action<PdkComponentDraft, string, string> register)
     {
-        if (vm.SavedDraft is null || vm.SelectedProcess is null) return;
+        // PDK-first: the save target is a named custom PDK file (new or existing), which no
+        // longer corresponds to SelectedProcess's per-process default file — SavedFilePath is
+        // the actual path UserPdkStore wrote to and is the only reliable source here.
+        if (vm.SavedDraft is null || vm.SavedFilePath is null) return;
 
-        var filePath = userPdkStore.ResolvePath(vm.SelectedProcess);
+        var filePath = vm.SavedFilePath;
         // Edit-tolerant load (matches CustomComponentLibraryRegistrar): a freshly-saved user
         // PDK may lack a Nazca origin offset, which the strict LoadFromFile would reject —
         // that rejection would silently skip registration while the UI still says "Saved".

@@ -2,117 +2,153 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.Components.AddCustomComponent"
         xmlns:dto="using:CAP_DataAccess.Components.ComponentDraftMapper.DTOs"
-        xmlns:conv="using:CAP.Avalonia.ViewModels.Converters"
+        xmlns:pdk="using:CAP_DataAccess.Components.AddCustomComponent"
+        xmlns:edit="using:AvaloniaEdit"
+        xmlns:behaviors="using:CAP.Avalonia.Behaviors"
+        xmlns:controls="using:CAP.Avalonia.Controls"
         x:Class="CAP.Avalonia.Views.NewComponentWindow"
         x:DataType="vm:NewComponentViewModel"
         Title="New Component"
-        Width="480" Height="660"
-        MinWidth="420" MinHeight="520"
+        Width="520" Height="740"
+        MinWidth="440" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
         Foreground="White">
 
-    <Window.Resources>
-        <conv:EnumToBooleanConverter x:Key="EnumToBooleanConverter"/>
-    </Window.Resources>
-
     <DockPanel Margin="16" LastChildFill="True">
 
-        <!-- Buttons — always visible at the bottom -->
+        <!-- Save — always visible at the bottom -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Preview" Command="{Binding RunPreviewCommand}"
-                    Width="90" Background="#3d4d6d"
-                    ToolTip.Tip="Renders the geometry reference below and extracts its size and pins"/>
-            <Button Content="Compute S-Matrix" Command="{Binding ComputeSMatrixCommand}"
-                    Width="140" Background="#3d4d6d"
-                    ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
             <Button Content="Save" Command="{Binding SaveCommand}"
-                    Width="80" Background="#2a4a2a"
-                    ToolTip.Tip="Saves the component into the selected fabrication process's user PDK"/>
+                    Width="90" Background="#2a4a2a"
+                    ToolTip.Tip="Saves the component into the selected PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
         </StackPanel>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
-                <TextBlock Text="New Component" FontSize="15" FontWeight="SemiBold" Foreground="LightBlue"/>
-                <TextBlock TextWrapping="Wrap" Foreground="Gray" FontSize="10"
-                           Text="Renders a component's geometry from a Python module/function reference, optionally recomputes its S-matrix via FDTD, and saves it into a fabrication process's own user PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
+                <!-- PDK -->
+                <TextBlock Text="PDK" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="*,8,Auto">
+                    <ComboBox Grid.Column="0"
+                              ItemsSource="{Binding AvailableCustomPdks}"
+                              SelectedItem="{Binding SelectedCustomPdk}"
+                              IsEnabled="{Binding !IsNewPdk}"
+                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="pdk:UserPdkInfo">
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <ToggleButton Grid.Column="2" Content="+ New PDK"
+                                  IsChecked="{Binding IsNewPdk, Mode=TwoWay}"
+                                  FontSize="11" Background="#3d4d6d"
+                                  ToolTip.Tip="Create a brand-new named custom PDK instead of appending to an existing one"/>
+                </Grid>
+                <TextBox Text="{Binding NewPdkName}" Watermark="New PDK name"
+                         IsVisible="{Binding IsNewPdk}"
+                         Background="#2d2d2d" Foreground="White"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Name:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding ComponentName}"
-                             Background="#2d2d2d" Foreground="White"/>
+                <!-- Fabrication process: chosen only for a new PDK, inherited (read-only) otherwise -->
+                <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <Grid ColumnDefinitions="*,8,Auto" IsVisible="{Binding IsNewPdk}">
+                    <ComboBox Grid.Column="0"
+                              ItemsSource="{Binding Processes}"
+                              SelectedItem="{Binding SelectedProcess}"
+                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="dto:ProcessDefinition">
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                    <Button Grid.Column="2" Content="Process editor…" Command="{Binding OpenProcessEditorCmdCommand}"
+                            FontSize="11" Background="#3d4d6d"
+                            ToolTip.Tip="Opens the Fabrication Process window to define or edit a process. Reopen this window afterwards to pick it up."/>
+                </Grid>
+                <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"
+                           IsVisible="{Binding !IsNewPdk}"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Input:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Row="2" Grid.Column="2" Orientation="Horizontal" Spacing="14">
-                        <RadioButton Content="Function reference" GroupName="InputMode" Foreground="White"
-                                     IsChecked="{Binding InputMode, Mode=TwoWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Reference}"/>
-                        <RadioButton Content="Own code" GroupName="InputMode" Foreground="White"
-                                     IsChecked="{Binding InputMode, Mode=TwoWay, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=OwnCode}"/>
-                    </StackPanel>
+                <Separator Background="#3d3d3d"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <ComboBox Grid.Row="4" Grid.Column="2"
+                <!-- Name -->
+                <TextBlock Text="Name" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <TextBox Text="{Binding ComponentName}" Background="#2d2d2d" Foreground="White"/>
+
+                <Separator Background="#3d3d3d"/>
+
+                <!-- Structure: the user's own Python code, rendered verbatim -->
+                <Grid ColumnDefinitions="*,Auto,Auto">
+                    <TextBlock Grid.Column="0" Text="Structure (Python code)" Foreground="#aaaaaa" FontSize="11"
+                               FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <controls:HelpFlyoutButton Grid.Column="1" Title="What goes here?" Margin="0,0,6,0">
+                        <controls:HelpFlyoutButton.HelpContent>
+                            <StackPanel Spacing="8" MaxWidth="380">
+                                <TextBlock TextWrapping="Wrap" Foreground="#dddddd" FontSize="11"
+                                           Text="Your code must create a variable named component holding the rendered geometry — a gdsfactory Component or a Nazca Cell, matching the Backend selected below. Everything else (imports, helper functions, parameters) is up to you."/>
+                                <TextBlock Text="gdsfactory example:" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0" x:Name="GdsFactoryExampleBox" IsReadOnly="True"
+                                             Text="import gdsfactory as gf&#10;component = gf.components.mmi1x2()"
+                                             AcceptsReturn="True" TextWrapping="NoWrap"
+                                             FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="10"
+                                             Background="#101018" Foreground="#dddddd"/>
+                                    <Button Grid.Column="1" Content="Copy" Click="OnCopyGdsFactoryExample"
+                                            FontSize="10" Padding="6,1" Margin="4,0,0,0" VerticalAlignment="Top"
+                                            Background="#33335a" Foreground="#ccccff" BorderThickness="0"/>
+                                </Grid>
+                                <TextBlock Text="Nazca example:" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
+                                <Grid ColumnDefinitions="*,Auto">
+                                    <TextBox Grid.Column="0" x:Name="NazcaExampleBox" IsReadOnly="True"
+                                             Text="import nazca as nd&#10;component = nd.Cell(name='my_component')"
+                                             AcceptsReturn="True" TextWrapping="NoWrap"
+                                             FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="10"
+                                             Background="#101018" Foreground="#dddddd"/>
+                                    <Button Grid.Column="1" Content="Copy" Click="OnCopyNazcaExample"
+                                            FontSize="10" Padding="6,1" Margin="4,0,0,0" VerticalAlignment="Top"
+                                            Background="#33335a" Foreground="#ccccff" BorderThickness="0"/>
+                                </Grid>
+                            </StackPanel>
+                        </controls:HelpFlyoutButton.HelpContent>
+                    </controls:HelpFlyoutButton>
+                    <Button Grid.Column="2" Content="Load from .py…" Command="{Binding LoadCodeFromFileCommand}"
+                            Background="#3d4d6d" FontSize="11"
+                            ToolTip.Tip="Reads a .py file's contents into the editor below"/>
+                </Grid>
+
+                <edit:TextEditor behaviors:TextEditorBindingBehavior.BoundText="{Binding Code, Mode=TwoWay}"
+                                  ShowLineNumbers="True"
+                                  WordWrap="False"
+                                  FontFamily="Consolas, Cascadia Mono, Courier New, monospace"
+                                  FontSize="11"
+                                  Height="200"
+                                  Background="#151515" Foreground="#dddddd"
+                                  BorderBrush="#3d3d3d" BorderThickness="1"
+                                  HorizontalScrollBarVisibility="Auto"
+                                  VerticalScrollBarVisibility="Auto"/>
+
+                <Grid ColumnDefinitions="Auto,8,*,8,Auto">
+                    <TextBlock Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <ComboBox Grid.Column="2"
                               ItemsSource="{Binding AvailableBackends}"
                               SelectedItem="{Binding SelectedBackend}"
                               Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
+                    <Button Grid.Column="4" Content="Preview" Command="{Binding RunPreviewCommand}"
+                            Width="90" Background="#3d4d6d"
+                            ToolTip.Tip="Renders the geometry and extracts its size and pins"/>
                 </Grid>
-
-                <!-- Reference mode: module/function/parameters dispatch -->
-                <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto"
-                      IsVisible="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=Reference}">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Module:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="0" Grid.Column="2" Text="{Binding Module}"
-                             Watermark="e.g. cspdk.sin300" Background="#2d2d2d" Foreground="White"/>
-
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Function:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="2" Grid.Column="2" Text="{Binding Function}"
-                             Watermark="e.g. coupler" Background="#2d2d2d" Foreground="White"/>
-
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Parameters:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    <TextBox Grid.Row="4" Grid.Column="2" Text="{Binding Parameters}"
-                             Watermark="e.g. length=10" Background="#2d2d2d" Foreground="White"/>
-                </Grid>
-
-                <!-- Own-code mode: pasted or file-loaded raw Python, rendered verbatim -->
-                <StackPanel Spacing="6"
-                            IsVisible="{Binding InputMode, Converter={StaticResource EnumToBooleanConverter}, ConverterParameter=OwnCode}">
-                    <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Grid.Column="0" Text="Python code:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                        <Button Grid.Column="1" Content="Load from .py…" Command="{Binding LoadCodeFromFileCommand}"
-                                Background="#3d4d6d" FontSize="11"
-                                ToolTip.Tip="Reads a .py file's contents into the editor below"/>
-                    </Grid>
-                    <TextBox Text="{Binding Code}"
-                             AcceptsReturn="True" AcceptsTab="True"
-                             TextWrapping="NoWrap"
-                             FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="11"
-                             Height="180"
-                             Background="#151515" Foreground="#dddddd"
-                             VerticalContentAlignment="Top"
-                             ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                             ScrollViewer.VerticalScrollBarVisibility="Auto"/>
-                </StackPanel>
 
                 <Separator Background="#3d3d3d"/>
 
-                <TextBlock Text="Save to fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
-                <ComboBox ItemsSource="{Binding Processes}" SelectedItem="{Binding SelectedProcess}"
-                          Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate x:DataType="dto:ProcessDefinition">
-                            <TextBlock Text="{Binding Name}"/>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
-                <TextBlock TextWrapping="Wrap" FontSize="10" Foreground="#777799"
-                           Text="Only fabrication processes from currently loaded PDKs are listed — import or configure one via the Fabrication Process window if none appear."/>
-
-                <Separator Background="#3d3d3d"/>
-
+                <!-- S-matrix -->
+                <TextBlock Text="S-matrix" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <Button Content="Compute with Meep" Command="{Binding ComputeSMatrixCommand}"
+                        Width="150" HorizontalAlignment="Left" Background="#3d4d6d"
+                        ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" Background="#2d2d2d"/>
                 <TextBlock Text="{Binding StatusText}" Foreground="#dddddd" FontSize="11" TextWrapping="Wrap"/>
 

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Interactivity;
 
 namespace CAP.Avalonia.Views;
 
@@ -13,5 +14,26 @@ public partial class NewComponentWindow : Window
     public NewComponentWindow()
     {
         InitializeComponent();
+    }
+
+    /// <summary>Copies the help flyout's gdsfactory example code to the clipboard.</summary>
+    private void OnCopyGdsFactoryExample(object? sender, RoutedEventArgs e) => CopyToClipboard(GdsFactoryExampleBox.Text);
+
+    /// <summary>Copies the help flyout's Nazca example code to the clipboard.</summary>
+    private void OnCopyNazcaExample(object? sender, RoutedEventArgs e) => CopyToClipboard(NazcaExampleBox.Text);
+
+    /// <summary>Writes <paramref name="text"/> to the OS clipboard, if any and non-empty.</summary>
+    private void CopyToClipboard(string? text)
+    {
+        if (string.IsNullOrEmpty(text))
+        {
+            return;
+        }
+
+        var clipboard = TopLevel.GetTopLevel(this)?.Clipboard;
+        if (clipboard != null)
+        {
+            _ = clipboard.SetTextAsync(text);
+        }
     }
 }

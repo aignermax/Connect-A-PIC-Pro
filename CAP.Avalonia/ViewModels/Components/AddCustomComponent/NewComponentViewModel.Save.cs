@@ -138,7 +138,7 @@ public partial class NewComponentViewModel
                 {
                     return;
                 }
-                _store.SaveToNamedPdk(NewPdkName, process, draft, backend, null);
+                SavedFilePath = _store.SaveToNamedPdk(NewPdkName, process, draft, backend, null);
             }
             else
             {
@@ -147,7 +147,7 @@ public partial class NewComponentViewModel
                 {
                     return;
                 }
-                _store.AppendToExistingPdk(filePath, draft);
+                SavedFilePath = _store.AppendToExistingPdk(filePath, draft);
             }
 
             SavedDraft = draft;

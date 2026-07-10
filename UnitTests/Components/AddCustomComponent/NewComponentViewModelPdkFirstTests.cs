@@ -105,6 +105,26 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_setsSavedFilePath_toTheActualWrittenFile_notTheProcessDefaultPath()
+    {
+        var store = Store();
+        var (vm, _) = Build(store, withFdtd: false);
+        vm.SelectedProcess = vm.Processes[0];
+        vm.NewPdkName = "My New PDK";
+
+        vm.SavedFilePath.ShouldBeNull(); // nothing saved yet
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        // Must be the named-PDK file the store actually wrote to (SaveToNamedPdk's return
+        // value) — never ResolvePath(process)'s per-process default file, which is wrong for
+        // a PDK-first save (the bug NewComponentWindowLauncher.OnSaved used to have).
+        vm.SavedFilePath.ShouldBe(store.ResolveNamedPath("My New PDK"));
+        vm.SavedFilePath.ShouldNotBe(store.ResolvePath(vm.Processes[0]));
+    }
+
+    [Fact]
     public async Task CanSave_isFalse_whenNewPdkNameIsBlank()
     {
         var store = Store();

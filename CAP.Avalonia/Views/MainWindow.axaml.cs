@@ -90,6 +90,23 @@ public partial class MainWindow : Window
                             "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
                         return path is null ? null : await File.ReadAllTextAsync(path);
                     };
+                    // Confirm before overwriting an existing component name in the target PDK
+                    // (new or existing custom PDK — the message names whichever applies).
+                    newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
+                    {
+                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                            $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
+                            "Overwrite?", new[] { "Cancel", "Overwrite" });
+                        return choice == 1;
+                    };
+                    // Opens the same Fabrication Process editor as the toolbar button (#570).
+                    // No back-channel for a newly-defined process: the user reopens this
+                    // assistant afterwards to pick it up (known limitation).
+                    newComponentVm.OpenProcessEditor = () =>
+                    {
+                        vm.OpenProcessManagerCommand.Execute(null);
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    };
                     var window = new NewComponentWindow { DataContext = newComponentVm };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
