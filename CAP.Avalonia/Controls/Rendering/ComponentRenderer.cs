@@ -57,6 +57,13 @@ public sealed class ComponentRenderer : ICanvasRenderer
 
         if (comp.IsLocked)
             DrawLockIcon(context, comp);
+
+        if (comp.IsLightSource)
+        {
+            LaserIndicatorRenderer.Draw(context, comp,
+                rc.InteractionState.HoveredLaserIconComponent == comp,
+                rc.ViewModel.IsSimulationModeActive);
+        }
     }
 
     private void DrawComponentGroup(DrawingContext context, ComponentGroup group, bool isSelected, CanvasRenderContext rc, bool isDimmed = false)

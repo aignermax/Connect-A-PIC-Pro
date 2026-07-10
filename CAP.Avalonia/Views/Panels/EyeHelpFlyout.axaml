@@ -133,6 +133,12 @@
                 computes the quality numbers below the plot — including realistic
                 receiver noise (shot, thermal and laser RIN).
             </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                Light enters at couplers with the laser switched on; couplers with
+                the laser switched off are your outputs — the eye is measured there
+                (toggle the laser icon on the canvas or the switch in the properties
+                panel).
+            </TextBlock>
 
             <TextBlock Text="Reading the numbers" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>

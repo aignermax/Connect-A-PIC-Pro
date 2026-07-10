@@ -314,6 +314,7 @@ public class DesignCanvas : Control
     private void OnCanvasViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(DesignCanvasViewModel.ShowPowerFlow)
+            or nameof(DesignCanvasViewModel.IsSimulationModeActive)
             or nameof(DesignCanvasViewModel.IsRouting)
             or nameof(DesignCanvasViewModel.PanX)
             or nameof(DesignCanvasViewModel.PanY)
