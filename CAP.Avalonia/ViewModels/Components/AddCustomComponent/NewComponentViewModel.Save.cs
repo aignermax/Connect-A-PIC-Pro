@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Solvers;
 using CAP_Core.Solvers.Fdtd;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Persistence.PIR;
 using CommunityToolkit.Mvvm.Input;
 
@@ -17,11 +18,18 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    /// <summary>Save is only possible once a matching preview has been rendered and no work is in flight.</summary>
-    private bool CanSave => HasPreview && !IsBusy;
+    /// <summary>
+    /// Save requires a rendered preview, no work in flight, a resolved target process, and —
+    /// for a new PDK — a non-blank name to create it under.
+    /// </summary>
+    private bool CanSave =>
+        HasPreview && !IsBusy && EffectiveProcess is not null &&
+        (!IsNewPdk || !string.IsNullOrWhiteSpace(NewPdkName));
 
     partial void OnHasPreviewChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
+    partial void OnSelectedProcessChanged(ProcessDefinition? value) => SaveCommand.NotifyCanExecuteChanged();
+    partial void OnNewPdkNameChanged(string value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// Recomputes the S-matrix from the rendered geometry via the FDTD solver. Any failure —
@@ -33,7 +41,7 @@ public partial class NewComponentViewModel
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
-        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
+        if (_lastPreview is not { Success: true } preview || EffectiveProcess is null)
         {
             StatusText = "Render a preview and select a process before computing the S-matrix.";
             return;
@@ -75,15 +83,17 @@ public partial class NewComponentViewModel
     }
 
     /// <summary>
-    /// Saves the current component as a PDK component draft into the selected process's user
-    /// PDK. Requires a name, a rendered preview, and a selected process — missing any of these
-    /// reports why via <see cref="NewComponentViewModel.StatusText"/> and leaves
-    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
-    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it. The S-matrix is either
-    /// the last FDTD result or a black box when none was computed — never fabricated. In
-    /// own-code mode the draft's raw code/backend are set instead of a module/function
-    /// reference. A black-box save preserves any pending diagnostic and prefixes it with a save
-    /// confirmation.
+    /// Saves the current component as a PDK component draft, either into a brand-new named
+    /// custom PDK (<see cref="NewComponentViewModel.IsNewPdk"/>) or appended to the selected
+    /// existing one (<see cref="NewComponentViewModel.SelectedCustomPdk"/>). Requires a name, a
+    /// rendered preview, and a resolved target process — missing any of these reports why via
+    /// <see cref="NewComponentViewModel.StatusText"/> and leaves
+    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name/PDK collision is reported
+    /// unless <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it. The S-matrix is
+    /// either the last FDTD result or a black box when none was computed — never fabricated.
+    /// The draft's source is always the user's own code (raw code + backend), never a
+    /// module/function reference. A black-box save preserves any pending diagnostic and
+    /// prefixes it with a save confirmation.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanSave))]
     private async Task Save()
@@ -100,40 +110,45 @@ public partial class NewComponentViewModel
             StatusText = "Render a preview before saving.";
             return;
         }
-        if (SelectedProcess is null)
+        var process = EffectiveProcess;
+        if (process is null)
         {
             StatusText = "Select a fabrication process before saving.";
+            return;
+        }
+        if (IsNewPdk && string.IsNullOrWhiteSpace(NewPdkName))
+        {
+            StatusText = "Enter a name for the new PDK before saving.";
             return;
         }
 
         IsBusy = true;
         try
         {
-            var process = SelectedProcess;
-            if (_store.ComponentExists(process, name))
-            {
-                if (ConfirmOverwrite is null)
-                {
-                    StatusText = $"'{name}' already exists in {process.Name}.";
-                    return;
-                }
-                if (!await ConfirmOverwrite(name, process.Name))
-                {
-                    StatusText = "Save cancelled.";
-                    return;
-                }
-            }
-
             var reference = BuildReference();
             var sMatrix = _computedModel is null
                 ? FdtdSMatrixToDraftConverter.BlackBox()
                 : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
-            var draft = InputMode == NewComponentInputMode.OwnCode
-                ? CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend)
-                : CustomComponentDraftFactory.Build(name, reference, preview, sMatrix);
+            var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
-            _store.Save(process, draft, backend, null);
+            if (IsNewPdk)
+            {
+                if (_store.NamedPdkExists(NewPdkName) && !await ConfirmCollision(name, NewPdkName))
+                {
+                    return;
+                }
+                _store.SaveToNamedPdk(NewPdkName, process, draft, backend, null);
+            }
+            else
+            {
+                var filePath = SelectedCustomPdk!.FilePath;
+                if (_store.ComponentExistsInFile(filePath, name) && !await ConfirmCollision(name, SelectedCustomPdk.Name))
+                {
+                    return;
+                }
+                _store.AppendToExistingPdk(filePath, draft);
+            }
 
             SavedDraft = draft;
             SavedProcessName = process.Name;
@@ -146,5 +161,24 @@ public partial class NewComponentViewModel
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Reports and resolves a name collision via <see cref="NewComponentViewModel.ConfirmOverwrite"/>:
+    /// true proceeds with the overwrite, false (or no confirmation hook) aborts with a status message.
+    /// </summary>
+    private async Task<bool> ConfirmCollision(string componentName, string targetName)
+    {
+        if (ConfirmOverwrite is null)
+        {
+            StatusText = $"'{componentName}' already exists in '{targetName}'.";
+            return false;
+        }
+        if (!await ConfirmOverwrite(componentName, targetName))
+        {
+            StatusText = "Save cancelled.";
+            return false;
+        }
+        return true;
     }
 }
