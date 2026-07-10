@@ -5,12 +5,13 @@ gdsfactory's open-source `cspdk` library — issue #570 follow-up / gdsfactory-b
 This is the PDK's *updater*: the CornerStone process is a Python library (cspdk); when it
 changes, re-run this to regenerate the Lunima PDK JSON. No hand-editing, no fabricated data.
 
-Environment (cspdk >= 1.4.3 — 1.4.2's `coupler` cell raises on a `bend_s` kwarg; sax ~0.17
-matches cspdk's model kwargs; installed --no-deps to avoid the unused gplugins/gdstk chain):
+Environment (cspdk >= 1.4.4 — 1.4.2's `coupler` cell raises on a `bend_s` kwarg, 1.4.3
+lacks the CLAD_OPEN layer; sax ~0.17 matches cspdk's model kwargs; installed --no-deps to
+avoid the unused gplugins/gdstk chain):
 
     uv venv .cspdk --python 3.12
     uv pip install --python .cspdk "gdsfactory==9.43.0" "sax~=0.17.0"
-    uv pip install --python .cspdk --no-deps "cspdk==1.4.3"
+    uv pip install --python .cspdk --no-deps "cspdk==1.4.4"
     .cspdk/Scripts/python scripts/generate_cspdk_sin300_pdk.py CAP-DataAccess/PDKs/cornerstone-sin-pdk.json
 
 Emits a `backend: "gdsfactory"` PDK: each component carries its gdsfactory factory name
@@ -45,6 +46,16 @@ SAX_MODEL_COMPONENTS = {"mmi1x2", "mmi2x2", "coupler",
 # real layout netlist. (cspdk.sin300's mzi has no heater — passive arms only.)
 CIRCUIT_MODEL_COMPONENTS = {"mzi"}
 
+# Cells whose own cspdk model deliberately raises NotImplementedError ("we should not need
+# this model") but which are placeable and must not ship as an all-zero black box that
+# absorbs all light (#712). `coupler_straight` is the parallel coupling section of the
+# directional coupler — the region where all the coupling physically happens. cspdk models
+# the coupling as a lumped `coupler` (fixed 50/50 + loss_dB, geometry-independent) and
+# leaves the sub-cells unmodeled, so the parent `coupler` model IS cspdk's own physics for
+# this section — not fabricated data. Port names are identical on both cells (o1/o2 west,
+# o3/o4 east), which _eval_model_smatrix verifies by name identity like any sax model.
+MODEL_SUBSTITUTES = {"coupler_straight": "coupler"}
+
 # Passive routing components that faithfully pass light (or current) straight through — a
 # lossless pass-through S-matrix is the honest ideal. Their cspdk sax model wrappers raise
 # on the `loss` kwarg (see _mzi_circuit), so we synthesize the transfer rather than evaluate
@@ -68,13 +79,13 @@ LAYER_DESCRIPTIONS = {
 }
 
 # Routing cross-sections cspdk.sin300 actually defines (xs_nc/xs_no optical, metal_routing/
-# heater_metal electrical — see cspdk.sin300.tech). kind 0 = Optical, 1 = Metal (ProcessDefinition.
-# XsectionKind's default int serialization — no JsonStringEnumConverter is registered).
+# heater_metal electrical — see cspdk.sin300.tech). Kind uses the enum NAME ("Optical" /
+# "Metal"): ProcessDefinition.Xsection.Kind carries JsonStringEnumConverter<XsectionKind>.
 XSECTION_SPECS = [
-    ("xs_nc", 0, "NITRIDE", "SiN C-band strip waveguide"),
-    ("xs_no", 0, "NITRIDE", "SiN O-band strip waveguide"),
-    ("metal_routing", 1, "PAD", "Electrical routing metal"),
-    ("heater_metal", 1, "HEATER", "Heater trace metal"),
+    ("xs_nc", "Optical", "NITRIDE", "SiN C-band strip waveguide"),
+    ("xs_no", "Optical", "NITRIDE", "SiN O-band strip waveguide"),
+    ("metal_routing", "Metal", "PAD", "Electrical routing metal"),
+    ("heater_metal", "Metal", "HEATER", "Heater trace metal"),
 ]
 
 
@@ -264,14 +275,16 @@ def build_smatrix(pdk, name, pins):
 
     - SAX_MODEL_COMPONENTS: the cspdk sax model, sampled at WAVELENGTHS_NM.
     - CIRCUIT_MODEL_COMPONENTS: a sax.circuit composition of the cell's netlist.
+    - MODEL_SUBSTITUTES: a documented stand-in cspdk model (see the map's comment, #712).
     - 2-port passives (1 in, 1 out): a lossless pass-through (their cspdk models raise).
     - otherwise None (unverified port mapping / erroring components stay black-box).
     """
-    if name in SAX_MODEL_COMPONENTS or name in CIRCUIT_MODEL_COMPONENTS:
+    if name in SAX_MODEL_COMPONENTS or name in CIRCUIT_MODEL_COMPONENTS \
+            or name in MODEL_SUBSTITUTES:
         try:
             sax, models = _sax_models()
             model = (_mzi_circuit(pdk, sax, models) if name in CIRCUIT_MODEL_COMPONENTS
-                     else getattr(models, name))
+                     else getattr(models, MODEL_SUBSTITUTES.get(name, name)))
             return _eval_model_smatrix(model, pins)
         except Exception as e:  # noqa: BLE001 — black-box on any model failure
             print(f"{name}: sax model failed ({e}) — black-box", file=sys.stderr)

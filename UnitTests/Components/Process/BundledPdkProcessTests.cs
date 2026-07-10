@@ -85,6 +85,7 @@ public class BundledPdkProcessTests
     [InlineData("cspdk.sin300.grating_coupler_rectangular")]
     [InlineData("cspdk.sin300.grating_coupler_elliptical")]
     [InlineData("cspdk.sin300.coupler")]
+    [InlineData("cspdk.sin300.coupler_straight")]
     [InlineData("cspdk.sin300.mzi")]
     public void CornerStoneSin_GratingsCouplerAndMzi_CarryRealMultiWavelengthSMatrices(
         string gdsFactoryFunction)
@@ -100,6 +101,56 @@ public class BundledPdkProcessTests
         var at1550 = comp.SMatrix.WavelengthData.Single(w => w.WavelengthNm == 1550);
         at1550.Connections.ShouldNotBeEmpty();
         at1550.Connections.ShouldAllBe(c => c.Magnitude > 0 && c.Magnitude <= 1);
+    }
+
+    [Fact]
+    public void CornerStoneSin_EveryComponent_CarriesAnSMatrix()
+    {
+        // A PDK component without an sMatrix silently loads as an all-zero
+        // (perfect-absorber) S-matrix: PdkTemplateConverter falls back to
+        // CreateSMatrixFromPdk(pins, null). coupler_straight shipped that way,
+        // so no light reached the ONA and every output sat at the −120 dB floor (#712).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+
+        draft.Components.ShouldAllBe(c => c.SMatrix != null);
+    }
+
+    [Fact]
+    public void CornerStoneSin_MultiWavelengthSMatrices_CoverTheCBandSweepRange()
+    {
+        // The generator samples at 1500–1600 nm; every sampled component must bracket
+        // that band so an ONA sweep over the C-band never extrapolates (#712).
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+
+        foreach (var comp in draft.Components.Where(c => c.SMatrix?.WavelengthData is { Count: > 0 }))
+        {
+            var wavelengths = comp.SMatrix!.WavelengthData!.Select(w => w.WavelengthNm).ToList();
+            wavelengths.Min().ShouldBeLessThanOrEqualTo(1500, comp.Name);
+            wavelengths.Max().ShouldBeGreaterThanOrEqualTo(1600, comp.Name);
+        }
+    }
+
+    [Fact]
+    public void CornerStoneSin_CouplerStraight_PlacedComponent_UsesCspdkSMatrixOver1500To1600()
+    {
+        // Regression for #712: a placed CornerStone coupler_straight used to get the
+        // synthetic {980, 1310, 1550} wavelength triple wrapping an all-zero S-matrix
+        // (ComponentTemplates single-matrix fallback), i.e. silent perfect-absorber
+        // physics labelled 'nazca_coupler_straight'. It must carry its real cspdk
+        // model: 1500–1600 nm keys with a transmitting 50/50 coupling section.
+        var draft = new PdkLoader().LoadFromFile(Path.Combine(PdkDir, "cornerstone-sin-pdk.json"));
+        var comp = draft.Components.Single(
+            c => c.GdsFactoryFunction == "cspdk.sin300.coupler_straight");
+
+        var template = CAP.Avalonia.Services.PdkTemplateConverter.ConvertToTemplate(
+            comp, draft.Name, draft.NazcaModuleName, draft.GdsFactoryRoutingCrossSection);
+        var placed = CAP.Avalonia.ViewModels.Library.ComponentTemplates
+            .CreateFromTemplate(template, 0, 0);
+
+        placed.WaveLengthToSMatrixMap.Keys.Min().ShouldBe(1500);
+        placed.WaveLengthToSMatrixMap.Keys.Max().ShouldBe(1600);
+        placed.WaveLengthToSMatrixMap[1550].GetNonNullValues().Values
+            .ShouldContain(v => v.Magnitude > 0.5);   // light gets through, not absorbed
     }
 
     [Fact]
