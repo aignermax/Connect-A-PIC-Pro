@@ -74,9 +74,6 @@ public partial class NewComponentViewModel : ObservableObject
     /// <summary>The draft last written by <c>Save</c>, or null before a successful save.</summary>
     public PdkComponentDraft? SavedDraft { get; private set; }
 
-    /// <summary>The process name <see cref="SavedDraft"/> was saved under.</summary>
-    public string? SavedProcessName { get; private set; }
-
     /// <summary>
     /// The user-PDK file path <c>Save</c> actually wrote to (named custom PDK, new or
     /// existing) — never derived from <see cref="SelectedProcess"/>, since a process's default

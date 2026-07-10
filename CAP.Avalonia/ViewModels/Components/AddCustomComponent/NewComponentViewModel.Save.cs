@@ -151,7 +151,6 @@ public partial class NewComponentViewModel
             }
 
             SavedDraft = draft;
-            SavedProcessName = process.Name;
             StatusText = _computedModel is null
                 ? $"Saved as black box. {StatusText}".Trim()
                 : "Saved with FDTD S-matrix.";
