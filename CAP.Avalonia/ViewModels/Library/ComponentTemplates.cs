@@ -203,6 +203,20 @@ public partial class ComponentTemplate : ObservableObject
     /// under the activated gdsfactory PDK (#570 field-test fix).
     /// </summary>
     public string? GdsFactoryRoutingCrossSection { get; set; }
+
+    /// <summary>
+    /// Optional raw source code authored by the user for this component
+    /// (e.g. a gdsfactory or Nazca script that builds the cell). Carried over
+    /// from <see cref="CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft.RawCode"/>.
+    /// Null for components defined through the normal function-reference path.
+    /// </summary>
+    public string? RawCode { get; set; }
+
+    /// <summary>
+    /// Backend the <see cref="RawCode"/> targets: <c>"nazca"</c> or
+    /// <c>"gdsfactory"</c>. Null when <see cref="RawCode"/> is not set.
+    /// </summary>
+    public string? RawCodeBackend { get; set; }
 }
 
 public class PinDefinition
