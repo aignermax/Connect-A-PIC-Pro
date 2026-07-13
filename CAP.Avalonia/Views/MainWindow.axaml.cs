@@ -106,6 +106,11 @@ public partial class MainWindow : Window
                     // window itself) so the dropdown cannot be left mid-selection while the modal
                     // is open.
                     var window = new NewComponentWindow { DataContext = newComponentVm };
+                    // Save closes the window; closing the window (via Save, the titlebar X, or
+                    // Alt+F4) always cancels any Meep compute still running so it doesn't keep
+                    // burning CPU/Docker resources after the user has moved on.
+                    newComponentVm.Saved += (_, _) => window.Close();
+                    window.Closing += (_, _) => newComponentVm.CancelCompute();
                     newComponentVm.CreateNewPdk = async () =>
                     {
                         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;

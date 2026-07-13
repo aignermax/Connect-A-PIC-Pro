@@ -114,6 +114,18 @@
                             ToolTip.Tip="Renders the geometry and extracts its size and pins"/>
                 </Grid>
 
+                <!-- Rendered preview thumbnail; hidden until a render succeeds (PreviewBitmap can be
+                     null on a headless/no-render-backend session). Click opens a zoom/pan popup. -->
+                <Image x:Name="PreviewThumbnail"
+                       Source="{Binding PreviewBitmap}"
+                       Height="120"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Left"
+                       Cursor="Hand"
+                       IsVisible="{Binding PreviewBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"
+                       PointerPressed="OnPreviewThumbnailPointerPressed"
+                       ToolTip.Tip="Click to enlarge"/>
+
                 <Separator Background="#3d3d3d"/>
 
                 <!-- S-matrix -->
