@@ -95,6 +95,37 @@ public sealed class UserPdkStore
     /// <summary>True when a named custom PDK file already exists for that name.</summary>
     public bool NamedPdkExists(string pdkName) => File.Exists(ResolveNamedPath(pdkName));
 
+    /// <summary>
+    /// Creates a new, empty named custom PDK file (no components yet) bound to a
+    /// fabrication process, for the "PDK first, then add components" wizard flow.
+    /// Callers must check <see cref="NamedPdkExists"/> first; this method refuses to
+    /// silently overwrite an existing file with the same name.
+    /// </summary>
+    /// <exception cref="InvalidOperationException">A named PDK with that name already exists.</exception>
+    public string CreateNamedPdkWithProcess(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection)
+    {
+        if (NamedPdkExists(pdkName))
+        {
+            throw new InvalidOperationException($"A custom PDK named '{pdkName}' already exists.");
+        }
+
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var draft = new PdkDraft
+        {
+            Name = pdkName,
+            Foundry = process.Foundry,
+            Backend = backend,
+            Process = process,
+            GdsFactoryRoutingCrossSection = routingCrossSection,
+            Components = new()
+        };
+
+        _saver.SaveToFile(draft, path);
+        return path;
+    }
+
     /// <summary>True when a component of that name exists in the PDK file at <paramref name="filePath"/>.</summary>
     public bool ComponentExistsInFile(string filePath, string componentName)
     {
