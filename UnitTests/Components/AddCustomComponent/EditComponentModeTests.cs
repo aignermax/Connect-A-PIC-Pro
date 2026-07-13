@@ -69,6 +69,20 @@ public class EditComponentModeTests : IDisposable
         return (vm, path, rawCode);
     }
 
+    /// <summary>Seeds a PDK with two components ("comp1" and "comp2") so a rename-onto-existing collision can be exercised.</summary>
+    private (NewComponentViewModel vm, string filePath, string rawCode) BuildWithTwoSeededComponents()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("comp1", rawCode));
+        store.AppendToExistingPdk(path, SeedComponent("comp2", rawCode));
+
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+        return (vm, path, rawCode);
+    }
+
     private static ComponentTemplate BuildTemplate(string rawCode) => new()
     {
         Name = "comp1",
@@ -140,6 +154,28 @@ public class EditComponentModeTests : IDisposable
 
         confirmCalls.ShouldBe(0);
         vm.SavedDraft.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public async Task Save_afterLoadForEdit_renamedOntoADifferentExistingComponent_stillPromptsAndAbortsWhenDeclined()
+    {
+        var (vm, filePath, rawCode) = BuildWithTwoSeededComponents();
+        vm.LoadForEdit(BuildTemplate(rawCode)); // editing comp1
+        var confirmCalls = 0;
+        // Rename comp1 → comp2 (which already exists): NOT a self-overwrite, so the collision
+        // prompt must fire — and declining it must abort without clobbering comp2.
+        vm.ConfirmOverwrite = (_, _) => { confirmCalls++; return Task.FromResult(false); };
+        vm.ComponentName = "comp2";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        confirmCalls.ShouldBe(1);
+        vm.SavedDraft.ShouldBeNull(); // aborted
+        var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
+        pdk.Components.Count.ShouldBe(2); // both originals intact — comp2 not overwritten
+        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp2").ShouldBe(1);
     }
 
     [Fact]

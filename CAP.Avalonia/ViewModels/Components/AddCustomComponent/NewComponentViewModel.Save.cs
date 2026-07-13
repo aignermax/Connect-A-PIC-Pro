@@ -95,10 +95,11 @@ public partial class NewComponentViewModel
     /// name, a rendered preview, and a selected PDK — missing any of these reports why via
     /// <see cref="NewComponentViewModel.StatusText"/> and leaves
     /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
-    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it — except in
-    /// <see cref="NewComponentViewModel.IsEditMode"/>, where the name always already exists (the
-    /// component being edited) and overwriting it in place is exactly the intended save, so the
-    /// collision check and confirm are skipped entirely. The S-matrix is either
+    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it — except for a
+    /// self-overwrite in <see cref="NewComponentViewModel.IsEditMode"/> (re-saving the edited
+    /// component under its own original name), which is the intended save and skips the prompt. A
+    /// rename onto a <em>different</em> existing component still collides and still prompts, so it
+    /// is never silently clobbered. The S-matrix is either
     /// the last FDTD result or a black box when none was computed — never fabricated. The
     /// draft's source is always the user's own code (raw code + backend), never a
     /// module/function reference. A black-box save preserves any pending diagnostic and
@@ -136,9 +137,13 @@ public partial class NewComponentViewModel
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
-            // Edit mode always overwrites the same name by design (see LoadForEdit) — the
-            // collision it would report is not a real conflict, so skip the confirm entirely.
-            if (!IsEditMode && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
+            // A self-overwrite (re-saving the edited component under its own name) is exactly the
+            // intended edit and needs no prompt. A rename onto a DIFFERENT existing component is a
+            // real collision and must still go through ConfirmOverwrite — AppendToExistingPdk
+            // removes-by-name, so skipping it would silently clobber the other component.
+            var isSelfEdit = IsEditMode &&
+                string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
+            if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
