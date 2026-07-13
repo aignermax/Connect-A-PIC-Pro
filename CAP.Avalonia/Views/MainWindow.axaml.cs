@@ -135,6 +135,12 @@ public partial class MainWindow : Window
                     processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
                         .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
                     processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
+                    // Let the editor SWITCH the design's process (issue #726): before, picking a
+                    // preset only filled the local editor state and was discarded on close, so the
+                    // design process could never be changed here. Switching is a real design change
+                    // (markDirty default) and is guarded to an empty canvas by the ViewModel.
+                    processVm.ApplyActiveProcess = selection => vm.FileOperations.SetActiveProcess(selection);
+                    processVm.PlacedComponentCountProvider = () => vm.Canvas.Components.Count;
                     // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
                     // the exact file so a real PDK can't be edited by accident.
                     processVm.ConfirmSaveToPdk = async path =>

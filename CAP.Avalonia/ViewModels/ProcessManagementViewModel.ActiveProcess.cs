@@ -38,6 +38,7 @@ public partial class ProcessManagementViewModel
     public void ShowActiveProcess(ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks)
     {
         ResetState();
+        _loadedPdks = loadedPdks;
         SetAvailablePresets(loadedPdks);
 
         if (active == null)
@@ -85,6 +86,14 @@ public partial class ProcessManagementViewModel
         ProcessName = active.DisplayName;
         HasProcess = true;
 
+        // Preselect the preset dropdown on the active process so the current selection is
+        // visible instead of an empty picker (issue #726). SetProperty skips the generated
+        // OnSelectedPresetChanged, so the merged multi-member state above is not clobbered
+        // by a single-preset reload.
+        var activePreset = AvailablePresets.FirstOrDefault(
+            p => active.MemberPdkNames.Contains(p.Name, StringComparer.OrdinalIgnoreCase));
+        SetProperty(ref _selectedPreset, activePreset, nameof(SelectedPreset));
+
         StatusText = definitions.Count > 0
             ? $"Active process for this design. Layer stack, cross-sections and materials merged from " +
               $"{definitions.Count} member PDK(s)."
@@ -124,6 +133,8 @@ public partial class ProcessManagementViewModel
         Xsections.Clear();
         Materials.Clear();
         _memberDrafts = new List<PdkDraft>();
+        // Clear via SetProperty so no preset Load is triggered by the generated setter.
+        SetProperty(ref _selectedPreset, null, nameof(SelectedPreset));
         MarkAllRowsOwned();
     }
 }
