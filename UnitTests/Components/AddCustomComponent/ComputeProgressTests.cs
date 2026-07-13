@@ -104,28 +104,45 @@ public class ComputeProgressTests : IDisposable
     [Fact]
     public async Task ComputeSMatrix_surfaces_a_reported_progress_line_in_StatusText()
     {
-        var (vm, fdtd) = Build();
-        fdtd.Setup(f => f.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
-            .ReturnsAsync(FdtdAvailability.Available(""));
-        fdtd.Setup(f => f.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
-            .Callback<FdtdSMatrixRequest, IProgress<string>?, CancellationToken>((_, progress, _) =>
-                progress?.Report("Meep step 50%"))
-            .ReturnsAsync(SuccessResult());
-
-        // The final "S-matrix computed" status overwrites the last progress line once the
-        // solve completes, so capture every StatusText value seen while the command runs
-        // (rather than only the value after it finishes) to prove the reported line was
-        // actually surfaced live, not just passed through and discarded.
-        var seenStatuses = new List<string>();
-        vm.PropertyChanged += (_, e) =>
+        // The VM reports progress through a UI-thread-safe Progress<string>, which marshals its
+        // callback onto the SynchronizationContext captured when it is constructed. Under xUnit's
+        // async context that callback would run non-deterministically off-thread, so pin a context
+        // that runs posted callbacks inline (synchronously) for the duration of this test — the
+        // production code is unchanged, only the test's context is controlled. The Moq mock returns
+        // already-completed tasks, so every await continuation runs inline too; the only thing that
+        // posts to the context is Progress.Report, so there is no reentrancy or deadlock.
+        var original = SynchronizationContext.Current;
+        SynchronizationContext.SetSynchronizationContext(new InlineSynchronizationContext());
+        try
         {
-            if (e.PropertyName == nameof(NewComponentViewModel.StatusText)) seenStatuses.Add(vm.StatusText);
-        };
+            var (vm, fdtd) = Build();
+            fdtd.Setup(f => f.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+                .ReturnsAsync(FdtdAvailability.Available(""));
+            fdtd.Setup(f => f.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+                .Callback<FdtdSMatrixRequest, IProgress<string>?, CancellationToken>((_, progress, _) =>
+                    progress?.Report("Meep step 50%"))
+                .ReturnsAsync(SuccessResult());
 
-        await vm.RunPreviewCommand.ExecuteAsync(null);
-        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+            // The final "S-matrix computed" status overwrites the last progress line once the
+            // solve completes, so capture every StatusText value seen while the command runs
+            // (rather than only the value after it finishes) to prove the reported line was
+            // actually surfaced live, not just passed through and discarded. With the inline
+            // context this recorder is deterministic — the report runs synchronously.
+            var seenStatuses = new List<string>();
+            vm.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(NewComponentViewModel.StatusText)) seenStatuses.Add(vm.StatusText);
+            };
 
-        seenStatuses.ShouldContain(s => s.Contains("Meep step 50%"));
+            await vm.RunPreviewCommand.ExecuteAsync(null);
+            await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+
+            seenStatuses.ShouldContain(s => s.Contains("Meep step 50%"));
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(original);
+        }
     }
 
     [Fact]
@@ -150,6 +167,17 @@ public class ComputeProgressTests : IDisposable
     {
         var (vm, _) = Build();
         Should.NotThrow(() => vm.CancelCompute());
+    }
+
+    /// <summary>
+    /// A <see cref="SynchronizationContext"/> that runs posted callbacks inline (synchronously)
+    /// on the calling thread, so a <see cref="Progress{T}"/> report is observed deterministically
+    /// within the test rather than being marshalled off-thread by xUnit's async context.
+    /// </summary>
+    private sealed class InlineSynchronizationContext : SynchronizationContext
+    {
+        public override void Post(SendOrPostCallback d, object? state) => d(state);
+        public override void Send(SendOrPostCallback d, object? state) => d(state);
     }
 
     public void Dispose()
