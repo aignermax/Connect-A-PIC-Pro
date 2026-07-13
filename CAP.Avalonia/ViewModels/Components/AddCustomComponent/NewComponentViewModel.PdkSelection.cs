@@ -21,6 +21,21 @@ public partial class NewComponentViewModel
     /// <summary>The last selected non-sentinel choice, restored when a "New PDK…" creation is cancelled.</summary>
     private PdkChoice? _previousPdkChoice;
 
+    /// <summary>
+    /// True only while <see cref="RefreshPdkChoices"/> itself runs. <see
+    /// cref="PdkChoice.NewPdkSentinel"/> is a single shared static instance, so a bound
+    /// dropdown reacting to <see cref="PdkChoices"/>'s change notification (clearing its
+    /// selection, then reselecting whatever it previously held, since that same object is
+    /// still present in the refreshed list) can reselect the sentinel a second time
+    /// synchronously, nested inside that very notification — re-entering <see
+    /// cref="OnSelectedPdkChoiceChanged"/> with the guard in <see
+    /// cref="HandleNewPdkSentinelAsync"/> already lifted, reopening the "New PDK…" modal.
+    /// Suppressing sentinel handling for just this window closes that gap without swallowing
+    /// the real target selection's notifications (that assignment always runs afterwards,
+    /// with the flag back off).
+    /// </summary>
+    private bool _suppressSentinelHandling;
+
     /// <summary>Named custom PDKs already on disk, refreshed after a new one is created.</summary>
     public IReadOnlyList<UserPdkInfo> AvailableCustomPdks { get; private set; } = Array.Empty<UserPdkInfo>();
 
@@ -50,6 +65,8 @@ public partial class NewComponentViewModel
     /// </summary>
     partial void OnSelectedPdkChoiceChanged(PdkChoice? value)
     {
+        if (_suppressSentinelHandling) return;
+
         if (value is { IsNewPdk: false })
         {
             _previousPdkChoice = value;
@@ -97,9 +114,23 @@ public partial class NewComponentViewModel
             return;
         }
 
-        RefreshPdkChoices();
-        SelectedPdkChoice = _pdkChoices.FirstOrDefault(
+        try
+        {
+            _suppressSentinelHandling = true;
+            RefreshPdkChoices();
+        }
+        finally
+        {
+            _suppressSentinelHandling = false;
+        }
+
+        var createdChoice = _pdkChoices.FirstOrDefault(
             c => !c.IsNewPdk && c.Pdk!.FilePath == created.FilePath);
+        // The created PDK should always be found post-refresh; falling back instead of
+        // leaving the sentinel selected is a defensive last resort, not the expected path.
+        SelectedPdkChoice = createdChoice
+            ?? _previousPdkChoice
+            ?? _pdkChoices.FirstOrDefault(c => !c.IsNewPdk);
     }
 
     /// <summary>Re-reads <see cref="AvailableCustomPdks"/> from the store and rebuilds <see cref="PdkChoices"/>.</summary>
