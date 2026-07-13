@@ -8,6 +8,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
@@ -100,9 +101,51 @@ public partial class MainWindow : Window
                         return choice == 1;
                     };
                     // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, task 5):
-                    // not yet wired here — selecting the sentinel is currently a no-op that
-                    // reverts to the previous PDK choice until the create-PDK dialog exists.
+                    // reuses the Fabrication Process editor's layer/cross-section/material UI in
+                    // "PDK creation" mode, blocking modally (ShowDialog, owner = the New Component
+                    // window itself) so the dropdown cannot be left mid-selection while the modal
+                    // is open.
                     var window = new NewComponentWindow { DataContext = newComponentVm };
+                    newComponentVm.CreateNewPdk = async () =>
+                    {
+                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+                        if (userPdkStore is null) return null;
+
+                        var processVm = new ProcessManagementViewModel(new FileDialogService(this),
+                            new IProcessImporter[]
+                            {
+                                new UpdkYamlProcessImporter(),
+                                new NazcaCsvProcessImporter(),
+                            }, new PdkJsonSaver());
+                        processVm.CreateUserPdk = (name, proc) =>
+                            userPdkStore.CreateNamedPdkWithProcess(name, proc, "gdsfactory", null);
+                        processVm.PdkNameExists = name => userPdkStore.NamedPdkExists(name);
+                        processVm.SetAvailablePresets(vm.LeftPanel.GetLoadedPdkDrafts());
+                        // Must run after CreateUserPdk is set, so CreatePdkCommand's CanExecute
+                        // (which requires CreateUserPdk != null) refreshes correctly.
+                        processVm.EnterPdkCreationMode();
+
+                        string? createdPath = null;
+                        var processWindow = new ProcessManagementWindow { DataContext = processVm };
+                        processVm.PdkCreated += (_, path) =>
+                        {
+                            createdPath = path;
+                            processWindow.Close();
+                        };
+
+                        try
+                        {
+                            await processWindow.ShowDialog(window);
+                        }
+                        catch
+                        {
+                            return null;
+                        }
+
+                        return createdPath is null
+                            ? null
+                            : userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+                    };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
                 };
