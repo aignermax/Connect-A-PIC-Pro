@@ -141,7 +141,7 @@ public partial class NewComponentViewModel
 
             SavedDraft = draft;
             StatusText = _computedModel is null
-                ? $"Saved as black box. {StatusText}".Trim()
+                ? $"Saved without simulation model (black box). {StatusText}".Trim()
                 : "Saved with FDTD S-matrix.";
             Saved?.Invoke(this, EventArgs.Empty);
         }
