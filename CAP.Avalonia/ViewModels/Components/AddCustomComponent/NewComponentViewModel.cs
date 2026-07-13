@@ -119,13 +119,31 @@ public partial class NewComponentViewModel : ObservableObject
         {
             IsNewPdk = true;
         }
+
+        // Seed the editor with a starter snippet so it is never blank on first open; the user
+        // still has to press Preview, so this cannot mask a stale/mismatched preview.
+        if (string.IsNullOrWhiteSpace(Code))
+        {
+            Code = BackendCodeExamples.For(SelectedBackend);
+        }
     }
 
     // A change to any input the preview was rendered from invalidates the preview — otherwise
     // a saved draft could be built from a rendered preview that no longer matches the current
     // inputs. Clearing _lastPreview is the load-bearing part: Save gates on that field, so a
     // stale preview cannot be saved; HasPreview (Save button's enablement) tracks it.
-    partial void OnSelectedBackendChanged(GeometryBackend value) => InvalidatePreview();
+    partial void OnSelectedBackendChanged(GeometryBackend value)
+    {
+        // Autoload the new backend's starter snippet, but only over an empty editor or one
+        // still holding the OTHER backend's untouched auto-example — never over user-authored
+        // code, which is anything else (including the new backend's own example, re-affirmed).
+        var otherBackend = value == GeometryBackend.GdsFactory ? GeometryBackend.Nazca : GeometryBackend.GdsFactory;
+        if (string.IsNullOrWhiteSpace(Code) || Code == BackendCodeExamples.For(otherBackend))
+        {
+            Code = BackendCodeExamples.For(value);
+        }
+        InvalidatePreview();
+    }
     partial void OnCodeChanged(string value) => InvalidatePreview();
 
     /// <summary>Switching the custom-PDK selection re-derives <see cref="IsNewPdk"/> and inherits its process.</summary>
