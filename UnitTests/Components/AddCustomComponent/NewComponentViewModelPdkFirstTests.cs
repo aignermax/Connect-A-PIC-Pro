@@ -17,12 +17,13 @@ using Xunit;
 namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
-/// Covers the PDK-first redesign of <see cref="NewComponentViewModel"/>: choosing between an
-/// existing named custom PDK (<see cref="NewComponentViewModel.SelectedCustomPdk"/>, process
-/// inherited and read-only) and creating a new one (<see cref="NewComponentViewModel.IsNewPdk"/>,
-/// name + process chosen), and routing <c>Save</c> to <see cref="UserPdkStore.SaveToNamedPdk"/>
-/// or <see cref="UserPdkStore.AppendToExistingPdk"/> accordingly. Function-reference mode no
-/// longer exists — every save is the user's own code.
+/// Covers the PDK-first redesign of <see cref="NewComponentViewModel"/>: choosing an existing
+/// named custom PDK (<see cref="NewComponentViewModel.SelectedCustomPdk"/>, process inherited and
+/// read-only) via <see cref="NewComponentViewModel.SelectedPdkChoice"/>, and routing
+/// <c>Save</c> to <see cref="UserPdkStore.AppendToExistingPdk"/>. A brand-new PDK is never
+/// created inline anymore — see <c>NewComponentNewPdkSentinelTests</c> for the "New PDK…"
+/// dropdown sentinel that replaced it (task 4 of the PDK-first component wizard). Function-
+/// reference mode no longer exists either — every save is the user's own code.
 /// </summary>
 public class NewComponentViewModelPdkFirstTests : IDisposable
 {
@@ -59,27 +60,6 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
     }
 
     [Fact]
-    public async Task NoCustomPdks_defaultsToNewPdk_andSavesToNamedPdk()
-    {
-        var store = Store();
-        var (vm, _) = Build(store, withFdtd: false);
-
-        vm.AvailableCustomPdks.ShouldBeEmpty();
-        vm.IsNewPdk.ShouldBeTrue(); // Test A: no custom PDKs yet -> defaults to "new PDK"
-
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My New PDK";
-
-        await vm.RunPreviewCommand.ExecuteAsync(null);
-        await vm.SaveCommand.ExecuteAsync(null);
-
-        vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedDraft!.RawCode.ShouldContain("gf.components.coupler");
-
-        store.ListCustomPdks().ShouldContain(i => i.Name == "My New PDK" && i.Process.Name == "P");
-    }
-
-    [Fact]
     public async Task ExistingCustomPdkSelected_inheritsProcess_andAppendsToItsFile()
     {
         var store = Store();
@@ -90,9 +70,7 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
         var pdkInfo = vm.AvailableCustomPdks.ShouldHaveSingleItem();
         pdkInfo.Name.ShouldBe("My SiN Lib");
 
-        vm.SelectedCustomPdk = pdkInfo;
-
-        vm.IsNewPdk.ShouldBeFalse(); // Test B: selecting an existing PDK switches out of "new"
+        vm.SelectedCustomPdk.ShouldBe(pdkInfo); // ctor pre-selects the only existing PDK
         vm.SelectedProcess.ShouldBe(pdkInfo.Process); // process is inherited from the PDK
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
@@ -108,47 +86,29 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
     public async Task Save_setsSavedFilePath_toTheActualWrittenFile_notTheProcessDefaultPath()
     {
         var store = Store();
-        var (vm, _) = Build(store, withFdtd: false);
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My New PDK";
+        var process = new ProcessDefinition { Name = "P" };
+        var path = store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process }, withFdtd: false);
 
         vm.SavedFilePath.ShouldBeNull(); // nothing saved yet
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
         await vm.SaveCommand.ExecuteAsync(null);
 
-        // Must be the named-PDK file the store actually wrote to (SaveToNamedPdk's return
-        // value) — never ResolvePath(process)'s per-process default file, which is wrong for
-        // a PDK-first save (the bug NewComponentWindowLauncher.OnSaved used to have).
-        vm.SavedFilePath.ShouldBe(store.ResolveNamedPath("My New PDK"));
-        vm.SavedFilePath.ShouldNotBe(store.ResolvePath(vm.Processes[0]));
-    }
-
-    [Fact]
-    public async Task CanSave_isFalse_whenNewPdkNameIsBlank()
-    {
-        var store = Store();
-        var (vm, _) = Build(store, withFdtd: false);
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "";
-
-        await vm.RunPreviewCommand.ExecuteAsync(null);
-        vm.HasPreview.ShouldBeTrue();
-
-        vm.IsNewPdk.ShouldBeTrue();
-        vm.SaveCommand.CanExecute(null).ShouldBeFalse(); // Test C: new PDK requires a name
-
-        vm.NewPdkName = "Now Named";
-        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+        // Must be the named-PDK file the store actually wrote to — never ResolvePath(process)'s
+        // per-process default file, which is wrong for a PDK-first save (the bug
+        // NewComponentWindowLauncher.OnSaved used to have).
+        vm.SavedFilePath.ShouldBe(path);
+        vm.SavedFilePath.ShouldNotBe(store.ResolvePath(process));
     }
 
     [Fact]
     public async Task FdtdFailure_savesBlackBox_andReportsTheError()
     {
         var store = Store();
-        var (vm, fdtd) = Build(store, withFdtd: true);
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "PDK";
+        var process = new ProcessDefinition { Name = "P" };
+        store.SaveToNamedPdk("PDK", process, SeedComponent("seed"), "gdsfactory", null);
+        var (vm, fdtd) = Build(store, new List<ProcessDefinition> { process }, withFdtd: true);
 
         fdtd.Setup(f => f.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
             .ReturnsAsync(FdtdAvailability.Available(""));
@@ -159,7 +119,7 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
         await vm.ComputeSMatrixCommand.ExecuteAsync(null);
         await vm.SaveCommand.ExecuteAsync(null);
 
-        vm.StatusText.ShouldContain("solver blew up"); // Test D: failure reported, never fabricated
+        vm.StatusText.ShouldContain("solver blew up"); // failure reported, never fabricated
         vm.SavedDraft!.SMatrix.ShouldBeNull();
     }
 
@@ -169,7 +129,7 @@ public class NewComponentViewModelPdkFirstTests : IDisposable
         var store = Store();
         var (vm, _) = Build(store, withFdtd: false);
 
-        vm.AvailableBackends.Count.ShouldBe(2); // Test E: own-code mode is the only mode now
+        vm.AvailableBackends.Count.ShouldBe(2); // own-code mode is the only mode now
         vm.AvailableBackends.ShouldContain(GeometryBackend.GdsFactory);
         vm.AvailableBackends.ShouldContain(GeometryBackend.Nazca);
     }

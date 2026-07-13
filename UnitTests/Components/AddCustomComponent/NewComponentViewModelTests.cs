@@ -32,6 +32,13 @@ public class NewComponentViewModelTests : IDisposable
         Pins = new List<NazcaPreviewPin> { new() { Name = "o1", X = 0, Y = 1, Angle = 180 }, new() { Name = "o2", X = 10, Y = 1, Angle = 0 } }
     };
 
+    private static PdkComponentDraft SeedComponent(string n) => new()
+    {
+        Name = n, WidthMicrometers = 5, HeightMicrometers = 1,
+        RawCode = "import gdsfactory as gf\ncomponent = gf.components.straight()", RawCodeBackend = "gdsfactory",
+        Pins = new() { new PhysicalPinDraft { Name = "o1" }, new PhysicalPinDraft { Name = "o2" } }
+    };
+
     private (NewComponentViewModel vm, Mock<IFdtdSMatrixService> fdtd) Build(bool withFdtd = true)
     {
         var nazca = new Mock<IComponentPreviewRenderer>();
@@ -40,13 +47,15 @@ public class NewComponentViewModelTests : IDisposable
         var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
         var fdtd = new Mock<IFdtdSMatrixService>();
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
+        var process = new ProcessDefinition { Name = "P" };
+        // PDK-first: Save always appends to a selected existing named custom PDK now (no more
+        // inline "new PDK" creation), so seed one and let the ctor pre-select it.
+        store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, withFdtd ? fdtd.Object : null, store,
-            new List<ProcessDefinition> { new() { Name = "P" } });
+            new List<ProcessDefinition> { process });
         vm.ComponentName = "My Comp";
         vm.SelectedBackend = GeometryBackend.GdsFactory;
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return (vm, fdtd);
     }
 

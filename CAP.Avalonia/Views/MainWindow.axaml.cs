@@ -99,14 +99,9 @@ public partial class MainWindow : Window
                             "Overwrite?", new[] { "Cancel", "Overwrite" });
                         return choice == 1;
                     };
-                    // Opens the same Fabrication Process editor as the toolbar button (#570).
-                    // No back-channel for a newly-defined process: the user reopens this
-                    // assistant afterwards to pick it up (known limitation).
-                    newComponentVm.OpenProcessEditor = () =>
-                    {
-                        vm.OpenProcessManagerCommand.Execute(null);
-                        return System.Threading.Tasks.Task.CompletedTask;
-                    };
+                    // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, task 5):
+                    // not yet wired here — selecting the sentinel is currently a no-op that
+                    // reverts to the previous PDK choice until the create-PDK dialog exists.
                     var window = new NewComponentWindow { DataContext = newComponentVm };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
