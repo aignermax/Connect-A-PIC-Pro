@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Solvers;
@@ -25,10 +26,13 @@ public partial class NewComponentViewModel
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
-    /// Recomputes the S-matrix from the rendered geometry via the FDTD solver. Any failure —
-    /// no solver configured, an unavailable backend, or a failed solve — clears the pending
-    /// model and reports the reason via <see cref="NewComponentViewModel.StatusText"/>; a
-    /// black-box save is the only fallback, never a fabricated matrix.
+    /// Recomputes the S-matrix from the rendered geometry via the FDTD solver, showing live
+    /// progress (Meep lines + an elapsed-time heartbeat) via
+    /// <see cref="NewComponentViewModel.StatusText"/> while it runs and cancellable via
+    /// <see cref="NewComponentViewModel.CancelCompute"/>. Any failure — no solver configured,
+    /// an unavailable backend, a failed solve, or a cancel — clears the pending model and
+    /// reports the reason (raw, never guessed) via <c>StatusText</c>; a black-box save is the
+    /// only fallback, never a fabricated matrix.
     /// </summary>
     [RelayCommand]
     private async Task ComputeSMatrix()
@@ -46,9 +50,10 @@ public partial class NewComponentViewModel
         }
 
         IsBusy = true;
+        _computeCts = new CancellationTokenSource();
         try
         {
-            var availability = await _fdtd.CheckAvailabilityAsync();
+            var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
                 _computedModel = null;
@@ -58,7 +63,7 @@ public partial class NewComponentViewModel
 
             var portNames = preview.Pins.Select(p => p.Name).ToList();
             var request = ComponentFdtdRequestFactory.BuildFromPreview(preview.Raw, portNames);
-            var result = await _fdtd.SolveAsync(request);
+            var result = await RunSolveWithLiveStatusAsync(request, _computeCts.Token);
             if (!result.Success)
             {
                 _computedModel = null;
@@ -67,11 +72,18 @@ public partial class NewComponentViewModel
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = "S-matrix computed.";
+            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)).";
+        }
+        catch (OperationCanceledException)
+        {
+            _computedModel = null;
+            StatusText = "S-matrix computation cancelled.";
         }
         finally
         {
             IsBusy = false;
+            _computeCts?.Dispose();
+            _computeCts = null;
         }
     }
 
