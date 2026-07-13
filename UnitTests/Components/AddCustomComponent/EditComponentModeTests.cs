@@ -126,6 +126,23 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_afterLoadForEdit_neverCallsConfirmOverwrite_evenThoughTheNameAlwaysExists()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+        var confirmCalls = 0;
+        // Edit-mode intentionally overwrites the same name — the collision that would trigger
+        // this hook in the non-edit path must never fire here (task 6's collision fix).
+        vm.ConfirmOverwrite = (_, _) => { confirmCalls++; return Task.FromResult(true); };
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        confirmCalls.ShouldBe(0);
+        vm.SavedDraft.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void LoadForEdit_withNoMatchingCustomPdk_reportsStatusAndLeavesEditModeFalse()
     {
         var (vm, _, rawCode) = BuildWithSeededPdk();

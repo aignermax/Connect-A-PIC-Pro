@@ -694,6 +694,23 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Handles "Edit…" click in the PDK template list context menu (issue #656 follow-up, task 6).
+    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — see the
+    /// <c>IsCustom</c> binding in <c>MainWindow.axaml</c> — but delegates the authoritative
+    /// bundled/custom check to <see cref="LeftPanelViewModel.CanEditTemplate"/> via the command.
+    /// </summary>
+    private void TemplateEditComponent_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (sender is MenuItem { DataContext: ComponentTemplate template })
+        {
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
+        }
+    }
+
+    /// <summary>
     /// Creates and shows the Component Settings dialog for the given entity.
     ///
     /// Per-Instance mode (<paramref name="liveComponent"/> non-null): the dialog
