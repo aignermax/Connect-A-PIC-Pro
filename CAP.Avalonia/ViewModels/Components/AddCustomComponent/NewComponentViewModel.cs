@@ -50,6 +50,14 @@ public partial class NewComponentViewModel : ObservableObject
     [ObservableProperty] private string _code = string.Empty;
 
     /// <summary>
+    /// True when the wizard was opened via <see cref="LoadForEdit"/> to edit an existing custom
+    /// component in place, rather than to author a new one. Purely a display flag consumed by
+    /// <see cref="WindowTitle"/>/<see cref="SaveButtonLabel"/> — the save path itself
+    /// (<c>AppendToExistingPdk</c>, overwrite-by-name) is identical either way.
+    /// </summary>
+    [ObservableProperty] private bool _isEditMode;
+
+    /// <summary>
     /// Rasterised thumbnail of the last successful <see cref="RunPreview"/>, rendered via
     /// <see cref="PreviewBitmapFactory.FromResult"/>. Null before any preview, after a failed
     /// preview, or when the current environment has no rendering backend (e.g. headless tests) —
@@ -62,6 +70,12 @@ public partial class NewComponentViewModel : ObservableObject
 
     /// <summary>Geometry backends selectable for the rendered code: always both, since saving is always own-code.</summary>
     public IReadOnlyList<GeometryBackend> AvailableBackends => _availableBackends;
+
+    /// <summary>Window title: reflects <see cref="IsEditMode"/> so Task 6's view can bind it directly.</summary>
+    public string WindowTitle => IsEditMode ? "Edit Component" : "New Component";
+
+    /// <summary>Save button label: reflects <see cref="IsEditMode"/> so Task 6's view can bind it directly.</summary>
+    public string SaveButtonLabel => IsEditMode ? "Save changes" : "Save";
 
     /// <summary>
     /// File-picker hook for <see cref="LoadCodeFromFile"/>: returns a ".py" file's already-read
@@ -137,6 +151,13 @@ public partial class NewComponentViewModel : ObservableObject
         InvalidatePreview();
     }
     partial void OnCodeChanged(string value) => InvalidatePreview();
+
+    /// <summary>Keeps the display-only <see cref="WindowTitle"/>/<see cref="SaveButtonLabel"/> in sync.</summary>
+    partial void OnIsEditModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(SaveButtonLabel));
+    }
 
     private void InvalidatePreview()
     {
