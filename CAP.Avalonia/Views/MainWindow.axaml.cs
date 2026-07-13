@@ -106,6 +106,11 @@ public partial class MainWindow : Window
                     // window itself) so the dropdown cannot be left mid-selection while the modal
                     // is open.
                     var window = new NewComponentWindow { DataContext = newComponentVm };
+                    // Save closes the window; closing the window (via Save, the titlebar X, or
+                    // Alt+F4) always cancels any Meep compute still running so it doesn't keep
+                    // burning CPU/Docker resources after the user has moved on.
+                    newComponentVm.Saved += (_, _) => window.Close();
+                    window.Closing += (_, _) => newComponentVm.CancelCompute();
                     newComponentVm.CreateNewPdk = async () =>
                     {
                         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
@@ -685,6 +690,23 @@ public partial class MainWindow : Window
         {
             var key = $"{template.PdkSource}::{template.Name}";
             ShowComponentSettingsDialog(key, template.Name, null, vm, template);
+        }
+    }
+
+    /// <summary>
+    /// Handles "Edit…" click in the PDK template list context menu (issue #656 follow-up, task 6).
+    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — see the
+    /// <c>IsCustom</c> binding in <c>MainWindow.axaml</c> — but delegates the authoritative
+    /// bundled/custom check to <see cref="LeftPanelViewModel.CanEditTemplate"/> via the command.
+    /// </summary>
+    private void TemplateEditComponent_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (sender is MenuItem { DataContext: ComponentTemplate template })
+        {
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
         }
     }
 

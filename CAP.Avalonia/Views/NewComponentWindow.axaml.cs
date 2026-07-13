@@ -1,5 +1,7 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using Avalonia.Interactivity;
+using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
 namespace CAP.Avalonia.Views;
 
@@ -14,6 +16,18 @@ public partial class NewComponentWindow : Window
     public NewComponentWindow()
     {
         InitializeComponent();
+    }
+
+    /// <summary>
+    /// Opens the rendered preview in a zoom/pan popup (<see cref="ComponentPreviewWindow"/>) when
+    /// the thumbnail is clicked. No-ops if a preview hasn't rendered yet (null-tolerant).
+    /// </summary>
+    private void OnPreviewThumbnailPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (DataContext is NewComponentViewModel vm && vm.PreviewBitmap is { } bitmap)
+        {
+            new ComponentPreviewWindow(bitmap).Show(this);
+        }
     }
 
     /// <summary>Copies the help flyout's gdsfactory example code to the clipboard.</summary>

@@ -1,5 +1,6 @@
 using System;
 using System.Linq;
+using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Solvers;
@@ -25,10 +26,13 @@ public partial class NewComponentViewModel
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
-    /// Recomputes the S-matrix from the rendered geometry via the FDTD solver. Any failure —
-    /// no solver configured, an unavailable backend, or a failed solve — clears the pending
-    /// model and reports the reason via <see cref="NewComponentViewModel.StatusText"/>; a
-    /// black-box save is the only fallback, never a fabricated matrix.
+    /// Recomputes the S-matrix from the rendered geometry via the FDTD solver, showing live
+    /// progress (Meep lines + an elapsed-time heartbeat) via
+    /// <see cref="NewComponentViewModel.StatusText"/> while it runs and cancellable via
+    /// <see cref="NewComponentViewModel.CancelCompute"/>. Any failure — no solver configured,
+    /// an unavailable backend, a failed solve, or a cancel — clears the pending model and
+    /// reports the reason (raw, never guessed) via <c>StatusText</c>; a black-box save is the
+    /// only fallback, never a fabricated matrix.
     /// </summary>
     [RelayCommand]
     private async Task ComputeSMatrix()
@@ -46,9 +50,10 @@ public partial class NewComponentViewModel
         }
 
         IsBusy = true;
+        _computeCts = new CancellationTokenSource();
         try
         {
-            var availability = await _fdtd.CheckAvailabilityAsync();
+            var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
                 _computedModel = null;
@@ -58,7 +63,7 @@ public partial class NewComponentViewModel
 
             var portNames = preview.Pins.Select(p => p.Name).ToList();
             var request = ComponentFdtdRequestFactory.BuildFromPreview(preview.Raw, portNames);
-            var result = await _fdtd.SolveAsync(request);
+            var result = await RunSolveWithLiveStatusAsync(request, _computeCts.Token);
             if (!result.Success)
             {
                 _computedModel = null;
@@ -67,11 +72,18 @@ public partial class NewComponentViewModel
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = "S-matrix computed.";
+            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)).";
+        }
+        catch (OperationCanceledException)
+        {
+            _computedModel = null;
+            StatusText = "S-matrix computation cancelled.";
         }
         finally
         {
             IsBusy = false;
+            _computeCts?.Dispose();
+            _computeCts = null;
         }
     }
 
@@ -83,7 +95,11 @@ public partial class NewComponentViewModel
     /// name, a rendered preview, and a selected PDK — missing any of these reports why via
     /// <see cref="NewComponentViewModel.StatusText"/> and leaves
     /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
-    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it. The S-matrix is either
+    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it — except for a
+    /// self-overwrite in <see cref="NewComponentViewModel.IsEditMode"/> (re-saving the edited
+    /// component under its own original name), which is the intended save and skips the prompt. A
+    /// rename onto a <em>different</em> existing component still collides and still prompts, so it
+    /// is never silently clobbered. The S-matrix is either
     /// the last FDTD result or a black box when none was computed — never fabricated. The
     /// draft's source is always the user's own code (raw code + backend), never a
     /// module/function reference. A black-box save preserves any pending diagnostic and
@@ -121,7 +137,13 @@ public partial class NewComponentViewModel
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
-            if (_store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
+            // A self-overwrite (re-saving the edited component under its own name) is exactly the
+            // intended edit and needs no prompt. A rename onto a DIFFERENT existing component is a
+            // real collision and must still go through ConfirmOverwrite — AppendToExistingPdk
+            // removes-by-name, so skipping it would silently clobber the other component.
+            var isSelfEdit = IsEditMode &&
+                string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
+            if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
@@ -129,7 +151,7 @@ public partial class NewComponentViewModel
 
             SavedDraft = draft;
             StatusText = _computedModel is null
-                ? $"Saved as black box. {StatusText}".Trim()
+                ? $"Saved without simulation model (black box). {StatusText}".Trim()
                 : "Saved with FDTD S-matrix.";
             Saved?.Invoke(this, EventArgs.Empty);
         }

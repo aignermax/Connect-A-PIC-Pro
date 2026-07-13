@@ -217,6 +217,20 @@ public partial class ComponentTemplate : ObservableObject
     /// <c>"gdsfactory"</c>. Null when <see cref="RawCode"/> is not set.
     /// </summary>
     public string? RawCodeBackend { get; set; }
+
+    /// <summary>
+    /// True when this template comes from a non-bundled (user-imported or custom-authored) PDK,
+    /// i.e. the inverse of <see cref="Library.PdkInfoViewModel.IsBundled"/> for its
+    /// <see cref="PdkSource"/> at the time it was added to the library. Set once by
+    /// <c>LeftPanelViewModel</c>/<c>CustomComponentLibraryRegistrar</c> alongside the
+    /// corresponding <c>PdkManagerViewModel.RegisterPdk(..., isBundled, ...)</c> call, purely so
+    /// the library list's "Edit…" context menu item (issue #656 follow-up) can bind
+    /// visibility/enablement directly instead of looking up the PDK manager per item. The
+    /// authoritative check for the edit action itself is
+    /// <c>LeftPanelViewModel.CanEditTemplate</c>, which re-derives this from the live PDK
+    /// registry rather than trusting this flag alone.
+    /// </summary>
+    public bool IsCustom { get; set; }
 }
 
 public class PinDefinition

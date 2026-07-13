@@ -605,6 +605,10 @@
                                         <StackPanel.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="Component Settings…" Click="TemplateComponentSettings_Click"/>
+                                                <!-- Custom (non-Foundry) components only: opens the "New Component"
+                                                     assistant prefilled to edit this component in place (#656 follow-up). -->
+                                                <MenuItem Header="Edit…" Click="TemplateEditComponent_Click"
+                                                          IsVisible="{Binding IsCustom}" IsEnabled="{Binding IsCustom}"/>
                                             </ContextMenu>
                                         </StackPanel.ContextMenu>
                                         <controls:ComponentPreview

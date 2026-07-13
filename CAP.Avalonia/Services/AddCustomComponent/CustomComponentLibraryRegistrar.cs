@@ -35,6 +35,9 @@ public static class CustomComponentLibraryRegistrar
         Action filterComponents)
     {
         var template = PdkTemplateConverter.ConvertToTemplate(draft, pdkName, null);
+        // A saved custom component always lands in a user PDK — editable via the library's
+        // "Edit…" action (issue #656 follow-up, task 6).
+        template.IsCustom = true;
         allTemplates.Add(template);
         if (!categories.Contains(template.Category))
             categories.Add(template.Category);

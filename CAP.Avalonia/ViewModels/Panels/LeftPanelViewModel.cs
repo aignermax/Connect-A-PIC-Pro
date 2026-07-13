@@ -196,6 +196,8 @@ public partial class LeftPanelViewModel : ObservableObject
                 {
                     var template = ConvertPdkComponentToTemplate(
                         pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
+                    // Bundled PDK — never editable (Foundry read-only).
+                    template.IsCustom = false;
                     AllTemplates.Add(template);
                     componentCount++;
                 }
@@ -388,6 +390,8 @@ public partial class LeftPanelViewModel : ObservableObject
             foreach (var pdkComp in pdk.Components)
             {
                 var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
+                // User-loaded PDK — editable via the library's "Edit…" action.
+                template.IsCustom = true;
                 AllTemplates.Add(template);
                 if (!Categories.Contains(template.Category))
                     Categories.Add(template.Category);
@@ -416,17 +420,10 @@ public partial class LeftPanelViewModel : ObservableObject
         => PdkTemplateConverter.ConvertToTemplate(
             pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
 
-    /// <summary>Opens the "New Component" window (issue #656); see <see cref="NewComponentWindowLauncher"/>.</summary>
-    [RelayCommand]
-    private async Task OpenNewComponent()
-    {
-        if (ShowNewComponentWindowAsync is null || _addCustomComponentDeps is null) return;
+    // OpenNewComponent, RegisterSavedCustomComponent, CanEditTemplate, EditCustomComponent:
+    // see LeftPanelViewModel.AddCustomComponent.cs (kept out of this file to respect the
+    // project's per-file line-count limit).
 
-        await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
-    }
-    /// <summary>Registers a saved custom component into the library; see <see cref="CustomComponentLibraryRegistrar"/>.</summary>
-    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath) =>
-        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
     /// <summary>
     /// Process fingerprints of all loaded PDKs, for single-process grouping (#570).
     /// Excludes process-agnostic tool PDKs (e.g. "Analysis Tools") — they are not a
