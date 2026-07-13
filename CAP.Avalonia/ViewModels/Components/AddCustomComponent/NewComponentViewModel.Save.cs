@@ -99,7 +99,8 @@ public partial class NewComponentViewModel
     /// self-overwrite in <see cref="NewComponentViewModel.IsEditMode"/> (re-saving the edited
     /// component under its own original name), which is the intended save and skips the prompt. A
     /// rename onto a <em>different</em> existing component still collides and still prompts, so it
-    /// is never silently clobbered. The S-matrix is either
+    /// is never silently clobbered. Any edit-mode rename also removes the entry under the
+    /// original name in the same write, so no orphaned duplicate is left behind. The S-matrix is either
     /// the last FDTD result or a black box when none was computed — never fabricated. The
     /// draft's source is always the user's own code (raw code + backend), never a
     /// module/function reference. A black-box save preserves any pending diagnostic and
@@ -147,7 +148,16 @@ public partial class NewComponentViewModel
             {
                 return;
             }
-            SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
+            // An edit-mode rename is a true rename: the original entry must be removed with the
+            // same write, otherwise it survives as an orphaned duplicate under the old name (#730).
+            var renamedFrom = IsEditMode && !isSelfEdit ? _editingOriginalName : null;
+            SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft, renamedFrom);
+            if (IsEditMode)
+            {
+                // Track the saved name so a further rename in the same session removes THIS
+                // entry, not the long-gone original.
+                _editingOriginalName = name;
+            }
 
             SavedDraft = draft;
             StatusText = _computedModel is null

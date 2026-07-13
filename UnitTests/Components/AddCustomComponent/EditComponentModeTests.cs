@@ -179,6 +179,63 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public async Task Save_afterLoadForEdit_renamedToANewName_removesTheOriginal_noOrphanLeftBehind()
+    {
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode)); // editing comp1
+        // Rename comp1 → comp3 (a NEW name): the original must be removed with the same save,
+        // never left behind as an orphaned duplicate (issue #730).
+        vm.ComponentName = "comp3";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
+        pdk.Components.Count.ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp3").ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(0); // no orphaned original
+    }
+
+    [Fact]
+    public async Task Save_afterLoadForEdit_renamedOntoADifferentExistingComponent_confirmed_removesTheOriginal()
+    {
+        var (vm, filePath, rawCode) = BuildWithTwoSeededComponents();
+        vm.LoadForEdit(BuildTemplate(rawCode)); // editing comp1
+        // Rename comp1 → comp2 (which already exists) and CONFIRM the overwrite: comp2 is
+        // replaced by the edited component AND comp1 must not survive as an orphan.
+        vm.ConfirmOverwrite = (_, _) => Task.FromResult(true);
+        vm.ComponentName = "comp2";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
+        pdk.Components.Count.ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp2").ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(0); // no orphaned original
+    }
+
+    [Fact]
+    public async Task Save_twice_withTwoRenames_removesEachPredecessor_leavingOnlyTheLatestName()
+    {
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode)); // editing comp1
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        vm.ComponentName = "comp3";
+        await vm.SaveCommand.ExecuteAsync(null); // comp1 → comp3
+
+        vm.ComponentName = "comp4";
+        await vm.SaveCommand.ExecuteAsync(null); // comp3 → comp4: must remove comp3, not re-remove comp1
+
+        var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
+        pdk.Components.Count.ShouldBe(1);
+        pdk.Components.Count(c => c.Name == "comp4").ShouldBe(1);
+    }
+
+    [Fact]
     public void LoadForEdit_withNoMatchingCustomPdk_reportsStatusAndLeavesEditModeFalse()
     {
         var (vm, _, rawCode) = BuildWithSeededPdk();

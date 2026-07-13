@@ -197,13 +197,20 @@ public sealed class UserPdkStore
 
     /// <summary>
     /// Adds or replaces (by name, case-insensitive) the component in an already-created
-    /// named custom PDK file. Returns <paramref name="filePath"/> for chaining.
+    /// named custom PDK file. When <paramref name="replacesName"/> is given (an edit-mode
+    /// rename), the component previously stored under that name is removed too, so the
+    /// rename never leaves an orphaned original behind (issue #730).
+    /// Returns <paramref name="filePath"/> for chaining.
     /// </summary>
-    public string AppendToExistingPdk(string filePath, PdkComponentDraft component)
+    public string AppendToExistingPdk(string filePath, PdkComponentDraft component, string? replacesName = null)
     {
         var pdk = _loader.LoadFromFileForEditing(filePath);
 
         pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        if (!string.IsNullOrWhiteSpace(replacesName))
+        {
+            pdk.Components.RemoveAll(c => string.Equals(c.Name, replacesName, StringComparison.OrdinalIgnoreCase));
+        }
         pdk.Components.Add(component);
 
         _saver.SaveToFile(pdk, filePath);

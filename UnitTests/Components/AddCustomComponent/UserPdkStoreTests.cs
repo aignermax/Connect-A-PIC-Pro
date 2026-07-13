@@ -74,6 +74,35 @@ public class UserPdkStoreTests : IDisposable
     }
 
     [Fact]
+    public void AppendToExistingPdk_withReplacesName_removesTheRenamedFromEntry()
+    {
+        var store = CreateStore();
+        var path = store.CreateNamedPdkWithProcess("Lib", Process("P"), "gdsfactory", null);
+        store.AppendToExistingPdk(path, Comp("Old"));
+        store.AppendToExistingPdk(path, Comp("Untouched"));
+
+        store.AppendToExistingPdk(path, Comp("New"), replacesName: "old"); // case-insensitive
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+        reloaded.Components.FindAll(c => c.Name == "Old").Count.ShouldBe(0); // no orphan (#730)
+        reloaded.Components.FindAll(c => c.Name == "New").Count.ShouldBe(1);
+        reloaded.Components.FindAll(c => c.Name == "Untouched").Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void AppendToExistingPdk_withoutReplacesName_keepsOtherComponents()
+    {
+        var store = CreateStore();
+        var path = store.CreateNamedPdkWithProcess("Lib", Process("P"), "gdsfactory", null);
+        store.AppendToExistingPdk(path, Comp("A"));
+
+        store.AppendToExistingPdk(path, Comp("B"));
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+        reloaded.Components.Count.ShouldBe(2);
+    }
+
+    [Fact]
     public void ComponentExists_reflects_saved_state()
     {
         var store = CreateStore();
