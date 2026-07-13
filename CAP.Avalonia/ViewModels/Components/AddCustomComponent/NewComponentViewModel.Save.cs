@@ -18,18 +18,11 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    /// <summary>
-    /// Save requires a rendered preview, no work in flight, a resolved target process, and —
-    /// for a new PDK — a non-blank name to create it under.
-    /// </summary>
-    private bool CanSave =>
-        HasPreview && !IsBusy && EffectiveProcess is not null &&
-        (!IsNewPdk || !string.IsNullOrWhiteSpace(NewPdkName));
+    /// <summary>Save requires a rendered preview, no work in flight, and a selected target PDK.</summary>
+    private bool CanSave => HasPreview && !IsBusy && SelectedCustomPdk is not null;
 
     partial void OnHasPreviewChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
-    partial void OnSelectedProcessChanged(ProcessDefinition? value) => SaveCommand.NotifyCanExecuteChanged();
-    partial void OnNewPdkNameChanged(string value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// Recomputes the S-matrix from the rendered geometry via the FDTD solver. Any failure —
@@ -41,9 +34,9 @@ public partial class NewComponentViewModel
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
-        if (_lastPreview is not { Success: true } preview || EffectiveProcess is null)
+        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
         {
-            StatusText = "Render a preview and select a process before computing the S-matrix.";
+            StatusText = "Render a preview and select a PDK before computing the S-matrix.";
             return;
         }
         if (_fdtd is null)
@@ -83,15 +76,16 @@ public partial class NewComponentViewModel
     }
 
     /// <summary>
-    /// Saves the current component as a PDK component draft, either into a brand-new named
-    /// custom PDK (<see cref="NewComponentViewModel.IsNewPdk"/>) or appended to the selected
-    /// existing one (<see cref="NewComponentViewModel.SelectedCustomPdk"/>). Requires a name, a
-    /// rendered preview, and a resolved target process — missing any of these reports why via
+    /// Saves the current component as a PDK component draft, appended to the selected existing
+    /// named custom PDK (<see cref="NewComponentViewModel.SelectedCustomPdk"/>) — a brand-new
+    /// PDK is never created here, only via the <see cref="NewComponentViewModel.CreateNewPdk"/>
+    /// modal hook, so by the time <c>Save</c> runs the target file already exists. Requires a
+    /// name, a rendered preview, and a selected PDK — missing any of these reports why via
     /// <see cref="NewComponentViewModel.StatusText"/> and leaves
-    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name/PDK collision is reported
-    /// unless <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it. The S-matrix is
-    /// either the last FDTD result or a black box when none was computed — never fabricated.
-    /// The draft's source is always the user's own code (raw code + backend), never a
+    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
+    /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it. The S-matrix is either
+    /// the last FDTD result or a black box when none was computed — never fabricated. The
+    /// draft's source is always the user's own code (raw code + backend), never a
     /// module/function reference. A black-box save preserves any pending diagnostic and
     /// prefixes it with a save confirmation.
     /// </summary>
@@ -110,15 +104,10 @@ public partial class NewComponentViewModel
             StatusText = "Render a preview before saving.";
             return;
         }
-        var process = EffectiveProcess;
-        if (process is null)
+        var pdk = SelectedCustomPdk;
+        if (pdk is null)
         {
-            StatusText = "Select a fabrication process before saving.";
-            return;
-        }
-        if (IsNewPdk && string.IsNullOrWhiteSpace(NewPdkName))
-        {
-            StatusText = "Enter a name for the new PDK before saving.";
+            StatusText = "Select a PDK before saving.";
             return;
         }
 
@@ -132,23 +121,11 @@ public partial class NewComponentViewModel
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
-            if (IsNewPdk)
+            if (_store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
-                if (_store.NamedPdkExists(NewPdkName) && !await ConfirmCollision(name, NewPdkName))
-                {
-                    return;
-                }
-                SavedFilePath = _store.SaveToNamedPdk(NewPdkName, process, draft, backend, null);
+                return;
             }
-            else
-            {
-                var filePath = SelectedCustomPdk!.FilePath;
-                if (_store.ComponentExistsInFile(filePath, name) && !await ConfirmCollision(name, SelectedCustomPdk.Name))
-                {
-                    return;
-                }
-                SavedFilePath = _store.AppendToExistingPdk(filePath, draft);
-            }
+            SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
 
             SavedDraft = draft;
             StatusText = _computedModel is null

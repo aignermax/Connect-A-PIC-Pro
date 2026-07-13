@@ -1,8 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.Components.AddCustomComponent"
-        xmlns:dto="using:CAP_DataAccess.Components.ComponentDraftMapper.DTOs"
-        xmlns:pdk="using:CAP_DataAccess.Components.AddCustomComponent"
         xmlns:edit="using:AvaloniaEdit"
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
         xmlns:controls="using:CAP.Avalonia.Controls"
@@ -28,50 +26,24 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
-                <!-- PDK -->
+                <!-- PDK: existing named custom PDKs plus a trailing "New PDK…" sentinel that
+                     opens the PDK-creation modal (wired in MainWindow.axaml.cs) -->
                 <TextBlock Text="PDK" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
-                <Grid ColumnDefinitions="*,8,Auto">
-                    <ComboBox Grid.Column="0"
-                              ItemsSource="{Binding AvailableCustomPdks}"
-                              SelectedItem="{Binding SelectedCustomPdk}"
-                              IsEnabled="{Binding !IsNewPdk}"
-                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="pdk:UserPdkInfo">
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <ToggleButton Grid.Column="2" Content="+ New PDK"
-                                  IsChecked="{Binding IsNewPdk, Mode=TwoWay}"
-                                  FontSize="11" Background="#3d4d6d"
-                                  ToolTip.Tip="Create a brand-new named custom PDK instead of appending to an existing one"/>
-                </Grid>
-                <TextBox Text="{Binding NewPdkName}" Watermark="New PDK name"
-                         IsVisible="{Binding IsNewPdk}"
-                         Background="#2d2d2d" Foreground="White"/>
+                <ComboBox ItemsSource="{Binding PdkChoices}"
+                          SelectedItem="{Binding SelectedPdkChoice}"
+                          Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
+                    <ComboBox.ItemTemplate>
+                        <DataTemplate x:DataType="vm:PdkChoice">
+                            <TextBlock Text="{Binding DisplayName}"/>
+                        </DataTemplate>
+                    </ComboBox.ItemTemplate>
+                </ComboBox>
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Fabrication process: chosen only for a new PDK, inherited (read-only) otherwise -->
+                <!-- Fabrication process: always inherited (read-only) from the selected PDK -->
                 <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
-                <Grid ColumnDefinitions="*,8,Auto" IsVisible="{Binding IsNewPdk}">
-                    <ComboBox Grid.Column="0"
-                              ItemsSource="{Binding Processes}"
-                              SelectedItem="{Binding SelectedProcess}"
-                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="dto:ProcessDefinition">
-                                <TextBlock Text="{Binding Name}"/>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button Grid.Column="2" Content="Process editor…" Command="{Binding OpenProcessEditorCmdCommand}"
-                            FontSize="11" Background="#3d4d6d"
-                            ToolTip.Tip="Opens the Fabrication Process window to define or edit a process. Reopen this window afterwards to pick it up."/>
-                </Grid>
-                <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"
-                           IsVisible="{Binding !IsNewPdk}"/>
+                <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"/>
 
                 <Separator Background="#3d3d3d"/>
 

@@ -31,6 +31,13 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         Pins = new List<NazcaPreviewPin> { new() { Name = "o1", X = 0, Y = 0.75, Angle = 180 }, new() { Name = "o2", X = 8, Y = 0.75, Angle = 0 } }
     };
 
+    private static PdkComponentDraft SeedComponent(string n) => new()
+    {
+        Name = n, WidthMicrometers = 5, HeightMicrometers = 1,
+        RawCode = "import gdsfactory as gf\ncomponent = gf.components.straight()", RawCodeBackend = "gdsfactory",
+        Pins = new() { new PhysicalPinDraft { Name = "o1" }, new PhysicalPinDraft { Name = "o2" } }
+    };
+
     private NewComponentViewModel Build()
     {
         var nazca = new Mock<IComponentPreviewRenderer>();
@@ -38,11 +45,13 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Ok());
         var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
+        var process = new ProcessDefinition { Name = "P" };
+        // PDK-first: Save always appends to a selected existing named custom PDK now (no more
+        // inline "new PDK" creation), so seed one and let the ctor pre-select it.
+        store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, fdtd: null, store,
-            new List<ProcessDefinition> { new() { Name = "P" } });
+            new List<ProcessDefinition> { process });
         vm.ComponentName = "My Raw Comp";
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return vm;
     }
 
