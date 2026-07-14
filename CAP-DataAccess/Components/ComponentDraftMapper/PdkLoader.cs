@@ -41,7 +41,12 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             }
 
             var json = File.ReadAllText(filePath);
-            return LoadFromJson(json, requireNazcaOffset);
+            var pdk = LoadFromJson(json, requireNazcaOffset);
+            // Stamp the source path (issue #733 review, Finding 5) so a caller holding several
+            // loaded drafts can match a specific one back to its own file instead of relying on
+            // its (possibly non-unique) display name.
+            pdk.FilePath = filePath;
+            return pdk;
         }
 
         /// <summary>

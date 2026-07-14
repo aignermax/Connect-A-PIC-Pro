@@ -703,7 +703,12 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm)
             return;
 
-        var draft = vm.LeftPanel.GetLoadedPdkDrafts().FirstOrDefault(d => d.Name == pdk.Name);
+        // Match by file path first, not just display name: two loaded PDKs can share a name
+        // (e.g. two custom PDKs authored under the same name from different files), and a
+        // name-only lookup could then load the wrong draft here while still resolving
+        // PdkFilePathResolver to this row's OWN file below — silently writing this edit into a
+        // different PDK's JSON (issue #733 review, Finding 5).
+        var draft = MetalTraceStyleResolver.FindOwnDraft(vm.LeftPanel.GetLoadedPdkDrafts(), pdk.FilePath, pdk.Name);
         if (draft is null)
             return;
 

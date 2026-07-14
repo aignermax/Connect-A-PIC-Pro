@@ -231,6 +231,34 @@ namespace UnitTests.Components
             }
         }
 
+        /// <summary>
+        /// Finding 5 (#733 review): loading by file path must stamp the draft with the path it
+        /// came from, so a caller holding several loaded PDKs can match a specific one back to its
+        /// own file (<see cref="CAP_DataAccess.Components.ComponentDraftMapper.MetalTraceStyleResolver.FindOwnDraft"/>)
+        /// even when two loaded PDKs share a display name. Not serialized — pure runtime provenance.
+        /// </summary>
+        [Fact]
+        public void LoadFromFile_SetsFilePathOnTheReturnedDraft()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "lunima-pdkloader-filepath-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "fab.json");
+            File.WriteAllText(path, @"{ ""name"": ""FilePathTest"", ""components"": [] }");
+
+            try
+            {
+                var loader = new PdkLoader();
+
+                loader.LoadFromFile(path).FilePath.ShouldBe(path);
+                loader.LoadFromFileForEditing(path).FilePath.ShouldBe(path);
+                loader.LoadFromJson(File.ReadAllText(path)).FilePath.ShouldBeNull();
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+
         [Fact]
         public void LoadFromJson_MultipleComponents_LoadsAll()
         {

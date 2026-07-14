@@ -89,6 +89,30 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             return null;
         }
 
+        /// <summary>
+        /// Finds the loaded draft that corresponds to one specific PDK, preferring a match by
+        /// <see cref="PdkDraft.FilePath"/> (stamped by <c>PdkLoader</c> at load time) over a
+        /// display-name-only match. Two loaded PDKs can share a display name (e.g. two custom
+        /// PDKs authored under the same name from different files); a name-only lookup could
+        /// then silently pick the wrong draft and write an edit into the wrong file (issue #733
+        /// review, Finding 5). Falls back to a name match when <paramref name="filePath"/> is
+        /// null/empty or matches no draft (legacy drafts built without a stamped path).
+        /// </summary>
+        /// <param name="drafts">Currently loaded PDK drafts.</param>
+        /// <param name="filePath">The target PDK's own file path, or null if unknown.</param>
+        /// <param name="name">The target PDK's display name, used as the fallback key.</param>
+        public static PdkDraft? FindOwnDraft(IReadOnlyList<PdkDraft> drafts, string? filePath, string name)
+        {
+            if (!string.IsNullOrEmpty(filePath))
+            {
+                var byPath = drafts.FirstOrDefault(d => d.FilePath == filePath);
+                if (byPath != null)
+                    return byPath;
+            }
+
+            return FindByName(drafts, name, d => d.Name);
+        }
+
         private static MetalTraceStyle BuildStyle(ProcessDefinition process, ProcessXsection metal)
         {
             var width = metal.WidthUm > 0 ? metal.WidthUm : MetalTraceStyle.DefaultWidthUm;
