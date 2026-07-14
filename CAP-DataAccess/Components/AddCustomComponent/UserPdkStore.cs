@@ -227,6 +227,103 @@ public sealed class UserPdkStore
     };
 
     /// <summary>
+    /// Moves a user PDK file to the store's <c>.trash</c> subfolder (issue #737/LC-T5), so a
+    /// deleted custom PDK can still be restored by hand instead of being gone for good. The
+    /// destination name is the original file's base name plus an invariant-culture
+    /// <c>yyyyMMdd-HHmmss</c> timestamp (see <see cref="ResolveTrashDestination"/>) — repeated
+    /// deletes of the same PDK never overwrite an earlier trashed copy. Callers are responsible
+    /// for the bundled-PDK guard (this store has no notion of "bundled"; that classification
+    /// lives in <c>PdkManagerViewModel</c>/<c>PdkInfoViewModel.IsBundled</c> at the UI layer) —
+    /// this method moves whatever path it is given.
+    /// </summary>
+    /// <param name="filePath">Full path of the PDK file to trash.</param>
+    /// <returns>The full path the file was moved to under <c>.trash</c>.</returns>
+    /// <exception cref="FileNotFoundException">No file exists at <paramref name="filePath"/>.</exception>
+    public string MoveToTrash(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"PDK file not found: {filePath}", filePath);
+        }
+
+        var trashPath = ResolveTrashDestination(filePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+        File.Move(filePath, trashPath);
+        return trashPath;
+    }
+
+    /// <summary>
+    /// Removes a single component (matched by name, case-insensitive) from the PDK file at
+    /// <paramref name="filePath"/>, rewriting the file without it. When
+    /// <paramref name="backupFirst"/> is true (the default), the file's PRE-EDIT content is
+    /// first copied into <c>.trash</c> (same naming as <see cref="MoveToTrash"/>) so an
+    /// accidental component delete can be recovered by hand — unlike <see cref="MoveToTrash"/>,
+    /// the PDK file itself is not moved; only one component leaves it.
+    /// </summary>
+    /// <param name="filePath">Full path of the PDK file to edit.</param>
+    /// <param name="componentName">Name of the component to remove (case-insensitive).</param>
+    /// <param name="backupFirst">When true, backs up the pre-edit file into <c>.trash</c> first.</param>
+    /// <returns>
+    /// <paramref name="filePath"/> on success, or <c>null</c> as a tolerated no-op when the file
+    /// does not exist or no component with that name is present (mirrors the tolerant style of
+    /// <see cref="ComponentExistsInFile"/> — a missing target is not an error here).
+    /// </returns>
+    public string? RemoveComponent(string filePath, string componentName, bool backupFirst = true)
+    {
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+        var removedCount = pdk.Components.RemoveAll(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
+        if (removedCount == 0)
+        {
+            return null;
+        }
+
+        if (backupFirst)
+        {
+            var trashPath = ResolveTrashDestination(filePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(filePath, trashPath);
+        }
+
+        _saver.SaveToFile(pdk, filePath);
+        return filePath;
+    }
+
+    /// <summary>
+    /// Computes a unique destination path under <c>&lt;root&gt;/.trash</c> for
+    /// <paramref name="filePath"/>: its base file name plus an invariant-culture
+    /// <c>yyyyMMdd-HHmmss</c> timestamp, with a numeric suffix appended if that exact name is
+    /// already taken (e.g. two trash operations on the same PDK within the same second).
+    /// </summary>
+    private string ResolveTrashDestination(string filePath)
+    {
+        var trashDir = Path.Combine(_root, TrashDirectoryName);
+        var baseName = Path.GetFileNameWithoutExtension(filePath);
+        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+
+        var candidate = Path.Combine(trashDir, $"{baseName}-{timestamp}.json");
+        var suffix = 1;
+        while (File.Exists(candidate))
+        {
+            candidate = Path.Combine(trashDir, $"{baseName}-{timestamp}-{suffix}.json");
+            suffix++;
+        }
+
+        return candidate;
+    }
+
+    /// <summary>
+    /// Name of the trash subfolder under the store root. Excluded from the startup directory
+    /// scan (<c>Directory.GetFiles(root, "*.json")</c> defaults to <c>TopDirectoryOnly</c>, see
+    /// <c>LeftPanelViewModel.CollectUserPdkCandidatePaths</c>) without needing a special case.
+    /// </summary>
+    private const string TrashDirectoryName = ".trash";
+
+    /// <summary>
     /// Converts a process display name into a filesystem- and culture-invariant slug
     /// (lowercase, non-alphanumeric runs collapsed to a single hyphen).
     /// </summary>

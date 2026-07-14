@@ -698,6 +698,35 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Handles "Delete…" click in the PDK template list context menu (LC-T5): confirms, then
+    /// moves the component out of its user PDK file into <c>.trash</c> (backing up the pre-edit
+    /// file) and out of the library via <see cref="LeftPanelViewModel.RemoveCustomComponentCommand"/>.
+    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — same
+    /// <c>IsCustom</c> binding as "Edit…" — but repeats the authoritative
+    /// <see cref="LeftPanelViewModel.CanEditTemplate"/> guard here before even showing the
+    /// confirm dialog. Placed components on the canvas are never touched (Design Checks flag any
+    /// resulting conflict).
+    /// </summary>
+    private async void TemplateDeleteComponent_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        if (sender is not MenuItem { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanEditTemplate(template))
+            return;
+
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            $"Move component '{template.Name}' to trash?\n\n"
+            + "A backup of the PDK file is saved to user-pdks/.trash before the component is "
+            + "removed. Placed instances on the canvas are kept.",
+            "Delete Component?", new[] { "Cancel", "Move to Trash" });
+        if (choice != 1)
+            return;
+
+        vm.LeftPanel.RemoveCustomComponentCommand.Execute(template);
+    }
+
+    /// <summary>
     /// Handles "Edit…" click on a custom PDK's row in PDK Management (issue #726 follow-up):
     /// opens the Fabrication Process editor scoped to just that PDK's own process, replacing the
     /// old toolbar-wide dialog with its preset/import pickers. Bundled PDKs have no Edit button
@@ -806,6 +835,48 @@ public partial class MainWindow : Window
             + $"{conflictedCount} placed component(s) from '{pdkInfo.Name}' are now in conflict "
             + "and new placements are blocked. Existing components are kept — see Design Checks.",
             "Process Changed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Handles "Delete…" click on a custom PDK's row in PDK Management (LC-T5): after a confirm
+    /// prompt, moves the whole PDK file to <c>user-pdks/.trash</c> via <see cref="UserPdkStore"/>
+    /// and then deregisters it from the library (templates, PDK-manager entry, in-memory draft,
+    /// remembered import path) via <see cref="LeftPanelViewModel.UnregisterPdk"/> — mirrors
+    /// <see cref="PdkCreate_Click"/>'s store-then-register order, just in reverse. Bundled PDKs
+    /// have no Delete button (see the <c>!IsBundled</c> visibility binding in
+    /// <c>MainWindow.axaml</c>), but the check is repeated here as the authoritative guard.
+    /// Placed components on the canvas are never touched (Design Checks flag any resulting
+    /// conflict, mirroring <see cref="WarnIfSavedProcessDivergedFromDesign"/>).
+    /// </summary>
+    private async void PdkDelete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || pdk.IsBundled || pdk.FilePath is null)
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+            + "The file is moved to user-pdks/.trash and can be restored manually.",
+            "Delete PDK?", new[] { "Cancel", "Move to Trash" });
+        if (choice != 1)
+            return;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return;
+
+        try
+        {
+            userPdkStore.MoveToTrash(pdk.FilePath);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorConsole.LogError($"Failed to move PDK '{pdk.Name}' to trash: {ex.Message}", ex);
+            return;
+        }
+
+        vm.LeftPanel.UnregisterPdk(pdk.FilePath);
     }
 
     /// <summary>
