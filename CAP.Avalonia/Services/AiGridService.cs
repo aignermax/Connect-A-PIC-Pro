@@ -21,21 +21,12 @@ public class AiGridService : IAiGridService
     private readonly SimulationService _simulationService;
 
     /// <summary>
-    /// Returns the design's active process. Wired by <c>MainViewModel</c> alongside the
-    /// identical wires on <c>CanvasInteractionViewModel</c> — the AI placement path must
-    /// obey the same single-process enforcement as manual placement (issue #570).
+    /// Shared placement-policy context (issues #570/#653/#737). Wired by <c>MainViewModel</c>
+    /// to the same instance <c>CanvasInteractionViewModel</c> uses, so the AI placement path
+    /// obeys exactly the same single-process enforcement as manual placement.
+    /// Defaults to <see cref="PlacementPolicyContext.Unrestricted"/>.
     /// </summary>
-    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
-
-    /// <summary>Names of loaded process-agnostic tool PDKs (see CanvasInteractionViewModel).</summary>
-    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
-
-    /// <summary>
-    /// Resolves a placed core component's PDK source from the loaded library
-    /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
-    /// path checks the group's children instead of the group's null source (#653).
-    /// </summary>
-    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+    public PlacementPolicyContext PlacementContext { get; set; } = PlacementPolicyContext.Unrestricted;
 
     /// <summary>
     /// Per-instance raw-code override store the AI placement path seeds into (issue
@@ -46,9 +37,7 @@ public class AiGridService : IAiGridService
     public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
 
     private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
-        SingleProcessPolicy.CheckPlacement(
-            GetActiveProcess?.Invoke(), pdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+        PlacementContext.CheckPlacement(pdkSource);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -333,7 +322,7 @@ public class AiGridService : IAiGridService
         if (sourceVm == null)
             return Task.FromResult($"Component '{sourceId}' not found.");
 
-        var tempClipboard = new ComponentClipboard { PdkSourceResolver = ResolveComponentPdkSource };
+        var tempClipboard = new ComponentClipboard { PdkSourceResolver = PlacementContext.ResolveComponentPdkSource };
         tempClipboard.Copy(new[] { sourceVm }, _canvas.Connections);
 
         // Single-process enforcement (issues #570/#653) — mirrors the paste gate;

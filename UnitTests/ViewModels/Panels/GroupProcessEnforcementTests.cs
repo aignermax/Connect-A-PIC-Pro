@@ -57,11 +57,15 @@ public class GroupProcessEnforcementTests : IDisposable
         _ => null
     };
 
+    private static PlacementPolicyContext Context(
+        ActiveProcessSelection? active, Func<Component, string?>? resolvePdkSource = null) =>
+        new(() => active,
+            () => Array.Empty<string>(),
+            component => resolvePdkSource?.Invoke(component));
+
     private void LockToSoiWithResolver()
     {
-        _interaction.GetActiveProcess = () => Soi("Demo");
-        _interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
-        _interaction.ResolveComponentPdkSource = ResolveByNazcaFunction;
+        _interaction.PlacementContext = Context(Soi("Demo"), ResolveByNazcaFunction);
         // The paste guard reads sources via the clipboard, which resolves group
         // children through its own resolver (wired by MainViewModel in production).
         _canvas.Clipboard.PdkSourceResolver = ResolveByNazcaFunction;
@@ -100,8 +104,7 @@ public class GroupProcessEnforcementTests : IDisposable
     public void PlaceGroupTemplate_NoResolverWired_IsPlaced()
     {
         // Without a resolver, child sources resolve to null (built-in) — legacy behavior.
-        _interaction.GetActiveProcess = () => Soi("Demo");
-        _interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        _interaction.PlacementContext = Context(Soi("Demo"));
         SelectGroupTemplate("Unknown Group", "foreign_func");
 
         _interaction.CanvasClicked(500, 500);
@@ -112,7 +115,7 @@ public class GroupProcessEnforcementTests : IDisposable
     [Fact]
     public void PlaceGroupTemplate_NoActiveProcess_AllowsForeignChildren()
     {
-        _interaction.ResolveComponentPdkSource = ResolveByNazcaFunction;
+        _interaction.PlacementContext = Context(active: null, ResolveByNazcaFunction);
         SelectGroupTemplate("Playground Group", "foreign_func");
 
         _interaction.CanvasClicked(500, 500);
