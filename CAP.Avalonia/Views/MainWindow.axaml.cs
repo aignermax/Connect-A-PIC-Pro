@@ -774,6 +774,60 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Handles the "+" click in the PDK-Management panel header (issue #700 follow-up, LC-T2):
+    /// opens <see cref="CreateCustomPdkWindow"/> directly, modal on the main window, instead of
+    /// going through the "New Component" assistant's "New PDK…" sentinel first. Built the same
+    /// way as that assistant's <c>CreateNewPdk</c> hook (<c>ShowNewComponentWindowAsync</c>
+    /// lambda above) — same view model, same available-processes filter, same
+    /// <see cref="ProcessManagementViewModel"/> definition editor — just with the main window as
+    /// owner and no parent assistant window to close afterwards. On success, the (possibly
+    /// component-less) new PDK is registered straight into the library via
+    /// <see cref="LeftPanel.RegisterCreatedPdk"/> so it appears in the list immediately.
+    /// </summary>
+    private async void PdkCreate_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return;
+
+        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
+            .Where(d => d.Process != null && !d.ProcessAgnostic)
+            .Select(d => d.Process!)
+            .ToList();
+        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
+            new IProcessImporter[]
+            {
+                new UpdkYamlProcessImporter(),
+                new NazcaCsvProcessImporter(),
+            }, new PdkJsonSaver());
+
+        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
+        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
+
+        string? createdPath = null;
+        createVm.PdkCreated += (_, path) =>
+        {
+            createdPath = path;
+            createWindow.Close();
+        };
+
+        try
+        {
+            await createWindow.ShowDialog(this);
+        }
+        catch
+        {
+            return;
+        }
+
+        if (createdPath is not null)
+            vm.LeftPanel.RegisterCreatedPdk(createdPath);
+    }
+
+    /// <summary>
     /// Creates and shows the Component Settings dialog for the given entity.
     ///
     /// Per-Instance mode (<paramref name="liveComponent"/> non-null): the dialog

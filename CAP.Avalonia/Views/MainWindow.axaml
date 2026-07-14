@@ -640,8 +640,17 @@
 
                 <!-- PDK Management rubric (own resizable section, like Hierarchy) -->
                 <DockPanel Grid.Row="6">
-                    <TextBlock DockPanel.Dock="Top" Text="PDK Management"
-                               FontWeight="Bold" Margin="10,6,10,4" Foreground="White"/>
+                    <DockPanel DockPanel.Dock="Top" Margin="10,6,10,4">
+                        <!-- Opens CreateCustomPdkWindow directly, no "New Component" detour
+                             (issue #700 follow-up, LC-T2) -->
+                        <Button DockPanel.Dock="Right" Content="+" Click="PdkCreate_Click"
+                                Width="22" Height="22" Padding="0" FontSize="14" FontWeight="Bold"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#3d3d3d" Foreground="White"
+                                ToolTip.Tip="Create custom PDK…"/>
+                        <TextBlock Text="PDK Management" VerticalAlignment="Center"
+                                   FontWeight="Bold" Foreground="White"/>
+                    </DockPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="5">
                             <TextBlock Text="{Binding LeftPanel.PdkManager.StatusText}"
