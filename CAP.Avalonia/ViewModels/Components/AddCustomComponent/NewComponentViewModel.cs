@@ -182,7 +182,9 @@ public partial class NewComponentViewModel : ObservableObject
     /// Renders the configured geometry reference, extracts its size and pins, and rasterises a
     /// thumbnail into <see cref="PreviewBitmap"/> via <see cref="PreviewBitmapFactory.FromResult"/>.
     /// A failed render (or a render with nothing to rasterise) clears <see cref="PreviewBitmap"/>
-    /// rather than leaving a stale bitmap behind.
+    /// rather than leaving a stale bitmap behind. Always re-renders — an explicit Preview click
+    /// invalidates any cached result first, unlike <see cref="Save"/>'s own call to
+    /// <see cref="EnsurePreviewAsync"/>, which reuses a still-valid one.
     /// </summary>
     [RelayCommand]
     private async Task RunPreview()
@@ -191,20 +193,44 @@ public partial class NewComponentViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var reference = BuildReference();
-            var result = await _extractor.ExtractAsync(reference);
-            _lastPreview = result;
-            HasPreview = result.Success;
-            PreviewBitmap = result.Success
-                ? PreviewBitmapFactory.FromResult(result.Raw, PreviewBitmapPixels)
-                : null;
-            StatusText = result.Success
-                ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
-                : result.Error ?? "Preview render failed.";
+            InvalidatePreview();
+            await EnsurePreviewAsync();
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Ensures <see cref="_lastPreview"/> holds a successful render, rendering one on demand if
+    /// it doesn't — the mechanism that lets <see cref="Save"/> (in the
+    /// <c>NewComponentViewModel.Save.cs</c> partial) work without a prior explicit
+    /// <see cref="RunPreview"/> click. Reuses an already-successful <see cref="_lastPreview"/>
+    /// verbatim (so a preceding Preview click is never re-rendered); otherwise renders exactly
+    /// like <see cref="RunPreview"/> does, updating <see cref="HasPreview"/>/
+    /// <see cref="PreviewBitmap"/>/<see cref="StatusText"/> either way. Does not touch
+    /// <see cref="IsBusy"/> itself: both callers already hold that guard for the duration of
+    /// their own command, and re-acquiring it here would be redundant at best and, for a
+    /// re-entrant caller, a way to defeat the guard.
+    /// </summary>
+    private async Task<bool> EnsurePreviewAsync()
+    {
+        if (_lastPreview is { Success: true })
+        {
+            return true;
+        }
+
+        var reference = BuildReference();
+        var result = await _extractor.ExtractAsync(reference);
+        _lastPreview = result;
+        HasPreview = result.Success;
+        PreviewBitmap = result.Success
+            ? PreviewBitmapFactory.FromResult(result.Raw, PreviewBitmapPixels)
+            : null;
+        StatusText = result.Success
+            ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
+            : result.Error ?? "Preview render failed.";
+        return result.Success;
     }
 }

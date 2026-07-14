@@ -112,24 +112,27 @@ public class NewComponentViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Changing_the_geometry_after_preview_invalidates_it_and_blocks_save()
+    public async Task Changing_the_geometry_after_preview_makesSaveRerenderTheNewCode()
     {
         var (vm, _) = Build(withFdtd: false);
         await vm.RunPreviewCommand.ExecuteAsync(null);
         vm.HasPreview.ShouldBeTrue();
         vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
-        // Edit the code without re-previewing: the rendered geometry no longer matches what
-        // would be saved, so Save must become impossible (drift guard, #656 review).
+        // Edit the code without re-previewing: the old drift-guard concern (#656 review) — that
+        // the rendered preview no longer matches what would be saved — is now moot, because Save
+        // re-renders from the current Code itself (EnsurePreviewAsync) whenever the cached
+        // preview was invalidated. So Save must stay reachable and must persist the NEW geometry,
+        // never a stale one.
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
-        vm.HasPreview.ShouldBeFalse();
-        vm.SaveCommand.CanExecute(null).ShouldBeFalse();
+        vm.HasPreview.ShouldBeFalse(); // cache invalidated...
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue(); // ...but Save no longer needs it
 
-        // Even if the command body is invoked directly (bypassing CanExecute), the cleared
-        // preview makes Save bail out — no mixed-geometry draft is ever persisted.
         await vm.SaveCommand.ExecuteAsync(null);
-        vm.SavedDraft.ShouldBeNull();
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.RawCode.ShouldContain("mmi1x2"); // saved the current code, freshly rendered
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

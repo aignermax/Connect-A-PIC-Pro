@@ -19,10 +19,13 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    /// <summary>Save requires a rendered preview, no work in flight, and a selected target PDK.</summary>
-    private bool CanSave => HasPreview && !IsBusy && SelectedCustomPdk is not null;
+    /// <summary>
+    /// Save no longer requires a prior explicit preview — it renders/validates on its own via
+    /// <see cref="NewComponentViewModel.EnsurePreviewAsync"/> — so this only requires no work in
+    /// flight and a selected target PDK.
+    /// </summary>
+    private bool CanSave => !IsBusy && SelectedCustomPdk is not null;
 
-    partial void OnHasPreviewChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
@@ -115,11 +118,6 @@ public partial class NewComponentViewModel
             StatusText = "Enter a component name before saving.";
             return;
         }
-        if (_lastPreview is not { Success: true } preview)
-        {
-            StatusText = "Render a preview before saving.";
-            return;
-        }
         var pdk = SelectedCustomPdk;
         if (pdk is null)
         {
@@ -130,6 +128,15 @@ public partial class NewComponentViewModel
         IsBusy = true;
         try
         {
+            // Renders/validates the current code itself when no (still-valid) preview exists —
+            // a prior explicit Preview click is no longer a prerequisite. A render failure (e.g.
+            // a Python syntax error) is reported via StatusText by EnsurePreviewAsync itself and
+            // aborts the save; nothing is ever persisted from a failed or stale render.
+            if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
+            {
+                return;
+            }
+
             var reference = BuildReference();
             var sMatrix = _computedModel is null
                 ? FdtdSMatrixToDraftConverter.BlackBox()
