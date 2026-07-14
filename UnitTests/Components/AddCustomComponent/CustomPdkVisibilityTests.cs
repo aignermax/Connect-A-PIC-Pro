@@ -157,4 +157,58 @@ public class CustomPdkVisibilityTests : IDisposable
         _leftPanel.FilteredTemplates.ShouldNotContain(t => t.PdkSource == "ForeignLib",
             "the value-incompatible PDK's component must not leak into the filtered library");
     }
+
+    /// <summary>
+    /// Guards the non-transitive-tolerance edge case: process compatibility is a tolerance band
+    /// (thickness ±5 nm), so two PDKs can share a catalog <c>ProcessGroup</c> (pairwise within
+    /// tolerance of EACH OTHER) while only one is within tolerance of the active process. The lock
+    /// must be computed per-PDK against the active fingerprint directly, never via a group
+    /// representative — otherwise a PDK that is over-tolerance to the active process would ride
+    /// into the allowed set on its group-mate's coat-tails (issue #570 violation).
+    /// </summary>
+    [Fact]
+    public void OverTolerancePdk_InSameCatalogGroupAsAllowedPdk_StaysBlocked()
+    {
+        // Active process at 213 nm (its own defining PDK is NOT loaded — the case where the
+        // stale snapshot would be useless anyway). Both custom PDKs below share core/cladding
+        // and are within ±5 nm of EACH OTHER (218 vs 222 = 4 nm) so the catalog groups them
+        // together — but only 218 nm is within ±5 nm of the active 213 nm (222 nm is 9 nm off).
+        var active = new ActiveProcessSelection(
+            DisplayName: "213 nm Process",
+            Fingerprint: new ProcessFingerprint("Si", 213, "SiO2", 1550, "213 nm Process"),
+            MemberPdkNames: new List<string>(),
+            IsPlayground: false);
+        _leftPanel.ApplyActiveProcess(active);
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var inTol = SimpleComponent("InTol Straight");
+        var outTol = SimpleComponent("OutTol Straight");
+        var inTolPath = store.SaveToNamedPdk("InTolLib", ProcessAt(218), inTol, "nazca", null);
+        var outTolPath = store.SaveToNamedPdk("OutTolLib", ProcessAt(222), outTol, "nazca", null);
+
+        _leftPanel.RegisterSavedCustomComponent(inTol, "InTolLib", inTolPath);
+        _leftPanel.RegisterSavedCustomComponent(outTol, "OutTolLib", outTolPath);
+
+        var inTolPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "InTolLib");
+        inTolPdk.IsEnabled.ShouldBeTrue("218 nm is within ±5 nm of the active 213 nm process");
+        inTolPdk.IsLockedByProcess.ShouldBeFalse();
+
+        var outTolPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "OutTolLib");
+        outTolPdk.IsEnabled.ShouldBeFalse("222 nm is 9 nm off the active 213 nm process — over tolerance, even though it shares a catalog group with the allowed 218 nm PDK");
+        outTolPdk.IsLockedByProcess.ShouldBeTrue();
+
+        _leftPanel.FilteredTemplates.ShouldContain(t => t.PdkSource == "InTolLib");
+        _leftPanel.FilteredTemplates.ShouldNotContain(t => t.PdkSource == "OutTolLib");
+    }
+
+    private static ProcessDefinition ProcessAt(double thicknessNm) => new()
+    {
+        Name = $"Si {thicknessNm} nm",
+        CoreThicknessNm = thicknessNm,
+        Materials = new List<ProcessMaterial>
+        {
+            new() { Name = "Si", Role = "core" },
+            new() { Name = "SiO2", Role = "cladding" },
+        },
+    };
 }

@@ -76,25 +76,31 @@ public partial class LeftPanelViewModel
     /// snapshot. That snapshot is fixed at the moment the process was selected/saved with the
     /// design; a custom PDK registered afterward (e.g. a named custom PDK that adopts a
     /// value-compatible CornerStone-preset process) is physically the same process but is
-    /// missing from the snapshot, so it would stay locked out forever. Instead this rebuilds
-    /// the process catalog fresh from every currently loaded PDK (<see cref="GetLoadedPdkProcessEntries"/>
-    /// via <see cref="ProcessCatalog.BuildGroups"/>) and returns the live member names of
-    /// whichever group is compatible with the active process's fingerprint
-    /// (<see cref="ProcessCompatibility.AreCompatible"/>) — falling back to the snapshot when
-    /// there is no fingerprint to match (legacy selections) or no live group matches (the
-    /// process's own PDK was since removed), so ordinary behavior is unchanged. The persisted
-    /// snapshot itself is never mutated — this only affects the runtime lock computed here.
+    /// missing from the snapshot, so it would stay locked out forever.
+    /// <para>
+    /// Instead this allows exactly those currently loaded PDKs whose OWN process fingerprint is
+    /// <see cref="ProcessCompatibility.AreCompatible"/> with the active process's fingerprint —
+    /// a direct per-PDK comparison against the active fingerprint, never a group-representative
+    /// match. That distinction matters because compatibility is deliberately non-transitive
+    /// (thickness/wavelength are tolerance bands): a <see cref="ProcessCatalog"/> group only
+    /// guarantees its members are pairwise-within-tolerance of each other, not that every member
+    /// is within tolerance of the active process. Comparing each PDK directly guarantees no
+    /// over-tolerance PDK is ever unlocked (issue #570).
+    /// </para>
+    /// Falls back to the snapshot when there is no fingerprint to match (legacy selections), so
+    /// ordinary behavior is unchanged. The persisted snapshot itself is never mutated — this only
+    /// affects the runtime lock computed here.
     /// </summary>
     private IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
     {
         if (active.Fingerprint is not { IsSpecified: true } fingerprint)
             return active.MemberPdkNames;
 
-        var liveGroups = ProcessCatalog.BuildGroups(GetLoadedPdkProcessEntries());
-        var match = liveGroups.FirstOrDefault(g =>
-            g.Fingerprint.IsSpecified && ProcessCompatibility.AreCompatible(g.Fingerprint, fingerprint));
-
-        return match?.MemberPdkNames ?? active.MemberPdkNames;
+        return GetLoadedPdkProcessEntries()
+            .Where(e => e.Fingerprint.IsSpecified &&
+                        ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint))
+            .Select(e => e.PdkName)
+            .ToList();
     }
 
     /// <summary>
