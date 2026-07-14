@@ -121,6 +121,31 @@ public partial class ProcessManagementViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Raised after <see cref="SaveProcess"/> has written the edited process back to a PDK's
+    /// JSON file on disk. The UI layer subscribes to re-apply the design's active process lock
+    /// by value, so an edit that changes a custom PDK's fingerprint (or newly declares one) is
+    /// reflected immediately without requiring a restart (issue #726 follow-up).
+    /// </summary>
+    public event EventHandler? ProcessSaved;
+
+    /// <summary>
+    /// Opens this editor scoped to exactly one custom PDK (issue #726 follow-up): the toolbar-wide
+    /// "Fabrication Process" dialog with its preset/import pickers is gone, replaced by a small
+    /// "Edit…" button per custom PDK in PDK Management. This loads <paramref name="draft"/>'s own
+    /// process (or a blank one named after the draft, if it declares none yet) and scopes
+    /// <see cref="SaveProcess"/> to that single PDK. It never reads or writes the design's active
+    /// fabrication process selection — only the PDK's own JSON file, via <see cref="PdkFilePathResolver"/>.
+    /// </summary>
+    public void LoadForSinglePdkEdit(PdkDraft draft)
+    {
+        Load(draft.Process ?? new ProcessDefinition { Name = draft.Name });
+        _memberDrafts = new List<PdkDraft> { draft };
+        StatusText = draft.Process == null
+            ? $"'{draft.Name}' has no process yet. Add layers, cross-sections and materials, then Save."
+            : $"Editing the process of '{draft.Name}'. Adjust as needed, then Save to PDK.";
+    }
+
+    /// <summary>
     /// Refreshes <see cref="AvailablePresets"/> from the currently loaded PDKs: any PDK that
     /// declares a <see cref="ProcessDefinition"/> (bundled or user-loaded) can seed the editor.
     /// Called by <see cref="ShowActiveProcess"/> every time the dialog opens, so the picker
@@ -371,6 +396,7 @@ public partial class ProcessManagementViewModel : ObservableObject
 
             _pdkSaver.SaveToFile(draft, path);
             StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+            ProcessSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {

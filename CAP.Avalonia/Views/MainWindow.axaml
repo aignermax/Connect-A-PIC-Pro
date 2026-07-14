@@ -249,16 +249,6 @@
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 
-                <!-- Fabrication process (layer stack, cross-sections, materials) — top-level
-                     shortcut so it doesn't require scrolling the right panel (#682/#570). -->
-                <Button Command="{Binding OpenProcessManagerCommand}"
-                        Width="36" Margin="2" Background="#3d3d3d"
-                        ToolTip.Tip="Fabrication process — layer stack, cross-sections, materials (opens the process manager)">
-                    <TextBlock Text="🧱" FontSize="16" VerticalAlignment="Center" HorizontalAlignment="Center"/>
-                </Button>
-
-                <Separator Width="1" Background="Gray" Margin="10,5"/>
-
                 <!-- Settings -->
                 <Button Command="{Binding OpenSettingsWindowCommand}"
                         Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="Open Settings (grid snap, updates, Python environment, AI key)">
@@ -676,7 +666,14 @@
                                                 <TextBlock Text="{Binding SourceBadge}"
                                                            FontSize="9" Foreground="Gray" Margin="0,0,5,0"/>
                                                 <TextBlock Text="{Binding ComponentCount, StringFormat={}{0} components}"
-                                                           FontSize="9" Foreground="Gray"/>
+                                                           FontSize="9" Foreground="Gray" Margin="0,0,5,0"/>
+                                                <!-- Edits this custom PDK's own fabrication process (layer
+                                                     stack, cross-sections, materials) — issue #726 follow-up.
+                                                     Bundled PDKs are read-only and have no Edit button. -->
+                                                <Button Content="Edit…" IsVisible="{Binding !IsBundled}"
+                                                        Click="PdkEditProcess_Click"
+                                                        FontSize="9" Padding="6,1" Background="#3d3d3d"
+                                                        ToolTip.Tip="Edit this PDK's fabrication process — layer stack, cross-sections, materials"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>
