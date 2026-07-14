@@ -916,13 +916,14 @@ public partial class MainViewModel : ObservableObject
             c => c.Component,
             c => c.TemplatePdkSource ?? CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component));
 
-        // The PDK-compatibility check is only meaningful under a real process lock: with no
-        // active process (or Playground) the placement policy allows everything, so flagging a
-        // component — e.g. from a trash-deleted, hence no-longer-loaded PDK — against a process
-        // that doesn't exist would be a false positive (PR #739 review). Passing null skips it.
-        var compatiblePdkNames = FileOperations.ActiveProcess is { IsPlayground: false }
-            ? LeftPanel.PdkManager.GetProcessCompatiblePdkNames()
-            : null;
+        // Under a real process lock the allowed set is the lock-derived membership; without one
+        // (Playground/no selection) nothing is locked, so GetProcessCompatiblePdkNames() equals
+        // all loaded PDK names and only a component whose PDK isn't loaded at all (e.g.
+        // trash-deleted while its placed instances were kept, as PdkDelete_Click promises) gets
+        // flagged — with a "not loaded" wording instead of a process-mismatch message that would
+        // reference a process that doesn't exist (PR #739 review, both directions).
+        var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
+        var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
 
         RightPanel.DesignValidation.RunValidation(
             connections,
@@ -932,7 +933,8 @@ public partial class MainViewModel : ObservableObject
             ChipSize.CurrentHeightMicrometers,
             pdkSourceByComponent,
             LeftPanel.GetProcessAgnosticPdkNames(),
-            compatiblePdkNames);
+            compatiblePdkNames,
+            processLockActive);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

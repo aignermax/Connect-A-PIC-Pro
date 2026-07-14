@@ -314,8 +314,16 @@ public partial class LeftPanelViewModel : ObservableObject
         if (enabledPdks.Count == 0)
             return;
 
+        var knownPdks = _preferencesService.GetKnownPdks();
         foreach (var pdk in PdkManager.LoadedPdks)
         {
+            // A PDK the last save never saw (e.g. created under a process lock, where the
+            // filter state is deliberately not persisted) keeps its default enabled state —
+            // only a KNOWN name absent from the enabled set was deliberately unchecked
+            // (PR #739 review). Empty known list = legacy preferences; fall back to the old
+            // enabled-set-only interpretation.
+            if (knownPdks.Count > 0 && !knownPdks.Contains(pdk.Name))
+                continue;
             pdk.IsEnabled = enabledPdks.Contains(pdk.Name);
         }
 
@@ -329,8 +337,9 @@ public partial class LeftPanelViewModel : ObservableObject
         if (!PdkManager.ManualTogglesEnabled)
             return;
 
-        var enabledPdks = PdkManager.GetEnabledPdkNames();
-        _preferencesService.SetEnabledPdks(enabledPdks);
+        _preferencesService.SetPdkFilterState(
+            PdkManager.GetEnabledPdkNames(),
+            PdkManager.LoadedPdks.Select(p => p.Name));
     }
 
     private void RestoreLeftPanelWidth()

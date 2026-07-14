@@ -49,9 +49,10 @@ public partial class LeftPanelViewModel
         // restarts — otherwise the FilterComponents() below would persist it back to enabled and
         // silently destroy the user's choice every launch (PR #739 review). Skipped under an
         // active process lock, where the enabled set is derived state, not the user's selection.
-        if (PdkManager.ManualTogglesEnabled)
-            RestorePdkFilterState();
-        FilterComponents();
+        if (PdkManager.ManualTogglesEnabled && _preferencesService.GetEnabledPdks().Count > 0)
+            RestorePdkFilterState(); // runs FilterComponents (and persists) itself
+        else
+            FilterComponents();
         return Task.CompletedTask;
     }
 

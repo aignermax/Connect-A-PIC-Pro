@@ -169,13 +169,22 @@ public class DesignValidator
     /// which are exempt). Resolution is a caller concern — this method only judges names.
     /// </param>
     /// <param name="processAgnosticPdkNames">PDK names exempt from process enforcement (tool libraries).</param>
-    /// <param name="enabledPdkNames">PDK names currently allowed under the active process lock.</param>
+    /// <param name="enabledPdkNames">
+    /// PDK names currently allowed: under an active process lock the lock-derived member set;
+    /// without one (Playground/no selection) all loaded PDK names — a component only gets flagged
+    /// there when its PDK isn't loaded at all (e.g. trash-deleted while its instances were kept).
+    /// </param>
+    /// <param name="processLockActive">
+    /// Whether a real (non-Playground) fabrication process is active. Only selects the issue
+    /// wording: a process-mismatch message would be wrong when no process exists to mismatch.
+    /// </param>
     /// <returns>One issue per conflicted component, empty when every component's PDK is exempt or enabled.</returns>
     public List<DesignIssue> ValidateComponentPdkCompatibility(
         IEnumerable<Component> components,
         IReadOnlyDictionary<Component, string?> pdkSourceByComponent,
         IReadOnlyCollection<string> processAgnosticPdkNames,
-        IReadOnlyCollection<string> enabledPdkNames)
+        IReadOnlyCollection<string> enabledPdkNames,
+        bool processLockActive = true)
     {
         ArgumentNullException.ThrowIfNull(components);
         ArgumentNullException.ThrowIfNull(pdkSourceByComponent);
@@ -200,7 +209,9 @@ public class DesignValidator
                 connection: null,
                 x: centerX,
                 y: centerY,
-                description: $"'{name}' belongs to '{pdkSource}', which no longer matches the active process."));
+                description: processLockActive
+                    ? $"'{name}' belongs to '{pdkSource}', which no longer matches the active process."
+                    : $"'{name}' belongs to '{pdkSource}', which is not loaded (the PDK may have been deleted or moved)."));
         }
 
         return issues;

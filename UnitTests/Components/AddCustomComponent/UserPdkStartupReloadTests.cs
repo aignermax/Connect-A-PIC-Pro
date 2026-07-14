@@ -192,4 +192,32 @@ public class UserPdkStartupReloadTests : IDisposable
         _leftPanel.FilteredTemplates.ShouldNotContain(t => t.Name == "Straight A",
             "the active process lock must still govern a PDK reloaded at startup");
     }
+
+    /// <summary>
+    /// PR #739 review, both directions: a user PDK that was deliberately unchecked (known to the
+    /// last save, absent from the enabled set) must come back unchecked after the startup reload —
+    /// while a PDK the save never saw (e.g. created under a process lock, where the filter state
+    /// is not persisted) must keep its default enabled state instead of being treated as
+    /// deliberately unchecked.
+    /// </summary>
+    [Fact]
+    public async Task ReloadUserPdksAtStartupAsync_respectsPersistedUncheck_butKeepsUnknownPdkEnabled()
+    {
+        SeedRoot(); // PdkA (with component) + PdkB (empty)
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        store.CreateNamedPdkWithProcess("PdkC", SimpleProcess("Process C"), "nazca", null);
+
+        // Last session: PdkA+PdkB were loaded, the user unchecked PdkB; PdkC did not exist yet.
+        _preferencesService.SetPdkFilterState(
+            enabledPdkNames: new[] { "PdkA" },
+            knownPdkNames: new[] { "PdkA", "PdkB" });
+
+        await _leftPanel.ReloadUserPdksAtStartupAsync(_userPdkRoot);
+
+        _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "PdkA").IsEnabled.ShouldBeTrue();
+        _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "PdkB").IsEnabled.ShouldBeFalse(
+            "a deliberately unchecked PDK must stay unchecked across restarts");
+        _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "PdkC").IsEnabled.ShouldBeTrue(
+            "a PDK the last save never saw must not be treated as deliberately unchecked");
+    }
 }

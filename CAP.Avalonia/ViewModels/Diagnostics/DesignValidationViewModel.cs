@@ -76,7 +76,8 @@ public partial class DesignValidationViewModel : ObservableObject
         double chipHeightMicrometers = 0,
         IReadOnlyDictionary<Component, string?>? pdkSourceByComponent = null,
         IReadOnlyCollection<string>? processAgnosticPdkNames = null,
-        IReadOnlyCollection<string>? enabledPdkNames = null)
+        IReadOnlyCollection<string>? enabledPdkNames = null,
+        bool processLockActive = true)
     {
         Issues.Clear();
         CurrentIndex = -1;
@@ -102,7 +103,7 @@ public partial class DesignValidationViewModel : ObservableObject
         {
             var pdkIssues = _validator.ValidateComponentPdkCompatibility(
                 allComponents, pdkSourceByComponent,
-                processAgnosticPdkNames ?? Array.Empty<string>(), enabledPdkNames);
+                processAgnosticPdkNames ?? Array.Empty<string>(), enabledPdkNames, processLockActive);
 
             foreach (var issue in pdkIssues)
                 Issues.Add(issue);
