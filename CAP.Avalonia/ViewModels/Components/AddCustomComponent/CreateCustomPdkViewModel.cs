@@ -159,13 +159,46 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     /// <summary>
     /// Prefills the "Define new" editor from the chosen template. A no-op on clearing the
     /// selection (value == null) so the editor is left exactly as the user last edited it.
+    /// Loads a deep copy, never <paramref name="value"/> itself: <see cref="AvailableProcesses"/>
+    /// entries can be the live, in-memory <see cref="ProcessDefinition"/> of an already-loaded PDK
+    /// (see <c>MainWindow.axaml.cs</c>'s <c>d.Process!</c> wiring), and <see cref="ProcessManagementViewModel.Load"/>
+    /// only copies collection references — editing the prefilled grid rows would otherwise mutate
+    /// that other PDK's process object in place.
     /// </summary>
     partial void OnSelectedTemplateChanged(ProcessDefinition? value)
     {
         if (value == null)
             return;
 
-        ProcessDefinitionEditor.Load(value);
+        ProcessDefinitionEditor.Load(CloneForTemplate(value));
         CoreThicknessNm = value.CoreThicknessNm;
     }
+
+    /// <summary>
+    /// Deep-copies a process definition so it can be handed to <see cref="ProcessDefinitionEditor"/>
+    /// as an independent starting point (see <see cref="OnSelectedTemplateChanged"/>) without ever
+    /// aliasing the original template's rows.
+    /// </summary>
+    private static ProcessDefinition CloneForTemplate(ProcessDefinition source) => new()
+    {
+        Name = source.Name,
+        Foundry = source.Foundry,
+        Version = source.Version,
+        CoreThicknessNm = source.CoreThicknessNm,
+        Layers = source.Layers.Select(l => new ProcessLayer
+        {
+            Name = l.Name, Layer = l.Layer, Datatype = l.Datatype, Field = l.Field, Description = l.Description,
+        }).ToList(),
+        Xsections = source.Xsections.Select(x => new ProcessXsection
+        {
+            Name = x.Name, Kind = x.Kind, WidthUm = x.WidthUm, MinRadiusUm = x.MinRadiusUm,
+            RecommendedRadiusUm = x.RecommendedRadiusUm, Layers = new List<string>(x.Layers), Description = x.Description,
+        }).ToList(),
+        Materials = source.Materials.Select(m => new ProcessMaterial
+        {
+            Name = m.Name, NByWavelengthNm = new Dictionary<int, double>(m.NByWavelengthNm), Role = m.Role,
+        }).ToList(),
+        AllowedAngles = new List<int>(source.AllowedAngles),
+        ElectricalBridgeRequired = source.ElectricalBridgeRequired,
+    };
 }

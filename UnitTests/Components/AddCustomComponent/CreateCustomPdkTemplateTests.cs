@@ -94,6 +94,12 @@ public class CreateCustomPdkTemplateTests : IDisposable
         reloaded.Process!.Xsections.Single(x => x.Name == "strip").WidthUm.ShouldBe(0.9,
             "the saved process must reflect the user's edit on top of the template, not the template's original value");
         reloaded.Process.CoreThicknessNm.ShouldBe(310);
+
+        // The template is a live process object (in the real app it can be the in-memory
+        // ProcessDefinition of an already-loaded PDK) — editing the prefilled editor must never
+        // mutate it, so the template stays a copy-on-select, not a shared reference.
+        template.Xsections.Single(x => x.Name == "strip").WidthUm.ShouldBe(0.5,
+            "editing the prefilled editor must not mutate the original template's process object");
     }
 
     [Fact]
