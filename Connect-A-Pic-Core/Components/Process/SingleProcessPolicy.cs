@@ -32,11 +32,26 @@ public static class SingleProcessPolicy
     /// design locked to <paramref name="active"/>. Built-ins, process-agnostic PDKs (tool
     /// libraries such as "Analysis Tools" — see <paramref name="processAgnosticPdkNames"/>),
     /// Playground, and an unset selection always pass; otherwise the component's PDK must be a
-    /// member of the active process.
+    /// member of the active process — either in the persisted <paramref name="active"/>
+    /// snapshot or in <paramref name="liveMemberPdkNames"/>.
     /// </summary>
+    /// <param name="active">The design's active process selection, or null when unset.</param>
+    /// <param name="componentPdkName">PDK source of the component being placed.</param>
+    /// <param name="processAgnosticPdkNames">Names of PDKs flagged process-agnostic (tool libraries).</param>
+    /// <param name="liveMemberPdkNames">
+    /// The by-value-compatible member PDK names for <paramref name="active"/>, recomputed against
+    /// the live catalog (see <c>LeftPanelViewModel.GetLiveMemberPdkNames</c>, issue #732) rather
+    /// than trusted from <paramref name="active"/>'s persisted
+    /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot. That snapshot is fixed at the
+    /// moment the process was selected/saved with the design, so a custom PDK registered
+    /// afterward — even one that is physically the same process — is missing from it and would
+    /// stay locked out forever without this live set. Null (unwired caller) falls back to the
+    /// snapshot only, preserving prior behavior.
+    /// </param>
     public static (bool IsAllowed, string? BlockReason) CheckPlacement(
         ActiveProcessSelection? active, string? componentPdkName,
-        IReadOnlyCollection<string>? processAgnosticPdkNames = null)
+        IReadOnlyCollection<string>? processAgnosticPdkNames = null,
+        IReadOnlyCollection<string>? liveMemberPdkNames = null)
     {
         if (IsExempt(componentPdkName, processAgnosticPdkNames))
             return (true, null);
@@ -45,6 +60,9 @@ public static class SingleProcessPolicy
             return (true, null);
 
         if (active.MemberPdkNames.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
+            return (true, null);
+
+        if (liveMemberPdkNames?.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase) ?? false)
             return (true, null);
 
         return (false,

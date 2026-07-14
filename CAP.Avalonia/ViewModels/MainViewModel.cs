@@ -292,11 +292,18 @@ public partial class MainViewModel : ObservableObject
         // their own, so children are resolved against the loaded library).
         Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
         Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
+        // By-value member PDKs for the active process (issue placement-livemembers, #732): a
+        // custom PDK registered after the process was saved is missing from its persisted
+        // MemberPdkNames snapshot but may still be the same process by value — this recomputes
+        // the allowed set live against the current catalog, same as the library-filter lock.
+        Func<IReadOnlyCollection<string>?> getLiveMemberPdkNames = () =>
+            FileOperations.ActiveProcess is { } activeProcess ? LeftPanel.GetLiveMemberPdkNames(activeProcess) : null;
         Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
             ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
 
         CanvasInteraction.GetActiveProcess = getActiveProcess;
         CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+        CanvasInteraction.GetLiveMemberPdkNames = getLiveMemberPdkNames;
         CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
 
@@ -309,6 +316,7 @@ public partial class MainViewModel : ObservableObject
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
+            aiGrid.GetLiveMemberPdkNames = getLiveMemberPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
             aiGrid.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         }

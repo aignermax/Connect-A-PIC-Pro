@@ -55,4 +55,52 @@ public class SingleProcessPolicyTests
         // Without the agnostic set it stays blocked (default overload behavior unchanged):
         SingleProcessPolicy.CheckPlacement(Soi(), "Analysis Tools").IsAllowed.ShouldBeFalse();
     }
+
+    /// <summary>
+    /// A custom PDK registered after the process was saved cannot be in the persisted
+    /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot, but is value-compatible
+    /// with the active process, so the live-membership set (#732) resolved by
+    /// <c>LeftPanelViewModel.GetLiveMemberPdkNames</c> must still allow it.
+    /// </summary>
+    [Fact]
+    public void PdkNotInSnapshot_ButInLiveMemberSet_IsAllowed()
+    {
+        var live = new[] { "MyLib" };
+        SingleProcessPolicy.CheckPlacement(Soi(), "MyLib", liveMemberPdkNames: live)
+            .IsAllowed.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// A PDK absent from both the persisted snapshot and the live member set (i.e. genuinely
+    /// value-incompatible with the active process) must remain blocked with the usual reason.
+    /// </summary>
+    [Fact]
+    public void PdkNotInSnapshot_AndNotInLiveMemberSet_IsBlocked()
+    {
+        var live = new[] { "MyLib" };
+        var (ok, reason) = SingleProcessPolicy.CheckPlacement(Soi(), "HHI-InP", liveMemberPdkNames: live);
+
+        ok.ShouldBeFalse();
+        reason.ShouldNotBeNull();
+        reason!.ShouldContain("HHI-InP");
+        reason.ShouldContain("SOI 220");
+    }
+
+    /// <summary>Live-member matching is case-insensitive, like the snapshot check.</summary>
+    [Fact]
+    public void LiveMemberSet_MatchIsCaseInsensitive()
+    {
+        SingleProcessPolicy.CheckPlacement(Soi(), "mylib", liveMemberPdkNames: new[] { "MyLib" })
+            .IsAllowed.ShouldBeTrue();
+    }
+
+    /// <summary>A null live-member set (unwired callback) must behave exactly like before.</summary>
+    [Fact]
+    public void NoLiveMemberSet_FallsBackToSnapshotOnly()
+    {
+        SingleProcessPolicy.CheckPlacement(Soi(), "Custom SOI", liveMemberPdkNames: null)
+            .IsAllowed.ShouldBeTrue("still allowed via the persisted snapshot");
+        SingleProcessPolicy.CheckPlacement(Soi(), "HHI-InP", liveMemberPdkNames: null)
+            .IsAllowed.ShouldBeFalse("no live set provided — foreign PDK stays blocked");
+    }
 }

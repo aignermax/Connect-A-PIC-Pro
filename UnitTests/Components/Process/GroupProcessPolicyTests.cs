@@ -89,4 +89,33 @@ public class GroupProcessPolicyTests
 
         isAllowed.ShouldBeTrue();
     }
+
+    /// <summary>
+    /// A child from a PDK missing from the persisted snapshot but present in the live
+    /// by-value member set (#732) must not block the group — mirrors
+    /// <c>SingleProcessPolicyTests.PdkNotInSnapshot_ButInLiveMemberSet_IsAllowed</c> at the
+    /// group level.
+    /// </summary>
+    [Fact]
+    public void ChildPdkOnlyInLiveMemberSet_IsAllowed()
+    {
+        var (isAllowed, _) = GroupProcessPolicy.CheckGroupPlacement(
+            Soi("Demo"), new[] { "Demo", "MyLib" },
+            liveMemberPdkNames: new[] { "MyLib" });
+
+        isAllowed.ShouldBeTrue();
+    }
+
+    /// <summary>A child PDK in neither the snapshot nor the live set still blocks the group.</summary>
+    [Fact]
+    public void ChildPdkNotInSnapshotOrLiveSet_StillBlocksGroup()
+    {
+        var (isAllowed, reason) = GroupProcessPolicy.CheckGroupPlacement(
+            Soi("Demo"), new[] { "Demo", "HHI-InP" },
+            liveMemberPdkNames: new[] { "MyLib" });
+
+        isAllowed.ShouldBeFalse();
+        reason.ShouldNotBeNull();
+        reason!.ShouldContain("HHI-InP");
+    }
 }

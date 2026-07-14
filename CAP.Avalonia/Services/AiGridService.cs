@@ -31,6 +31,14 @@ public class AiGridService : IAiGridService
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
     /// <summary>
+    /// By-value-compatible member PDK names for the active process (issue placement-livemembers),
+    /// mirroring <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> so the AI placement path
+    /// obeys the same by-value process lock as manual placement (#732). Wired by
+    /// <c>MainViewModel</c> to <c>LeftPanelViewModel.GetLiveMemberPdkNames</c>.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }
+
+    /// <summary>
     /// Resolves a placed core component's PDK source from the loaded library
     /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
     /// path checks the group's children instead of the group's null source (#653).
@@ -48,7 +56,8 @@ public class AiGridService : IAiGridService
     private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
         SingleProcessPolicy.CheckPlacement(
             GetActiveProcess?.Invoke(), pdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            GetLiveMemberPdkNames?.Invoke());
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

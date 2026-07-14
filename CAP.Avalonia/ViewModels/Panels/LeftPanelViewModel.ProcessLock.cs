@@ -104,6 +104,18 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
+    /// Public accessor for <see cref="ResolveLiveMemberPdkNames"/>, so placement/paste/AI-grid
+    /// callers can consult the same by-value member set the library-filter lock above uses,
+    /// instead of trusting <paramref name="active"/>'s persisted
+    /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot (issue placement-livemembers,
+    /// building on #732). Internal — wired by <c>MainViewModel</c> into
+    /// <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> and
+    /// <c>AiGridService.GetLiveMemberPdkNames</c>; <c>UnitTests</c> has InternalsVisibleTo.
+    /// </summary>
+    internal IReadOnlyList<string> GetLiveMemberPdkNames(ActiveProcessSelection active) =>
+        ResolveLiveMemberPdkNames(active);
+
+    /// <summary>
     /// The most recently applied process selection. Re-applied when a PDK is loaded
     /// afterwards, so importing a PDK while a process is locked cannot slip foreign
     /// components into the library (issue #570).
