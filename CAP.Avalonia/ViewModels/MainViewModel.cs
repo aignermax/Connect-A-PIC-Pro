@@ -297,7 +297,7 @@ public partial class MainViewModel : ObservableObject
         // MemberPdkNames snapshot but may still be the same process by value — this recomputes
         // the allowed set live against the current catalog, same as the library-filter lock.
         Func<IReadOnlyCollection<string>?> getLiveMemberPdkNames = () =>
-            FileOperations.ActiveProcess is { } activeProcess ? LeftPanel.GetLiveMemberPdkNames(activeProcess) : null;
+            FileOperations.ActiveProcess is { } activeProcess ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess) : null;
         Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
             ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
 

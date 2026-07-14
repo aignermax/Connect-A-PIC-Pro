@@ -60,7 +60,7 @@ public class CustomPdkVisibilityTests : IDisposable
         var interaction = new CanvasInteractionViewModel(_canvas, new CommandManager());
         interaction.GetActiveProcess = () => active;
         interaction.GetProcessAgnosticPdkNames = () => _leftPanel.GetProcessAgnosticPdkNames();
-        interaction.GetLiveMemberPdkNames = () => _leftPanel.GetLiveMemberPdkNames(active);
+        interaction.GetLiveMemberPdkNames = () => _leftPanel.ResolveLiveMemberPdkNames(active);
         return interaction;
     }
 
@@ -82,7 +82,7 @@ public class CustomPdkVisibilityTests : IDisposable
     /// <summary>
     /// Locks the library to a real process built from the bundled Demo PDK's own fingerprint.
     /// Returns the applied selection so callers can reuse the identical snapshot (e.g. to feed
-    /// <see cref="LeftPanelViewModel.GetLiveMemberPdkNames"/> the same way <c>MainViewModel</c> does).
+    /// <see cref="LeftPanelViewModel.ResolveLiveMemberPdkNames"/> the same way <c>MainViewModel</c> does).
     /// </summary>
     private ActiveProcessSelection ApplyDemoProcessLock()
     {
@@ -184,7 +184,7 @@ public class CustomPdkVisibilityTests : IDisposable
     /// Reproduces the field bug directly at the placement guard (not just the library filter):
     /// a component from a value-compatible custom PDK registered after the process was saved
     /// must be placeable via <see cref="CanvasInteractionViewModel.PlaceComponentAt"/>, using the
-    /// live member set from <see cref="LeftPanelViewModel.GetLiveMemberPdkNames"/> rather than the
+    /// live member set from <see cref="LeftPanelViewModel.ResolveLiveMemberPdkNames"/> rather than the
     /// stale <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot.
     /// </summary>
     [Fact]

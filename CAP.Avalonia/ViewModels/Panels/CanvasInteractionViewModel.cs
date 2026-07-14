@@ -129,7 +129,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// trusting the persisted <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot
     /// (#732). This is what allows a custom PDK registered after the process was saved — but
     /// physically the same process — to be placed/pasted. Wired by <c>MainViewModel</c> to
-    /// <c>LeftPanelViewModel.GetLiveMemberPdkNames</c>; null when unwired falls back to the
+    /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>; null when unwired falls back to the
     /// snapshot-only check.
     /// </summary>
     public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }

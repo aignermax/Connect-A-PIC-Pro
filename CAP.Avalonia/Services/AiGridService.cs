@@ -34,7 +34,7 @@ public class AiGridService : IAiGridService
     /// By-value-compatible member PDK names for the active process (issue placement-livemembers),
     /// mirroring <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> so the AI placement path
     /// obeys the same by-value process lock as manual placement (#732). Wired by
-    /// <c>MainViewModel</c> to <c>LeftPanelViewModel.GetLiveMemberPdkNames</c>.
+    /// <c>MainViewModel</c> to <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>.
     /// </summary>
     public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }
 

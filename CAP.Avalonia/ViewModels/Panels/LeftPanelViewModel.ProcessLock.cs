@@ -90,8 +90,16 @@ public partial class LeftPanelViewModel
     /// Falls back to the snapshot when there is no fingerprint to match (legacy selections), so
     /// ordinary behavior is unchanged. The persisted snapshot itself is never mutated — this only
     /// affects the runtime lock computed here.
+    /// <para>
+    /// Internal (not private): besides the library-filter lock above, the placement/paste/AI-grid
+    /// guards consult this same set (wired by <c>MainViewModel</c> into
+    /// <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> and
+    /// <c>AiGridService.GetLiveMemberPdkNames</c>, plus the metal-spec providers), so the library
+    /// filter and every placement surface always agree on membership. <c>UnitTests</c> has
+    /// InternalsVisibleTo.
+    /// </para>
     /// </summary>
-    private IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
+    internal IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
     {
         if (active.Fingerprint is not { IsSpecified: true } fingerprint)
             return active.MemberPdkNames;
@@ -102,18 +110,6 @@ public partial class LeftPanelViewModel
             .Select(e => e.PdkName)
             .ToList();
     }
-
-    /// <summary>
-    /// Public accessor for <see cref="ResolveLiveMemberPdkNames"/>, so placement/paste/AI-grid
-    /// callers can consult the same by-value member set the library-filter lock above uses,
-    /// instead of trusting <paramref name="active"/>'s persisted
-    /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot (issue placement-livemembers,
-    /// building on #732). Internal — wired by <c>MainViewModel</c> into
-    /// <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> and
-    /// <c>AiGridService.GetLiveMemberPdkNames</c>; <c>UnitTests</c> has InternalsVisibleTo.
-    /// </summary>
-    internal IReadOnlyList<string> GetLiveMemberPdkNames(ActiveProcessSelection active) =>
-        ResolveLiveMemberPdkNames(active);
 
     /// <summary>
     /// The most recently applied process selection. Re-applied when a PDK is loaded
