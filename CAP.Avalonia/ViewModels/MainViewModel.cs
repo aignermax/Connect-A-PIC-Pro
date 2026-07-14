@@ -906,12 +906,25 @@ public partial class MainViewModel : ObservableObject
             .Select(c => c.Component)
             .ToList();
 
+        // PDK-process compatibility (issue #570 follow-up, LC-T4): resolve each placed
+        // component's PDK source the same way the placement/paste guards do — the snapshot
+        // TemplatePdkSource captured when it was placed, falling back to a live library match
+        // (see ComponentClipboard/FileOperationsViewModel for the same fallback) — so a process
+        // edit that diverges a PDK from the design's active process is flagged for review even
+        // though the already-placed components themselves are never touched or deleted.
+        var pdkSourceByComponent = Canvas.Components.ToDictionary(
+            c => c.Component,
+            c => c.TemplatePdkSource ?? CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component));
+
         RightPanel.DesignValidation.RunValidation(
             connections,
             groups,
             allComponents,
             ChipSize.CurrentWidthMicrometers,
-            ChipSize.CurrentHeightMicrometers);
+            ChipSize.CurrentHeightMicrometers,
+            pdkSourceByComponent,
+            LeftPanel.GetProcessAgnosticPdkNames(),
+            LeftPanel.PdkManager.GetEnabledPdkNames());
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

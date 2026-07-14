@@ -57,19 +57,26 @@ public partial class DesignValidationViewModel : ObservableObject
     /// <summary>
     /// Runs design validation on the provided connections.
     /// Detects invalid geometry, blocked paths, overlaps with frozen group paths,
-    /// and (when chip bounds are provided) out-of-bounds component placement.
+    /// (when chip bounds are provided) out-of-bounds component placement, and (when PDK
+    /// data is provided) placed components whose PDK no longer matches the active process.
     /// </summary>
     /// <param name="connections">Waveguide connections to validate.</param>
     /// <param name="groups">ComponentGroups whose frozen paths are checked for overlap. Optional.</param>
-    /// <param name="allComponents">All placed components checked against chip bounds. Optional.</param>
+    /// <param name="allComponents">All placed components checked against chip bounds and PDK compatibility. Optional.</param>
     /// <param name="chipWidthMicrometers">Chip boundary width; ignored when ≤0. Optional.</param>
     /// <param name="chipHeightMicrometers">Chip boundary height; ignored when ≤0. Optional.</param>
+    /// <param name="pdkSourceByComponent">Each component's resolved PDK source name. Optional — skips the PDK check when absent.</param>
+    /// <param name="processAgnosticPdkNames">PDK names exempt from process enforcement (tool libraries). Optional.</param>
+    /// <param name="enabledPdkNames">PDK names currently allowed under the active process lock. Optional — skips the PDK check when absent.</param>
     public void RunValidation(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup>? groups = null,
         IEnumerable<Component>? allComponents = null,
         double chipWidthMicrometers = 0,
-        double chipHeightMicrometers = 0)
+        double chipHeightMicrometers = 0,
+        IReadOnlyDictionary<Component, string?>? pdkSourceByComponent = null,
+        IReadOnlyCollection<string>? processAgnosticPdkNames = null,
+        IReadOnlyCollection<string>? enabledPdkNames = null)
     {
         Issues.Clear();
         CurrentIndex = -1;
@@ -88,6 +95,16 @@ public partial class DesignValidationViewModel : ObservableObject
                 allComponents, chipWidthMicrometers, chipHeightMicrometers);
 
             foreach (var issue in boundsIssues)
+                Issues.Add(issue);
+        }
+
+        if (allComponents is not null && pdkSourceByComponent is not null && enabledPdkNames is not null)
+        {
+            var pdkIssues = _validator.ValidateComponentPdkCompatibility(
+                allComponents, pdkSourceByComponent,
+                processAgnosticPdkNames ?? Array.Empty<string>(), enabledPdkNames);
+
+            foreach (var issue in pdkIssues)
                 Issues.Add(issue);
         }
 

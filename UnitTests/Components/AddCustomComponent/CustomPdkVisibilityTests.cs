@@ -467,4 +467,75 @@ public class CustomPdkVisibilityTests : IDisposable
             "with no reference PDK loaded, fingerprint compatibility alone must still unlock the candidate");
         clashingPdk.IsLockedByProcess.ShouldBeFalse();
     }
+
+    /// <summary>
+    /// LC-T3 review finding fix: the layer-consistency reference must prefer a BUNDLED snapshot
+    /// member over a custom one, regardless of which was loaded first. Reproduced here by
+    /// registering the custom PDK BEFORE calling <c>Initialize()</c> (which loads the bundled
+    /// Demo PDK), so the custom draft lands earlier in the internal loaded-drafts list — the
+    /// exact ordering the old "first loaded snapshot member" rule got wrong. Without the fix, the
+    /// renumbered custom PDK would be picked as reference and — since it trivially matches
+    /// itself — would stay enabled while the real bundled Foundry PDK (whose layers actually
+    /// differ from the custom draft) would be wrongly excluded from the live member set.
+    /// </summary>
+    [Fact]
+    public void RenumberedCustomPdkLoadedBeforeFoundry_ReferenceStaysFoundry_CustomFallsOut()
+    {
+        var preferencesService = new UserPreferencesService(_testPrefsPath);
+        var canvas = new DesignCanvasViewModel();
+        var groupLibrary = new GroupLibraryManager();
+        var pdkLoader = new PdkLoader();
+        var leftPanel = new LeftPanelViewModel(canvas, groupLibrary, pdkLoader, preferencesService,
+            new HierarchyPanelViewModel(canvas), new PdkManagerViewModel(),
+            new ComponentLibraryViewModel(groupLibrary));
+
+        var renumberedProcess = new ProcessDefinition
+        {
+            Name = "Renumbered Process",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 999, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var component = SimpleComponent("MyCustom Straight");
+        var path = store.SaveToNamedPdk("MyCustom", renumberedProcess, component, "nazca", null);
+
+        // Registered BEFORE Initialize(): lands earlier in the internal loaded-drafts list than
+        // the bundled Demo PDK that Initialize() loads next — reproducing "custom loaded before
+        // the bundled Foundry reference" without needing a second bundled PDK file.
+        leftPanel.RegisterSavedCustomComponent(component, "MyCustom", path);
+        leftPanel.Initialize();
+
+        var demoName = leftPanel.PdkManager.LoadedPdks
+            .First(p => p.Name.Contains("Demo", StringComparison.OrdinalIgnoreCase)).Name;
+        var demoDraft = leftPanel.GetLoadedPdkDrafts().First(d => d.Name == demoName);
+        var demoFingerprint = ProcessFingerprintFactory.From(demoDraft);
+        demoFingerprint.IsSpecified.ShouldBeTrue("sanity: the bundled Demo PDK must declare a full process");
+
+        var active = new ActiveProcessSelection(
+            DisplayName: "Demo Process",
+            Fingerprint: demoFingerprint,
+            MemberPdkNames: new List<string> { demoName, "MyCustom" },
+            IsPlayground: false);
+
+        leftPanel.ApplyActiveProcess(active);
+
+        var demoPdk = leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == demoName);
+        demoPdk.IsEnabled.ShouldBeTrue(
+            "the bundled Foundry PDK must never be locked out by a divergent custom snapshot member acting as reference");
+        demoPdk.IsLockedByProcess.ShouldBeFalse();
+
+        var customPdk = leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "MyCustom");
+        customPdk.IsEnabled.ShouldBeFalse(
+            "the renumbered custom PDK must fall out once the bundled Foundry PDK is correctly used as the layer-consistency reference");
+        customPdk.IsLockedByProcess.ShouldBeTrue();
+    }
 }

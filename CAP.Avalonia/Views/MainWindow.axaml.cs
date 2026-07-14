@@ -754,7 +754,11 @@ public partial class MainWindow : Window
         processVm.LoadForSinglePdkEdit(draft);
         // Re-apply the active process lock by value after a save, so an edit that changes this
         // PDK's fingerprint is reflected immediately without a restart.
-        processVm.ProcessSaved += (_, _) => vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+        processVm.ProcessSaved += async (_, _) =>
+        {
+            vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+            await WarnIfSavedProcessDivergedFromDesign(vm, pdk);
+        };
 
         var processWindow = new ProcessManagementWindow
         {
@@ -771,6 +775,37 @@ public partial class MainWindow : Window
                 _openPdkEditWindows.Remove(key);
         };
         processWindow.Show(this);
+    }
+
+    /// <summary>
+    /// Warns the user when a per-PDK process save (<see cref="PdkEditProcess_Click"/>) diverged
+    /// <paramref name="pdk"/> from the design's active process (issue #570 follow-up, LC-T4):
+    /// the placement lock (<c>IsLockedByProcess</c>, just recomputed by
+    /// <see cref="LeftPanelViewModel.ReapplyActiveProcessAfterPdkChange"/>) already blocks NEW
+    /// placements from this PDK, but components placed from it BEFORE the edit are deliberately
+    /// kept on the canvas — this tells the user they are now in conflict instead of leaving that
+    /// discoverable only via Design Checks. No dialog when the PDK isn't locked (no divergence)
+    /// or there are zero placed components from it (the lock alone is enough). Never deletes
+    /// anything.
+    /// </summary>
+    private static async Task WarnIfSavedProcessDivergedFromDesign(MainViewModel vm, PdkInfoViewModel pdk)
+    {
+        var pdkInfo = vm.LeftPanel.PdkManager.LoadedPdks.FirstOrDefault(p =>
+            pdk.FilePath != null ? p.FilePath == pdk.FilePath : p.Name == pdk.Name);
+        if (pdkInfo is not { IsLockedByProcess: true })
+            return;
+
+        var conflictedCount = vm.Canvas.Components.Count(c =>
+            (c.TemplatePdkSource ?? vm.CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component))
+            == pdkInfo.Name);
+        if (conflictedCount == 0)
+            return;
+
+        await new MessageBoxService().ShowChoicePromptAsync(
+            "The saved process no longer matches the design's active process. "
+            + $"{conflictedCount} placed component(s) from '{pdkInfo.Name}' are now in conflict "
+            + "and new placements are blocked. Existing components are kept — see Design Checks.",
+            "Process Changed", new[] { "OK" });
     }
 
     /// <summary>

@@ -103,13 +103,20 @@ public partial class LeftPanelViewModel
     /// wavelength) says nothing about GDS layer NUMBERS — a PDK whose "NITRIDE" layer was
     /// renumbered from 203 to 2030 is still fingerprint-compatible but would mix mismatched layer
     /// numbers into one chip, which is unmanufacturable. So a candidate must ALSO pass
-    /// <see cref="ProcessLayerConsistency.LayersConsistent"/> against a reference process: the
-    /// first currently-loaded PDK draft whose name is in the snapshot <c>active.MemberPdkNames</c>
-    /// and whose <c>Process</c> is set — i.e. the defining foundry/ur-PDK for this process, not
-    /// just any value-compatible one. If that reference PDK isn't loaded, the layer check is
-    /// skipped (fingerprint-only, unchanged behavior) — this method must never let an over-broad
-    /// layer check narrow the set below what plain fingerprint compatibility already allowed, and
-    /// it must never widen it either. Deliberately NOT applied to <see cref="ProcessCatalog"/>
+    /// <see cref="ProcessLayerConsistency.LayersConsistent"/> against a reference process: among
+    /// the currently-loaded PDK drafts whose name is in the snapshot <c>active.MemberPdkNames</c>
+    /// and whose <c>Process</c> is set, this prefers a BUNDLED one (via <see cref="PdkManager"/>'s
+    /// <c>LoadedPdks</c>, <see cref="PdkInfoViewModel.IsBundled"/>) — falling back to the first
+    /// loaded one only when no bundled member is loaded. Bundled PDKs are read-only Foundry truth,
+    /// so their layer numbering can never have drifted; a custom snapshot member may have been
+    /// edited (e.g. its layers renumbered) after the process was saved, and if THAT edited draft
+    /// were picked as reference merely because it happened to be loaded first, comparing every
+    /// other candidate — including the real Foundry PDK itself — against its now-divergent layer
+    /// stack would wrongly lock the Foundry out of its own process (LC-T3 review finding). If no
+    /// snapshot member with a set process is loaded at all, the layer check is skipped
+    /// (fingerprint-only, unchanged behavior) — this method must never let an over-broad layer
+    /// check narrow the set below what plain fingerprint compatibility already allowed, and it
+    /// must never widen it either. Deliberately NOT applied to <see cref="ProcessCatalog"/>
     /// grouping (still fingerprint-only there): the catalog only needs a coarse "these are roughly
     /// the same process" grouping for the UI, while this live lock must be strict — an intentional
     /// asymmetry, not an oversight.
@@ -121,9 +128,13 @@ public partial class LeftPanelViewModel
             return active.MemberPdkNames;
 
         var loadedDrafts = GetLoadedPdkDrafts();
-        var referenceProcess = loadedDrafts
-            .FirstOrDefault(d => active.MemberPdkNames.Contains(d.Name) && d.Process != null)
-            ?.Process;
+        var snapshotMembersWithProcess = loadedDrafts
+            .Where(d => active.MemberPdkNames.Contains(d.Name) && d.Process != null)
+            .ToList();
+        var referenceProcess = (
+            snapshotMembersWithProcess.FirstOrDefault(d => IsBundledPdkName(d.Name))
+            ?? snapshotMembersWithProcess.FirstOrDefault()
+        )?.Process;
 
         return GetLoadedPdkProcessEntries()
             .Where(e => e.Fingerprint.IsSpecified &&
@@ -134,6 +145,15 @@ public partial class LeftPanelViewModel
             .Select(e => e.PdkName)
             .ToList();
     }
+
+    /// <summary>
+    /// True when a loaded PDK named <paramref name="name"/> is bundled (Foundry, read-only) per
+    /// <see cref="PdkManager"/>'s live registry. Used to prefer a bundled PDK as the
+    /// layer-consistency reference in <see cref="ResolveLiveMemberPdkNames"/> (LC-T3 review
+    /// finding) — false for a name that isn't currently loaded at all.
+    /// </summary>
+    private bool IsBundledPdkName(string name) =>
+        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == name) is { IsBundled: true };
 
     /// <summary>
     /// The most recently applied process selection. Re-applied when a PDK is loaded
