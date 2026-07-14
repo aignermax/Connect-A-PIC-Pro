@@ -124,47 +124,16 @@ public partial class MainWindow : Window
                     window.Closing += (_, _) => newComponentVm.CancelCompute();
                     newComponentVm.CreateNewPdk = async () =>
                     {
-                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
-                        if (userPdkStore is null) return null;
-
-                        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
-                            .Where(d => d.Process != null && !d.ProcessAgnostic)
-                            .Select(d => d.Process!)
-                            .ToList();
-                        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
-                            new IProcessImporter[]
-                            {
-                                new UpdkYamlProcessImporter(),
-                                new NazcaCsvProcessImporter(),
-                            }, new PdkJsonSaver());
-
-                        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
-                        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
-
-                        string? createdPath = null;
-                        createVm.PdkCreated += (_, path) =>
-                        {
-                            createdPath = path;
-                            createWindow.Close();
-                        };
-
-                        try
-                        {
-                            await createWindow.ShowDialog(window);
-                        }
-                        catch
-                        {
-                            return null;
-                        }
-
+                        // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also
+                        // registers the new (possibly component-less) PDK into the library, so
+                        // cancelling the component afterwards no longer leaves the PDK invisible
+                        // until the next restart (PR #739 review).
+                        var createdPath = await ShowCreateCustomPdkDialogAsync(window);
                         if (createdPath is null)
                             return null;
 
-                        // The freshly created PDK is empty and not yet in the loaded-PDK set, so
-                        // there is nothing to re-lock here; component visibility is (re)established
-                        // when the first component is saved into it via RegisterSavedCustomComponent,
-                        // which itself re-applies the active process by value (CP-T2).
-                        return userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+                        return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
                     };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
@@ -717,8 +686,9 @@ public partial class MainWindow : Window
 
         var choice = await new MessageBoxService().ShowChoicePromptAsync(
             $"Move component '{template.Name}' to trash?\n\n"
-            + "A backup of the PDK file is saved to user-pdks/.trash before the component is "
-            + "removed. Placed instances on the canvas are kept.",
+            + "The PDK file is rewritten without this component; a full pre-edit backup "
+            + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
+            + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.",
             "Delete Component?", new[] { "Cancel", "Move to Trash" });
         if (choice != 1)
             return;
@@ -855,25 +825,37 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm)
             return;
 
-        var choice = await new MessageBoxService().ShowChoicePromptAsync(
-            $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
-            + "The file is moved to user-pdks/.trash and can be restored manually.",
-            "Delete PDK?", new[] { "Cancel", "Move to Trash" });
-        if (choice != 1)
-            return;
-
         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
         if (userPdkStore is null)
             return;
 
-        try
-        {
-            userPdkStore.MoveToTrash(pdk.FilePath);
-        }
-        catch (Exception ex)
-        {
-            vm.ErrorConsole.LogError($"Failed to move PDK '{pdk.Name}' to trash: {ex.Message}", ex);
+        // Only files inside the managed user-pdks root are moved to its .trash. An
+        // externally-stored PDK (imported from an arbitrary folder, remembered via preferences)
+        // is the user's own file in a place they chose — deleting it from the library must not
+        // relocate it into a hidden app-data folder (PR #739 review), so that path only
+        // deregisters and leaves the file untouched.
+        var isManaged = userPdkStore.IsInManagedRoot(pdk.FilePath);
+        var prompt = isManaged
+            ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+              + "The file is moved to user-pdks/.trash and can be restored manually."
+            : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
+              + $"The file stays untouched at:\n{pdk.FilePath}";
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            prompt, "Delete PDK?", new[] { "Cancel", isManaged ? "Move to Trash" : "Remove" });
+        if (choice != 1)
             return;
+
+        if (isManaged)
+        {
+            try
+            {
+                userPdkStore.MoveToTrash(pdk.FilePath);
+            }
+            catch (Exception ex)
+            {
+                vm.ErrorConsole.LogError($"Failed to move PDK '{pdk.Name}' to trash: {ex.Message}", ex);
+                return;
+            }
         }
 
         vm.LeftPanel.UnregisterPdk(pdk.FilePath);
@@ -892,12 +874,27 @@ public partial class MainWindow : Window
     /// </summary>
     private async void PdkCreate_Click(object? sender, RoutedEventArgs e)
     {
+        await ShowCreateCustomPdkDialogAsync(this);
+    }
+
+    /// <summary>
+    /// The single shared wiring for the Create-Custom-PDK dialog — used by both entry points
+    /// (the PDK-Management "+" button above and the New Component assistant's "New PDK…"
+    /// sentinel), so their importer lists, event wiring, and post-create registration can never
+    /// drift apart (PR #739 review). Shows the dialog modally over <paramref name="owner"/>;
+    /// on success the (possibly component-less) new PDK is registered straight into the library
+    /// via <see cref="LeftPanelViewModel.RegisterCreatedPdk"/> — so it appears in PDK Management
+    /// immediately regardless of entry point — and its file path is returned. Returns null when
+    /// the user cancelled or the dialog faulted (logged, not swallowed).
+    /// </summary>
+    private async Task<string?> ShowCreateCustomPdkDialogAsync(Window owner)
+    {
         if (DataContext is not MainViewModel vm)
-            return;
+            return null;
 
         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
         if (userPdkStore is null)
-            return;
+            return null;
 
         var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
             .Where(d => d.Process != null && !d.ProcessAgnostic)
@@ -922,15 +919,17 @@ public partial class MainWindow : Window
 
         try
         {
-            await createWindow.ShowDialog(this);
+            await createWindow.ShowDialog(owner);
         }
-        catch
+        catch (Exception ex)
         {
-            return;
+            vm.ErrorConsole.LogError($"Create-PDK dialog failed: {ex.Message}", ex);
+            return null;
         }
 
         if (createdPath is not null)
             vm.LeftPanel.RegisterCreatedPdk(createdPath);
+        return createdPath;
     }
 
     /// <summary>

@@ -916,6 +916,14 @@ public partial class MainViewModel : ObservableObject
             c => c.Component,
             c => c.TemplatePdkSource ?? CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component));
 
+        // The PDK-compatibility check is only meaningful under a real process lock: with no
+        // active process (or Playground) the placement policy allows everything, so flagging a
+        // component — e.g. from a trash-deleted, hence no-longer-loaded PDK — against a process
+        // that doesn't exist would be a false positive (PR #739 review). Passing null skips it.
+        var compatiblePdkNames = FileOperations.ActiveProcess is { IsPlayground: false }
+            ? LeftPanel.PdkManager.GetProcessCompatiblePdkNames()
+            : null;
+
         RightPanel.DesignValidation.RunValidation(
             connections,
             groups,
@@ -924,7 +932,7 @@ public partial class MainViewModel : ObservableObject
             ChipSize.CurrentHeightMicrometers,
             pdkSourceByComponent,
             LeftPanel.GetProcessAgnosticPdkNames(),
-            LeftPanel.PdkManager.GetProcessCompatiblePdkNames());
+            compatiblePdkNames);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

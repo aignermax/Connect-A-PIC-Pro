@@ -239,17 +239,43 @@ public sealed class UserPdkStore
     /// <param name="filePath">Full path of the PDK file to trash.</param>
     /// <returns>The full path the file was moved to under <c>.trash</c>.</returns>
     /// <exception cref="FileNotFoundException">No file exists at <paramref name="filePath"/>.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// <paramref name="filePath"/> is not under this store's managed root (see
+    /// <see cref="IsInManagedRoot"/>) — an externally-stored file must never be relocated into
+    /// the app-data trash.
+    /// </exception>
     public string MoveToTrash(string filePath)
     {
         if (!File.Exists(filePath))
         {
             throw new FileNotFoundException($"PDK file not found: {filePath}", filePath);
         }
+        if (!IsInManagedRoot(filePath))
+        {
+            throw new InvalidOperationException(
+                $"'{filePath}' is outside the managed user-PDK directory and must not be moved to its trash.");
+        }
 
         var trashPath = ResolveTrashDestination(filePath);
         Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
         File.Move(filePath, trashPath);
         return trashPath;
+    }
+
+    /// <summary>
+    /// True when <paramref name="filePath"/> lies directly under this store's root directory.
+    /// PDKs imported from arbitrary external folders (remembered via preferences) are registered
+    /// in the library but their files are NOT managed by this store — deleting one from the
+    /// library must leave the user's file untouched where they keep it, instead of relocating it
+    /// into a hidden app-data trash folder (PR #739 review). Callers use this to decide between
+    /// <see cref="MoveToTrash"/> (managed) and unregister-only (external).
+    /// </summary>
+    public bool IsInManagedRoot(string filePath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        var root = Path.GetFullPath(_root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(directory, root, StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>

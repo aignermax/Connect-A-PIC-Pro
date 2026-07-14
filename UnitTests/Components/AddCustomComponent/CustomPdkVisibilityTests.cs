@@ -425,14 +425,61 @@ public class CustomPdkVisibilityTests : IDisposable
     }
 
     /// <summary>
-    /// When the reference PDK (the process's own defining PDK, per the snapshot
-    /// <see cref="ActiveProcessSelection.MemberPdkNames"/>) is not currently loaded, the layer
-    /// check must be skipped entirely — behavior stays fingerprint-only, exactly as before this
-    /// feature existed. A layer-clashing candidate must NOT be penalized when there is nothing
-    /// loaded to compare it against.
+    /// Pairwise layer consistency (PR #739 review): two custom PDKs that each ADD a layer the
+    /// reference process does not define both pass the reference comparison — but if they
+    /// disagree on that shared layer's GDS number they must not both be placeable on one chip.
+    /// The earlier-accepted member (bundled/snapshot/load order precedence) wins; the
+    /// later-loaded conflicting PDK is locked out.
     /// </summary>
     [Fact]
-    public void ReferencePdkNotLoaded_FallsBackToFingerprintOnly_LayerClashIgnored()
+    public void TwoMetalAugmentedPdks_ConflictingSharedLayerNumbers_SecondIsLockedOut()
+    {
+        ApplyDemoProcessLock();
+
+        ProcessDefinition AugmentedProcess(int metalLayerNumber) => new()
+        {
+            Name = $"Augmented {metalLayerNumber}",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 1, Datatype = 0 },
+                new() { Name = "METAL2", Layer = metalLayerNumber, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var componentA = SimpleComponent("MetalLibA Straight");
+        var pathA = store.SaveToNamedPdk("MetalLibA", AugmentedProcess(12), componentA, "nazca", null);
+        _leftPanel.RegisterSavedCustomComponent(componentA, "MetalLibA", pathA);
+
+        var componentB = SimpleComponent("MetalLibB Straight");
+        var pathB = store.SaveToNamedPdk("MetalLibB", AugmentedProcess(99), componentB, "nazca", null);
+        _leftPanel.RegisterSavedCustomComponent(componentB, "MetalLibB", pathB);
+
+        _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "MetalLibA").IsEnabled.ShouldBeTrue(
+            "the first-accepted metal-augmented PDK keeps its membership");
+        var conflicting = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "MetalLibB");
+        conflicting.IsEnabled.ShouldBeFalse(
+            "a second PDK defining the same added layer NAME with a different GDS number must not join the same chip");
+        conflicting.IsLockedByProcess.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// When the reference PDK (the process's own defining PDK, per the snapshot
+    /// <see cref="ActiveProcessSelection.MemberPdkNames"/>) is not currently loaded, the
+    /// REFERENCE comparison is skipped — but pairwise consistency among the live members still
+    /// applies (PR #739 review): the bundled Demo PDK is fingerprint-compatible with this
+    /// process and defines WAVEGUIDE as layer 1, so a candidate that renumbers WAVEGUIDE to 999
+    /// must still be locked out. Mixing the two on one chip would be unmanufacturable no matter
+    /// which of them the snapshot happened to name.
+    /// </summary>
+    [Fact]
+    public void ReferencePdkNotLoaded_PairwiseClashWithLoadedMember_StillLockedOut()
     {
         var active = new ActiveProcessSelection(
             DisplayName: "Unloaded Foundry Process",
@@ -463,9 +510,9 @@ public class CustomPdkVisibilityTests : IDisposable
         _leftPanel.RegisterSavedCustomComponent(component, "ClashingLib", path);
 
         var clashingPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "ClashingLib");
-        clashingPdk.IsEnabled.ShouldBeTrue(
-            "with no reference PDK loaded, fingerprint compatibility alone must still unlock the candidate");
-        clashingPdk.IsLockedByProcess.ShouldBeFalse();
+        clashingPdk.IsEnabled.ShouldBeFalse(
+            "a candidate that renumbers a layer another live member defines must stay locked out even without a snapshot reference");
+        clashingPdk.IsLockedByProcess.ShouldBeTrue();
     }
 
     /// <summary>

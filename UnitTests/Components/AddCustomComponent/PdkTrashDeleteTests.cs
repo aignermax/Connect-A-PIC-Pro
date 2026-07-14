@@ -153,6 +153,39 @@ public class PdkTrashDeleteTests : IDisposable
         trashedFiles.Length.ShouldBe(2, "both trashed copies must survive, never overwriting one another");
     }
 
+    /// <summary>
+    /// An externally-stored PDK file (imported from a folder the user chose, outside the managed
+    /// user-pdks root) must never be relocated into the store's hidden app-data trash
+    /// (PR #739 review) — MoveToTrash refuses, the file stays where the user keeps it, and the
+    /// UI's delete path falls back to unregister-only.
+    /// </summary>
+    [Fact]
+    public void MoveToTrash_fileOutsideManagedRoot_throwsAndLeavesFileUntouched()
+    {
+        var store = CreateStore();
+        var externalDir = Path.Combine(Path.GetTempPath(), $"external-pdks-{Guid.NewGuid():N}");
+        _tempDirs.Add(externalDir);
+        Directory.CreateDirectory(externalDir);
+        var externalPath = Path.Combine(externalDir, "my-project-pdk.json");
+        File.WriteAllText(externalPath, "{}");
+
+        Should.Throw<InvalidOperationException>(() => store.MoveToTrash(externalPath));
+        File.Exists(externalPath).ShouldBeTrue("the user's externally-stored file must stay untouched");
+    }
+
+    [Fact]
+    public void IsInManagedRoot_distinguishesManagedFromExternalPaths()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"managed-root-{Guid.NewGuid():N}");
+        _tempDirs.Add(root);
+        var store = new UserPdkStore(root, new PdkJsonSaver(), new PdkLoader());
+
+        store.IsInManagedRoot(Path.Combine(root, "some-pdk.json")).ShouldBeTrue();
+        store.IsInManagedRoot(Path.Combine(root, ".trash", "some-pdk.json")).ShouldBeFalse(
+            "files already in .trash are not directly under the root");
+        store.IsInManagedRoot(Path.Combine(Path.GetTempPath(), "elsewhere.json")).ShouldBeFalse();
+    }
+
     // ---------- UserPdkStore.RemoveComponent ----------
 
     [Fact]
@@ -344,6 +377,27 @@ public class PdkTrashDeleteTests : IDisposable
         reloaded.Components.ShouldNotContain(c => c.Name == "Straight A");
         vm.GetLoadedPdkDrafts().First(d => d.Name == "My Lib").Components
             .ShouldNotContain(c => c.Name == "Straight A", "the in-memory draft must match the on-disk file");
+    }
+
+    /// <summary>
+    /// A corrupt (hand-edited/locked) PDK file must not let the store's loader exception escape
+    /// through the RelayCommand into the async void click handler and crash the app
+    /// (PR #739 review) — the delete becomes a logged no-op and the template stays.
+    /// </summary>
+    [Fact]
+    public void RemoveCustomComponent_corruptPdkFile_doesNotThrow_andKeepsTemplate()
+    {
+        var store = CreateStore();
+        var path = store.SaveToNamedPdk("My Lib", SimpleProcess("P"), SimpleComponent("Straight A"), "nazca", null);
+        var vm = CreateLeftPanelViewModel(store, out _);
+        vm.RegisterCreatedPdk(path);
+        var template = vm.AllTemplates.First(t => t.Name == "Straight A");
+
+        File.WriteAllText(path, "{ not valid json");
+
+        Should.NotThrow(() => vm.RemoveCustomComponentCommand.Execute(template));
+        vm.AllTemplates.ShouldContain(t => t.Name == "Straight A",
+            "a failed delete must leave the library unchanged");
     }
 
     [Fact]

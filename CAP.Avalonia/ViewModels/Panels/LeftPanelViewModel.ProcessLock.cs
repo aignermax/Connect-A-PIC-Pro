@@ -113,13 +113,23 @@ public partial class LeftPanelViewModel
     /// were picked as reference merely because it happened to be loaded first, comparing every
     /// other candidate — including the real Foundry PDK itself — against its now-divergent layer
     /// stack would wrongly lock the Foundry out of its own process (LC-T3 review finding). If no
-    /// snapshot member with a set process is loaded at all, the layer check is skipped
-    /// (fingerprint-only, unchanged behavior) — this method must never let an over-broad layer
-    /// check narrow the set below what plain fingerprint compatibility already allowed, and it
-    /// must never widen it either. Deliberately NOT applied to <see cref="ProcessCatalog"/>
+    /// snapshot member with a set process is loaded at all, the reference comparison is skipped
+    /// and only the pairwise consistency below applies — layer checks may only ever make the
+    /// member set STRICTER than plain fingerprint compatibility, never wider (issue #570).
+    /// Deliberately NOT applied to <see cref="ProcessCatalog"/>
     /// grouping (still fingerprint-only there): the catalog only needs a coarse "these are roughly
     /// the same process" grouping for the UI, while this live lock must be strict — an intentional
     /// asymmetry, not an oversight.
+    /// </para>
+    /// <para>
+    /// Beyond the reference comparison, accepted members must also be layers-consistent with EACH
+    /// OTHER (pairwise): a layer name absent from the reference (e.g. two custom PDKs each adding
+    /// a "METAL" layer the Foundry process doesn't define) passes the reference check for both,
+    /// but if they disagree on its (Layer, Datatype) numbers they must not both be placeable on
+    /// one chip. Candidates are considered bundled-first, then snapshot members, then load order,
+    /// so the Foundry/original members always win such a conflict deterministically and a
+    /// later-loaded conflicting PDK is the one locked out. All name comparisons are
+    /// case-insensitive, matching <c>SingleProcessPolicy</c>/<c>PdkManagerViewModel</c>.
     /// </para>
     /// </summary>
     internal IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
@@ -129,21 +139,34 @@ public partial class LeftPanelViewModel
 
         var loadedDrafts = GetLoadedPdkDrafts();
         var snapshotMembersWithProcess = loadedDrafts
-            .Where(d => active.MemberPdkNames.Contains(d.Name) && d.Process != null)
+            .Where(d => active.MemberPdkNames.Contains(d.Name, StringComparer.OrdinalIgnoreCase)
+                        && d.Process != null)
             .ToList();
         var referenceProcess = (
             snapshotMembersWithProcess.FirstOrDefault(d => IsBundledPdkName(d.Name))
             ?? snapshotMembersWithProcess.FirstOrDefault()
         )?.Process;
 
-        return GetLoadedPdkProcessEntries()
-            .Where(e => e.Fingerprint.IsSpecified &&
-                        ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint) &&
-                        ProcessLayerConsistency.LayersConsistent(
-                            referenceProcess,
-                            loadedDrafts.FirstOrDefault(d => d.Name == e.PdkName)?.Process))
-            .Select(e => e.PdkName)
-            .ToList();
+        // Bundled first, then snapshot members, then load order (OrderBy is stable) — the
+        // deterministic precedence for the pairwise conflict resolution documented above.
+        var candidates = GetLoadedPdkProcessEntries()
+            .Where(e => e.Fingerprint.IsSpecified && ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint))
+            .OrderByDescending(e => IsBundledPdkName(e.PdkName))
+            .ThenByDescending(e => active.MemberPdkNames.Contains(e.PdkName, StringComparer.OrdinalIgnoreCase));
+
+        var accepted = new List<(string Name, ProcessDefinition? Process)>();
+        foreach (var candidate in candidates)
+        {
+            var candidateProcess = loadedDrafts.FirstOrDefault(d =>
+                string.Equals(d.Name, candidate.PdkName, StringComparison.OrdinalIgnoreCase))?.Process;
+            if (!ProcessLayerConsistency.LayersConsistent(referenceProcess, candidateProcess))
+                continue;
+            if (accepted.Any(a => !ProcessLayerConsistency.LayersConsistent(a.Process, candidateProcess)))
+                continue;
+            accepted.Add((candidate.PdkName, candidateProcess));
+        }
+
+        return accepted.Select(a => a.Name).ToList();
     }
 
     /// <summary>
@@ -153,7 +176,8 @@ public partial class LeftPanelViewModel
     /// finding) — false for a name that isn't currently loaded at all.
     /// </summary>
     private bool IsBundledPdkName(string name) =>
-        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == name) is { IsBundled: true };
+        PdkManager.LoadedPdks.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) is { IsBundled: true };
 
     /// <summary>
     /// The most recently applied process selection. Re-applied when a PDK is loaded

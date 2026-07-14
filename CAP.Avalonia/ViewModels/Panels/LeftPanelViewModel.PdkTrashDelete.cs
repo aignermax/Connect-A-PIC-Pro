@@ -95,7 +95,19 @@ public partial class LeftPanelViewModel
         if (pdkInfo?.FilePath is null || userPdkStore is null)
             return;
 
-        var result = userPdkStore.RemoveComponent(pdkInfo.FilePath, template.Name);
+        string? result;
+        try
+        {
+            result = userPdkStore.RemoveComponent(pdkInfo.FilePath, template.Name);
+        }
+        catch (Exception ex)
+        {
+            // A corrupt/locked PDK file must surface as an error-console entry, not escape into
+            // the async void click handler and take the app down (PR #739 review).
+            _errorConsole?.LogError(
+                $"Failed to delete component '{template.Name}' from PDK '{pdkInfo.Name}': {ex.Message}", ex);
+            return;
+        }
         if (result is null)
             return;
 
