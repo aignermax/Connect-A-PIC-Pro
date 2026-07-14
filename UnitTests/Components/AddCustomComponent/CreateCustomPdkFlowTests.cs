@@ -150,6 +150,31 @@ public class CreateCustomPdkFlowTests : IDisposable
     }
 
     [Fact]
+    public void DefineNew_WithCoreThickness_YieldsVisiblePdk_UnderCompatibleActiveProcess()
+    {
+        ApplyDemoProcessLock();
+
+        // "Define new": the editor seeds Si/SiO2 core/cladding (SOI defaults); giving it a
+        // cross-section (required content) and a value-compatible core thickness must produce a
+        // fully specified fingerprint so the PDK is visible under the active Demo process (#570).
+        var vm = CreateVm(_store, CompatibleProcess());
+        vm.PdkName = "DefLib";
+        vm.ProcessSource = PdkProcessSource.DefineNew;
+        vm.ProcessDefinitionEditor.AddXsectionCommand.Execute(null);
+        vm.CoreThicknessNm = 222;
+        vm.CreatePdkCommand.Execute(null);
+        var createdPath = vm.CreatedFilePath;
+        createdPath.ShouldNotBeNull("a define-new process with a cross-section and thickness must be creatable");
+
+        var component = SimpleComponent("DefLib Straight");
+        _store.AppendToExistingPdk(createdPath!, component);
+        _leftPanel.RegisterSavedCustomComponent(component, "DefLib", createdPath!);
+
+        _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "DefLib").IsEnabled.ShouldBeTrue(
+            "a define-new PDK with core thickness set has a specified, value-compatible fingerprint and must be enabled under the active process lock");
+    }
+
+    [Fact]
     public void NazcaExample_DefinesComponentFunction()
     {
         BackendCodeExamples.Nazca.ShouldContain("def component()");

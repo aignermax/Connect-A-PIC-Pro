@@ -16,7 +16,8 @@ namespace UnitTests.Components.AddCustomComponent;
 /// <summary>
 /// Verifies <see cref="CreateCustomPdkViewModel"/>: a name plus either an adopted existing
 /// process or a freshly defined one creates a named user PDK via <see cref="UserPdkStore"/>,
-/// with name-collision and empty-selection guards on <c>CreatePdk</c>'s availability.
+/// with name-collision (by display name) and empty/contentless-selection guards on
+/// <c>CreatePdk</c>'s availability, and a fully specified fingerprint for a "define new" process.
 /// </summary>
 public class CreateCustomPdkViewModelTests : IDisposable
 {
@@ -61,24 +62,46 @@ public class CreateCustomPdkViewModelTests : IDisposable
     }
 
     [Fact]
-    public void DefineNew_CreatePdk_UsesProcessDefinitionEditorToProcess()
+    public void DefineNew_CreatePdk_UsesProcessDefinitionEditorToProcess_WithCoreThickness()
     {
         var store = CreateStore();
         var vm = CreateVm(store);
         vm.PdkName = "Fresh Lib";
         vm.ProcessSource = PdkProcessSource.DefineNew;
         vm.ProcessDefinitionEditor.ProcessName = "My New Process";
-        vm.ProcessDefinitionEditor.Materials.Add(new ProcessMaterial { Name = "Si", Role = "core" });
+        // NewProcess() already seeds Si/SiO2 core/cladding materials; add a cross-section
+        // (required content) and a core thickness so the fingerprint is fully specified.
+        vm.ProcessDefinitionEditor.AddXsectionCommand.Execute(null);
+        vm.CoreThicknessNm = 220;
 
         vm.CreatePdkCommand.Execute(null);
 
         vm.CreatedFilePath.ShouldNotBeNull();
-        var listed = store.ListCustomPdks();
-        listed.ShouldContain(p => p.Name == "Fresh Lib" && p.Process.Name == "My New Process");
+        var reloaded = new PdkLoader().LoadFromFileForEditing(vm.CreatedFilePath!);
+        reloaded.Name.ShouldBe("Fresh Lib");
+        reloaded.Process!.Name.ShouldBe("My New Process");
+        reloaded.Process.CoreThicknessNm.ShouldBe(220);
     }
 
     [Fact]
-    public void CanCreate_IsFalse_WhenNameEmpty_OrUseExistingWithoutSelection()
+    public void DefineNew_CreatedProcess_HasSpecifiedFingerprint()
+    {
+        var store = CreateStore();
+        var vm = CreateVm(store);
+        vm.PdkName = "Spec Lib";
+        vm.ProcessSource = PdkProcessSource.DefineNew;
+        vm.ProcessDefinitionEditor.AddXsectionCommand.Execute(null);
+        vm.CoreThicknessNm = 220;
+
+        vm.CreatePdkCommand.Execute(null);
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(vm.CreatedFilePath!);
+        ProcessFingerprintFactory.From(reloaded).IsSpecified.ShouldBeTrue(
+            "a define-new process with core/cladding materials + core thickness must yield a specified fingerprint");
+    }
+
+    [Fact]
+    public void CanCreate_IsFalse_WhenNameEmpty_OrUseExistingWithoutSelection_OrDefineNewWithoutContent()
     {
         var store = CreateStore();
         var vm = CreateVm(store);
@@ -92,7 +115,10 @@ public class CreateCustomPdkViewModelTests : IDisposable
         vm.CreatePdkCommand.CanExecute(null).ShouldBeTrue();
 
         vm.ProcessSource = PdkProcessSource.DefineNew;
-        vm.CreatePdkCommand.CanExecute(null).ShouldBeTrue("DefineNew doesn't require a selected existing process");
+        vm.CreatePdkCommand.CanExecute(null).ShouldBeFalse("DefineNew with no cross-sections is an empty process");
+
+        vm.ProcessDefinitionEditor.AddXsectionCommand.Execute(null);
+        vm.CreatePdkCommand.CanExecute(null).ShouldBeTrue("DefineNew becomes valid once it has a cross-section");
     }
 
     [Fact]
@@ -113,5 +139,41 @@ public class CreateCustomPdkViewModelTests : IDisposable
         eventFired.ShouldBeFalse();
         vm.CreatedFilePath.ShouldBeNull();
         vm.StatusText.ShouldContain("already exists");
+    }
+
+    [Fact]
+    public void CreatePdk_CollisionIsByDisplayName_CaseInsensitive()
+    {
+        var store = CreateStore();
+        // The collision check keys on the stored DISPLAY name (via ListCustomPdks), not the
+        // slugged file name: an exact display-name match (case-insensitive) is a collision.
+        store.CreateNamedPdkWithProcess("My Lib", ExistingProcess(), "gdsfactory", null);
+
+        var vm = CreateVm(store);
+        vm.SelectedExistingProcess = vm.AvailableProcesses[0];
+        vm.PdkName = "MY LIB";
+
+        vm.CreatePdkCommand.Execute(null);
+
+        vm.CreatedFilePath.ShouldBeNull();
+        vm.StatusText.ShouldContain("already exists");
+    }
+
+    [Fact]
+    public void CreatePdk_DoesNotThrow_WhenStoreLevelSlugCollisionOccurs()
+    {
+        var store = CreateStore();
+        // "My Lib" and "My  Lib" are distinct display names but slug to the same file, so the
+        // by-display-name check passes yet the store refuses the write. The command must surface
+        // that as a status message rather than letting the exception escape and crash the dialog.
+        store.CreateNamedPdkWithProcess("My Lib", ExistingProcess(), "gdsfactory", null);
+
+        var vm = CreateVm(store);
+        vm.SelectedExistingProcess = vm.AvailableProcesses[0];
+        vm.PdkName = "My  Lib";
+
+        Should.NotThrow(() => vm.CreatePdkCommand.Execute(null));
+        vm.CreatedFilePath.ShouldBeNull();
+        vm.StatusText.ShouldNotBeNullOrEmpty();
     }
 }

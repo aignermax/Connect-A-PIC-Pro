@@ -119,7 +119,7 @@ public partial class MainWindow : Window
                         if (userPdkStore is null) return null;
 
                         var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
-                            .Where(d => d.Process != null)
+                            .Where(d => d.Process != null && !d.ProcessAgnostic)
                             .Select(d => d.Process!)
                             .ToList();
                         var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
@@ -151,11 +151,10 @@ public partial class MainWindow : Window
                         if (createdPath is null)
                             return null;
 
-                        // A newly created PDK can shift which components are visible under an
-                        // active by-value process lock (CP-T2) — refresh from the live catalog
-                        // rather than a stale name snapshot.
-                        vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
-
+                        // The freshly created PDK is empty and not yet in the loaded-PDK set, so
+                        // there is nothing to re-lock here; component visibility is (re)established
+                        // when the first component is saved into it via RegisterSavedCustomComponent,
+                        // which itself re-applies the active process by value (CP-T2).
                         return userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
                     };
                     window.Show(this);

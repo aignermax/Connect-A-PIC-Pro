@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using System.Collections.Specialized;
+using System.Linq;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -31,6 +33,16 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     [ObservableProperty]
     private ProcessDefinition? _selectedExistingProcess;
 
+    /// <summary>
+    /// Core waveguide-layer thickness in nm for a "Define new" process. Required for the created
+    /// PDK's process fingerprint to be complete (<see cref="CAP_Core.Components.Process.ProcessFingerprint.IsSpecified"/>
+    /// needs core material + thickness + cladding) — without it the new PDK would never match the
+    /// active process by value and would stay invisible/locked (issue #570). Only used for the
+    /// "Define new" path; an adopted existing process already carries its own thickness.
+    /// </summary>
+    [ObservableProperty]
+    private double? _coreThicknessNm;
+
     /// <summary>Status / result message, notably the name-collision warning.</summary>
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -60,7 +72,13 @@ public partial class CreateCustomPdkViewModel : ObservableObject
         AvailableProcesses = availableProcesses;
         ProcessDefinitionEditor = processDefinitionEditor;
         ProcessDefinitionEditor.NewProcessCommand.Execute(null);
+        // A "Define new" process only becomes creatable once it has at least one cross-section
+        // (see CanCreate); re-evaluate availability whenever that collection changes.
+        ProcessDefinitionEditor.Xsections.CollectionChanged += OnDefinedXsectionsChanged;
     }
+
+    private void OnDefinedXsectionsChanged(object? sender, NotifyCollectionChangedEventArgs e) =>
+        CreatePdkCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// Builds the process from the chosen source, refuses on a name collision, and otherwise
@@ -69,22 +87,58 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCreate))]
     private void CreatePdk()
     {
-        if (_store.NamedPdkExists(PdkName))
+        // Collision is checked against the stored DISPLAY names, not the slugged file name, so
+        // "My Lib" vs "My-Lib" are not conflated and a name that slugs to the "custom" fallback
+        // does not falsely block an unrelated name.
+        if (_store.ListCustomPdks().Any(p => string.Equals(p.Name, PdkName, StringComparison.OrdinalIgnoreCase)))
         {
             StatusText = $"A PDK named '{PdkName}' already exists.";
             return;
         }
 
-        var process = ProcessSource == PdkProcessSource.UseExisting
-            ? SelectedExistingProcess!
-            : ProcessDefinitionEditor.ToProcess();
+        var process = BuildProcess();
 
-        CreatedFilePath = _store.CreateNamedPdkWithProcess(PdkName, process, "gdsfactory", null);
-        PdkCreated?.Invoke(this, CreatedFilePath);
+        try
+        {
+            var path = _store.CreateNamedPdkWithProcess(PdkName, process, "gdsfactory", null);
+            CreatedFilePath = path;
+            PdkCreated?.Invoke(this, path);
+        }
+        catch (InvalidOperationException ex)
+        {
+            // The store keys files by name-slug, so two distinct display names can still collide
+            // at the file level. Surface that instead of letting the exception crash the dialog.
+            StatusText = ex.Message;
+        }
     }
 
-    private bool CanCreate() =>
-        !string.IsNullOrWhiteSpace(PdkName) && (ProcessSource == PdkProcessSource.DefineNew || SelectedExistingProcess != null);
+    /// <summary>
+    /// Builds the process for the new PDK. The "Define new" path stamps the user-entered
+    /// core thickness onto the editor's process so the resulting fingerprint is complete.
+    /// </summary>
+    private ProcessDefinition BuildProcess()
+    {
+        if (ProcessSource == PdkProcessSource.UseExisting)
+        {
+            return SelectedExistingProcess!;
+        }
+
+        var process = ProcessDefinitionEditor.ToProcess();
+        process.CoreThicknessNm = CoreThicknessNm;
+        return process;
+    }
+
+    private bool CanCreate()
+    {
+        if (string.IsNullOrWhiteSpace(PdkName))
+        {
+            return false;
+        }
+
+        return ProcessSource == PdkProcessSource.DefineNew
+            ? ProcessDefinitionEditor.Xsections.Count > 0
+            : SelectedExistingProcess != null;
+    }
 
     partial void OnPdkNameChanged(string value) => CreatePdkCommand.NotifyCanExecuteChanged();
 

@@ -67,6 +67,17 @@
                     </ComboBox>
                 </StackPanel>
 
+                <!-- "Define new": core thickness lives on THIS view model (not the embedded
+                     process editor) because it completes the process fingerprint (#570); kept
+                     outside the DataContext-swapped editor block below so it binds to the outer VM. -->
+                <StackPanel Orientation="Horizontal" Spacing="8"
+                            IsVisible="{Binding ProcessSource,
+                                        Converter={x:Static conv:PdkProcessSourceToBoolConverter.Instance},
+                                        ConverterParameter=DefineNew}">
+                    <TextBlock Text="Core thickness (nm)" VerticalAlignment="Center" Foreground="#aaa"/>
+                    <TextBox Text="{Binding CoreThicknessNm}" Width="120" Watermark="e.g. 220"/>
+                </StackPanel>
+
                 <!-- "Define new": the embedded ProcessDefinitionEditor's pure definition fields
                      (process name + layers/xsections/materials grids), mirrored from
                      ProcessManagementWindow.axaml WITHOUT its edit-an-existing-PDK affordances
