@@ -17,13 +17,25 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
         /// Builds the spec for the design's active process from the loaded PDK drafts.
         /// Null selection (no design yet) or playground mode yields the default spec.
         /// </summary>
+        /// <param name="active">The design's active process selection, or null when unset.</param>
+        /// <param name="loadedPdks">All currently loaded PDK drafts.</param>
+        /// <param name="effectiveMemberPdkNames">
+        /// When non-null, REPLACES <see cref="ActiveProcessSelection.MemberPdkNames"/> as the
+        /// member filter — pass the live by-value member set (see
+        /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>) so a value-compatible custom PDK
+        /// registered after the snapshot was persisted still contributes its metal
+        /// cross-section / bridge policy to the export (placement-livemembers review, Finding 0).
+        /// Null keeps the snapshot-only lookup.
+        /// </param>
         public static MetalRoutingSpec FromActiveProcess(
-            ActiveProcessSelection? active, IReadOnlyList<PdkDraft>? loadedPdks)
+            ActiveProcessSelection? active, IReadOnlyList<PdkDraft>? loadedPdks,
+            IReadOnlyCollection<string>? effectiveMemberPdkNames = null)
         {
             if (active == null || loadedPdks == null)
                 return MetalRoutingSpec.Default;
 
-            var definitions = active.MemberPdkNames
+            var memberNames = effectiveMemberPdkNames ?? (IEnumerable<string>)active.MemberPdkNames;
+            var definitions = memberNames
                 .Select(name => loadedPdks.FirstOrDefault(
                     d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
                 .Where(p => p != null)

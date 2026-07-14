@@ -259,11 +259,22 @@ public partial class MainViewModel : ObservableObject
         GdsFactoryExport = gdsFactoryExport;
         // gdsfactory export honours gdsfactory-backend overrides from the design's store.
         GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
+        // By-value member PDKs for the active process (issue placement-livemembers, #732): a
+        // custom PDK registered after the process was saved is missing from its persisted
+        // MemberPdkNames snapshot but may still be the same process by value — this recomputes
+        // the allowed set live against the current catalog, same as the library-filter lock.
+        // Shared by the placement guards below AND the metal-spec providers, so placement and
+        // export agree on membership.
+        Func<IReadOnlyCollection<string>?> getLiveMemberPdkNames = () =>
+            FileOperations.ActiveProcess is { } activeProcess ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess) : null;
+
         // Electrical metal routing spec (#682): trace width / layers / crossing policy come
         // from the active process's metal cross-section; both exporters share one provider.
+        // The live member set replaces the stale snapshot so a live-allowed custom PDK's metal
+        // xsection / bridge policy reaches the export (review Finding 0).
         Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec> metalSpecProvider = () =>
             CAP_DataAccess.Components.ComponentDraftMapper.MetalRoutingSpecFactory.FromActiveProcess(
-                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts());
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts(), getLiveMemberPdkNames());
         FileOperations.MetalRoutingSpecProvider = metalSpecProvider;
         GdsFactoryExport.MetalRoutingSpecProvider = metalSpecProvider;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
@@ -292,12 +303,6 @@ public partial class MainViewModel : ObservableObject
         // their own, so children are resolved against the loaded library).
         Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
         Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
-        // By-value member PDKs for the active process (issue placement-livemembers, #732): a
-        // custom PDK registered after the process was saved is missing from its persisted
-        // MemberPdkNames snapshot but may still be the same process by value — this recomputes
-        // the allowed set live against the current catalog, same as the library-filter lock.
-        Func<IReadOnlyCollection<string>?> getLiveMemberPdkNames = () =>
-            FileOperations.ActiveProcess is { } activeProcess ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess) : null;
         Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
             ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
 
