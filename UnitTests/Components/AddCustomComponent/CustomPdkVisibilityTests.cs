@@ -306,4 +306,165 @@ public class CustomPdkVisibilityTests : IDisposable
             new() { Name = "SiO2", Role = "cladding" },
         },
     };
+
+    /// <summary>
+    /// Reproduces the #570 follow-up bug: a custom PDK's WAVEGUIDE layer was renumbered (the
+    /// Demo PDK defines it as layer 1) so it is still fingerprint-compatible (same Si/SiO2
+    /// materials, thickness within tolerance) but mixing it with the Demo PDK on one chip would
+    /// produce a chip with two different "WAVEGUIDE" GDS layer numbers — unmanufacturable. The
+    /// layer-stack check must keep it out of the live member set even though the fingerprint
+    /// alone would have allowed it.
+    /// </summary>
+    [Fact]
+    public void RenumberedLayerCustomPdk_ValueCompatibleButLayersDiverge_StaysLockedAndFiltered()
+    {
+        ApplyDemoProcessLock();
+
+        var renumberedProcess = new ProcessDefinition
+        {
+            Name = "Renumbered Process",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 999, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var component = SimpleComponent("RenumberedLib Straight");
+        var path = store.SaveToNamedPdk("RenumberedLib", renumberedProcess, component, "nazca", null);
+
+        _leftPanel.RegisterSavedCustomComponent(component, "RenumberedLib", path);
+
+        var renumberedPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "RenumberedLib");
+        renumberedPdk.IsEnabled.ShouldBeFalse(
+            "same WAVEGUIDE layer NAME but a different GDS layer number must not be treated as the same process");
+        renumberedPdk.IsLockedByProcess.ShouldBeTrue();
+
+        _leftPanel.FilteredTemplates.ShouldNotContain(t => t.PdkSource == "RenumberedLib",
+            "the layer-renumbered PDK's component must not leak into the filtered library");
+    }
+
+    /// <summary>Mirror of the renumbered case at the placement guard (the #736 path).</summary>
+    [Fact]
+    public void RenumberedLayerCustomPdk_IsBlocked_ViaCanvasInteractionViewModel()
+    {
+        var active = ApplyDemoProcessLock();
+
+        var renumberedProcess = new ProcessDefinition
+        {
+            Name = "Renumbered Process",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 999, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var component = SimpleComponent("RenumberedLib Straight");
+        var path = store.SaveToNamedPdk("RenumberedLib", renumberedProcess, component, "nazca", null);
+        _leftPanel.RegisterSavedCustomComponent(component, "RenumberedLib", path);
+
+        var template = _leftPanel.AllTemplates.Single(t => t.PdkSource == "RenumberedLib");
+        var interaction = CreatePlacementInteraction(active);
+        interaction.SelectedTemplate = template;
+
+        interaction.CanvasClicked(100, 100);
+
+        _canvas.Components.Count.ShouldBe(0, "a layer-renumbered custom PDK must remain blocked at placement");
+    }
+
+    /// <summary>
+    /// The #734 metal-addition workflow must keep working: a custom PDK that matches the Demo
+    /// PDK's WAVEGUIDE layer exactly and only ADDS a new metal layer must stay a live member.
+    /// </summary>
+    [Fact]
+    public void MetalAugmentedCustomPdk_MatchingSharedLayer_StaysEnabledAndVisible()
+    {
+        ApplyDemoProcessLock();
+
+        var augmentedProcess = new ProcessDefinition
+        {
+            Name = "Augmented Process",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 1, Datatype = 0 },
+                new() { Name = "METAL2", Layer = 12, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var component = SimpleComponent("AugmentedLib Straight");
+        var path = store.SaveToNamedPdk("AugmentedLib", augmentedProcess, component, "nazca", null);
+
+        _leftPanel.RegisterSavedCustomComponent(component, "AugmentedLib", path);
+
+        var augmentedPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "AugmentedLib");
+        augmentedPdk.IsEnabled.ShouldBeTrue(
+            "matching shared layers plus one additional metal layer must still count as the same process");
+        augmentedPdk.IsLockedByProcess.ShouldBeFalse();
+
+        _leftPanel.FilteredTemplates.ShouldContain(t => t.PdkSource == "AugmentedLib");
+    }
+
+    /// <summary>
+    /// When the reference PDK (the process's own defining PDK, per the snapshot
+    /// <see cref="ActiveProcessSelection.MemberPdkNames"/>) is not currently loaded, the layer
+    /// check must be skipped entirely — behavior stays fingerprint-only, exactly as before this
+    /// feature existed. A layer-clashing candidate must NOT be penalized when there is nothing
+    /// loaded to compare it against.
+    /// </summary>
+    [Fact]
+    public void ReferencePdkNotLoaded_FallsBackToFingerprintOnly_LayerClashIgnored()
+    {
+        var active = new ActiveProcessSelection(
+            DisplayName: "Unloaded Foundry Process",
+            Fingerprint: new CAP_Core.Components.Process.ProcessFingerprint("Si", 220, "SiO2", 1550, "Unloaded Foundry Process"),
+            MemberPdkNames: new List<string> { "SomeUnloadedFoundryPdk" },
+            IsPlayground: false);
+        _leftPanel.ApplyActiveProcess(active);
+
+        var clashingProcess = new ProcessDefinition
+        {
+            Name = "Clashing Process",
+            CoreThicknessNm = 222,
+            Materials = new List<ProcessMaterial>
+            {
+                new() { Name = "Si", Role = "core" },
+                new() { Name = "SiO2", Role = "cladding" },
+            },
+            Layers = new List<ProcessLayer>
+            {
+                new() { Name = "WAVEGUIDE", Layer = 999, Datatype = 0 },
+            },
+        };
+
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var component = SimpleComponent("ClashingLib Straight");
+        var path = store.SaveToNamedPdk("ClashingLib", clashingProcess, component, "nazca", null);
+
+        _leftPanel.RegisterSavedCustomComponent(component, "ClashingLib", path);
+
+        var clashingPdk = _leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == "ClashingLib");
+        clashingPdk.IsEnabled.ShouldBeTrue(
+            "with no reference PDK loaded, fingerprint compatibility alone must still unlock the candidate");
+        clashingPdk.IsLockedByProcess.ShouldBeFalse();
+    }
 }

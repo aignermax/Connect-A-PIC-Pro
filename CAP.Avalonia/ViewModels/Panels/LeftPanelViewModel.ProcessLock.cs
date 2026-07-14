@@ -98,15 +98,39 @@ public partial class LeftPanelViewModel
     /// filter and every placement surface always agree on membership. <c>UnitTests</c> has
     /// InternalsVisibleTo.
     /// </para>
+    /// <para>
+    /// Layer-stack check (issue #570 follow-up): the fingerprint alone (materials/thickness/
+    /// wavelength) says nothing about GDS layer NUMBERS — a PDK whose "NITRIDE" layer was
+    /// renumbered from 203 to 2030 is still fingerprint-compatible but would mix mismatched layer
+    /// numbers into one chip, which is unmanufacturable. So a candidate must ALSO pass
+    /// <see cref="ProcessLayerConsistency.LayersConsistent"/> against a reference process: the
+    /// first currently-loaded PDK draft whose name is in the snapshot <c>active.MemberPdkNames</c>
+    /// and whose <c>Process</c> is set — i.e. the defining foundry/ur-PDK for this process, not
+    /// just any value-compatible one. If that reference PDK isn't loaded, the layer check is
+    /// skipped (fingerprint-only, unchanged behavior) — this method must never let an over-broad
+    /// layer check narrow the set below what plain fingerprint compatibility already allowed, and
+    /// it must never widen it either. Deliberately NOT applied to <see cref="ProcessCatalog"/>
+    /// grouping (still fingerprint-only there): the catalog only needs a coarse "these are roughly
+    /// the same process" grouping for the UI, while this live lock must be strict — an intentional
+    /// asymmetry, not an oversight.
+    /// </para>
     /// </summary>
     internal IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
     {
         if (active.Fingerprint is not { IsSpecified: true } fingerprint)
             return active.MemberPdkNames;
 
+        var loadedDrafts = GetLoadedPdkDrafts();
+        var referenceProcess = loadedDrafts
+            .FirstOrDefault(d => active.MemberPdkNames.Contains(d.Name) && d.Process != null)
+            ?.Process;
+
         return GetLoadedPdkProcessEntries()
             .Where(e => e.Fingerprint.IsSpecified &&
-                        ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint))
+                        ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint) &&
+                        ProcessLayerConsistency.LayersConsistent(
+                            referenceProcess,
+                            loadedDrafts.FirstOrDefault(d => d.Name == e.PdkName)?.Process))
             .Select(e => e.PdkName)
             .ToList();
     }
