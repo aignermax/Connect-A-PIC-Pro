@@ -1,11 +1,8 @@
 using System;
 using System.IO;
-using CAP.Avalonia.Services;
-using CAP.Avalonia.ViewModels;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using Moq;
 using Shouldly;
 using Xunit;
 
@@ -13,11 +10,8 @@ namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
 /// End-to-end test for the PDK-first "New PDK…" modal flow (issue #726 follow-up, task 6): a
-/// named custom PDK is created empty via <see cref="UserPdkStore"/>, a component is appended to
-/// it afterwards, and <see cref="ProcessManagementViewModel"/>'s PDK-creation mode drives the
-/// same store method end to end from the wizard's perspective. Mirrors
-/// <c>UserPdkCreateEmptyTests</c>, <c>ProcessManagementPdkCreationTests</c> and
-/// <c>UserPdkNamedStoreTests</c>.
+/// named custom PDK is created empty via <see cref="UserPdkStore"/>, and a component is appended
+/// to it afterwards. Mirrors <c>UserPdkCreateEmptyTests</c> and <c>UserPdkNamedStoreTests</c>.
 /// </summary>
 public class NewPdkModalFlowTests : IDisposable
 {
@@ -51,25 +45,6 @@ public class NewPdkModalFlowTests : IDisposable
         store.AppendToExistingPdk(path, Comp("mmi"));
 
         new PdkLoader().LoadFromFileForEditing(path).Components.Count.ShouldBe(1);
-    }
-
-    [Fact]
-    public void ProcessManagementViewModel_creation_mode_creates_pdk_file_and_raises_event()
-    {
-        var store = Store();
-        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>())
-        {
-            CreateUserPdk = (name, process) => store.CreateNamedPdkWithProcess(name, process, "gdsfactory", null),
-        };
-        vm.EnterPdkCreationMode();
-        vm.PdkName = "Lib2";
-        string? raisedPath = null;
-        vm.PdkCreated += (_, path) => raisedPath = path;
-
-        vm.CreatePdkCommand.Execute(null);
-
-        store.ListCustomPdks().ShouldContain(i => i.Name == "Lib2");
-        raisedPath.ShouldNotBeNullOrEmpty();
     }
 
     public void Dispose()

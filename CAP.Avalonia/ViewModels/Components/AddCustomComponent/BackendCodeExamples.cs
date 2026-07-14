@@ -15,7 +15,7 @@ public static class BackendCodeExamples
     public const string GdsFactory = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
     /// <summary>Starter snippet for <see cref="GeometryBackend.Nazca"/>.</summary>
-    public const string Nazca = "import nazca as nd\ncomponent = nd.Cell(name='my_component')";
+    public const string Nazca = "import nazca as nd\n\ndef component():\n    with nd.Cell(name='my_component') as c:\n        nd.strt(length=20, width=0.5).put(0)\n        nd.Pin('a0').put(0, 0, 180)\n        nd.Pin('b0').put(20, 0, 0)\n    return c";
 
     /// <summary>Returns the starter snippet matching <paramref name="backend"/>.</summary>
     public static string For(GeometryBackend backend) =>

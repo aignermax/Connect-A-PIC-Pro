@@ -6,6 +6,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
+using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -100,11 +101,12 @@ public partial class MainWindow : Window
                             "Overwrite?", new[] { "Cancel", "Overwrite" });
                         return choice == 1;
                     };
-                    // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, task 5):
-                    // reuses the Fabrication Process editor's layer/cross-section/material UI in
-                    // "PDK creation" mode, blocking modally (ShowDialog, owner = the New Component
-                    // window itself) so the dropdown cannot be left mid-selection while the modal
-                    // is open.
+                    // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, CP-T4): opens
+                    // the purpose-built CreateCustomPdkWindow — not the general Fabrication
+                    // Process editor — so creating a brand-new named PDK is a small, focused
+                    // dialog instead of the full view/edit-existing-process tool. Modal
+                    // (ShowDialog, owner = the New Component window itself) so its PDK dropdown
+                    // cannot be left mid-selection while the modal is open.
                     var window = new NewComponentWindow { DataContext = newComponentVm };
                     // Save closes the window; closing the window (via Save, the titlebar X, or
                     // Alt+F4) always cancels any Meep compute still running so it doesn't keep
@@ -116,40 +118,44 @@ public partial class MainWindow : Window
                         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
                         if (userPdkStore is null) return null;
 
-                        var processVm = new ProcessManagementViewModel(new FileDialogService(this),
+                        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
+                            .Where(d => d.Process != null && !d.ProcessAgnostic)
+                            .Select(d => d.Process!)
+                            .ToList();
+                        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
                             new IProcessImporter[]
                             {
                                 new UpdkYamlProcessImporter(),
                                 new NazcaCsvProcessImporter(),
                             }, new PdkJsonSaver());
-                        processVm.CreateUserPdk = (name, proc) =>
-                            userPdkStore.CreateNamedPdkWithProcess(name, proc, "gdsfactory", null);
-                        processVm.PdkNameExists = name => userPdkStore.NamedPdkExists(name);
-                        processVm.SetAvailablePresets(vm.LeftPanel.GetLoadedPdkDrafts());
-                        // Must run after CreateUserPdk is set, so CreatePdkCommand's CanExecute
-                        // (which requires CreateUserPdk != null) refreshes correctly.
-                        processVm.EnterPdkCreationMode();
+
+                        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
+                        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
 
                         string? createdPath = null;
-                        var processWindow = new ProcessManagementWindow { DataContext = processVm };
-                        processVm.PdkCreated += (_, path) =>
+                        createVm.PdkCreated += (_, path) =>
                         {
                             createdPath = path;
-                            processWindow.Close();
+                            createWindow.Close();
                         };
 
                         try
                         {
-                            await processWindow.ShowDialog(window);
+                            await createWindow.ShowDialog(window);
                         }
                         catch
                         {
                             return null;
                         }
 
-                        return createdPath is null
-                            ? null
-                            : userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+                        if (createdPath is null)
+                            return null;
+
+                        // The freshly created PDK is empty and not yet in the loaded-PDK set, so
+                        // there is nothing to re-lock here; component visibility is (re)established
+                        // when the first component is saved into it via RegisterSavedCustomComponent,
+                        // which itself re-applies the active process by value (CP-T2).
+                        return userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
                     };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
