@@ -12,17 +12,6 @@
 
     <DockPanel Margin="14">
 
-        <!-- PDK-creation mode (#727 task 5): shown only when this dialog is reused by the
-             "New Component" wizard's "New PDK…" sentinel to author a brand-new named PDK,
-             instead of viewing/editing the design's already-active process. -->
-        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Spacing="8" Margin="0,0,0,10"
-                    IsVisible="{Binding IsPdkCreationMode}">
-            <TextBlock Text="PDK name:" VerticalAlignment="Center" Foreground="#aaa"/>
-            <TextBox Text="{Binding PdkName}" Watermark="PDK name" Width="240" VerticalAlignment="Center"/>
-            <Button Content="Create PDK" Command="{Binding CreatePdkCommand}"
-                    Padding="12,6" Background="#2a4a2a"/>
-        </StackPanel>
-
         <!-- Header -->
         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
             <StackPanel Orientation="Horizontal" Spacing="8">
