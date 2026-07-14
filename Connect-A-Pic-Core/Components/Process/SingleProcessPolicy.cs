@@ -31,22 +31,25 @@ public static class SingleProcessPolicy
     /// Decides whether a component from <paramref name="componentPdkName"/> may be placed on a
     /// design locked to <paramref name="active"/>. Built-ins, process-agnostic PDKs (tool
     /// libraries such as "Analysis Tools" — see <paramref name="processAgnosticPdkNames"/>),
-    /// Playground, and an unset selection always pass; otherwise the component's PDK must be a
-    /// member of the active process — either in the persisted <paramref name="active"/>
-    /// snapshot or in <paramref name="liveMemberPdkNames"/>.
+    /// Playground, and an unset selection always pass; otherwise the component's PDK must be an
+    /// effective member of the active process: <paramref name="liveMemberPdkNames"/> when
+    /// provided, else the persisted <paramref name="active"/> snapshot.
     /// </summary>
     /// <param name="active">The design's active process selection, or null when unset.</param>
     /// <param name="componentPdkName">PDK source of the component being placed.</param>
     /// <param name="processAgnosticPdkNames">Names of PDKs flagged process-agnostic (tool libraries).</param>
     /// <param name="liveMemberPdkNames">
     /// The by-value-compatible member PDK names for <paramref name="active"/>, recomputed against
-    /// the live catalog (see <c>LeftPanelViewModel.GetLiveMemberPdkNames</c>, issue #732) rather
-    /// than trusted from <paramref name="active"/>'s persisted
-    /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot. That snapshot is fixed at the
-    /// moment the process was selected/saved with the design, so a custom PDK registered
-    /// afterward — even one that is physically the same process — is missing from it and would
-    /// stay locked out forever without this live set. Null (unwired caller) falls back to the
-    /// snapshot only, preserving prior behavior.
+    /// the live catalog (see <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>, issue #732).
+    /// When non-null it REPLACES the persisted <see cref="ActiveProcessSelection.MemberPdkNames"/>
+    /// snapshot as the membership authority — not a union with it. Both directions matter: the
+    /// snapshot is frozen when the process is saved with the design, so a value-compatible custom
+    /// PDK registered afterward exists only in the live set (would otherwise stay locked out
+    /// forever), and a snapshot member whose process was edited into incompatibility afterward is
+    /// absent from the live set (a snapshot-OR-live union would keep it pasteable while the
+    /// library filter correctly hides it). The live resolution itself already falls back to the
+    /// snapshot when the active process has no computable fingerprint. Null (unwired caller)
+    /// falls back to the snapshot, preserving prior behavior.
     /// </param>
     public static (bool IsAllowed, string? BlockReason) CheckPlacement(
         ActiveProcessSelection? active, string? componentPdkName,
@@ -59,10 +62,8 @@ public static class SingleProcessPolicy
         if (active == null || active.IsPlayground)
             return (true, null);
 
-        if (active.MemberPdkNames.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
-            return (true, null);
-
-        if (liveMemberPdkNames?.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase) ?? false)
+        var effectiveMembers = liveMemberPdkNames ?? (IEnumerable<string>)active.MemberPdkNames;
+        if (effectiveMembers.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
             return (true, null);
 
         return (false,

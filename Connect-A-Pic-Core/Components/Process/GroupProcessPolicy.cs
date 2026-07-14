@@ -25,7 +25,8 @@ public static class GroupProcessPolicy
     /// <param name="liveMemberPdkNames">
     /// By-value-compatible member PDK names for <paramref name="active"/>, forwarded verbatim to
     /// <see cref="SingleProcessPolicy.CheckPlacement"/> for each child — see that method's
-    /// parameter doc (issue #732). Null falls back to the persisted snapshot only.
+    /// parameter doc (issue #732). Non-null REPLACES the persisted snapshot as the membership
+    /// authority; null falls back to the snapshot.
     /// </param>
     /// <param name="groupName">Display name of the group, used in the block message.</param>
     public static (bool IsAllowed, string? BlockReason) CheckGroupPlacement(

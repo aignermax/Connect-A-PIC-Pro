@@ -60,7 +60,7 @@ public class SingleProcessPolicyTests
     /// A custom PDK registered after the process was saved cannot be in the persisted
     /// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot, but is value-compatible
     /// with the active process, so the live-membership set (#732) resolved by
-    /// <c>LeftPanelViewModel.GetLiveMemberPdkNames</c> must still allow it.
+    /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c> must still allow it.
     /// </summary>
     [Fact]
     public void PdkNotInSnapshot_ButInLiveMemberSet_IsAllowed()
@@ -68,6 +68,24 @@ public class SingleProcessPolicyTests
         var live = new[] { "MyLib" };
         SingleProcessPolicy.CheckPlacement(Soi(), "MyLib", liveMemberPdkNames: live)
             .IsAllowed.ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// The live set REPLACES the snapshot, it is not unioned with it: a snapshot member whose
+    /// process was edited into incompatibility AFTER the design was saved disappears from the
+    /// live set and must then be blocked at placement/paste too — otherwise the library filter
+    /// (live-only) and the placement gate would disagree about the same PDK.
+    /// </summary>
+    [Fact]
+    public void SnapshotMemberPdk_MissingFromLiveMemberSet_IsBlocked()
+    {
+        // "Custom SOI" IS in the Soi() snapshot, but not in the live set anymore.
+        var live = new[] { "Foundry SOI" };
+        var (ok, reason) = SingleProcessPolicy.CheckPlacement(Soi(), "Custom SOI", liveMemberPdkNames: live);
+
+        ok.ShouldBeFalse("live membership is authoritative — the stale snapshot must not resurrect an edited-incompatible PDK");
+        reason.ShouldNotBeNull();
+        reason!.ShouldContain("Custom SOI");
     }
 
     /// <summary>
