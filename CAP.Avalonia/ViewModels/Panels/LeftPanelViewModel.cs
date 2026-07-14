@@ -151,6 +151,22 @@ public partial class LeftPanelViewModel : ObservableObject
         LoadComponentLibrary();
         RestorePdkFilterState();
         RestoreLeftPanelWidth();
+
+        // Fire-and-forget (issue #700): ReloadUserPdksAtStartupAsync does its file I/O
+        // synchronously and returns an already-completed Task, so this executes fully on the
+        // calling (UI) thread before Initialize() returns — no cross-thread mutation of the
+        // observable AllTemplates/LoadedPdks collections. Wrapped in try/catch here (rather than
+        // awaited) because Initialize() itself is synchronous and must not throw on a single bad
+        // user PDK file; ReloadUserPdksAtStartupAsync already tolerates per-file failures
+        // internally, this is a last-resort guard against anything unexpected.
+        try
+        {
+            _ = ReloadUserPdksAtStartupAsync();
+        }
+        catch (Exception ex)
+        {
+            _errorConsole?.LogError($"Failed to reload user PDKs at startup: {ex.Message}", ex);
+        }
     }
 
     partial void OnSearchTextChanged(string value) => FilterComponents();

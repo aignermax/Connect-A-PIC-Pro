@@ -30,14 +30,20 @@ public sealed class UserPdkStore
     }
 
     /// <summary>
-    /// Creates the store used at runtime, rooted at
+    /// The default root directory used by <see cref="CreateDefault"/> —
     /// <c>%LOCALAPPDATA%/Lunima/user-pdks</c> (per-user, per-machine; never inside the
-    /// installed application directory so it survives reinstalls/updates).
+    /// installed application directory so it survives reinstalls/updates). Exposed as a
+    /// standalone path so callers that need to scan the directory without a full store
+    /// instance (e.g. the startup PDK reload, issue #700) share this single source of truth
+    /// instead of duplicating the path formula.
     /// </summary>
-    public static UserPdkStore CreateDefault() => new(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "user-pdks"),
-        new PdkJsonSaver(),
-        new PdkLoader());
+    public static string DefaultRootDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "user-pdks");
+
+    /// <summary>
+    /// Creates the store used at runtime, rooted at <see cref="DefaultRootDirectory"/>.
+    /// </summary>
+    public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
 
     /// <summary>The user-PDK file path for a fabrication process. Does not create the file.</summary>
     public string ResolvePath(ProcessDefinition process) =>
