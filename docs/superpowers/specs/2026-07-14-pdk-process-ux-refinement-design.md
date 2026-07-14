@@ -68,6 +68,14 @@
 - Kein Prozess-Merge-Feature: identische Prozesse werden seit #732 by-value als kompatibel gruppiert —
   das beantwortet „warum passen exakt gleiche PDKs nicht zusammen?" bereits.
 - #700/#730 unverändert.
+- **Bundled PDKs bleiben read-only** (kein Edit-Button, Toolbar-🧱-Button entfällt komplett) — damit
+  entfällt der frühere #682-Workflow „Metall-Cross-Section in ein BUNDLED PDK speichern" ersatzlos.
+  Das ist eine bewusste Entscheidung, kein Versehen: ein Bundled/Foundry-PDK ist die vom Hersteller
+  gelieferte Wahrheit und soll nicht vom Nutzer verändert werden können. Wer Metall-Routing auf Basis
+  eines Bundled-Prozesses braucht, legt ein custom PDK an, das diesen Prozess übernimmt (Create-Custom-PDK-
+  Dialog, „Use existing process") und ergänzt dort die Metall-Cross-Section — der Bundled-Prozess selbst
+  bleibt unangetastet. Ein Follow-up-Issue für einen komfortableren „Duplicate as custom PDK"-Weg wird
+  separat angelegt (#733 review, Finding 6).
 
 ## Testing
 - Save ohne Preview: Save mit gültigem Code (Extractor-Mock) rendert selbst und speichert; mit

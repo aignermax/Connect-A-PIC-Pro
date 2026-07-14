@@ -95,9 +95,12 @@ public partial class NewComponentViewModel
     /// named custom PDK (<see cref="NewComponentViewModel.SelectedCustomPdk"/>) — a brand-new
     /// PDK is never created here, only via the <see cref="NewComponentViewModel.CreateNewPdk"/>
     /// modal hook, so by the time <c>Save</c> runs the target file already exists. Requires a
-    /// name, a rendered preview, and a selected PDK — missing any of these reports why via
+    /// name and a selected PDK — missing either reports why via
     /// <see cref="NewComponentViewModel.StatusText"/> and leaves
-    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
+    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A prior explicit Preview click is
+    /// NOT required: Save renders/validates the current code itself via
+    /// <see cref="NewComponentViewModel.EnsurePreviewAsync"/>, reusing an already-rendered,
+    /// still-valid preview verbatim. A name collision is reported unless
     /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it — except for a
     /// self-overwrite in <see cref="NewComponentViewModel.IsEditMode"/> (re-saving the edited
     /// component under its own original name), which is the intended save and skips the prompt. A

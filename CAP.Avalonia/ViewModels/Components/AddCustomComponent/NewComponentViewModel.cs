@@ -126,8 +126,10 @@ public partial class NewComponentViewModel : ObservableObject
             SelectedPdkChoice = PdkChoices[0];
         }
 
-        // Seed the editor with a starter snippet so it is never blank on first open; the user
-        // still has to press Preview, so this cannot mask a stale/mismatched preview.
+        // Seed the editor with a starter snippet so it is never blank on first open. Save no
+        // longer requires a prior explicit Preview click (issue #733 review, Finding 9) — it
+        // renders/validates the current code itself via EnsurePreviewAsync — so this starter
+        // snippet cannot mask a stale/mismatched preview either way.
         if (string.IsNullOrWhiteSpace(Code))
         {
             Code = BackendCodeExamples.For(SelectedBackend);
@@ -166,6 +168,13 @@ public partial class NewComponentViewModel : ObservableObject
         _lastPreview = null;
         HasPreview = false;
         PreviewBitmap = null;
+        // The S-matrix belongs to the geometry it was computed FROM — clearing it here too
+        // (issue #733 review, Finding 1, critical) is the load-bearing fix: without it, Save
+        // would re-render the NEW geometry (via EnsurePreviewAsync) but still attach the OLD
+        // geometry's FDTD result, persisting invented physics that never matched what was
+        // actually saved. A geometry change must always force at least a black-box save unless
+        // ComputeSMatrix is re-run against the new geometry.
+        _computedModel = null;
     }
 
     /// <summary>The rendered geometry reference: always the user's own code, verbatim.</summary>

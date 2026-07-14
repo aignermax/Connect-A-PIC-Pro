@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
@@ -133,6 +134,48 @@ public class NewComponentViewModelTests : IDisposable
 
         vm.SavedDraft.ShouldNotBeNull();
         vm.SavedDraft!.RawCode.ShouldContain("mmi1x2"); // saved the current code, freshly rendered
+    }
+
+    /// <summary>
+    /// Finding 1 (#733 review, critical): <c>InvalidatePreview</c> cleared the cached geometry
+    /// preview on a code change but left a previously-computed <c>_computedModel</c> in place, so
+    /// Save re-rendered the NEW geometry but still attached the OLD geometry's FDTD S-matrix —
+    /// invented physics that never matched what was actually saved. Changing the code after a
+    /// successful compute must force a black-box save, never a stale matrix.
+    /// </summary>
+    [Fact]
+    public async Task ComputeSMatrix_thenChangingTheCode_ForcesABlackBoxSave_NeverTheStaleSMatrix()
+    {
+        var (vm, fdtd) = Build();
+        fdtd.Setup(f => f.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FdtdAvailability.Available(""));
+        fdtd.Setup(f => f.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FdtdSMatrixResult
+            {
+                Success = true,
+                Ports = new[] { "o1", "o2" },
+                Wavelengths = new[] { 1.55 },
+                Entries = new[]
+                {
+                    new FdtdSEntry { Key = "o2@0,o1@0", Values = new[] { new Complex(0.95, 0.0) } },
+                    new FdtdSEntry { Key = "o1@0,o2@0", Values = new[] { new Complex(0.95, 0.0) } },
+                },
+            });
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+        vm.StatusText.ShouldContain("computed"); // sanity: the compute actually produced a model
+
+        // Change the geometry WITHOUT recomputing — the old computed S-matrix belongs to the
+        // OLD geometry and must not survive.
+        vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.SMatrix.ShouldBeNull(); // black box — never the stale FDTD matrix
+        vm.SavedDraft.RawCode.ShouldContain("mmi1x2");
+        vm.StatusText.ShouldContain("black box");
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
