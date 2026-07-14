@@ -109,6 +109,18 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("components")]
         public List<PdkComponentDraft> Components { get; set; } = new();
+
+        /// <summary>
+        /// Absolute path of the JSON file this draft was loaded from, stamped by
+        /// <c>PdkLoader</c> at load time. Never serialized — pure runtime provenance, not PDK
+        /// data — used to match a specific loaded draft back to its own file when two loaded
+        /// PDKs could share a display name (issue #733 review, Finding 5): a name-only lookup
+        /// could otherwise pick the wrong draft and silently write an edit into the wrong file.
+        /// Null for a draft built in memory (e.g. via <c>LoadFromJson</c>) rather than loaded
+        /// from disk.
+        /// </summary>
+        [JsonIgnore]
+        public string? FilePath { get; set; }
     }
 
     /// <summary>

@@ -173,34 +173,6 @@ public partial class MainWindow : Window
                     editorWindow.Show(this);
                 };
 
-                // Wire up Fabrication Process window (process model — #570). The dialog derives
-                // its state from the design's active process + loaded PDKs at open time, so a
-                // reopened dialog always reflects the current selection (#660).
-                vm.ShowProcessManagerRequested = () =>
-                {
-                    var processVm = new ProcessManagementViewModel(new FileDialogService(this));
-                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
-                    // persisted, using the same loaded-PDK registry the offset editor writes through.
-                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
-                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
-                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
-                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
-                    // the exact file so a real PDK can't be edited by accident.
-                    processVm.ConfirmSaveToPdk = async path =>
-                    {
-                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
-                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
-                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
-                            "Save to PDK file?", new[] { "Cancel", "Save" });
-                        return choice == 1;
-                    };
-                    var processWindow = new ProcessManagementWindow
-                    {
-                        DataContext = processVm
-                    };
-                    processWindow.Show(this);
-                };
-
                 // Wire up the New-Design process-selection dialog (issue #570)
                 vm.ShowProcessSelectionAsync = async groups =>
                 {
@@ -714,6 +686,59 @@ public partial class MainWindow : Window
         {
             vm.LeftPanel.EditCustomComponentCommand.Execute(template);
         }
+    }
+
+    /// <summary>
+    /// Handles "Edit…" click on a custom PDK's row in PDK Management (issue #726 follow-up):
+    /// opens the Fabrication Process editor scoped to just that PDK's own process, replacing the
+    /// old toolbar-wide dialog with its preset/import pickers. Bundled PDKs have no Edit button
+    /// (see the <c>!IsBundled</c> visibility binding in <c>MainWindow.axaml</c>), but the check is
+    /// repeated here as the authoritative guard. Never touches
+    /// <c>FileOperationsViewModel.ActiveProcess</c> — only the PDK's own JSON file.
+    /// </summary>
+    private void PdkEditProcess_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || pdk.IsBundled)
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // Match by file path first, not just display name: two loaded PDKs can share a name
+        // (e.g. two custom PDKs authored under the same name from different files), and a
+        // name-only lookup could then load the wrong draft here while still resolving
+        // PdkFilePathResolver to this row's OWN file below — silently writing this edit into a
+        // different PDK's JSON (issue #733 review, Finding 5).
+        var draft = MetalTraceStyleResolver.FindOwnDraft(vm.LeftPanel.GetLoadedPdkDrafts(), pdk.FilePath, pdk.Name);
+        if (draft is null)
+            return;
+
+        var processVm = new ProcessManagementViewModel(new FileDialogService(this))
+        {
+            // Resolve straight to this row's own file path — no name-based lookup needed since
+            // the button is already scoped to this exact PDK.
+            PdkFilePathResolver = _ => pdk.FilePath,
+            // Confirm before overwriting the PDK's JSON on disk (same prompt as the former
+            // toolbar dialog): naming the exact file so it can't be edited by accident.
+            ConfirmSaveToPdk = async path =>
+            {
+                var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                    $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                    + "layers and cross-sections are written. Continue?",
+                    "Save to PDK file?", new[] { "Cancel", "Save" });
+                return choice == 1;
+            },
+        };
+        processVm.LoadForSinglePdkEdit(draft);
+        // Re-apply the active process lock by value after a save, so an edit that changes this
+        // PDK's fingerprint is reflected immediately without a restart.
+        processVm.ProcessSaved += (_, _) => vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+
+        var processWindow = new ProcessManagementWindow
+        {
+            DataContext = processVm,
+            Title = $"Edit Process — {pdk.Name}",
+        };
+        processWindow.Show(this);
     }
 
     /// <summary>

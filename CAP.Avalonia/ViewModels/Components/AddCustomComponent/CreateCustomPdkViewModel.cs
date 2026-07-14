@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using CAP.Avalonia.Services.AddCustomComponent;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -32,6 +33,16 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     /// <summary>The process picked in the "Use existing" dropdown, or null if none selected yet.</summary>
     [ObservableProperty]
     private ProcessDefinition? _selectedExistingProcess;
+
+    /// <summary>
+    /// The process picked in the "Define new" path's "Start from template" dropdown, or null if
+    /// none chosen. Selecting one prefills <see cref="ProcessDefinitionEditor"/> (name, layers,
+    /// cross-sections, materials) and <see cref="CoreThicknessNm"/> as a starting point only —
+    /// the user is free to edit every field afterwards, and <c>CreatePdk</c> persists whatever
+    /// ends up in the editor, not this template.
+    /// </summary>
+    [ObservableProperty]
+    private ProcessDefinition? _selectedTemplate;
 
     /// <summary>
     /// Core waveguide-layer thickness in nm for a "Define new" process. Required for the created
@@ -145,4 +156,25 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     partial void OnProcessSourceChanged(PdkProcessSource value) => CreatePdkCommand.NotifyCanExecuteChanged();
 
     partial void OnSelectedExistingProcessChanged(ProcessDefinition? value) => CreatePdkCommand.NotifyCanExecuteChanged();
+
+    /// <summary>
+    /// Prefills the "Define new" editor from the chosen template. A no-op on clearing the
+    /// selection (value == null) so the editor is left exactly as the user last edited it.
+    /// Loads a deep copy, never <paramref name="value"/> itself: <see cref="AvailableProcesses"/>
+    /// entries can be the live, in-memory <see cref="ProcessDefinition"/> of an already-loaded PDK
+    /// (see <c>MainWindow.axaml.cs</c>'s <c>d.Process!</c> wiring), and <see cref="ProcessManagementViewModel.Load"/>
+    /// only copies collection references — editing the prefilled grid rows would otherwise mutate
+    /// that other PDK's process object in place.
+    /// </summary>
+    partial void OnSelectedTemplateChanged(ProcessDefinition? value)
+    {
+        if (value == null)
+            return;
+
+        // Deep-copies via the shared ProcessDefinitionCloner (issue #733 review, Finding 3) —
+        // the same helper LoadForSinglePdkEdit uses — so this dialog never aliases the
+        // template's rows (which can be another already-loaded PDK's live in-memory process).
+        ProcessDefinitionEditor.Load(ProcessDefinitionCloner.Clone(value));
+        CoreThicknessNm = value.CoreThicknessNm;
+    }
 }

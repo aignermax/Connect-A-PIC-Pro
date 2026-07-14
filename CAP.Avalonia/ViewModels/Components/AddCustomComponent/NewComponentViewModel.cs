@@ -126,8 +126,10 @@ public partial class NewComponentViewModel : ObservableObject
             SelectedPdkChoice = PdkChoices[0];
         }
 
-        // Seed the editor with a starter snippet so it is never blank on first open; the user
-        // still has to press Preview, so this cannot mask a stale/mismatched preview.
+        // Seed the editor with a starter snippet so it is never blank on first open. Save no
+        // longer requires a prior explicit Preview click (issue #733 review, Finding 9) — it
+        // renders/validates the current code itself via EnsurePreviewAsync — so this starter
+        // snippet cannot mask a stale/mismatched preview either way.
         if (string.IsNullOrWhiteSpace(Code))
         {
             Code = BackendCodeExamples.For(SelectedBackend);
@@ -136,8 +138,10 @@ public partial class NewComponentViewModel : ObservableObject
 
     // A change to any input the preview was rendered from invalidates the preview — otherwise
     // a saved draft could be built from a rendered preview that no longer matches the current
-    // inputs. Clearing _lastPreview is the load-bearing part: Save gates on that field, so a
-    // stale preview cannot be saved; HasPreview (Save button's enablement) tracks it.
+    // inputs. Clearing _lastPreview is the load-bearing part: Save re-renders via
+    // EnsurePreviewAsync whenever _lastPreview isn't a fresh success, so a stale preview can
+    // never be saved verbatim. HasPreview no longer gates Save's enablement (Save renders
+    // on demand) — it only drives the preview thumbnail/status display.
     partial void OnSelectedBackendChanged(GeometryBackend value)
     {
         // Autoload the new backend's starter snippet, but only over an empty editor or one
@@ -164,6 +168,13 @@ public partial class NewComponentViewModel : ObservableObject
         _lastPreview = null;
         HasPreview = false;
         PreviewBitmap = null;
+        // The S-matrix belongs to the geometry it was computed FROM — clearing it here too
+        // (issue #733 review, Finding 1, critical) is the load-bearing fix: without it, Save
+        // would re-render the NEW geometry (via EnsurePreviewAsync) but still attach the OLD
+        // geometry's FDTD result, persisting invented physics that never matched what was
+        // actually saved. A geometry change must always force at least a black-box save unless
+        // ComputeSMatrix is re-run against the new geometry.
+        _computedModel = null;
     }
 
     /// <summary>The rendered geometry reference: always the user's own code, verbatim.</summary>
@@ -182,7 +193,9 @@ public partial class NewComponentViewModel : ObservableObject
     /// Renders the configured geometry reference, extracts its size and pins, and rasterises a
     /// thumbnail into <see cref="PreviewBitmap"/> via <see cref="PreviewBitmapFactory.FromResult"/>.
     /// A failed render (or a render with nothing to rasterise) clears <see cref="PreviewBitmap"/>
-    /// rather than leaving a stale bitmap behind.
+    /// rather than leaving a stale bitmap behind. Always re-renders — an explicit Preview click
+    /// invalidates any cached result first, unlike <see cref="Save"/>'s own call to
+    /// <see cref="EnsurePreviewAsync"/>, which reuses a still-valid one.
     /// </summary>
     [RelayCommand]
     private async Task RunPreview()
@@ -191,20 +204,44 @@ public partial class NewComponentViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var reference = BuildReference();
-            var result = await _extractor.ExtractAsync(reference);
-            _lastPreview = result;
-            HasPreview = result.Success;
-            PreviewBitmap = result.Success
-                ? PreviewBitmapFactory.FromResult(result.Raw, PreviewBitmapPixels)
-                : null;
-            StatusText = result.Success
-                ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
-                : result.Error ?? "Preview render failed.";
+            InvalidatePreview();
+            await EnsurePreviewAsync();
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    /// <summary>
+    /// Ensures <see cref="_lastPreview"/> holds a successful render, rendering one on demand if
+    /// it doesn't — the mechanism that lets <see cref="Save"/> (in the
+    /// <c>NewComponentViewModel.Save.cs</c> partial) work without a prior explicit
+    /// <see cref="RunPreview"/> click. Reuses an already-successful <see cref="_lastPreview"/>
+    /// verbatim (so a preceding Preview click is never re-rendered); otherwise renders exactly
+    /// like <see cref="RunPreview"/> does, updating <see cref="HasPreview"/>/
+    /// <see cref="PreviewBitmap"/>/<see cref="StatusText"/> either way. Does not touch
+    /// <see cref="IsBusy"/> itself: both callers already hold that guard for the duration of
+    /// their own command, and re-acquiring it here would be redundant at best and, for a
+    /// re-entrant caller, a way to defeat the guard.
+    /// </summary>
+    private async Task<bool> EnsurePreviewAsync()
+    {
+        if (_lastPreview is { Success: true })
+        {
+            return true;
+        }
+
+        var reference = BuildReference();
+        var result = await _extractor.ExtractAsync(reference);
+        _lastPreview = result;
+        HasPreview = result.Success;
+        PreviewBitmap = result.Success
+            ? PreviewBitmapFactory.FromResult(result.Raw, PreviewBitmapPixels)
+            : null;
+        StatusText = result.Success
+            ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
+            : result.Error ?? "Preview render failed.";
+        return result.Success;
     }
 }

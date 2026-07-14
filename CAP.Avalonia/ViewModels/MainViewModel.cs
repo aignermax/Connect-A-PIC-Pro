@@ -729,18 +729,6 @@ public partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Raised when the user requests to open the Fabrication Process window
-    /// (process model — issue #570). The View layer subscribes and shows it.
-    /// </summary>
-    public Action? ShowProcessManagerRequested { get; set; }
-
-    [RelayCommand]
-    private void OpenProcessManager()
-    {
-        ShowProcessManagerRequested?.Invoke();
-    }
-
-    /// <summary>
     /// Shows the New-Design process-selection dialog (issue #570) and returns the
     /// user's choice, or null if the user cancelled. Wired by
     /// <see cref="CAP.Avalonia.Views.MainWindow"/>; left null in headless/test

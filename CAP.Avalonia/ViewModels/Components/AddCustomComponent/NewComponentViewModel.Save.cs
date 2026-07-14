@@ -19,10 +19,13 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    /// <summary>Save requires a rendered preview, no work in flight, and a selected target PDK.</summary>
-    private bool CanSave => HasPreview && !IsBusy && SelectedCustomPdk is not null;
+    /// <summary>
+    /// Save no longer requires a prior explicit preview — it renders/validates on its own via
+    /// <see cref="NewComponentViewModel.EnsurePreviewAsync"/> — so this only requires no work in
+    /// flight and a selected target PDK.
+    /// </summary>
+    private bool CanSave => !IsBusy && SelectedCustomPdk is not null;
 
-    partial void OnHasPreviewChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
     partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
 
     /// <summary>
@@ -92,9 +95,12 @@ public partial class NewComponentViewModel
     /// named custom PDK (<see cref="NewComponentViewModel.SelectedCustomPdk"/>) — a brand-new
     /// PDK is never created here, only via the <see cref="NewComponentViewModel.CreateNewPdk"/>
     /// modal hook, so by the time <c>Save</c> runs the target file already exists. Requires a
-    /// name, a rendered preview, and a selected PDK — missing any of these reports why via
+    /// name and a selected PDK — missing either reports why via
     /// <see cref="NewComponentViewModel.StatusText"/> and leaves
-    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A name collision is reported unless
+    /// <see cref="NewComponentViewModel.SavedDraft"/> null. A prior explicit Preview click is
+    /// NOT required: Save renders/validates the current code itself via
+    /// <see cref="NewComponentViewModel.EnsurePreviewAsync"/>, reusing an already-rendered,
+    /// still-valid preview verbatim. A name collision is reported unless
     /// <see cref="NewComponentViewModel.ConfirmOverwrite"/> confirms it — except for a
     /// self-overwrite in <see cref="NewComponentViewModel.IsEditMode"/> (re-saving the edited
     /// component under its own original name), which is the intended save and skips the prompt. A
@@ -115,11 +121,6 @@ public partial class NewComponentViewModel
             StatusText = "Enter a component name before saving.";
             return;
         }
-        if (_lastPreview is not { Success: true } preview)
-        {
-            StatusText = "Render a preview before saving.";
-            return;
-        }
         var pdk = SelectedCustomPdk;
         if (pdk is null)
         {
@@ -130,6 +131,15 @@ public partial class NewComponentViewModel
         IsBusy = true;
         try
         {
+            // Renders/validates the current code itself when no (still-valid) preview exists —
+            // a prior explicit Preview click is no longer a prerequisite. A render failure (e.g.
+            // a Python syntax error) is reported via StatusText by EnsurePreviewAsync itself and
+            // aborts the save; nothing is ever persisted from a failed or stale render.
+            if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
+            {
+                return;
+            }
+
             var reference = BuildReference();
             var sMatrix = _computedModel is null
                 ? FdtdSMatrixToDraftConverter.BlackBox()

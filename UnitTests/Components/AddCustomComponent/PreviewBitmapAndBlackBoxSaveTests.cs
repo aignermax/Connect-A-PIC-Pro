@@ -128,17 +128,19 @@ public class PreviewBitmapAndBlackBoxSaveTests : IDisposable
         vm.StatusText.ShouldContain("black box");
     }
 
-    // (C) CanSave must not require a computed S-matrix — only preview + PDK.
+    // (C) CanSave must not require a computed S-matrix, nor even a prior preview — only a
+    // selected PDK and no work in flight; Save renders/validates on its own (task 1, #729
+    // follow-up).
     [Fact]
-    public async Task CanSave_isTrue_assoonAs_previewAndPdk_arePresent_withoutCompute()
+    public async Task CanSave_isTrue_assoonAsAPdkIsSelected_evenWithoutAPriorPreviewOrCompute()
     {
         var (vm, _) = Build(withFdtd: true); // FDTD configured but never invoked
-        vm.SaveCommand.CanExecute(null).ShouldBeFalse(); // no preview yet
+        vm.SelectedCustomPdk.ShouldNotBeNull(); // ctor pre-selects the seeded PDK
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue(); // PDK selected, not busy — no preview needed
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
 
-        vm.SelectedCustomPdk.ShouldNotBeNull();
-        vm.SaveCommand.CanExecute(null).ShouldBeTrue(); // preview + PDK, no compute needed
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue(); // still true after an explicit preview
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
