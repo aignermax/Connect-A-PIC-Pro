@@ -153,6 +153,29 @@ public partial class PdkManagerViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Returns the names of loaded PDKs that are compatible with the active process lock —
+    /// every PDK whose <see cref="PdkInfoViewModel.IsLockedByProcess"/> is false. When no process
+    /// is active (<see cref="ClearProcessLock"/> ran, or a process was never applied), nothing is
+    /// locked, so this returns every loaded PDK name.
+    /// <para>
+    /// Deliberately NOT the same as <see cref="GetEnabledPdkNames"/>: per
+    /// <see cref="ApplyProcessLock"/>'s doc, a process MEMBER PDK's enabled checkbox stays
+    /// user-togglable to declutter the component library — that is a filtering choice, not a
+    /// process violation. Callers that need to judge whether a placed component's PDK still
+    /// belongs to the active process (e.g. the design-check PDK-compatibility validator) must use
+    /// this lock-based set; using <see cref="GetEnabledPdkNames"/> there would wrongly flag a
+    /// manually-disabled-but-still-valid member PDK's components as process-conflicted.
+    /// </para>
+    /// </summary>
+    public HashSet<string> GetProcessCompatiblePdkNames()
+    {
+        return LoadedPdks
+            .Where(p => !p.IsLockedByProcess)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
     /// Drives the enabled set directly: every loaded PDK whose name is in <paramref name="names"/>
     /// is enabled, all others disabled. Used to lock the library to the active process's member
     /// PDKs (issue #570); callers are expected to also set <see cref="ManualTogglesEnabled"/>.

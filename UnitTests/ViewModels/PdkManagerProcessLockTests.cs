@@ -42,4 +42,40 @@ public class PdkManagerProcessLockTests
         filterCalls.ShouldBe(1);
         manager.GetEnabledPdkNames().ShouldBe(new[] { "A" }, ignoreOrder: true);
     }
+
+    /// <summary>
+    /// Regression test for the design-check false positive: deselecting a member PDK's
+    /// library-filter checkbox is a filtering choice (<see cref="PdkManagerViewModel.ApplyProcessLock"/>
+    /// doc), not a process violation, so its already-placed components must not become
+    /// "process conflicted". <see cref="PdkManagerViewModel.GetEnabledPdkNames"/> alone cannot
+    /// tell that apart from a real foreign-process PDK — only <c>IsLockedByProcess</c> can — so
+    /// design-check wiring must consult <see cref="PdkManagerViewModel.GetProcessCompatiblePdkNames"/>
+    /// instead.
+    /// </summary>
+    [Fact]
+    public void GetProcessCompatiblePdkNames_MemberPdkManuallyDisabled_StillCountsAsCompatible()
+    {
+        var manager = new PdkManagerViewModel();
+        manager.RegisterPdk("MemberPdk", null, true, 1);
+        manager.RegisterPdk("ForeignPdk", null, true, 1);
+
+        manager.ApplyProcessLock(new[] { "MemberPdk" });
+
+        // User declutters the library by unchecking the member PDK.
+        manager.LoadedPdks.First(p => p.Name == "MemberPdk").IsEnabled = false;
+
+        manager.GetEnabledPdkNames().ShouldNotContain("MemberPdk");
+        manager.GetProcessCompatiblePdkNames().ShouldContain("MemberPdk");
+        manager.GetProcessCompatiblePdkNames().ShouldNotContain("ForeignPdk");
+    }
+
+    [Fact]
+    public void GetProcessCompatiblePdkNames_NoActiveProcess_ReturnsAllLoadedPdks()
+    {
+        var manager = new PdkManagerViewModel();
+        manager.RegisterPdk("A", null, true, 1);
+        manager.RegisterPdk("B", null, true, 1);
+
+        manager.GetProcessCompatiblePdkNames().ShouldBe(new[] { "A", "B" }, ignoreOrder: true);
+    }
 }

@@ -924,7 +924,7 @@ public partial class MainViewModel : ObservableObject
             ChipSize.CurrentHeightMicrometers,
             pdkSourceByComponent,
             LeftPanel.GetProcessAgnosticPdkNames(),
-            LeftPanel.PdkManager.GetEnabledPdkNames());
+            LeftPanel.PdkManager.GetProcessCompatiblePdkNames());
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }
