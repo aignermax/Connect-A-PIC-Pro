@@ -136,8 +136,10 @@ public partial class NewComponentViewModel : ObservableObject
 
     // A change to any input the preview was rendered from invalidates the preview — otherwise
     // a saved draft could be built from a rendered preview that no longer matches the current
-    // inputs. Clearing _lastPreview is the load-bearing part: Save gates on that field, so a
-    // stale preview cannot be saved; HasPreview (Save button's enablement) tracks it.
+    // inputs. Clearing _lastPreview is the load-bearing part: Save re-renders via
+    // EnsurePreviewAsync whenever _lastPreview isn't a fresh success, so a stale preview can
+    // never be saved verbatim. HasPreview no longer gates Save's enablement (Save renders
+    // on demand) — it only drives the preview thumbnail/status display.
     partial void OnSelectedBackendChanged(GeometryBackend value)
     {
         // Autoload the new backend's starter snippet, but only over an empty editor or one
