@@ -28,6 +28,30 @@ public partial class LeftPanelViewModel
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
 
     /// <summary>
+    /// Takes a freshly created (possibly still component-less) custom PDK file into the loaded
+    /// set immediately (issue #734, "Duplicate as custom PDK"): loads its draft, registers it
+    /// with the PDK manager, persists its path for the next start, and re-applies the active
+    /// process lock — so a value-compatible duplicate of a foundry process appears enabled at
+    /// once instead of only after its first component is saved. Returns the loaded draft (or
+    /// the already-loaded one when the file was registered before).
+    /// </summary>
+    public PdkDraft? RegisterCreatedCustomPdk(string filePath)
+    {
+        if (PdkManager.IsPdkLoaded(filePath))
+            return GetLoadedPdkDrafts().FirstOrDefault(d => d.FilePath == filePath);
+
+        // Edit-tolerant loader — the same one UserPdkStore reads its own files with — so a
+        // fresh user PDK (which may lack Nazca origin offsets) still loads.
+        var draft = _pdkLoader.LoadFromFileForEditing(filePath);
+        _loadedPdkDrafts.Add(draft);
+        PdkManager.RegisterPdk(draft.Name, filePath, false, draft.Components.Count);
+        _preferencesService.AddUserPdkPath(filePath);
+        ReapplyActiveProcessAfterPdkChange();
+        FilterComponents();
+        return draft;
+    }
+
+    /// <summary>
     /// True when <paramref name="template"/> belongs to a currently-loaded, non-bundled PDK —
     /// the only components the "New Component" assistant is allowed to edit in place. Foundry
     /// (bundled) PDKs are read-only, so a template whose <see cref="ComponentTemplate.PdkSource"/>

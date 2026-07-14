@@ -674,6 +674,13 @@
                                                         Click="PdkEditProcess_Click"
                                                         FontSize="9" Padding="6,1" Background="#3d3d3d"
                                                         ToolTip.Tip="Edit this PDK's fabrication process — layer stack, cross-sections, materials"/>
+                                                <!-- Bundled/foundry PDKs are read-only (#733); to extend their
+                                                     process (e.g. add a metal cross-section) duplicate it into a
+                                                     named custom PDK in one step and edit that copy (issue #734). -->
+                                                <Button Content="Duplicate…" IsVisible="{Binding IsBundled}"
+                                                        Click="PdkDuplicateAsCustom_Click"
+                                                        FontSize="9" Padding="6,1" Background="#3d3d3d"
+                                                        ToolTip.Tip="Duplicate as custom PDK — copies this foundry process into a new editable custom PDK; the foundry file stays untouched"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>

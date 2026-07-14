@@ -3,6 +3,7 @@ using Avalonia.Controls.Notifications;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
@@ -11,6 +12,8 @@ using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+using System;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkImport;
@@ -712,11 +715,25 @@ public partial class MainWindow : Window
         if (draft is null)
             return;
 
+        OpenSinglePdkProcessEditor(vm, pdk.Name, pdk.FilePath, draft);
+    }
+
+    /// <summary>
+    /// Opens the Fabrication Process editor scoped to one custom PDK's own process — shared by
+    /// the per-PDK "Edit…" button and the bundled-PDK "Duplicate…" flow (issue #734), which
+    /// opens the editor directly on the freshly created duplicate.
+    /// </summary>
+    /// <param name="vm">The main view model (for the post-save process-lock re-apply).</param>
+    /// <param name="pdkName">The PDK's display name (window title).</param>
+    /// <param name="filePath">The PDK's own JSON file, saved to on confirm.</param>
+    /// <param name="draft">The PDK's loaded draft whose process is edited.</param>
+    private void OpenSinglePdkProcessEditor(MainViewModel vm, string pdkName, string? filePath, PdkDraft draft)
+    {
         var processVm = new ProcessManagementViewModel(new FileDialogService(this))
         {
-            // Resolve straight to this row's own file path — no name-based lookup needed since
-            // the button is already scoped to this exact PDK.
-            PdkFilePathResolver = _ => pdk.FilePath,
+            // Resolve straight to this PDK's own file path — no name-based lookup needed since
+            // the caller is already scoped to this exact PDK.
+            PdkFilePathResolver = _ => filePath,
             // Confirm before overwriting the PDK's JSON on disk (same prompt as the former
             // toolbar dialog): naming the exact file so it can't be edited by accident.
             ConfirmSaveToPdk = async path =>
@@ -736,9 +753,64 @@ public partial class MainWindow : Window
         var processWindow = new ProcessManagementWindow
         {
             DataContext = processVm,
-            Title = $"Edit Process — {pdk.Name}",
+            Title = $"Edit Process — {pdkName}",
         };
         processWindow.Show(this);
+    }
+
+    /// <summary>
+    /// Handles "Duplicate…" click on a bundled PDK's row in PDK Management (issue #734).
+    /// Bundled/foundry PDKs are read-only since #733, so extending a foundry process (e.g.
+    /// adding a metal cross-section for electrical routing) requires a custom PDK. This does it
+    /// in one step: prompts for a name, creates a named custom PDK carrying a value-identical
+    /// copy of the foundry process (the foundry JSON is never touched), registers it immediately
+    /// (value-compatible → enabled under the active process lock), and opens the per-PDK
+    /// process editor on it.
+    /// </summary>
+    private async void PdkDuplicateAsCustom_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || !pdk.IsBundled)
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var sourceDraft = MetalTraceStyleResolver.FindOwnDraft(
+            vm.LeftPanel.GetLoadedPdkDrafts(), pdk.FilePath, pdk.Name);
+        if (sourceDraft?.Process is null)
+        {
+            await new MessageBoxService().ShowChoicePromptAsync(
+                $"'{pdk.Name}' declares no fabrication process, so there is nothing to duplicate.",
+                "Duplicate as custom PDK", new[] { "OK" });
+            return;
+        }
+
+        var name = await new InputDialogService().ShowInputDialogAsync(
+            "Duplicate as custom PDK",
+            "Name for the new custom PDK",
+            $"{pdk.Name} (custom)");
+        if (string.IsNullOrWhiteSpace(name))
+            return;
+
+        if (App.Services.GetService(typeof(UserPdkStore)) is not UserPdkStore store)
+            return;
+
+        string createdPath;
+        try
+        {
+            createdPath = BundledPdkDuplicationService.Duplicate(store, sourceDraft, name);
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+        {
+            await new MessageBoxService().ShowChoicePromptAsync(
+                ex.Message, "Duplicate as custom PDK", new[] { "OK" });
+            return;
+        }
+
+        var newDraft = vm.LeftPanel.RegisterCreatedCustomPdk(createdPath);
+        if (newDraft is null)
+            return;
+
+        OpenSinglePdkProcessEditor(vm, newDraft.Name, createdPath, newDraft);
     }
 
     /// <summary>
