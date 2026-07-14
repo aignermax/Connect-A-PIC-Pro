@@ -116,4 +116,34 @@ public class CreateCustomPdkTemplateTests : IDisposable
 
         vm.ProcessDefinitionEditor.ProcessName.ShouldBe(nameBeforeClear);
     }
+
+    /// <summary>
+    /// Finding 2 (#733 review): <see cref="ProcessManagementViewModel.Load"/> only copied
+    /// Name+Layers/Xsections/Materials, and <see cref="ProcessManagementViewModel.ToProcess"/>
+    /// only built from those — so a template's <c>AllowedAngles</c>/
+    /// <c>ElectricalBridgeRequired</c>/<c>Foundry</c>/<c>Version</c> silently vanished on
+    /// CreatePdk even though the template prefill and the editor never touch them.
+    /// </summary>
+    [Fact]
+    public void SelectingTemplate_ThenCreatePdk_PreservesAllowedAnglesAndElectricalBridgeRequired()
+    {
+        var store = CreateStore();
+        var template = TemplateProcess();
+        template.AllowedAngles = new List<int> { 0, 90, 180, 270 };
+        template.ElectricalBridgeRequired = true;
+        template.Foundry = "AcmeFab";
+        template.Version = "v3";
+        var vm = CreateVm(store, template);
+
+        vm.SelectedTemplate = template;
+        vm.PdkName = "My Angled Lib";
+        vm.ProcessSource = PdkProcessSource.DefineNew;
+        vm.CreatePdkCommand.Execute(null);
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(vm.CreatedFilePath!);
+        reloaded.Process!.AllowedAngles.ShouldBe(new List<int> { 0, 90, 180, 270 });
+        reloaded.Process.ElectricalBridgeRequired.ShouldBe(true);
+        reloaded.Process.Foundry.ShouldBe("AcmeFab");
+        reloaded.Process.Version.ShouldBe("v3");
+    }
 }

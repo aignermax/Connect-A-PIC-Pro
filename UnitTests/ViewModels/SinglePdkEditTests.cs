@@ -131,4 +131,115 @@ public class SinglePdkEditTests
             Directory.Delete(dir, recursive: true);
         }
     }
+
+    /// <summary>
+    /// Finding 0 (#733 review): SaveProcess used to filter rows by a NAME snapshot taken at
+    /// Load() time, so a row renamed afterwards — including every row added via "+ Layer"/
+    /// "+ Cross-section" (they start as NEW_LAYER/new_xs and are always renamed) — fell outside
+    /// that snapshot and was silently dropped on save. Ownership must be tracked by row
+    /// object identity, not by name, so a rename can never un-own a row.
+    /// </summary>
+    [Fact]
+    public async Task SaveProcess_AfterAddingAndRenamingRows_PersistsBothUnderTheirNewNames()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "single-pdk-edit-rename-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "custom.json");
+
+        try
+        {
+            var draft = new PdkDraft { Name = "BlankPdk", Process = null };
+
+            var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>())
+            {
+                PdkFilePathResolver = name => name == "BlankPdk" ? path : null,
+                ConfirmSaveToPdk = _ => Task.FromResult(true),
+            };
+            vm.LoadForSinglePdkEdit(draft);
+
+            vm.AddLayerCommand.Execute(null);
+            vm.Layers.Single().Name = "WG";
+
+            vm.AddXsectionCommand.Execute(null);
+            vm.Xsections.Single().Name = "strip";
+
+            await vm.SaveProcessCommand.ExecuteAsync(null);
+
+            var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+            reloaded.Process.ShouldNotBeNull();
+            reloaded.Process!.Layers.ShouldContain(l => l.Name == "WG");
+            reloaded.Process.Xsections.ShouldContain(x => x.Name == "strip");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Finding 3 (#733 review): LoadForSinglePdkEdit used to copy the draft's process rows by
+    /// reference into the editable collections, so every keystroke mutated the live in-memory
+    /// PDK immediately, even before Save. Closing the editor without saving must leave the
+    /// original draft untouched; only Save may write the edit back.
+    /// </summary>
+    [Fact]
+    public void LoadForSinglePdkEdit_EditingWithoutSave_DoesNotMutateTheLiveDraft()
+    {
+        var draft = new PdkDraft
+        {
+            Name = "MyCustomPdk",
+            Process = new ProcessDefinition
+            {
+                Name = "MyCustomPdk",
+                Xsections = new List<ProcessXsection> { new() { Name = "strip", WidthUm = 0.5 } },
+            },
+        };
+        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>());
+
+        vm.LoadForSinglePdkEdit(draft);
+        vm.Xsections.Single(x => x.Name == "strip").WidthUm = 0.9;
+
+        draft.Process.Xsections.Single(x => x.Name == "strip").WidthUm.ShouldBe(0.5,
+            "editing the editor's copy must not mutate the live draft before Save");
+    }
+
+    /// <summary>
+    /// Finding 4 (#733 review): SaveProcess rebuilt the process from the editable grids but never
+    /// wrote the edited <c>ProcessName</c> back onto it, so renaming the process in the editor was
+    /// silently discarded on save.
+    /// </summary>
+    [Fact]
+    public async Task SaveProcess_AfterRenamingTheProcess_PersistsTheNewName()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "single-pdk-edit-procrename-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, "custom.json");
+
+        try
+        {
+            var draft = new PdkDraft
+            {
+                Name = "MyCustomPdk",
+                Process = new ProcessDefinition { Name = "OldProcessName" },
+            };
+            new PdkJsonSaver().SaveToFile(draft, path);
+
+            var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>())
+            {
+                PdkFilePathResolver = name => name == "MyCustomPdk" ? path : null,
+                ConfirmSaveToPdk = _ => Task.FromResult(true),
+            };
+            vm.LoadForSinglePdkEdit(draft);
+            vm.ProcessName = "NewProcessName";
+
+            await vm.SaveProcessCommand.ExecuteAsync(null);
+
+            var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+            reloaded.Process!.Name.ShouldBe("NewProcessName");
+        }
+        finally
+        {
+            Directory.Delete(dir, recursive: true);
+        }
+    }
 }

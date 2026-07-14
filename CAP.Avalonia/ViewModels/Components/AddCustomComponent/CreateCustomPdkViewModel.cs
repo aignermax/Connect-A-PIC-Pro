@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
+using CAP.Avalonia.Services.AddCustomComponent;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -170,35 +171,10 @@ public partial class CreateCustomPdkViewModel : ObservableObject
         if (value == null)
             return;
 
-        ProcessDefinitionEditor.Load(CloneForTemplate(value));
+        // Deep-copies via the shared ProcessDefinitionCloner (issue #733 review, Finding 3) —
+        // the same helper LoadForSinglePdkEdit uses — so this dialog never aliases the
+        // template's rows (which can be another already-loaded PDK's live in-memory process).
+        ProcessDefinitionEditor.Load(ProcessDefinitionCloner.Clone(value));
         CoreThicknessNm = value.CoreThicknessNm;
     }
-
-    /// <summary>
-    /// Deep-copies a process definition so it can be handed to <see cref="ProcessDefinitionEditor"/>
-    /// as an independent starting point (see <see cref="OnSelectedTemplateChanged"/>) without ever
-    /// aliasing the original template's rows.
-    /// </summary>
-    private static ProcessDefinition CloneForTemplate(ProcessDefinition source) => new()
-    {
-        Name = source.Name,
-        Foundry = source.Foundry,
-        Version = source.Version,
-        CoreThicknessNm = source.CoreThicknessNm,
-        Layers = source.Layers.Select(l => new ProcessLayer
-        {
-            Name = l.Name, Layer = l.Layer, Datatype = l.Datatype, Field = l.Field, Description = l.Description,
-        }).ToList(),
-        Xsections = source.Xsections.Select(x => new ProcessXsection
-        {
-            Name = x.Name, Kind = x.Kind, WidthUm = x.WidthUm, MinRadiusUm = x.MinRadiusUm,
-            RecommendedRadiusUm = x.RecommendedRadiusUm, Layers = new List<string>(x.Layers), Description = x.Description,
-        }).ToList(),
-        Materials = source.Materials.Select(m => new ProcessMaterial
-        {
-            Name = m.Name, NByWavelengthNm = new Dictionary<int, double>(m.NByWavelengthNm), Role = m.Role,
-        }).ToList(),
-        AllowedAngles = new List<int>(source.AllowedAngles),
-        ElectricalBridgeRequired = source.ElectricalBridgeRequired,
-    };
 }

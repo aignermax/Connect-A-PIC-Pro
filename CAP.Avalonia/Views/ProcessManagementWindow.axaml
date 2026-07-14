@@ -149,21 +149,6 @@
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#9999bb"
                        Text="A chip is built in one fabrication process. Here you inspect and edit this PDK's own process: layer stack and materials (future FDTD input) and design rules (why a fab may reject certain components)."/>
 
-            <!-- Playground: explicit state instead of an empty page (#660) -->
-            <Border IsVisible="{Binding IsPlaygroundState}" Background="#4d3d1e" CornerRadius="4" Padding="8,6" Margin="0,4,0,0">
-                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#ffcc66"
-                           Text="⚠ Playground — this design mixes components freely and has no single fabrication process. It is not manufacturable. Choose a real process via File → New Design to see its details here."/>
-            </Border>
-
-            <!-- Active process identity (#660) -->
-            <StackPanel IsVisible="{Binding HasProcess}" Spacing="2" Margin="0,4,0,0">
-                <TextBlock Text="{Binding FingerprintSummary}" FontSize="12" Foreground="#aaccee"/>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="Member PDKs:" FontSize="11" Foreground="#888"/>
-                    <TextBlock Text="{Binding MemberPdksText}" FontSize="11" Foreground="#ccc" TextWrapping="Wrap"/>
-                </StackPanel>
-            </StackPanel>
-
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
                 <Button Content="Save to PDK file…" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
                         Padding="12,6" Background="#2a4a2a"
