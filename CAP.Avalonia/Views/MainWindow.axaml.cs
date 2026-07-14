@@ -28,6 +28,15 @@ public partial class MainWindow : Window
 {
     private SettingsWindow? _settingsWindow;
 
+    /// <summary>
+    /// Tracks the currently-open per-PDK "Edit Process" window, keyed by the PDK's
+    /// file path (falling back to its name when the path is null, e.g. an
+    /// unsaved draft). Prevents a second click on the same PDK's "Edit…" button
+    /// from opening a duplicate editor window — the existing one is activated
+    /// instead. Entries are removed when their window closes.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, ProcessManagementWindow> _openPdkEditWindows = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -712,6 +721,20 @@ public partial class MainWindow : Window
         if (draft is null)
             return;
 
+        // Dedup: a second click on the same PDK's "Edit…" button re-activates the
+        // already-open editor instead of spawning a duplicate window. Deliberately shows the
+        // window's CURRENT (possibly unsaved) editor state rather than reloading the draft —
+        // reloading would silently destroy the user's in-progress edits.
+        var key = pdk.FilePath ?? pdk.Name;
+        if (_openPdkEditWindows.TryGetValue(key, out var existingWindow) && existingWindow.IsVisible)
+        {
+            // Un-minimize first: Activate() alone leaves a minimized window minimized,
+            // which looks like the button silently did nothing.
+            existingWindow.WindowState = WindowState.Normal;
+            existingWindow.Activate();
+            return;
+        }
+
         var processVm = new ProcessManagementViewModel(new FileDialogService(this))
         {
             // Resolve straight to this row's own file path — no name-based lookup needed since
@@ -737,6 +760,15 @@ public partial class MainWindow : Window
         {
             DataContext = processVm,
             Title = $"Edit Process — {pdk.Name}",
+        };
+        _openPdkEditWindows[key] = processWindow;
+        // Only remove the entry if it still points at THIS window: if the key was ever
+        // re-assigned to a newer window, the older window's Closed handler must not
+        // deregister the newer one.
+        processWindow.Closed += (_, _) =>
+        {
+            if (_openPdkEditWindows.TryGetValue(key, out var tracked) && ReferenceEquals(tracked, processWindow))
+                _openPdkEditWindows.Remove(key);
         };
         processWindow.Show(this);
     }

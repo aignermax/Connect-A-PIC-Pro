@@ -124,6 +124,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
     /// <summary>
+    /// Callback returning the by-value-compatible member PDK names for the active process
+    /// (issue placement-livemembers), computed live against the current PDK catalog rather than
+    /// trusting the persisted <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot
+    /// (#732). This is what allows a custom PDK registered after the process was saved — but
+    /// physically the same process — to be placed/pasted. Wired by <c>MainViewModel</c> to
+    /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>; null when unwired falls back to the
+    /// snapshot-only check.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }
+
+    /// <summary>
     /// Callback resolving the PDK source of a placed core component (groups carry none of
     /// their own, so their children are resolved individually — issue #653). Wired by
     /// <c>MainViewModel</c> to <c>ComponentPdkSourceResolver.Resolve</c> over the loaded
@@ -357,7 +368,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         var (isAllowed, blockReason) = SingleProcessPolicy.CheckPlacement(
             GetActiveProcess?.Invoke(), SelectedTemplate.PdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            GetLiveMemberPdkNames?.Invoke());
         if (!isAllowed)
         {
             UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
@@ -395,6 +407,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             GetActiveProcess?.Invoke(),
             ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
             GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            GetLiveMemberPdkNames?.Invoke(),
             SelectedGroupTemplate.Name);
         if (!isAllowed)
         {
@@ -765,11 +778,12 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         var active = GetActiveProcess?.Invoke();
         var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var liveMemberPdkNames = GetLiveMemberPdkNames?.Invoke();
         // PeekPdkSources expands groups to their resolved children (the clipboard's
         // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
         // smuggle foreign-process components past the paste guard (issue #653).
         var blockedCount = _canvas.Clipboard.PeekPdkSources()
-            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
+            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames, liveMemberPdkNames).IsAllowed);
         if (blockedCount > 0)
         {
             UpdateStatus?.Invoke(
