@@ -34,6 +34,16 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     private ProcessDefinition? _selectedExistingProcess;
 
     /// <summary>
+    /// The process picked in the "Define new" path's "Start from template" dropdown, or null if
+    /// none chosen. Selecting one prefills <see cref="ProcessDefinitionEditor"/> (name, layers,
+    /// cross-sections, materials) and <see cref="CoreThicknessNm"/> as a starting point only —
+    /// the user is free to edit every field afterwards, and <c>CreatePdk</c> persists whatever
+    /// ends up in the editor, not this template.
+    /// </summary>
+    [ObservableProperty]
+    private ProcessDefinition? _selectedTemplate;
+
+    /// <summary>
     /// Core waveguide-layer thickness in nm for a "Define new" process. Required for the created
     /// PDK's process fingerprint to be complete (<see cref="CAP_Core.Components.Process.ProcessFingerprint.IsSpecified"/>
     /// needs core material + thickness + cladding) — without it the new PDK would never match the
@@ -145,4 +155,17 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     partial void OnProcessSourceChanged(PdkProcessSource value) => CreatePdkCommand.NotifyCanExecuteChanged();
 
     partial void OnSelectedExistingProcessChanged(ProcessDefinition? value) => CreatePdkCommand.NotifyCanExecuteChanged();
+
+    /// <summary>
+    /// Prefills the "Define new" editor from the chosen template. A no-op on clearing the
+    /// selection (value == null) so the editor is left exactly as the user last edited it.
+    /// </summary>
+    partial void OnSelectedTemplateChanged(ProcessDefinition? value)
+    {
+        if (value == null)
+            return;
+
+        ProcessDefinitionEditor.Load(value);
+        CoreThicknessNm = value.CoreThicknessNm;
+    }
 }
