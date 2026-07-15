@@ -76,6 +76,18 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
+    public void DeletedEmptyPdk_IsNotListed()
+    {
+        // Creating a PDK, then deleting it before adding any component, leaves an empty
+        // (0-component) file in trash. It has nothing worth restoring and must not show up as a
+        // confusing "0 components" entry next to a same-named real PDK (field-test #741).
+        var path = _store.CreateNamedPdkWithProcess("Empty Lib", Process(), "gdsfactory", null);
+        _store.MoveToTrash(path);
+
+        _trash.ListEntries().ShouldBeEmpty();
+    }
+
+    [Fact]
     public void BackupWhoseComponentsAreAllBack_IsNotListed()
     {
         var path = SeedPdk("My Lib", "A");

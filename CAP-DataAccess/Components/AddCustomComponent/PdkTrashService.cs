@@ -60,7 +60,11 @@ public sealed class PdkTrashService
         foreach (var path in Directory.GetFiles(TrashDirectory, "*.json"))
         {
             var entry = TryReadEntry(path);
-            if (entry != null && (entry.Kind == PdkTrashKind.DeletedPdk || entry.RestorableComponentNames.Count > 0))
+            // Only list entries that actually have something to restore: a deleted PDK with
+            // ≥1 component, or a removed-components backup whose components aren't all back. An
+            // empty (0-component) deleted PDK is noise — it shows up as a confusing "0 components"
+            // duplicate next to a same-named real PDK and has nothing worth recovering.
+            if (entry != null && entry.RestorableComponentNames.Count > 0)
                 entries.Add(entry);
         }
 
