@@ -126,5 +126,22 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
     }
 
+    [Fact]
+    public async Task LoadSMatrixFromFile_portCountMismatch_doesNotProduceASMatrix()
+    {
+        var vm = Build(); // component has 2 pins (o1, o2)
+        double freqGHz = 299_792_458.0 / 1550e-9 / 1e9;
+        var s1p = "# GHz S MA R 50\n"
+                  + freqGHz.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + " 0.5 0\n";
+        var path = Path.Combine(_root, "oneport.s1p");
+        await File.WriteAllTextAsync(path, s1p);
+        vm.PickSMatrixFile = () => Task.FromResult<string?>(path);
+
+        await vm.LoadSMatrixFromFileCommand.ExecuteAsync(null);
+
+        vm.HasSMatrix.ShouldBeFalse();
+        vm.StatusText.ShouldContain("Cannot import");
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

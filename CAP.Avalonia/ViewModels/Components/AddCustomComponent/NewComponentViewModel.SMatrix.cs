@@ -56,8 +56,11 @@ public partial class NewComponentViewModel
 
             _computedModel = SParameterConverter.ToComponentSMatrixData(resolved);
             RefreshSMatrixEntries();
+            var remapNote = _portsMappedByPosition
+                ? " Ports were auto-mapped to pins by position — verify the assignment."
+                : "";
             StatusText = $"Loaded S-matrix: {resolved.PortCount} ports, " +
-                         $"{resolved.SMatricesByWavelengthNm.Count} wavelength(s) from {Path.GetFileName(path)}.";
+                         $"{resolved.SMatricesByWavelengthNm.Count} wavelength(s) from {Path.GetFileName(path)}.{remapNote}";
         }
         catch (Exception ex)
         {
@@ -69,8 +72,11 @@ public partial class NewComponentViewModel
         }
     }
 
+    private bool _portsMappedByPosition;
+
     private ImportedSParameters? ReconcilePorts(ImportedSParameters imported, IReadOnlyList<string> pinNames)
     {
+        _portsMappedByPosition = false;
         if (pinNames.Count == 0 || PortNameMapping.NamesAlignWithComponent(imported.PortNames, pinNames))
             return imported;
 
@@ -81,6 +87,7 @@ public partial class NewComponentViewModel
             return null;
         }
 
+        _portsMappedByPosition = true;
         return PortNameMapping.Remap(imported, PortNameMapping.BuildDefaultMapping(imported.PortNames, pinNames));
     }
 

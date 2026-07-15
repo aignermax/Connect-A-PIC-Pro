@@ -14,6 +14,9 @@ public partial class NewComponentViewModel
 
     public string? MigratedFromPdkName { get; private set; }
 
+    /// <summary>The component's original name in the PDK it was migrated out of (for library cleanup).</summary>
+    public string? MigratedFromComponentName { get; private set; }
+
     public void LoadForEdit(ComponentTemplate template)
     {
         var match = PdkChoices.FirstOrDefault(c => !c.IsNewPdk && c.Pdk?.Name == template.PdkSource);

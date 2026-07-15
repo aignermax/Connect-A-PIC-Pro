@@ -92,6 +92,41 @@ public class NewComponentViewModelMigrationTests : IDisposable
     }
 
     [Fact]
+    public async Task SwitchingPdk_withRename_removesUnderOriginalName_noDuplicate()
+    {
+        var (vm, store) = BuildWithTwoPdks(processB: "SiN");
+        vm.LoadForEdit(WidgetTemplateInPdkA());
+        vm.ComponentName = "WidgetRenamed";
+
+        SelectPdk(vm, "PDK B");
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.MigratedFromPdkName.ShouldBe("PDK A");
+        vm.MigratedFromComponentName.ShouldBe("Widget");
+        var pdkA = store.ListCustomPdks().First(p => p.Name == "PDK A");
+        var pdkB = store.ListCustomPdks().First(p => p.Name == "PDK B");
+        store.ComponentExistsInFile(pdkA.FilePath, "Widget").ShouldBeFalse();
+        store.ComponentExistsInFile(pdkB.FilePath, "WidgetRenamed").ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task SwitchingPdk_intoPdkWithSameName_withoutConfirm_abortsAndKeepsOriginal()
+    {
+        var (vm, store) = BuildWithTwoPdks(processB: "SiN");
+        var pdkB = store.ListCustomPdks().First(p => p.Name == "PDK B");
+        store.AppendToExistingPdk(pdkB.FilePath, Widget()); // PDK B already has "Widget"
+
+        vm.LoadForEdit(WidgetTemplateInPdkA());
+        SelectPdk(vm, "PDK B"); // no ConfirmOverwrite hook → collision must abort
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.MigratedFromPdkName.ShouldBeNull();
+        var pdkA = store.ListCustomPdks().First(p => p.Name == "PDK A");
+        store.ComponentExistsInFile(pdkA.FilePath, "Widget").ShouldBeTrue();
+    }
+
+    [Fact]
     public async Task SwitchingPdk_differentProcess_refusesAndKeepsOriginal()
     {
         var (vm, store) = BuildWithTwoPdks(processB: "SOI");

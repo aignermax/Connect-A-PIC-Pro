@@ -126,19 +126,26 @@ public partial class NewComponentViewModel
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
 
-            if (isMigration && TryRemoveFromOriginalPdk(name))
+            if (isMigration && TryRemoveFromOriginalPdk(_editingOriginalName ?? name))
             {
                 MigratedFromPdkName = _editOriginalPdkName;
+                MigratedFromComponentName = _editingOriginalName ?? name;
                 _editOriginalPdkFilePath = pdk.FilePath;
                 _editOriginalPdkName = pdk.Name;
                 _editOriginalProcessName = SelectedProcess?.Name;
+                _editingOriginalName = name;
             }
 
-            StatusText = MigratedFromPdkName != null
-                ? $"Moved '{name}' to PDK '{pdk.Name}'."
-                : _computedModel is null
-                    ? $"Saved without simulation model (black box). {StatusText}".Trim()
-                    : "Saved with FDTD S-matrix.";
+            // A migration whose removal threw already set an explanatory StatusText (the component
+            // now lives in both PDKs) — don't overwrite it with a plain save-success message.
+            if (!isMigration || MigratedFromPdkName != null)
+            {
+                StatusText = MigratedFromPdkName != null
+                    ? $"Moved '{name}' to PDK '{pdk.Name}'."
+                    : _computedModel is null
+                        ? $"Saved without simulation model (black box). {StatusText}".Trim()
+                        : "Saved with FDTD S-matrix.";
+            }
             Saved?.Invoke(this, EventArgs.Empty);
         }
         finally
