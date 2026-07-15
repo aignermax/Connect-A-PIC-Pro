@@ -3,31 +3,8 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
-/// <summary>
-/// Startup reload of user-authored PDKs (issue #700). <see cref="UserPreferencesService.GetUserPdkPaths"/>
-/// only ever remembers paths the app itself imported — nothing replayed them at app start, so a
-/// previously-imported custom PDK vanished from the PDK-management list on the next launch even
-/// though the "New Component" dialog (which scans the user-pdks directory directly) still saw it.
-/// This reload closes that gap by combining a direct directory scan of the user-pdks root (catching
-/// PDKs placed there without ever going through <see cref="LeftPanelViewModel.LoadPdk"/>, e.g. a
-/// process-less/component-less PDK created by a future "+" flow) with the remembered import paths
-/// (catching PDKs stored outside the default root). Split into its own partial purely to keep
-/// <c>LeftPanelViewModel.cs</c> under the project's line-count limit.
-/// </summary>
 public partial class LeftPanelViewModel
 {
-    /// <summary>
-    /// Re-registers every user-authored PDK found on disk into the library, exactly once per
-    /// resolved full path (issue #700). Intended to run once, right after the bundled PDKs are
-    /// loaded in <see cref="Initialize"/>. Returns <see cref="Task"/> (not <c>async</c>, and with
-    /// no <c>await</c> inside) purely so the call site can fire it the same way it would an actual
-    /// async operation — all of the work is small, local file I/O over a handful of JSON files and
-    /// runs synchronously to completion before the task is handed back.
-    /// </summary>
-    /// <param name="userPdkRootOverride">
-    /// Directory to scan instead of <see cref="UserPdkStore.DefaultRootDirectory"/>. Exists so
-    /// tests can point the scan at a temp directory instead of the real per-user app-data folder.
-    /// </param>
     internal Task ReloadUserPdksAtStartupAsync(string? userPdkRootOverride = null)
     {
         var root = userPdkRootOverride ?? UserPdkStore.DefaultRootDirectory;
@@ -40,30 +17,17 @@ public partial class LeftPanelViewModel
             TryReloadUserPdk(path);
         }
 
-        // One reapply/refilter for the whole batch, not one per file (mirrors
-        // CustomComponentLibraryRegistrar.Register's per-call reapply, just batched here).
         ReapplyActiveProcessAfterPdkChange();
-        // Initialize() restored the persisted PDK enable selection BEFORE this reload existed in
-        // LoadedPdks, so the reloaded user PDKs all registered as enabled. Re-applying the
-        // persisted selection here keeps a deliberately-unchecked user PDK unchecked across
-        // restarts — otherwise the FilterComponents() below would persist it back to enabled and
-        // silently destroy the user's choice every launch (PR #739 review). Skipped under an
-        // active process lock, where the enabled set is derived state, not the user's selection.
+        // Re-apply the persisted enable selection so a deliberately-unchecked user PDK stays
+        // unchecked across restarts; otherwise FilterComponents would persist it back to enabled.
+        // Skipped under a process lock, where the enabled set is derived state.
         if (PdkManager.ManualTogglesEnabled && _preferencesService.GetEnabledPdks().Count > 0)
-            RestorePdkFilterState(); // runs FilterComponents (and persists) itself
+            RestorePdkFilterState();
         else
             FilterComponents();
         return Task.CompletedTask;
     }
 
-    /// <summary>
-    /// Every candidate user-PDK path to consider, deduplicated by full path: the directory scan
-    /// (<c>*.json</c> directly under <paramref name="root"/> — <see cref="Directory.GetFiles(string, string)"/>
-    /// defaults to <c>TopDirectoryOnly</c>, which already excludes anything under a <c>.trash</c>
-    /// subfolder without needing a special case) plus the remembered import paths from
-    /// <see cref="UserPreferencesService.GetUserPdkPaths"/>. A path present in both sources is
-    /// returned only once.
-    /// </summary>
     private IReadOnlyList<string> CollectUserPdkCandidatePaths(string root)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -78,8 +42,6 @@ public partial class LeftPanelViewModel
             }
             catch (Exception ex)
             {
-                // One malformed remembered path (hand-edited/corrupted prefs entry) must only
-                // lose itself, not abort the whole startup batch (PR #739 review).
                 _errorConsole?.LogWarning(
                     $"Skipped malformed user-PDK path '{rawPath}' at startup: {ex.Message}");
                 return;
@@ -100,21 +62,11 @@ public partial class LeftPanelViewModel
         return result;
     }
 
-    /// <summary>
-    /// Loads and registers a single user PDK, tolerating failure the same way a manual import via
-    /// <see cref="LeftPanelViewModel.LoadPdk"/> does: a missing file is dropped from remembered
-    /// preferences (it can never reappear on its own, and the file may have been renamed or
-    /// deleted outside the app), while any other failure (a corrupted or mid-write file) is skipped
-    /// WITHOUT touching preferences, since that failure could be transient. A name collision with
-    /// an already-loaded PDK is skipped as a tolerated duplicate rather than raised as an error.
-    /// </summary>
     private void TryReloadUserPdk(string path)
     {
         PdkDraft pdk;
         try
         {
-            // The edit-tolerant loader — the same one UserPdkStore and CustomComponentLibraryRegistrar
-            // read user PDKs with — so a user PDK missing a Nazca origin offset still reloads.
             pdk = _pdkLoader.LoadFromFileForEditing(path);
         }
         catch (FileNotFoundException)
@@ -140,7 +92,6 @@ public partial class LeftPanelViewModel
         foreach (var pdkComp in pdk.Components)
         {
             var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
-            // User-loaded PDK — editable via the library's "Edit…" action.
             template.IsCustom = true;
             AllTemplates.Add(template);
             if (!Categories.Contains(template.Category))

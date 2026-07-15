@@ -18,14 +18,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="NewComponentViewModel.LoadForEdit"/>: prefilling the wizard from an
-/// existing custom component's <see cref="ComponentTemplate"/> for in-place editing (name,
-/// own-code, backend, fixed target PDK), and that the subsequent <c>Save</c> overwrites the
-/// original entry in its named custom PDK file rather than duplicating it. Also covers the
-/// <see cref="NewComponentViewModel.WindowTitle"/>/<see cref="NewComponentViewModel.SaveButtonLabel"/>
-/// display properties Task 6's view binds to.
-/// </summary>
 public class EditComponentModeTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-edit-" + Guid.NewGuid().ToString("N"));
@@ -69,7 +61,6 @@ public class EditComponentModeTests : IDisposable
         return (vm, path, rawCode);
     }
 
-    /// <summary>Seeds a PDK with two components ("comp1" and "comp2") so a rename-onto-existing collision can be exercised.</summary>
     private (NewComponentViewModel vm, string filePath, string rawCode) BuildWithTwoSeededComponents()
     {
         var store = Store();
@@ -106,7 +97,7 @@ public class EditComponentModeTests : IDisposable
         vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
         vm.SelectedCustomPdk.ShouldNotBeNull();
         vm.SelectedCustomPdk!.Name.ShouldBe("Lib");
-        createNewPdkCalls.ShouldBe(0); // selecting an existing PDK entry must never invoke the "New PDK…" hook
+        createNewPdkCalls.ShouldBe(0);
     }
 
     [Fact]
@@ -128,14 +119,14 @@ public class EditComponentModeTests : IDisposable
     {
         var (vm, filePath, rawCode) = BuildWithSeededPdk();
         vm.LoadForEdit(BuildTemplate(rawCode));
-        vm.ConfirmOverwrite = (_, _) => Task.FromResult(true); // editing intentionally overwrites the same name
+        vm.ConfirmOverwrite = (_, _) => Task.FromResult(true);
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
         var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
-        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1); // overwritten, not duplicated
+        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1);
         pdk.Components.Count.ShouldBe(1);
     }
 
@@ -145,8 +136,6 @@ public class EditComponentModeTests : IDisposable
         var (vm, _, rawCode) = BuildWithSeededPdk();
         vm.LoadForEdit(BuildTemplate(rawCode));
         var confirmCalls = 0;
-        // Edit-mode intentionally overwrites the same name — the collision that would trigger
-        // this hook in the non-edit path must never fire here (task 6's collision fix).
         vm.ConfirmOverwrite = (_, _) => { confirmCalls++; return Task.FromResult(true); };
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
@@ -160,10 +149,8 @@ public class EditComponentModeTests : IDisposable
     public async Task Save_afterLoadForEdit_renamedOntoADifferentExistingComponent_stillPromptsAndAbortsWhenDeclined()
     {
         var (vm, filePath, rawCode) = BuildWithTwoSeededComponents();
-        vm.LoadForEdit(BuildTemplate(rawCode)); // editing comp1
+        vm.LoadForEdit(BuildTemplate(rawCode));
         var confirmCalls = 0;
-        // Rename comp1 → comp2 (which already exists): NOT a self-overwrite, so the collision
-        // prompt must fire — and declining it must abort without clobbering comp2.
         vm.ConfirmOverwrite = (_, _) => { confirmCalls++; return Task.FromResult(false); };
         vm.ComponentName = "comp2";
 
@@ -171,9 +158,9 @@ public class EditComponentModeTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         confirmCalls.ShouldBe(1);
-        vm.SavedDraft.ShouldBeNull(); // aborted
+        vm.SavedDraft.ShouldBeNull();
         var pdk = new PdkLoader().LoadFromFileForEditing(filePath);
-        pdk.Components.Count.ShouldBe(2); // both originals intact — comp2 not overwritten
+        pdk.Components.Count.ShouldBe(2);
         pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1);
         pdk.Components.Count(c => c.Name == "comp2").ShouldBe(1);
     }

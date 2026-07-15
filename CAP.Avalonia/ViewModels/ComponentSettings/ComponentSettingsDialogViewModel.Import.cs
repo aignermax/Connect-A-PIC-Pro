@@ -3,32 +3,18 @@ using CAP_DataAccess.Import;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
 
-/// <summary>
-/// S-parameter import helpers of the Component Settings dialog: importer selection,
-/// port-name reconciliation against the component's pins, and the human-readable
-/// import status line. Split out to keep the main ViewModel file focused.
-/// </summary>
 public partial class ComponentSettingsDialogViewModel
 {
-    /// <summary>
-    /// Returns <paramref name="imported"/> unchanged when port names already
-    /// align, the result of <see cref="PortNameMapping.Remap"/> with a
-    /// user-supplied mapping when they don't, or <c>null</c> when the user
-    /// cancelled the mapping dialog (in which case <see cref="StatusText"/>
-    /// is set so the caller can return without storing anything).
-    /// </summary>
     private async Task<ImportedSParameters?> ReconcilePortNamesAsync(ImportedSParameters imported)
     {
         if (_availablePinNames == null || _availablePinNames.Count == 0)
-            return imported; // caller didn't tell us the pin names — proceed and let Apply complain if anything's wrong
+            return imported;
 
         if (PortNameMapping.NamesAlignWithComponent(imported.PortNames, _availablePinNames))
             return imported;
 
         if (imported.PortNames.Count != _availablePinNames.Count)
         {
-            // Different port counts is structurally unmappable — bail out
-            // loudly rather than open a dialog the user couldn't satisfy.
             StatusText = $"Cannot import: file has {imported.PortNames.Count} port(s), " +
                          $"but '{_displayName}' has {_availablePinNames.Count} pin(s).";
             return null;
@@ -36,7 +22,6 @@ public partial class ComponentSettingsDialogViewModel
 
         if (_portMappingDialog == null)
         {
-            // No interactive surface available (typically test or headless).
             StatusText = $"Imported port names don't match component pins on '{_displayName}'. " +
                          $"Re-run with a port-mapping dialog wired up to resolve this interactively.";
             return null;

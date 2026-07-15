@@ -9,11 +9,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies <see cref="UserPdkStore"/>: user-authored components are persisted into a
-/// per-process, per-user file under a writable root — never into the bundled foundry
-/// PDK JSONs — with save-then-reload roundtripping and replace-not-duplicate semantics.
-/// </summary>
 public class UserPdkStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-userpdk-" + Guid.NewGuid().ToString("N"));
@@ -22,10 +17,6 @@ public class UserPdkStoreTests : IDisposable
 
     private static ProcessDefinition Process(string name) => new() { Name = name };
 
-    // Width/height and two pins are required: PdkLoader.LoadFromFileForEditing still
-    // structurally validates components (name/dimensions/pins) even though it tolerates
-    // a missing NazcaOriginOffset. GdsFactoryFunction marks this as a gdsfactory-backend
-    // component, exempt from the Nazca-only origin-offset requirement.
     private static PdkComponentDraft Comp(string name) => new()
     {
         Name = name,
@@ -42,7 +33,6 @@ public class UserPdkStoreTests : IDisposable
     [Fact]
     public void ForkBundledPdk_copies_into_user_root_leaves_original_and_is_idempotent()
     {
-        // A "bundled" PDK living outside the user root (simulating the read-only app dir).
         var bundledDir = Path.Combine(Path.GetTempPath(), "lunima-bundled-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(bundledDir);
         var bundledPath = new UserPdkStore(bundledDir, new PdkJsonSaver(), new PdkLoader())
@@ -51,11 +41,10 @@ public class UserPdkStoreTests : IDisposable
         var store = CreateStore();
         var forked = store.ForkBundledPdk(bundledPath, "Shipped Lib");
 
-        forked.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue(); // copied into the editable user root
-        File.Exists(bundledPath).ShouldBeTrue();                            // bundled original untouched
+        forked.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue();
+        File.Exists(bundledPath).ShouldBeTrue();
         new PdkLoader().LoadFromFileForEditing(forked).Components.Count.ShouldBe(1);
 
-        // Idempotent: re-forking returns the same path and never clobbers a user edit on the fork.
         store.AppendToExistingPdk(forked, Comp("Edited"));
         store.ForkBundledPdk(bundledPath, "Shipped Lib").ShouldBe(forked);
         new PdkLoader().LoadFromFileForEditing(forked).Components.Select(c => c.Name).ShouldContain("Edited");

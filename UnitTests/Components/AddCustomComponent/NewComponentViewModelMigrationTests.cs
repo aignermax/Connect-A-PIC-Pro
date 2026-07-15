@@ -18,10 +18,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers editor-driven PDK migration: switching the PDK dropdown in edit mode moves the
-/// component to the target PDK when both share a fabrication process, and refuses otherwise.
-/// </summary>
 public class NewComponentViewModelMigrationTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-mig-" + Guid.NewGuid().ToString("N"));

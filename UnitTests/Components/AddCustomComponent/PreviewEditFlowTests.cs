@@ -17,19 +17,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Task 7 end-to-end coverage for the PDK-first component wizard, tying together the three
-/// previously-independent behaviours in a single integration test: (a) <see
-/// cref="NewComponentViewModel.RunPreview"/> against a mocked geometry renderer flips <see
-/// cref="NewComponentViewModel.HasPreview"/> (see <see cref="PreviewBitmapAndBlackBoxSaveTests"/>
-/// for why <see cref="NewComponentViewModel.PreviewBitmap"/> itself is left untested here — it is
-/// legitimately null in this headless test host); (b) <see cref="NewComponentViewModel.LoadForEdit"/>
-/// prefilling from a <see cref="ComponentTemplate"/> followed by <c>Save</c> overwrites the
-/// original entry in its named custom PDK file rather than duplicating it (see <see
-/// cref="EditComponentModeTests"/>); and (c) the "New PDK…" sentinel's reopen guard still fires
-/// its creation hook exactly once after a <c>PdkChoices</c> refresh (see <see
-/// cref="NewPdkReopenGuardTests"/>). One focused assertion per stage.
-/// </summary>
 public class PreviewEditFlowTests : IDisposable
 {
     private readonly string _root =
@@ -60,9 +47,6 @@ public class PreviewEditFlowTests : IDisposable
         return new NewComponentViewModel(extractor, fdtd: null, store, processes);
     }
 
-    // (a) A successful mocked render must flip HasPreview, independent of whether this host can
-    // rasterise a bitmap (it cannot — see PreviewBitmapAndBlackBoxSaveTests for the documented
-    // headless-renderer null path).
     [Fact]
     public async Task RunPreview_withMockedPolygonResult_setsHasPreviewTrue()
     {
@@ -76,8 +60,6 @@ public class PreviewEditFlowTests : IDisposable
         vm.HasPreview.ShouldBeTrue();
     }
 
-    // (b) LoadForEdit prefills from an existing custom component, and Save overwrites it in
-    // place in its named custom PDK file rather than appending a duplicate entry.
     [Fact]
     public async Task LoadForEdit_thenSave_overwritesTheOriginalComponent_withoutDuplicating()
     {
@@ -98,12 +80,9 @@ public class PreviewEditFlowTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         var pdk = new PdkLoader().LoadFromFileForEditing(path);
-        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1); // overwritten in place, not duplicated
+        pdk.Components.Count(c => c.Name == "comp1").ShouldBe(1);
     }
 
-    // (c) Selecting the "New PDK…" sentinel, followed by the bound-ComboBox reselect replay that
-    // used to reopen the modal a second time (see NewPdkReopenGuardTests), must invoke the
-    // creation hook exactly once and land on the newly created PDK.
     [Fact]
     public async Task SelectingTheSentinel_withReselectReplayAfterRefresh_invokesCreateNewPdkExactlyOnce()
     {
@@ -129,9 +108,9 @@ public class PreviewEditFlowTests : IDisposable
             return Task.FromResult<UserPdkInfo?>(new UserPdkInfo("Brand New Lib", path, process));
         };
 
-        vm.SelectedPdkChoice = vm.PdkChoices[^1]; // select the sentinel
+        vm.SelectedPdkChoice = vm.PdkChoices[^1];
         await Task.Yield();
-        await Task.Yield(); // pump any nested re-fired handler too
+        await Task.Yield();
 
         callCount.ShouldBe(1);
     }

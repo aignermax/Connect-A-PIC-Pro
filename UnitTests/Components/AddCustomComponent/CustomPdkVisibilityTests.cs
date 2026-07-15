@@ -18,14 +18,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Reproduces and verifies the fix for the by-name-vs-by-value process lock bug: a newly
-/// registered custom PDK whose fabrication process is VALUE-compatible with the active process
-/// (same core material/cladding within tolerance) must become visible/enabled immediately, even
-/// though it cannot possibly be present in the active process's persisted
-/// <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot (that snapshot predates the new
-/// PDK's existence). A value-INCOMPATIBLE custom PDK must remain locked out (no regression).
-/// </summary>
 public class CustomPdkVisibilityTests : IDisposable
 {
     private readonly string _testPrefsPath;
@@ -49,12 +41,6 @@ public class CustomPdkVisibilityTests : IDisposable
         _leftPanel.Initialize();
     }
 
-    /// <summary>
-    /// Wires a <see cref="CanvasInteractionViewModel"/> the way <c>MainViewModel</c> does for
-    /// the placement guard (issue placement-livemembers): active process + live by-value
-    /// member set both sourced from <paramref name="active"/> and the live PDK catalog, so the
-    /// placement path sees exactly what the library-filter lock already sees (#732).
-    /// </summary>
     private CanvasInteractionViewModel CreatePlacementInteraction(ActiveProcessSelection active)
     {
         var interaction = new CanvasInteractionViewModel(_canvas, new CommandManager());
@@ -68,22 +54,17 @@ public class CustomPdkVisibilityTests : IDisposable
     {
         if (File.Exists(_testPrefsPath))
         {
-            try { File.Delete(_testPrefsPath); } catch { /* best effort */ }
+            try { File.Delete(_testPrefsPath); } catch { }
         }
         if (Directory.Exists(_userPdkRoot))
         {
-            try { Directory.Delete(_userPdkRoot, true); } catch { /* best effort */ }
+            try { Directory.Delete(_userPdkRoot, true); } catch { }
         }
     }
 
     private string DemoPdkName() =>
         _leftPanel.PdkManager.LoadedPdks.First(p => p.Name.Contains("Demo", StringComparison.OrdinalIgnoreCase)).Name;
 
-    /// <summary>
-    /// Locks the library to a real process built from the bundled Demo PDK's own fingerprint.
-    /// Returns the applied selection so callers can reuse the identical snapshot (e.g. to feed
-    /// <see cref="LeftPanelViewModel.ResolveLiveMemberPdkNames"/> the same way <c>MainViewModel</c> does).
-    /// </summary>
     private ActiveProcessSelection ApplyDemoProcessLock()
     {
         var demoName = DemoPdkName();
@@ -91,8 +72,6 @@ public class CustomPdkVisibilityTests : IDisposable
         var demoFingerprint = ProcessFingerprintFactory.From(demoDraft);
         demoFingerprint.IsSpecified.ShouldBeTrue("sanity: the bundled Demo PDK must declare a full process");
 
-        // Mirrors a persisted design snapshot: at the time it was saved, only the Demo PDK
-        // belonged to this process — a custom PDK registered afterward cannot be in it.
         var active = new ActiveProcessSelection(
             DisplayName: "Demo Process",
             Fingerprint: demoFingerprint,
@@ -122,8 +101,6 @@ public class CustomPdkVisibilityTests : IDisposable
     {
         ApplyDemoProcessLock();
 
-        // A value-compatible process: same core/cladding materials as Demo (Si/SiO2), thickness
-        // within the ±5 nm tolerance (222 vs 220), default wavelength within ±40 nm (inherits 1550).
         var compatibleProcess = new ProcessDefinition
         {
             Name = "MyLib Process",
@@ -154,7 +131,6 @@ public class CustomPdkVisibilityTests : IDisposable
     {
         ApplyDemoProcessLock();
 
-        // A value-INCOMPATIBLE process: different core material (Si3N4 vs Demo's Si).
         var foreignProcess = new ProcessDefinition
         {
             Name = "Foreign Process",
@@ -180,13 +156,6 @@ public class CustomPdkVisibilityTests : IDisposable
             "the value-incompatible PDK's component must not leak into the filtered library");
     }
 
-    /// <summary>
-    /// Reproduces the field bug directly at the placement guard (not just the library filter):
-    /// a component from a value-compatible custom PDK registered after the process was saved
-    /// must be placeable via <see cref="CanvasInteractionViewModel.PlaceComponentAt"/>, using the
-    /// live member set from <see cref="LeftPanelViewModel.ResolveLiveMemberPdkNames"/> rather than the
-    /// stale <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot.
-    /// </summary>
     [Fact]
     public void ValueCompatibleCustomPdk_IsPlaceable_ViaCanvasInteractionViewModel()
     {
@@ -218,7 +187,6 @@ public class CustomPdkVisibilityTests : IDisposable
             "a value-compatible custom PDK registered after the process snapshot was taken must be placeable");
     }
 
-    /// <summary>Mirror of the above with a value-INCOMPATIBLE custom PDK — must stay blocked.</summary>
     [Fact]
     public void ValueIncompatibleCustomPdk_IsBlocked_ViaCanvasInteractionViewModel()
     {
@@ -253,21 +221,9 @@ public class CustomPdkVisibilityTests : IDisposable
         status!.ShouldContain("process");
     }
 
-    /// <summary>
-    /// Guards the non-transitive-tolerance edge case: process compatibility is a tolerance band
-    /// (thickness ±5 nm), so two PDKs can share a catalog <c>ProcessGroup</c> (pairwise within
-    /// tolerance of EACH OTHER) while only one is within tolerance of the active process. The lock
-    /// must be computed per-PDK against the active fingerprint directly, never via a group
-    /// representative — otherwise a PDK that is over-tolerance to the active process would ride
-    /// into the allowed set on its group-mate's coat-tails (issue #570 violation).
-    /// </summary>
     [Fact]
     public void OverTolerancePdk_InSameCatalogGroupAsAllowedPdk_StaysBlocked()
     {
-        // Active process at 213 nm (its own defining PDK is NOT loaded — the case where the
-        // stale snapshot would be useless anyway). Both custom PDKs below share core/cladding
-        // and are within ±5 nm of EACH OTHER (218 vs 222 = 4 nm) so the catalog groups them
-        // together — but only 218 nm is within ±5 nm of the active 213 nm (222 nm is 9 nm off).
         var active = new ActiveProcessSelection(
             DisplayName: "213 nm Process",
             Fingerprint: new ProcessFingerprint("Si", 213, "SiO2", 1550, "213 nm Process"),
@@ -307,14 +263,6 @@ public class CustomPdkVisibilityTests : IDisposable
         },
     };
 
-    /// <summary>
-    /// Reproduces the #570 follow-up bug: a custom PDK's WAVEGUIDE layer was renumbered (the
-    /// Demo PDK defines it as layer 1) so it is still fingerprint-compatible (same Si/SiO2
-    /// materials, thickness within tolerance) but mixing it with the Demo PDK on one chip would
-    /// produce a chip with two different "WAVEGUIDE" GDS layer numbers — unmanufacturable. The
-    /// layer-stack check must keep it out of the live member set even though the fingerprint
-    /// alone would have allowed it.
-    /// </summary>
     [Fact]
     public void RenumberedLayerCustomPdk_ValueCompatibleButLayersDiverge_StaysLockedAndFiltered()
     {
@@ -350,7 +298,6 @@ public class CustomPdkVisibilityTests : IDisposable
             "the layer-renumbered PDK's component must not leak into the filtered library");
     }
 
-    /// <summary>Mirror of the renumbered case at the placement guard (the #736 path).</summary>
     [Fact]
     public void RenumberedLayerCustomPdk_IsBlocked_ViaCanvasInteractionViewModel()
     {
@@ -385,10 +332,6 @@ public class CustomPdkVisibilityTests : IDisposable
         _canvas.Components.Count.ShouldBe(0, "a layer-renumbered custom PDK must remain blocked at placement");
     }
 
-    /// <summary>
-    /// The #734 metal-addition workflow must keep working: a custom PDK that matches the Demo
-    /// PDK's WAVEGUIDE layer exactly and only ADDS a new metal layer must stay a live member.
-    /// </summary>
     [Fact]
     public void MetalAugmentedCustomPdk_MatchingSharedLayer_StaysEnabledAndVisible()
     {
@@ -424,13 +367,6 @@ public class CustomPdkVisibilityTests : IDisposable
         _leftPanel.FilteredTemplates.ShouldContain(t => t.PdkSource == "AugmentedLib");
     }
 
-    /// <summary>
-    /// Pairwise layer consistency (PR #739 review): two custom PDKs that each ADD a layer the
-    /// reference process does not define both pass the reference comparison — but if they
-    /// disagree on that shared layer's GDS number they must not both be placeable on one chip.
-    /// The earlier-accepted member (bundled/snapshot/load order precedence) wins; the
-    /// later-loaded conflicting PDK is locked out.
-    /// </summary>
     [Fact]
     public void TwoMetalAugmentedPdks_ConflictingSharedLayerNumbers_SecondIsLockedOut()
     {
@@ -469,15 +405,6 @@ public class CustomPdkVisibilityTests : IDisposable
         conflicting.IsLockedByProcess.ShouldBeTrue();
     }
 
-    /// <summary>
-    /// When the reference PDK (the process's own defining PDK, per the snapshot
-    /// <see cref="ActiveProcessSelection.MemberPdkNames"/>) is not currently loaded, the
-    /// REFERENCE comparison is skipped — but pairwise consistency among the live members still
-    /// applies (PR #739 review): the bundled Demo PDK is fingerprint-compatible with this
-    /// process and defines WAVEGUIDE as layer 1, so a candidate that renumbers WAVEGUIDE to 999
-    /// must still be locked out. Mixing the two on one chip would be unmanufacturable no matter
-    /// which of them the snapshot happened to name.
-    /// </summary>
     [Fact]
     public void ReferencePdkNotLoaded_PairwiseClashWithLoadedMember_StillLockedOut()
     {
@@ -515,16 +442,6 @@ public class CustomPdkVisibilityTests : IDisposable
         clashingPdk.IsLockedByProcess.ShouldBeTrue();
     }
 
-    /// <summary>
-    /// LC-T3 review finding fix: the layer-consistency reference must prefer a BUNDLED snapshot
-    /// member over a custom one, regardless of which was loaded first. Reproduced here by
-    /// registering the custom PDK BEFORE calling <c>Initialize()</c> (which loads the bundled
-    /// Demo PDK), so the custom draft lands earlier in the internal loaded-drafts list — the
-    /// exact ordering the old "first loaded snapshot member" rule got wrong. Without the fix, the
-    /// renumbered custom PDK would be picked as reference and — since it trivially matches
-    /// itself — would stay enabled while the real bundled Foundry PDK (whose layers actually
-    /// differ from the custom draft) would be wrongly excluded from the live member set.
-    /// </summary>
     [Fact]
     public void RenumberedCustomPdkLoadedBeforeFoundry_ReferenceStaysFoundry_CustomFallsOut()
     {
@@ -555,9 +472,6 @@ public class CustomPdkVisibilityTests : IDisposable
         var component = SimpleComponent("MyCustom Straight");
         var path = store.SaveToNamedPdk("MyCustom", renumberedProcess, component, "nazca", null);
 
-        // Registered BEFORE Initialize(): lands earlier in the internal loaded-drafts list than
-        // the bundled Demo PDK that Initialize() loads next — reproducing "custom loaded before
-        // the bundled Foundry reference" without needing a second bundled PDK file.
         leftPanel.RegisterSavedCustomComponent(component, "MyCustom", path);
         leftPanel.Initialize();
 

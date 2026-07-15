@@ -18,16 +18,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="LeftPanelViewModel.ReloadUserPdksAtStartupAsync"/> (issue #700): user-authored
-/// PDKs are found on disk (directory scan of the user-pdks root + remembered import paths from
-/// <see cref="UserPreferencesService.GetUserPdkPaths"/>) but nothing replays them at app start, so
-/// they vanish from the PDK-management list on the next launch even though the "New Component"
-/// dialog (which scans the directory directly) still sees them. These tests build a
-/// <see cref="LeftPanelViewModel"/> the same way <see cref="LeftPanelNewComponentTests"/> does
-/// (no bundled-PDK <c>Initialize()</c> call, so assertions are not muddied by real bundled PDKs)
-/// and drive the reload against a temp root + a fake preferences file.
-/// </summary>
 public class UserPdkStartupReloadTests : IDisposable
 {
     private readonly string _testPrefsPath;
@@ -58,14 +48,14 @@ public class UserPdkStartupReloadTests : IDisposable
         {
             if (File.Exists(path))
             {
-                try { File.Delete(path); } catch { /* best effort */ }
+                try { File.Delete(path); } catch { }
             }
         }
         foreach (var dir in new[] { _userPdkRoot, _externalDir })
         {
             if (Directory.Exists(dir))
             {
-                try { Directory.Delete(dir, true); } catch { /* best effort */ }
+                try { Directory.Delete(dir, true); } catch { }
             }
         }
     }
@@ -86,16 +76,12 @@ public class UserPdkStartupReloadTests : IDisposable
         },
     };
 
-    /// <summary>Writes the three root-level fixtures (a-with-component, b-empty, .trash) and returns their paths.</summary>
     private (string aPath, string bPath, string trashPath) SeedRoot()
     {
         var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
         var aPath = store.SaveToNamedPdk("PdkA", SimpleProcess("Process A"), SimpleComponent("Straight A"), "nazca", null);
         var bPath = store.CreateNamedPdkWithProcess("PdkB", SimpleProcess("Process B"), "nazca", null);
 
-        // A trashed file living directly under user-pdks/.trash/ must never be picked up by the
-        // startup reload — Directory.GetFiles(root, "*.json") with the default TopDirectoryOnly
-        // scope already excludes it, but the fixture proves that in practice.
         var trashDir = Path.Combine(_userPdkRoot, ".trash");
         Directory.CreateDirectory(trashDir);
         var trashPath = Path.Combine(trashDir, "trashed-pdk.json");
@@ -156,7 +142,6 @@ public class UserPdkStartupReloadTests : IDisposable
         var deadPath = Path.Combine(Path.GetTempPath(), $"nonexistent-{Guid.NewGuid():N}.json");
         _preferencesService.AddUserPdkPath(deadPath);
 
-        // Must not throw.
         await _leftPanel.ReloadUserPdksAtStartupAsync(_userPdkRoot);
 
         _leftPanel.PdkManager.LoadedPdks.ShouldNotContain(p => p.FilePath == deadPath);
@@ -179,9 +164,6 @@ public class UserPdkStartupReloadTests : IDisposable
     {
         SeedRoot();
 
-        // Lock the library to a process that does NOT include PdkA, so the reload's mandatory
-        // ReapplyActiveProcessAfterPdkChange() + FilterComponents() call is actually observable:
-        // the reloaded component must stay excluded from FilteredTemplates.
         _leftPanel.ApplyActiveProcess(new ActiveProcessSelection(
             DisplayName: "Other Process", Fingerprint: null,
             MemberPdkNames: new List<string> { "Some Other PDK" }, IsPlayground: false));
@@ -193,21 +175,13 @@ public class UserPdkStartupReloadTests : IDisposable
             "the active process lock must still govern a PDK reloaded at startup");
     }
 
-    /// <summary>
-    /// PR #739 review, both directions: a user PDK that was deliberately unchecked (known to the
-    /// last save, absent from the enabled set) must come back unchecked after the startup reload —
-    /// while a PDK the save never saw (e.g. created under a process lock, where the filter state
-    /// is not persisted) must keep its default enabled state instead of being treated as
-    /// deliberately unchecked.
-    /// </summary>
     [Fact]
     public async Task ReloadUserPdksAtStartupAsync_respectsPersistedUncheck_butKeepsUnknownPdkEnabled()
     {
-        SeedRoot(); // PdkA (with component) + PdkB (empty)
+        SeedRoot();
         var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
         store.CreateNamedPdkWithProcess("PdkC", SimpleProcess("Process C"), "nazca", null);
 
-        // Last session: PdkA+PdkB were loaded, the user unchecked PdkB; PdkC did not exist yet.
         _preferencesService.SetPdkFilterState(
             enabledPdkNames: new[] { "PdkA" },
             knownPdkNames: new[] { "PdkA", "PdkB" });

@@ -14,14 +14,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies the "Start from template" prefill on <see cref="CreateCustomPdkViewModel"/>
-/// (task 2 of the PDK-process UX refinement): picking <see cref="CreateCustomPdkViewModel.SelectedTemplate"/>
-/// loads that process into <see cref="CreateCustomPdkViewModel.ProcessDefinitionEditor"/> as an editable
-/// starting point (layer stack, cross-sections, materials, name, core thickness) — the user can then
-/// modify it freely before <c>CreatePdk</c> persists whatever ends up in the editor, not the original
-/// template values.
-/// </summary>
 public class CreateCustomPdkTemplateTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-createpdk-template-" + Guid.NewGuid().ToString("N"));
@@ -54,7 +46,7 @@ public class CreateCustomPdkTemplateTests : IDisposable
     {
         if (Directory.Exists(_root))
         {
-            try { Directory.Delete(_root, true); } catch { /* best effort */ }
+            try { Directory.Delete(_root, true); } catch { }
         }
     }
 
@@ -82,7 +74,6 @@ public class CreateCustomPdkTemplateTests : IDisposable
         var vm = CreateVm(store, template);
 
         vm.SelectedTemplate = template;
-        // Modify the prefilled cross-section width — the user is free to diverge from the template.
         vm.ProcessDefinitionEditor.Xsections.Single(x => x.Name == "strip").WidthUm = 0.9;
         vm.PdkName = "My Template Lib";
         vm.ProcessSource = PdkProcessSource.DefineNew;
@@ -95,9 +86,6 @@ public class CreateCustomPdkTemplateTests : IDisposable
             "the saved process must reflect the user's edit on top of the template, not the template's original value");
         reloaded.Process.CoreThicknessNm.ShouldBe(310);
 
-        // The template is a live process object (in the real app it can be the in-memory
-        // ProcessDefinition of an already-loaded PDK) — editing the prefilled editor must never
-        // mutate it, so the template stays a copy-on-select, not a shared reference.
         template.Xsections.Single(x => x.Name == "strip").WidthUm.ShouldBe(0.5,
             "editing the prefilled editor must not mutate the original template's process object");
     }
@@ -117,13 +105,6 @@ public class CreateCustomPdkTemplateTests : IDisposable
         vm.ProcessDefinitionEditor.ProcessName.ShouldBe(nameBeforeClear);
     }
 
-    /// <summary>
-    /// Finding 2 (#733 review): <see cref="ProcessManagementViewModel.Load"/> only copied
-    /// Name+Layers/Xsections/Materials, and <see cref="ProcessManagementViewModel.ToProcess"/>
-    /// only built from those — so a template's <c>AllowedAngles</c>/
-    /// <c>ElectricalBridgeRequired</c>/<c>Foundry</c>/<c>Version</c> silently vanished on
-    /// CreatePdk even though the template prefill and the editor never touch them.
-    /// </summary>
     [Fact]
     public void SelectingTemplate_ThenCreatePdk_PreservesAllowedAnglesAndElectricalBridgeRequired()
     {

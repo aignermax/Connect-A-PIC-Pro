@@ -6,10 +6,6 @@ using Shouldly;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies the PDK trash flyout ViewModel: it lists recoverable entries, and restoring both
-/// removes the entry from the flyout and hands the result to the host's re-register callback.
-/// </summary>
 public sealed class PdkTrashViewModelTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-trashvm-" + Guid.NewGuid().ToString("N"));
@@ -25,7 +21,7 @@ public sealed class PdkTrashViewModelTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_root))
-            try { Directory.Delete(_root, true); } catch { /* best effort */ }
+            try { Directory.Delete(_root, true); } catch { }
     }
 
     private static PdkComponentDraft Component(string name) => new()
@@ -56,7 +52,7 @@ public sealed class PdkTrashViewModelTests : IDisposable
         var proc = new ProcessDefinition { Name = "P" };
         _store.SaveToNamedPdk("My Lib", proc, Component("Keep"), "gdsfactory", null);
         var path = _store.SaveToNamedPdk("My Lib", proc, Component("Gone"), "gdsfactory", null);
-        _store.RemoveComponent(path, "Gone"); // backup + remove one component
+        _store.RemoveComponent(path, "Gone");
         _vm.Refresh();
 
         PdkTrashRestoreResult? restored = null;
@@ -87,8 +83,8 @@ public sealed class PdkTrashViewModelTests : IDisposable
         restored.ShouldNotBeNull();
         restored!.Kind.ShouldBe(PdkTrashKind.DeletedPdk);
         restored.PdkName.ShouldBe("My Lib");
-        File.Exists(path).ShouldBeTrue();       // file moved back
-        _vm.Entries.ShouldBeEmpty();            // gone from the flyout
+        File.Exists(path).ShouldBeTrue();
+        _vm.Entries.ShouldBeEmpty();
     }
 
 }

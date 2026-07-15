@@ -8,12 +8,6 @@ using Xunit;
 
 namespace UnitTests.ViewModels;
 
-/// <summary>
-/// VM-level tests for <see cref="DesignValidationViewModel.RunValidation"/>'s PDK-process
-/// compatibility check (issue #570 follow-up, LC-T4): a placed component whose resolved PDK
-/// source is neither process-agnostic nor in the enabled set must produce an issue; one that is
-/// allowed or agnostic must not.
-/// </summary>
 public class DesignValidationViewModelPdkCheckTests
 {
     private readonly DesignValidationViewModel _vm = new();

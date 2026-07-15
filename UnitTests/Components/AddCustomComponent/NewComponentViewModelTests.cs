@@ -17,11 +17,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="NewComponentViewModel"/>: geometry preview + optional FDTD S-matrix
-/// recompute + save into a process's user PDK, with a hard rule that a missing or failed
-/// FDTD run always saves as a black box, never a fabricated S-matrix.
-/// </summary>
 public class NewComponentViewModelTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-" + Guid.NewGuid().ToString("N"));
@@ -49,8 +44,6 @@ public class NewComponentViewModelTests : IDisposable
         var fdtd = new Mock<IFdtdSMatrixService>();
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
         var process = new ProcessDefinition { Name = "P" };
-        // PDK-first: Save always appends to a selected existing named custom PDK now (no more
-        // inline "new PDK" creation), so seed one and let the ctor pre-select it.
         store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, withFdtd ? fdtd.Object : null, store,
             new List<ProcessDefinition> { process });
@@ -68,10 +61,10 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedDraft!.SMatrix.ShouldBeNull();      // black box, no invented physics
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
         vm.SavedDraft.Pins.Count.ShouldBe(2);
         vm.SavedDraft.RawCode.ShouldContain("gf.components.coupler");
-        vm.SavedDraft.GdsFactoryFunction.ShouldBeNull(); // always own-code now, never a reference
+        vm.SavedDraft.GdsFactoryFunction.ShouldBeNull();
     }
 
     [Fact]
@@ -88,7 +81,7 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.StatusText.ShouldContain("solver blew up");
-        vm.SavedDraft!.SMatrix.ShouldBeNull();       // failed FDTD => still no model, never fake
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
     }
 
     [Fact]
@@ -99,7 +92,7 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.StatusText.ShouldContain("Saved");   // black-box save still confirms
+        vm.StatusText.ShouldContain("Saved");
     }
 
     [Fact]
@@ -120,29 +113,17 @@ public class NewComponentViewModelTests : IDisposable
         vm.HasPreview.ShouldBeTrue();
         vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
-        // Edit the code without re-previewing: the old drift-guard concern (#656 review) — that
-        // the rendered preview no longer matches what would be saved — is now moot, because Save
-        // re-renders from the current Code itself (EnsurePreviewAsync) whenever the cached
-        // preview was invalidated. So Save must stay reachable and must persist the NEW geometry,
-        // never a stale one.
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
-        vm.HasPreview.ShouldBeFalse(); // cache invalidated...
-        vm.SaveCommand.CanExecute(null).ShouldBeTrue(); // ...but Save no longer needs it
+        vm.HasPreview.ShouldBeFalse();
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedDraft!.RawCode.ShouldContain("mmi1x2"); // saved the current code, freshly rendered
+        vm.SavedDraft!.RawCode.ShouldContain("mmi1x2");
     }
 
-    /// <summary>
-    /// Finding 1 (#733 review, critical): <c>InvalidatePreview</c> cleared the cached geometry
-    /// preview on a code change but left a previously-computed <c>_computedModel</c> in place, so
-    /// Save re-rendered the NEW geometry but still attached the OLD geometry's FDTD S-matrix —
-    /// invented physics that never matched what was actually saved. Changing the code after a
-    /// successful compute must force a black-box save, never a stale matrix.
-    /// </summary>
     [Fact]
     public async Task ComputeSMatrix_thenChangingTheCode_ForcesABlackBoxSave_NeverTheStaleSMatrix()
     {
@@ -164,16 +145,14 @@ public class NewComponentViewModelTests : IDisposable
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
         await vm.ComputeSMatrixCommand.ExecuteAsync(null);
-        vm.StatusText.ShouldContain("computed"); // sanity: the compute actually produced a model
+        vm.StatusText.ShouldContain("computed");
 
-        // Change the geometry WITHOUT recomputing — the old computed S-matrix belongs to the
-        // OLD geometry and must not survive.
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedDraft!.SMatrix.ShouldBeNull(); // black box — never the stale FDTD matrix
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
         vm.SavedDraft.RawCode.ShouldContain("mmi1x2");
         vm.StatusText.ShouldContain("black box");
     }

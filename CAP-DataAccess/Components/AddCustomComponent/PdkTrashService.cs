@@ -9,27 +9,10 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP_DataAccess.Components.AddCustomComponent;
 
-/// <summary>
-/// Reads and restores items from the user-PDK <c>.trash</c> folder that
-/// <see cref="UserPdkStore.MoveToTrash"/> (deleted PDK) and
-/// <see cref="UserPdkStore.RemoveComponent"/> (pre-edit component backup) write into.
-///
-/// Both operations leave a full PDK JSON named <c>&lt;base&gt;-&lt;yyyyMMdd-HHmmss&gt;.json</c>, so a
-/// trash file's kind is inferred, not stored: if the original live file
-/// (<c>&lt;root&gt;/&lt;base&gt;.json</c>) is gone it was a deleted PDK; if it still exists the backup is
-/// a removed-components snapshot, and the restorable set is the components present in the backup
-/// but missing from the live file. This keeps restore purely additive — it never clobbers newer
-/// edits — and needs no extra metadata on disk.
-/// </summary>
 public sealed class PdkTrashService
 {
     private const string TrashDirectoryName = ".trash";
 
-    /// <summary>
-    /// Days a trashed item is kept before it is deleted automatically. Chosen instead of a manual
-    /// "delete permanently" button, which is a footgun next to "Restore" in a safety-net feature —
-    /// time-based expiry (like OS recycle bins / Gmail) is safer and self-cleaning.
-    /// </summary>
     public const int RetentionDays = 30;
 
     private static readonly Regex TimestampSuffix =
@@ -39,7 +22,6 @@ public sealed class PdkTrashService
     private readonly PdkLoader _loader;
     private readonly PdkJsonSaver _saver;
 
-    /// <summary>Creates a trash service over an explicit user-PDK root (tests).</summary>
     public PdkTrashService(string userPdkRootDirectory, PdkLoader loader, PdkJsonSaver saver)
     {
         _root = userPdkRootDirectory;
@@ -47,18 +29,11 @@ public sealed class PdkTrashService
         _saver = saver;
     }
 
-    /// <summary>Creates the runtime service rooted at <see cref="UserPdkStore.DefaultRootDirectory"/>.</summary>
     public static PdkTrashService CreateDefault() =>
         new(UserPdkStore.DefaultRootDirectory, new PdkLoader(), new PdkJsonSaver());
 
-    /// <summary>Absolute path of the trash folder (may not exist yet).</summary>
     public string TrashDirectory => Path.Combine(_root, TrashDirectoryName);
 
-    /// <summary>
-    /// Lists recoverable trash entries, newest first. Unparseable/unreadable files and
-    /// removed-components backups whose components are all already back in the live file are
-    /// skipped, so the list only ever shows items that can actually be restored.
-    /// </summary>
     public IReadOnlyList<PdkTrashEntry> ListEntries()
     {
         PurgeExpired();
@@ -70,10 +45,6 @@ public sealed class PdkTrashService
         foreach (var path in Directory.GetFiles(TrashDirectory, "*.json"))
         {
             var entry = TryReadEntry(path);
-            // Only list entries that actually have something to restore: a deleted PDK with
-            // ≥1 component, or a removed-components backup whose components aren't all back. An
-            // empty (0-component) deleted PDK is noise — it shows up as a confusing "0 components"
-            // duplicate next to a same-named real PDK and has nothing worth recovering.
             if (entry != null && entry.RestorableComponentNames.Count > 0)
                 entries.Add(entry);
         }
@@ -85,7 +56,7 @@ public sealed class PdkTrashService
     {
         PdkDraft backup;
         try { backup = _loader.LoadFromFileForEditing(trashPath); }
-        catch { return null; } // a damaged trash file must not break the whole listing
+        catch { return null; }
 
         var fileName = Path.GetFileNameWithoutExtension(trashPath);
         var match = TimestampSuffix.Match(fileName);
@@ -97,10 +68,6 @@ public sealed class PdkTrashService
         var backupComponents = backup.Components.Select(c => c.Name).ToList();
         var live = TryLoadLive(livePath);
 
-        // Treat as a removed-components backup ONLY when the live file is the SAME PDK (same
-        // display name). A live file that merely shares the slug is a DIFFERENT PDK that reused
-        // the freed name after this one was deleted — restoring must not merge this PDK's
-        // components into that unrelated file, so it is a deleted PDK restored to its own path.
         bool sameLivePdk = live != null && string.Equals(live.Name, backup.Name, StringComparison.OrdinalIgnoreCase);
         if (!sameLivePdk)
             return new PdkTrashEntry(trashPath, backup.Name, PdkTrashKind.DeletedPdk, deletedAt, livePath, backupComponents);
@@ -118,15 +85,9 @@ public sealed class PdkTrashService
         if (!File.Exists(livePath))
             return null;
         try { return _loader.LoadFromFileForEditing(livePath); }
-        catch { return null; } // unreadable live file → treat the backup as a standalone deleted PDK
+        catch { return null; }
     }
 
-    /// <summary>
-    /// Restores <paramref name="entry"/>. A deleted PDK's file is moved back under the store root
-    /// (with a numeric suffix if a PDK of that name was created since); a removed-components backup
-    /// re-adds only the still-missing components to the live file. Returns what was restored so the
-    /// caller can re-register it into the library.
-    /// </summary>
     public PdkTrashRestoreResult Restore(PdkTrashEntry entry)
     {
         return entry.Kind == PdkTrashKind.DeletedPdk
@@ -143,10 +104,6 @@ public sealed class PdkTrashService
         var restored = _loader.LoadFromFileForEditing(target);
         if (!string.Equals(target, entry.OriginalLivePath, StringComparison.OrdinalIgnoreCase))
         {
-            // The original slot is taken by another PDK, so the file landed at a suffixed path.
-            // Give the restored PDK a distinct display name too, otherwise it collides by name
-            // with the occupant and the library either skips it as a duplicate or shows two
-            // same-named entries. The " (restored)" tag makes its origin clear.
             restored.Name = $"{restored.Name} (restored)";
             _saver.SaveToFile(restored, target);
         }
@@ -168,14 +125,8 @@ public sealed class PdkTrashService
         return new PdkTrashRestoreResult(entry.OriginalLivePath, live.Name, PdkTrashKind.RemovedComponents, readded);
     }
 
-    /// <summary>
-    /// Deletes trash files older than <see cref="RetentionDays"/>. Called automatically by
-    /// <see cref="ListEntries"/>; there is deliberately no manual permanent-delete — a footgun
-    /// next to "Restore" in a safety-net feature. Time-based expiry is safer and self-cleaning.
-    /// </summary>
     public void PurgeExpired() => PurgeExpired(DateTime.Now);
 
-    /// <summary>Testable core: deletes trash files whose deletion timestamp is older than the retention window.</summary>
     internal void PurgeExpired(DateTime now)
     {
         if (!Directory.Exists(TrashDirectory))
@@ -186,7 +137,7 @@ public sealed class PdkTrashService
         {
             var match = TimestampSuffix.Match(Path.GetFileNameWithoutExtension(path));
             if (!match.Success)
-                continue; // leave undatable files rather than risk deleting something unexpected
+                continue;
 
             var deletedAt = ParseTimestamp(match.Groups["date"].Value, match.Groups["time"].Value);
             if (deletedAt != DateTime.MinValue && deletedAt < cutoff)
@@ -196,7 +147,7 @@ public sealed class PdkTrashService
 
     private static void TryDelete(string path)
     {
-        try { File.Delete(path); } catch { /* best effort — a locked file is retried next listing */ }
+        try { File.Delete(path); } catch { }
     }
 
     private static string UniquePath(string desired)
@@ -224,11 +175,6 @@ public sealed class PdkTrashService
     }
 }
 
-/// <summary>Result of <see cref="PdkTrashService.Restore"/>: where the PDK now lives and what came back.</summary>
-/// <param name="RestoredPdkPath">Live file path the restored PDK/components are in.</param>
-/// <param name="PdkName">Display name of the restored PDK.</param>
-/// <param name="Kind">Which restore path ran.</param>
-/// <param name="RestoredComponents">Components actually added back (drafts, for re-registration).</param>
 public sealed record PdkTrashRestoreResult(
     string RestoredPdkPath,
     string PdkName,

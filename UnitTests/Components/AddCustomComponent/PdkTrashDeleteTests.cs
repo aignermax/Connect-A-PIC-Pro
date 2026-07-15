@@ -19,14 +19,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers LC-T5 (delete-to-trash): <see cref="UserPdkStore.MoveToTrash"/> and
-/// <see cref="UserPdkStore.RemoveComponent"/> at the store level, and
-/// <see cref="LeftPanelViewModel.UnregisterPdk"/> /
-/// <see cref="LeftPanelViewModel.RemoveCustomComponentCommand"/> at the library level — the
-/// mirror image of <see cref="RegisterCreatedPdkTests"/> / <see cref="LibraryEditActionTests"/>.
-/// Never touches bundled (Foundry) PDKs; only custom, user-authored ones.
-/// </summary>
 public class PdkTrashDeleteTests : IDisposable
 {
     private readonly List<string> _tempDirs = new();
@@ -39,7 +31,6 @@ public class PdkTrashDeleteTests : IDisposable
         return new UserPdkStore(root, new PdkJsonSaver(), new PdkLoader());
     }
 
-    /// <summary>Builds a <see cref="LeftPanelViewModel"/>, optionally with the "add custom component" collaborators wired (mirrors <c>LibraryEditActionTests</c>).</summary>
     private LeftPanelViewModel CreateLeftPanelViewModel(UserPdkStore? userPdkStore, out UserPreferencesService preferences)
     {
         var canvas = new DesignCanvasViewModel();
@@ -86,15 +77,13 @@ public class PdkTrashDeleteTests : IDisposable
     {
         foreach (var dir in _tempDirs.Where(Directory.Exists))
         {
-            try { Directory.Delete(dir, true); } catch { /* best effort */ }
+            try { Directory.Delete(dir, true); } catch { }
         }
         foreach (var file in _tempFiles.Where(File.Exists))
         {
-            try { File.Delete(file); } catch { /* best effort */ }
+            try { File.Delete(file); } catch { }
         }
     }
-
-    // ---------- UserPdkStore.MoveToTrash ----------
 
     [Fact]
     public void MoveToTrash_movesFileIntoTrashSubfolder_andRemovesOriginal()
@@ -143,8 +132,6 @@ public class PdkTrashDeleteTests : IDisposable
         var pathFirst = reuseStore.CreateNamedPdkWithProcess("Dup", SimpleProcess("P"), "gdsfactory", null);
         reuseStore.MoveToTrash(pathFirst);
 
-        // A second PDK with the exact same slug ("dup.json"), trashed right after — must not
-        // collide with (or silently overwrite) the first trashed copy.
         var pathSecond = reuseStore.CreateNamedPdkWithProcess("Dup", SimpleProcess("P"), "gdsfactory", null);
         reuseStore.MoveToTrash(pathSecond);
 
@@ -153,12 +140,6 @@ public class PdkTrashDeleteTests : IDisposable
         trashedFiles.Length.ShouldBe(2, "both trashed copies must survive, never overwriting one another");
     }
 
-    /// <summary>
-    /// An externally-stored PDK file (imported from a folder the user chose, outside the managed
-    /// user-pdks root) must never be relocated into the store's hidden app-data trash
-    /// (PR #739 review) — MoveToTrash refuses, the file stays where the user keeps it, and the
-    /// UI's delete path falls back to unregister-only.
-    /// </summary>
     [Fact]
     public void MoveToTrash_fileOutsideManagedRoot_throwsAndLeavesFileUntouched()
     {
@@ -186,7 +167,6 @@ public class PdkTrashDeleteTests : IDisposable
         store.IsInManagedRoot(Path.Combine(Path.GetTempPath(), "elsewhere.json")).ShouldBeFalse();
     }
 
-    // ---------- UserPdkStore.RemoveComponent ----------
 
     [Fact]
     public void RemoveComponent_removesNamedComponent_rewritesFileWithoutIt()
@@ -277,8 +257,6 @@ public class PdkTrashDeleteTests : IDisposable
         Directory.Exists(Path.Combine(root, ".trash")).ShouldBeFalse();
     }
 
-    // ---------- LeftPanelViewModel.UnregisterPdk ----------
-
     [Fact]
     public void UnregisterPdk_removesTemplates_pdkEntry_draft_andPrefsPath()
     {
@@ -328,7 +306,6 @@ public class PdkTrashDeleteTests : IDisposable
         var vm = CreateLeftPanelViewModel(store, out _);
         vm.RegisterCreatedPdk(pathA);
         vm.RegisterCreatedPdk(pathB);
-        // Both components share the "Test" category (see SimpleComponent).
         vm.Categories.ShouldContain("Test");
 
         vm.UnregisterPdk(pathA);
@@ -359,8 +336,6 @@ public class PdkTrashDeleteTests : IDisposable
         vm.AllTemplates.ShouldNotContain(t => t.Name == "Straight X");
     }
 
-    // ---------- LeftPanelViewModel.RemoveCustomComponent ----------
-
     [Fact]
     public void RemoveCustomComponent_forCustomTemplate_removesFromStoreFileAndLibrary()
     {
@@ -379,11 +354,6 @@ public class PdkTrashDeleteTests : IDisposable
             .ShouldNotContain(c => c.Name == "Straight A", "the in-memory draft must match the on-disk file");
     }
 
-    /// <summary>
-    /// A corrupt (hand-edited/locked) PDK file must not let the store's loader exception escape
-    /// through the RelayCommand into the async void click handler and crash the app
-    /// (PR #739 review) — the delete becomes a logged no-op and the template stays.
-    /// </summary>
     [Fact]
     public void RemoveCustomComponent_corruptPdkFile_doesNotThrow_andKeepsTemplate()
     {
@@ -424,8 +394,6 @@ public class PdkTrashDeleteTests : IDisposable
 
         vm.RemoveCustomComponentCommand.Execute(template);
 
-        // Removing a single component deletes only the component, never the PDK itself
-        // (UnregisterPdk is the separate, whole-PDK operation).
         vm.PdkManager.LoadedPdks.ShouldContain(p => p.Name == "My Lib");
     }
 }

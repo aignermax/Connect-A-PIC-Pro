@@ -35,8 +35,6 @@
                     </StackPanel>
                 </Border>
 
-                <!-- PDK: existing named custom PDKs plus a trailing "New PDK…" sentinel that
-                     opens the PDK-creation modal (wired in MainWindow.axaml.cs) -->
                 <TextBlock Text="PDK" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <ComboBox ItemsSource="{Binding PdkChoices}"
                           SelectedItem="{Binding SelectedPdkChoice}"
@@ -50,19 +48,16 @@
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Fabrication process: always inherited (read-only) from the selected PDK -->
                 <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Name -->
                 <TextBlock Text="Name" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBox Text="{Binding ComponentName}" Background="#2d2d2d" Foreground="White"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Structure: the user's own Python code, rendered verbatim -->
                 <Grid ColumnDefinitions="*,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="Structure (Python code)" Foreground="#aaaaaa" FontSize="11"
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -123,8 +118,6 @@
                             ToolTip.Tip="Renders the geometry and extracts its size and pins"/>
                 </Grid>
 
-                <!-- Rendered preview thumbnail; hidden until a render succeeds (PreviewBitmap can be
-                     null on a headless/no-render-backend session). Click opens a zoom/pan popup. -->
                 <Image x:Name="PreviewThumbnail"
                        Source="{Binding PreviewBitmap}"
                        Height="120"

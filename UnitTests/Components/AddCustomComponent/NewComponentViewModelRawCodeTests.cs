@@ -15,12 +15,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="NewComponentViewModel"/>'s own-code mode: pasting/loading raw Python
-/// source instead of a module/function reference, previewing it via
-/// <see cref="GeometryReference.RawCode"/>, and saving it as a raw-code draft (never a
-/// fabricated module/function reference).
-/// </summary>
 public class NewComponentViewModelRawCodeTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-raw-" + Guid.NewGuid().ToString("N"));
@@ -46,8 +40,6 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
         var process = new ProcessDefinition { Name = "P" };
-        // PDK-first: Save always appends to a selected existing named custom PDK now (no more
-        // inline "new PDK" creation), so seed one and let the ctor pre-select it.
         store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, fdtd: null, store,
             new List<ProcessDefinition> { process });
@@ -114,7 +106,7 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.SMatrixEntries.ShouldContain(e => e.WavelengthKey == "1550");
 
         await vm.SaveCommand.ExecuteAsync(null);
-        vm.SavedDraft!.SMatrix.ShouldNotBeNull(); // imported S-matrix persisted, not a black box
+        vm.SavedDraft!.SMatrix.ShouldNotBeNull();
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

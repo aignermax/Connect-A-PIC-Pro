@@ -7,39 +7,24 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Panels.PdkTrash;
 
-/// <summary>
-/// Display wrapper for one <see cref="PdkTrashEntry"/> in the PDK trash flyout: turns the raw
-/// entry into human-readable strings and carries the Restore command (which delegates to the
-/// owning <see cref="PdkTrashViewModel"/>), so the item template can bind it directly without an
-/// ancestor cast.
-/// </summary>
 public partial class PdkTrashEntryViewModel : ObservableObject
 {
     private readonly PdkTrashViewModel _owner;
 
-    /// <summary>The underlying trash entry (passed back to the service on restore/purge).</summary>
     public PdkTrashEntry Entry { get; }
 
-    /// <summary>Creates the display wrapper bound to its owning trash ViewModel.</summary>
     public PdkTrashEntryViewModel(PdkTrashEntry entry, PdkTrashViewModel owner)
     {
         Entry = entry;
         _owner = owner;
     }
 
-    /// <summary>Primary line, e.g. the PDK name.</summary>
     public string Title => Entry.PdkName;
 
-    /// <summary>True for a whole deleted PDK (drives the icon/label in the flyout).</summary>
     public bool IsDeletedPdk => Entry.Kind == PdkTrashKind.DeletedPdk;
 
-    /// <summary>Short kind label shown as a chip.</summary>
     public string KindLabel => IsDeletedPdk ? "PDK" : "Component(s)";
 
-    /// <summary>
-    /// Secondary line: what exactly would be restored — the whole PDK with its component count,
-    /// or the specific removed component names.
-    /// </summary>
     public string Detail
     {
         get
@@ -55,12 +40,10 @@ public partial class PdkTrashEntryViewModel : ObservableObject
         }
     }
 
-    /// <summary>When the item was deleted, formatted for display.</summary>
     public string DeletedAtText => Entry.DeletedAt == DateTime.MinValue
         ? ""
         : Entry.DeletedAt.ToString("yyyy-MM-dd HH:mm", CultureInfo.InvariantCulture);
 
-    /// <summary>Restores this entry (whole PDK or removed components).</summary>
     [RelayCommand]
     private void Restore() => _owner.RestoreEntry(this);
 }

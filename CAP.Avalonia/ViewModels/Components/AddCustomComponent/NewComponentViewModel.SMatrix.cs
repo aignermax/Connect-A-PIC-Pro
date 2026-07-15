@@ -6,29 +6,17 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
-/// <summary>
-/// S-matrix display + file-import for the component editor. The S-matrix belongs to the
-/// component definition (its geometry), so it lives here alongside Compute-with-Meep rather
-/// than in a separate per-instance dialog.
-/// </summary>
 public partial class NewComponentViewModel
 {
     private static readonly IReadOnlyList<ISParameterImporter> _sMatrixImporters =
         new ISParameterImporter[] { new LumericalSParameterImporter(), new TouchstoneImporter() };
 
-    /// <summary>File picker returning an S-parameter file path, or null if cancelled.</summary>
     public Func<Task<string?>>? PickSMatrixFile { get; set; }
 
-    /// <summary>Per-wavelength entries of the current S-matrix (imported or computed).</summary>
     public ObservableCollection<SMatrixEntryViewModel> SMatrixEntries { get; } = new();
 
     [ObservableProperty] private bool _hasSMatrix;
 
-    /// <summary>
-    /// Imports S-parameters (Lumerical .dat / Touchstone .sNp) as this component's S-matrix.
-    /// Renders a preview first for the pin names, reconciles port names against them, and stores
-    /// the result so a subsequent Save persists it instead of a black box.
-    /// </summary>
     [RelayCommand]
     private async Task LoadSMatrixFromFile()
     {

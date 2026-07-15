@@ -15,15 +15,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers task 1 of the PDK-process UX refinement (#729 follow-up): <c>Save</c> no longer
-/// requires a prior explicit <see cref="NewComponentViewModel.RunPreview"/> click — it renders
-/// and validates the current code itself via the private <c>EnsurePreviewAsync</c> helper. A
-/// render failure (e.g. a Python syntax error) is reported through
-/// <see cref="NewComponentViewModel.StatusText"/> and aborts the save, exactly like a failed
-/// explicit preview always did. A preview already rendered by an explicit click is reused
-/// verbatim — Save never re-renders on top of a still-valid preview.
-/// </summary>
 public class SaveWithoutPreviewTests : IDisposable
 {
     private readonly string _root =
@@ -62,14 +53,12 @@ public class SaveWithoutPreviewTests : IDisposable
         return (vm, gds);
     }
 
-    // (A) No preceding Preview click: CanExecute is already true (PDK selected, not busy), and
-    // Save renders the code itself and persists the result.
     [Fact]
     public async Task Save_withoutAPriorPreviewClick_rendersItselfAndSaves()
     {
         var (vm, gds) = Build();
 
-        vm.HasPreview.ShouldBeFalse(); // no Preview click happened
+        vm.HasPreview.ShouldBeFalse();
         vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
         await vm.SaveCommand.ExecuteAsync(null);
@@ -79,8 +68,6 @@ public class SaveWithoutPreviewTests : IDisposable
         gds.Verify(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()), Times.Once);
     }
 
-    // (B) A render failure (e.g. a Python syntax error) surfaces via StatusText and aborts the
-    // save — never silently, never with a fabricated/black-box draft in its place.
     [Fact]
     public async Task Save_whenTheCodeFailsToRender_reportsTheErrorAndDoesNotSave()
     {
@@ -103,8 +90,6 @@ public class SaveWithoutPreviewTests : IDisposable
         vm.StatusText.ShouldContain("SyntaxError");
     }
 
-    // (C) A preview already rendered by an explicit click is reused, not re-rendered: the
-    // renderer is invoked exactly once across both the Preview click and the subsequent Save.
     [Fact]
     public async Task Save_afterAnExplicitPreview_reusesItWithoutRerendering()
     {

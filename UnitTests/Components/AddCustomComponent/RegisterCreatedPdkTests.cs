@@ -18,16 +18,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="LeftPanelViewModel.RegisterCreatedPdk"/> (LC-T2): the "+" button in the
-/// PDK-Management panel opens <c>CreateCustomPdkWindow</c> directly (no "New Component" detour)
-/// and, on success, hands the freshly saved (possibly component-less) PDK file straight to this
-/// helper so it appears in the loaded-PDK list immediately — mirroring how
-/// <see cref="LeftPanelViewModel.ReloadUserPdksAtStartupAsync"/> registers a user PDK found on
-/// disk (issue #700), just for a single freshly-created file instead of a directory scan.
-/// Built the same way <see cref="UserPdkStartupReloadTests"/> is: no bundled-PDK
-/// <c>Initialize()</c> call, so assertions are not muddied by real bundled PDKs.
-/// </summary>
 public class RegisterCreatedPdkTests : IDisposable
 {
     private readonly string _userPdkRoot;
@@ -55,7 +45,7 @@ public class RegisterCreatedPdkTests : IDisposable
     {
         if (Directory.Exists(_userPdkRoot))
         {
-            try { Directory.Delete(_userPdkRoot, true); } catch { /* best effort */ }
+            try { Directory.Delete(_userPdkRoot, true); } catch { }
         }
     }
 
@@ -90,16 +80,10 @@ public class RegisterCreatedPdkTests : IDisposable
     [Fact]
     public void RegisterCreatedPdk_reappliesActiveProcess_soValueCompatiblePdkIsEnabled()
     {
-        // Lock the library to a process with a fingerprint-relevant process; the reloaded PDK's
-        // own process ("Process A") is a different instance but value-compatible (issue #736's
-        // by-value comparison), so the reapply must not lock it out. This exercises the
-        // ReapplyActiveProcessAfterPdkChange() + FilterComponents() call, not just registration.
         var path = _store.CreateNamedPdkWithProcess("Fresh Lib", SimpleProcess("Process A"), "gdsfactory", null);
 
         _leftPanel.RegisterCreatedPdk(path);
 
-        // No active process lock is set up in this test (Playground-equivalent default), so the
-        // PDK must simply be enabled and its (zero) components pass the filter without error.
         var pdkInfo = _leftPanel.PdkManager.LoadedPdks.ShouldHaveSingleItem();
         pdkInfo.IsEnabled.ShouldBeTrue();
     }

@@ -8,12 +8,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies the named-custom-PDK API on <see cref="UserPdkStore"/>: creating a
-/// user-named PDK file (independent of any single fabrication process file),
-/// listing all named custom PDKs with their process, and appending further
-/// components to an already-created named PDK without duplicating by name.
-/// </summary>
 public class UserPdkNamedStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-namedpdk-" + Guid.NewGuid().ToString("N"));

@@ -15,17 +15,10 @@
         Background="#1e1e1e"
         WindowStartupLocation="CenterOwner">
 
-    <!-- The dialog can be resized quite short; without an outer scroll the
-         lower DockPanel sections (effective S-matrix + wavelength list) get
-         clipped instead of becoming reachable. Wrapping the whole content in a
-         ScrollViewer keeps every section accessible at any window height. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
     <DockPanel Margin="16">
 
-        <!-- No in-content title: the window title bar already shows {Binding Title}. -->
-
-        <!-- Status bar -->
         <Border DockPanel.Dock="Bottom"
                 Background="#161616"
                 CornerRadius="4"
@@ -38,8 +31,6 @@
                        TextWrapping="Wrap"/>
         </Border>
 
-        <!-- Load + Recalculate side by side. Recalculate (FDTD) computes the S-matrix from
-             the component geometry with the open-source Meep solver instead of importing. -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
             <Button Content="Load S-matrix from file…"
                     Command="{Binding LoadFromFileCommand}"
@@ -54,17 +45,13 @@
                     IsVisible="{Binding CanRecalculate}"/>
         </StackPanel>
 
-        <!-- Solver / simulation status -->
         <Border DockPanel.Dock="Bottom"
                 Background="#161616"
                 CornerRadius="4"
                 Padding="8,6"
                 Margin="0,8,0,0"
                 IsVisible="{Binding SolverStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <!-- Grid, not a horizontal StackPanel: a StackPanel measures its
-                 children with infinite width, which disables TextWrapping and
-                 pushes long solver messages (e.g. the Docker install hint)
-                 out of the window. The star column bounds the text width. -->
+            <!-- Grid (not StackPanel): a star column bounds text width so long messages wrap. -->
             <Grid ColumnDefinitions="Auto,*">
                 <TextBlock Grid.Column="0" Text="⏳" FontSize="12" VerticalAlignment="Center"
                            Margin="0,0,8,0"
@@ -76,7 +63,6 @@
             </Grid>
         </Border>
 
-        <!-- Empty state -->
         <TextBlock DockPanel.Dock="Top"
                    Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it."
                    Foreground="Gray"
@@ -85,10 +71,6 @@
                    TextWrapping="Wrap"
                    IsVisible="{Binding HasSMatrices, Converter={x:Static BoolConverters.Not}}"/>
 
-        <!-- Currently effective S-matrix (read-only): shows what the simulator
-             actually uses for this entity right now, with a per-row tag that
-             distinguishes "PDK Default" from "Override active" so the user can
-             see the source of truth without inferring it from the override list. -->
         <TextBlock DockPanel.Dock="Top"
                    Text="Currently effective S-matrix"
                    Foreground="#aaaacc"
@@ -126,10 +108,7 @@
                                            FontSize="10"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"/>
-                                <!-- Source tag: orange when override active, dim when PDK default.
-                                     Uses two overlapping TextBlocks toggled by IsOverridden — Avalonia
-                                     compiled bindings can't take a foreground brush from a binding
-                                     in this scope, so two pre-coloured rows is the cleanest path. -->
+                                <!-- Two pre-coloured rows toggled by IsOverridden: compiled bindings can't set Foreground from a binding here. -->
                                 <TextBlock Grid.Column="3"
                                            Text="{Binding SourceTag}"
                                            Foreground="#FFA500"
@@ -154,7 +133,6 @@
             </ScrollViewer>
         </Border>
 
-        <!-- S-matrix list header -->
         <Grid DockPanel.Dock="Top"
               ColumnDefinitions="110,80,*,80"
               Margin="0,0,0,4"
@@ -166,7 +144,6 @@
             <TextBlock Grid.Column="3" Text="" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
         </Grid>
 
-        <!-- S-matrix entries list -->
         <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       IsVisible="{Binding HasSMatrices}">
@@ -178,7 +155,6 @@
                                 Padding="8,6"
                                 Margin="0,2">
                             <Grid ColumnDefinitions="110,80,*,36">
-                                <!-- Wavelength -->
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding WavelengthLabel}"
                                                Foreground="White"
@@ -190,14 +166,12 @@
                                                IsVisible="{Binding SourceNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
 
-                                <!-- Dimensions -->
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding Dimensions}"
                                            Foreground="#aaaaaa"
                                            FontSize="11"
                                            VerticalAlignment="Center"/>
 
-                                <!-- Strongest couplings preview -->
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding MagnitudePreview}"
                                                Foreground="#88ccaa"
@@ -210,15 +184,7 @@
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
-                                <!-- Delete button -->
-                                <!--
-                                    NOTE: We bind the parent VM's command via #DialogRoot (the Window's
-                                    x:Name) instead of $parent[ItemsControl].((vm:ComponentSettingsDialogViewModel)DataContext).
-                                    The cast form fails at runtime in deferred DataTemplate scope with
-                                    "Unable to resolve type vm:ComponentSettingsDialogViewModel" because
-                                    the vm: namespace prefix isn't reliably available when the template
-                                    is materialised (Avalonia issue with XamlIl + DataTemplate type casts).
-                                -->
+                                <!-- Bind via #DialogRoot: the $parent cast form fails in deferred DataTemplate scope (XamlIl namespace resolution). -->
                                 <Button Grid.Column="3"
                                         Content="×"
                                         CommandParameter="{Binding}"

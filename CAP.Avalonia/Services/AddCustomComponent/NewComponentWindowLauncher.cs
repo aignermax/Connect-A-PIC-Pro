@@ -8,20 +8,8 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.Services.AddCustomComponent;
 
-/// <summary>
-/// Builds the <see cref="NewComponentViewModel"/> offered by the "New Component" window
-/// (issue #656) and wires its <see cref="NewComponentViewModel.Saved"/> event: on save, reads
-/// the saved process's user-PDK file back (so the registered PDK name always matches what
-/// <see cref="UserPdkStore"/> wrote to disk) and hands the draft to <paramref name="register"/>
-/// in <see cref="BuildViewModel"/>. Extracted out of <c>LeftPanelViewModel.OpenNewComponent</c>
-/// to keep that command thin.
-/// </summary>
 public static class NewComponentWindowLauncher
 {
-    /// <summary>
-    /// Creates the view model, offering every currently loaded PDK's fabrication process as a
-    /// save target (a process-less/tool PDK has nowhere physically meaningful to save into).
-    /// </summary>
     public static NewComponentViewModel BuildViewModel(
         AddCustomComponentDependencies deps, PdkLoader pdkLoader, IReadOnlyList<PdkDraft> loadedPdks,
         Action<PdkComponentDraft, string, string> register,
@@ -38,15 +26,9 @@ public static class NewComponentWindowLauncher
         Action<PdkComponentDraft, string, string> register,
         Action<string, string>? removeMigratedTemplate)
     {
-        // PDK-first: the save target is a named custom PDK file (new or existing), which no
-        // longer corresponds to SelectedProcess's per-process default file — SavedFilePath is
-        // the actual path UserPdkStore wrote to and is the only reliable source here.
         if (vm.SavedDraft is null || vm.SavedFilePath is null) return;
 
         var filePath = vm.SavedFilePath;
-        // Edit-tolerant load (matches CustomComponentLibraryRegistrar): a freshly-saved user
-        // PDK may lack a Nazca origin offset, which the strict LoadFromFile would reject —
-        // that rejection would silently skip registration while the UI still says "Saved".
         var pdk = pdkLoader.LoadFromFileForEditing(filePath);
         register(vm.SavedDraft, pdk.Name, filePath);
 
