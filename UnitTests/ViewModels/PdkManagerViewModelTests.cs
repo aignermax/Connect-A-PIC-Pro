@@ -113,7 +113,7 @@ public class PdkManagerViewModelTests
 
         vm.LoadedPdks[0].IsEnabled.ShouldBeFalse();
         vm.LoadedPdks[1].IsEnabled.ShouldBeFalse();
-        vm.StatusText.ShouldBe("All PDKs disabled");
+        vm.StatusText.ShouldBe("Disabled 2 PDK(s)");
     }
 
     [Fact]

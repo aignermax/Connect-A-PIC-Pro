@@ -19,8 +19,6 @@ public partial class PdkManagerViewModel : ObservableObject
     /// in the PDK-manager UI can be disabled/hidden and reflect that the selection is locked.
     /// </summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(EnableAllCommand))]
-    [NotifyCanExecuteChangedFor(nameof(DisableAllCommand))]
     private bool _manualTogglesEnabled = true;
 
     /// <summary>
@@ -88,30 +86,38 @@ public partial class PdkManagerViewModel : ObservableObject
     /// governs the enabled set (issue #570) — the bulk buttons must not override the
     /// same lock that greys out the per-PDK checkboxes.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
+    [RelayCommand]
     private void EnableAll()
     {
-        SetAllEnabled(true);
-        StatusText = "All PDKs enabled";
+        var changed = SetAllEnabled(true);
+        StatusText = $"Enabled {changed} allowed PDK(s)";
     }
 
     /// <summary>
-    /// Disables all PDKs and refreshes the component library. Disabled while a process
-    /// governs the enabled set (issue #570).
+    /// Disables every PDK the user may toggle (skipping process-locked ones) and refreshes the
+    /// component library.
     /// </summary>
-    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
+    [RelayCommand]
     private void DisableAll()
     {
-        SetAllEnabled(false);
-        StatusText = "All PDKs disabled";
+        var changed = SetAllEnabled(false);
+        StatusText = $"Disabled {changed} PDK(s)";
     }
 
-    private void SetAllEnabled(bool enabled)
+    /// <summary>
+    /// Sets the enabled state of every PDK the user may toggle — i.e. those NOT locked by the
+    /// active fabrication process (a locked PDK belongs to a foreign process and keeps its
+    /// process-dictated state). So "Enable all" turns on all allowed/compatible PDKs and
+    /// "Disable all" turns them off, both without fighting the process lock. Returns the number
+    /// of PDKs actually changed.
+    /// </summary>
+    private int SetAllEnabled(bool enabled)
     {
+        var toggleable = LoadedPdks.Where(p => !p.IsLockedByProcess).ToList();
         _suppressFilterNotifications = true;
         try
         {
-            foreach (var pdk in LoadedPdks)
+            foreach (var pdk in toggleable)
                 pdk.IsEnabled = enabled;
         }
         finally
@@ -119,6 +125,7 @@ public partial class PdkManagerViewModel : ObservableObject
             _suppressFilterNotifications = false;
         }
         OnFilterChanged?.Invoke();
+        return toggleable.Count;
     }
 
     /// <summary>

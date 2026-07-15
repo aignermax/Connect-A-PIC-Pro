@@ -10,20 +10,27 @@ namespace UnitTests.ViewModels;
 public class PdkManagerProcessLockTests
 {
     [Fact]
-    public void BulkCommands_AreDisabled_WhileProcessLockGovernsEnabledSet()
+    public void BulkCommands_OnlyToggleAllowedPdks_AndLeaveProcessLockedOnesUntouched()
     {
         var manager = new PdkManagerViewModel();
-        manager.RegisterPdk("Demo", null, true, 3);
+        manager.RegisterPdk("Allowed", null, true, 1);
+        manager.RegisterPdk("Foreign", null, true, 1);
+        manager.ApplyProcessLock(new[] { "Allowed" }); // Foreign → locked+disabled, Allowed → enabled
 
-        manager.ManualTogglesEnabled = false;
-
-        manager.EnableAllCommand.CanExecute(null).ShouldBeFalse();
-        manager.DisableAllCommand.CanExecute(null).ShouldBeFalse();
-
-        manager.ManualTogglesEnabled = true;
-
+        // Bulk buttons are always usable now; they operate on the allowed (unlocked) set.
         manager.EnableAllCommand.CanExecute(null).ShouldBeTrue();
         manager.DisableAllCommand.CanExecute(null).ShouldBeTrue();
+
+        manager.DisableAllCommand.Execute(null);
+        Pdk(manager, "Allowed").IsEnabled.ShouldBeFalse(); // allowed PDK toggled off
+        Pdk(manager, "Foreign").IsEnabled.ShouldBeFalse(); // locked PDK untouched (already off)
+
+        manager.EnableAllCommand.Execute(null);
+        Pdk(manager, "Allowed").IsEnabled.ShouldBeTrue();  // allowed PDK enabled
+        Pdk(manager, "Foreign").IsEnabled.ShouldBeFalse(); // locked PDK NOT force-enabled
+
+        static PdkInfoViewModel Pdk(PdkManagerViewModel m, string name) =>
+            m.LoadedPdks.Single(p => p.Name == name);
     }
 
     [Fact]
