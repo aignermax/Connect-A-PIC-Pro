@@ -660,7 +660,8 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm)
             return;
 
-        if (sender is MenuItem { DataContext: ComponentTemplate template })
+        // Accept both the context-menu item and the inline hover pencil button.
+        if (sender is Control { DataContext: ComponentTemplate template })
         {
             vm.LeftPanel.EditCustomComponentCommand.Execute(template);
         }
@@ -681,7 +682,8 @@ public partial class MainWindow : Window
         if (DataContext is not MainViewModel vm)
             return;
 
-        if (sender is not MenuItem { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanEditTemplate(template))
+        // Accept both the context-menu item and the inline hover ✕ button.
+        if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanEditTemplate(template))
             return;
 
         var choice = await new MessageBoxService().ShowChoicePromptAsync(

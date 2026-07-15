@@ -51,15 +51,14 @@ public sealed class CanvasOverlayRenderer : ICanvasRenderer
 
     private static void DrawStatusInfo(DrawingContext context, Rect bounds, DesignCanvasViewModel vm, double zoom)
     {
-        string snapInfo = vm.GridSnap.IsEnabled
-            ? $" | [G] Snap: {vm.GridSnap.GridSizeMicrometers}µm"
-            : " | [G] Snap: OFF";
-        string gridInfo = vm.ShowGridOverlay ? " | [Shift+G] Grid: ON" : "";
-        string powerInfo = vm.ShowPowerFlow ? " | [P] Power: ON" : " | [P] Power: OFF";
+        // The active fabrication process is shown here (grid HUD) rather than only at the
+        // bottom of the PDK panel; the snap/power key hints were dropped from the HUD because
+        // the full key legend is already displayed under the canvas.
+        string processInfo = string.IsNullOrEmpty(vm.ActiveProcessLabel) ? "" : $" | {vm.ActiveProcessLabel}";
 
         context.DrawText(
             new FormattedText(
-                $"Zoom: {zoom:P0} | Components: {vm.Components.Count} | Connections: {vm.Connections.Count}{snapInfo}{gridInfo}{powerInfo}",
+                $"Zoom: {zoom:P0} | Components: {vm.Components.Count} | Connections: {vm.Connections.Count}{processInfo}",
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
                 new Typeface("Arial"),

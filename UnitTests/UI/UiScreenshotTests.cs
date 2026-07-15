@@ -88,6 +88,11 @@ public class UiScreenshotTests
                 OperatingSystem.IsWindows() ? @"Scripts\python.exe" : "bin/python"));
         TryCapture(() => new PythonEnvironmentManagerPanel(), envVm, 500, 700, outputDir, "PythonEnvironmentManagerPanel.png", captured, skipped);
 
+        // PDK trash flyout: seed a deleted PDK + a removed-components backup so the panel
+        // renders real recoverable rows (Restore / permanently-delete) instead of the empty state.
+        TryCapture(() => new PdkTrashPanel(), SeedPdkTrashViewModel(), 360, 400, outputDir,
+            "PdkTrashPanel.png", captured, skipped);
+
         foreach (var (name, reason) in skipped)
             Console.WriteLine($"[SKIPPED] {name}: {reason}");
 
@@ -103,6 +108,39 @@ public class UiScreenshotTests
         }
 
         captured.Count.ShouldBeGreaterThan(0, "At least one screenshot must be captured");
+    }
+
+    /// <summary>
+    /// Builds a <see cref="PdkTrashViewModel"/> backed by a throwaway user-PDK root seeded with
+    /// one deleted PDK and one removed-components backup, so the trash panel renders real rows.
+    /// </summary>
+    private static CAP.Avalonia.ViewModels.Panels.PdkTrash.PdkTrashViewModel SeedPdkTrashViewModel()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-trash-{Guid.NewGuid():N}");
+        var store = new CAP_DataAccess.Components.AddCustomComponent.UserPdkStore(
+            root, new CAP_DataAccess.Components.ComponentDraftMapper.PdkJsonSaver(),
+            new CAP_DataAccess.Components.ComponentDraftMapper.PdkLoader());
+
+        CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft Comp(string n) => new()
+        {
+            Name = n, WidthMicrometers = 5, HeightMicrometers = 1,
+            RawCode = "import gdsfactory as gf\ncomponent = gf.components.straight()", RawCodeBackend = "gdsfactory",
+            Pins = new() { new() { Name = "o1" }, new() { Name = "o2" } },
+        };
+        var process = new CAP_DataAccess.Components.ComponentDraftMapper.DTOs.ProcessDefinition { Name = "Demo SOI 220nm" };
+
+        // Deleted whole PDK.
+        var libA = store.SaveToNamedPdk("My SiN Library", process, Comp("Ring Resonator"), "gdsfactory", null);
+        store.SaveToNamedPdk("My SiN Library", process, Comp("Grating Coupler"), "gdsfactory", null);
+        store.MoveToTrash(libA);
+        // Removed component (leaves a backup while the PDK lives on).
+        var libB = store.SaveToNamedPdk("Prototype Kit", process, Comp("Test MMI"), "gdsfactory", null);
+        store.SaveToNamedPdk("Prototype Kit", process, Comp("Spiral Delay"), "gdsfactory", null);
+        store.RemoveComponent(libB, "Test MMI");
+
+        var vm = new CAP.Avalonia.ViewModels.Panels.PdkTrash.PdkTrashViewModel(store.CreateTrashService());
+        vm.Refresh();
+        return vm;
     }
 
     private static void TryCapture(
