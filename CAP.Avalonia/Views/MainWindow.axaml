@@ -590,10 +590,21 @@
                                  Background="Transparent" Foreground="White"
                                  Margin="5,0"
                                  controls:ComponentPreview.RenderService="{Binding GdsPreviewRenderService}">
+                            <ListBox.Styles>
+                                <!-- Inline edit/delete icons on a custom component appear only on
+                                     hover or when the row is selected — keeps the palette clean
+                                     but discoverable (no hidden-only context menu). -->
+                                <Style Selector="ListBoxItem:pointerover StackPanel#ItemActions">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </Style>
+                                <Style Selector="ListBoxItem:selected StackPanel#ItemActions">
+                                    <Setter Property="Opacity" Value="1"/>
+                                </Style>
+                            </ListBox.Styles>
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vmLib:ComponentTemplate">
-                                    <StackPanel Orientation="Horizontal" Margin="0,1">
-                                        <StackPanel.ContextMenu>
+                                    <DockPanel Margin="0,1" HorizontalAlignment="Stretch">
+                                        <DockPanel.ContextMenu>
                                             <ContextMenu>
                                                 <MenuItem Header="Component Settings…" Click="TemplateComponentSettings_Click"/>
                                                 <!-- Custom (non-Foundry) components only: opens the "New Component"
@@ -605,8 +616,22 @@
                                                 <MenuItem Header="Delete…" Click="TemplateDeleteComponent_Click"
                                                           IsVisible="{Binding IsCustom}" IsEnabled="{Binding IsCustom}"/>
                                             </ContextMenu>
-                                        </StackPanel.ContextMenu>
-                                        <controls:ComponentPreview
+                                        </DockPanel.ContextMenu>
+                                        <!-- Hover/selected edit (✏) + delete (✕) for custom components; bundled
+                                             components show nothing (IsCustom gate). Same handlers as the context menu. -->
+                                        <StackPanel x:Name="ItemActions" DockPanel.Dock="Right" Orientation="Horizontal"
+                                                    VerticalAlignment="Center" Opacity="0"
+                                                    IsVisible="{Binding IsCustom}">
+                                            <Button Content="✏" Click="TemplateEditComponent_Click"
+                                                    FontSize="11" Padding="4,0" MinWidth="0"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#c9c9c9"
+                                                    ToolTip.Tip="Edit component"/>
+                                            <Button Content="✕" Click="TemplateDeleteComponent_Click"
+                                                    FontSize="11" Padding="4,0" MinWidth="0" Margin="2,0,0,0"
+                                                    Background="Transparent" BorderThickness="0" Foreground="#e08a8a"
+                                                    ToolTip.Tip="Delete component (to trash)"/>
+                                        </StackPanel>
+                                        <controls:ComponentPreview DockPanel.Dock="Left"
                                             Width="56" Height="36"
                                             WidthMicrometers="{Binding WidthMicrometers}"
                                             HeightMicrometers="{Binding HeightMicrometers}"
@@ -630,7 +655,7 @@
                                             </StackPanel>
                                             <TextBlock Text="{Binding Category}" FontSize="9" Foreground="Gray"/>
                                         </StackPanel>
-                                    </StackPanel>
+                                    </DockPanel>
                                 </DataTemplate>
                             </ListBox.ItemTemplate>
                         </ListBox>
@@ -659,7 +684,7 @@
                                 Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                                 Background="#3d3d3d" Foreground="#c9c9c9"
-                                ToolTip.Tip="Papierkorb — gelöschte PDKs / Komponenten wiederherstellen">
+                                ToolTip.Tip="Trash — restore deleted PDKs / components">
                             <Button.Flyout>
                                 <Flyout Placement="Bottom">
                                     <panels:PdkTrashPanel DataContext="{Binding LeftPanel.PdkTrash}"/>
@@ -697,17 +722,17 @@
                                                 <!-- Edits this custom PDK's own fabrication process (layer
                                                      stack, cross-sections, materials) — issue #726 follow-up.
                                                      Bundled PDKs are read-only and have no Edit button. -->
-                                                <Button Content="Edit…" IsVisible="{Binding !IsBundled}"
+                                                <Button Content="✏" IsVisible="{Binding !IsBundled}"
                                                         Click="PdkEditProcess_Click"
-                                                        FontSize="9" Padding="6,1" Background="#3d3d3d"
-                                                        ToolTip.Tip="Edit this PDK's fabrication process — layer stack, cross-sections, materials"/>
+                                                        FontSize="11" Padding="5,1" MinWidth="0" Background="#3d3d3d" Foreground="#c9c9c9"
+                                                        ToolTip.Tip="Edit this PDK — layer stack, cross-sections, materials"/>
                                                 <!-- Moves this custom PDK's file to user-pdks/.trash after a
                                                      confirm prompt (LC-T5). Bundled PDKs are read-only and have
                                                      no Delete button. -->
-                                                <Button Content="Delete…" IsVisible="{Binding !IsBundled}"
+                                                <Button Content="✕" IsVisible="{Binding !IsBundled}"
                                                         Click="PdkDelete_Click"
-                                                        FontSize="9" Padding="6,1" Background="#3d3d3d" Margin="4,0,0,0"
-                                                        ToolTip.Tip="Move this PDK's file to the trash (recoverable)"/>
+                                                        FontSize="11" Padding="5,1" MinWidth="0" Background="#3d3d3d" Foreground="#e08a8a" Margin="4,0,0,0"
+                                                        ToolTip.Tip="Move this PDK to trash (recoverable)"/>
                                             </StackPanel>
                                         </StackPanel>
                                     </DataTemplate>

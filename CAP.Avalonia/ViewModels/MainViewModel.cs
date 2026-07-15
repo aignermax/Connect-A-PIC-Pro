@@ -586,6 +586,9 @@ public partial class MainViewModel : ObservableObject
         ActiveProcessLabel = p == null ? "No process selected"
             : p.IsPlayground ? "Playground — not manufacturable"
             : $"Process: {p.DisplayName}";
+        // Mirror into the canvas VM so the status HUD (CanvasOverlayRenderer) can show the
+        // active process in the grid overlay, not only at the bottom of the PDK panel.
+        Canvas.ActiveProcessLabel = ActiveProcessLabel;
         LeftPanel.ApplyActiveProcess(p);
     }
 

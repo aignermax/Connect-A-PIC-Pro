@@ -58,7 +58,7 @@ public partial class PdkTrashViewModel : ObservableObject
     private void Open()
     {
         Refresh();
-        StatusText = HasEntries ? "" : "Papierkorb ist leer.";
+        StatusText = HasEntries ? "" : "Trash is empty.";
         IsOpen = true;
     }
 
@@ -75,14 +75,14 @@ public partial class PdkTrashViewModel : ObservableObject
             var result = _trash.Restore(item.Entry);
             OnRestored?.Invoke(result);
             StatusText = result.Kind == PdkTrashKind.DeletedPdk
-                ? $"'{result.PdkName}' wiederhergestellt."
-                : $"{result.RestoredComponents.Count} Komponente(n) in '{result.PdkName}' wiederhergestellt.";
+                ? $"Restored '{result.PdkName}'."
+                : $"Restored {result.RestoredComponents.Count} component(s) to '{result.PdkName}'.";
         }
         catch (Exception ex)
         {
             // A locked/corrupt file must surface, not crash the click handler (CLAUDE.md §silent-failure).
-            _errorConsole?.LogError($"Wiederherstellen aus Papierkorb fehlgeschlagen: {ex.Message}", ex);
-            StatusText = $"Fehler beim Wiederherstellen: {ex.Message}";
+            _errorConsole?.LogError($"Restore from trash failed: {ex.Message}", ex);
+            StatusText = $"Restore failed: {ex.Message}";
         }
         Refresh();
     }
@@ -94,12 +94,12 @@ public partial class PdkTrashViewModel : ObservableObject
         try
         {
             _trash.Purge(item.Entry);
-            StatusText = $"'{item.Title}' endgültig gelöscht.";
+            StatusText = $"Deleted '{item.Title}' permanently.";
         }
         catch (Exception ex)
         {
-            _errorConsole?.LogError($"Endgültiges Löschen fehlgeschlagen: {ex.Message}", ex);
-            StatusText = $"Fehler: {ex.Message}";
+            _errorConsole?.LogError($"Permanent delete failed: {ex.Message}", ex);
+            StatusText = $"Error: {ex.Message}";
         }
         Refresh();
     }

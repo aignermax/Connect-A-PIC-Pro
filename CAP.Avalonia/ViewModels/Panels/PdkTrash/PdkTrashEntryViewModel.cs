@@ -33,7 +33,7 @@ public partial class PdkTrashEntryViewModel
     public bool IsDeletedPdk => Entry.Kind == PdkTrashKind.DeletedPdk;
 
     /// <summary>Short kind label shown as a chip.</summary>
-    public string KindLabel => IsDeletedPdk ? "PDK" : "Komponente(n)";
+    public string KindLabel => IsDeletedPdk ? "PDK" : "Component(s)";
 
     /// <summary>
     /// Secondary line: what exactly would be restored — the whole PDK with its component count,
@@ -45,7 +45,7 @@ public partial class PdkTrashEntryViewModel
         {
             var count = Entry.RestorableComponentNames.Count;
             if (IsDeletedPdk)
-                return count == 1 ? "1 Komponente" : $"{count} Komponenten";
+                return count == 1 ? "1 component" : $"{count} components";
 
             var names = string.Join(", ", Entry.RestorableComponentNames.Take(4));
             if (count > 4)
