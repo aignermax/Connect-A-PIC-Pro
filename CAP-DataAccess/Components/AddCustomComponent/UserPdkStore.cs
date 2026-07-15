@@ -46,6 +46,27 @@ public sealed class UserPdkStore
     public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
 
     /// <summary>
+    /// Forks a bundled (read-only, shipped) PDK into the editable user-PDK store so the user can
+    /// edit it without touching the installed app directory (which is overwritten on update).
+    /// Copies the bundled JSON to <c>&lt;root&gt;/&lt;slug(name)&gt;.json</c> and returns that path. If a user
+    /// PDK of the same name already exists (already forked, or a same-named user PDK), returns its
+    /// existing path unchanged — forking is idempotent and never clobbers user edits.
+    /// </summary>
+    /// <param name="bundledFilePath">Full path of the bundled PDK JSON to fork.</param>
+    /// <param name="pdkName">Display name of the bundled PDK (drives the user-copy file name).</param>
+    /// <returns>The user-PDK file path holding the (now editable) fork.</returns>
+    public string ForkBundledPdk(string bundledFilePath, string pdkName)
+    {
+        var target = ResolveNamedPath(pdkName);
+        if (File.Exists(target))
+            return target; // already forked / a same-named user PDK exists — don't overwrite
+
+        Directory.CreateDirectory(_root);
+        File.Copy(bundledFilePath, target);
+        return target;
+    }
+
+    /// <summary>
     /// Creates a <see cref="PdkTrashService"/> over this store's SAME root, so restore reads the
     /// exact <c>.trash</c> folder that <see cref="MoveToTrash"/> / <see cref="RemoveComponent"/>
     /// write into (no risk of a default-root mismatch when the store was constructed elsewhere).

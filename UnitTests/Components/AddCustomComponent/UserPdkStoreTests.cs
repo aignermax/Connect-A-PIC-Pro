@@ -40,6 +40,30 @@ public class UserPdkStoreTests : IDisposable
     };
 
     [Fact]
+    public void ForkBundledPdk_copies_into_user_root_leaves_original_and_is_idempotent()
+    {
+        // A "bundled" PDK living outside the user root (simulating the read-only app dir).
+        var bundledDir = Path.Combine(Path.GetTempPath(), "lunima-bundled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(bundledDir);
+        var bundledPath = new UserPdkStore(bundledDir, new PdkJsonSaver(), new PdkLoader())
+            .SaveToNamedPdk("Shipped Lib", Process("P"), Comp("A"), "gdsfactory", null);
+
+        var store = CreateStore();
+        var forked = store.ForkBundledPdk(bundledPath, "Shipped Lib");
+
+        forked.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue(); // copied into the editable user root
+        File.Exists(bundledPath).ShouldBeTrue();                            // bundled original untouched
+        new PdkLoader().LoadFromFileForEditing(forked).Components.Count.ShouldBe(1);
+
+        // Idempotent: re-forking returns the same path and never clobbers a user edit on the fork.
+        store.AppendToExistingPdk(forked, Comp("Edited"));
+        store.ForkBundledPdk(bundledPath, "Shipped Lib").ShouldBe(forked);
+        new PdkLoader().LoadFromFileForEditing(forked).Components.Select(c => c.Name).ShouldContain("Edited");
+
+        Directory.Delete(bundledDir, true);
+    }
+
+    [Fact]
     public void ResolvePath_is_under_user_root_and_slugified()
     {
         var store = CreateStore();
