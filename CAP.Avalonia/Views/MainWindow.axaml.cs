@@ -634,33 +634,11 @@ public partial class MainWindow : Window
         vm.LeftPanel.RefreshUserGlobalOverrideBadges(userStore.Overrides.ContainsKey);
     }
 
-    /// <summary>
-    /// Handles "Component Settings…" click in the PDK template list context menu.
-    /// </summary>
-    private void TemplateComponentSettings_Click(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm)
-            return;
-
-        if (sender is MenuItem { DataContext: ComponentTemplate template })
-        {
-            var key = $"{template.PdkSource}::{template.Name}";
-            ShowComponentSettingsDialog(key, template.Name, null, vm, template);
-        }
-    }
-
-    /// <summary>
-    /// Handles "Edit…" click in the PDK template list context menu (issue #656 follow-up, task 6).
-    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — see the
-    /// <c>IsCustom</c> binding in <c>MainWindow.axaml</c> — but delegates the authoritative
-    /// bundled/custom check to <see cref="LeftPanelViewModel.CanEditTemplate"/> via the command.
-    /// </summary>
     private void TemplateEditComponent_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm)
             return;
 
-        // Accept both the context-menu item and the inline hover pencil button.
         if (sender is Control { DataContext: ComponentTemplate template })
         {
             vm.LeftPanel.EditCustomComponentCommand.Execute(template);

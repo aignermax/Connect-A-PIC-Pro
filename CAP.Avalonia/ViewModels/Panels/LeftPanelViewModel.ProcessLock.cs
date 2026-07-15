@@ -44,18 +44,17 @@ public partial class LeftPanelViewModel
     /// user's own (persisted) enable selection back — the locked set is derived state and must
     /// never replace it.
     /// </summary>
-    public void ApplyActiveProcess(ActiveProcessSelection? active)
+    public void ApplyActiveProcess(ActiveProcessSelection? active, bool preserveMemberToggles = false)
     {
         _lastAppliedProcess = active;
         if (active is { IsPlayground: false })
         {
-            // Order matters: the lock flag must be set BEFORE ApplyProcessLock — that call
-            // triggers FilterComponents → SavePdkFilterState, whose guard reads the flag.
-            // Reversed, the locked set would be persisted over the user's own selection.
+            // The lock flag must be set BEFORE ApplyProcessLock, whose FilterComponents →
+            // SavePdkFilterState guard reads it.
             PdkManager.ManualTogglesEnabled = false;
-            // Member + tool PDKs stay individually toggleable (library filtering);
-            // only foreign-process PDKs get their checkbox locked.
-            PdkManager.ApplyProcessLock(ResolveLiveMemberPdkNames(active).Concat(GetProcessAgnosticPdkNames()));
+            PdkManager.ApplyProcessLock(
+                ResolveLiveMemberPdkNames(active).Concat(GetProcessAgnosticPdkNames()),
+                preserveMemberToggles);
             FilterComponents();
         }
         else
@@ -190,6 +189,6 @@ public partial class LeftPanelViewModel
     internal void ReapplyActiveProcessAfterPdkChange()
     {
         if (_lastAppliedProcess is { IsPlayground: false })
-            ApplyActiveProcess(_lastAppliedProcess);
+            ApplyActiveProcess(_lastAppliedProcess, preserveMemberToggles: true);
     }
 }

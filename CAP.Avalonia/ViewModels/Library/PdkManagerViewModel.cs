@@ -215,7 +215,7 @@ public partial class PdkManagerViewModel : ObservableObject
     /// checkbox is locked, because enabling a foreign-process PDK would contradict the
     /// single-process rule.
     /// </summary>
-    public void ApplyProcessLock(IEnumerable<string> allowedNames)
+    public void ApplyProcessLock(IEnumerable<string> allowedNames, bool preserveMemberToggles = false)
     {
         var allowed = allowedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _suppressFilterNotifications = true;
@@ -224,7 +224,18 @@ public partial class PdkManagerViewModel : ObservableObject
             foreach (var pdk in LoadedPdks)
             {
                 var isAllowed = allowed.Contains(pdk.Name);
-                pdk.IsEnabled = isAllowed;
+                // When re-applying the lock after a PDK change, an already-unlocked member keeps
+                // the user's manual declutter toggle; only a newly-added/previously-foreign PDK
+                // gets enabled. Foreign PDKs are always disabled and locked.
+                if (isAllowed)
+                {
+                    if (!preserveMemberToggles || pdk.IsLockedByProcess)
+                        pdk.IsEnabled = true;
+                }
+                else
+                {
+                    pdk.IsEnabled = false;
+                }
                 pdk.IsLockedByProcess = !isAllowed;
             }
         }

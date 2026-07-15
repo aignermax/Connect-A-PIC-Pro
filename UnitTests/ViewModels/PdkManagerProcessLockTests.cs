@@ -34,6 +34,28 @@ public class PdkManagerProcessLockTests
     }
 
     [Fact]
+    public void ApplyProcessLock_Reapplied_WithPreserve_KeepsManuallyDisabledMember()
+    {
+        // Regression for the "save re-shows all hidden PDKs" bug: under a process lock a member
+        // PDK stays togglable; a re-apply after a PDK change (preserveMemberToggles) must not
+        // force it back on.
+        var manager = new PdkManagerViewModel();
+        manager.RegisterPdk("MemberA", null, true, 1);
+        manager.RegisterPdk("MemberB", null, true, 1);
+        manager.ApplyProcessLock(new[] { "MemberA", "MemberB" });
+
+        Pdk(manager, "MemberB").IsEnabled = false; // user hides one member
+
+        manager.ApplyProcessLock(new[] { "MemberA", "MemberB" }, preserveMemberToggles: true);
+
+        Pdk(manager, "MemberA").IsEnabled.ShouldBeTrue();
+        Pdk(manager, "MemberB").IsEnabled.ShouldBeFalse(); // stays hidden
+
+        static PdkInfoViewModel Pdk(PdkManagerViewModel m, string name) =>
+            m.LoadedPdks.Single(p => p.Name == name);
+    }
+
+    [Fact]
     public void SetEnabledPdks_BatchesFilterNotifications_ToASingleCallback()
     {
         var manager = new PdkManagerViewModel();

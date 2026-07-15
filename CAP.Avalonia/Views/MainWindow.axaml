@@ -609,20 +609,6 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vmLib:ComponentTemplate">
                                     <DockPanel Margin="0,1" HorizontalAlignment="Stretch">
-                                        <DockPanel.ContextMenu>
-                                            <ContextMenu>
-                                                <MenuItem Header="Component Settings…" Click="TemplateComponentSettings_Click"/>
-                                                <!-- Edit the component definition — available for every component;
-                                                     editing a bundled one forks its PDK into the user store first. -->
-                                                <MenuItem Header="Edit…" Click="TemplateEditComponent_Click"/>
-                                                <!-- Custom (non-Foundry) components only: moves the component to
-                                                     .trash and out of its user PDK file (LC-T5). -->
-                                                <MenuItem Header="Delete…" Click="TemplateDeleteComponent_Click"
-                                                          IsVisible="{Binding IsCustom}" IsEnabled="{Binding IsCustom}"/>
-                                            </ContextMenu>
-                                        </DockPanel.ContextMenu>
-                                        <!-- Hover/selected edit (✏, all components — bundled forks on edit) +
-                                             delete (✕, custom only). Same handlers as the context menu. -->
                                         <StackPanel Classes="itemActions" DockPanel.Dock="Right" Orientation="Horizontal"
                                                     VerticalAlignment="Center">
                                             <Button Content="✏" Click="TemplateEditComponent_Click"
