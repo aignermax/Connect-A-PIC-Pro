@@ -9,7 +9,7 @@ namespace CAP.Avalonia.ViewModels.Panels.PdkTrash;
 
 /// <summary>
 /// Drives the PDK-Management trash flyout: lists recoverable deleted PDKs and removed-component
-/// backups (<see cref="PdkTrashService"/>) and restores or permanently purges them. Restoring
+/// backups (<see cref="PdkTrashService"/>) and restores them (old items auto-expire). Restoring
 /// only touches files on disk here; re-registering the result into the running library is the
 /// host's job via <see cref="OnRestored"/> (wired to the same RegisterCreatedPdk /
 /// RegisterSavedCustomComponent hooks the delete path is the mirror of).

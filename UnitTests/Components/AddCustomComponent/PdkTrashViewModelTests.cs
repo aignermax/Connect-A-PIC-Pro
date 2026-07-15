@@ -51,6 +51,28 @@ public sealed class PdkTrashViewModelTests : IDisposable
     }
 
     [Fact]
+    public void RestoreRemovedComponent_ReRegistersComponentAndClearsEntry()
+    {
+        var proc = new ProcessDefinition { Name = "P" };
+        _store.SaveToNamedPdk("My Lib", proc, Component("Keep"), "gdsfactory", null);
+        var path = _store.SaveToNamedPdk("My Lib", proc, Component("Gone"), "gdsfactory", null);
+        _store.RemoveComponent(path, "Gone"); // backup + remove one component
+        _vm.Refresh();
+
+        PdkTrashRestoreResult? restored = null;
+        _vm.OnRestored = r => restored = r;
+
+        _vm.Entries[0].RestoreCommand.Execute(null);
+
+        restored.ShouldNotBeNull();
+        restored!.Kind.ShouldBe(PdkTrashKind.RemovedComponents);
+        restored.RestoredComponents.Select(c => c.Name).ShouldBe(new[] { "Gone" });
+        new PdkLoader().LoadFromFileForEditing(path).Components.Select(c => c.Name)
+            .ShouldBe(new[] { "Keep", "Gone" }, ignoreOrder: true);
+        _vm.Entries.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Restore_InvokesReRegisterCallback_AndClearsTheEntry()
     {
         var path = _store.SaveToNamedPdk("My Lib", new ProcessDefinition { Name = "P" }, Component("A"), "gdsfactory", null);

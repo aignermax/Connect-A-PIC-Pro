@@ -2,17 +2,18 @@ using System;
 using System.Globalization;
 using System.Linq;
 using CAP_DataAccess.Components.AddCustomComponent;
+using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Panels.PdkTrash;
 
 /// <summary>
 /// Display wrapper for one <see cref="PdkTrashEntry"/> in the PDK trash flyout: turns the raw
-/// entry into human-readable strings and carries the Restore / permanently-delete commands (which
-/// delegate to the owning <see cref="PdkTrashViewModel"/>), so the item template can bind them
-/// directly without an ancestor cast.
+/// entry into human-readable strings and carries the Restore command (which delegates to the
+/// owning <see cref="PdkTrashViewModel"/>), so the item template can bind it directly without an
+/// ancestor cast.
 /// </summary>
-public partial class PdkTrashEntryViewModel
+public partial class PdkTrashEntryViewModel : ObservableObject
 {
     private readonly PdkTrashViewModel _owner;
 

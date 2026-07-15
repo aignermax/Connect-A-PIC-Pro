@@ -95,12 +95,17 @@ public sealed class PdkTrashService
         var deletedAt = ParseTimestamp(match.Groups["date"].Value, match.Groups["time"].Value);
         var livePath = Path.Combine(_root, match.Groups["base"].Value + ".json");
         var backupComponents = backup.Components.Select(c => c.Name).ToList();
+        var live = TryLoadLive(livePath);
 
-        if (!File.Exists(livePath))
+        // Treat as a removed-components backup ONLY when the live file is the SAME PDK (same
+        // display name). A live file that merely shares the slug is a DIFFERENT PDK that reused
+        // the freed name after this one was deleted — restoring must not merge this PDK's
+        // components into that unrelated file, so it is a deleted PDK restored to its own path.
+        bool sameLivePdk = live != null && string.Equals(live.Name, backup.Name, StringComparison.OrdinalIgnoreCase);
+        if (!sameLivePdk)
             return new PdkTrashEntry(trashPath, backup.Name, PdkTrashKind.DeletedPdk, deletedAt, livePath, backupComponents);
 
-        // Live file still exists → this is a component backup. Restorable = in backup, not in live.
-        var liveNames = TryLoadComponentNames(livePath);
+        var liveNames = live!.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var restorable = backup.Components
             .Where(c => !liveNames.Contains(c.Name))
             .Select(c => c.Name)
@@ -108,18 +113,12 @@ public sealed class PdkTrashService
         return new PdkTrashEntry(trashPath, backup.Name, PdkTrashKind.RemovedComponents, deletedAt, livePath, restorable);
     }
 
-    private HashSet<string> TryLoadComponentNames(string livePath)
+    private PdkDraft? TryLoadLive(string livePath)
     {
-        try
-        {
-            return _loader.LoadFromFileForEditing(livePath).Components
-                .Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        }
-        catch
-        {
-            // Live file unreadable → treat everything in the backup as restorable.
-            return new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        }
+        if (!File.Exists(livePath))
+            return null;
+        try { return _loader.LoadFromFileForEditing(livePath); }
+        catch { return null; } // unreadable live file → treat the backup as a standalone deleted PDK
     }
 
     /// <summary>
@@ -142,6 +141,16 @@ public sealed class PdkTrashService
         File.Move(entry.TrashFilePath, target);
 
         var restored = _loader.LoadFromFileForEditing(target);
+        if (!string.Equals(target, entry.OriginalLivePath, StringComparison.OrdinalIgnoreCase))
+        {
+            // The original slot is taken by another PDK, so the file landed at a suffixed path.
+            // Give the restored PDK a distinct display name too, otherwise it collides by name
+            // with the occupant and the library either skips it as a duplicate or shows two
+            // same-named entries. The " (restored)" tag makes its origin clear.
+            restored.Name = $"{restored.Name} (restored)";
+            _saver.SaveToFile(restored, target);
+        }
+
         return new PdkTrashRestoreResult(target, restored.Name, PdkTrashKind.DeletedPdk,
             restored.Components.ToList());
     }

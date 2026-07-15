@@ -116,7 +116,7 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
-    public void RestoreDeletedPdk_WhenNameTakenAfterListing_RestoresUnderNonCollidingName()
+    public void RestoreDeletedPdk_WhenNameTakenAfterListing_RestoresUnderNonCollidingNameAndTag()
     {
         var path = SeedPdk("My Lib", "A");
         _store.MoveToTrash(path);
@@ -131,6 +131,29 @@ public sealed class PdkTrashServiceTests : IDisposable
         result.RestoredPdkPath.ShouldContain("restored");
         File.Exists(result.RestoredPdkPath).ShouldBeTrue();
         File.Exists(path).ShouldBeTrue(); // the fresh PDK is untouched
+        result.PdkName.ShouldContain("restored"); // distinct display name → no duplicate library heading
+    }
+
+    [Fact]
+    public void SlugReusedByDifferentPdk_StaysDeletedPdk_AndRestoreDoesNotMergeIntoIt()
+    {
+        // "My Lib" and "My-Lib" slug to the same file name. Deleting the first then creating the
+        // second must NOT make the old backup a component-backup of the unrelated new PDK — else
+        // restore would inject the old PDK's components into it (#741 review, CRITICAL).
+        var path = SeedPdk("My Lib", "A");
+        _store.MoveToTrash(path);
+        var otherPath = SeedPdk("My-Lib", "X"); // same slug, different display name
+
+        var entries = _trash.ListEntries();
+        entries.Count.ShouldBe(1);
+        entries[0].Kind.ShouldBe(PdkTrashKind.DeletedPdk);           // not RemovedComponents
+        entries[0].RestorableComponentNames.ShouldBe(new[] { "A" });
+
+        _trash.Restore(entries[0]);
+
+        // The unrelated live PDK must be untouched — no foreign component 'A' merged in.
+        new PdkLoader().LoadFromFileForEditing(otherPath).Components.Select(c => c.Name)
+            .ShouldBe(new[] { "X" });
     }
 
     [Fact]
