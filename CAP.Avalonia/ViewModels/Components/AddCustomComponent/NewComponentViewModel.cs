@@ -168,13 +168,10 @@ public partial class NewComponentViewModel : ObservableObject
         _lastPreview = null;
         HasPreview = false;
         PreviewBitmap = null;
-        // The S-matrix belongs to the geometry it was computed FROM — clearing it here too
-        // (issue #733 review, Finding 1, critical) is the load-bearing fix: without it, Save
-        // would re-render the NEW geometry (via EnsurePreviewAsync) but still attach the OLD
-        // geometry's FDTD result, persisting invented physics that never matched what was
-        // actually saved. A geometry change must always force at least a black-box save unless
-        // ComputeSMatrix is re-run against the new geometry.
+        // The S-matrix is bound to the geometry it was computed from — a geometry change must
+        // drop it, so Save never attaches a stale FDTD result to new geometry (#733 Finding 1).
         _computedModel = null;
+        RefreshSMatrixEntries();
     }
 
     /// <summary>The rendered geometry reference: always the user's own code, verbatim.</summary>

@@ -96,5 +96,26 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.Code.ShouldBe("unchanged");
     }
 
+    [Fact]
+    public async Task LoadSMatrixFromFile_imports_and_shows_entries_then_saves_them()
+    {
+        var vm = Build();
+        double freqGHz = 299_792_458.0 / 1550e-9 / 1e9;
+        var s2p = "# GHz S MA R 50\n"
+                  + freqGHz.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                  + " 0.05 10 0.95 80 0.95 80 0.05 10\n";
+        var path = Path.Combine(_root, "coupler.s2p");
+        await File.WriteAllTextAsync(path, s2p);
+        vm.PickSMatrixFile = () => Task.FromResult<string?>(path);
+
+        await vm.LoadSMatrixFromFileCommand.ExecuteAsync(null);
+
+        vm.HasSMatrix.ShouldBeTrue();
+        vm.SMatrixEntries.ShouldContain(e => e.WavelengthKey == "1550");
+
+        await vm.SaveCommand.ExecuteAsync(null);
+        vm.SavedDraft!.SMatrix.ShouldNotBeNull(); // imported S-matrix persisted, not a black box
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

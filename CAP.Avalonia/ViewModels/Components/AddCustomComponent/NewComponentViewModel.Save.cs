@@ -87,6 +87,7 @@ public partial class NewComponentViewModel
             IsBusy = false;
             _computeCts?.Dispose();
             _computeCts = null;
+            RefreshSMatrixEntries();
         }
     }
 

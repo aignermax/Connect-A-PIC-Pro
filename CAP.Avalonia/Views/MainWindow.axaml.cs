@@ -101,6 +101,9 @@ public partial class MainWindow : Window
                             "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
                         return path is null ? null : await File.ReadAllTextAsync(path);
                     };
+                    newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
+                        "Load S-Parameter File",
+                        "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
                     // Confirm before overwriting an existing component name in the target PDK
                     // (new or existing custom PDK — the message names whichever applies).
                     newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
