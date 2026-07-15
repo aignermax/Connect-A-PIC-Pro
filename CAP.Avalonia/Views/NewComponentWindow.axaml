@@ -26,6 +26,15 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
+                <Border Background="#2a2440" CornerRadius="3" Padding="8,5" IsVisible="{Binding IsEditMode}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Editing the component definition — affects every placement"
+                                   FontWeight="Bold" FontSize="11" Foreground="#c9b3ff"/>
+                        <TextBlock Text="Changes here rewrite the component in its PDK and apply to all current and future placements. To tweak only one placement on the canvas, use “Component Settings…” on that component instead."
+                                   FontSize="10" Foreground="#9aa0b0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- PDK: existing named custom PDKs plus a trailing "New PDK…" sentinel that
                      opens the PDK-creation modal (wired in MainWindow.axaml.cs) -->
                 <TextBlock Text="PDK" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>

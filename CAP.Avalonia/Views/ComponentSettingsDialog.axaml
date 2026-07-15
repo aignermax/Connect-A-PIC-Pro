@@ -57,6 +57,15 @@
                 DataContext="{Binding NazcaCodeEditor}"
                 x:DataType="io:InstanceNazcaCodeEditorViewModel">
             <StackPanel Spacing="6">
+                <Border Background="#2a2440" CornerRadius="3" Padding="8,5">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Instance override — this placement only"
+                                   FontWeight="Bold" FontSize="11" Foreground="#c9b3ff"/>
+                        <TextBlock Text="Edits here apply only to the selected component on the canvas. To change the component's definition for every placement, use “Edit…” on the component in the library (custom components only)."
+                                   FontSize="10" Foreground="#9aa0b0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
                 <!-- Backend toggle (#637): Nazca | gdsfactory. Above the header so the whole
                      section (title, docs, cheat-sheet) reflects the selected backend. -->
                 <StackPanel Orientation="Horizontal" Spacing="10">
