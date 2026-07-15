@@ -22,6 +22,21 @@ public partial class NewComponentViewModel
     private string? _editingOriginalName;
 
     /// <summary>
+    /// The PDK the edit started in, captured by <see cref="LoadForEdit"/>. When the user picks a
+    /// different PDK before saving, <c>Save</c> migrates the component there (removing it from
+    /// this one) provided both PDKs share the same fabrication process.
+    /// </summary>
+    private string? _editOriginalPdkFilePath;
+    private string? _editOriginalPdkName;
+    private string? _editOriginalProcessName;
+
+    /// <summary>
+    /// Set by a save that moved the edited component to a different PDK: the PDK name it left, so
+    /// the library can drop the now-stale template. Null when no migration happened.
+    /// </summary>
+    public string? MigratedFromPdkName { get; private set; }
+
+    /// <summary>
     /// Prefills <see cref="NewComponentViewModel.ComponentName"/>, <see cref="NewComponentViewModel.Code"/>,
     /// <see cref="NewComponentViewModel.SelectedBackend"/>, and the fixed target PDK from
     /// <paramref name="template"/>, then sets <see cref="NewComponentViewModel.IsEditMode"/>.
@@ -57,6 +72,9 @@ public partial class NewComponentViewModel
         SelectedPdkChoice = match;
 
         _editingOriginalName = template.Name;
+        _editOriginalPdkFilePath = match.Pdk!.FilePath;
+        _editOriginalPdkName = match.Pdk.Name;
+        _editOriginalProcessName = match.Pdk.Process?.Name;
         IsEditMode = true;
     }
 }

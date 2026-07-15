@@ -24,17 +24,19 @@ public static class NewComponentWindowLauncher
     /// </summary>
     public static NewComponentViewModel BuildViewModel(
         AddCustomComponentDependencies deps, PdkLoader pdkLoader, IReadOnlyList<PdkDraft> loadedPdks,
-        Action<PdkComponentDraft, string, string> register)
+        Action<PdkComponentDraft, string, string> register,
+        Action<string, string>? removeMigratedTemplate = null)
     {
         var processes = loadedPdks.Where(d => d.Process != null).Select(d => d.Process!).ToList();
         var vm = new NewComponentViewModel(deps.Extractor, deps.Fdtd, deps.UserPdkStore, processes);
-        vm.Saved += (_, _) => OnSaved(vm, pdkLoader, register);
+        vm.Saved += (_, _) => OnSaved(vm, pdkLoader, register, removeMigratedTemplate);
         return vm;
     }
 
     private static void OnSaved(
         NewComponentViewModel vm, PdkLoader pdkLoader,
-        Action<PdkComponentDraft, string, string> register)
+        Action<PdkComponentDraft, string, string> register,
+        Action<string, string>? removeMigratedTemplate)
     {
         // PDK-first: the save target is a named custom PDK file (new or existing), which no
         // longer corresponds to SelectedProcess's per-process default file — SavedFilePath is
@@ -47,5 +49,8 @@ public static class NewComponentWindowLauncher
         // that rejection would silently skip registration while the UI still says "Saved".
         var pdk = pdkLoader.LoadFromFileForEditing(filePath);
         register(vm.SavedDraft, pdk.Name, filePath);
+
+        if (vm.MigratedFromPdkName is { } fromPdk)
+            removeMigratedTemplate?.Invoke(fromPdk, vm.SavedDraft.Name);
     }
 }

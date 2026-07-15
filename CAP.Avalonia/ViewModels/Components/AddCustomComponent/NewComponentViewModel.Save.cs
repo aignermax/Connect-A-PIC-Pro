@@ -129,6 +129,18 @@ public partial class NewComponentViewModel
             return;
         }
 
+        MigratedFromPdkName = null;
+        var isMigration = IsEditMode
+            && _editOriginalPdkFilePath is not null
+            && !PathsEqual(_editOriginalPdkFilePath, pdk.FilePath);
+        if (isMigration &&
+            !string.Equals(_editOriginalProcessName, SelectedProcess?.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            StatusText = $"Cannot move '{name}' to PDK '{pdk.Name}': it uses a different fabrication " +
+                         $"process ('{SelectedProcess?.Name}' vs '{_editOriginalProcessName}').";
+            return;
+        }
+
         IsBusy = true;
         try
         {
@@ -152,23 +164,56 @@ public partial class NewComponentViewModel
             // intended edit and needs no prompt. A rename onto a DIFFERENT existing component is a
             // real collision and must still go through ConfirmOverwrite — AppendToExistingPdk
             // removes-by-name, so skipping it would silently clobber the other component.
-            var isSelfEdit = IsEditMode &&
+            var isSelfEdit = IsEditMode && !isMigration &&
                 string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
             if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
-
             SavedDraft = draft;
-            StatusText = _computedModel is null
-                ? $"Saved without simulation model (black box). {StatusText}".Trim()
-                : "Saved with FDTD S-matrix.";
+
+            if (isMigration && TryRemoveFromOriginalPdk(name))
+            {
+                MigratedFromPdkName = _editOriginalPdkName;
+                _editOriginalPdkFilePath = pdk.FilePath;
+                _editOriginalPdkName = pdk.Name;
+                _editOriginalProcessName = SelectedProcess?.Name;
+            }
+
+            StatusText = MigratedFromPdkName != null
+                ? $"Moved '{name}' to PDK '{pdk.Name}'."
+                : _computedModel is null
+                    ? $"Saved without simulation model (black box). {StatusText}".Trim()
+                    : "Saved with FDTD S-matrix.";
             Saved?.Invoke(this, EventArgs.Empty);
         }
         finally
         {
             IsBusy = false;
+        }
+    }
+
+    private static bool PathsEqual(string? a, string? b) =>
+        a != null && b != null &&
+        string.Equals(Path.GetFullPath(a), Path.GetFullPath(b), StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Removes the just-saved component from the PDK it was migrated out of. A failure leaves the
+    /// component in both PDKs (safe) and is reported rather than crashing the save.
+    /// </summary>
+    private bool TryRemoveFromOriginalPdk(string name)
+    {
+        try
+        {
+            _store.RemoveComponent(_editOriginalPdkFilePath!, name);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            StatusText = $"Saved to '{SelectedCustomPdk?.Name}', but could not remove the original " +
+                         $"copy from '{_editOriginalPdkName}': {ex.Message}";
+            return false;
         }
     }
 

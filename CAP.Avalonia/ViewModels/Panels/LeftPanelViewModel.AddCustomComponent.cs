@@ -28,6 +28,35 @@ public partial class LeftPanelViewModel
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
 
     /// <summary>
+    /// Drops the library template a migrated component left behind (the editor already removed it
+    /// from the old PDK file). Matches by PDK name + component name, cleans up an emptied category
+    /// and the in-memory draft, then re-filters.
+    /// </summary>
+    internal void RemoveMigratedLibraryTemplate(string oldPdkName, string componentName)
+    {
+        var stale = AllTemplates.FirstOrDefault(t =>
+            t.PdkSource == oldPdkName &&
+            string.Equals(t.Name, componentName, System.StringComparison.OrdinalIgnoreCase));
+        if (stale is null)
+            return;
+
+        AllTemplates.Remove(stale);
+        if (!AllTemplates.Any(t => t.Category == stale.Category))
+            Categories.Remove(stale.Category);
+
+        var oldPdk = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == oldPdkName);
+        if (oldPdk?.FilePath is { } path)
+        {
+            var normalized = Path.GetFullPath(path);
+            _loadedPdkDrafts
+                .FirstOrDefault(d => d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized)
+                ?.Components.RemoveAll(c => string.Equals(c.Name, componentName, System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        FilterComponents();
+    }
+
+    /// <summary>
     /// True when <paramref name="template"/> belongs to any currently-loaded PDK, so the component
     /// editor may open for it. Bundled (Foundry) PDKs are editable too now: editing one forks its
     /// PDK into the writable user store first (<see cref="ForkBundledPdkForEdit"/>), so the shipped
@@ -64,7 +93,8 @@ public partial class LeftPanelViewModel
         }
 
         var vm = NewComponentWindowLauncher.BuildViewModel(
-            _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent);
+            _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(),
+            RegisterSavedCustomComponent, RemoveMigratedLibraryTemplate);
         vm.LoadForEdit(template);
         await ShowNewComponentWindowAsync(vm);
     }
