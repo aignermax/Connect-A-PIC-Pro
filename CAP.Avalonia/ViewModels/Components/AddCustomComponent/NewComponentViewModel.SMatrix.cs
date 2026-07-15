@@ -13,9 +13,21 @@ public partial class NewComponentViewModel
 
     public Func<Task<string?>>? PickSMatrixFile { get; set; }
 
+    /// <summary>Opens the read-only stored-S-matrix viewer for (pdkName, componentName).</summary>
+    public Func<string, string, Task>? ShowStoredSMatrices { get; set; }
+
     public ObservableCollection<SMatrixEntryViewModel> SMatrixEntries { get; } = new();
 
     [ObservableProperty] private bool _hasSMatrix;
+
+    [RelayCommand]
+    private async Task ShowSMatrices()
+    {
+        if (ShowStoredSMatrices is null || SelectedCustomPdk is null) return;
+        var name = ComponentName?.Trim();
+        if (string.IsNullOrEmpty(name)) return;
+        await ShowStoredSMatrices(SelectedCustomPdk.Name, name);
+    }
 
     [RelayCommand]
     private async Task LoadSMatrixFromFile()

@@ -104,6 +104,13 @@ public partial class MainWindow : Window
                     newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
                         "Load S-Parameter File",
                         "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
+                    newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
+                    {
+                        var template = vm.LeftPanel.AllTemplates
+                            .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
+                        ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    };
                     // Confirm before overwriting an existing component name in the target PDK
                     // (new or existing custom PDK — the message names whichever applies).
                     newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
@@ -246,10 +253,6 @@ public partial class MainWindow : Window
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
                     id => vm.FileOperations.StoredSMatrices.ContainsKey(id);
-
-                // Wire up per-instance Nazca override marker in hierarchy
-                vm.LeftPanel.HierarchyPanel.CheckHasNazcaOverride =
-                    id => vm.FileOperations.StoredNazcaOverrides.ContainsKey(id);
 
                 // Initial badge population for PDK templates (covers user-global
                 // overrides loaded from disk on app start). Updated again every

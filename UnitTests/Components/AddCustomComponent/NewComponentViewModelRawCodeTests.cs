@@ -109,5 +109,22 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.SavedDraft!.SMatrix.ShouldNotBeNull();
     }
 
+    [Fact]
+    public void LoadForEdit_functionReferenceComponent_synthesizesEditableCode()
+    {
+        var vm = Build();
+        var template = new CAP.Avalonia.ViewModels.Library.ComponentTemplate
+        {
+            Name = "Coupler", PdkSource = "My PDK",
+            GdsFactoryFunction = "cspdk.sin300.coupler", RawCode = null, IsCustom = true
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.IsEditMode.ShouldBeTrue();
+        vm.Code.ShouldContain("cspdk.sin300.coupler()");
+        vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
+    }
+
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 }

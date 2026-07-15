@@ -138,6 +138,9 @@
                     <Button Content="Load from file…" Command="{Binding LoadSMatrixFromFileCommand}"
                             Background="#3d5d3d"
                             ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) for this component."/>
+                    <Button Content="Show stored S-matrices…" Command="{Binding ShowSMatricesCommand}"
+                            Background="#3d3d5d"
+                            ToolTip.Tip="Opens the stored per-wavelength S-matrices for this component (including foundry/PDK defaults)."/>
                 </StackPanel>
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" Background="#2d2d2d"/>
                 <TextBlock Text="{Binding StatusText}" Foreground="#dddddd" FontSize="11" TextWrapping="Wrap"/>
