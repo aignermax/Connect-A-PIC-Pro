@@ -594,10 +594,15 @@
                                 <!-- Inline edit/delete icons on a custom component appear only on
                                      hover or when the row is selected — keeps the palette clean
                                      but discoverable (no hidden-only context menu). -->
-                                <Style Selector="ListBoxItem:pointerover StackPanel#ItemActions">
+                                <!-- Default hidden via STYLE (not an inline Opacity, which would
+                                     out-prioritise the hover setter and stay invisible). -->
+                                <Style Selector="ListBoxItem StackPanel.itemActions">
+                                    <Setter Property="Opacity" Value="0"/>
+                                </Style>
+                                <Style Selector="ListBoxItem:pointerover StackPanel.itemActions">
                                     <Setter Property="Opacity" Value="1"/>
                                 </Style>
-                                <Style Selector="ListBoxItem:selected StackPanel#ItemActions">
+                                <Style Selector="ListBoxItem:selected StackPanel.itemActions">
                                     <Setter Property="Opacity" Value="1"/>
                                 </Style>
                             </ListBox.Styles>
@@ -619,8 +624,8 @@
                                         </DockPanel.ContextMenu>
                                         <!-- Hover/selected edit (✏) + delete (✕) for custom components; bundled
                                              components show nothing (IsCustom gate). Same handlers as the context menu. -->
-                                        <StackPanel x:Name="ItemActions" DockPanel.Dock="Right" Orientation="Horizontal"
-                                                    VerticalAlignment="Center" Opacity="0"
+                                        <StackPanel Classes="itemActions" DockPanel.Dock="Right" Orientation="Horizontal"
+                                                    VerticalAlignment="Center"
                                                     IsVisible="{Binding IsCustom}">
                                             <Button Content="✏" Click="TemplateEditComponent_Click"
                                                     FontSize="11" Padding="4,0" MinWidth="0"
