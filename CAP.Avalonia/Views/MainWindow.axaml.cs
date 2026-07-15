@@ -101,6 +101,16 @@ public partial class MainWindow : Window
                             "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
                         return path is null ? null : await File.ReadAllTextAsync(path);
                     };
+                    newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
+                        "Load S-Parameter File",
+                        "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
+                    newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
+                    {
+                        var template = vm.LeftPanel.AllTemplates
+                            .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
+                        ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    };
                     // Confirm before overwriting an existing component name in the target PDK
                     // (new or existing custom PDK — the message names whichever applies).
                     newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
@@ -124,47 +134,16 @@ public partial class MainWindow : Window
                     window.Closing += (_, _) => newComponentVm.CancelCompute();
                     newComponentVm.CreateNewPdk = async () =>
                     {
-                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
-                        if (userPdkStore is null) return null;
-
-                        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
-                            .Where(d => d.Process != null && !d.ProcessAgnostic)
-                            .Select(d => d.Process!)
-                            .ToList();
-                        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
-                            new IProcessImporter[]
-                            {
-                                new UpdkYamlProcessImporter(),
-                                new NazcaCsvProcessImporter(),
-                            }, new PdkJsonSaver());
-
-                        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
-                        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
-
-                        string? createdPath = null;
-                        createVm.PdkCreated += (_, path) =>
-                        {
-                            createdPath = path;
-                            createWindow.Close();
-                        };
-
-                        try
-                        {
-                            await createWindow.ShowDialog(window);
-                        }
-                        catch
-                        {
-                            return null;
-                        }
-
+                        // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also
+                        // registers the new (possibly component-less) PDK into the library, so
+                        // cancelling the component afterwards no longer leaves the PDK invisible
+                        // until the next restart (PR #739 review).
+                        var createdPath = await ShowCreateCustomPdkDialogAsync(window);
                         if (createdPath is null)
                             return null;
 
-                        // The freshly created PDK is empty and not yet in the loaded-PDK set, so
-                        // there is nothing to re-lock here; component visibility is (re)established
-                        // when the first component is saved into it via RegisterSavedCustomComponent,
-                        // which itself re-applies the active process by value (CP-T2).
-                        return userPdkStore.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+                        return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
                     };
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
@@ -274,10 +253,6 @@ public partial class MainWindow : Window
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
                     id => vm.FileOperations.StoredSMatrices.ContainsKey(id);
-
-                // Wire up per-instance Nazca override marker in hierarchy
-                vm.LeftPanel.HierarchyPanel.CheckHasNazcaOverride =
-                    id => vm.FileOperations.StoredNazcaOverrides.ContainsKey(id);
 
                 // Initial badge population for PDK templates (covers user-global
                 // overrides loaded from disk on app start). Updated again every
@@ -665,36 +640,46 @@ public partial class MainWindow : Window
         vm.LeftPanel.RefreshUserGlobalOverrideBadges(userStore.Overrides.ContainsKey);
     }
 
-    /// <summary>
-    /// Handles "Component Settings…" click in the PDK template list context menu.
-    /// </summary>
-    private void TemplateComponentSettings_Click(object? sender, RoutedEventArgs e)
-    {
-        if (DataContext is not MainViewModel vm)
-            return;
-
-        if (sender is MenuItem { DataContext: ComponentTemplate template })
-        {
-            var key = $"{template.PdkSource}::{template.Name}";
-            ShowComponentSettingsDialog(key, template.Name, null, vm, template);
-        }
-    }
-
-    /// <summary>
-    /// Handles "Edit…" click in the PDK template list context menu (issue #656 follow-up, task 6).
-    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — see the
-    /// <c>IsCustom</c> binding in <c>MainWindow.axaml</c> — but delegates the authoritative
-    /// bundled/custom check to <see cref="LeftPanelViewModel.CanEditTemplate"/> via the command.
-    /// </summary>
     private void TemplateEditComponent_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm)
             return;
 
-        if (sender is MenuItem { DataContext: ComponentTemplate template })
+        if (sender is Control { DataContext: ComponentTemplate template })
         {
             vm.LeftPanel.EditCustomComponentCommand.Execute(template);
         }
+    }
+
+    /// <summary>
+    /// Handles "Delete…" click in the PDK template list context menu (LC-T5): confirms, then
+    /// moves the component out of its user PDK file into <c>.trash</c> (backing up the pre-edit
+    /// file) and out of the library via <see cref="LeftPanelViewModel.RemoveCustomComponentCommand"/>.
+    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — same
+    /// <c>IsCustom</c> binding as "Edit…" — but repeats the authoritative
+    /// <see cref="LeftPanelViewModel.CanEditTemplate"/> guard here before even showing the
+    /// confirm dialog. Placed components on the canvas are never touched (Design Checks flag any
+    /// resulting conflict).
+    /// </summary>
+    private async void TemplateDeleteComponent_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // Accept both the context-menu item and the inline hover ✕ button.
+        if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanDeleteTemplate(template))
+            return;
+
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            $"Move component '{template.Name}' to trash?\n\n"
+            + "The PDK file is rewritten without this component; a full pre-edit backup "
+            + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
+            + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.",
+            "Delete Component?", new[] { "Cancel", "Move to Trash" });
+        if (choice != 1)
+            return;
+
+        vm.LeftPanel.RemoveCustomComponentCommand.Execute(template);
     }
 
     /// <summary>
@@ -754,7 +739,11 @@ public partial class MainWindow : Window
         processVm.LoadForSinglePdkEdit(draft);
         // Re-apply the active process lock by value after a save, so an edit that changes this
         // PDK's fingerprint is reflected immediately without a restart.
-        processVm.ProcessSaved += (_, _) => vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+        processVm.ProcessSaved += async (_, _) =>
+        {
+            vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+            await WarnIfSavedProcessDivergedFromDesign(vm, pdk);
+        };
 
         var processWindow = new ProcessManagementWindow
         {
@@ -771,6 +760,162 @@ public partial class MainWindow : Window
                 _openPdkEditWindows.Remove(key);
         };
         processWindow.Show(this);
+    }
+
+    /// <summary>
+    /// Warns the user when a per-PDK process save (<see cref="PdkEditProcess_Click"/>) diverged
+    /// <paramref name="pdk"/> from the design's active process (issue #570 follow-up, LC-T4):
+    /// the placement lock (<c>IsLockedByProcess</c>, just recomputed by
+    /// <see cref="LeftPanelViewModel.ReapplyActiveProcessAfterPdkChange"/>) already blocks NEW
+    /// placements from this PDK, but components placed from it BEFORE the edit are deliberately
+    /// kept on the canvas — this tells the user they are now in conflict instead of leaving that
+    /// discoverable only via Design Checks. No dialog when the PDK isn't locked (no divergence)
+    /// or there are zero placed components from it (the lock alone is enough). Never deletes
+    /// anything.
+    /// </summary>
+    private static async Task WarnIfSavedProcessDivergedFromDesign(MainViewModel vm, PdkInfoViewModel pdk)
+    {
+        var pdkInfo = vm.LeftPanel.PdkManager.LoadedPdks.FirstOrDefault(p =>
+            pdk.FilePath != null ? p.FilePath == pdk.FilePath : p.Name == pdk.Name);
+        if (pdkInfo is not { IsLockedByProcess: true })
+            return;
+
+        var conflictedCount = vm.Canvas.Components.Count(c =>
+            (c.TemplatePdkSource ?? vm.CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component))
+            == pdkInfo.Name);
+        if (conflictedCount == 0)
+            return;
+
+        await new MessageBoxService().ShowChoicePromptAsync(
+            "The saved process no longer matches the design's active process. "
+            + $"{conflictedCount} placed component(s) from '{pdkInfo.Name}' are now in conflict "
+            + "and new placements are blocked. Existing components are kept — see Design Checks.",
+            "Process Changed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Handles "Delete…" click on a custom PDK's row in PDK Management (LC-T5): after a confirm
+    /// prompt, moves the whole PDK file to <c>user-pdks/.trash</c> via <see cref="UserPdkStore"/>
+    /// and then deregisters it from the library (templates, PDK-manager entry, in-memory draft,
+    /// remembered import path) via <see cref="LeftPanelViewModel.UnregisterPdk"/> — mirrors
+    /// <see cref="PdkCreate_Click"/>'s store-then-register order, just in reverse. Bundled PDKs
+    /// have no Delete button (see the <c>!IsBundled</c> visibility binding in
+    /// <c>MainWindow.axaml</c>), but the check is repeated here as the authoritative guard.
+    /// Placed components on the canvas are never touched (Design Checks flag any resulting
+    /// conflict, mirroring <see cref="WarnIfSavedProcessDivergedFromDesign"/>).
+    /// </summary>
+    private async void PdkDelete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || pdk.IsBundled || pdk.FilePath is null)
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return;
+
+        // Only files inside the managed user-pdks root are moved to its .trash. An
+        // externally-stored PDK (imported from an arbitrary folder, remembered via preferences)
+        // is the user's own file in a place they chose — deleting it from the library must not
+        // relocate it into a hidden app-data folder (PR #739 review), so that path only
+        // deregisters and leaves the file untouched.
+        var isManaged = userPdkStore.IsInManagedRoot(pdk.FilePath);
+        var prompt = isManaged
+            ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+              + "The file is moved to user-pdks/.trash and can be restored manually."
+            : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
+              + $"The file stays untouched at:\n{pdk.FilePath}";
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            prompt, "Delete PDK?", new[] { "Cancel", isManaged ? "Move to Trash" : "Remove" });
+        if (choice != 1)
+            return;
+
+        if (isManaged)
+        {
+            try
+            {
+                userPdkStore.MoveToTrash(pdk.FilePath);
+            }
+            catch (Exception ex)
+            {
+                vm.ErrorConsole.LogError($"Failed to move PDK '{pdk.Name}' to trash: {ex.Message}", ex);
+                return;
+            }
+        }
+
+        vm.LeftPanel.UnregisterPdk(pdk.FilePath);
+    }
+
+    /// <summary>
+    /// Handles the "+" click in the PDK-Management panel header (issue #700 follow-up, LC-T2):
+    /// opens <see cref="CreateCustomPdkWindow"/> directly, modal on the main window, instead of
+    /// going through the "New Component" assistant's "New PDK…" sentinel first. Built the same
+    /// way as that assistant's <c>CreateNewPdk</c> hook (<c>ShowNewComponentWindowAsync</c>
+    /// lambda above) — same view model, same available-processes filter, same
+    /// <see cref="ProcessManagementViewModel"/> definition editor — just with the main window as
+    /// owner and no parent assistant window to close afterwards. On success, the (possibly
+    /// component-less) new PDK is registered straight into the library via
+    /// <see cref="LeftPanel.RegisterCreatedPdk"/> so it appears in the list immediately.
+    /// </summary>
+    private async void PdkCreate_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowCreateCustomPdkDialogAsync(this);
+    }
+
+    /// <summary>
+    /// The single shared wiring for the Create-Custom-PDK dialog — used by both entry points
+    /// (the PDK-Management "+" button above and the New Component assistant's "New PDK…"
+    /// sentinel), so their importer lists, event wiring, and post-create registration can never
+    /// drift apart (PR #739 review). Shows the dialog modally over <paramref name="owner"/>;
+    /// on success the (possibly component-less) new PDK is registered straight into the library
+    /// via <see cref="LeftPanelViewModel.RegisterCreatedPdk"/> — so it appears in PDK Management
+    /// immediately regardless of entry point — and its file path is returned. Returns null when
+    /// the user cancelled or the dialog faulted (logged, not swallowed).
+    /// </summary>
+    private async Task<string?> ShowCreateCustomPdkDialogAsync(Window owner)
+    {
+        if (DataContext is not MainViewModel vm)
+            return null;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return null;
+
+        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
+            .Where(d => d.Process != null && !d.ProcessAgnostic)
+            .Select(d => d.Process!)
+            .ToList();
+        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
+            new IProcessImporter[]
+            {
+                new UpdkYamlProcessImporter(),
+                new NazcaCsvProcessImporter(),
+            }, new PdkJsonSaver());
+
+        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
+        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
+
+        string? createdPath = null;
+        createVm.PdkCreated += (_, path) =>
+        {
+            createdPath = path;
+            createWindow.Close();
+        };
+
+        try
+        {
+            await createWindow.ShowDialog(owner);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorConsole.LogError($"Create-PDK dialog failed: {ex.Message}", ex);
+            return null;
+        }
+
+        if (createdPath is not null)
+            vm.LeftPanel.RegisterCreatedPdk(createdPath);
+        return createdPath;
     }
 
     /// <summary>

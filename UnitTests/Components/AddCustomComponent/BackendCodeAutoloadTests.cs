@@ -13,12 +13,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="BackendCodeExamples"/> and the autoload behavior in
-/// <see cref="NewComponentViewModel"/>: switching <see cref="GeometryBackend"/> loads the
-/// matching starter snippet into an empty or untouched-example editor, but never overwrites
-/// user-authored code.
-/// </summary>
 public class BackendCodeAutoloadTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-autoload-" + Guid.NewGuid().ToString("N"));
@@ -45,7 +39,7 @@ public class BackendCodeAutoloadTests : IDisposable
     public void Test_A_empty_code_then_switch_to_gdsfactory_loads_its_example()
     {
         var vm = Build();
-        vm.SelectedBackend = GeometryBackend.Nazca; // move away from the ctor's default first
+        vm.SelectedBackend = GeometryBackend.Nazca;
         vm.Code = string.Empty;
 
         vm.SelectedBackend = GeometryBackend.GdsFactory;
@@ -58,7 +52,7 @@ public class BackendCodeAutoloadTests : IDisposable
     {
         var vm = Build();
         vm.SelectedBackend = GeometryBackend.GdsFactory;
-        vm.Code = BackendCodeExamples.GdsFactory; // untouched auto-example, re-affirmed explicitly
+        vm.Code = BackendCodeExamples.GdsFactory;
 
         vm.SelectedBackend = GeometryBackend.Nazca;
 

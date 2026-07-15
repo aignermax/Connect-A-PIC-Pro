@@ -318,7 +318,8 @@ public class DesignCanvas : Control
             or nameof(DesignCanvasViewModel.IsRouting)
             or nameof(DesignCanvasViewModel.PanX)
             or nameof(DesignCanvasViewModel.PanY)
-            or nameof(DesignCanvasViewModel.SelectedComponent))
+            or nameof(DesignCanvasViewModel.SelectedComponent)
+            or nameof(DesignCanvasViewModel.ActiveProcessLabel))
         {
             // SelectedComponent: redraw so the highlight follows a selection made
             // outside the canvas (e.g. clicking a node in the hierarchy panel).

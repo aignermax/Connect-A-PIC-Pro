@@ -586,6 +586,9 @@ public partial class MainViewModel : ObservableObject
         ActiveProcessLabel = p == null ? "No process selected"
             : p.IsPlayground ? "Playground — not manufacturable"
             : $"Process: {p.DisplayName}";
+        // Mirror into the canvas VM so the status HUD (CanvasOverlayRenderer) can show the
+        // active process in the grid overlay, not only at the bottom of the PDK panel.
+        Canvas.ActiveProcessLabel = ActiveProcessLabel;
         LeftPanel.ApplyActiveProcess(p);
     }
 
@@ -906,12 +909,35 @@ public partial class MainViewModel : ObservableObject
             .Select(c => c.Component)
             .ToList();
 
+        // PDK-process compatibility (issue #570 follow-up, LC-T4): resolve each placed
+        // component's PDK source the same way the placement/paste guards do — the snapshot
+        // TemplatePdkSource captured when it was placed, falling back to a live library match
+        // (see ComponentClipboard/FileOperationsViewModel for the same fallback) — so a process
+        // edit that diverges a PDK from the design's active process is flagged for review even
+        // though the already-placed components themselves are never touched or deleted.
+        var pdkSourceByComponent = Canvas.Components.ToDictionary(
+            c => c.Component,
+            c => c.TemplatePdkSource ?? CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component));
+
+        // Under a real process lock the allowed set is the lock-derived membership; without one
+        // (Playground/no selection) nothing is locked, so GetProcessCompatiblePdkNames() equals
+        // all loaded PDK names and only a component whose PDK isn't loaded at all (e.g.
+        // trash-deleted while its placed instances were kept, as PdkDelete_Click promises) gets
+        // flagged — with a "not loaded" wording instead of a process-mismatch message that would
+        // reference a process that doesn't exist (PR #739 review, both directions).
+        var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
+        var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
+
         RightPanel.DesignValidation.RunValidation(
             connections,
             groups,
             allComponents,
             ChipSize.CurrentWidthMicrometers,
-            ChipSize.CurrentHeightMicrometers);
+            ChipSize.CurrentHeightMicrometers,
+            pdkSourceByComponent,
+            LeftPanel.GetProcessAgnosticPdkNames(),
+            compatiblePdkNames,
+            processLockActive);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

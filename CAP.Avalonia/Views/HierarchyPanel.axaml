@@ -102,14 +102,6 @@
                                            IsVisible="{Binding HasSMatrixOverride}"
                                            ToolTip.Tip="Per-instance S-matrix override active"/>
 
-                                <!-- Nazca parameter override badge -->
-                                <TextBlock Text="🔧"
-                                           FontSize="11"
-                                           VerticalAlignment="Center"
-                                           Margin="2,0,0,0"
-                                           IsVisible="{Binding HasNazcaOverride}"
-                                           ToolTip.Tip="Per-instance Nazca parameter override active"/>
-
                                 <!-- Focus Button -->
                                 <Button Content="🎯"
                                         Command="{Binding FocusCommand}"

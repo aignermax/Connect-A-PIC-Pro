@@ -15,17 +15,10 @@
         Background="#1e1e1e"
         WindowStartupLocation="CenterOwner">
 
-    <!-- The dialog can be resized quite short; without an outer scroll the
-         lower DockPanel sections (effective S-matrix + wavelength list) get
-         clipped instead of becoming reachable. Wrapping the whole content in a
-         ScrollViewer keeps every section accessible at any window height. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto"
                   HorizontalScrollBarVisibility="Disabled">
     <DockPanel Margin="16">
 
-        <!-- No in-content title: the window title bar already shows {Binding Title}. -->
-
-        <!-- Status bar -->
         <Border DockPanel.Dock="Bottom"
                 Background="#161616"
                 CornerRadius="4"
@@ -38,223 +31,6 @@
                        TextWrapping="Wrap"/>
         </Border>
 
-        <!-- Per-instance editable Nazca code editor (issue #556) -->
-        <!-- NOTE (issue #556): The legacy "Nazca Parameters Override" section (#541,
-             bound to ComponentSettingsDialogViewModel.NazcaOverride) was removed from
-             this dialog because the full code editor below supersedes it. The
-             InstanceNazcaOverrideViewModel class and NazcaCodeOverride parameter
-             persistence are intentionally kept so older .lun files that stored
-             function-name/parameter overrides still load and apply. -->
-
-        <Border DockPanel.Dock="Bottom"
-                Background="#1a1a2a"
-                CornerRadius="4"
-                Padding="10,8"
-                Margin="0,10,0,0"
-                BorderBrush="#2a2a4a"
-                BorderThickness="1"
-                IsVisible="{Binding NazcaCodeEditor, Converter={x:Static ObjectConverters.IsNotNull}}"
-                DataContext="{Binding NazcaCodeEditor}"
-                x:DataType="io:InstanceNazcaCodeEditorViewModel">
-            <StackPanel Spacing="6">
-                <!-- Backend toggle (#637): Nazca | gdsfactory. Above the header so the whole
-                     section (title, docs, cheat-sheet) reflects the selected backend. -->
-                <StackPanel Orientation="Horizontal" Spacing="10">
-                    <TextBlock Text="Backend:" Foreground="#9aa0b0" FontSize="11"
-                               VerticalAlignment="Center"/>
-                    <RadioButton Content="Nazca" GroupName="overrideBackend" FontSize="11"
-                                 Foreground="#ddddee"
-                                 IsChecked="{Binding !UseGdsFactoryBackend}"/>
-                    <RadioButton Content="gdsfactory" GroupName="overrideBackend" FontSize="11"
-                                 Foreground="#ddddee"
-                                 IsChecked="{Binding UseGdsFactoryBackend, Mode=TwoWay}"/>
-                    <TextBlock Text="{Binding BackendHelp}" Foreground="#777799" FontSize="10"
-                               TextWrapping="Wrap" VerticalAlignment="Center"/>
-                </StackPanel>
-
-                <!-- Section actions/badges (title omitted — it's the window title already;
-                     docs + cheat-sheet are backend-aware, #556/#637) -->
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="🔧 Override active"
-                               FontSize="10"
-                               Foreground="#FFA500"
-                               VerticalAlignment="Center"
-                               IsVisible="{Binding HasOverride}"/>
-                    <TextBlock Text="⚠ Overlaps neighbours"
-                               FontSize="10"
-                               Foreground="#FF8888"
-                               VerticalAlignment="Center"
-                               IsVisible="{Binding HasOverlap}"/>
-                    <!-- Docs + cheat-sheet — backend-aware (issue #556/#637) -->
-                    <Button Content="{Binding DocsButtonLabel}"
-                            Click="OnOpenNazcaDocs"
-                            Padding="6,1"
-                            Background="Transparent"
-                            Foreground="#7faaff"
-                            BorderThickness="0"
-                            FontSize="10"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="Open the selected backend's manual in your browser"/>
-                    <Button Content="?"
-                            Padding="8,1"
-                            Background="#33335a"
-                            Foreground="#ccccff"
-                            BorderThickness="0"
-                            CornerRadius="8"
-                            FontSize="11"
-                            FontWeight="Bold"
-                            VerticalAlignment="Center"
-                            ToolTip.Tip="Quick help — most-used commands for the selected backend">
-                        <Button.Flyout>
-                            <Flyout>
-                                <StackPanel Spacing="4" MaxWidth="460">
-                                    <TextBlock Text="{Binding QuickHelpTitle}"
-                                               FontWeight="SemiBold" FontSize="11" Foreground="#aaaacc"
-                                               TextWrapping="Wrap"/>
-                                    <!-- Backend-appropriate runnable example. Selectable for copy. -->
-                                    <Border Background="#101018" BorderBrush="#333355" BorderThickness="1"
-                                            CornerRadius="3" Padding="6">
-                                        <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
-                                            <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
-                                                                 FontSize="10" Foreground="#dddddd"
-                                                                 Text="{Binding StarterExample}"/>
-                                        </ScrollViewer>
-                                    </Border>
-                                    <Button Content="Insert into editor"
-                                            Command="{Binding InsertStarterCommand}"
-                                            Padding="8,3" FontSize="10"
-                                            Background="#2a4a2a" Foreground="#cceecc" BorderThickness="0"
-                                            HorizontalAlignment="Left"
-                                            ToolTip.Tip="Replace the editor content with this example"/>
-                                    <TextBlock Text="Common elements:"
-                                               FontSize="10" Foreground="#aaaacc" Margin="0,2,0,0" TextWrapping="Wrap"/>
-                                    <SelectableTextBlock FontFamily="Consolas, Courier New, monospace"
-                                                         FontSize="9" Foreground="#9aa0b0" TextWrapping="Wrap"
-                                                         Text="{Binding QuickHelpElements}"/>
-                                </StackPanel>
-                            </Flyout>
-                        </Button.Flyout>
-                    </Button>
-                </StackPanel>
-
-                <!-- No-editable-source note: shown for fixed-cell GDS / KLayout PCells
-                     whose Python source can't be introspected. The geometry preview
-                     still renders; the user may paste their own Nazca code to override. -->
-                <TextBlock Text="No editable Nazca source for this component; you can still paste your own Nazca code to override its geometry."
-                           Foreground="#ddaa66"
-                           FontSize="10"
-                           TextWrapping="Wrap"
-                           IsVisible="{Binding HasEditableSource, Converter={x:Static BoolConverters.Not}}"/>
-
-                <!-- Original source (READ-ONLY reference). Editing the PDK's real code in
-                     place isn't supported — it's a decorated closure with non-standalone
-                     references — so it's shown for understanding only; use the override
-                     editor below to replace the geometry with your own self-contained code. -->
-                <!-- Original source (read-only reference): a thin toggle expands a scrollable
-                     code box. A ToggleButton (not an Expander) so the control height is minimal. -->
-                <ToggleButton x:Name="OrigSrcToggle"
-                              Content="▸ Original source (read-only reference)"
-                              FontSize="10"
-                              Foreground="#777799"
-                              Background="Transparent"
-                              BorderThickness="0"
-                              Padding="2,0"
-                              MinHeight="0"
-                              Margin="0,2,0,0"
-                              HorizontalAlignment="Left"
-                              IsVisible="{Binding HasEditableSource}"/>
-                <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto"
-                              HorizontalScrollBarVisibility="Auto" Background="#101018"
-                              IsVisible="{Binding #OrigSrcToggle.IsChecked}">
-                    <SelectableTextBlock Text="{Binding OriginalSource}"
-                                         FontFamily="Consolas, Courier New, monospace"
-                                         FontSize="10"
-                                         Foreground="#9aa0b0"
-                                         Margin="4"
-                                         TextWrapping="NoWrap"/>
-                </ScrollViewer>
-
-                <!-- Override editor (left) + live preview (right) -->
-                <Grid ColumnDefinitions="*,160" Height="340">
-                    <edit:TextEditor Grid.Column="0"
-                                     behaviors:TextEditorBindingBehavior.BoundText="{Binding Code, Mode=TwoWay}"
-                                     ShowLineNumbers="True"
-                                     WordWrap="False"
-                                     FontFamily="Consolas, Courier New, monospace"
-                                     FontSize="11"
-                                     Background="#101018"
-                                     Foreground="#dddddd"
-                                     BorderBrush="#333355"
-                                     BorderThickness="1"
-                                     Margin="0,0,8,0"
-                                     HorizontalScrollBarVisibility="Auto"
-                                     VerticalScrollBarVisibility="Auto"
-                                     ToolTip.Tip="Write self-contained Nazca code that defines component() returning a Cell. Imports/helpers allowed."/>
-                    <Border Grid.Column="1"
-                            Background="#0a0a10"
-                            BorderBrush="#333355"
-                            BorderThickness="1"
-                            CornerRadius="3">
-                        <Image Source="{Binding PreviewBitmap}"
-                               Stretch="Uniform"
-                               Margin="4"/>
-                    </Border>
-                </Grid>
-
-                <!-- Error text — selectable + copyable so it can be pasted into a bug report -->
-                <Grid ColumnDefinitions="*,Auto" Margin="0,2,0,0"
-                      IsVisible="{Binding PreviewError, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                    <ScrollViewer Grid.Column="0" MaxHeight="120" VerticalScrollBarVisibility="Auto">
-                        <SelectableTextBlock Text="{Binding PreviewError}"
-                                             Foreground="#FF6B6B"
-                                             FontSize="10"
-                                             FontFamily="Consolas, Courier New, monospace"
-                                             TextWrapping="Wrap"/>
-                    </ScrollViewer>
-                    <Button Grid.Column="1"
-                            Content="Copy"
-                            Click="OnCopyError"
-                            Padding="6,1" FontSize="10" Margin="6,0,0,0"
-                            VerticalAlignment="Top"
-                            Background="#33335a" Foreground="#ccccff" BorderThickness="0"
-                            ToolTip.Tip="Copy the error message to the clipboard"/>
-                </Grid>
-
-                <!-- Buttons -->
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="Run Preview"
-                            Command="{Binding RunPreviewCommand}"
-                            Padding="10,5"
-                            Background="#2a2a6a"
-                            Foreground="White"
-                            FontSize="11"
-                            IsEnabled="{Binding IsRunning, Converter={x:Static BoolConverters.Not}}"/>
-                    <Button Content="Apply"
-                            Command="{Binding ApplyOverrideCommand}"
-                            Padding="10,5"
-                            Background="#2a5a2a"
-                            Foreground="White"
-                            FontSize="11"
-                            ToolTip.Tip="Persist this code and recompute the component size (enabled after a successful run)"/>
-                    <Button Content="Reset to Template"
-                            Command="{Binding ResetToTemplateCommand}"
-                            Padding="10,5"
-                            Background="#3a2a20"
-                            Foreground="#ddaa88"
-                            FontSize="11"/>
-                </StackPanel>
-
-                <!-- Status / hint text -->
-                <TextBlock Text="{Binding StatusText}"
-                           Foreground="#aaaacc"
-                           FontSize="10"
-                           TextWrapping="Wrap"
-                           IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-            </StackPanel>
-        </Border>
-
-        <!-- Load + Recalculate side by side. Recalculate (FDTD) computes the S-matrix from
-             the component geometry with the open-source Meep solver instead of importing. -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
             <Button Content="Load S-matrix from file…"
                     Command="{Binding LoadFromFileCommand}"
@@ -269,17 +45,13 @@
                     IsVisible="{Binding CanRecalculate}"/>
         </StackPanel>
 
-        <!-- Solver / simulation status -->
         <Border DockPanel.Dock="Bottom"
                 Background="#161616"
                 CornerRadius="4"
                 Padding="8,6"
                 Margin="0,8,0,0"
                 IsVisible="{Binding SolverStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <!-- Grid, not a horizontal StackPanel: a StackPanel measures its
-                 children with infinite width, which disables TextWrapping and
-                 pushes long solver messages (e.g. the Docker install hint)
-                 out of the window. The star column bounds the text width. -->
+            <!-- Grid (not StackPanel): a star column bounds text width so long messages wrap. -->
             <Grid ColumnDefinitions="Auto,*">
                 <TextBlock Grid.Column="0" Text="⏳" FontSize="12" VerticalAlignment="Center"
                            Margin="0,0,8,0"
@@ -291,7 +63,6 @@
             </Grid>
         </Border>
 
-        <!-- Empty state -->
         <TextBlock DockPanel.Dock="Top"
                    Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it."
                    Foreground="Gray"
@@ -300,10 +71,6 @@
                    TextWrapping="Wrap"
                    IsVisible="{Binding HasSMatrices, Converter={x:Static BoolConverters.Not}}"/>
 
-        <!-- Currently effective S-matrix (read-only): shows what the simulator
-             actually uses for this entity right now, with a per-row tag that
-             distinguishes "PDK Default" from "Override active" so the user can
-             see the source of truth without inferring it from the override list. -->
         <TextBlock DockPanel.Dock="Top"
                    Text="Currently effective S-matrix"
                    Foreground="#aaaacc"
@@ -341,10 +108,7 @@
                                            FontSize="10"
                                            TextTrimming="CharacterEllipsis"
                                            VerticalAlignment="Center"/>
-                                <!-- Source tag: orange when override active, dim when PDK default.
-                                     Uses two overlapping TextBlocks toggled by IsOverridden — Avalonia
-                                     compiled bindings can't take a foreground brush from a binding
-                                     in this scope, so two pre-coloured rows is the cleanest path. -->
+                                <!-- Two pre-coloured rows toggled by IsOverridden: compiled bindings can't set Foreground from a binding here. -->
                                 <TextBlock Grid.Column="3"
                                            Text="{Binding SourceTag}"
                                            Foreground="#FFA500"
@@ -369,7 +133,6 @@
             </ScrollViewer>
         </Border>
 
-        <!-- S-matrix list header -->
         <Grid DockPanel.Dock="Top"
               ColumnDefinitions="110,80,*,80"
               Margin="0,0,0,4"
@@ -381,7 +144,6 @@
             <TextBlock Grid.Column="3" Text="" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
         </Grid>
 
-        <!-- S-matrix entries list -->
         <ScrollViewer VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       IsVisible="{Binding HasSMatrices}">
@@ -393,7 +155,6 @@
                                 Padding="8,6"
                                 Margin="0,2">
                             <Grid ColumnDefinitions="110,80,*,36">
-                                <!-- Wavelength -->
                                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding WavelengthLabel}"
                                                Foreground="White"
@@ -405,14 +166,12 @@
                                                IsVisible="{Binding SourceNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                 </StackPanel>
 
-                                <!-- Dimensions -->
                                 <TextBlock Grid.Column="1"
                                            Text="{Binding Dimensions}"
                                            Foreground="#aaaaaa"
                                            FontSize="11"
                                            VerticalAlignment="Center"/>
 
-                                <!-- Strongest couplings preview -->
                                 <StackPanel Grid.Column="2" VerticalAlignment="Center">
                                     <TextBlock Text="{Binding MagnitudePreview}"
                                                Foreground="#88ccaa"
@@ -425,15 +184,7 @@
                                                TextTrimming="CharacterEllipsis"/>
                                 </StackPanel>
 
-                                <!-- Delete button -->
-                                <!--
-                                    NOTE: We bind the parent VM's command via #DialogRoot (the Window's
-                                    x:Name) instead of $parent[ItemsControl].((vm:ComponentSettingsDialogViewModel)DataContext).
-                                    The cast form fails at runtime in deferred DataTemplate scope with
-                                    "Unable to resolve type vm:ComponentSettingsDialogViewModel" because
-                                    the vm: namespace prefix isn't reliably available when the template
-                                    is materialised (Avalonia issue with XamlIl + DataTemplate type casts).
-                                -->
+                                <!-- Bind via #DialogRoot: the $parent cast form fails in deferred DataTemplate scope (XamlIl namespace resolution). -->
                                 <Button Grid.Column="3"
                                         Content="×"
                                         CommandParameter="{Binding}"

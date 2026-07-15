@@ -139,6 +139,29 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Every PDK name the last filter-state save saw as loaded — enabled or not. Distinguishes a
+    /// PDK the user deliberately unchecked (known, absent from <see cref="GetEnabledPdks"/>) from
+    /// one the save never saw (e.g. created under a process lock, where the filter state is not
+    /// persisted): only the former must restore as disabled (PR #739 review). Empty for
+    /// preferences written before this list existed.
+    /// </summary>
+    public HashSet<string> GetKnownPdks()
+    {
+        return new HashSet<string>(_preferences.KnownPdks, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Sets both PDK filter lists — the enabled names and the full set of loaded ("known")
+    /// names — in one save. See <see cref="GetKnownPdks"/> for why the second list exists.
+    /// </summary>
+    public void SetPdkFilterState(IEnumerable<string> enabledPdkNames, IEnumerable<string> knownPdkNames)
+    {
+        _preferences.EnabledPdks = enabledPdkNames.ToList();
+        _preferences.KnownPdks = knownPdkNames.ToList();
+        Save();
+    }
+
+    /// <summary>
     /// Gets the list of user-loaded PDK file paths for auto-reload.
     /// </summary>
     public List<string> GetUserPdkPaths()
@@ -319,6 +342,13 @@ public class UserPreferences
     /// List of PDK names that are currently enabled (visible in library).
     /// </summary>
     public List<string> EnabledPdks { get; set; } = new();
+
+    /// <summary>
+    /// All PDK names loaded at the last filter-state save (enabled or not) — lets restore tell a
+    /// deliberately-unchecked PDK from one it has never seen. See
+    /// <see cref="UserPreferencesService.GetKnownPdks"/>.
+    /// </summary>
+    public List<string> KnownPdks { get; set; } = new();
 
     /// <summary>
     /// List of user-loaded PDK file paths to auto-load at startup.

@@ -333,3 +333,107 @@ public class DesignValidatorBoundsTests
         result[0].Type.ShouldBe(DesignIssueType.OutOfBounds);
     }
 }
+
+/// <summary>
+/// Unit tests for <see cref="DesignValidator.ValidateComponentPdkCompatibility"/> — flags placed
+/// components whose PDK no longer matches the active process (issue #570 follow-up, LC-T4).
+/// </summary>
+public class DesignValidatorPdkCompatibilityTests
+{
+    private readonly DesignValidator _validator = new();
+
+    private static CAP_Core.Components.Core.Component CreateComponent(string name)
+    {
+        var comp = TestComponentFactory.CreateStraightWaveGuide();
+        comp.HumanReadableName = name;
+        return comp;
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_NullArguments_ThrowArgumentNullException()
+    {
+        var comp = CreateComponent("Comp1");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?> { [comp] = "LockedLib" };
+        var empty = Array.Empty<string>();
+
+        Should.Throw<ArgumentNullException>(() =>
+            _validator.ValidateComponentPdkCompatibility(null!, pdkSources, empty, empty));
+        Should.Throw<ArgumentNullException>(() =>
+            _validator.ValidateComponentPdkCompatibility(new[] { comp }, null!, empty, empty));
+        Should.Throw<ArgumentNullException>(() =>
+            _validator.ValidateComponentPdkCompatibility(new[] { comp }, pdkSources, null!, empty));
+        Should.Throw<ArgumentNullException>(() =>
+            _validator.ValidateComponentPdkCompatibility(new[] { comp }, pdkSources, empty, null!));
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_PdkNotEnabledOrAgnostic_ReturnsIssue()
+    {
+        var comp = CreateComponent("LockedComp");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?> { [comp] = "LockedLib" };
+
+        var result = _validator.ValidateComponentPdkCompatibility(
+            new[] { comp }, pdkSources, Array.Empty<string>(), Array.Empty<string>());
+
+        result.Count.ShouldBe(1);
+        result[0].Type.ShouldBe(DesignIssueType.PdkProcessMismatch);
+        result[0].Description.ShouldContain("LockedComp");
+        result[0].Description.ShouldContain("LockedLib");
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_PdkEnabled_ReturnsNoIssue()
+    {
+        var comp = CreateComponent("AllowedComp");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?> { [comp] = "AllowedLib" };
+
+        var result = _validator.ValidateComponentPdkCompatibility(
+            new[] { comp }, pdkSources, Array.Empty<string>(), new[] { "AllowedLib" });
+
+        result.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_PdkProcessAgnostic_ReturnsNoIssue()
+    {
+        var comp = CreateComponent("ToolComp");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?> { [comp] = "Analysis Tools" };
+
+        var result = _validator.ValidateComponentPdkCompatibility(
+            new[] { comp }, pdkSources, new[] { "Analysis Tools" }, Array.Empty<string>());
+
+        result.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_UnresolvedPdkSource_ReturnsNoIssue()
+    {
+        // A component with no resolved PDK source (built-in, or a group with none of its own)
+        // is exempt — same as SingleProcessPolicy.IsBuiltIn treats null/empty as exempt.
+        var comp = CreateComponent("BuiltInComp");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?>();
+
+        var result = _validator.ValidateComponentPdkCompatibility(
+            new[] { comp }, pdkSources, Array.Empty<string>(), Array.Empty<string>());
+
+        result.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ValidateComponentPdkCompatibility_MixOfConflictedAndAllowed_FlagsOnlyConflicted()
+    {
+        var conflicted = CreateComponent("Conflicted");
+        var allowed = CreateComponent("Allowed");
+        var pdkSources = new Dictionary<CAP_Core.Components.Core.Component, string?>
+        {
+            [conflicted] = "LockedLib",
+            [allowed] = "AllowedLib",
+        };
+
+        var result = _validator.ValidateComponentPdkCompatibility(
+            new[] { conflicted, allowed }, pdkSources, Array.Empty<string>(), new[] { "AllowedLib" });
+
+        result.Count.ShouldBe(1);
+        result[0].Description.ShouldContain("Conflicted");
+    }
+}

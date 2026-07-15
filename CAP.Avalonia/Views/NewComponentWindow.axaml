@@ -4,6 +4,7 @@
         xmlns:edit="using:AvaloniaEdit"
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
         xmlns:controls="using:CAP.Avalonia.Controls"
+        xmlns:cs="using:CAP.Avalonia.ViewModels.ComponentSettings"
         x:Class="CAP.Avalonia.Views.NewComponentWindow"
         x:DataType="vm:NewComponentViewModel"
         Title="{Binding WindowTitle}"
@@ -15,19 +16,25 @@
 
     <DockPanel Margin="16" LastChildFill="True">
 
-        <!-- Save — always visible at the bottom -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
             <Button Content="{Binding SaveButtonLabel}" Command="{Binding SaveCommand}"
-                    Width="90" Background="#2a4a2a"
+                    MinWidth="130" Padding="14,4" Background="#2a4a2a"
                     ToolTip.Tip="Saves the component into the selected PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
         </StackPanel>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
-                <!-- PDK: existing named custom PDKs plus a trailing "New PDK…" sentinel that
-                     opens the PDK-creation modal (wired in MainWindow.axaml.cs) -->
+                <Border Background="#2a2440" CornerRadius="3" Padding="8,5" IsVisible="{Binding IsEditMode}">
+                    <StackPanel Spacing="2">
+                        <TextBlock Text="Editing the component definition — affects every placement"
+                                   FontWeight="Bold" FontSize="11" Foreground="#c9b3ff"/>
+                        <TextBlock Text="Changes here rewrite the component in its PDK and apply to all current and future placements. To tweak only one placement on the canvas, use “Component Settings…” on that component instead."
+                                   FontSize="10" Foreground="#9aa0b0" TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
+
                 <TextBlock Text="PDK" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <ComboBox ItemsSource="{Binding PdkChoices}"
                           SelectedItem="{Binding SelectedPdkChoice}"
@@ -41,19 +48,16 @@
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Fabrication process: always inherited (read-only) from the selected PDK -->
                 <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Name -->
                 <TextBlock Text="Name" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBox Text="{Binding ComponentName}" Background="#2d2d2d" Foreground="White"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- Structure: the user's own Python code, rendered verbatim -->
                 <Grid ColumnDefinitions="*,Auto,Auto">
                     <TextBlock Grid.Column="0" Text="Structure (Python code)" Foreground="#aaaaaa" FontSize="11"
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
@@ -114,8 +118,6 @@
                             ToolTip.Tip="Renders the geometry and extracts its size and pins"/>
                 </Grid>
 
-                <!-- Rendered preview thumbnail; hidden until a render succeeds (PreviewBitmap can be
-                     null on a headless/no-render-backend session). Click opens a zoom/pan popup. -->
                 <Image x:Name="PreviewThumbnail"
                        Source="{Binding PreviewBitmap}"
                        Height="120"
@@ -128,13 +130,49 @@
 
                 <Separator Background="#3d3d3d"/>
 
-                <!-- S-matrix -->
                 <TextBlock Text="S-matrix" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
-                <Button Content="Compute with Meep" Command="{Binding ComputeSMatrixCommand}"
-                        Width="150" HorizontalAlignment="Left" Background="#3d4d6d"
-                        ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="Compute with Meep" Command="{Binding ComputeSMatrixCommand}"
+                            Width="150" Background="#3d4d6d"
+                            ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
+                    <Button Content="Load from file…" Command="{Binding LoadSMatrixFromFileCommand}"
+                            Background="#3d5d3d"
+                            ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) for this component."/>
+                    <Button Content="Show stored S-matrices…" Command="{Binding ShowSMatricesCommand}"
+                            Background="#3d3d5d"
+                            ToolTip.Tip="Opens the stored per-wavelength S-matrices for this component (including foundry/PDK defaults)."/>
+                </StackPanel>
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" Background="#2d2d2d"/>
                 <TextBlock Text="{Binding StatusText}" Foreground="#dddddd" FontSize="11" TextWrapping="Wrap"/>
+
+                <Expander Header="S-matrix data" IsExpanded="False"
+                          IsVisible="{Binding HasSMatrix}" Background="#161616">
+                    <ItemsControl ItemsSource="{Binding SMatrixEntries}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="cs:SMatrixEntryViewModel">
+                                <Border Background="#252526" CornerRadius="4" Padding="8,6" Margin="0,2">
+                                    <Grid ColumnDefinitions="110,80,*">
+                                        <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding WavelengthLabel}" Foreground="White"
+                                                       FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="{Binding SourceNote}" Foreground="#666666" FontSize="9"
+                                                       IsVisible="{Binding SourceNote, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding Dimensions}" Foreground="#aaaaaa"
+                                                   FontSize="11" VerticalAlignment="Center"/>
+                                        <StackPanel Grid.Column="2" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding MagnitudePreview}" Foreground="#88ccaa"
+                                                       FontFamily="Consolas, Courier New, monospace" FontSize="10"
+                                                       TextWrapping="NoWrap"/>
+                                            <TextBlock Text="{Binding PortNamesDisplay}" Foreground="#666666" FontSize="9"
+                                                       TextTrimming="CharacterEllipsis"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </Expander>
 
             </StackPanel>
         </ScrollViewer>

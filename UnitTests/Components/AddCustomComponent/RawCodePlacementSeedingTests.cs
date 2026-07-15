@@ -10,12 +10,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies that placing a raw-code component template (rawcode authoring, Task 2)
-/// seeds a per-instance <see cref="NazcaCodeOverride"/> in the placement-time override
-/// store, so the raw-code preview and export — which read the override map — work
-/// without any export-path changes. Also pins the undo/redo symmetry of that seeding.
-/// </summary>
 public class RawCodePlacementSeedingTests
 {
     private static ComponentTemplate BuildTemplate(string name, string? rawCode, string? backend)
@@ -134,9 +128,6 @@ public class RawCodePlacementSeedingTests
         cmd!.Execute();
         var identifier = overrides.Keys.Single();
 
-        // Undo removes the entry this command seeded, then something else (e.g. a
-        // project load) populates the same identifier before this command's Execute
-        // runs again — simulating a pre-existing entry the command never created.
         cmd.Undo();
         var existing = new NazcaCodeOverride { RawCode = "keep-me", Backend = OverrideBackend.Nazca };
         overrides[identifier] = existing;
@@ -144,7 +135,6 @@ public class RawCodePlacementSeedingTests
         cmd.Execute();
         overrides[identifier].ShouldBeSameAs(existing);
 
-        // Undo must not remove an entry this command didn't create.
         cmd.Undo();
         overrides[identifier].ShouldBeSameAs(existing);
     }

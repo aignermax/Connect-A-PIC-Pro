@@ -20,16 +20,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// End-to-end coverage for the separated "Create Custom PDK" dialog (issue #729 follow-up):
-/// (a) <see cref="CreateCustomPdkViewModel"/> with an adopted, value-compatible existing process
-/// actually persists a named user PDK via <see cref="UserPdkStore"/>; (b) once that PDK gains a
-/// component and is registered with the library, it is enabled/visible under the active process
-/// lock (the by-value visibility fix, mirroring <see cref="CustomPdkVisibilityTests"/> but sourced
-/// through the dialog's own creation path rather than <c>store.SaveToNamedPdk</c> directly); and
-/// (c) the Nazca starter snippet the dialog's "Define new" editor and the wider add-component flow
-/// share still satisfies the render contract (<c>def component()</c>). One focused assert per stage.
-/// </summary>
 public class CreateCustomPdkFlowTests : IDisposable
 {
     private readonly string _testPrefsPath;
@@ -58,18 +48,17 @@ public class CreateCustomPdkFlowTests : IDisposable
     {
         if (File.Exists(_testPrefsPath))
         {
-            try { File.Delete(_testPrefsPath); } catch { /* best effort */ }
+            try { File.Delete(_testPrefsPath); } catch { }
         }
         if (Directory.Exists(_userPdkRoot))
         {
-            try { Directory.Delete(_userPdkRoot, true); } catch { /* best effort */ }
+            try { Directory.Delete(_userPdkRoot, true); } catch { }
         }
     }
 
     private static CreateCustomPdkViewModel CreateVm(UserPdkStore store, ProcessDefinition process) =>
         new(store, new[] { process }, new ProcessManagementViewModel(Mock.Of<IFileDialogService>()));
 
-    /// <summary>Same Si/SiO2, ~222 nm process shape as <see cref="CustomPdkVisibilityTests"/>'s value-compatible case.</summary>
     private static ProcessDefinition CompatibleProcess() => new()
     {
         Name = "MyLib Process",
@@ -95,7 +84,6 @@ public class CreateCustomPdkFlowTests : IDisposable
         },
     };
 
-    /// <summary>Locks the library to a real process built from the bundled Demo PDK's own fingerprint.</summary>
     private void ApplyDemoProcessLock()
     {
         var demoName = _leftPanel.PdkManager.LoadedPdks.First(p => p.Name.Contains("Demo", StringComparison.OrdinalIgnoreCase)).Name;
@@ -138,9 +126,6 @@ public class CreateCustomPdkFlowTests : IDisposable
         var createdPath = vm.CreatedFilePath;
         createdPath.ShouldNotBeNull("the dialog must have written the new PDK before it can gain a component");
 
-        // The dialog itself only creates the (empty) named PDK; adding a component and
-        // registering it with the library is the "New Component" assistant's job (issue #656),
-        // which is what actually triggers the by-value visibility re-check (issue #570).
         var component = SimpleComponent("MyLib Straight");
         _store.SaveToNamedPdk("MyLib", process, component, "nazca", null);
         _leftPanel.RegisterSavedCustomComponent(component, "MyLib", createdPath!);
@@ -154,9 +139,6 @@ public class CreateCustomPdkFlowTests : IDisposable
     {
         ApplyDemoProcessLock();
 
-        // "Define new": the editor seeds Si/SiO2 core/cladding (SOI defaults); giving it a
-        // cross-section (required content) and a value-compatible core thickness must produce a
-        // fully specified fingerprint so the PDK is visible under the active Demo process (#570).
         var vm = CreateVm(_store, CompatibleProcess());
         vm.PdkName = "DefLib";
         vm.ProcessSource = PdkProcessSource.DefineNew;

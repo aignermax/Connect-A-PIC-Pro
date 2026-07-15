@@ -14,20 +14,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Regression coverage for the "New PDK…" reopen bug: after a successful modal creation,
-/// <see cref="NewComponentViewModel.PdkSelection"/>'s <c>RefreshPdkChoices</c> rebuilds
-/// <see cref="NewComponentViewModel.PdkChoices"/> and raises its property-changed
-/// notification. A bound <c>ComboBox</c> reacts to that <c>ItemsSource</c> swap by clearing
-/// <c>SelectedItem</c> and then reselecting whatever it previously held, if that object is
-/// still present (by reference) in the new source — and since
-/// <see cref="PdkChoice.NewPdkSentinel"/> is a single shared static instance, it always is.
-/// That replay used to reselect the sentinel a second time, and because it happens
-/// synchronously nested inside the creation handler (after its <c>IsBusy</c> guard has
-/// already been lifted), the "new PDK" modal reopened immediately. These tests simulate that
-/// ComboBox replay directly against the view model (no Avalonia control needed) and assert
-/// the modal-creation hook fires exactly once.
-/// </summary>
 public class NewPdkReopenGuardTests : IDisposable
 {
     private readonly string _root =
@@ -58,11 +44,6 @@ public class NewPdkReopenGuardTests : IDisposable
         return vm;
     }
 
-    /// <summary>
-    /// Wires a <see cref="PropertyChanged"/> listener that reproduces the bound ComboBox's
-    /// real reaction to an <c>ItemsSource</c> swap: clear the selection, then reselect the
-    /// previously-held item if it is still present in the new source.
-    /// </summary>
     private static void SimulateComboBoxReselectOnItemsSourceSwap(NewComponentViewModel vm)
     {
         vm.PropertyChanged += (_, e) =>
@@ -95,9 +76,9 @@ public class NewPdkReopenGuardTests : IDisposable
             return Task.FromResult<UserPdkInfo?>(new UserPdkInfo("Brand New Lib", path, process));
         };
 
-        vm.SelectedPdkChoice = vm.PdkChoices[^1]; // select the sentinel
+        vm.SelectedPdkChoice = vm.PdkChoices[^1];
         await Task.Yield();
-        await Task.Yield(); // pump any nested re-fired handler too
+        await Task.Yield();
 
         callCount.ShouldBe(1);
         vm.SelectedCustomPdk.ShouldNotBeNull();
@@ -113,15 +94,12 @@ public class NewPdkReopenGuardTests : IDisposable
         var process = new ProcessDefinition { Name = "SiN 300" };
         store.CreateNamedPdkWithProcess("Existing Lib", process, "gdsfactory", null);
         var vm = Build(store);
-        var existingChoice = vm.PdkChoices[0]; // ctor already pre-selected this one
+        var existingChoice = vm.PdkChoices[0];
 
-        // The hook reports a path that ListCustomPdks() will never see (e.g. an out-of-store
-        // location or a save that failed after all) -- RefreshPdkChoices' FirstOrDefault(...)
-        // legitimately returns null.
         vm.CreateNewPdk = () => Task.FromResult<UserPdkInfo?>(
             new UserPdkInfo("Ghost Lib", Path.Combine(_root, "ghost.json"), process));
 
-        vm.SelectedPdkChoice = vm.PdkChoices[^1]; // select the sentinel
+        vm.SelectedPdkChoice = vm.PdkChoices[^1];
         await Task.Yield();
 
         vm.SelectedPdkChoice.ShouldNotBeNull();
