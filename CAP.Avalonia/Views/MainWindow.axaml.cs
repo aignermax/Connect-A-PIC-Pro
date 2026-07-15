@@ -683,7 +683,7 @@ public partial class MainWindow : Window
             return;
 
         // Accept both the context-menu item and the inline hover ✕ button.
-        if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanEditTemplate(template))
+        if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanDeleteTemplate(template))
             return;
 
         var choice = await new MessageBoxService().ShowChoicePromptAsync(

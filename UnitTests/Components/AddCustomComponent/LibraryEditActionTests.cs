@@ -109,13 +109,16 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public void CanEditTemplate_false_forTemplateBelongingToABundledFoundryPdk()
+    public void BundledTemplate_isEditable_butNotDeletable()
     {
+        // Bundled components are now editable (editing forks the PDK into the user store), but a
+        // shipped component still cannot be deleted — only a user copy can (unified-PDK design).
         var vm = CreateLeftPanelViewModel();
         vm.PdkManager.RegisterPdk("Foundry Pdk", null, isBundled: true, componentCount: 1);
         var template = new ComponentTemplate { Name = "X", PdkSource = "Foundry Pdk" };
 
-        vm.CanEditTemplate(template).ShouldBeFalse();
+        vm.CanEditTemplate(template).ShouldBeTrue();
+        vm.CanDeleteTemplate(template).ShouldBeFalse();
     }
 
     [Fact]
@@ -128,18 +131,24 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public async Task EditCustomComponent_forBundledTemplate_doesNothing()
+    public async Task EditCustomComponent_forBundledTemplate_forksIntoUserStore_andOpensEditor()
     {
-        var vm = CreateLeftPanelViewModel(CreateUserPdkStore());
-        vm.PdkManager.RegisterPdk("Foundry Pdk", null, isBundled: true, componentCount: 1);
-        var template = new ComponentTemplate { Name = "Grating Coupler", PdkSource = "Foundry Pdk" };
+        var userStore = CreateUserPdkStore();
+        var vm = CreateLeftPanelViewModel(userStore);
+
+        // A "bundled" PDK file on disk (separate from the user store), registered as bundled.
+        var (bundledPath, bundledName, _) = SaveUserPdk(CreateUserPdkStore(), "ActiveProc");
+        vm.PdkManager.RegisterPdk(bundledName, bundledPath, isBundled: true, componentCount: 1);
 
         var showCalls = 0;
         vm.ShowNewComponentWindowAsync = _ => { showCalls++; return Task.CompletedTask; };
 
+        var template = new ComponentTemplate { Name = "My Coupler", PdkSource = bundledName, IsCustom = false };
         await vm.EditCustomComponentCommand.ExecuteAsync(template);
 
-        showCalls.ShouldBe(0);
+        showCalls.ShouldBe(1);                                // editor opened on the forked copy
+        userStore.NamedPdkExists(bundledName).ShouldBeTrue(); // bundled PDK forked into the user store
+        File.Exists(bundledPath).ShouldBeTrue();              // shipped original untouched
     }
 
     [Fact]

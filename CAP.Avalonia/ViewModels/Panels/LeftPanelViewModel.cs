@@ -205,6 +205,10 @@ public partial class LeftPanelViewModel : ObservableObject
             try
             {
                 var pdk = _pdkLoader.LoadFromFile(pdkFile);
+                // A user fork of this bundled PDK (same name, created by editing it) shadows the
+                // shipped copy — skip the bundled one so the editable fork is the single entry.
+                if (_addCustomComponentDeps?.UserPdkStore?.NamedPdkExists(pdk.Name) == true)
+                    continue;
                 _loadedPdkDrafts.Add(pdk);
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)

@@ -87,7 +87,7 @@ public partial class LeftPanelViewModel
     [RelayCommand]
     private void RemoveCustomComponent(ComponentTemplate? template)
     {
-        if (template is null || !CanEditTemplate(template))
+        if (template is null || !CanDeleteTemplate(template))
             return;
 
         var pdkInfo = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource);
