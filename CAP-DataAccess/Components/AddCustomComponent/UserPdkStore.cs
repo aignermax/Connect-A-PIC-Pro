@@ -45,6 +45,13 @@ public sealed class UserPdkStore
     /// </summary>
     public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
 
+    /// <summary>
+    /// Creates a <see cref="PdkTrashService"/> over this store's SAME root, so restore reads the
+    /// exact <c>.trash</c> folder that <see cref="MoveToTrash"/> / <see cref="RemoveComponent"/>
+    /// write into (no risk of a default-root mismatch when the store was constructed elsewhere).
+    /// </summary>
+    public PdkTrashService CreateTrashService() => new(_root, _loader, _saver);
+
     /// <summary>The user-PDK file path for a fabrication process. Does not create the file.</summary>
     public string ResolvePath(ProcessDefinition process) =>
         Path.Combine(_root, Slug(process.Name) + ".json");
