@@ -24,6 +24,14 @@ namespace CAP_DataAccess.Components.AddCustomComponent;
 public sealed class PdkTrashService
 {
     private const string TrashDirectoryName = ".trash";
+
+    /// <summary>
+    /// Days a trashed item is kept before it is deleted automatically. Chosen instead of a manual
+    /// "delete permanently" button, which is a footgun next to "Restore" in a safety-net feature —
+    /// time-based expiry (like OS recycle bins / Gmail) is safer and self-cleaning.
+    /// </summary>
+    public const int RetentionDays = 30;
+
     private static readonly Regex TimestampSuffix =
         new(@"^(?<base>.+)-(?<date>\d{8})-(?<time>\d{6})(?:-\d+)?$", RegexOptions.Compiled);
 
@@ -53,6 +61,8 @@ public sealed class PdkTrashService
     /// </summary>
     public IReadOnlyList<PdkTrashEntry> ListEntries()
     {
+        PurgeExpired();
+
         var entries = new List<PdkTrashEntry>();
         if (!Directory.Exists(TrashDirectory))
             return entries;
@@ -149,11 +159,35 @@ public sealed class PdkTrashService
         return new PdkTrashRestoreResult(entry.OriginalLivePath, live.Name, PdkTrashKind.RemovedComponents, readded);
     }
 
-    /// <summary>Permanently deletes a trash file (irreversible). No-op if already gone.</summary>
-    public void Purge(PdkTrashEntry entry)
+    /// <summary>
+    /// Deletes trash files older than <see cref="RetentionDays"/>. Called automatically by
+    /// <see cref="ListEntries"/>; there is deliberately no manual permanent-delete — a footgun
+    /// next to "Restore" in a safety-net feature. Time-based expiry is safer and self-cleaning.
+    /// </summary>
+    public void PurgeExpired() => PurgeExpired(DateTime.Now);
+
+    /// <summary>Testable core: deletes trash files whose deletion timestamp is older than the retention window.</summary>
+    internal void PurgeExpired(DateTime now)
     {
-        if (File.Exists(entry.TrashFilePath))
-            File.Delete(entry.TrashFilePath);
+        if (!Directory.Exists(TrashDirectory))
+            return;
+
+        var cutoff = now.AddDays(-RetentionDays);
+        foreach (var path in Directory.GetFiles(TrashDirectory, "*.json"))
+        {
+            var match = TimestampSuffix.Match(Path.GetFileNameWithoutExtension(path));
+            if (!match.Success)
+                continue; // leave undatable files rather than risk deleting something unexpected
+
+            var deletedAt = ParseTimestamp(match.Groups["date"].Value, match.Groups["time"].Value);
+            if (deletedAt != DateTime.MinValue && deletedAt < cutoff)
+                TryDelete(path);
+        }
+    }
+
+    private static void TryDelete(string path)
+    {
+        try { File.Delete(path); } catch { /* best effort — a locked file is retried next listing */ }
     }
 
     private static string UniquePath(string desired)

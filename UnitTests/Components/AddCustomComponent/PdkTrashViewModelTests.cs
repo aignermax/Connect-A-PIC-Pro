@@ -69,20 +69,4 @@ public sealed class PdkTrashViewModelTests : IDisposable
         _vm.Entries.ShouldBeEmpty();            // gone from the flyout
     }
 
-    [Fact]
-    public void Purge_RemovesEntryWithoutRestoring()
-    {
-        var path = _store.SaveToNamedPdk("My Lib", new ProcessDefinition { Name = "P" }, Component("A"), "gdsfactory", null);
-        _store.MoveToTrash(path);
-        _vm.Refresh();
-
-        bool restoreCalled = false;
-        _vm.OnRestored = _ => restoreCalled = true;
-
-        _vm.Entries[0].PurgeCommand.Execute(null);
-
-        restoreCalled.ShouldBeFalse();
-        _vm.Entries.ShouldBeEmpty();
-        File.Exists(path).ShouldBeFalse(); // not restored
-    }
 }

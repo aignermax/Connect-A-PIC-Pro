@@ -87,20 +87,4 @@ public partial class PdkTrashViewModel : ObservableObject
         Refresh();
     }
 
-    /// <summary>Permanently deletes a trash entry (irreversible), after which it is gone for good.</summary>
-    public void PurgeEntry(PdkTrashEntryViewModel? item)
-    {
-        if (item is null) return;
-        try
-        {
-            _trash.Purge(item.Entry);
-            StatusText = $"Deleted '{item.Title}' permanently.";
-        }
-        catch (Exception ex)
-        {
-            _errorConsole?.LogError($"Permanent delete failed: {ex.Message}", ex);
-            StatusText = $"Error: {ex.Message}";
-        }
-        Refresh();
-    }
 }

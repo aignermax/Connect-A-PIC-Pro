@@ -62,8 +62,4 @@ public partial class PdkTrashEntryViewModel
     /// <summary>Restores this entry (whole PDK or removed components).</summary>
     [RelayCommand]
     private void Restore() => _owner.RestoreEntry(this);
-
-    /// <summary>Permanently removes this entry from the trash (irreversible).</summary>
-    [RelayCommand]
-    private void Purge() => _owner.PurgeEntry(this);
 }

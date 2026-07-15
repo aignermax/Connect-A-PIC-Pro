@@ -149,16 +149,32 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
-    public void Purge_RemovesTheTrashFile()
+    public void PurgeExpired_DeletesEntriesOlderThanRetention_KeepsRecentOnes()
     {
         var path = SeedPdk("My Lib", "A");
+        var trashPath = _store.MoveToTrash(path);
+
+        // Simulate "now" well past the retention window relative to the file's timestamp.
+        var future = DateTime.Now.AddDays(PdkTrashService.RetentionDays + 1);
+        _trash.PurgeExpired(future);
+        File.Exists(trashPath).ShouldBeFalse();
+
+        // A freshly trashed item is within the window and is kept.
+        var path2 = SeedPdk("My Lib 2", "B");
+        var trashPath2 = _store.MoveToTrash(path2);
+        _trash.PurgeExpired(DateTime.Now);
+        File.Exists(trashPath2).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void ListEntries_AutoPurgesExpiredEntries()
+    {
+        // ListEntries runs the (real-time) auto-purge; a just-trashed item is inside the
+        // 30-day window, so it must still be listed rather than swept away immediately.
+        var path = SeedPdk("My Lib", "A");
         _store.MoveToTrash(path);
-        var entry = _trash.ListEntries()[0];
 
-        _trash.Purge(entry);
-
-        File.Exists(entry.TrashFilePath).ShouldBeFalse();
-        _trash.ListEntries().ShouldBeEmpty();
+        _trash.ListEntries().Count.ShouldBe(1);
     }
 
     [Fact]
