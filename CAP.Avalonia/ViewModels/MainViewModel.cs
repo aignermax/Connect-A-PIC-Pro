@@ -257,8 +257,6 @@ public partial class MainViewModel : ObservableObject
         VerilogAExportFormat = new VerilogAExportFormat(verilogAExport);
         GdsFactoryExportFormat = new GdsFactoryExportFormat();
         GdsFactoryExport = gdsFactoryExport;
-        // gdsfactory export honours gdsfactory-backend overrides from the design's store.
-        GdsFactoryExport.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
         // By-value member PDKs for the active process (issue placement-livemembers, #732): a
         // custom PDK registered after the process was saved is missing from its persisted
         // MemberPdkNames snapshot but may still be the same process by value — this recomputes
@@ -316,18 +314,12 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
         _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
 
-        // Raw-code placement seeding: manual and AI placement both write into the same
-        // per-instance override store paste-propagation already uses (see
-        // OnComponentsPasted below), so a placed raw-code template's preview/export
-        // override exists without any export-path changes.
-        CanvasInteraction.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         if (aiGridService is Services.AiGridService aiGrid)
         {
             aiGrid.GetActiveProcess = getActiveProcess;
             aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
             aiGrid.GetLiveMemberPdkNames = getLiveMemberPdkNames;
             aiGrid.ResolveComponentPdkSource = resolvePdkSource;
-            aiGrid.NazcaOverrideStore = FileOperations.StoredNazcaOverrides;
         }
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
@@ -373,12 +365,6 @@ public partial class MainViewModel : ObservableObject
                 ModeProbe.Open(target, canvasX * zoom + Canvas.PanX, canvasY * zoom + Canvas.PanY);
             };
         }
-
-        // Carry per-instance Nazca overrides onto pasted copies so their raw-code
-        // preview and export geometry follow the duplicated component.
-        CanvasInteraction.OnComponentsPasted = identifierMap =>
-            Selection.NazcaOverridePropagator.Propagate(
-                identifierMap, FileOperations.StoredNazcaOverrides);
 
         // Wire rename from hierarchy panel through undo-aware command manager
         LeftPanel.HierarchyPanel.RenameComponent = (component, newName) =>
@@ -552,9 +538,6 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
         };
 
-        // Export validation must run against the SAME per-instance Nazca overrides the
-        // production export uses; FileOperations owns the live store (issue #565 F1).
-        RightPanel.ExportValidation.OverridesProvider = () => FileOperations.StoredNazcaOverrides;
         FileOperations.ZoomToFitAfterLoad = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);
@@ -976,14 +959,6 @@ public class DesignFileData
     /// Null or empty for designs without stored S-matrix overrides.
     /// </summary>
     public Dictionary<string, ComponentSMatrixData>? SMatrices { get; set; }
-
-    /// <summary>
-    /// Per-instance Nazca function parameter overrides, keyed by component Identifier.
-    /// Null or empty for designs without Nazca overrides.
-    /// Each entry stores the overridden function name and parameters plus the original
-    /// template values to allow "Reset to template" after a project reload.
-    /// </summary>
-    public Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>? NazcaOverrides { get; set; }
 
     /// <summary>
     /// Most recent simulation results and any stored parameter sweep results.

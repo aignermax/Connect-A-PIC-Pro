@@ -29,6 +29,8 @@ public class Issue742PdkUxPolishScreenshotTests
     [AvaloniaFact]
     public void CapturePdkUxPolishWalkthrough()
     {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UI_SHOT_DIR")))
+            return; // opt-in: heavy headless render, only on explicit request (see UiScreenshotTests)
         var outputDir = ResolveOutputDirectory();
         Directory.CreateDirectory(outputDir);
 

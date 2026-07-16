@@ -18,13 +18,6 @@ namespace CAP.Avalonia.Controls.Canvas.ComponentPreview;
 /// is fired on the UI thread so the canvas can call <c>InvalidateVisual()</c>.
 /// </para>
 /// <para>
-/// When a per-instance raw-code Nazca override is active (<see cref="RawCodeLookup"/>
-/// returns a non-null string for the component's identifier), the fetch is routed to
-/// <see cref="NazcaComponentPreviewService.RenderRawCodeAsync"/> instead of the
-/// template path, and the raw-code hash is included in the cache key so a change in
-/// the override code invalidates the cached thumbnail automatically.
-/// </para>
-/// <para>
 /// Failures (Python unavailable, script timeout, 0 polygons) are cached as <c>null</c>
 /// so no further retries are attempted during the session — the component simply stays
 /// as a legacy rectangle.
@@ -68,16 +61,6 @@ public sealed class GdsPreviewRenderService
     public event Action? OnPreviewLoaded;
 
     /// <summary>
-    /// Optional delegate that returns the stored raw-code Nazca override for a
-    /// component identifier, or <c>null</c> when no raw-code override is active.
-    /// Wire this to <c>FileOperationsViewModel.StoredNazcaOverrides</c> after DI setup.
-    /// When set, components with a raw-code override have their thumbnail rendered via
-    /// <see cref="NazcaComponentPreviewService.RenderRawCodeAsync"/> instead of the
-    /// PDK template path, and the cache key includes a hash of the raw code.
-    /// </summary>
-    public Func<string, string?>? RawCodeLookup { get; set; }
-
-    /// <summary>
     /// Initializes the service with the shared Nazca preview back-end and a
     /// default disk cache.
     /// </summary>
@@ -106,14 +89,11 @@ public sealed class GdsPreviewRenderService
     /// Returns cached <see cref="GdsPreviewData"/> for the given component template,
     /// or <c>null</c> while a background fetch is pending or when no preview is
     /// available (unknown Nazca function, Python unavailable, empty polygon list).
-    /// When <see cref="RawCodeLookup"/> is set and returns a non-null value for this
-    /// component, the raw-code render path is used instead of the template path.
     /// </summary>
     /// <param name="comp">The component for which to fetch/retrieve the preview.</param>
     public GdsPreviewData? TryGetPreview(ComponentViewModel comp)
     {
-        var rawCode = RawCodeLookup?.Invoke(comp.Component.Identifier);
-        var cacheKey = BuildCacheKey(comp, rawCode);
+        var cacheKey = BuildCacheKey(comp);
         if (cacheKey == null)
             return null;
 
@@ -122,28 +102,22 @@ public sealed class GdsPreviewRenderService
 
         // Enqueue a background fetch only once per key
         if (_pendingFetches.TryAdd(cacheKey, 0))
-            _ = FetchAndCacheAsync(cacheKey, comp, rawCode);
+            _ = FetchAndCacheAsync(cacheKey, comp);
 
         return null;
     }
 
     /// <summary>
     /// Builds the cache key for a component.
-    /// When <paramref name="rawCode"/> is non-null the key is prefixed with
-    /// <c>"rawcode|"</c> and includes a SHA-256 hash of the code so that any
-    /// change in the override automatically invalidates the cached thumbnail.
-    /// Returns <c>null</c> when neither a raw-code override nor a Nazca function
-    /// name is available (built-in or external-port components).
+    /// Returns <c>null</c> when no Nazca function name is available (built-in or
+    /// external-port components).
     /// </summary>
-    internal static string? BuildCacheKey(ComponentViewModel comp, string? rawCode = null)
+    internal static string? BuildCacheKey(ComponentViewModel comp)
     {
         // Key on the UNROTATED dimensions: the cached bitmap holds unrotated geometry, so
         // keying on the live (rotation-swapped) dims would re-run the Python render on every
         // rotation and rasterise with a distorted aspect ratio.
         var (width, height) = GetUnrotatedDimensions(comp);
-
-        if (rawCode != null)
-            return $"rawcode|{ComputeRawCodeHash(rawCode)}|{width:F2}|{height:F2}";
 
         // gdsfactory-native components take precedence over the Nazca function: placement gives
         // them a synthesized nazcaFunction ("nazca_<name>") no Nazca script can render, so the
@@ -170,13 +144,6 @@ public sealed class GdsPreviewRenderService
     private static bool IsGdsFactoryNative(CAP_Core.Components.Core.Component comp) =>
         !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction) && comp.GdsFactoryFunction!.Contains('.');
 
-    private static string ComputeRawCodeHash(string code)
-    {
-        var bytes = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(code));
-        return Convert.ToHexString(bytes);
-    }
-
     /// <summary>
     /// Renders a gdsfactory-native component's geometry via the gdsfactory preview back-end,
     /// or a failure result when no service is wired / the function is not module-qualified (#570).
@@ -189,16 +156,12 @@ public sealed class GdsPreviewRenderService
         return await _gdsFactoryPreviewService.RenderRawCodeAsync(code);
     }
 
-    private async Task FetchAndCacheAsync(string cacheKey, ComponentViewModel comp, string? rawCode)
+    private async Task FetchAndCacheAsync(string cacheKey, ComponentViewModel comp)
     {
         NazcaPreviewResult result;
         try
         {
-            if (rawCode != null)
-            {
-                result = await _previewService.RenderRawCodeAsync(rawCode);
-            }
-            else if (IsGdsFactoryNative(comp.Component))
+            if (IsGdsFactoryNative(comp.Component))
             {
                 // Precedence over the (possibly synthesized) nazcaFunction — see BuildCacheKey.
                 result = await RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);

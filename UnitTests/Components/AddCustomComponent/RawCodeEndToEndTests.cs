@@ -2,13 +2,10 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.ViewModels.Canvas;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using CAP_DataAccess.Persistence.PIR;
 using Shouldly;
 using Xunit;
 
@@ -33,7 +30,7 @@ public class RawCodeEndToEndTests : IDisposable
     };
 
     [Fact]
-    public void RawCode_component_survives_draft_to_template_to_placement_override()
+    public void RawCode_component_survives_draft_to_template()
     {
         var draft = BuildDraft();
 
@@ -45,16 +42,6 @@ public class RawCodeEndToEndTests : IDisposable
 
         var template = PdkTemplateConverter.ConvertToTemplate(reloadedComponent, "My P", null);
         template.RawCode.ShouldContain("gf.components.straight");
-
-        var canvas = new DesignCanvasViewModel();
-        var overrides = new Dictionary<string, NazcaCodeOverride>();
-        var command = PlaceComponentCommand.TryCreate(canvas, template, 0, 0, overrides);
-        command.ShouldNotBeNull();
-        command!.Execute();
-
-        var seededOverride = overrides.Values.Single();
-        seededOverride.RawCode.ShouldContain("gf.components.straight");
-        seededOverride.Backend.ShouldBe(OverrideBackend.GdsFactory);
     }
 
     public void Dispose()

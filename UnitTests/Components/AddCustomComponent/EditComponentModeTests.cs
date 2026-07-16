@@ -101,6 +101,25 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public void LoadForEdit_nazcaFunctionReference_synthesizesValidDefComponent()
+    {
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = new ComponentTemplate
+        {
+            Name = "2x2 MMI", PdkSource = "Lib",
+            NazcaFunctionName = "demo.mmi2x2_dp", RawCodeBackend = "nazca", RawCode = null,
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.SelectedBackend.ShouldBe(GeometryBackend.Nazca);
+        vm.Code.ShouldContain("def component():");
+        vm.Code.ShouldContain("nazca.demofab");
+        vm.Code.ShouldContain("mmi2x2_dp");
+        vm.Code.ShouldNotContain("component = demo");
+    }
+
+    [Fact]
     public async Task EditSave_renameWithinSamePdk_removesTheOriginal_noOrphan()
     {
         var store = Store();

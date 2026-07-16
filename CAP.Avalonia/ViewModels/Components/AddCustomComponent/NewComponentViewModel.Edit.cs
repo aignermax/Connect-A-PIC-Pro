@@ -189,10 +189,11 @@ public partial class NewComponentViewModel
         }
         if (!string.IsNullOrWhiteSpace(t.NazcaFunctionName))
         {
-            var module = t.NazcaModuleName;
-            var call = string.IsNullOrWhiteSpace(module) ? t.NazcaFunctionName : $"{module}.{t.NazcaFunctionName}";
-            var import = string.IsNullOrWhiteSpace(module) ? "import nazca as nd" : $"import {module.Split('.')[0]}";
-            return ($"{import}\ncomponent = {call}()", GeometryBackend.Nazca);
+            // NazcaCodeTemplateBuilder mirrors the preview script's contract: a def component()
+            // returning the PDK cell, with the demo PDK mapped onto nazca.demofab.
+            return (CAP.Avalonia.Services.NazcaCodeTemplateBuilder.Build(
+                        t.NazcaModuleName, t.NazcaFunctionName, t.NazcaParameters),
+                    GeometryBackend.Nazca);
         }
         return null;
     }
