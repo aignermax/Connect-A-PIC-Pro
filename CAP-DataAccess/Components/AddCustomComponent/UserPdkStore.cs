@@ -211,6 +211,35 @@ public sealed class UserPdkStore
         return string.Equals(directory, root, StringComparison.OrdinalIgnoreCase);
     }
 
+    /// <summary>
+    /// Replaces (or adds) <paramref name="component"/> in the PDK file with a single
+    /// load-modify-save, optionally backing the previous file state up to <c>.trash</c> first.
+    /// One write means any failure leaves the file either fully old or fully new — never with
+    /// the component missing (PR #742 review, finding 5). Returns false when the file does not
+    /// exist.
+    /// </summary>
+    public bool ReplaceComponent(string filePath, PdkComponentDraft component, bool backupFirst = true)
+    {
+        if (!File.Exists(filePath))
+        {
+            return false;
+        }
+
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        if (backupFirst)
+        {
+            var trashPath = ResolveTrashDestination(filePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(filePath, trashPath);
+        }
+
+        _saver.SaveToFile(pdk, filePath);
+        return true;
+    }
+
     public string? RemoveComponent(string filePath, string componentName, bool backupFirst = true)
     {
         if (!File.Exists(filePath))

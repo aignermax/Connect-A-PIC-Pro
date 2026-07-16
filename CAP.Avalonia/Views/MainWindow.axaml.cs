@@ -895,7 +895,11 @@ public partial class MainWindow : Window
 
         if (isRevertToBundled && isManaged)
         {
-            vm.LeftPanel.RevertShadowForkToBundled(pdk);
+            // The revert is all-or-nothing (see RevertShadowForkToBundled): a false here means
+            // nothing was changed — tell the user instead of closing as if it worked
+            // (PR #742 review, finding 3).
+            if (!vm.LeftPanel.RevertShadowForkToBundled(pdk))
+                await ShowRestoreOriginalFailedAsync(pdk.Name);
             return;
         }
 
@@ -913,8 +917,20 @@ public partial class MainWindow : Window
         }
 
         vm.LeftPanel.UnregisterPdk(pdk.FilePath);
-        if (isRevertToBundled)
-            vm.LeftPanel.RestoreBundledPdk(pdk.Name);
+        if (isRevertToBundled && !vm.LeftPanel.RestoreBundledPdk(pdk.Name))
+            await ShowRestoreOriginalFailedAsync(pdk.Name);
+    }
+
+    /// <summary>
+    /// Tells the user that restoring a bundled original failed (PR #742 review, finding 3) —
+    /// the details are in the Error Console, logged by the revert/restore methods themselves.
+    /// </summary>
+    private static async Task ShowRestoreOriginalFailedAsync(string pdkName)
+    {
+        await new MessageBoxService().ShowChoicePromptAsync(
+            $"Could not restore the built-in original of '{pdkName}'.\n\n"
+            + "See the Error Console for details.",
+            "Restore failed", new[] { "OK" });
     }
 
     /// <summary>

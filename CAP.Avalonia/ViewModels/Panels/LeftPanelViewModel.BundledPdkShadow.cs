@@ -105,17 +105,35 @@ public partial class LeftPanelViewModel
         if (PdkManager.IsPdkNameLoaded(pdkName, null))
             return false;
 
-        PdkDraft pdk;
+        var pdk = LoadBundledOriginForRestore(pdkName, origin);
+        if (pdk is null)
+            return false;
+
+        RegisterRestoredBundledDraft(pdk, origin.FilePath);
+        return true;
+    }
+
+    /// <summary>
+    /// Loads the bundled original fresh (not from the read-only cache: the restored draft joins
+    /// <see cref="_loadedPdkDrafts"/>, where it may be mutated later). Logs and returns null on
+    /// failure.
+    /// </summary>
+    private PdkDraft? LoadBundledOriginForRestore(string pdkName, BundledPdkOrigin origin)
+    {
         try
         {
-            pdk = _pdkLoader.LoadFromFile(origin.FilePath);
+            return _pdkLoader.LoadFromFile(origin.FilePath);
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Could not restore bundled PDK '{pdkName}': {ex.Message}", ex);
-            return false;
+            return null;
         }
+    }
 
+    /// <summary>Puts a freshly loaded bundled original back into the library (in-memory only).</summary>
+    private void RegisterRestoredBundledDraft(PdkDraft pdk, string filePath)
+    {
         _loadedPdkDrafts.Add(pdk);
         int componentCount = 0;
         foreach (var pdkComp in pdk.Components)
@@ -127,22 +145,30 @@ public partial class LeftPanelViewModel
                 Categories.Add(template.Category);
             componentCount++;
         }
-        PdkManager.RegisterPdk(pdk.Name, origin.FilePath, true, componentCount);
+        PdkManager.RegisterPdk(pdk.Name, filePath, true, componentCount);
 
         ReapplyActiveProcessAfterPdkChange();
         FilterComponents();
-        return true;
     }
 
     /// <summary>
     /// Delete on a fork = revert to the foundry truth: moves the user's copy to
     /// <c>user-pdks/.trash</c>, deregisters it, and restores the bundled original in place —
-    /// same name, so placed components and the process snapshot stay valid.
+    /// same name, so placed components and the process snapshot stay valid. All-or-nothing:
+    /// the bundled original is loaded BEFORE the fork is touched, so a failure (unreadable
+    /// built-in JSON, locked fork file) leaves the fork registered and on disk — never a half
+    /// state where both disappear (PR #742 review, finding 3).
     /// </summary>
     internal bool RevertShadowForkToBundled(PdkInfoViewModel fork)
     {
         var store = _addCustomComponentDeps?.UserPdkStore;
         if (store is null || fork.IsBundled || fork.FilePath is null)
+            return false;
+        if (!_bundledPdkCatalog.TryGetValue(fork.Name, out var origin))
+            return false;
+
+        var bundledDraft = LoadBundledOriginForRestore(fork.Name, origin);
+        if (bundledDraft is null)
             return false;
 
         try
@@ -156,7 +182,8 @@ public partial class LeftPanelViewModel
         }
 
         UnregisterPdk(fork.FilePath);
-        return RestoreBundledPdk(fork.Name);
+        RegisterRestoredBundledDraft(bundledDraft, origin.FilePath);
+        return true;
     }
 
     /// <summary>
@@ -224,8 +251,14 @@ public partial class LeftPanelViewModel
 
         try
         {
-            store.RemoveComponent(pdkInfo.FilePath, template.Name);
-            store.AppendToExistingPdk(pdkInfo.FilePath, counterpart);
+            // Single load-modify-save (PR #742 review, finding 5): a failure leaves the fork
+            // file unchanged instead of a half state with the component missing.
+            if (!store.ReplaceComponent(pdkInfo.FilePath, counterpart))
+            {
+                _errorConsole?.LogError(
+                    $"Failed to restore the built-in definition of '{template.Name}': the fork file '{pdkInfo.FilePath}' no longer exists.");
+                return true;
+            }
         }
         catch (Exception ex)
         {
