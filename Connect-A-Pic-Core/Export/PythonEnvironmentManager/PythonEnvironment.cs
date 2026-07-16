@@ -26,6 +26,12 @@ public class PythonEnvironment
     /// <summary>Detected gdsfactory version, e.g. "9.34.2". Null if not installed.</summary>
     public string? GdsFactoryVersion { get; set; }
 
+    /// <summary>
+    /// Detected cspdk (CornerStone PDK) version, e.g. "1.4.4". Null if not installed —
+    /// then every CornerStone component fails to render/export in this environment.
+    /// </summary>
+    public string? CspdkVersion { get; set; }
+
     /// <summary>True when pyclipper is importable in this environment.</summary>
     public bool HasPyclipper { get; set; }
 
