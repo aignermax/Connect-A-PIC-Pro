@@ -56,7 +56,8 @@ public partial class LeftPanelViewModel
         if (TemplateDefinitionSaved is null)
             return;
         var fresh = AllTemplates.FirstOrDefault(t =>
-            t.PdkSource == pdkName && string.Equals(t.Name, componentName, StringComparison.OrdinalIgnoreCase));
+            string.Equals(t.PdkSource, pdkName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(t.Name, componentName, StringComparison.OrdinalIgnoreCase));
         if (fresh != null)
             TemplateDefinitionSaved(fresh);
     }

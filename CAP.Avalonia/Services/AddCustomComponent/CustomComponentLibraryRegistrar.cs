@@ -29,8 +29,12 @@ public static class CustomComponentLibraryRegistrar
         // old entry (UserPdkStore.AppendToExistingPdk), so the in-memory library must too —
         // otherwise "Show stored S-matrices" keeps resolving the STALE template (FirstOrDefault
         // over AllTemplates) and the library lists the component twice (field-test fix, PR #742).
+        // PDK names are compared case-insensitively everywhere in the save flow (the name is
+        // re-read from the PDK file on every save) — a casing difference must not skip the
+        // stale-template replacement and resurrect the duplicate/stale bug.
         var stale = allTemplates
-            .Where(t => t.PdkSource == pdkName && string.Equals(t.Name, draft.Name, StringComparison.OrdinalIgnoreCase))
+            .Where(t => string.Equals(t.PdkSource, pdkName, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(t.Name, draft.Name, StringComparison.OrdinalIgnoreCase))
             .ToList();
         foreach (var old in stale)
             allTemplates.Remove(old);

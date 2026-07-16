@@ -270,6 +270,10 @@ public partial class LeftPanelViewModel
         ReplaceLibraryTemplateWithBundledDefinition(pdkInfo, template, counterpart);
         ReapplyActiveProcessAfterPdkChange();
         FilterComponents();
+        // A revert changes the template's physics exactly like an editor save does — placed
+        // instances must adopt the RESTORED foundry definition, not keep the edited fork's
+        // S-matrix until restart (PR #742 physics review).
+        NotifyTemplateDefinitionSaved(pdkInfo.Name, template.Name);
         return true;
     }
 

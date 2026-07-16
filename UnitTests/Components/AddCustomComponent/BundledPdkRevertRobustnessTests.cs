@@ -158,6 +158,27 @@ public class BundledPdkRevertRobustnessTests : IDisposable
     }
 
     [Fact]
+    public async Task ComponentRevert_raisesTemplateDefinitionSaved_withTheRestoredTemplate()
+    {
+        // "Restore Original" changes the template's physics just like an editor save does —
+        // placed instances must be refreshed from the restored foundry definition, not keep
+        // the edited fork's S-matrix until restart (PR #742 physics review).
+        var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
+        await CreateShadowingForkAsync(leftPanel, store);
+        var customized = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+
+        ComponentTemplate? notified = null;
+        leftPanel.TemplateDefinitionSaved = t => notified = t;
+
+        leftPanel.RemoveCustomComponentCommand.Execute(customized);
+
+        notified.ShouldNotBeNull("placed instances must be refreshed after a revert");
+        notified!.Name.ShouldBe("Bundled Coupler");
+        notified.RawCode.ShouldBe(Code, "the notification must carry the RESTORED foundry definition");
+    }
+
+    [Fact]
     public void ReplaceComponent_missingFile_returnsFalse_andWritesNothing()
     {
         var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
