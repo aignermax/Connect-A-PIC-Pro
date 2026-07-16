@@ -681,7 +681,22 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
-                        <TextBlock Text="PDK Management" VerticalAlignment="Center"
+                        <!-- Compact header icon actions (PDK UX polish T5): enable/disable all
+                             PDKs at once, replacing the bottom button row below. DockPanel places
+                             each subsequent Dock="Right" child further left, so the last one added
+                             here (EnableAll) ends up closest to the title: Title, EnableAll,
+                             DisableAll, Trash, "+" left-to-right. -->
+                        <Button DockPanel.Dock="Right" Content="☐" Command="{Binding LeftPanel.PdkManager.DisableAllCommand}"
+                                Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#3d3d3d" Foreground="#c9c9c9"
+                                ToolTip.Tip="Disable all PDKs"/>
+                        <Button DockPanel.Dock="Right" Content="☑" Command="{Binding LeftPanel.PdkManager.EnableAllCommand}"
+                                Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#3d3d3d" Foreground="#c9c9c9"
+                                ToolTip.Tip="Enable all PDKs"/>
+                        <TextBlock Text="PDK Mgmt" VerticalAlignment="Center"
                                    FontWeight="Bold" Foreground="White"/>
                     </DockPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -729,23 +744,9 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- PDK Action Buttons -->
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Center">
-                                <Button Content="Enable All" Command="{Binding LeftPanel.PdkManager.EnableAllCommand}"
-                                        Width="75" Height="24" Margin="2" FontSize="10"
-                                        Background="#3d3d3d"/>
-                                <Button Content="Disable All" Command="{Binding LeftPanel.PdkManager.DisableAllCommand}"
-                                        Width="75" Height="24" Margin="2" FontSize="10"
-                                        Background="#3d3d3d"/>
-                            </StackPanel>
-
-                            <!-- Active fabrication process of this design (issue #570) -->
-                            <TextBlock Text="{Binding ActiveProcessLabel}"
-                                       FontSize="10" FontWeight="SemiBold" Foreground="LightSkyBlue"
-                                       Margin="2,8,2,0" TextWrapping="Wrap"
-                                       ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
-
-                            <!-- Fabrication process now opens from the top toolbar icon (#570). -->
+                            <!-- Enable All / Disable All moved to compact header icon buttons
+                                 (PDK UX polish T5). Active-process label removed here; it's shown
+                                 in the top HUD (status bar) and no longer duplicated in this panel. -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
