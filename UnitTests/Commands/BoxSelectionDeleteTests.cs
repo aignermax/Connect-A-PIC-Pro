@@ -104,6 +104,24 @@ public class BoxSelectionDeleteTests
     }
 
     [Fact]
+    public void DeleteSelected_afterDeselectingViaEmptyCanvasClick_deletesNothing()
+    {
+        var (canvas, commandManager, interaction, vm1, _, _) = CreateSetup();
+
+        // Click component 1 (single selection), then click empty canvas: everything LOOKS
+        // deselected — DEL must not act on a stale selection set and silently delete vm1.
+        canvas.SelectedComponent = vm1;
+        canvas.Selection.SelectedComponents.ShouldBe(new[] { vm1 });
+
+        interaction.CanvasClicked(4000, 4000); // empty area
+
+        interaction.DeleteSelectedCommand.Execute(null);
+
+        canvas.Components.Count.ShouldBe(3);
+        commandManager.UndoCount.ShouldBe(0);
+    }
+
+    [Fact]
     public void Undo_AfterBoxSelectionDelete_RestoresComponentsAndConnections()
     {
         var (canvas, commandManager, interaction, _, _, _) = CreateSetup();

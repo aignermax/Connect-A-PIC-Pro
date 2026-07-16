@@ -71,7 +71,14 @@ public partial class DesignCanvasViewModel : ObservableObject
     /// </summary>
     partial void OnSelectedComponentChanged(ComponentViewModel? value)
     {
-        if (value == null) return;
+        if (value == null)
+        {
+            // Deselecting the primary (empty-canvas click, leaving Select mode) must also
+            // clear the multi-selection set — otherwise DEL acts on a stale selection and
+            // deletes components that appear deselected.
+            Selection.ClearSelection();
+            return;
+        }
         if (!Selection.SelectedComponents.Contains(value))
             Selection.SelectSingle(value);
     }
