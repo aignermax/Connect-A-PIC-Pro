@@ -23,9 +23,9 @@ public partial class NewComponentViewModel
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
-        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
+        if (SelectedProcess is null)
         {
-            StatusText = "Render a preview and select a PDK before computing the S-matrix.";
+            StatusText = "Select a PDK before computing the S-matrix.";
             return;
         }
         if (_fdtd is null)
@@ -38,6 +38,14 @@ public partial class NewComponentViewModel
         _computeCts = new CancellationTokenSource();
         try
         {
+            // Render the geometry ourselves when no preview exists yet — same pattern as
+            // Save (#733). A render failure leaves its reason in StatusText and computes
+            // nothing (field-test fix, PR #742: "Compute" demanded a manual Preview click).
+            if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
+            {
+                return;
+            }
+
             var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
@@ -57,7 +65,8 @@ public partial class NewComponentViewModel
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)).";
+            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)) — " +
+                         $"\"{SaveButtonLabel}\" writes it into the component definition.";
         }
         catch (OperationCanceledException)
         {
@@ -115,9 +124,14 @@ public partial class NewComponentViewModel
             }
 
             var reference = BuildReference();
-            var sMatrix = _computedModel is null
-                ? FdtdSMatrixToDraftConverter.BlackBox()
-                : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
+            // Priority: a fresh compute/import wins; otherwise an unchanged-geometry edit keeps
+            // the definition's stored matrix verbatim (never silently wiped); only a geometry
+            // change (or a from-scratch component without compute) saves a black box.
+            var sMatrix = _computedModel is not null
+                ? FdtdSMatrixToDraftConverter.FromFdtd(_computedModel)
+                : CanKeepLoadedSMatrix
+                    ? _loadedSMatrixDraft
+                    : FdtdSMatrixToDraftConverter.BlackBox();
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
@@ -165,9 +179,11 @@ public partial class NewComponentViewModel
             {
                 StatusText = MigratedFromPdkName != null
                     ? $"Moved '{name}' to PDK '{pdk.Name}'."
-                    : _computedModel is null
-                        ? $"Saved without simulation model (black box). {StatusText}".Trim()
-                        : "Saved with FDTD S-matrix.";
+                    : _computedModel is not null
+                        ? "Saved with FDTD S-matrix."
+                        : sMatrix is not null
+                            ? "Saved — kept the component's stored S-matrix."
+                            : $"Saved without simulation model (black box). {StatusText}".Trim();
             }
             Saved?.Invoke(this, EventArgs.Empty);
         }

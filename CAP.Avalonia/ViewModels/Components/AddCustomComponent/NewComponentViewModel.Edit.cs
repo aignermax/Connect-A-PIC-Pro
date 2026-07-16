@@ -48,6 +48,20 @@ public partial class NewComponentViewModel
     private string? _loadedPdkFilePath;
 
     /// <summary>
+    /// The S-matrix stored in the component's PDK definition when the edit session was loaded.
+    /// A save without a fresh compute keeps it verbatim as long as the geometry (code + backend)
+    /// is unchanged — an edit-save must never silently wipe real computed/imported data. When the
+    /// geometry DID change, the stored matrix no longer describes the component and is dropped
+    /// (same conservative stale rule as a post-compute code edit; #582 semantics).
+    /// </summary>
+    private PdkSMatrixDraft? _loadedSMatrixDraft;
+
+    /// <summary>Whether the definition's stored S-matrix is still valid for the current geometry.</summary>
+    private bool CanKeepLoadedSMatrix =>
+        IsEditMode && _loadedSMatrixDraft is not null
+        && Code == _loadedCode && SelectedBackend == _loadedBackend;
+
+    /// <summary>
     /// True when the user changed any editable field — name, code, geometry backend, or target
     /// PDK — since <see cref="LoadForEdit"/>. The main window's editor dedup consults this: a
     /// stale-but-clean editor is replaced with a freshly loaded view model on a second ✏ click,
@@ -97,6 +111,7 @@ public partial class NewComponentViewModel
         SelectedPdkChoice = match;
 
         _editingOriginalName = template.Name;
+        _loadedSMatrixDraft = template.SourceDraft?.SMatrix;
         _editOriginalPdkFilePath = match.Pdk!.FilePath;
         _editOriginalPdkName = match.Pdk.Name;
         _editOriginalProcessName = match.Pdk.Process?.Name;

@@ -60,7 +60,8 @@ public partial class NewComponentViewModel
                 ? " Ports were auto-mapped to pins by position — verify the assignment."
                 : "";
             StatusText = $"Loaded S-matrix: {resolved.PortCount} ports, " +
-                         $"{resolved.SMatricesByWavelengthNm.Count} wavelength(s) from {Path.GetFileName(path)}.{remapNote}";
+                         $"{resolved.SMatricesByWavelengthNm.Count} wavelength(s) from {Path.GetFileName(path)}.{remapNote}" +
+                         $" \"{SaveButtonLabel}\" writes it into the component definition.";
         }
         catch (Exception ex)
         {
