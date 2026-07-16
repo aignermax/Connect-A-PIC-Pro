@@ -155,6 +155,33 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
+    public void SequentialRemovals_ListEntries_OnePerComponent_RestoringOneDoesNotCascade()
+    {
+        var path = SeedPdk("My Lib", "A", "B", "C");
+        _store.RemoveComponent(path, "A");
+        _store.RemoveComponent(path, "B");
+        _store.RemoveComponent(path, "C");
+
+        var entries = _trash.ListEntries();
+
+        entries.Count.ShouldBe(3, "one entry per removed component, not one per backup file");
+        entries.ShouldAllBe(e => e.Kind == PdkTrashKind.RemovedComponents);
+        entries.ShouldAllBe(e => e.RestorableComponentNames.Count == 1,
+            "each entry must name exactly the one component it restores");
+        entries.SelectMany(e => e.RestorableComponentNames).ShouldBe(new[] { "A", "B", "C" }, ignoreOrder: true);
+
+        var entryA = entries.Single(e => e.RestorableComponentNames[0] == "A");
+        _trash.Restore(entryA);
+
+        new PdkLoader().LoadFromFileForEditing(path).Components.Select(c => c.Name)
+            .ShouldBe(new[] { "A" }, "restoring A must not cascade-restore B or C");
+
+        var remaining = _trash.ListEntries();
+        remaining.SelectMany(e => e.RestorableComponentNames).ShouldBe(new[] { "B", "C" }, ignoreOrder: true,
+            "B and C must still be listed and restorable after restoring A");
+    }
+
+    [Fact]
     public void PurgeExpired_DeletesEntriesOlderThanRetention_KeepsRecentOnes()
     {
         var path = SeedPdk("My Lib", "A");

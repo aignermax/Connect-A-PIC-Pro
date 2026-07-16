@@ -1,6 +1,5 @@
 using System;
 using System.Globalization;
-using System.Linq;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,24 +18,27 @@ public partial class PdkTrashEntryViewModel : ObservableObject
         _owner = owner;
     }
 
-    public string Title => Entry.PdkName;
-
     public bool IsDeletedPdk => Entry.Kind == PdkTrashKind.DeletedPdk;
 
-    public string KindLabel => IsDeletedPdk ? "PDK" : "Component(s)";
+    public string KindLabel => IsDeletedPdk ? "PDK" : "Component";
+
+    /// <summary>
+    /// For a deleted PDK, the PDK name; for a single removed component, the component's own name
+    /// (the PDK it belongs to is shown in <see cref="Detail"/> instead).
+    /// </summary>
+    public string Title => IsDeletedPdk ? Entry.PdkName : Entry.RestorableComponentNames[0];
 
     public string Detail
     {
         get
         {
-            var count = Entry.RestorableComponentNames.Count;
             if (IsDeletedPdk)
+            {
+                var count = Entry.RestorableComponentNames.Count;
                 return count == 1 ? "1 component" : $"{count} components";
+            }
 
-            var names = string.Join(", ", Entry.RestorableComponentNames.Take(4));
-            if (count > 4)
-                names += $" +{count - 4}";
-            return names;
+            return Entry.PdkName;
         }
     }
 

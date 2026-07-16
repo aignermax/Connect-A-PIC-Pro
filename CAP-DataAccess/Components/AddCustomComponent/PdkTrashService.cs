@@ -42,17 +42,48 @@ public sealed class PdkTrashService
         if (!Directory.Exists(TrashDirectory))
             return entries;
 
+        // Each component-delete backs up a full copy of the PDK file as it stood right before
+        // that one delete. Sequential deletes (A, then B, then C) therefore leave overlapping
+        // backups: the A-backup still contains B and C. Expand every RemovedComponents backup to
+        // one candidate entry PER missing component, then keep only the most recently written
+        // backup for each (livePath, componentName) pair - that is the backup whose delete
+        // actually removed that component. This is what makes Restore(entry) able to bring back
+        // exactly the one component the user clicked, without resurrecting later deletes.
+        var newestPerComponent = new Dictionary<(string LivePath, string Name), (DateTime WrittenAt, PdkTrashEntry Entry)>();
+
         foreach (var path in Directory.GetFiles(TrashDirectory, "*.json"))
         {
-            var entry = TryReadEntry(path);
-            if (entry != null && entry.RestorableComponentNames.Count > 0)
-                entries.Add(entry);
+            var raw = TryReadRawInfo(path);
+            if (raw is null)
+                continue;
+
+            if (raw.Kind == PdkTrashKind.DeletedPdk)
+            {
+                if (raw.ComponentNames.Count > 0)
+                    entries.Add(new PdkTrashEntry(path, raw.PdkName, PdkTrashKind.DeletedPdk, raw.DeletedAt, raw.LivePath, raw.ComponentNames));
+                continue;
+            }
+
+            var writtenAt = File.GetLastWriteTimeUtc(path);
+            foreach (var name in raw.ComponentNames)
+            {
+                var key = (raw.LivePath.ToLowerInvariant(), name.ToLowerInvariant());
+                if (newestPerComponent.TryGetValue(key, out var existing) && existing.WrittenAt >= writtenAt)
+                    continue;
+
+                newestPerComponent[key] = (writtenAt,
+                    new PdkTrashEntry(path, raw.PdkName, PdkTrashKind.RemovedComponents, raw.DeletedAt, raw.LivePath, new[] { name }));
+            }
         }
 
+        entries.AddRange(newestPerComponent.Values.Select(v => v.Entry));
         return entries.OrderByDescending(e => e.DeletedAt).ToList();
     }
 
-    private PdkTrashEntry? TryReadEntry(string trashPath)
+    private sealed record RawTrashInfo(
+        string PdkName, PdkTrashKind Kind, DateTime DeletedAt, string LivePath, IReadOnlyList<string> ComponentNames);
+
+    private RawTrashInfo? TryReadRawInfo(string trashPath)
     {
         PdkDraft backup;
         try { backup = _loader.LoadFromFileForEditing(trashPath); }
@@ -70,14 +101,14 @@ public sealed class PdkTrashService
 
         bool sameLivePdk = live != null && string.Equals(live.Name, backup.Name, StringComparison.OrdinalIgnoreCase);
         if (!sameLivePdk)
-            return new PdkTrashEntry(trashPath, backup.Name, PdkTrashKind.DeletedPdk, deletedAt, livePath, backupComponents);
+            return new RawTrashInfo(backup.Name, PdkTrashKind.DeletedPdk, deletedAt, livePath, backupComponents);
 
         var liveNames = live!.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var restorable = backup.Components
             .Where(c => !liveNames.Contains(c.Name))
             .Select(c => c.Name)
             .ToList();
-        return new PdkTrashEntry(trashPath, backup.Name, PdkTrashKind.RemovedComponents, deletedAt, livePath, restorable);
+        return new RawTrashInfo(backup.Name, PdkTrashKind.RemovedComponents, deletedAt, livePath, restorable);
     }
 
     private PdkDraft? TryLoadLive(string livePath)
@@ -117,8 +148,15 @@ public sealed class PdkTrashService
         var backup = _loader.LoadFromFileForEditing(entry.TrashFilePath);
         var live = _loader.LoadFromFileForEditing(entry.OriginalLivePath);
         var liveNames = live.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var wanted = entry.RestorableComponentNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        var readded = backup.Components.Where(c => !liveNames.Contains(c.Name)).ToList();
+        // Restore ONLY the component(s) this entry names - not the whole backup/live diff. A
+        // backup file is a full pre-delete snapshot and may still contain components that were
+        // removed by a later, separate delete; those have their own entries and must stay gone
+        // here so clicking "Restore" on one component can never resurrect a different one.
+        var readded = backup.Components
+            .Where(c => wanted.Contains(c.Name) && !liveNames.Contains(c.Name))
+            .ToList();
         live.Components.AddRange(readded);
         _saver.SaveToFile(live, entry.OriginalLivePath);
 
