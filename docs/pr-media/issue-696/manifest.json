@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-use-preset-dropdown.png",
+    "caption": "The Fabrication Process window offers the renamed \u0027Use preset \u25BE\u0027 dropdown, whose tooltip now explains USE semantics: the pick becomes the design\u0027s process."
+  },
+  {
+    "file": "02-preset-in-use-banner.png",
+    "caption": "Picking a preset sets it as the design\u0027s active process \u2014 a blue banner confirms \u0027Using preset \u2026 \u2014 unchanged\u0027 and the editor shows the preset\u0027s layer stack."
+  },
+  {
+    "file": "03-design-only-override.png",
+    "caption": "Editing a field (waveguide width 1.2 \u2192 1.5 \u00B5m) commits a design-only override \u2014 the banner reports \u00271 property overridden\u0027 and the PDK file on disk stays unchanged."
+  },
+  {
+    "file": "04-reopened-state-restored.png",
+    "caption": "Reopening the dialog restores the persisted state: the banner shows the preset with its override count and the editor shows the effective (overridden) values."
+  }
+]
