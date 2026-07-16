@@ -2,7 +2,6 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Commands;
 
@@ -18,24 +17,20 @@ public class PlaceComponentCommand : IUndoableCommand
     private readonly double _x;
     private readonly double _y;
     private readonly bool _isValid;
-    private readonly IDictionary<string, NazcaCodeOverride>? _overrideStore;
     private ComponentViewModel? _createdViewModel;
-    private bool _seededRawCodeOverride;
 
     private PlaceComponentCommand(
         DesignCanvasViewModel canvas,
         ComponentTemplate template,
         double x,
         double y,
-        bool isValid,
-        IDictionary<string, NazcaCodeOverride>? overrideStore)
+        bool isValid)
     {
         _canvas = canvas;
         _template = template;
         _x = x;
         _y = y;
         _isValid = isValid;
-        _overrideStore = overrideStore;
 
         if (isValid)
         {
@@ -50,19 +45,11 @@ public class PlaceComponentCommand : IUndoableCommand
     /// <param name="template">PDK template to instantiate.</param>
     /// <param name="x">Requested X position (µm); may be nudged by placement search.</param>
     /// <param name="y">Requested Y position (µm); may be nudged by placement search.</param>
-    /// <param name="overrideStore">
-    /// Optional per-instance raw-code override store (e.g.
-    /// <c>FileOperationsViewModel.StoredNazcaOverrides</c>). When <paramref name="template"/>
-    /// carries <see cref="ComponentTemplate.RawCode"/>, <see cref="Execute"/> seeds a matching
-    /// <see cref="NazcaCodeOverride"/> entry for the placed instance so raw-code preview and
-    /// export — which read the override map — work without any export-path changes.
-    /// </param>
     public static PlaceComponentCommand? TryCreate(
         DesignCanvasViewModel canvas,
         ComponentTemplate template,
         double x,
-        double y,
-        IDictionary<string, NazcaCodeOverride>? overrideStore = null)
+        double y)
     {
         var validPosition = canvas.FindValidPlacement(x, y, template.WidthMicrometers, template.HeightMicrometers);
 
@@ -71,7 +58,7 @@ public class PlaceComponentCommand : IUndoableCommand
             return null; // No space available
         }
 
-        return new PlaceComponentCommand(canvas, template, validPosition.Value.x, validPosition.Value.y, true, overrideStore);
+        return new PlaceComponentCommand(canvas, template, validPosition.Value.x, validPosition.Value.y, true);
     }
 
     public string Description => $"Place {_template.Name}";
@@ -88,31 +75,7 @@ public class PlaceComponentCommand : IUndoableCommand
                 // Component not in canvas, add it
                 _createdViewModel = _canvas.AddComponent(_component, _template.Name, _template.PdkSource);
             }
-
-            SeedRawCodeOverride();
         }
-    }
-
-    /// <summary>
-    /// Seeds a per-instance <see cref="NazcaCodeOverride"/> for the placed component when
-    /// <see cref="_template"/> is a raw-code component. No-ops when there is no override
-    /// store, the template has no raw code, or the store already has an entry for this
-    /// instance's identifier (e.g. restored from a .lun file on load) — an existing entry
-    /// is never overwritten. Runs on every <see cref="Execute"/>, not just the first, so a
-    /// redo after <see cref="Undo"/> (which removes the entry this command seeded) restores it.
-    /// </summary>
-    private void SeedRawCodeOverride()
-    {
-        if (_overrideStore == null || _component == null) return;
-        if (string.IsNullOrEmpty(_template.RawCode)) return;
-        if (_overrideStore.ContainsKey(_component.Identifier)) return;
-
-        _overrideStore[_component.Identifier] = new NazcaCodeOverride
-        {
-            RawCode = _template.RawCode,
-            Backend = _template.RawCodeBackend == "gdsfactory" ? OverrideBackend.GdsFactory : OverrideBackend.Nazca
-        };
-        _seededRawCodeOverride = true;
     }
 
     public void Undo()
@@ -127,14 +90,6 @@ public class PlaceComponentCommand : IUndoableCommand
                 _canvas.RemoveComponent(viewModel);
             }
             _createdViewModel = null;
-
-            // Undo symmetry: only remove the override entry if THIS command seeded it —
-            // never touch a pre-existing entry (e.g. loaded from a .lun file).
-            if (_seededRawCodeOverride && _overrideStore != null)
-            {
-                _overrideStore.Remove(_component.Identifier);
-                _seededRawCodeOverride = false;
-            }
         }
     }
 }

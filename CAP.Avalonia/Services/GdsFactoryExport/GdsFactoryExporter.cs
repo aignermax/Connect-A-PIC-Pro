@@ -6,7 +6,6 @@ using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_Core.Routing;
 using CAP_Core.Routing.MetalRouting;
-using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
 
@@ -22,8 +21,6 @@ public class GdsFactoryExporter
     /// <summary>Exports the design to a gdsfactory Python script.</summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="options">Component representation mode (stubs vs. ubcpdk cells).</param>
-    /// <param name="overrides">Per-instance overrides; gdsfactory-backend ones are emitted as
-    /// component factories. Null skips override handling.</param>
     /// <param name="metalSpec">
     /// Process-derived metal routing parameters for electrical connections (issue #682):
     /// trace width, GDS layer/datatype, and waveguide-crossing policy. Electrical
@@ -32,21 +29,19 @@ public class GdsFactoryExporter
     /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
         MetalRoutingSpec? metalSpec = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         AppendHeader(sb, canvas, options);
         GdsFactoryMetalTraceWriter.AppendHeaderConstants(sb, metal);
-        AppendOverrideFactories(sb, canvas, overrides);
-        AppendStubs(sb, canvas, options, overrides);
+        AppendStubs(sb, canvas, options);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
         sb.AppendLine("# Components");
         foreach (var comp in EnumerateExportableComponents(canvas))
-            AppendPlacement(sb, comp, options, overrides, ref refIndex);
+            AppendPlacement(sb, comp, options, ref refIndex);
         sb.AppendLine();
         AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metal);
         AppendFooter(sb);
@@ -114,62 +109,6 @@ public class GdsFactoryExporter
         return conflicts;
     }
 
-    /// <summary>
-    /// Identifiers of instances whose override is written for Nazca — the gdsfactory export
-    /// cannot run that code, so those instances use their ubcpdk/stub geometry instead of the
-    /// custom override. Surfaced as a pre-export warning so the divergence is visible.
-    /// </summary>
-    public static IReadOnlyList<string> CollectBackendMismatches(
-        DesignCanvasViewModel canvas, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
-    {
-        if (overrides == null) return Array.Empty<string>();
-        return EnumerateExportableComponents(canvas)
-            .Where(c => overrides.TryGetValue(c.Identifier, out var o)
-                        && !string.IsNullOrWhiteSpace(o.RawCode)
-                        && o.Backend == OverrideBackend.Nazca)
-            .Select(c => c.Identifier)
-            .Distinct(StringComparer.Ordinal)
-            .ToList();
-    }
-
-    /// <summary>Returns the gdsfactory-backend override RawCode for a component, or null.</summary>
-    private static string? GdsFactoryOverrideCode(
-        Component comp, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
-    {
-        if (overrides != null
-            && overrides.TryGetValue(comp.Identifier, out var o)
-            && !string.IsNullOrWhiteSpace(o.RawCode)
-            && o.Backend == OverrideBackend.GdsFactory)
-            return o.RawCode;
-        return null;
-    }
-
-    private static string OverrideFactoryName(Component comp) =>
-        "override_" + System.Text.RegularExpressions.Regex.Replace(comp.Identifier, @"[^a-zA-Z0-9_]", "_");
-
-    /// <summary>Emits one factory per gdsfactory-backend override: the user's code wrapped in a
-    /// function that returns the `component` it defines.</summary>
-    private static void AppendOverrideFactories(
-        StringBuilder sb, DesignCanvasViewModel canvas,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
-    {
-        var generated = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var comp in EnumerateExportableComponents(canvas))
-        {
-            var code = GdsFactoryOverrideCode(comp, overrides);
-            if (code == null) continue;
-            var name = OverrideFactoryName(comp);
-            if (!generated.Add(name)) continue;
-
-            sb.AppendLine($"def {name}() -> gf.Component:");
-            sb.AppendLine("    import gdsfactory as gf");
-            foreach (var line in code.Replace("\r\n", "\n").Split('\n'))
-                sb.AppendLine("    " + line);
-            sb.AppendLine("    return component");
-            sb.AppendLine();
-        }
-    }
-
     private static IEnumerable<Component> EnumerateExportableComponents(DesignCanvasViewModel canvas)
     {
         foreach (var compVm in canvas.Components)
@@ -224,15 +163,13 @@ public class GdsFactoryExporter
     }
 
     private static void AppendStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in EnumerateExportableComponents(canvas))
         {
-            // A gdsfactory override / real gdsfactory factory / ubcpdk cell all replace the stub.
-            if (GdsFactoryOverrideCode(comp, overrides) != null
-                || UsesGdsFactoryFactory(comp)
+            // A real gdsfactory factory / ubcpdk cell replaces the stub.
+            if (UsesGdsFactoryFactory(comp)
                 || UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
@@ -285,7 +222,7 @@ public class GdsFactoryExporter
     /// </summary>
     private static void AppendPlacement(
         StringBuilder sb, Component comp, GdsFactoryExportOptions options,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides, ref int refIndex)
+        ref int refIndex)
     {
         var ci = CultureInfo.InvariantCulture;
         var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
@@ -295,9 +232,7 @@ public class GdsFactoryExporter
         var varName = $"ref_{refIndex}";
 
         string factory;
-        if (GdsFactoryOverrideCode(comp, overrides) != null)
-            factory = $"{OverrideFactoryName(comp)}()";
-        else if (UsesGdsFactoryFactory(comp))
+        if (UsesGdsFactoryFactory(comp))
             // gdsfactory-backend component: resolve the cell from the PDK activated in the header.
             // cspdk exposes cells via the PDK registry (cspdk.sin300.cells / gf.get_component),
             // NOT as module attributes — "cspdk.sin300.mmi1x2()" raises AttributeError (#570 review).

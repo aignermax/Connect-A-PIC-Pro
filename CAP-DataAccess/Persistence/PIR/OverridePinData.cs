@@ -1,9 +1,7 @@
 namespace CAP_DataAccess.Persistence.PIR;
 
 /// <summary>
-/// Persisted representation of a physical optical port derived from a per-instance
-/// Nazca raw-code override (issue #561). Stored inside
-/// <see cref="NazcaCodeOverride.OverridePins"/> and <see cref="NazcaCodeOverride.TemplatePins"/>.
+/// Representation of a physical optical port derived from rendered raw-code geometry.
 /// Coordinates are in component-local µm space (same convention as
 /// <c>CAP_Core.Components.Core.PhysicalPin</c>).
 /// </summary>

@@ -276,14 +276,11 @@ public class DesignCanvas : Control
         {
             oldVm.CommandManager.StateChanged -= OnCommandStateChanged;
             oldVm.GdsPreviewRenderService.OnPreviewLoaded -= InvalidateVisual;
-            oldVm.GdsPreviewRenderService.RawCodeLookup = null;
         }
         if (e.NewValue is MainViewModel newVm)
         {
             newVm.CommandManager.StateChanged += OnCommandStateChanged;
             newVm.GdsPreviewRenderService.OnPreviewLoaded += InvalidateVisual;
-            newVm.GdsPreviewRenderService.RawCodeLookup = id =>
-                newVm.FileOperations.StoredNazcaOverrides.TryGetValue(id, out var o) ? o.RawCode : null;
         }
     }
 
