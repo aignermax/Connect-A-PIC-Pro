@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-pdk-before-rename.png",
+    "caption": "The user PDK \u0027Lib\u0027 starts with two components \u2014 \u0027comp1\u0027 (about to be edited) and \u0027comp2\u0027."
+  },
+  {
+    "file": "02-edit-mode-opened.png",
+    "caption": "Edit mode opens the window prefilled with \u0027comp1\u0027, its raw code, and its fixed target PDK \u0027Lib\u0027."
+  },
+  {
+    "file": "03-renamed-to-new-name.png",
+    "caption": "The user renames the component to \u0027comp1_v2\u0027 \u2014 a name that does not exist yet in the PDK."
+  },
+  {
+    "file": "04-saved.png",
+    "caption": "Saving stores \u0027comp1_v2\u0027 and, with the same write, removes the entry under the old name \u0027comp1\u0027 (the #730 fix)."
+  },
+  {
+    "file": "05-pdk-after-rename-no-orphan.png",
+    "caption": "The PDK now holds \u0027comp1_v2\u0027 and the untouched \u0027comp2\u0027 \u2014 no orphaned \u0027comp1\u0027 duplicate is left behind."
+  }
+]
