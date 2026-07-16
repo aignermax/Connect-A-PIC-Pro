@@ -713,12 +713,19 @@ public partial class MainWindow : Window
         if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanDeleteTemplate(template))
             return;
 
+        // On a fork of a bundled PDK, a component the built-in original also has is not
+        // deleted but reverted to the foundry definition.
+        var isRevertToBundled = vm.LeftPanel.IsComponentRevertToBundled(template);
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{template.Name}' and restore the built-in original?\n\n"
+              + "A full backup of your customized PDK file is saved to user-pdks/.trash first. "
+              + "Placed instances on the canvas are kept."
+            : $"Move component '{template.Name}' to trash?\n\n"
+              + "The PDK file is rewritten without this component; a full pre-edit backup "
+              + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
+              + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.";
         var choice = await new MessageBoxService().ShowChoicePromptAsync(
-            $"Move component '{template.Name}' to trash?\n\n"
-            + "The PDK file is rewritten without this component; a full pre-edit backup "
-            + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
-            + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.",
-            "Delete Component?", new[] { "Cancel", "Move to Trash" });
+            prompt, "Delete Component?", new[] { "Cancel", isRevertToBundled ? "Restore Original" : "Move to Trash" });
         if (choice != 1)
             return;
 
@@ -864,15 +871,33 @@ public partial class MainWindow : Window
         // relocate it into a hidden app-data folder (PR #739 review), so that path only
         // deregisters and leaves the file untouched.
         var isManaged = userPdkStore.IsInManagedRoot(pdk.FilePath);
-        var prompt = isManaged
-            ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
-              + "The file is moved to user-pdks/.trash and can be restored manually."
-            : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
-              + $"The file stays untouched at:\n{pdk.FilePath}";
+        // A fork of a bundled PDK "reverts to the foundry truth" instead: the user's copy is
+        // removed and the read-only built-in original reappears in the library.
+        var bundledCount = pdk.ShadowsBundledPdk
+            ? vm.LeftPanel.GetBundledOriginalComponentCount(pdk.Name)
+            : null;
+        var isRevertToBundled = bundledCount is not null;
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{pdk.Name}' and restore the built-in original (its {bundledCount} components)?\n\n"
+              + (isManaged
+                  ? "Your copy is moved to the trash."
+                  : $"Your file stays untouched at:\n{pdk.FilePath}")
+            : isManaged
+                ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+                  + "The file is moved to user-pdks/.trash and can be restored manually."
+                : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
+                  + $"The file stays untouched at:\n{pdk.FilePath}";
+        var confirmLabel = isRevertToBundled ? "Restore Original" : isManaged ? "Move to Trash" : "Remove";
         var choice = await new MessageBoxService().ShowChoicePromptAsync(
-            prompt, "Delete PDK?", new[] { "Cancel", isManaged ? "Move to Trash" : "Remove" });
+            prompt, "Delete PDK?", new[] { "Cancel", confirmLabel });
         if (choice != 1)
             return;
+
+        if (isRevertToBundled && isManaged)
+        {
+            vm.LeftPanel.RevertShadowForkToBundled(pdk);
+            return;
+        }
 
         if (isManaged)
         {
@@ -888,6 +913,8 @@ public partial class MainWindow : Window
         }
 
         vm.LeftPanel.UnregisterPdk(pdk.FilePath);
+        if (isRevertToBundled)
+            vm.LeftPanel.RestoreBundledPdk(pdk.Name);
     }
 
     /// <summary>
