@@ -14,11 +14,8 @@ public class GroupDeleteCommand : IUndoableCommand
     private readonly DesignCanvasViewModel _canvas;
     private readonly List<DeletedComponentData> _deletedComponents = new();
 
-    /// <summary>
-    /// Components actually removed by the last <see cref="Execute"/> run.
-    /// Locked components are skipped on Execute and must not be re-added on Undo,
-    /// otherwise they would end up on the canvas twice.
-    /// </summary>
+    // Locked components are skipped on Execute and must not be re-added on Undo,
+    // otherwise they would end up on the canvas twice.
     private readonly List<DeletedComponentData> _removedComponents = new();
 
     /// <summary>

@@ -62,8 +62,7 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     private void CreatePdk()
     {
         // A new user PDK must not take a loaded bundled PDK's name: such a file would be
-        // mistaken for the user's fork of the built-in PDK on the next save/startup and
-        // silently displace the whole built-in library (PR #742 review, finding 1).
+        // mistaken for a fork of the built-in PDK and silently displace its whole library.
         if (_reservedBundledPdkNames.Contains(PdkName, StringComparer.OrdinalIgnoreCase))
         {
             StatusText = $"'{PdkName}' is a built-in PDK's name — choose a different name. " +

@@ -22,7 +22,7 @@ using Xunit;
 namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
-/// #570 integrity of the fork-shadow reference role (PR #742 review, finding 0): a user fork
+/// #570 integrity of the fork-shadow reference role: a user fork
 /// that shadows a bundled PDK inherits the foundry's layer-consistency reference authority
 /// ONLY while its process is layer-consistent with the bundled original. A hand-edited fork
 /// with renumbered layers must never become the reference and lock genuine foundry PDKs out.

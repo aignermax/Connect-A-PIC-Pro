@@ -61,8 +61,7 @@ public partial class ComponentSettingsDialogViewModel
     {
         if (_fdtdService == null || _fdtdRequestFactory == null || _liveComponent == null || _storedSMatrices == null)
         {
-            // Defensive: the button is hidden while CanRecalculate is false, so this
-            // only trips when the dialog was never Configure()d — never fail silently.
+            // Trips only when the dialog was never Configure()d — never fail silently.
             SolverStatus = "FDTD recompute is not available for this dialog " +
                 "(no live component or solver wiring). Open the dialog from a placed component.";
             return;
@@ -101,9 +100,7 @@ public partial class ComponentSettingsDialogViewModel
             }
             catch (InvalidOperationException ex)
             {
-                // The factory failed to obtain the component's geometry (broken Python
-                // env, missing foundry package, no polygons/pins) and already built an
-                // actionable message — show it instead of a dead-end generic status.
+                // The factory already built an actionable message — show it, not a generic status.
                 SolverStatus = ex.Message;
                 _errorConsole?.LogError(
                     $"FDTD geometry export failed for '{_displayName}': {ex.Message}");

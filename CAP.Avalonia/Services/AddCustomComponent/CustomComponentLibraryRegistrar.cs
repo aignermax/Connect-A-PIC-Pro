@@ -26,12 +26,9 @@ public static class CustomComponentLibraryRegistrar
         template.IsCustom = true;
 
         // An edit-save re-registers an existing component: the on-disk PDK already replaced the
-        // old entry (UserPdkStore.AppendToExistingPdk), so the in-memory library must too —
-        // otherwise "Show stored S-matrices" keeps resolving the STALE template (FirstOrDefault
-        // over AllTemplates) and the library lists the component twice (field-test fix, PR #742).
-        // PDK names are compared case-insensitively everywhere in the save flow (the name is
-        // re-read from the PDK file on every save) — a casing difference must not skip the
-        // stale-template replacement and resurrect the duplicate/stale bug.
+        // old entry, so the in-memory library must too — otherwise stored-S-matrix lookups keep
+        // resolving the STALE template and the library lists the component twice. Names are
+        // matched case-insensitively like the rest of the save flow.
         var stale = allTemplates
             .Where(t => string.Equals(t.PdkSource, pdkName, StringComparison.OrdinalIgnoreCase)
                         && string.Equals(t.Name, draft.Name, StringComparison.OrdinalIgnoreCase))
@@ -57,8 +54,8 @@ public static class CustomComponentLibraryRegistrar
         }
         else
         {
-            // Already-loaded PDK (the usual edit-save): mirror the on-disk replacement in the
-            // cached draft too, so divergence checks and later edit sessions see the new state.
+            // Mirror the on-disk replacement in the cached draft, so divergence checks and
+            // later edit sessions see the new state.
             var normalized = Path.GetFullPath(filePath);
             var cachedDraft = loadedPdkDrafts.FirstOrDefault(d =>
                 d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized);

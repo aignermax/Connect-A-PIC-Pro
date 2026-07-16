@@ -137,20 +137,17 @@ public sealed class GdsPreviewRenderService
     /// </summary>
     internal static string? BuildCacheKey(ComponentViewModel comp, string? rawCode = null)
     {
-        // Key on the UNROTATED dimensions: rotating with R swaps comp.Width/Height, but the
-        // cached bitmap always holds unrotated geometry (the canvas rotates it at draw time).
-        // Keying on the live dims would re-run the Python render on every rotation and
-        // rasterise the bitmap with a swapped (distorted) aspect ratio.
+        // Key on the UNROTATED dimensions: the cached bitmap holds unrotated geometry, so
+        // keying on the live (rotation-swapped) dims would re-run the Python render on every
+        // rotation and rasterise with a distorted aspect ratio.
         var (width, height) = GetUnrotatedDimensions(comp);
 
         if (rawCode != null)
             return $"rawcode|{ComputeRawCodeHash(rawCode)}|{width:F2}|{height:F2}";
 
-        // gdsfactory-native components (e.g. CornerStone SiN) take precedence over the Nazca
-        // function: on placement they are given a *synthesized* nazcaFunction ("nazca_<name>",
-        // for grouping/save) that no Nazca script can render — so keying on it would route the
-        // preview to the Nazca path and draw nothing. A module-qualified GdsFactoryFunction is
-        // the real render identity, so check it first (#570 field test — blank canvas grid).
+        // gdsfactory-native components take precedence over the Nazca function: placement gives
+        // them a synthesized nazcaFunction ("nazca_<name>") no Nazca script can render, so the
+        // module-qualified GdsFactoryFunction is the real render identity.
         if (IsGdsFactoryNative(comp.Component))
             return $"gdsfactory|{comp.Component.GdsFactoryFunction}|{width:F2}|{height:F2}";
 
@@ -161,10 +158,6 @@ public sealed class GdsPreviewRenderService
         return null;
     }
 
-    /// <summary>
-    /// The component's footprint at RotationDegrees = 0 — the frame the preview geometry
-    /// and bitmap live in. See <see cref="GdsPolygonRenderer.GetUnrotatedSize"/>.
-    /// </summary>
     private static (double Width, double Height) GetUnrotatedDimensions(ComponentViewModel comp) =>
         GdsPolygonRenderer.GetUnrotatedSize(comp.Component.RotationDegrees, comp.Width, comp.Height);
 
@@ -223,8 +216,7 @@ public sealed class GdsPreviewRenderService
             result = NazcaPreviewResult.Fail("Unexpected error during GDS preview fetch.");
         }
 
-        // Rasterise in the UNROTATED frame — the canvas applies the component's rotation
-        // at draw time, so the bitmap aspect must match the rotation-free geometry.
+        // Rasterise in the unrotated frame — the canvas applies the rotation at draw time.
         var (unrotatedW, unrotatedH) = GetUnrotatedDimensions(comp);
         var data = result.Success && result.Polygons.Count > 0
             ? new GdsPreviewData(result, unrotatedW, unrotatedH)

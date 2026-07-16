@@ -17,7 +17,7 @@ namespace UnitTests.Components.AddCustomComponent;
 /// The registrar's stale-template replacement must match the PDK name case-insensitively,
 /// like every other PDK-name comparison in the save flow — otherwise a casing difference
 /// between the on-disk PDK name and the registered template's PdkSource resurrects the
-/// duplicate/stale-template bug the replacement exists to fix (PR #742 physics review).
+/// duplicate/stale-template bug the replacement exists to fix.
 /// </summary>
 public class RegistrarPdkNameCasingTests : IDisposable
 {

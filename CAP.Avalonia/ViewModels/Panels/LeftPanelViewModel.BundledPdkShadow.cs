@@ -5,36 +5,26 @@ namespace CAP.Avalonia.ViewModels.Panels;
 
 /// <summary>
 /// Fork-shadow bookkeeping for bundled (read-only foundry) PDKs: a user PDK whose name matches
-/// a bundled PDK is the user's editable fork and "shadows" the built-in original. This partial
-/// remembers where each bundled original lives so the shadow can be applied (on save and at
-/// startup) and reverted (delete fork = restore foundry truth). Bundled JSON files are never
-/// written, moved, or deleted here.
+/// a bundled PDK is the user's editable fork and shadows the built-in original. Bundled JSON
+/// files are never written, moved, or deleted here.
 /// </summary>
 public partial class LeftPanelViewModel
 {
     private readonly Dictionary<string, BundledPdkOrigin> _bundledPdkCatalog = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, PdkDraft> _bundledOriginDraftCache = new(StringComparer.OrdinalIgnoreCase);
 
     private sealed record BundledPdkOrigin(string FilePath, int ComponentCount);
 
-    /// <summary>Remembers a loaded bundled PDK's file so forks can shadow and restore it.</summary>
     private void RecordBundledPdkOrigin(string pdkName, string filePath, int componentCount)
     {
         if (!_bundledPdkCatalog.ContainsKey(pdkName))
             _bundledPdkCatalog[pdkName] = new BundledPdkOrigin(filePath, componentCount);
     }
 
-    /// <summary>
-    /// The component count of the bundled original that <paramref name="pdkName"/> shadows, for
-    /// the delete-confirm prompt — null when no bundled original is known under that name.
-    /// </summary>
     internal int? GetBundledOriginalComponentCount(string pdkName) =>
         _bundledPdkCatalog.TryGetValue(pdkName, out var origin) ? origin.ComponentCount : null;
 
-    /// <summary>
-    /// Takes the bundled PDK's in-memory registration out of the library (templates, draft,
-    /// PDK-manager row) so a user fork of the same name can take its place. Deliberately touches
-    /// no files and no preferences — the bundled JSON stays on disk as the read-only original.
-    /// </summary>
+    /// <summary>In-memory deregistration only — the bundled JSON stays on disk as the read-only original.</summary>
     private void DeregisterBundledPdkForShadow(PdkInfoViewModel bundled)
     {
         if (bundled.FilePath is not null)
@@ -49,7 +39,6 @@ public partial class LeftPanelViewModel
         PdkManager.LoadedPdks.Remove(bundled);
     }
 
-    /// <summary>Flags the freshly registered user PDK as a fork when a bundled original exists.</summary>
     private void MarkIfShadowsBundledPdk(string pdkName)
     {
         if (!_bundledPdkCatalog.ContainsKey(pdkName))
@@ -62,13 +51,10 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// After a save forked a bundled PDK (fork-on-save), swaps the library from the bundled
-    /// entry to the user's copy: deregisters the bundled original in memory and registers the
-    /// fork with all its components. The bundled entry is only displaced when the fork file
-    /// actually loads and registers (verified) — a failed fork load leaves the built-in PDK
-    /// fully registered and reports the problem (PR #742 review, finding 6). Returns false
-    /// when <paramref name="pdkName"/> does not name a loaded bundled PDK, so the caller falls
-    /// back to the normal registration.
+    /// Swaps the library from the bundled entry to the user's saved fork. Returns false when
+    /// <paramref name="pdkName"/> is no loaded bundled PDK (caller registers normally). The
+    /// bundled entry is only displaced once the fork actually loads — a failed load leaves the
+    /// built-in PDK fully registered and reports the problem.
     /// </summary>
     private bool TryShadowBundledPdkWithSavedFork(string pdkName, string forkFilePath)
     {
@@ -77,8 +63,7 @@ public partial class LeftPanelViewModel
         if (bundled is null)
             return false;
 
-        // TryReloadUserPdk parses the fork BEFORE deregistering the bundled entry, so a
-        // failure here means nothing was changed.
+        // TryReloadUserPdk parses the fork BEFORE deregistering the bundled entry, so a failure here changes nothing.
         if (!TryReloadUserPdk(forkFilePath))
         {
             _errorConsole?.LogError(
@@ -93,10 +78,9 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// Re-registers the bundled original of <paramref name="pdkName"/> from its untouched JSON
-    /// after the shadowing fork was removed — the in-session equivalent of the bundled load at
-    /// startup. Returns false when no bundled original is known, the name is still occupied, or
-    /// the file cannot be loaded.
+    /// Re-registers the bundled original from its untouched JSON after the shadowing fork was
+    /// removed. Returns false when no original is known, the name is still occupied, or the
+    /// file cannot be loaded.
     /// </summary>
     internal bool RestoreBundledPdk(string pdkName)
     {
@@ -114,9 +98,8 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// Loads the bundled original fresh (not from the read-only cache: the restored draft joins
-    /// <see cref="_loadedPdkDrafts"/>, where it may be mutated later). Logs and returns null on
-    /// failure.
+    /// Loads fresh, not from <see cref="_bundledOriginDraftCache"/>: the restored draft joins
+    /// <see cref="_loadedPdkDrafts"/>, where it may be mutated later.
     /// </summary>
     private PdkDraft? LoadBundledOriginForRestore(string pdkName, BundledPdkOrigin origin)
     {
@@ -131,7 +114,6 @@ public partial class LeftPanelViewModel
         }
     }
 
-    /// <summary>Puts a freshly loaded bundled original back into the library (in-memory only).</summary>
     private void RegisterRestoredBundledDraft(PdkDraft pdk, string filePath)
     {
         _loadedPdkDrafts.Add(pdk);
@@ -152,12 +134,10 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// Delete on a fork = revert to the foundry truth: moves the user's copy to
-    /// <c>user-pdks/.trash</c>, deregisters it, and restores the bundled original in place —
-    /// same name, so placed components and the process snapshot stay valid. All-or-nothing:
-    /// the bundled original is loaded BEFORE the fork is touched, so a failure (unreadable
-    /// built-in JSON, locked fork file) leaves the fork registered and on disk — never a half
-    /// state where both disappear (PR #742 review, finding 3).
+    /// Delete on a fork = revert to foundry truth: trashes the user's copy and restores the
+    /// bundled original under the same name, so placed components and the process snapshot stay
+    /// valid. All-or-nothing: the original is loaded BEFORE the fork is touched, so a failure
+    /// leaves the fork registered and on disk.
     /// </summary>
     internal bool RevertShadowForkToBundled(PdkInfoViewModel fork)
     {
@@ -187,9 +167,8 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// True when deleting <paramref name="template"/> reverts it to the bundled original
-    /// instead of removing it: its PDK is a fork of a bundled PDK and the bundled original
-    /// contains a component of the same name. The delete-confirm prompt announces the restore.
+    /// True when deleting <paramref name="template"/> reverts it to the bundled original instead
+    /// of removing it, so the delete-confirm prompt can announce the restore.
     /// </summary>
     public bool IsComponentRevertToBundled(ComponentTemplate template)
     {
@@ -200,13 +179,9 @@ public partial class LeftPanelViewModel
         return FindBundledCounterpart(pdkInfo.Name, template.Name) is not null;
     }
 
-    private readonly Dictionary<string, PdkDraft> _bundledOriginDraftCache = new(StringComparer.OrdinalIgnoreCase);
-
     /// <summary>
-    /// The parsed bundled original of <paramref name="pdkName"/>, cached for the session —
-    /// bundled JSONs are read-only, so one parse per file suffices and repeated lookups (layer
-    /// checks, revert prompts) never re-hit the disk on the UI thread (PR #742 review,
-    /// finding 7). Read failures are logged and NOT cached, so a transient lock can recover.
+    /// Cached per session — bundled JSONs are read-only. Read failures are logged and NOT
+    /// cached, so a transient file lock can recover.
     /// </summary>
     private PdkDraft? GetBundledOriginDraft(string pdkName)
     {
@@ -228,17 +203,15 @@ public partial class LeftPanelViewModel
         }
     }
 
-    /// <summary>Reads the bundled original's definition of a component, if both exist.</summary>
     private PdkComponentDraft? FindBundledCounterpart(string pdkName, string componentName) =>
         GetBundledOriginDraft(pdkName)?.Components
             .FirstOrDefault(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Delete on a forked component that still exists in the bundled original = revert that one
-    /// component to the foundry definition inside the fork (with a full pre-edit backup of the
-    /// fork file in <c>.trash</c>). Returns false when this is not a revert case — the caller
-    /// then performs the plain component delete. Returns true (handled) even when the rewrite
-    /// fails, so a failed revert never degrades into a delete.
+    /// component to the foundry definition inside the fork (with a full backup in .trash).
+    /// Returns false when this is not a revert case (caller deletes normally). Returns true even
+    /// when the rewrite fails, so a failed revert never degrades into a delete.
     /// </summary>
     private bool TryRevertComponentToBundled(
         PdkInfoViewModel pdkInfo, CAP_DataAccess.Components.AddCustomComponent.UserPdkStore store, ComponentTemplate template)
@@ -251,8 +224,7 @@ public partial class LeftPanelViewModel
 
         try
         {
-            // Single load-modify-save (PR #742 review, finding 5): a failure leaves the fork
-            // file unchanged instead of a half state with the component missing.
+            // Single load-modify-save: a failure leaves the fork file unchanged, never half-rewritten.
             if (!store.ReplaceComponent(pdkInfo.FilePath, counterpart))
             {
                 _errorConsole?.LogError(
@@ -270,14 +242,12 @@ public partial class LeftPanelViewModel
         ReplaceLibraryTemplateWithBundledDefinition(pdkInfo, template, counterpart);
         ReapplyActiveProcessAfterPdkChange();
         FilterComponents();
-        // A revert changes the template's physics exactly like an editor save does — placed
-        // instances must adopt the RESTORED foundry definition, not keep the edited fork's
-        // S-matrix until restart (PR #742 physics review).
+        // A revert changes physics like an editor save: placed instances must adopt the restored
+        // foundry definition now, not keep the edited fork's S-matrix until restart.
         NotifyTemplateDefinitionSaved(pdkInfo.Name, template.Name);
         return true;
     }
 
-    /// <summary>Swaps the customized library template and in-memory draft for the foundry definition.</summary>
     private void ReplaceLibraryTemplateWithBundledDefinition(
         PdkInfoViewModel pdkInfo, ComponentTemplate customized, PdkComponentDraft counterpart)
     {

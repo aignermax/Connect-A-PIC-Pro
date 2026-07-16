@@ -5,27 +5,20 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 namespace CAP.Avalonia.ViewModels.Panels;
 
 /// <summary>
-/// Divergence bookkeeping for fork PDKs: on a user fork of a bundled PDK, only components whose
-/// definition actually differs from the bundled original get the inline delete/restore ✕ — an
-/// untouched fork component has nothing to restore, so its ✕ is hidden (the ✏ stays everywhere).
-/// Components of plain custom PDKs (no bundled original) always keep their delete ✕.
+/// Divergence bookkeeping for fork PDKs: only components whose definition differs from the
+/// bundled original get the inline delete/restore ✕ — an untouched fork component has nothing
+/// to restore. Components of plain custom PDKs (no bundled original) always keep their ✕.
 /// </summary>
 public partial class LeftPanelViewModel
 {
-    /// <summary>
-    /// Serializer used for the structural draft comparison. Both sides are compared as
-    /// deserialized <see cref="PdkComponentDraft"/> object graphs re-serialized with the SAME
-    /// options, so on-disk formatting (indentation, comments, property order in hand-written
-    /// JSON) never causes a false divergence.
-    /// </summary>
+    // Both sides are re-serialized with the SAME options, so on-disk formatting
+    // (indentation, property order) never causes a false divergence.
     private static readonly JsonSerializerOptions DraftComparisonOptions = new();
 
     /// <summary>
-    /// True when <paramref name="template"/>'s definition differs from the bundled original —
-    /// i.e. there is something to delete or restore. Components of a PDK without a bundled
-    /// original (plain custom PDKs) always diverge; on a fork, a component diverges when the
-    /// bundled original lacks it (newly added → plain delete) or defines it differently
-    /// (edited → Restore Original). Uses the session-cached bundled draft; no file is parsed.
+    /// True when there is something to delete or restore: the bundled original lacks the
+    /// component (user-added → plain delete) or defines it differently (edited → restore).
+    /// Uses the session-cached bundled draft; no file is parsed.
     /// </summary>
     internal bool ComponentDivergesFromBundledOriginal(ComponentTemplate template)
     {
@@ -44,17 +37,11 @@ public partial class LeftPanelViewModel
         return !DraftsAreEquivalent(current, counterpart);
     }
 
-    /// <summary>Structural equality of two component drafts via canonical re-serialization.</summary>
     private static bool DraftsAreEquivalent(PdkComponentDraft a, PdkComponentDraft b) =>
         ReferenceEquals(a, b)
         || JsonSerializer.Serialize(a, DraftComparisonOptions) == JsonSerializer.Serialize(b, DraftComparisonOptions);
 
-    /// <summary>
-    /// Recomputes <see cref="ComponentTemplate.IsDeletable"/> (the ✕ visibility) for every
-    /// library template. Called once per library change from
-    /// <see cref="ReapplyActiveProcessAfterPdkChange"/> — never per hover/binding, so the
-    /// divergence check stays off the hot path.
-    /// </summary>
+    /// <summary>Called once per library change, never per hover/binding — keeps the divergence check off the hot path.</summary>
     private void RefreshTemplateDeletableFlags()
     {
         foreach (var template in AllTemplates)

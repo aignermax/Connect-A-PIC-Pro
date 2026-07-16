@@ -55,9 +55,8 @@ public partial class NewComponentViewModel : ObservableObject
     public string? SavedFilePath { get; private set; }
 
     /// <summary>
-    /// True when the last successful save executed the deferred bundled fork
-    /// (<see cref="HasPendingBundledFork"/>): only then may the library shadow the bundled
-    /// PDK with the saved file — a mere name match must not (PR #742 review, finding 1).
+    /// True when the last save executed the deferred bundled fork: only then may the library
+    /// shadow the bundled PDK with the saved file — a mere name match must not.
     /// </summary>
     public bool SavedViaPendingBundledFork { get; private set; }
 
@@ -101,9 +100,7 @@ public partial class NewComponentViewModel : ObservableObject
     }
     partial void OnCodeChanged(string value) => InvalidatePreview();
 
-    // The edit-mode title includes the component name (task-2), so a rename while the
-    // window is open (or the initial LoadForEdit assignment, which sets ComponentName
-    // before IsEditMode) must also refresh the title binding.
+    // The edit-mode title includes the component name, so a rename must refresh the title binding.
     partial void OnComponentNameChanged(string value) => OnPropertyChanged(nameof(WindowTitle));
 
     partial void OnIsEditModeChanged(bool value)
@@ -168,9 +165,8 @@ public partial class NewComponentViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Missing/outdated foundry packages (e.g. cspdk) fail the render with a raw Python
-    /// error the user can't act on. Show the actionable hint in the status bar and keep
-    /// the raw error in the Error Console; unrecognised errors stay verbatim.
+    /// Shows the actionable foundry-package hint in the status bar and keeps the raw Python
+    /// error in the Error Console; unrecognised errors stay verbatim.
     /// </summary>
     private string DescribeRenderError(string? rawError)
     {

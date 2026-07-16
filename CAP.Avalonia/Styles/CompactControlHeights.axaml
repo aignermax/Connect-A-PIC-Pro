@@ -1,78 +1,37 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
   <!--
-    App-wide compact control heights (field feedback: standard Button/ComboBox chrome
-    reads too tall). Reference look is the "+ Material" button in the Fabrication Process
-    editor (ProcessManagementWindow.axaml, FontSize="10" Padding="6,1") — but that button
-    also shrinks FontSize, which is explicitly out of scope here (many buttons carry longer
-    labels than "+ Material" and a global font shrink is a separate, riskier change).
+    App-wide compact control heights: Fluent's 32px Button/ComboBox/TextBox chrome shrinks
+    to ~21px (padding floor 1/2 plus FontSize 12).
 
-    Approach: override the Fluent theme's resource keys that Button's and ComboBox's
-    ControlThemes consume for sizing, instead of a Style Selector="Button"/"ComboBox".
-    Reason: Avalonia's ToggleButton (and its subclasses CheckBox/RadioButton) derive from
-    Button at the CLR level, so a type Selector="Button" Style would also match them.
-    Scope of the keys (verified against Avalonia.Themes.Fluent 11.3.13): ButtonPadding is
-    read not only by the plain Button ControlTheme but ALSO by ToggleButton and RepeatButton,
-    so those render equally compact — accepted, the compact look is intended app-wide.
-    CheckBox and RadioButton have their own keys (CheckBoxMinHeight/RadioButtonMinHeight, no
-    "*Padding" key of their own) and are untouched by this override.
-
-    Measured Fluent defaults (headless Skia, FontSize 14, dark theme) before this change:
-      ButtonPadding            = 8,5,8,6   -> Button renders at 32px tall
-      ComboBoxPadding           = 12,5,0,7  -> ComboBox renders at 32px tall (MinHeight=32)
-      ComboBoxItemThemePadding  = 11,5,11,7 -> dropdown ComboBoxItem rows
-    Button has no "ButtonMinHeight" resource — its height is purely padding+content driven,
-    so it is not overridden here (there is nothing to hook).
-
-    Target ~40% flatter (per field feedback) is bounded by the unchanged FontSize=14 content
-    line height (~21px) — reducing vertical padding to the practical floor (without clipping
-    text) lands Button/ComboBox at 24px (32 -> 24, a verified 25% reduction, no clipping).
-    Hitting the full 40% would require also shrinking FontSize, which this change intentionally
-    does not do (see PR notes for this trade-off).
-
-    Follow-up (field test found 3 gaps — TextBox/NumericUpDown untouched, Flyout/Transient
-    buttons still tall): verified against Avalonia.Themes.Fluent 11.3.13 source.
-    TextBox's ControlTheme (Controls/TextBox.xaml) and NumericUpDown's ControlTheme
-    (Controls/NumericUpDown.xaml) both read the SAME three keys for their outer control
-    (NumericUpDown's inner PART_TextBox padding is a TemplateBinding to NumericUpDown's own
-    Padding, so one override drives both controls):
-      TextControlThemeMinHeight = 32   (Accents/BaseResources.xaml)
-      TextControlThemeMinWidth  = 64   (unrelated to height — left untouched)
-      TextControlThemePadding   = 10,6,6,5
-    AutoCompleteBox (Controls/AutoCompleteBox.xaml) also reads TextControlThemePadding for
-    its own Padding, and its inner PART_TextBox reads the same three keys again — both layers
-    compact together, which is fine (no clipping: MinHeight is a floor, never a fixed Height).
-    NumericUpDown's spinner RepeatButtons already render compact: their Padding is
-    "{StaticResource ButtonPadding}" (Controls/ButtonSpinner.xaml), so they picked up the
-    ButtonPadding override above for free; their height stretches to the ButtonSpinner's
-    border, which now shrinks with TextControlThemeMinHeight.
+    Sizing goes through the Fluent theme's resource keys, NOT a Style Selector="Button":
+    ToggleButton (and CheckBox/RadioButton) derive from Button at the CLR level, so a type
+    selector would match them too. ButtonPadding is also read by ToggleButton/RepeatButton —
+    accepted, the compact look is intended app-wide; CheckBox/RadioButton have their own keys
+    and stay untouched. Button has no MinHeight resource — its height is purely
+    padding+content driven. TextControlThemePadding/MinHeight drive TextBox, NumericUpDown
+    (its inner PART_TextBox template-binds to the outer Padding) and AutoCompleteBox;
+    NumericUpDown's spinner RepeatButtons pick up ButtonPadding for free.
   -->
   <Styles.Resources>
     <ResourceDictionary>
       <Thickness x:Key="ButtonPadding">8,1,8,2</Thickness>
 
-      <!-- Left/right unchanged (12 left, 0 right — the 0 leaves room for the drop-down
-           arrow glyph drawn by the ComboBox template); only vertical padding is reduced. -->
+      <!-- Right=0 leaves room for the drop-down arrow glyph; only vertical padding is reduced. -->
       <Thickness x:Key="ComboBoxPadding">12,1,0,2</Thickness>
       <Thickness x:Key="ComboBoxItemThemePadding">11,1,11,2</Thickness>
       <x:Double x:Key="ComboBoxMinHeight">21</x:Double>
 
-      <!-- TextBox / NumericUpDown / AutoCompleteBox: same reduce-vertical-only pattern as
-           Button/ComboBox above. Left=10/Right=6 unchanged (Right=6 leaves room for the
-           clear/reveal-password glyph button some TextBoxes host in InnerRightContent);
-           only Top/Bottom drop to the 1/2 floor. MinHeight 32 -> 21 matches ComboBoxMinHeight
-           so text inputs and combo boxes align at the same row height. -->
+      <!-- Right=6 leaves room for the clear/reveal glyph some TextBoxes host in
+           InnerRightContent. MinHeight matches ComboBoxMinHeight so text inputs and combo
+           boxes align at the same row height. -->
       <Thickness x:Key="TextControlThemePadding">10,1,6,2</Thickness>
       <x:Double x:Key="TextControlThemeMinHeight">21</x:Double>
     </ResourceDictionary>
   </Styles.Resources>
 
-  <!-- FontSize 12 (down from the Fluent 14) closes the gap to the requested ~40% flatter:
-       with the reduced padding above, Button/ComboBox/TextBox/NumericUpDown land at ~21px
-       (32 -> ~21). Type selectors match by StyleKey, so plain Button/ComboBox/TextBox/
-       NumericUpDown are hit while CheckBox/ToggleButton/RadioButton (own StyleKeys and
-       ControlThemes) stay untouched; views that set FontSize locally (most of the dense
-       panels use 9-11 already) win anyway. -->
+  <!-- Type selectors match by StyleKey, so CheckBox/ToggleButton/RadioButton (own StyleKeys)
+       stay untouched; views that set FontSize locally win anyway. -->
   <Style Selector="Button">
     <Setter Property="FontSize" Value="12"/>
   </Style>

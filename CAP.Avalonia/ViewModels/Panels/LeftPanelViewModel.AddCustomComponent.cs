@@ -17,19 +17,17 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// Raised after a saved component definition replaced its library template, with the fresh
-    /// template. Wired (in <see cref="MainViewModel"/>) to
-    /// <see cref="FileOperationsViewModel.RefreshInstancesFromTemplate"/> so the saved S-matrix
-    /// takes effect type-wide — including instances already placed on the canvas (PR #742).
+    /// Raised with the fresh template after a saved definition replaced its library template.
+    /// Wired to <see cref="FileOperationsViewModel.RefreshInstancesFromTemplate"/> so the saved
+    /// S-matrix takes effect type-wide, including already-placed instances.
     /// </summary>
     public Action<ComponentTemplate>? TemplateDefinitionSaved { get; set; }
 
     public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath, bool savedViaBundledFork = false)
     {
-        // A save that executed the deferred fork-on-save: the saved file is the user's copy of
-        // the whole bundled PDK and replaces (shadows) the bundled entry instead of being
-        // registered next to it. Only that explicit fork flow may shadow — a save that merely
-        // SHARES a bundled PDK's name must not (PR #742 review, finding 1).
+        // A fork-on-save file is the user's copy of the whole bundled PDK and replaces (shadows)
+        // the bundled entry. Only the explicit fork flow may shadow — a save that merely SHARES
+        // a bundled PDK's name must not.
         if (savedViaBundledFork && TryShadowBundledPdkWithSavedFork(pdkName, filePath))
         {
             NotifyTemplateDefinitionSaved(pdkName, draft.Name);
@@ -50,7 +48,6 @@ public partial class LeftPanelViewModel
         NotifyTemplateDefinitionSaved(pdkName, draft.Name);
     }
 
-    /// <summary>Resolves the freshly registered template and raises <see cref="TemplateDefinitionSaved"/>.</summary>
     private void NotifyTemplateDefinitionSaved(string pdkName, string componentName)
     {
         if (TemplateDefinitionSaved is null)
@@ -90,10 +87,9 @@ public partial class LeftPanelViewModel
         PdkManager.LoadedPdks.Any(p => p.Name == template.PdkSource);
 
     /// <summary>
-    /// Whether the ✕ (delete / Restore Original) applies to <paramref name="template"/>: its PDK
-    /// must be a loaded non-bundled PDK AND the component must actually diverge from the bundled
-    /// original — on a fork, untouched components are identical to the foundry truth and have
-    /// nothing to delete or restore (field-test fix, PR #742).
+    /// Whether the ✕ (delete / Restore Original) applies: the PDK must be a loaded non-bundled
+    /// PDK AND the component must diverge from the bundled original — on a fork, untouched
+    /// components have nothing to delete or restore.
     /// </summary>
     public bool CanDeleteTemplate(ComponentTemplate template) =>
         PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false }
@@ -111,16 +107,14 @@ public partial class LeftPanelViewModel
             _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(),
             RegisterSavedCustomComponent, RemoveMigratedLibraryTemplate);
 
-        // A bundled component opens read-only-sourced with a DEFERRED fork: nothing is written
-        // to disk until "Save changes" actually creates the user's copy of the PDK
-        // (fork-on-save; closing without saving leaves no trace).
+        // A bundled component opens with a DEFERRED fork: nothing is written to disk until
+        // "Save changes" creates the user's copy of the PDK; closing without saving leaves no trace.
         var loaded = pdkInfo is { IsBundled: true, FilePath: not null }
             ? vm.LoadForEditBundled(template, pdkInfo.FilePath, ResolvePdkProcess(pdkInfo))
             : vm.LoadForEdit(template);
         if (!loaded)
         {
-            // No half-initialized "New Component" window when the edit session cannot be set up
-            // (PR #742 review, finding 4) — surface LoadForEdit's reason instead.
+            // Never show a half-initialized window — surface LoadForEdit's reason instead.
             _errorConsole?.LogError($"Cannot edit component '{template.Name}': {vm.StatusText}");
             UpdateStatus?.Invoke(vm.StatusText);
             return;
@@ -129,9 +123,8 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// The fabrication process a PDK declares — from the already-loaded draft when available,
-    /// otherwise read from its file (a bundled PDK registered without a loaded draft, e.g. in
-    /// tests). The deferred fork-on-save needs it to describe the fork target.
+    /// The fabrication process a PDK declares — from the loaded draft when available,
+    /// otherwise read from its file.
     /// </summary>
     private ProcessDefinition? ResolvePdkProcess(PdkInfoViewModel pdkInfo)
     {
@@ -150,9 +143,7 @@ public partial class LeftPanelViewModel
         }
         catch (Exception ex)
         {
-            // An unreadable/corrupt file is NOT "declares no fabrication process" — log the
-            // real cause so the user-facing misdiagnosis can be traced (PR #742 review,
-            // finding 9).
+            // An unreadable file is NOT "declares no fabrication process" — log the real cause.
             _errorConsole?.LogError($"Could not read PDK '{pdkInfo.Name}' at '{pdkInfo.FilePath}': {ex.Message}", ex);
             return null;
         }

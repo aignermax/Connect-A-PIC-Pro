@@ -53,12 +53,9 @@ public static class GdsPolygonRenderer
         double centerY = comp.Y + comp.Height / 2.0;
         double rotationDegrees = comp.Component.RotationDegrees;
 
-        // comp.Width/Height are the CURRENT footprint — the rotate command has already
-        // swapped them at 90°/270°. The bitmap holds UNROTATED geometry, so it must be
-        // drawn into the unrotated-size rect (centred on the footprint centre); the
-        // rotation transform then maps it exactly onto the rotated footprint. Drawing
-        // straight into the swapped footprint would apply the 90° swap twice and leave
-        // the preview visually unrotated and misaligned with the pins.
+        // The rotate command already swapped comp.Width/Height at 90°/270°, but the bitmap
+        // holds UNROTATED geometry: draw it into the unrotated-size rect and let the rotation
+        // transform map it onto the footprint — else the 90° swap is applied twice.
         var destRect = GetUnrotatedDestRect(comp.X, comp.Y, comp.Width, comp.Height, rotationDegrees);
 
         using (context.PushTransform(BuildRotationMatrix(rotationDegrees, centerX, centerY)))
@@ -126,9 +123,8 @@ public static class GdsPolygonRenderer
     }
 
     /// <summary>
-    /// Footprint size at RotationDegrees = 0. The rotate command swaps the component's
-    /// live Width/Height at each 90° step, so odd quarter-turn states swap them back.
-    /// Accepts any 90°-multiple (normalises negatives and ≥360°).
+    /// Footprint size at RotationDegrees = 0: odd quarter-turns swap the live Width/Height
+    /// back. Accepts any 90°-multiple (normalises negatives and ≥360°).
     /// </summary>
     internal static (double Width, double Height) GetUnrotatedSize(
         double rotationDegrees, double currentWidth, double currentHeight)
@@ -140,10 +136,8 @@ public static class GdsPolygonRenderer
     }
 
     /// <summary>
-    /// The rect the UNROTATED preview must be drawn into so that, after applying
-    /// <see cref="BuildRotationMatrix"/> around the footprint centre, the image covers the
-    /// component's current (rotation-swapped) footprint exactly — also for non-square
-    /// components, where a 90° rotation swaps the bounding-box width and height.
+    /// The rect the unrotated preview must be drawn into so that, after rotating around the
+    /// footprint centre, the image covers the current (rotation-swapped) footprint exactly.
     /// </summary>
     internal static Rect GetUnrotatedDestRect(
         double compX, double compY, double compWidth, double compHeight, double rotationDegrees)

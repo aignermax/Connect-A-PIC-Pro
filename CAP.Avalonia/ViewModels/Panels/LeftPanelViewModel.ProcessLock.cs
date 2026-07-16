@@ -72,14 +72,11 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
-    /// True when <paramref name="name"/> carries foundry authority for the layer-consistency
-    /// reference: either a bundled PDK itself, or the user's fork shadowing one — the fork is a
-    /// copy of the foundry PDK under the same name and inherits its reference role, so forking
-    /// never demotes the foundry process below an unrelated custom PDK. The fork inherits that
-    /// authority ONLY while its process is layer-consistent with the bundled original it
-    /// shadows (validated against the cached bundled JSON): a hand-edited fork with renumbered
-    /// layers must never become the #570 layer reference and lock genuine foundry PDKs out
-    /// (PR #742 review, finding 0) — it falls through the normal layer check instead.
+    /// True when <paramref name="name"/> carries foundry authority for the #570 layer-consistency
+    /// reference: a bundled PDK itself, or a user fork shadowing one. The fork inherits that
+    /// authority ONLY while its process is layer-consistent with the bundled original — a
+    /// hand-edited fork with renumbered layers must never become the layer reference and lock
+    /// genuine foundry PDKs out; it falls through the normal layer check instead.
     /// </summary>
     private bool IsBundledPdkName(string name)
     {
@@ -103,9 +100,8 @@ public partial class LeftPanelViewModel
 
     internal void ReapplyActiveProcessAfterPdkChange()
     {
-        // Every library mutation (register/unregister/fork/revert/delete) funnels through this
-        // hook, so the ✕-visibility flags are recomputed here once per change — never per
-        // hover/binding (see LeftPanelViewModel.ComponentDivergence.cs).
+        // Every library mutation funnels through this hook, so the ✕-visibility flags are
+        // recomputed once per change — never per hover/binding.
         RefreshTemplateDeletableFlags();
 
         if (_lastAppliedProcess is { IsPlayground: false })

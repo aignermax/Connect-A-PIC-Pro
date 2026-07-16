@@ -31,13 +31,6 @@ public class ComponentFdtdRequestFactory
     private readonly double _portWidthUm;
     private readonly int _siliconLayer;
 
-    /// <summary>Initializes the factory.</summary>
-    /// <param name="preview">Nazca single-component renderer.</param>
-    /// <param name="gdsFactoryPreview">gdsfactory renderer for gdsfactory-native components
-    /// (a component with <see cref="Component.GdsFactoryFunction"/> cannot render via Nazca —
-    /// its Nazca name is only a synthesized "nazca_&lt;name&gt;" placeholder).</param>
-    /// <param name="portWidthUm">Port (waveguide) width in µm.</param>
-    /// <param name="siliconLayer">GDS layer carrying the optical waveguide.</param>
     public ComponentFdtdRequestFactory(
         NazcaComponentPreviewService preview,
         GdsFactoryComponentPreviewService? gdsFactoryPreview = null,
@@ -51,12 +44,10 @@ public class ComponentFdtdRequestFactory
     }
 
     /// <summary>
-    /// Renders the component and builds an FDTD request. Never fails silently: every
-    /// failure (render error, no polygons, no pins) throws an
-    /// <see cref="InvalidOperationException"/> whose message is user-actionable —
-    /// the dialog shows it in its solver status.
+    /// Renders the component and builds an FDTD request. Never fails silently: every failure
+    /// throws an <see cref="InvalidOperationException"/> with a user-actionable message that
+    /// the dialog shows in its solver status.
     /// </summary>
-    /// <exception cref="InvalidOperationException">The geometry could not be obtained.</exception>
     public async Task<FdtdSMatrixRequest?> BuildAsync(Component component, CancellationToken ct = default)
     {
         var preview = await RenderComponentAsync(component, ct);
@@ -82,23 +73,17 @@ public class ComponentFdtdRequestFactory
     }
 
     /// <summary>
-    /// Renders the component with the backend that actually owns its geometry:
-    /// gdsfactory-native components (CornerStone etc., non-empty
-    /// <see cref="Component.GdsFactoryFunction"/>) via the gdsfactory renderer using the
-    /// same import + PDK.activate() + gf.get_component() code as the canvas preview
-    /// (<see cref="GdsFactoryPreviewCode"/>); everything else via the Nazca renderer.
-    /// Rendering a gdsfactory component through Nazca always failed ("module
-    /// 'nazca.demofab' has no attribute 'nazca_&lt;name&gt;'") — the root cause of the
-    /// "Recalculate S-matrix does nothing useful" field report.
+    /// Renders with the backend that owns the geometry: gdsfactory-native components via the
+    /// gdsfactory renderer (their Nazca name is only a synthesized "nazca_&lt;name&gt;"
+    /// placeholder no Nazca script can render), everything else via Nazca.
     /// </summary>
     private Task<NazcaPreviewResult> RenderComponentAsync(Component component, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(component.GdsFactoryFunction))
         {
             // Render the ACTUAL parametrised geometry (e.g. length=3.5), not the function's
-            // defaults — otherwise the FDTD S-matrix is computed for the wrong shape, and #580 E's
-            // template promotion would spread that default-geometry matrix to every instance of a
-            // parametrised type (#580 review). Every other RenderAsync call site passes params too.
+            // defaults — otherwise the FDTD S-matrix is computed for the wrong shape and
+            // template promotion spreads it to every instance of the type.
             return _preview.RenderAsync(
                 component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters, ct);
         }
@@ -113,38 +98,16 @@ public class ComponentFdtdRequestFactory
         return _gdsFactoryPreview.RenderRawCodeAsync(code, ct);
     }
 
-    /// <summary>
-    /// Builds the user-facing message for a failed geometry render: a foundry-package
-    /// hint (plus the raw Python error, so nothing is lost) when the failure is a
-    /// recognised missing/outdated-PDK problem, otherwise the raw error prefixed with
-    /// what was being attempted.
-    /// </summary>
     private static string DescribeRenderFailure(string? rawError) =>
         FoundryEnvironmentErrorHint.Describe(rawError) is { } hint
             ? $"{hint} Python error: {rawError}"
             : $"Could not render this component's geometry for FDTD: {rawError ?? "unknown render error"}";
 
     /// <summary>
-    /// Builds a complete <see cref="FdtdSMatrixRequest"/> directly from an already
-    /// rendered <see cref="NazcaPreviewResult"/>, without re-rendering. Used by flows
-    /// that already hold a preview render (e.g. the custom-PDK "own component" editor)
-    /// so they don't pay for a second Nazca render just to get an FDTD request.
-    /// Polygons are filtered to <paramref name="siliconLayer"/> (falling back to all
-    /// layers when none match) and ports are index-matched to <paramref name="portNames"/>
-    /// (falling back to the preview's own pin names on a count mismatch) — the same
-    /// mapping <see cref="BuildAsync"/> applies.
+    /// Builds an <see cref="FdtdSMatrixRequest"/> from an already rendered preview, applying
+    /// the same layer filtering and port mapping as <see cref="BuildAsync"/> without paying
+    /// for a second render. A null <paramref name="sweep"/> keeps the default 1.5–1.6 µm band.
     /// </summary>
-    /// <param name="preview">Rendered geometry/pins to build the request from.</param>
-    /// <param name="portNames">
-    /// Port names to assign, index-matched to <paramref name="preview"/>'s pins
-    /// (e.g. the component's own pin names, so the S-matrix is keyed as expected).
-    /// </param>
-    /// <param name="siliconLayer">GDS layer carrying the optical waveguide.</param>
-    /// <param name="portWidthUm">Port (waveguide) width in µm.</param>
-    /// <param name="sweep">
-    /// Wavelength sweep to run; null keeps the request's default 1.5–1.6 µm band
-    /// (used by flows without a placed component, e.g. the custom-PDK preview).
-    /// </param>
     public static FdtdSMatrixRequest BuildFromPreview(
         NazcaPreviewResult preview,
         IReadOnlyList<string> portNames,
@@ -185,16 +148,10 @@ public class ComponentFdtdRequestFactory
     }
 
     /// <summary>
-    /// Builds FDTD ports from the rendered Nazca pin stubs. Positions and angles
-    /// come from the preview (same coordinate frame as the polygons), but the port
-    /// <b>names</b> come from the component's own pins so the resulting S-matrix is
-    /// keyed by the names the simulator expects (e.g. "port 1"), not the Nazca cell
-    /// pin names ("a0"/"pin1"). Without this the override can't be mapped onto the
-    /// component and every wavelength is skipped.
-    ///
-    /// Pins are matched by index (a PDK's pin order matches its Nazca cell's pin
-    /// order). If the counts differ we keep the preview names rather than guess —
-    /// the override will then report the mismatch instead of mislabelling ports.
+    /// Positions/angles come from the preview, but port NAMES come from the component's own
+    /// pins (index-matched — a PDK's pin order matches its Nazca cell's) so the S-matrix is
+    /// keyed by the names the simulator expects. On a count mismatch the preview names are
+    /// kept rather than guessed, so the override reports the mismatch instead of mislabelling.
     /// </summary>
     internal static IReadOnlyList<FdtdPort> BuildPorts(
         IReadOnlyList<NazcaPreviewPin> pins, IReadOnlyList<string> componentPinNames, double portWidthUm)

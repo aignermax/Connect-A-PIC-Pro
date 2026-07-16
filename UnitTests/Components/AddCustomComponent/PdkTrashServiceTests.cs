@@ -184,7 +184,7 @@ public sealed class PdkTrashServiceTests : IDisposable
     [Fact]
     public void ListEntries_PicksNewestBackupByFilenameTimestamp_NotByFileMtime()
     {
-        // PR #742 review, finding 6: after a git checkout/sync the trash files' mtimes are
+        // After a git checkout/sync the trash files' mtimes are
         // rewritten, so the newest-backup-per-component dedup must rank by the DeletedAt
         // timestamp encoded in the file NAME (with the "-N" same-second collision counter as
         // tiebreaker), never by File.GetLastWriteTimeUtc.

@@ -3,20 +3,14 @@ using System.Text.RegularExpressions;
 namespace CAP_Core.Export;
 
 /// <summary>
-/// Turns raw Python errors from the preview/geometry render subprocess into a short,
-/// actionable message when the cause is a missing or unusable foundry PDK package
-/// (e.g. cspdk for CornerStone) in the active Python environment. Returns null for
-/// errors it does not recognise, so callers keep showing the raw error text.
-/// Callers should log the raw error to the Error Console alongside the hint.
+/// Turns raw Python errors from the render subprocess into a short, actionable message when the
+/// cause is a missing or unusable foundry PDK package in the active Python environment.
+/// Returns null for unrecognised errors, so callers keep showing the raw error text.
 /// </summary>
 public static class FoundryEnvironmentErrorHint
 {
-    /// <summary>
-    /// Top-level module names of the foundry/PDK packages Lunima's managed-environment
-    /// installer provisions (<see cref="PythonEnvironmentManager.NazcaPackageInstaller"/>).
-    /// Only errors that reference these modules get a hint — an unknown module is most
-    /// likely the user's own import and keeps the raw error.
-    /// </summary>
+    // Packages the managed-environment installer provisions. Only these get a hint —
+    // an unknown module is most likely the user's own import and keeps the raw error.
     private static readonly string[] _knownFoundryModules =
         { "cspdk", "ubcpdk", "siepic_ebeam_pdk", "nazca", "gdsfactory", "klayout" };
 
@@ -26,12 +20,7 @@ public static class FoundryEnvironmentErrorHint
     private static readonly Regex _missingAttribute = new(
         @"module '([A-Za-z0-9_\.]+)' has no attribute '([A-Za-z0-9_]+)'", RegexOptions.Compiled);
 
-    /// <summary>
-    /// Returns a user-actionable message for <paramref name="rawError"/> when it is a
-    /// recognised foundry-package problem (ModuleNotFoundError / AttributeError on a
-    /// known PDK module), or null when the error is not foundry-related.
-    /// </summary>
-    /// <param name="rawError">Raw error text from the Python render subprocess.</param>
+    /// <summary>A user-actionable message for a recognised foundry-package problem, or null.</summary>
     public static string? Describe(string? rawError)
     {
         if (string.IsNullOrWhiteSpace(rawError))

@@ -38,9 +38,8 @@ public partial class NewComponentViewModel
         _computeCts = new CancellationTokenSource();
         try
         {
-            // Render the geometry ourselves when no preview exists yet — same pattern as
-            // Save (#733). A render failure leaves its reason in StatusText and computes
-            // nothing (field-test fix, PR #742: "Compute" demanded a manual Preview click).
+            // Render the geometry ourselves when no preview exists yet, like Save does;
+            // a render failure leaves its reason in StatusText and computes nothing.
             if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
             {
                 return;
@@ -100,9 +99,8 @@ public partial class NewComponentViewModel
         }
 
         MigratedFromPdkName = null;
-        // While a bundled fork is pending, the "original" is the read-only built-in PDK — a
-        // save into a different PDK is a copy-out, never a migration that would remove the
-        // bundled component from the library.
+        // While a bundled fork is pending, the "original" is the read-only built-in PDK — a save
+        // into a different PDK is a copy-out, never a migration that would remove the original.
         var isMigration = IsEditMode
             && !HasPendingBundledFork
             && _editOriginalPdkFilePath is not null
@@ -124,10 +122,9 @@ public partial class NewComponentViewModel
             }
 
             var reference = BuildReference();
-            // Priority: a fresh compute/import wins; otherwise an unchanged-geometry same-PDK
-            // edit keeps the definition's stored matrix verbatim (never silently wiped) —
-            // provided the matrix still resolves against the rendered pins; a geometry change,
-            // a PDK migration, or a pin mismatch saves a black box (no invented physics).
+            // A fresh compute/import wins; otherwise an unchanged-geometry same-PDK edit keeps
+            // the stored matrix verbatim (never silently wiped) provided it still resolves
+            // against the rendered pins. Everything else saves a black box — no invented physics.
             var keepStored = _computedModel is null
                 && CanKeepLoadedSMatrix
                 && LoadedSMatrixResolvesAgainstPins(preview.Pins.Select(p => p.Name));
@@ -159,7 +156,7 @@ public partial class NewComponentViewModel
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
             // Only a save that actually executed the deferred fork may shadow the bundled
-            // PDK in the library — a mere name match must not (PR #742 review, finding 1).
+            // PDK in the library — a mere name match must not.
             SavedViaPendingBundledFork = executesPendingFork;
             if (executesPendingFork)
             {
@@ -197,9 +194,8 @@ public partial class NewComponentViewModel
         }
         catch (Exception ex)
         {
-            // Without a catch, the AsyncRelayCommand swallows the fault and the Save button
-            // looks like it silently did nothing (PR #742 review, finding 2) — e.g. when the
-            // target fork file was reverted to trash underneath an open editor.
+            // Without this catch the AsyncRelayCommand swallows the fault and Save looks like it
+            // did nothing — e.g. when the fork file was trashed underneath an open editor.
             StatusText = $"Save failed: {ex.Message}";
             _errorConsole?.LogError($"Saving component '{name}' to PDK '{pdk.Name}' failed: {ex.Message}", ex);
         }

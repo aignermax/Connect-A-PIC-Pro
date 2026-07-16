@@ -269,7 +269,7 @@ public class EditComponentModeTests : IDisposable
     [Fact]
     public void HasUnsavedEditChanges_tracksTheGeometryBackend()
     {
-        // PR #742 review, finding 4: a backend switch is user input like any other — the
+        // A backend switch is user input like any other — the
         // dedup's "no unsaved changes → adopt fresh state" guard must never throw it away.
         var (vm, _, rawCode) = BuildWithSeededPdk();
         vm.LoadForEdit(BuildTemplate(rawCode));
@@ -304,9 +304,8 @@ public class EditComponentModeTests : IDisposable
     [Fact]
     public async Task Save_whenTheStoreThrows_reportsTheError_insteadOfSilentlySwallowingIt()
     {
-        // PR #742 review, finding 2: Save() had try/finally with no catch, so a store failure
-        // (e.g. the target file vanished after a fork revert) faulted the AsyncRelayCommand
-        // silently — the Save button looked like it did nothing.
+        // A store failure (e.g. the target file vanished after a fork revert) must not fault
+        // the AsyncRelayCommand silently — the Save button would look like it did nothing.
         var (vm, filePath, rawCode) = BuildWithSeededPdk();
         vm.LoadForEdit(BuildTemplate(rawCode));
         vm.ConfirmOverwrite = (_, _) => Task.FromResult(true);

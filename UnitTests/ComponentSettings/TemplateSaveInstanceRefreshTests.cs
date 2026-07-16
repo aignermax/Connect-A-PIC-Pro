@@ -17,7 +17,7 @@ using Xunit;
 namespace UnitTests.ComponentSettings;
 
 /// <summary>
-/// Pins the type-wide effect of saving a component definition (PR #742): placed instances
+/// Pins the type-wide effect of saving a component definition: placed instances
 /// snapshot their S-matrix at placement time, so after an editor save the new PDK matrices
 /// must be pushed into every matching live instance — while per-instance and user-global
 /// overrides keep winning over the refreshed PDK default.

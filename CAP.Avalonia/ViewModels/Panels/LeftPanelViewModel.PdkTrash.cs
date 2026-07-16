@@ -28,9 +28,8 @@ public partial class LeftPanelViewModel
             return;
         }
 
-        // A restored trash entry is a real file in user-pdks: like the startup path, the file
-        // is the truth about a fork's existence, so a restore under a bundled PDK's name may
-        // shadow the built-in entry again (it restores the user's fork).
+        // The restored file in user-pdks is the truth about a fork's existence, so a restore
+        // under a bundled PDK's name may shadow the built-in entry again.
         foreach (var component in result.RestoredComponents)
             RegisterSavedCustomComponent(component, result.PdkName, result.RestoredPdkPath, savedViaBundledFork: true);
     }

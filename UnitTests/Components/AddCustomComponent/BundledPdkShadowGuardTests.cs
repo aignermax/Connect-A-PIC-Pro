@@ -21,7 +21,7 @@ using Xunit;
 namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
-/// Guards around the bundled-PDK shadow mechanism (PR #742 review, findings 1, 6, 8): only a
+/// Guards around the bundled-PDK shadow mechanism: only a
 /// save that actually executed the deferred fork may displace a loaded bundled PDK; a failed
 /// fork registration must leave the bundled entry untouched; and the interactive Load-PDK path
 /// shadows a fork file exactly like the startup path instead of rejecting it as a duplicate.
@@ -107,7 +107,7 @@ public class BundledPdkShadowGuardTests : IDisposable
         return (leftPanel, store);
     }
 
-    // ---------------------------------------------------------------- finding 1: name != fork
+    // -------------------------------------------------------------------------- name != fork
 
     [Fact]
     public void SaveWithoutForkFlag_underABundledName_neverDeregistersTheBundledPdk()
@@ -130,7 +130,7 @@ public class BundledPdkShadowGuardTests : IDisposable
             "the rejected registration must be reported, not silent");
     }
 
-    // ----------------------------------------------------- finding 6: no shadow without a fork
+    // ------------------------------------------------------------- no shadow without a fork
 
     [Fact]
     public void SaveWithForkFlag_whoseForkFileCannotBeLoaded_keepsTheBundledPdkUntouched()
@@ -151,7 +151,7 @@ public class BundledPdkShadowGuardTests : IDisposable
             "the failed fork registration must be reported explicitly, not as a silent success");
     }
 
-    // ------------------------------------------------- finding 8: interactive load = fork-shadow
+    // --------------------------------------------------------- interactive load = fork-shadow
 
     [Fact]
     public async Task InteractiveLoadPdk_ofAForkFile_shadowsTheBundledPdk_likeTheStartupPath()
@@ -178,7 +178,7 @@ public class BundledPdkShadowGuardTests : IDisposable
             "the misleading duplicate rejection must be gone for fork files");
     }
 
-    // -------------------------------------------- finding 9: unreadable PDK != missing process
+    // ------------------------------------------------------ unreadable PDK != missing process
 
     [Fact]
     public async Task EditBundledComponent_whosePdkFileIsUnreadable_logsTheReadError_notJustMissingProcess()

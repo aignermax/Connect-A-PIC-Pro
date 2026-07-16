@@ -67,8 +67,7 @@ public partial class HierarchyPanelViewModel : ObservableObject
         // Canvas → Hierarchy: mirror SelectedComponent changes into the hierarchy tree.
         _canvas.PropertyChanged += OnCanvasPropertyChanged;
 
-        // Canvas → Hierarchy: mirror the multi-selection set (box selection, Ctrl+click)
-        // so every selected component is highlighted, not only the primary one.
+        // Canvas → Hierarchy: mirror the multi-selection set (box selection, Ctrl+click).
         _canvas.Selection.SelectedComponents.CollectionChanged += OnCanvasSelectionSetChanged;
     }
 
@@ -82,10 +81,6 @@ public partial class HierarchyPanelViewModel : ObservableObject
             SyncSelectionFromCanvas(_canvas.SelectedComponent);
     }
 
-    /// <summary>
-    /// Responds to changes of the canvas multi-selection set (e.g. a box selection)
-    /// by mirroring the whole set into the hierarchy tree as a multi-node highlight.
-    /// </summary>
     private void OnCanvasSelectionSetChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         if (!_suppressSync)
@@ -162,9 +157,8 @@ public partial class HierarchyPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Synchronizes hierarchy selection with canvas selection.
-    /// Called when a component is selected on the canvas. When the canvas holds a
-    /// multi-selection (box selection), the whole set is highlighted instead.
+    /// Synchronizes hierarchy selection with canvas selection. When the canvas holds a
+    /// multi-selection, the whole set is highlighted instead.
     /// </summary>
     public void SyncSelectionFromCanvas(ComponentViewModel? selectedComponent)
     {
@@ -181,12 +175,6 @@ public partial class HierarchyPanelViewModel : ObservableObject
         });
     }
 
-    /// <summary>
-    /// Mirrors the canvas multi-selection set into the tree: every component in
-    /// <see cref="SelectionManager.SelectedComponents"/> gets its node highlighted.
-    /// Falls back to the primary <see cref="DesignCanvasViewModel.SelectedComponent"/>
-    /// when the set is empty.
-    /// </summary>
     private void MirrorSelectionSetFromCanvas()
     {
         RunSuppressed(() =>
@@ -205,9 +193,6 @@ public partial class HierarchyPanelViewModel : ObservableObject
         });
     }
 
-    /// <summary>
-    /// Highlights and reveals the tree node belonging to the given canvas component.
-    /// </summary>
     private void SelectNodeFor(ComponentViewModel? component)
     {
         if (component == null) return;
@@ -217,10 +202,7 @@ public partial class HierarchyPanelViewModel : ObservableObject
         ExpandParentsToNode(node);
     }
 
-    /// <summary>
-    /// Runs a sync action with <see cref="_suppressSync"/> set, so node
-    /// <c>IsSelected</c> writes do not re-enter the hierarchy → canvas path.
-    /// </summary>
+    /// <summary>Runs with <see cref="_suppressSync"/> set, so node IsSelected writes do not re-enter the hierarchy → canvas path.</summary>
     private void RunSuppressed(Action action)
     {
         bool wasSuppressed = _suppressSync;
@@ -370,14 +352,11 @@ public partial class HierarchyPanelViewModel : ObservableObject
     private void SelectComponent(HierarchyNodeViewModel node)
     {
         if (node.ComponentViewModel == null) return;
-        // While a canvas → hierarchy sync is writing node.IsSelected flags, the
-        // resulting SelectionRequested callbacks must not push a single-select back
-        // to the canvas (that would collapse a box multi-selection to one node).
+        // A canvas → hierarchy sync writing node.IsSelected must not push a single-select
+        // back to the canvas — that would collapse a box multi-selection to one node.
         if (_suppressSync) return;
-        // Already the sole canvas selection — nothing to push. This value-equality guard
-        // is what stops the node.IsSelected → SelectionRequested → canvas → node.IsSelected
-        // cycle from recursing. It only short-circuits for a single selection: clicking a
-        // node while a box multi-selection is active must still reduce to that node.
+        // Value-equality guard against the node → canvas → node recursion. Single selection
+        // only: clicking a node while a box multi-selection is active must still reduce to it.
         if (_canvas.SelectedComponent == node.ComponentViewModel &&
             _canvas.Selection.SelectedComponents.Count == 1) return;
 

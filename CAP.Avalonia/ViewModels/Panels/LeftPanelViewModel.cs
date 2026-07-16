@@ -143,12 +143,10 @@ public partial class LeftPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Loads every bundled (read-only foundry) PDK JSON from <paramref name="pdkDir"/> into the
-    /// library and records each one in the bundled-origin catalog, so a user fork created later
-    /// can shadow it and a deleted fork can restore it. A user fork found on disk at startup
-    /// does NOT suppress the bundled load here — the startup reload replaces (shadows) the
-    /// bundled entry instead, which keeps the built-in PDK available when the fork file turns
-    /// out to be unreadable.
+    /// Loads every bundled PDK JSON from <paramref name="pdkDir"/> and records each in the
+    /// bundled-origin catalog. A user fork on disk does NOT suppress the bundled load here —
+    /// the startup reload replaces (shadows) the bundled entry instead, which keeps the
+    /// built-in PDK available when the fork file turns out to be unreadable.
     /// </summary>
     internal void LoadBundledPdksFrom(string pdkDir)
     {
@@ -330,11 +328,10 @@ public partial class LeftPanelViewModel : ObservableObject
 
             if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
             {
-                // A file named like a loaded BUNDLED PDK is the user's fork of it and shadows
-                // the built-in original — same semantics as the startup reload, so a fork
-                // works no matter WHEN its file appears (PR #742 review, finding 8). The
-                // file parsed successfully above, so deregistering here cannot strand the
-                // library without either entry. Any other name collision is still rejected.
+                // A file named like a loaded BUNDLED PDK is the user's fork and shadows the
+                // built-in original — same semantics as the startup reload. The file parsed
+                // successfully above, so deregistering here cannot strand the library without
+                // either entry. Any other name collision is still rejected.
                 var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
                     p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
                 if (shadowedBundled is null)

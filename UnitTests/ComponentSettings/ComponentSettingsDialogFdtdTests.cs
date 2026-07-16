@@ -246,9 +246,8 @@ public class ComponentSettingsDialogFdtdTests
     [Fact]
     public async Task RecalculateSMatrix_WhenGeometryExportThrows_ShowsTheActionableMessage_AndStoresNothing()
     {
-        // Field bug follow-up: the request factory now throws with a user-actionable
-        // message (e.g. missing cspdk) instead of returning a bare null. The dialog
-        // must show that message — not a generic dead-end — and must not solve.
+        // The request factory throws with a user-actionable message (e.g. missing cspdk).
+        // The dialog must show that message — not a generic dead-end — and must not solve.
         const string factoryMessage =
             "The foundry package 'cspdk' is not installed in the active Python environment — " +
             "open Settings → Python Environments and re-run Install to add it.";

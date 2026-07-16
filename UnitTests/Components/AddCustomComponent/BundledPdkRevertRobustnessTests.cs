@@ -21,7 +21,7 @@ using Xunit;
 namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
-/// Failure robustness of the revert-to-bundled paths (PR #742 review, findings 3 and 5): a
+/// Failure robustness of the revert-to-bundled paths: a
 /// failed PDK revert must be all-or-nothing (never "fork trashed AND original missing"), and
 /// a component revert must rewrite the fork file in a single operation.
 /// </summary>
@@ -113,7 +113,7 @@ public class BundledPdkRevertRobustnessTests : IDisposable
         return leftPanel.PdkManager.LoadedPdks.Single(p => p.Name == BundledPdkName);
     }
 
-    // -------------------------------------------------- finding 3: all-or-nothing PDK revert
+    // ------------------------------------------------------------- all-or-nothing PDK revert
 
     [Fact]
     public async Task RevertShadowFork_whenTheBundledOriginalIsUnreadable_failsWithoutChangingAnything()
@@ -137,7 +137,7 @@ public class BundledPdkRevertRobustnessTests : IDisposable
         _errorConsole.Entries.ShouldContain(e => e.Message.Contains("Could not restore bundled PDK"));
     }
 
-    // ---------------------------------------------- finding 5: single-write component revert
+    // ---------------------------------------------------------- single-write component revert
 
     [Fact]
     public async Task ComponentRevert_rewritesTheForkFile_inASingleOperation_withBackup()
@@ -162,7 +162,7 @@ public class BundledPdkRevertRobustnessTests : IDisposable
     {
         // "Restore Original" changes the template's physics just like an editor save does —
         // placed instances must be refreshed from the restored foundry definition, not keep
-        // the edited fork's S-matrix until restart (PR #742 physics review).
+        // the edited fork's S-matrix until restart.
         var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
         await CreateShadowingForkAsync(leftPanel, store);
         var customized = leftPanel.AllTemplates.Single(

@@ -82,10 +82,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action? ClearComponentTemplateSelection { get; set; }
 
     /// <summary>
-    /// Callback invoked when the user requests "Edit Component…" from the canvas context menu.
-    /// Wired by <c>MainWindow.axaml.cs</c> to open the unified "Edit Component" editor when the
-    /// clicked component's PDK template is resolvable and editable (design
-    /// 2026-07-16-pdk-ux-polish T4), falling back to the per-instance
+    /// Callback for "Edit Component…" from the canvas context menu. Wired by
+    /// <c>MainWindow.axaml.cs</c> to the unified "Edit Component" editor when the component's
+    /// PDK template is resolvable and editable, falling back to the per-instance
     /// <c>ComponentSettingsDialog</c> otherwise (ComponentGroups, template-less instances).
     /// </summary>
     public Action<ComponentViewModel>? OpenComponentSettings { get; set; }
@@ -743,7 +742,6 @@ public partial class CanvasInteractionViewModel : ObservableObject
         if (targets.Count == 0 && SelectedComponent != null)
             targets.Add(SelectedComponent);
 
-        // Locked components are never deleted (Lock Elements).
         var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
         if (deletable.Count == 0)
         {

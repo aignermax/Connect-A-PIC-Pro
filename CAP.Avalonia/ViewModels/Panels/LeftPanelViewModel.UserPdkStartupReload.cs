@@ -64,9 +64,8 @@ public partial class LeftPanelViewModel
 
     /// <summary>
     /// Loads and registers one user PDK file; returns false when the file could not be loaded
-    /// or its name duplicates a loaded non-bundled PDK. The bundled entry is only deregistered
-    /// AFTER the fork file parsed successfully, so a broken fork never removes the built-in
-    /// PDK (PR #742 review, finding 6).
+    /// or its name duplicates a loaded non-bundled PDK. A bundled entry is only deregistered
+    /// AFTER the fork file parsed successfully, so a broken fork never removes the built-in PDK.
     /// </summary>
     private bool TryReloadUserPdk(string path)
     {
@@ -88,12 +87,10 @@ public partial class LeftPanelViewModel
 
         if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
         {
-            // A user PDK named like a BUNDLED one is the user's fork of it ("copy-to-user on
-            // first edit") — it shadows the built-in original, exactly like the session that
-            // created the fork did. At startup this is deliberately name-based: the file in
-            // user-pdks is the only truth about a fork's existence (the session that created
-            // it is gone), and creating non-fork PDKs under a bundled name is blocked in the
-            // UI (see CreateCustomPdkViewModel). Any other name collision is still skipped.
+            // A user PDK named like a BUNDLED one is the user's fork and shadows the built-in
+            // original. Deliberately name-based at startup: the file in user-pdks is the only
+            // truth about a fork's existence (the creating session is gone), and non-fork PDKs
+            // under a bundled name are blocked in the UI. Any other collision is still skipped.
             var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
                 p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
             if (shadowedBundled is null)

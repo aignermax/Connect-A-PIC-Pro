@@ -20,7 +20,7 @@ using Xunit;
 namespace UnitTests.Components.AddCustomComponent;
 
 /// <summary>
-/// Field-test fixes for the unified component editor's S-matrix flow (PR #742):
+/// The unified component editor's S-matrix flow:
 /// "Compute with Meep" must not require a manual Preview click first, computed
 /// matrices must land in the PDK JSON on save, and an edit-save without a fresh
 /// compute must not silently wipe the S-matrix already stored in the definition.

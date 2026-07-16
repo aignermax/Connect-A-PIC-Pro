@@ -119,9 +119,8 @@ public class LeftPanelNewComponentTests : IDisposable
     [Fact]
     public void RegisterSavedCustomComponent_replacesTheStaleTemplate_afterAnEditSave()
     {
-        // Field-test bug (PR #742): an edit-save re-registered the component WITHOUT removing
-        // the stale template, so "Show stored S-matrices" (FirstOrDefault over AllTemplates)
-        // kept showing the pre-edit matrices and the library listed the component twice.
+        // An edit-save must replace the stale template — otherwise "Show stored S-matrices"
+        // keeps showing the pre-edit matrices and the library lists the component twice.
         var vm = CreateLeftPanelViewModel();
         var (filePath, pdkName, draft) = SaveUserPdk("Proc");
         vm.RegisterSavedCustomComponent(draft, pdkName, filePath);

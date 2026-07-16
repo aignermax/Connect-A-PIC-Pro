@@ -22,10 +22,6 @@ public partial class PdkTrashEntryViewModel : ObservableObject
 
     public string KindLabel => IsDeletedPdk ? "PDK" : "Component";
 
-    /// <summary>
-    /// For a deleted PDK, the PDK name; for a single removed component, the component's own name
-    /// (the PDK it belongs to is shown in <see cref="Detail"/> instead).
-    /// </summary>
     public string Title => IsDeletedPdk ? Entry.PdkName : Entry.RestorableComponentNames[0];
 
     public string Detail

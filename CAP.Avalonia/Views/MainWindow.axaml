@@ -686,11 +686,8 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
-                        <!-- Compact header icon actions (PDK UX polish T5): enable/disable all
-                             PDKs at once, replacing the bottom button row below. DockPanel places
-                             each subsequent Dock="Right" child further left, so the last one added
-                             here (EnableAll) ends up closest to the title: Title, EnableAll,
-                             DisableAll, Trash, "+" left-to-right. -->
+                        <!-- DockPanel places each subsequent Dock="Right" child further left, so
+                             the visual order is: Title, EnableAll, DisableAll, Trash, "+". -->
                         <Button DockPanel.Dock="Right" Content="☐" Command="{Binding LeftPanel.PdkManager.DisableAllCommand}"
                                 Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
@@ -749,9 +746,6 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- Enable All / Disable All moved to compact header icon buttons
-                                 (PDK UX polish T5). Active-process label removed here; it's shown
-                                 in the top HUD (status bar) and no longer duplicated in this panel. -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>

@@ -38,12 +38,10 @@ public partial class MainWindow : Window
     private readonly System.Collections.Generic.Dictionary<string, ProcessManagementWindow> _openPdkEditWindows = new();
 
     /// <summary>
-    /// Tracks the currently-open "Edit Component" window per component being edited, keyed by
-    /// <c>NewComponentViewModel.EditOriginalPdkKey + "::" + EditingOriginalName</c> (task-2
-    /// dedup). A second ✏ click on the same component activates the existing window instead of
-    /// opening a duplicate. "New Component" sessions (not editing anything yet) are never keyed
-    /// here, so multiple blank "New Component" windows can still be opened in parallel. Entries
-    /// are removed when their window closes.
+    /// Open "Edit Component" windows keyed by <c>EditOriginalPdkKey + "::" + EditingOriginalName</c>:
+    /// a second ✏ click on the same component activates the existing window instead of opening
+    /// a duplicate. "New Component" sessions are never keyed here, so several blank windows can
+    /// stay open in parallel.
     /// </summary>
     private readonly System.Collections.Generic.Dictionary<string, NewComponentWindow> _openComponentEditWindows = new();
 
@@ -102,12 +100,8 @@ public partial class MainWindow : Window
                 // iterating on the design while it stays open.
                 vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
                 {
-                    // Dedup (task-2): a second ✏ click on the same component builds a brand-new
-                    // NewComponentViewModel (see LeftPanelViewModel.EditCustomComponent) with
-                    // LoadForEdit already applied, so by the time this hook runs IsEditMode and
-                    // the edit-identity fields are set. Activate the existing window for that
-                    // component instead of opening a duplicate. "New Component" sessions
-                    // (IsEditMode false) are never deduped — several can stay open at once.
+                    // By the time this hook runs, LoadForEdit was already applied — IsEditMode
+                    // and the edit-identity fields are set, so the dedup key can be built here.
                     var editKey = newComponentVm.IsEditMode && newComponentVm.EditOriginalPdkKey is not null
                         && newComponentVm.EditingOriginalName is not null
                         ? $"{newComponentVm.EditOriginalPdkKey}::{newComponentVm.EditingOriginalName}"
@@ -116,14 +110,11 @@ public partial class MainWindow : Window
                         && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
                         && existingComponentWindow.IsVisible)
                     {
-                        // Stale-state guard (PR #742 review, findings 2+4): the existing window
-                        // may hold an outdated snapshot (the file changed on disk since it
-                        // opened) — saving from it would silently overwrite the newer state.
-                        // If the user has no unsaved input there, adopt the freshly loaded
-                        // view model WHOLESALE: it carries the current on-disk state AND the
-                        // complete edit bookkeeping (pending bundled fork, save target) that a
-                        // field-by-field copy would lose. If they do, only activate — user
-                        // input is never thrown away.
+                        // The existing window may hold an outdated snapshot (file changed on
+                        // disk since it opened) — saving from it would overwrite the newer
+                        // state. If the user has no unsaved input, adopt the freshly loaded
+                        // view model WHOLESALE (a field-by-field copy would lose the edit
+                        // bookkeeping); otherwise only activate — input is never thrown away.
                         if (existingComponentWindow.DataContext is NewComponentViewModel existingVm
                             && !existingVm.HasUnsavedEditChanges)
                         {
@@ -242,11 +233,8 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Both component context-menu entry points share one routing (design
-                // 2026-07-16-pdk-ux-polish T4 + PR #742 review): PDK template resolvable and
-                // editable -> unified "Edit Component" editor; otherwise (ComponentGroups,
-                // template-less legacy instances, unloaded PDK) -> classic per-instance
-                // Component Settings dialog. See OpenComponentEditorOrSettings below.
+                // Both component context-menu entry points share one routing — see
+                // OpenComponentEditorOrSettings.
                 vm.LeftPanel.HierarchyPanel.OpenComponentSettings = node =>
                     OpenComponentEditorOrSettings(node.ComponentViewModel, node.Component, vm);
                 vm.CanvasInteraction.OpenComponentSettings = compVm =>
@@ -854,9 +842,8 @@ public partial class MainWindow : Window
 
         if (isRevertToBundled && isManaged)
         {
-            // The revert is all-or-nothing (see RevertShadowForkToBundled): a false here means
-            // nothing was changed — tell the user instead of closing as if it worked
-            // (PR #742 review, finding 3).
+            // The revert is all-or-nothing: a false here means nothing was changed —
+            // tell the user instead of closing as if it worked.
             if (!vm.LeftPanel.RevertShadowForkToBundled(pdk))
                 await ShowRestoreOriginalFailedAsync(pdk.Name);
             return;
@@ -880,10 +867,6 @@ public partial class MainWindow : Window
             await ShowRestoreOriginalFailedAsync(pdk.Name);
     }
 
-    /// <summary>
-    /// Tells the user that restoring a bundled original failed (PR #742 review, finding 3) —
-    /// the details are in the Error Console, logged by the revert/restore methods themselves.
-    /// </summary>
     private static async Task ShowRestoreOriginalFailedAsync(string pdkName)
     {
         await new MessageBoxService().ShowChoicePromptAsync(
@@ -893,11 +876,9 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Wires one <see cref="NewComponentViewModel"/> to the window that hosts it — file
-    /// pickers, overwrite confirm, stored-S-matrices dialog, the "New PDK…" creation hook, and
-    /// Saved→Close. Runs both for a brand-new editor window and when the editor dedup swaps a
-    /// freshly loaded view model into an already-open window (PR #742 review, finding 2), so
-    /// the two paths can never drift apart.
+    /// Wires one <see cref="NewComponentViewModel"/> to the window that hosts it. Runs both for
+    /// a brand-new editor window and when the editor dedup swaps a freshly loaded view model
+    /// into an already-open window, so the two paths can never drift apart.
     /// </summary>
     private void WireNewComponentEditorHooks(NewComponentViewModel newComponentVm, NewComponentWindow window, MainViewModel vm)
     {
@@ -929,19 +910,14 @@ public partial class MainWindow : Window
                 "Overwrite?", new[] { "Cancel", "Overwrite" });
             return choice == 1;
         };
-        // Save closes the window that currently hosts this view model.
         newComponentVm.Saved += (_, _) => window.Close();
-        // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, CP-T4): opens the
-        // purpose-built CreateCustomPdkWindow — not the general Fabrication Process editor —
-        // so creating a brand-new named PDK is a small, focused dialog instead of the full
-        // view/edit-existing-process tool. Modal (ShowDialog, owner = the New Component window
-        // itself) so its PDK dropdown cannot be left mid-selection while the modal is open.
+        // "New PDK…" opens the purpose-built CreateCustomPdkWindow, not the general Fabrication
+        // Process editor. Modal with the New Component window as owner, so its PDK dropdown
+        // cannot be left mid-selection while the modal is open.
         newComponentVm.CreateNewPdk = async () =>
         {
-            // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also registers
-            // the new (possibly component-less) PDK into the library, so cancelling the
-            // component afterwards no longer leaves the PDK invisible until the next restart
-            // (PR #739 review).
+            // ShowCreateCustomPdkDialogAsync also registers the new (possibly component-less)
+            // PDK, so cancelling the component afterwards doesn't leave the PDK invisible.
             var createdPath = await ShowCreateCustomPdkDialogAsync(window);
             if (createdPath is null)
                 return null;
@@ -998,7 +974,7 @@ public partial class MainWindow : Window
             }, new PdkJsonSaver());
 
         // Loaded bundled PDK names are reserved: a user PDK under such a name would be taken
-        // for a fork of the built-in PDK and shadow it (PR #742 review, finding 1).
+        // for a fork of the built-in PDK and shadow it.
         var reservedBundledNames = vm.LeftPanel.PdkManager.LoadedPdks
             .Where(p => p.IsBundled || p.ShadowsBundledPdk)
             .Select(p => p.Name)
@@ -1030,16 +1006,11 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Shared routing for both component context-menu entry points — the canvas ("Edit
-    /// Component…") and the hierarchy panel ("Component Settings…"). When the placed
-    /// component's PDK template can be resolved (<see cref="CanvasComponentTemplateResolver"/>)
-    /// AND <see cref="LeftPanelViewModel.CanEditTemplate"/> allows editing it, opens the unified
-    /// "Edit Component" editor via <see cref="LeftPanelViewModel.EditCustomComponentCommand"/> —
-    /// the same hook as the library's ✏ button, so fork-on-edit for bundled PDKs and the editor
-    /// window dedup apply automatically. Otherwise falls back to the classic per-instance
-    /// Component Settings dialog (the pre-#742 behavior): ComponentGroups and template-less
-    /// legacy instances keep their S-matrix settings view instead of a misleading
-    /// "template no longer available" error.
+    /// Shared routing for both component context-menu entry points (canvas and hierarchy):
+    /// an editable PDK template opens the unified "Edit Component" editor via the same command
+    /// as the library's ✏ button, so fork-on-edit and window dedup apply automatically;
+    /// otherwise (ComponentGroups, template-less legacy instances) falls back to the
+    /// per-instance Component Settings dialog instead of a misleading error.
     /// </summary>
     private void OpenComponentEditorOrSettings(
         CAP.Avalonia.ViewModels.Canvas.ComponentViewModel? compVm,
@@ -1100,9 +1071,8 @@ public partial class MainWindow : Window
             as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
         var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
-        // gdsfactory-native components (CornerStone etc.) carry only a synthesized
-        // "nazca_<name>" placeholder as their Nazca function — their FDTD geometry must
-        // render through the gdsfactory backend, so the factory needs both renderers.
+        // gdsfactory-native components carry only a synthesized "nazca_<name>" placeholder as
+        // their Nazca function, so the factory needs both renderers.
         var gdsFactoryGeometryService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
             as CAP_Core.Export.GdsFactoryComponentPreviewService;
         Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;

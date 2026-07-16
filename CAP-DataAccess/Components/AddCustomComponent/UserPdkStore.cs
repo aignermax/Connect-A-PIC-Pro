@@ -213,10 +213,9 @@ public sealed class UserPdkStore
 
     /// <summary>
     /// Replaces (or adds) <paramref name="component"/> in the PDK file with a single
-    /// load-modify-save, optionally backing the previous file state up to <c>.trash</c> first.
-    /// One write means any failure leaves the file either fully old or fully new — never with
-    /// the component missing (PR #742 review, finding 5). Returns false when the file does not
-    /// exist.
+    /// load-modify-save — any failure leaves the file fully old or fully new, never with the
+    /// component missing. Optionally backs the previous state up to <c>.trash</c> first.
+    /// Returns false when the file does not exist.
     /// </summary>
     public bool ReplaceComponent(string filePath, PdkComponentDraft component, bool backupFirst = true)
     {

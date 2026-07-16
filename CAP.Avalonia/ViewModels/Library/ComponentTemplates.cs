@@ -126,11 +126,8 @@ public partial class ComponentTemplate : ObservableObject
     private bool _hasUserGlobalSMatrixOverride;
 
     /// <summary>
-    /// Whether the library shows the inline delete/restore ✕ on this template. Recomputed once
-    /// per library change (see <c>LeftPanelViewModel.RefreshTemplateDeletableFlags</c>): true for
-    /// components of plain custom PDKs and for fork components that diverge from their bundled
-    /// original; false for bundled components and for fork components identical to the original
-    /// (nothing to restore).
+    /// Whether the library shows the inline delete/restore ✕. Recomputed once per library
+    /// change by <c>LeftPanelViewModel.RefreshTemplateDeletableFlags</c>, never per binding.
     /// </summary>
     [ObservableProperty]
     private bool _isDeletable;
@@ -162,9 +159,8 @@ public partial class ComponentTemplate : ObservableObject
     public bool IsCustom { get; set; }
 
     /// <summary>
-    /// The PDK component draft this template was converted from — the library's current
-    /// definition of the component, used to detect divergence from a bundled original without
-    /// re-parsing any file.
+    /// The PDK component draft this template was converted from, used to detect divergence
+    /// from a bundled original without re-parsing any file.
     /// </summary>
     public CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft? SourceDraft { get; set; }
 }

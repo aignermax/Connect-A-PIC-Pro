@@ -214,11 +214,8 @@ public partial class FileOperationsViewModel : ObservableObject
             .ToList();
         if (addedComponents.Count == 0) return;
 
-        // Reuse ApplyAll with a single-component view so the identifier /
-        // template-key lookup logic stays in one place. Re-applying the
-        // same matrix to an already-up-to-date component is a no-op.
-        // Precedence per-instance > user-global > template: user-global first,
-        // project-local per-instance LAST so they win last-write-per-wavelength.
+        // Precedence per-instance > user-global > template: user-global first, project-local
+        // per-instance LAST so they win the last-write-per-wavelength application.
         ApplyUserGlobalOverrides(addedComponents);
 
         if (StoredSMatrices.Count > 0)
@@ -236,11 +233,9 @@ public partial class FileOperationsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Applies the user-global PDK template S-matrix overrides to a set of
-    /// components. Project-local instance overrides (in <see cref="StoredSMatrices"/>)
-    /// take precedence and are intentionally applied AFTER these (application is
-    /// last-write-wins per wavelength); this fills the gap for components that
-    /// don't have a project-local override.
+    /// Applies the user-global PDK template S-matrix overrides. Project-local instance
+    /// overrides take precedence and are intentionally applied AFTER these — application is
+    /// last-write-wins per wavelength.
     /// </summary>
     private void ApplyUserGlobalOverrides(IEnumerable<Component> components)
     {
@@ -869,11 +864,8 @@ public partial class FileOperationsViewModel : ObservableObject
                         HasUnsavedChanges = true;
                     }
 
-                    // Apply overrides with the documented precedence per-instance >
-                    // user-global > template: user-global first, project-local
-                    // per-instance LAST (application is last-write-wins per wavelength).
-                    // The template-key fallback ("{pdkSource}::{templateName}") lets
-                    // PDK-template-scoped overrides reach every instance of the template.
+                    // Precedence per-instance > user-global > template: user-global first,
+                    // project-local per-instance LAST (last-write-wins per wavelength).
                     var allComponents = _canvas.Components.Select(vm => vm.Component).ToList();
                     ApplyUserGlobalOverrides(allComponents);
                     // Project load is the one place we hold the COMPLETE component set,

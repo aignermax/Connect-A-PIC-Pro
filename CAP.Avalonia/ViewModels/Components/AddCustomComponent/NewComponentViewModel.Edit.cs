@@ -31,11 +31,9 @@ public partial class NewComponentViewModel
     public string? MigratedFromComponentName { get; private set; }
 
     /// <summary>
-    /// The PDK file path (or, lacking one, the PDK name) this edit session was loaded from.
-    /// Together with <see cref="EditingOriginalName"/> this identifies which on-disk component
-    /// is being edited, independent of any in-progress rename — used by the main window to key
-    /// its open-editor-window dictionary so a second "Edit…" click on the same component
-    /// activates the existing window instead of opening a duplicate (task-2 dedup).
+    /// With <see cref="EditingOriginalName"/> identifies the on-disk component being edited,
+    /// independent of any in-progress rename — the main window keys its open-editor-window
+    /// dictionary on this so a second "Edit…" click activates the existing window.
     /// </summary>
     public string? EditOriginalPdkKey => _editOriginalPdkFilePath ?? _editOriginalPdkName;
 
@@ -47,27 +45,21 @@ public partial class NewComponentViewModel
     private GeometryBackend? _loadedBackend;
     private string? _loadedPdkFilePath;
 
-    /// <summary>
-    /// The S-matrix stored in the component's PDK definition when the edit session was loaded.
-    /// A save without a fresh compute keeps it verbatim as long as the geometry (code + backend)
-    /// is unchanged AND the save targets the SAME PDK file — an edit-save must never silently
-    /// wipe real computed/imported data. When the geometry DID change the stored matrix no
-    /// longer describes the component; when the component MIGRATES to a different PDK the matrix
-    /// was computed under another PDK's process (same process NAME is not the same process).
-    /// Both drop to black box (same conservative stale rule as a post-compute code edit; #582).
-    /// </summary>
+    // The S-matrix stored in the PDK definition at load time. A save without a fresh compute
+    // keeps it verbatim only while the geometry (code + backend) is unchanged AND the save
+    // targets the SAME PDK file — an edit-save must never silently wipe real computed data,
+    // but a changed geometry or a PDK migration (same process NAME is not the same process)
+    // drops to black box rather than persisting stale physics.
     private PdkSMatrixDraft? _loadedSMatrixDraft;
 
-    /// <summary>Whether the definition's stored S-matrix is still valid for the current geometry.</summary>
     private bool CanKeepLoadedSMatrix =>
         IsEditMode && _loadedSMatrixDraft is not null
         && Code == _loadedCode && SelectedBackend == _loadedBackend
         && PathsEqual(SelectedCustomPdk?.FilePath, _loadedPdkFilePath);
 
     /// <summary>
-    /// True when every pin name the loaded S-matrix references exists among
-    /// <paramref name="renderedPinNames"/>. A JSON-defined component (no RawCode) is edited via
-    /// SYNTHESIZED code whose render may yield different pin names than the foundry definition —
+    /// True when every pin name the loaded S-matrix references exists among the rendered pins.
+    /// Synthesized edit code may render different pin names than the foundry definition —
     /// persisting the stored matrix against renamed pins would later resolve to silent
     /// zero-transmission matrices on placement.
     /// </summary>
@@ -83,10 +75,9 @@ public partial class NewComponentViewModel
     }
 
     /// <summary>
-    /// True when the user changed any editable field — name, code, geometry backend, or target
-    /// PDK — since <see cref="LoadForEdit"/>. The main window's editor dedup consults this: a
-    /// stale-but-clean editor is replaced with a freshly loaded view model on a second ✏ click,
-    /// while unsaved user input is never thrown away (PR #742 review, finding 4).
+    /// True when the user changed any editable field since <see cref="LoadForEdit"/>. The
+    /// editor dedup consults this: a stale-but-clean editor is replaced with a freshly loaded
+    /// view model on a second ✏ click, while unsaved user input is never thrown away.
     /// </summary>
     public bool HasUnsavedEditChanges =>
         IsEditMode && (Code != _loadedCode
@@ -95,10 +86,9 @@ public partial class NewComponentViewModel
             || !string.Equals(SelectedCustomPdk?.FilePath, _loadedPdkFilePath, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
-    /// Prefills this editor from <paramref name="template"/>. Returns false (leaving
-    /// <see cref="IsEditMode"/> off and the reason in <see cref="StatusText"/>) when the
-    /// template's PDK has no matching entry in this VM's custom-PDK choices — callers must then
-    /// NOT show the window, otherwise a half-initialized "New Component" session appears.
+    /// Prefills this editor from <paramref name="template"/>. Returns false (reason in
+    /// <see cref="StatusText"/>) when the template's PDK is not among the custom-PDK choices —
+    /// callers must then NOT show the window (a half-initialized session would appear).
     /// </summary>
     public bool LoadForEdit(ComponentTemplate template)
     {
@@ -145,11 +135,10 @@ public partial class NewComponentViewModel
     }
 
     /// <summary>
-    /// Prefills this editor from a BUNDLED component's template without forking its PDK yet.
-    /// The fork target (the user copy of the whole PDK in user-pdks) is offered as the selected
-    /// PDK choice; the copy itself is only created when "Save changes" runs
-    /// (<see cref="HasPendingBundledFork"/>). Returns false — leaving no trace on disk — when
-    /// the bundled PDK declares no fabrication process or the template cannot be loaded.
+    /// Prefills this editor from a BUNDLED component's template without forking its PDK yet —
+    /// the fork is only created when "Save changes" runs (<see cref="HasPendingBundledFork"/>).
+    /// Returns false, leaving no trace on disk, when the bundled PDK declares no fabrication
+    /// process or the template cannot be loaded.
     /// </summary>
     public bool LoadForEditBundled(ComponentTemplate template, string bundledFilePath, ProcessDefinition? process)
     {
@@ -179,13 +168,11 @@ public partial class NewComponentViewModel
     }
 
     /// <summary>
-    /// Turns a foundry component's function reference into equivalent editable code, so a bundled
-    /// component opens with a visible, runnable definition instead of a blank editor.
-    /// gdsfactory-native PDKs (e.g. CornerStone's cspdk) register their cells in the PDK
-    /// registry, NOT as module attributes — "cspdk.sin300.coupler_straight()" raises
-    /// AttributeError (and a bare "import cspdk" doesn't even load the sin300 submodule).
-    /// So the synthesized code uses the same import + PDK.activate() + gf.get_component()
-    /// pattern as the canvas preview and the exporter (<see cref="GdsFactoryPreviewCode"/>).
+    /// Turns a foundry component's function reference into equivalent editable code, so a
+    /// bundled component opens with a runnable definition instead of a blank editor.
+    /// gdsfactory-native PDKs register their cells in the PDK registry, NOT as module
+    /// attributes ("cspdk.sin300.coupler_straight()" raises AttributeError), so the code uses
+    /// the same import + PDK.activate() + gf.get_component() pattern as the canvas preview.
     /// </summary>
     private static (string Code, GeometryBackend Backend)? SynthesizeCodeFromReference(ComponentTemplate t)
     {

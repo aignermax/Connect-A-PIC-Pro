@@ -97,7 +97,7 @@ public sealed class GdsPreviewRenderServiceTests
         // On placement, a gdsfactory-native component is given a synthesized nazcaFunction
         // ("nazca_<name>") that no Nazca script can render. The gdsfactory factory must take
         // precedence so the placed component previews via gdsfactory, not a dead Nazca call —
-        // otherwise the canvas grid stays blank (#570 field test).
+        // otherwise the canvas grid stays blank.
         var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_mmi1x2");
         comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
 
@@ -313,7 +313,7 @@ public sealed class GdsPreviewRenderServiceTests
     {
         // A failed render (broken/half-provisioned interpreter) must NOT be persisted as an
         // empty marker — otherwise the component stays blank forever, even after the env is
-        // fixed. A fresh instance must re-attempt the render (#570 field test).
+        // fixed. A fresh instance must re-attempt the render.
         var diskDir = Path.Combine(Path.GetTempPath(), "lunima-fail-" + Guid.NewGuid().ToString("N"));
         var key = new GdsPreviewKey("m", "f", "p");
 

@@ -14,12 +14,8 @@
             <Setter Property="Background" Value="#2D2D2D"/>
             <Setter Property="LineStroke" Value="#A0A0A0"/>
         </Style>
-        <!-- App-wide CompactControlHeights.axaml now drives NumericUpDown/Button height and
-             padding (~21px, matching this panel's target); the old local TextControlThemeMinHeight
-             = 26 override and per-control FontSize/Padding setters (#570) are gone — they used to
-             fight the global style with an older, taller set of numbers. Only the layout-specific
-             VerticalContentAlignment (keeps the number centered) and FontSize (fits "Run
-             Transient"/"Export CSV" labels) remain as local Setters. -->
+        <!-- CompactControlHeights.axaml drives input height/padding app-wide; only the
+             layout-specific VerticalContentAlignment and label FontSize stay local. -->
         <Style Selector="NumericUpDown">
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>

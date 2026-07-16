@@ -7,12 +7,8 @@
              x:DataType="vm:MainViewModel">
 
     <UserControl.Styles>
-        <!-- App-wide CompactControlHeights.axaml now drives NumericUpDown/ComboBox/Button height
-             and padding (~21px, matching this panel's target); the old local
-             TextControlThemeMinHeight = 26 override and per-control FontSize/Padding setters
-             (#570) are gone — they used to fight the global style with an older, taller set of
-             numbers. Only the layout-specific VerticalContentAlignment (keeps the value centered)
-             and FontSize (fits "Run Eye Analysis"/"Export CSV" labels) remain as local Setters. -->
+        <!-- CompactControlHeights.axaml drives input height/padding app-wide; only the
+             layout-specific VerticalContentAlignment and label FontSize stay local. -->
         <Style Selector="NumericUpDown">
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>

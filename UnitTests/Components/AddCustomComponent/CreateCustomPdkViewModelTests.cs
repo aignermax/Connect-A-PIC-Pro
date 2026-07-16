@@ -152,7 +152,7 @@ public class CreateCustomPdkViewModelTests : IDisposable
     [Fact]
     public void CreatePdk_NameCollidingWithALoadedBundledPdk_IsRejectedWithAnExplanation()
     {
-        // PR #742 review, finding 1: a brand-new user PDK named like a loaded bundled PDK
+        // A brand-new user PDK named like a loaded bundled PDK
         // would be mistaken for its fork on the next save/startup and silently displace the
         // whole built-in library — block the name at creation time instead.
         var store = CreateStore();

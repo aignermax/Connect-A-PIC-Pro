@@ -18,11 +18,8 @@ public sealed class PdkTrashService
     private static readonly Regex TimestampSuffix =
         new(@"^(?<base>.+)-(?<date>\d{8})-(?<time>\d{6})(?:-(?<counter>\d+))?$", RegexOptions.Compiled);
 
-    /// <summary>
-    /// Comparer for live-PDK file paths used as dictionary keys below. Case-insensitive only on
-    /// Windows: on case-sensitive file systems two paths differing in case are genuinely
-    /// different files and must not be collapsed into one dedup bucket.
-    /// </summary>
+    // Case-insensitive only on Windows: on case-sensitive file systems two paths differing in
+    // case are genuinely different files and must not share a dedup bucket.
     private static readonly StringComparer LivePathComparer =
         OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
@@ -50,20 +47,12 @@ public sealed class PdkTrashService
         if (!Directory.Exists(TrashDirectory))
             return entries;
 
-        // Each component-delete backs up a full copy of the PDK file as it stood right before
-        // that one delete. Sequential deletes (A, then B, then C) therefore leave overlapping
-        // backups: the A-backup still contains B and C. Expand every RemovedComponents backup to
-        // one candidate entry PER missing component, then keep only the newest backup for each
-        // (livePath, componentName) pair - that is the backup whose delete actually removed that
-        // component. This is what makes Restore(entry) able to bring back exactly the one
-        // component the user clicked, without resurrecting later deletes.
-        //
-        // "Newest" is ranked by the DeletedAt timestamp encoded in the trash file's NAME, with
-        // the "-N" same-second collision counter as tiebreaker - never by the file's mtime,
-        // which a git checkout/sync rewrites and would then promote a stale backup.
-        //
-        // Live-path keys fold case only on Windows (see LivePathComparer); component names are
-        // matched case-insensitively everywhere, like the rest of the component-name handling.
+        // Each component-delete backs up the FULL pre-delete PDK file, so sequential deletes
+        // leave overlapping backups. Emit one entry per missing component, keeping only the
+        // newest backup per (livePath, componentName) — the one whose delete actually removed
+        // it — so Restore brings back exactly the clicked component without resurrecting later
+        // deletes. "Newest" ranks by the timestamp in the file NAME (counter as tiebreaker),
+        // never mtime, which a git checkout/sync rewrites.
         var liveCache = new Dictionary<string, PdkDraft?>(LivePathComparer);
         var newestPerComponent = new Dictionary<(string LivePath, string Name), ((DateTime DeletedAt, int Counter) Rank, PdkTrashEntry Entry)>();
 
@@ -96,7 +85,7 @@ public sealed class PdkTrashService
         return entries.OrderByDescending(e => e.DeletedAt).ToList();
     }
 
-    /// <summary>Folds path case on Windows only — see <see cref="LivePathComparer"/>.</summary>
+    // Folds path case on Windows only — see LivePathComparer.
     private static string PathKey(string path) =>
         OperatingSystem.IsWindows() ? path.ToLowerInvariant() : path;
 
@@ -122,8 +111,7 @@ public sealed class PdkTrashService
         var livePath = Path.Combine(_root, match.Groups["base"].Value + ".json");
         var backupComponents = backup.Components.Select(c => c.Name).ToList();
 
-        // Several backups usually point at the same live PDK file (one backup per delete) —
-        // parse it once per ListEntries call, not once per trash file.
+        // Several backups point at the same live PDK file — parse it once per ListEntries call.
         if (!liveCache.TryGetValue(livePath, out var live))
         {
             live = TryLoadLive(livePath);
@@ -181,10 +169,8 @@ public sealed class PdkTrashService
         var liveNames = live.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var wanted = entry.RestorableComponentNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
 
-        // Restore ONLY the component(s) this entry names - not the whole backup/live diff. A
-        // backup file is a full pre-delete snapshot and may still contain components that were
-        // removed by a later, separate delete; those have their own entries and must stay gone
-        // here so clicking "Restore" on one component can never resurrect a different one.
+        // Restore ONLY the component(s) this entry names: the backup is a full pre-delete
+        // snapshot and may still contain components a later delete removed — those must stay gone.
         var readded = backup.Components
             .Where(c => wanted.Contains(c.Name) && !liveNames.Contains(c.Name))
             .ToList();

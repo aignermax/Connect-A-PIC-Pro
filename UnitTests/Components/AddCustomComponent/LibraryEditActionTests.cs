@@ -143,7 +143,7 @@ public class LibraryEditActionTests : IDisposable
     [Fact]
     public async Task EditCustomComponent_whenLoadForEditFails_opensNoWindow()
     {
-        // PR #742 review, finding 4: a template whose PDK is registered (so CanEditTemplate
+        // A template whose PDK is registered (so CanEditTemplate
         // passes) but has no matching entry in the user PDK store makes LoadForEdit fail —
         // that must NOT leave a half-initialized "New Component" window on screen.
         var userStore = CreateUserPdkStore(); // empty store: no custom PDK to edit into

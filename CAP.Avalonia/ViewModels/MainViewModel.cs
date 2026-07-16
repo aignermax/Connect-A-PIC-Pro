@@ -296,8 +296,8 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
 
-        // A saved component definition takes effect type-wide (PR #742): push the new PDK
-        // S-matrices into already-placed instances; explicit overrides keep winning.
+        // A saved component definition takes effect type-wide: push the new PDK S-matrices
+        // into already-placed instances; explicit overrides keep winning.
         LeftPanel.TemplateDefinitionSaved = FileOperations.RefreshInstancesFromTemplate;
 
         // Single-process enforcement (issues #570/#653): every placement surface — manual

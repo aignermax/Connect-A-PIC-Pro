@@ -73,10 +73,8 @@ public class EnvironmentHealthChecker
     }
 
     /// <summary>
-    /// Returns the installed version of <paramref name="module"/> (e.g. gdsfactory,
-    /// cspdk), or null when it is not importable. These packages are optional — their
-    /// absence never marks the environment broken, but the version shows in the
-    /// interpreter list so a missing foundry PDK is visible at a glance.
+    /// The installed version of <paramref name="module"/>, or null when it is not importable.
+    /// These packages are optional — their absence never marks the environment broken.
     /// </summary>
     private async Task<string?> ProbePackageVersionAsync(string pythonPath, string module, CancellationToken ct)
     {
