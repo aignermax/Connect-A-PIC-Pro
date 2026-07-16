@@ -65,8 +65,15 @@ public partial class LeftPanelViewModel
     public bool CanEditTemplate(ComponentTemplate template) =>
         PdkManager.LoadedPdks.Any(p => p.Name == template.PdkSource);
 
+    /// <summary>
+    /// Whether the ✕ (delete / Restore Original) applies to <paramref name="template"/>: its PDK
+    /// must be a loaded non-bundled PDK AND the component must actually diverge from the bundled
+    /// original — on a fork, untouched components are identical to the foundry truth and have
+    /// nothing to delete or restore (field-test fix, PR #742).
+    /// </summary>
     public bool CanDeleteTemplate(ComponentTemplate template) =>
-        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false };
+        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false }
+        && ComponentDivergesFromBundledOriginal(template);
 
     [RelayCommand]
     private async Task EditCustomComponent(ComponentTemplate? template)

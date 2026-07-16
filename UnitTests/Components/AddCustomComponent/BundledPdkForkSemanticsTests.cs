@@ -297,6 +297,79 @@ public class BundledPdkForkSemanticsTests : IDisposable
             .ShouldNotContain(c => c.Name == "My New Comp");
     }
 
+    // ------------------------------------------------------------------ (c2) X only on divergent fork components
+
+    [Fact]
+    public async Task ForkComponents_onlyTheEditedOne_isDeletable()
+    {
+        var (leftPanel, _, _) = CreateLeftPanelWithBundledPdk();
+        var editor = await OpenEditorAsync(leftPanel, "Bundled Coupler");
+        editor.Code = BundledCouplerCode + "\n# user tweak";
+        await SaveEditorAsync(editor);
+
+        var edited = leftPanel.AllTemplates.Single(t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+        var untouched = leftPanel.AllTemplates.Single(t => t.PdkSource == BundledPdkName && t.Name == "Bundled Straight");
+
+        leftPanel.CanDeleteTemplate(edited).ShouldBeTrue(
+            "the edited component diverges from the bundled original — offer Restore Original");
+        edited.IsDeletable.ShouldBeTrue("the ✕ must appear on the edited component");
+        leftPanel.CanDeleteTemplate(untouched).ShouldBeFalse(
+            "an untouched fork component is identical to the bundled original — there is nothing to restore");
+        untouched.IsDeletable.ShouldBeFalse("no ✕ on identical fork components");
+        leftPanel.CanEditTemplate(untouched).ShouldBeTrue("the ✏ stays on every fork component");
+    }
+
+    [Fact]
+    public async Task ComponentAddedToTheFork_isDeletable_becauseTheOriginalNeverHadIt()
+    {
+        var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
+        var editor = await OpenEditorAsync(leftPanel, "Bundled Coupler");
+        editor.Code = BundledCouplerCode + "\n# user tweak";
+        await SaveEditorAsync(editor);
+        var forkPath = store.ResolveNamedPath(BundledPdkName);
+        var added = RawCodeComponent("My New Comp", "import gdsfactory as gf\ncomponent = gf.components.taper()");
+        store.AppendToExistingPdk(forkPath, added);
+        leftPanel.RegisterSavedCustomComponent(added, BundledPdkName, forkPath);
+
+        var template = leftPanel.AllTemplates.Single(t => t.Name == "My New Comp");
+        leftPanel.CanDeleteTemplate(template).ShouldBeTrue(
+            "a component the bundled original never had gets the plain delete-to-trash ✕");
+        template.IsDeletable.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task RevertingTheEditedComponent_hidesItsDeleteAction_again()
+    {
+        var (leftPanel, _, _) = CreateLeftPanelWithBundledPdk();
+        var editor = await OpenEditorAsync(leftPanel, "Bundled Coupler");
+        editor.Code = BundledCouplerCode + "\n# user tweak";
+        await SaveEditorAsync(editor);
+        var edited = leftPanel.AllTemplates.Single(t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+        edited.IsDeletable.ShouldBeTrue("sanity: the edited component shows the ✕ before the revert");
+
+        leftPanel.RemoveCustomComponentCommand.Execute(edited);
+
+        var reverted = leftPanel.AllTemplates.Single(t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+        leftPanel.CanDeleteTemplate(reverted).ShouldBeFalse(
+            "after the revert the component matches the bundled original again — the ✕ disappears");
+        reverted.IsDeletable.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void PlainCustomPdkComponents_stayDeletable_withoutABundledOriginal()
+    {
+        var (leftPanel, store) = CreateLeftPanel();
+        var component = RawCodeComponent("Solo Comp", BundledCouplerCode);
+        var path = store.SaveToNamedPdk("SoloLib", new ProcessDefinition { Name = "P1" },
+            component, "gdsfactory", null);
+        leftPanel.RegisterSavedCustomComponent(component, "SoloLib", path);
+
+        var template = leftPanel.AllTemplates.Single(t => t.Name == "Solo Comp");
+        leftPanel.CanDeleteTemplate(template).ShouldBeTrue(
+            "components of a plain custom PDK keep the normal delete-to-trash ✕");
+        template.IsDeletable.ShouldBeTrue();
+    }
+
     // ------------------------------------------------------------------ (d) startup fork-shadow
 
     [Fact]

@@ -103,6 +103,11 @@ public partial class LeftPanelViewModel
 
     internal void ReapplyActiveProcessAfterPdkChange()
     {
+        // Every library mutation (register/unregister/fork/revert/delete) funnels through this
+        // hook, so the ✕-visibility flags are recomputed here once per change — never per
+        // hover/binding (see LeftPanelViewModel.ComponentDivergence.cs).
+        RefreshTemplateDeletableFlags();
+
         if (_lastAppliedProcess is { IsPlayground: false })
             ApplyActiveProcess(_lastAppliedProcess, preserveMemberToggles: true);
     }

@@ -124,6 +124,17 @@ public partial class ComponentTemplate : ObservableObject
 
     [ObservableProperty]
     private bool _hasUserGlobalSMatrixOverride;
+
+    /// <summary>
+    /// Whether the library shows the inline delete/restore ✕ on this template. Recomputed once
+    /// per library change (see <c>LeftPanelViewModel.RefreshTemplateDeletableFlags</c>): true for
+    /// components of plain custom PDKs and for fork components that diverge from their bundled
+    /// original; false for bundled components and for fork components identical to the original
+    /// (nothing to restore).
+    /// </summary>
+    [ObservableProperty]
+    private bool _isDeletable;
+
     public Func<List<Pin>, SMatrix>? CreateSMatrix { get; set; }
     public Func<List<Pin>, List<Slider>, SMatrix>? CreateSMatrixWithSliders { get; set; }
 
@@ -149,6 +160,13 @@ public partial class ComponentTemplate : ObservableObject
     public string? RawCodeBackend { get; set; }
 
     public bool IsCustom { get; set; }
+
+    /// <summary>
+    /// The PDK component draft this template was converted from — the library's current
+    /// definition of the component, used to detect divergence from a bundled original without
+    /// re-parsing any file.
+    /// </summary>
+    public CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft? SourceDraft { get; set; }
 }
 
 public class PinDefinition
