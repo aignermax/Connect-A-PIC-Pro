@@ -23,9 +23,9 @@ public partial class NewComponentViewModel
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
-        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
+        if (SelectedProcess is null)
         {
-            StatusText = "Render a preview and select a PDK before computing the S-matrix.";
+            StatusText = "Select a PDK before computing the S-matrix.";
             return;
         }
         if (_fdtd is null)
@@ -38,6 +38,13 @@ public partial class NewComponentViewModel
         _computeCts = new CancellationTokenSource();
         try
         {
+            // Render the geometry ourselves when no preview exists yet, like Save does;
+            // a render failure leaves its reason in StatusText and computes nothing.
+            if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
+            {
+                return;
+            }
+
             var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
@@ -57,7 +64,8 @@ public partial class NewComponentViewModel
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)).";
+            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)) — " +
+                         $"\"{SaveButtonLabel}\" writes it into the component definition.";
         }
         catch (OperationCanceledException)
         {
@@ -91,7 +99,10 @@ public partial class NewComponentViewModel
         }
 
         MigratedFromPdkName = null;
+        // While a bundled fork is pending, the "original" is the read-only built-in PDK — a save
+        // into a different PDK is a copy-out, never a migration that would remove the original.
         var isMigration = IsEditMode
+            && !HasPendingBundledFork
             && _editOriginalPdkFilePath is not null
             && !PathsEqual(_editOriginalPdkFilePath, pdk.FilePath);
         if (isMigration &&
@@ -111,20 +122,48 @@ public partial class NewComponentViewModel
             }
 
             var reference = BuildReference();
-            var sMatrix = _computedModel is null
-                ? FdtdSMatrixToDraftConverter.BlackBox()
-                : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
+            // A fresh compute/import wins; otherwise an unchanged-geometry same-PDK edit keeps
+            // the stored matrix verbatim (never silently wiped) provided it still resolves
+            // against the rendered pins. Everything else saves a black box — no invented physics.
+            var keepStored = _computedModel is null
+                && CanKeepLoadedSMatrix
+                && LoadedSMatrixResolvesAgainstPins(preview.Pins.Select(p => p.Name));
+            var sMatrix = _computedModel is not null
+                ? FdtdSMatrixToDraftConverter.FromFdtd(_computedModel)
+                : keepStored
+                    ? _loadedSMatrixDraft
+                    : FdtdSMatrixToDraftConverter.BlackBox();
+            var droppedStoredSMatrix = _computedModel is null && !keepStored && _loadedSMatrixDraft is not null;
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
             var isSelfEdit = IsEditMode && !isMigration &&
                 string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
-            if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
+            // The deferred fork-on-save: the target file does not exist until now, so probe
+            // name collisions against the bundled source the fork will be copied from.
+            var executesPendingFork = HasPendingBundledFork
+                && _pendingForkTargetPath is not null
+                && PathsEqual(pdk.FilePath, _pendingForkTargetPath);
+            var collisionProbePath = executesPendingFork ? _pendingForkSourcePath! : pdk.FilePath;
+            if (!isSelfEdit && _store.ComponentExistsInFile(collisionProbePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
+            if (executesPendingFork)
+            {
+                _store.ForkBundledPdk(_pendingForkSourcePath!, pdk.Name);
+            }
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
+            // Only a save that actually executed the deferred fork may shadow the bundled
+            // PDK in the library — a mere name match must not.
+            SavedViaPendingBundledFork = executesPendingFork;
+            if (executesPendingFork)
+            {
+                // From here on this session edits the user's copy directly.
+                _pendingForkSourcePath = null;
+                _pendingForkTargetPath = null;
+            }
 
             if (isMigration && TryRemoveFromOriginalPdk(_editingOriginalName ?? name))
             {
@@ -140,13 +179,25 @@ public partial class NewComponentViewModel
             // now lives in both PDKs) — don't overwrite it with a plain save-success message.
             if (!isMigration || MigratedFromPdkName != null)
             {
+                var dropNote = droppedStoredSMatrix
+                    ? " Its stored S-matrix was dropped (black box) — recompute it for this PDK/geometry."
+                    : "";
                 StatusText = MigratedFromPdkName != null
-                    ? $"Moved '{name}' to PDK '{pdk.Name}'."
-                    : _computedModel is null
-                        ? $"Saved without simulation model (black box). {StatusText}".Trim()
-                        : "Saved with FDTD S-matrix.";
+                    ? $"Moved '{name}' to PDK '{pdk.Name}'.{dropNote}"
+                    : _computedModel is not null
+                        ? "Saved with FDTD S-matrix."
+                        : sMatrix is not null
+                            ? "Saved — kept the component's stored S-matrix."
+                            : $"Saved without simulation model (black box).{dropNote} {StatusText}".Trim();
             }
             Saved?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // Without this catch the AsyncRelayCommand swallows the fault and Save looks like it
+            // did nothing — e.g. when the fork file was trashed underneath an open editor.
+            StatusText = $"Save failed: {ex.Message}";
+            _errorConsole?.LogError($"Saving component '{name}' to PDK '{pdk.Name}' failed: {ex.Message}", ex);
         }
         finally
         {

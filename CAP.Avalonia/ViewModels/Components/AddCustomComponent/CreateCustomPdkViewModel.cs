@@ -40,10 +40,15 @@ public partial class CreateCustomPdkViewModel : ObservableObject
 
     public event EventHandler<string>? PdkCreated;
 
+    private readonly IReadOnlyCollection<string> _reservedBundledPdkNames;
+
     public CreateCustomPdkViewModel(
-        UserPdkStore store, IReadOnlyList<ProcessDefinition> availableProcesses, ProcessManagementViewModel processDefinitionEditor)
+        UserPdkStore store, IReadOnlyList<ProcessDefinition> availableProcesses,
+        ProcessManagementViewModel processDefinitionEditor,
+        IReadOnlyCollection<string>? reservedBundledPdkNames = null)
     {
         _store = store;
+        _reservedBundledPdkNames = reservedBundledPdkNames ?? Array.Empty<string>();
         AvailableProcesses = availableProcesses;
         ProcessDefinitionEditor = processDefinitionEditor;
         ProcessDefinitionEditor.NewProcessCommand.Execute(null);
@@ -56,6 +61,15 @@ public partial class CreateCustomPdkViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanCreate))]
     private void CreatePdk()
     {
+        // A new user PDK must not take a loaded bundled PDK's name: such a file would be
+        // mistaken for a fork of the built-in PDK and silently displace its whole library.
+        if (_reservedBundledPdkNames.Contains(PdkName, StringComparer.OrdinalIgnoreCase))
+        {
+            StatusText = $"'{PdkName}' is a built-in PDK's name — choose a different name. " +
+                         "(To customize a built-in PDK, edit one of its components instead; saving forks it automatically.)";
+            return;
+        }
+
         if (_store.ListCustomPdks().Any(p => string.Equals(p.Name, PdkName, StringComparison.OrdinalIgnoreCase)))
         {
             StatusText = $"A PDK named '{PdkName}' already exists.";

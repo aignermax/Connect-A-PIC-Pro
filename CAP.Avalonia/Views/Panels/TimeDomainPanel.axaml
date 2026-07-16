@@ -8,30 +8,18 @@
              x:Class="CAP.Avalonia.Views.Panels.TimeDomainPanel"
              x:DataType="vm:MainViewModel">
 
-    <UserControl.Resources>
-        <!-- Drives the min height of NumericUpDown / TextBox / ComboBox in this panel. The Fluent
-             default is 32 px, which is what made the number fields look twice as tall as the Run
-             button; 26 px matches the compact analysis buttons (#570 feedback). Shrinking this
-             (rather than forcing Height) keeps the spinner buttons visible and the text un-clipped. -->
-        <x:Double x:Key="TextControlThemeMinHeight">26</x:Double>
-    </UserControl.Resources>
-
     <UserControl.Styles>
         <!-- Dark hover-tracker so its text is readable on the dark theme. -->
         <Style Selector="oxy|TrackerControl">
             <Setter Property="Background" Value="#2D2D2D"/>
             <Setter Property="LineStroke" Value="#A0A0A0"/>
         </Style>
-        <!-- Compact inputs: spinner buttons kept (just smaller, via the reduced min height),
-             centered content so the number is not clipped. -->
+        <!-- CompactControlHeights.axaml drives input height/padding app-wide; only the
+             layout-specific VerticalContentAlignment and label FontSize stay local. -->
         <Style Selector="NumericUpDown">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Padding" Value="6,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.analysis">
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
     </UserControl.Styles>

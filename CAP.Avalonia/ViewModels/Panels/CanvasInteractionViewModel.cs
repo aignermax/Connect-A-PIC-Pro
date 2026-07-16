@@ -82,8 +82,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action? ClearComponentTemplateSelection { get; set; }
 
     /// <summary>
-    /// Callback invoked when the user requests "Component Settings…" from the canvas context menu.
-    /// Wired by <c>MainWindow.axaml.cs</c> to open the component settings dialog.
+    /// Callback for "Edit Component…" from the canvas context menu. Wired by
+    /// <c>MainWindow.axaml.cs</c> to the unified "Edit Component" editor when the component's
+    /// PDK template is resolvable and editable, falling back to the per-instance
+    /// <c>ComponentSettingsDialog</c> otherwise (ComponentGroups, template-less instances).
     /// </summary>
     public Action<ComponentViewModel>? OpenComponentSettings { get; set; }
 
@@ -734,26 +736,31 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         var selection = _canvas.Selection;
 
-        if (selection.HasMultipleSelected)
+        // The selection set is authoritative (box selection populates only the set);
+        // fall back to the primary SelectedComponent when the set is empty.
+        var targets = selection.SelectedComponents.ToList();
+        if (targets.Count == 0 && SelectedComponent != null)
+            targets.Add(SelectedComponent);
+
+        var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
+        if (deletable.Count == 0)
         {
-            int count = selection.SelectedComponents.Count;
-            var cmd = new GroupDeleteCommand(_canvas, selection.SelectedComponents.ToList());
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted {count} components");
+            if (targets.Count > 0)
+                UpdateStatus?.Invoke("Selection is locked — unlock elements to delete them");
             return;
         }
 
-        if (SelectedComponent != null)
-        {
-            var name = SelectedComponent.Name;
-            var cmd = new DeleteComponentCommand(_canvas, SelectedComponent);
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted: {name}");
-        }
+        // One batch command for a multi-selection, so a single undo restores everything.
+        IUndoableCommand cmd = deletable.Count == 1
+            ? new DeleteComponentCommand(_canvas, deletable[0])
+            : new GroupDeleteCommand(_canvas, deletable);
+        _commandManager.ExecuteCommand(cmd);
+
+        selection.ClearSelection();
+        SelectedComponent = null;
+        UpdateStatus?.Invoke(deletable.Count == 1
+            ? $"Deleted: {deletable[0].Name}"
+            : $"Deleted {deletable.Count} components");
     }
 
     [RelayCommand]
@@ -989,8 +996,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Opens the Component Settings dialog for the currently selected canvas component.
-    /// Only enabled when exactly one component is selected.
+    /// Opens the unified "Edit Component" editor for the currently selected canvas component's
+    /// PDK template, or the per-instance Component Settings dialog when no editable template
+    /// resolves (e.g. ComponentGroups). Only enabled when a component is selected.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanOpenSelectedComponentSettings))]
     private void OpenSelectedComponentSettings()

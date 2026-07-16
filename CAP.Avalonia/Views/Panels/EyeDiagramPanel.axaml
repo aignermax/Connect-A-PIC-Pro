@@ -6,29 +6,16 @@
              x:Class="CAP.Avalonia.Views.Panels.EyeDiagramPanel"
              x:DataType="vm:MainViewModel">
 
-    <UserControl.Resources>
-        <!-- Drives the min height of NumericUpDown / TextBox / ComboBox; Fluent default 32 px made
-             the number fields look twice as tall as the Run button. 26 px matches the compact
-             analysis buttons and keeps the spinner buttons visible + text un-clipped (#570). -->
-        <x:Double x:Key="TextControlThemeMinHeight">26</x:Double>
-    </UserControl.Resources>
-
     <UserControl.Styles>
-        <!-- Compact inputs: spinner buttons kept (just smaller, via the reduced min height),
-             centered content so the number is not clipped. -->
+        <!-- CompactControlHeights.axaml drives input height/padding app-wide; only the
+             layout-specific VerticalContentAlignment and label FontSize stay local. -->
         <Style Selector="NumericUpDown">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Padding" Value="6,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="ComboBox">
-            <Setter Property="FontSize" Value="11"/>
-            <Setter Property="Padding" Value="6,0"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
         <Style Selector="Button.analysis">
-            <Setter Property="Height" Value="26"/>
-            <Setter Property="Padding" Value="10,0"/>
             <Setter Property="FontSize" Value="11"/>
         </Style>
     </UserControl.Styles>

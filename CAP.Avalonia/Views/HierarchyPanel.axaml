@@ -21,7 +21,10 @@
         <!-- Tree View -->
         <ScrollViewer HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
+            <!-- SelectionMode=Multiple: a canvas box selection highlights ALL selected
+                 nodes; single-selection mode would immediately deselect all but one. -->
             <TreeView ItemsSource="{Binding RootNodes}"
+                      SelectionMode="Multiple"
                       Background="Transparent"
                       Padding="4">
 

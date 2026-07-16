@@ -214,9 +214,10 @@ public partial class FileOperationsViewModel : ObservableObject
             .ToList();
         if (addedComponents.Count == 0) return;
 
-        // Reuse ApplyAll with a single-component view so the identifier /
-        // template-key lookup logic stays in one place. Re-applying the
-        // same matrix to an already-up-to-date component is a no-op.
+        // Precedence per-instance > user-global > template: user-global first, project-local
+        // per-instance LAST so they win the last-write-per-wavelength application.
+        ApplyUserGlobalOverrides(addedComponents);
+
         if (StoredSMatrices.Count > 0)
         {
             Services.SMatrixOverrideApplicator.ApplyAll(
@@ -228,15 +229,13 @@ public partial class FileOperationsViewModel : ObservableObject
                 keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate);
         }
 
-        ApplyUserGlobalOverrides(addedComponents);
         ApplyAllNazcaOverrides(addedComponents);
     }
 
     /// <summary>
-    /// Applies the user-global PDK template S-matrix overrides to a set of
-    /// components. Project-local instance overrides (in <see cref="StoredSMatrices"/>)
-    /// take precedence and are intentionally applied first; this fills the
-    /// gap for components that don't have a project-local override.
+    /// Applies the user-global PDK template S-matrix overrides. Project-local instance
+    /// overrides take precedence and are intentionally applied AFTER these — application is
+    /// last-write-wins per wavelength.
     /// </summary>
     private void ApplyUserGlobalOverrides(IEnumerable<Component> components)
     {
@@ -865,11 +864,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         HasUnsavedChanges = true;
                     }
 
-                    // Apply per-instance overrides to live components so the
-                    // next simulation run picks up the stored S-matrices.
-                    // Falls back to "{pdkSource}::{templateName}" so PDK-template-scoped
-                    // overrides reach every instance of the template, not just renamed instances.
+                    // Precedence per-instance > user-global > template: user-global first,
+                    // project-local per-instance LAST (last-write-wins per wavelength).
                     var allComponents = _canvas.Components.Select(vm => vm.Component).ToList();
+                    ApplyUserGlobalOverrides(allComponents);
                     // Project load is the one place we hold the COMPLETE component set,
                     // so it is also the only place an orphan check is meaningful — let
                     // it surface genuinely unmatched overrides (renamed/removed).
@@ -881,7 +879,6 @@ public partial class FileOperationsViewModel : ObservableObject
                         errorConsole: _errorConsole,
                         keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate,
                         reportOrphans: true);
-                    ApplyUserGlobalOverrides(allComponents);
                 }
                 else
                 {

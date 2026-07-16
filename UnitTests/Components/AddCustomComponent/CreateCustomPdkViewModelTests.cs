@@ -150,6 +150,31 @@ public class CreateCustomPdkViewModelTests : IDisposable
     }
 
     [Fact]
+    public void CreatePdk_NameCollidingWithALoadedBundledPdk_IsRejectedWithAnExplanation()
+    {
+        // A brand-new user PDK named like a loaded bundled PDK
+        // would be mistaken for its fork on the next save/startup and silently displace the
+        // whole built-in library — block the name at creation time instead.
+        var store = CreateStore();
+        var vm = new CreateCustomPdkViewModel(
+            store, new[] { ExistingProcess() },
+            new ProcessManagementViewModel(Mock.Of<IFileDialogService>()),
+            reservedBundledPdkNames: new[] { "CornerStone SiN" });
+        vm.SelectedExistingProcess = vm.AvailableProcesses[0];
+        vm.PdkName = "cornerstone sin"; // case-insensitive
+
+        var eventFired = false;
+        vm.PdkCreated += (_, _) => eventFired = true;
+
+        vm.CreatePdkCommand.Execute(null);
+
+        eventFired.ShouldBeFalse();
+        vm.CreatedFilePath.ShouldBeNull();
+        store.ListCustomPdks().ShouldBeEmpty("no file may be created under a bundled PDK's name");
+        vm.StatusText.ShouldContain("built-in");
+    }
+
+    [Fact]
     public void CreatePdk_DoesNotThrow_WhenStoreLevelSlugCollisionOccurs()
     {
         var store = CreateStore();

@@ -56,7 +56,9 @@ public partial class PdkTrashViewModel : ObservableObject
             OnRestored?.Invoke(result);
             StatusText = result.Kind == PdkTrashKind.DeletedPdk
                 ? $"Restored '{result.PdkName}'."
-                : $"Restored {result.RestoredComponents.Count} component(s) to '{result.PdkName}'.";
+                : result.RestoredComponents.Count == 1
+                    ? $"Restored '{result.RestoredComponents[0].Name}' to '{result.PdkName}'."
+                    : $"Restored {result.RestoredComponents.Count} component(s) to '{result.PdkName}'.";
         }
         catch (Exception ex)
         {

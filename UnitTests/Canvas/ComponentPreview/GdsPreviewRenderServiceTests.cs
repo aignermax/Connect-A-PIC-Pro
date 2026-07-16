@@ -60,6 +60,24 @@ public sealed class GdsPreviewRenderServiceTests
     }
 
     [Fact]
+    public void BuildCacheKey_RotatedComponent_MatchesUnrotatedKey()
+    {
+        // Rotating with R swaps Component.Width/HeightMicrometers and bumps RotationDegrees.
+        // The preview bitmap content is rotation-independent (the canvas rotates it at draw
+        // time), so the cache key must not change — otherwise every rotation re-runs the
+        // Python render and rasterises the unrotated geometry into a swapped-aspect bitmap.
+        var unrotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 8, heightMicrometers: 4);
+
+        var rotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 4, heightMicrometers: 8);
+        rotated.Component.RotationDegrees = 90;
+
+        GdsPreviewRenderService.BuildCacheKey(rotated)
+            .ShouldBe(GdsPreviewRenderService.BuildCacheKey(unrotated));
+    }
+
+    [Fact]
     public void BuildCacheKey_GdsFactoryNativeComponent_ReturnsGdsfactoryKey()
     {
         // A gdsfactory-native component (no Nazca function, a gdsfactory factory) must still get
@@ -79,7 +97,7 @@ public sealed class GdsPreviewRenderServiceTests
         // On placement, a gdsfactory-native component is given a synthesized nazcaFunction
         // ("nazca_<name>") that no Nazca script can render. The gdsfactory factory must take
         // precedence so the placed component previews via gdsfactory, not a dead Nazca call —
-        // otherwise the canvas grid stays blank (#570 field test).
+        // otherwise the canvas grid stays blank.
         var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_mmi1x2");
         comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
 
@@ -295,7 +313,7 @@ public sealed class GdsPreviewRenderServiceTests
     {
         // A failed render (broken/half-provisioned interpreter) must NOT be persisted as an
         // empty marker — otherwise the component stays blank forever, even after the env is
-        // fixed. A fresh instance must re-attempt the render (#570 field test).
+        // fixed. A fresh instance must re-attempt the render.
         var diskDir = Path.Combine(Path.GetTempPath(), "lunima-fail-" + Guid.NewGuid().ToString("N"));
         var key = new GdsPreviewKey("m", "f", "p");
 

@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Themes.Fluent;
 
 [assembly: AvaloniaTestApplication(typeof(UnitTests.UI.ScreenshotTestAppBuilder))]
@@ -8,8 +9,10 @@ namespace UnitTests.UI;
 
 /// <summary>
 /// Minimal Avalonia application for headless screenshot tests.
-/// Loads only Fluent theme — intentionally avoids production App.cs DI setup
-/// so tests control all ViewModel construction themselves.
+/// Loads the Fluent theme plus the app-wide compact control height overrides —
+/// intentionally avoids production App.cs DI setup so tests control all ViewModel
+/// construction themselves, but still needs the production style include so the
+/// screenshots reflect the real Button/ComboBox chrome.
 /// </summary>
 internal class ScreenshotTestApp : Application
 {
@@ -17,6 +20,10 @@ internal class ScreenshotTestApp : Application
     {
         RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://CAP.Avalonia/Styles/CompactControlHeights.axaml"),
+        });
     }
 }
 

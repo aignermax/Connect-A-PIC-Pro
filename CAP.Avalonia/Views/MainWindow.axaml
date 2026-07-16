@@ -147,7 +147,7 @@
                                         <DataTemplate>
                                             <Button HorizontalAlignment="Stretch"
                                                     HorizontalContentAlignment="Left"
-                                                    Margin="0,2" Padding="10,7"
+                                                    Margin="0,2" Padding="10,3"
                                                     Command="{Binding ExportCommand}"
                                                     Background="{Binding Background}"
                                                     ToolTip.Tip="{Binding Description}">
@@ -191,7 +191,7 @@
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                                     <Button Grid.Column="0" HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Left"
-                                            Padding="10,7"
+                                            Padding="10,3"
                                             Background="#3d3d5d"
                                             Command="{Binding LoadPdkCommand}"
                                             ToolTip.Tip="Load a PDK component library (JSON)">
@@ -210,7 +210,7 @@
 
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Command="{Binding OpenPdkOffsetEditorCommand}"
                                         ToolTip.Tip="Calibrate NazcaOriginOffset per component and verify pin alignment against the rendered GDS">
@@ -223,7 +223,7 @@
 
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Click="OpenModeSolverDialog_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
@@ -234,7 +234,7 @@
                                 </Button>
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Click="OpenPdkResolutionCheckDialog_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
@@ -609,14 +609,19 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vmLib:ComponentTemplate">
                                     <DockPanel Margin="0,1" HorizontalAlignment="Stretch">
+                                        <!-- Right margin keeps the hover icons off the row's right
+                                             edge (mirrors the preview's 6px gap on the left). -->
                                         <StackPanel Classes="itemActions" DockPanel.Dock="Right" Orientation="Horizontal"
-                                                    VerticalAlignment="Center">
+                                                    VerticalAlignment="Center" Margin="0,0,6,0">
                                             <Button Content="✏" Click="TemplateEditComponent_Click"
                                                     FontSize="11" Padding="4,0" MinWidth="0"
                                                     Background="Transparent" BorderThickness="0" Foreground="#c9c9c9"
                                                     ToolTip.Tip="Edit component"/>
+                                            <!-- ✕ only where there is something to delete or restore:
+                                                 IsDeletable is false for bundled components AND for fork
+                                                 components identical to their bundled original. -->
                                             <Button Content="✕" Click="TemplateDeleteComponent_Click"
-                                                    IsVisible="{Binding IsCustom}"
+                                                    IsVisible="{Binding IsDeletable}"
                                                     FontSize="11" Padding="4,0" MinWidth="0" Margin="2,0,0,0"
                                                     Background="Transparent" BorderThickness="0" Foreground="#e08a8a"
                                                     ToolTip.Tip="Delete component (to trash)"/>
@@ -681,7 +686,19 @@
                                 </Flyout>
                             </Button.Flyout>
                         </Button>
-                        <TextBlock Text="PDK Management" VerticalAlignment="Center"
+                        <!-- DockPanel places each subsequent Dock="Right" child further left, so
+                             the visual order is: Title, EnableAll, DisableAll, Trash, "+". -->
+                        <Button DockPanel.Dock="Right" Content="☐" Command="{Binding LeftPanel.PdkManager.DisableAllCommand}"
+                                Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#3d3d3d" Foreground="#c9c9c9"
+                                ToolTip.Tip="Disable all PDKs"/>
+                        <Button DockPanel.Dock="Right" Content="☑" Command="{Binding LeftPanel.PdkManager.EnableAllCommand}"
+                                Width="22" Height="22" Padding="0" FontSize="12" Margin="0,0,4,0"
+                                HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
+                                Background="#3d3d3d" Foreground="#c9c9c9"
+                                ToolTip.Tip="Enable all PDKs"/>
+                        <TextBlock Text="PDK Mgmt" VerticalAlignment="Center"
                                    FontWeight="Bold" Foreground="White"/>
                     </DockPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -729,23 +746,6 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
 
-                            <!-- PDK Action Buttons -->
-                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0" HorizontalAlignment="Center">
-                                <Button Content="Enable All" Command="{Binding LeftPanel.PdkManager.EnableAllCommand}"
-                                        Width="75" Height="24" Margin="2" FontSize="10"
-                                        Background="#3d3d3d"/>
-                                <Button Content="Disable All" Command="{Binding LeftPanel.PdkManager.DisableAllCommand}"
-                                        Width="75" Height="24" Margin="2" FontSize="10"
-                                        Background="#3d3d3d"/>
-                            </StackPanel>
-
-                            <!-- Active fabrication process of this design (issue #570) -->
-                            <TextBlock Text="{Binding ActiveProcessLabel}"
-                                       FontSize="10" FontWeight="SemiBold" Foreground="LightSkyBlue"
-                                       Margin="2,8,2,0" TextWrapping="Wrap"
-                                       ToolTip.Tip="The fabrication process this design is locked to. Chosen at New Design; foreign-process PDKs are locked below."/>
-
-                            <!-- Fabrication process now opens from the top toolbar icon (#570). -->
                         </StackPanel>
                     </ScrollViewer>
                 </DockPanel>
@@ -1038,7 +1038,7 @@
                                    MainViewModel="{Binding}">
                 <controls:DesignCanvas.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Component Settings…" Command="{Binding CanvasInteraction.OpenSelectedComponentSettingsCommand}">
+                    <MenuItem Header="Edit Component…" Command="{Binding CanvasInteraction.OpenSelectedComponentSettingsCommand}">
                         <MenuItem.Icon>
                             <TextBlock Text="⚙️" FontSize="14"/>
                         </MenuItem.Icon>

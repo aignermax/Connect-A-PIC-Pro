@@ -9,7 +9,7 @@ namespace CAP_Core.Export;
 /// Only raw-code mode (<see cref="NazcaComponentPreviewService.RenderRawCodeAsync"/>) is
 /// used for gdsfactory; there is no PDK "module mode".
 /// </summary>
-public sealed class GdsFactoryComponentPreviewService : NazcaComponentPreviewService
+public class GdsFactoryComponentPreviewService : NazcaComponentPreviewService
 {
     /// <summary>Initializes the gdsfactory preview service.</summary>
     /// <param name="pythonExecutable">Interpreter that has gdsfactory installed.</param>
