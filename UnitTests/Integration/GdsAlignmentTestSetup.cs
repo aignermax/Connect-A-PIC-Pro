@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP_Core.Export;
 
 namespace UnitTests.Integration;
 

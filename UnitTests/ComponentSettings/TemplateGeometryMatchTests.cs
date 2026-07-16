@@ -1,5 +1,4 @@
 using CAP.Avalonia.Services;
-using CAP_DataAccess.Persistence.PIR;
 using Shouldly;
 using Xunit;
 
@@ -15,13 +14,12 @@ public class TemplateGeometryMatchTests
         TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
 
     [Fact]
-    public void Matches_IsTrue_WhenNoOverrideAndTupleEqualsTemplate()
+    public void Matches_IsTrue_WhenTupleEqualsTemplate()
     {
         var component = CreateComponent();
 
         TemplateGeometryMatch.Matches(
                 component,
-                activeOverride: null,
                 templateModuleName: component.NazcaModuleName,
                 templateFunctionName: component.NazcaFunctionName,
                 templateFunctionParameters: component.NazcaFunctionParameters)
@@ -34,59 +32,11 @@ public class TemplateGeometryMatchTests
         var component = CreateComponent(); // module name is null, parameters ""
 
         TemplateGeometryMatch.Matches(
-                component, null,
+                component,
                 templateModuleName: string.Empty,
                 templateFunctionName: component.NazcaFunctionName,
                 templateFunctionParameters: null)
             .ShouldBeTrue();
-    }
-
-    [Fact]
-    public void Matches_IsFalse_WhenRawCodeOverrideIsActive()
-    {
-        var component = CreateComponent();
-        var nazcaOverride = new NazcaCodeOverride { RawCode = "cell = nd.Cell('x')" };
-
-        TemplateGeometryMatch.Matches(
-                component, nazcaOverride,
-                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
-            .ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Matches_IsFalse_WhenFunctionNameOverrideIsActive()
-    {
-        var component = CreateComponent();
-        var nazcaOverride = new NazcaCodeOverride { FunctionName = "other_cell" };
-
-        TemplateGeometryMatch.Matches(
-                component, nazcaOverride,
-                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
-            .ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Matches_IsFalse_WhenModuleNameOverrideIsActive()
-    {
-        var component = CreateComponent();
-        var nazcaOverride = new NazcaCodeOverride { ModuleName = "other_pdk" };
-
-        TemplateGeometryMatch.Matches(
-                component, nazcaOverride,
-                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
-            .ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Matches_IsFalse_WhenParameterOverrideIsActive()
-    {
-        var component = CreateComponent();
-        var nazcaOverride = new NazcaCodeOverride { FunctionParameters = "length=99" };
-
-        TemplateGeometryMatch.Matches(
-                component, nazcaOverride,
-                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
-            .ShouldBeFalse();
     }
 
     [Fact]
@@ -96,28 +46,10 @@ public class TemplateGeometryMatchTests
         component.NazcaFunctionParameters = "length=42";
 
         TemplateGeometryMatch.Matches(
-                component, null,
+                component,
                 templateModuleName: component.NazcaModuleName,
                 templateFunctionName: component.NazcaFunctionName,
                 templateFunctionParameters: "")
             .ShouldBeFalse();
-    }
-
-    [Fact]
-    public void Matches_IsTrue_WhenOverrideRecordCarriesNoGeometryFields()
-    {
-        var component = CreateComponent();
-        // A record that only snapshots template values (e.g. after "Reset to
-        // template") does not modify geometry.
-        var nazcaOverride = new NazcaCodeOverride
-        {
-            TemplateFunctionName = component.NazcaFunctionName,
-            TemplateFunctionParameters = component.NazcaFunctionParameters,
-        };
-
-        TemplateGeometryMatch.Matches(
-                component, nazcaOverride,
-                component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters)
-            .ShouldBeTrue();
     }
 }

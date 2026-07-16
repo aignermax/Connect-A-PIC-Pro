@@ -493,7 +493,7 @@ public class SMatrixOverrideApplicatorTests
         var b = TestComponentFactory.CreateSimpleTwoPortComponent(); b.Identifier = "B";
         b.NazcaFunctionName = "ebeam_edge_coupler";
 
-        string GeoKey(Component c) => CAP.Avalonia.Services.ComponentGeometryKey.For(c, _ => null);
+        string GeoKey(Component c) => CAP.Avalonia.Services.ComponentGeometryKey.For(c);
         var store = new Dictionary<string, ComponentSMatrixData> { [GeoKey(a)] = MakeData("1550", 2) };
 
         var result = SMatrixOverrideApplicator.ApplyAll(
