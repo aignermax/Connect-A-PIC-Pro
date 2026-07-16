@@ -24,6 +24,17 @@ internal class ScreenshotTestApp : Application
         {
             Source = new Uri("avares://CAP.Avalonia/Styles/CompactControlHeights.axaml"),
         });
+        // Mirrors the production App.axaml includes: without them AvaloniaEdit's TextEditor and
+        // OxyPlot's PlotView have no control template, so UI-flow tests could not type into the
+        // component code editor (issue #556 rationale in App.axaml applies here too).
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"),
+        });
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://OxyPlot.Avalonia/Themes/Default.axaml"),
+        });
     }
 }
 
