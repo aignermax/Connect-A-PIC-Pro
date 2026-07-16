@@ -16,6 +16,14 @@ public partial class LeftPanelViewModel
         await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
     }
 
+    /// <summary>
+    /// Raised after a saved component definition replaced its library template, with the fresh
+    /// template. Wired (in <see cref="MainViewModel"/>) to
+    /// <see cref="FileOperationsViewModel.RefreshInstancesFromTemplate"/> so the saved S-matrix
+    /// takes effect type-wide — including instances already placed on the canvas (PR #742).
+    /// </summary>
+    public Action<ComponentTemplate>? TemplateDefinitionSaved { get; set; }
+
     public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath, bool savedViaBundledFork = false)
     {
         // A save that executed the deferred fork-on-save: the saved file is the user's copy of
@@ -23,7 +31,10 @@ public partial class LeftPanelViewModel
         // registered next to it. Only that explicit fork flow may shadow — a save that merely
         // SHARES a bundled PDK's name must not (PR #742 review, finding 1).
         if (savedViaBundledFork && TryShadowBundledPdkWithSavedFork(pdkName, filePath))
+        {
+            NotifyTemplateDefinitionSaved(pdkName, draft.Name);
             return;
+        }
 
         // Defensive guard: never register a second library entry under a loaded bundled PDK's
         // name — the UI blocks creating such PDKs, so reaching this means a stale/foreign file.
@@ -36,6 +47,18 @@ public partial class LeftPanelViewModel
         }
 
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
+        NotifyTemplateDefinitionSaved(pdkName, draft.Name);
+    }
+
+    /// <summary>Resolves the freshly registered template and raises <see cref="TemplateDefinitionSaved"/>.</summary>
+    private void NotifyTemplateDefinitionSaved(string pdkName, string componentName)
+    {
+        if (TemplateDefinitionSaved is null)
+            return;
+        var fresh = AllTemplates.FirstOrDefault(t =>
+            t.PdkSource == pdkName && string.Equals(t.Name, componentName, StringComparison.OrdinalIgnoreCase));
+        if (fresh != null)
+            TemplateDefinitionSaved(fresh);
     }
 
     internal void RemoveMigratedLibraryTemplate(string oldPdkName, string componentName)
