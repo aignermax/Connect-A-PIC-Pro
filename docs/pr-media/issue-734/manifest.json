@@ -1,0 +1,26 @@
+[
+  {
+    "file": "01-bundled-pdk-duplicate-button.png",
+    "caption": "The bundled (read-only) Demo PDK row in PDK Management now offers a \u0027Duplicate\u2026\u0027 button where custom PDKs have \u0027Edit\u2026\u0027."
+  },
+  {
+    "file": "02-name-prompt.png",
+    "caption": "Clicking \u0027Duplicate\u2026\u0027 asks for a name for the new custom PDK, prefilled with \u0027Demo PDK (custom)\u0027."
+  },
+  {
+    "file": "03-duplicate-registered-enabled.png",
+    "caption": "The duplicate appears immediately as a user PDK with its own \u0027Edit\u2026\u0027 button \u2014 value-compatible with the foundry process, so it is enabled under the active process lock."
+  },
+  {
+    "file": "04-process-editor-on-duplicate.png",
+    "caption": "The per-PDK process editor opens directly on the fresh duplicate, showing the copied foundry layer stack, cross-sections and materials."
+  },
+  {
+    "file": "05-metal-xsection-added.png",
+    "caption": "\u0027\u002B Metal (electrical)\u0027 adds a metal routing cross-section to the copy \u2014 the kind of extension the read-only foundry PDK refuses."
+  },
+  {
+    "file": "06-saved-foundry-untouched.png",
+    "caption": "Saving writes the extended process into the duplicate\u0027s own JSON only \u2014 the bundled foundry file stays byte-identical."
+  }
+]
