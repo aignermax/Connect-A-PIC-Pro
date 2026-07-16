@@ -24,6 +24,7 @@ public partial class NewComponentViewModel : ObservableObject
     private readonly ComponentGeometryExtractor _extractor;
     private readonly IFdtdSMatrixService? _fdtd;
     private readonly UserPdkStore _store;
+    private readonly CAP_Core.ErrorConsoleService? _errorConsole;
 
     private GeometryExtractResult? _lastPreview;
 
@@ -61,11 +62,13 @@ public partial class NewComponentViewModel : ObservableObject
         ComponentGeometryExtractor extractor,
         IFdtdSMatrixService? fdtd,
         UserPdkStore store,
-        IReadOnlyList<ProcessDefinition> processes)
+        IReadOnlyList<ProcessDefinition> processes,
+        CAP_Core.ErrorConsoleService? errorConsole = null)
     {
         _extractor = extractor;
         _fdtd = fdtd;
         _store = store;
+        _errorConsole = errorConsole;
         Processes = processes;
 
         RefreshPdkChoices();
@@ -153,7 +156,22 @@ public partial class NewComponentViewModel : ObservableObject
             : null;
         StatusText = result.Success
             ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
-            : result.Error ?? "Preview render failed.";
+            : DescribeRenderError(result.Error);
         return result.Success;
+    }
+
+    /// <summary>
+    /// Missing/outdated foundry packages (e.g. cspdk) fail the render with a raw Python
+    /// error the user can't act on. Show the actionable hint in the status bar and keep
+    /// the raw error in the Error Console; unrecognised errors stay verbatim.
+    /// </summary>
+    private string DescribeRenderError(string? rawError)
+    {
+        var hint = CAP_Core.Export.FoundryEnvironmentErrorHint.Describe(rawError);
+        if (hint is null)
+            return rawError ?? "Preview render failed.";
+
+        _errorConsole?.LogError($"Component preview render failed: {rawError}");
+        return hint;
     }
 }

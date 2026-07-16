@@ -290,6 +290,71 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public void LoadForEdit_foundryComponentWithoutRawCode_synthesizesPdkRegistryCode_notModuleAttributeCall()
+    {
+        // Field bug: the synthesized editor code for a CornerStone component was
+        // "import cspdk\ncomponent = cspdk.sin300.coupler_straight()", which fails twice —
+        // "import cspdk" doesn't load the sin300 submodule (AttributeError: module 'cspdk'
+        // has no attribute 'sin300'), and cspdk cells are registered in the PDK registry,
+        // not as module attributes. The synthesis must use the exporter/preview pattern.
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = BuildTemplate(null!);
+        template.RawCode = null;
+        template.GdsFactoryFunction = "cspdk.sin300.coupler_straight";
+
+        vm.LoadForEdit(template);
+
+        vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
+        vm.Code.ShouldContain("import cspdk.sin300");
+        vm.Code.ShouldContain("cspdk.sin300.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('coupler_straight')");
+        vm.Code.ShouldNotContain("cspdk.sin300.coupler_straight()");
+    }
+
+    [Fact]
+    public void LoadForEdit_foundryComponentWithBareCellName_resolvesViaGetComponent()
+    {
+        // A bare (dotless) gdsfactory cell has no PDK module to import/activate —
+        // resolve it against the render script's default PDK instead of emitting
+        // the nonsensical "import straight".
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = BuildTemplate(null!);
+        template.RawCode = null;
+        template.GdsFactoryFunction = "straight";
+
+        vm.LoadForEdit(template);
+
+        vm.Code.ShouldContain("gf.get_component('straight')");
+        vm.Code.ShouldNotContain("import straight");
+    }
+
+    [Fact]
+    public async Task RunPreview_missingFoundryPackage_showsActionableHint_andLogsRawErrorToConsole()
+    {
+        // A raw "ModuleNotFoundError: No module named 'cspdk'" from the render subprocess
+        // is not actionable for the user — the status bar must point at the Python
+        // Environments settings while the raw error goes to the Error Console.
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        var nazca = new Mock<IComponentPreviewRenderer>();
+        var gds = new Mock<IComponentPreviewRenderer>();
+        gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+           .ReturnsAsync(NazcaPreviewResult.Fail("No module named 'cspdk'"));
+        var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var vm = new NewComponentViewModel(extractor, fdtd: null, store,
+            new List<ProcessDefinition> { process }, errorConsole);
+        vm.Code = "import cspdk.sin300\ncomponent = gf.get_component('coupler_straight')";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldContain("cspdk");
+        vm.StatusText.ShouldContain("Settings → Python Environments");
+        errorConsole.Entries.ShouldContain(e => e.Message.Contains("No module named 'cspdk'"));
+    }
+
+    [Fact]
     public void LoadForEdit_withNoStoredCode_setsCodeEmpty_andReportsStatus()
     {
         var (vm, _, _) = BuildWithSeededPdk();

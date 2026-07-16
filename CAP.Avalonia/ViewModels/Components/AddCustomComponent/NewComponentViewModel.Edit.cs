@@ -1,5 +1,6 @@
 using System.Linq;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -156,13 +157,21 @@ public partial class NewComponentViewModel
     /// <summary>
     /// Turns a foundry component's function reference into equivalent editable code, so a bundled
     /// component opens with a visible, runnable definition instead of a blank editor.
+    /// gdsfactory-native PDKs (e.g. CornerStone's cspdk) register their cells in the PDK
+    /// registry, NOT as module attributes — "cspdk.sin300.coupler_straight()" raises
+    /// AttributeError (and a bare "import cspdk" doesn't even load the sin300 submodule).
+    /// So the synthesized code uses the same import + PDK.activate() + gf.get_component()
+    /// pattern as the canvas preview and the exporter (<see cref="GdsFactoryPreviewCode"/>).
     /// </summary>
     private static (string Code, GeometryBackend Backend)? SynthesizeCodeFromReference(ComponentTemplate t)
     {
         if (!string.IsNullOrWhiteSpace(t.GdsFactoryFunction))
         {
-            var top = t.GdsFactoryFunction.Split('.')[0];
-            return ($"import {top}\ncomponent = {t.GdsFactoryFunction}()", GeometryBackend.GdsFactory);
+            // Bare (dotless) cell names have no PDK module to activate — resolve them
+            // against whatever PDK the render script activates by default.
+            var code = GdsFactoryPreviewCode.For(t.GdsFactoryFunction)
+                ?? $"import gdsfactory as gf\ncomponent = gf.get_component('{t.GdsFactoryFunction}')\n";
+            return (code, GeometryBackend.GdsFactory);
         }
         if (!string.IsNullOrWhiteSpace(t.NazcaFunctionName))
         {

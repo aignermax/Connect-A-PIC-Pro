@@ -122,7 +122,12 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.LoadForEdit(template);
 
         vm.IsEditMode.ShouldBeTrue();
-        vm.Code.ShouldContain("cspdk.sin300.coupler()");
+        // cspdk cells live in the PDK registry, not as module attributes —
+        // "cspdk.sin300.coupler()" raises AttributeError (field bug). The synthesized
+        // code must use the import + activate + gf.get_component pattern instead.
+        vm.Code.ShouldContain("import cspdk.sin300");
+        vm.Code.ShouldContain("cspdk.sin300.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('coupler')");
         vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
     }
 
