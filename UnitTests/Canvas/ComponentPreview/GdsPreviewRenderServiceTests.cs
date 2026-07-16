@@ -60,6 +60,24 @@ public sealed class GdsPreviewRenderServiceTests
     }
 
     [Fact]
+    public void BuildCacheKey_RotatedComponent_MatchesUnrotatedKey()
+    {
+        // Rotating with R swaps Component.Width/HeightMicrometers and bumps RotationDegrees.
+        // The preview bitmap content is rotation-independent (the canvas rotates it at draw
+        // time), so the cache key must not change — otherwise every rotation re-runs the
+        // Python render and rasterises the unrotated geometry into a swapped-aspect bitmap.
+        var unrotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 8, heightMicrometers: 4);
+
+        var rotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 4, heightMicrometers: 8);
+        rotated.Component.RotationDegrees = 90;
+
+        GdsPreviewRenderService.BuildCacheKey(rotated)
+            .ShouldBe(GdsPreviewRenderService.BuildCacheKey(unrotated));
+    }
+
+    [Fact]
     public void BuildCacheKey_GdsFactoryNativeComponent_ReturnsGdsfactoryKey()
     {
         // A gdsfactory-native component (no Nazca function, a gdsfactory factory) must still get
