@@ -52,13 +52,16 @@ fehlendem Component (dedupe per Name über alle Backups, neuestes Backup gewinnt
 wie sie sind. Statusmeldung nennt die konkrete Komponente.
 
 ### 4. Rechtsklick → unified Editor (T4)
-Der Canvas-Kontextmenü-Eintrag „Component Settings" öffnet den unified „Edit Component"-Editor
-für die Template-Definition der angeklickten Komponente (gleicher Pfad wie ✏ in der Library,
-inkl. fork-on-edit für bundled). Der `ComponentSettingsDialog` bleibt ausschließlich als
-S-Matrix-Ansicht (vom Editor über „stored S-matrices" geöffnet); sein
-„Recalculate S-matrix (FDTD)…"-Button + `RecalculateSMatrixCommand`/`CanRecalculate` werden
-ersatzlos entfernt (Recompute lebt im Editor). Keine-Physik-Regel: dadurch entsteht KEIN neuer
-S-Matrix-Pfad, es verschwindet nur ein toter.
+Der Canvas-Kontextmenü-Eintrag („Component Settings" → „Edit Component…") öffnet den unified
+„Edit Component"-Editor für die Template-Definition der angeklickten Komponente (gleicher Pfad
+wie ✏ in der Library, inkl. fork-on-edit für bundled). Der `ComponentSettingsDialog` bleibt als
+S-Matrix-Ansicht (vom Editor über „stored S-matrices" geöffnet).
+
+**Revision nach Merge-Kollision:** Der ursprünglich als „tot" eingestufte
+„Recalculate S-matrix (FDTD)…"-Button wurde parallel durch PR #743 (Issue #582) repariert und
+ausgebaut (Wellenlängen-Sweep über die komponenten-eigenen Wellenlängen, Stale-Warnung,
+Provenance-Tags). Er bleibt deshalb ERHALTEN — die Feld-Beobachtung „geht nicht" bezog sich auf
+den Stand vor #743. Entfernt wird nichts; nur das Rechtsklick-Routing ändert sich.
 
 ### 5. PDK-Mgmt-Header (T5)
 Header-Text „PDK Mgmt"; drei kompakte Icon-Buttons im Header (Reihenfolge: Enable All,
