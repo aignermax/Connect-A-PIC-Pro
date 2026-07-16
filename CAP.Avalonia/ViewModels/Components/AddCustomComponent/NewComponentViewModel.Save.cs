@@ -171,6 +171,14 @@ public partial class NewComponentViewModel
             }
             Saved?.Invoke(this, EventArgs.Empty);
         }
+        catch (Exception ex)
+        {
+            // Without a catch, the AsyncRelayCommand swallows the fault and the Save button
+            // looks like it silently did nothing (PR #742 review, finding 2) — e.g. when the
+            // target fork file was reverted to trash underneath an open editor.
+            StatusText = $"Save failed: {ex.Message}";
+            _errorConsole?.LogError($"Saving component '{name}' to PDK '{pdk.Name}' failed: {ex.Message}", ex);
+        }
         finally
         {
             IsBusy = false;

@@ -44,15 +44,20 @@ public partial class NewComponentViewModel
 
     private string? _loadedName;
     private string? _loadedCode;
+    private GeometryBackend? _loadedBackend;
+    private string? _loadedPdkFilePath;
 
     /// <summary>
-    /// True when the user changed the name or code since <see cref="LoadForEdit"/> (or the last
-    /// <see cref="RefreshFromFreshEdit"/>). The main window's editor dedup consults this: a
-    /// stale-but-clean editor is refreshed with the current on-disk state on a second ✏ click,
-    /// while unsaved user input is never thrown away.
+    /// True when the user changed any editable field — name, code, geometry backend, or target
+    /// PDK — since <see cref="LoadForEdit"/>. The main window's editor dedup consults this: a
+    /// stale-but-clean editor is replaced with a freshly loaded view model on a second ✏ click,
+    /// while unsaved user input is never thrown away (PR #742 review, finding 4).
     /// </summary>
     public bool HasUnsavedEditChanges =>
-        IsEditMode && (Code != _loadedCode || ComponentName != _loadedName);
+        IsEditMode && (Code != _loadedCode
+            || ComponentName != _loadedName
+            || SelectedBackend != _loadedBackend
+            || !string.Equals(SelectedCustomPdk?.FilePath, _loadedPdkFilePath, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Prefills this editor from <paramref name="template"/>. Returns false (leaving
@@ -97,6 +102,8 @@ public partial class NewComponentViewModel
         _editOriginalProcessName = match.Pdk.Process?.Name;
         _loadedName = ComponentName;
         _loadedCode = Code;
+        _loadedBackend = SelectedBackend;
+        _loadedPdkFilePath = SelectedCustomPdk?.FilePath;
         IsEditMode = true;
         return true;
     }
@@ -133,25 +140,6 @@ public partial class NewComponentViewModel
         if (string.IsNullOrEmpty(StatusText))
             StatusText = "Editing a built-in component — \"Save changes\" creates your own editable copy of its PDK.";
         return true;
-    }
-
-    /// <summary>
-    /// Adopts the freshly loaded template state of <paramref name="fresh"/> — a new VM that just
-    /// ran <see cref="LoadForEdit"/> for the same component — into this already-open editor.
-    /// Called by the main window's dedup when this editor has no unsaved user input
-    /// (<see cref="HasUnsavedEditChanges"/> false), so a second ✏ click shows the current
-    /// on-disk state instead of a stale snapshot whose Save would silently overwrite newer
-    /// changes. Setting <see cref="NewComponentViewModel.Code"/> also invalidates the preview.
-    /// </summary>
-    public void RefreshFromFreshEdit(NewComponentViewModel fresh)
-    {
-        ComponentName = fresh.ComponentName;
-        SelectedBackend = fresh.SelectedBackend;
-        Code = fresh.Code;
-        StatusText = fresh.StatusText;
-        _editingOriginalName = fresh._editingOriginalName;
-        _loadedName = fresh._loadedName;
-        _loadedCode = fresh._loadedCode;
     }
 
     /// <summary>

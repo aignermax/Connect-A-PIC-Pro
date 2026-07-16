@@ -116,15 +116,19 @@ public partial class MainWindow : Window
                         && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
                         && existingComponentWindow.IsVisible)
                     {
-                        // Stale-state guard (PR #742 review, finding 2): the existing window may
-                        // hold an outdated snapshot (the file changed on disk since it opened) —
-                        // saving from it would silently overwrite the newer state. If the user
-                        // has no unsaved input there, adopt the freshly loaded template state;
-                        // if they do, only activate — user input is never thrown away.
+                        // Stale-state guard (PR #742 review, findings 2+4): the existing window
+                        // may hold an outdated snapshot (the file changed on disk since it
+                        // opened) — saving from it would silently overwrite the newer state.
+                        // If the user has no unsaved input there, adopt the freshly loaded
+                        // view model WHOLESALE: it carries the current on-disk state AND the
+                        // complete edit bookkeeping (pending bundled fork, save target) that a
+                        // field-by-field copy would lose. If they do, only activate — user
+                        // input is never thrown away.
                         if (existingComponentWindow.DataContext is NewComponentViewModel existingVm
                             && !existingVm.HasUnsavedEditChanges)
                         {
-                            existingVm.RefreshFromFreshEdit(newComponentVm);
+                            WireNewComponentEditorHooks(newComponentVm, existingComponentWindow, vm);
+                            existingComponentWindow.DataContext = newComponentVm;
                         }
                         // Un-minimize first: Activate() alone leaves a minimized window
                         // minimized, which looks like the ✏ button silently did nothing.
@@ -133,59 +137,14 @@ public partial class MainWindow : Window
                         return System.Threading.Tasks.Task.CompletedTask;
                     }
 
-                    // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the
-                    // view model only knows the file's already-read contents (PickPyFile's
-                    // contract), never a path, so it can't own a FileDialogService itself.
-                    newComponentVm.PickPyFile = async () =>
-                    {
-                        var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
-                            "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
-                        return path is null ? null : await File.ReadAllTextAsync(path);
-                    };
-                    newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
-                        "Load S-Parameter File",
-                        "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
-                    newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
-                    {
-                        var template = vm.LeftPanel.AllTemplates
-                            .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
-                        ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
-                        return System.Threading.Tasks.Task.CompletedTask;
-                    };
-                    // Confirm before overwriting an existing component name in the target PDK
-                    // (new or existing custom PDK — the message names whichever applies).
-                    newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
-                    {
-                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
-                            $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
-                            "Overwrite?", new[] { "Cancel", "Overwrite" });
-                        return choice == 1;
-                    };
-                    // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, CP-T4): opens
-                    // the purpose-built CreateCustomPdkWindow — not the general Fabrication
-                    // Process editor — so creating a brand-new named PDK is a small, focused
-                    // dialog instead of the full view/edit-existing-process tool. Modal
-                    // (ShowDialog, owner = the New Component window itself) so its PDK dropdown
-                    // cannot be left mid-selection while the modal is open.
-                    var window = new NewComponentWindow { DataContext = newComponentVm };
-                    // Save closes the window; closing the window (via Save, the titlebar X, or
-                    // Alt+F4) always cancels any Meep compute still running so it doesn't keep
-                    // burning CPU/Docker resources after the user has moved on.
-                    newComponentVm.Saved += (_, _) => window.Close();
-                    window.Closing += (_, _) => newComponentVm.CancelCompute();
-                    newComponentVm.CreateNewPdk = async () =>
-                    {
-                        // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also
-                        // registers the new (possibly component-less) PDK into the library, so
-                        // cancelling the component afterwards no longer leaves the PDK invisible
-                        // until the next restart (PR #739 review).
-                        var createdPath = await ShowCreateCustomPdkDialogAsync(window);
-                        if (createdPath is null)
-                            return null;
-
-                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
-                        return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
-                    };
+                    var window = new NewComponentWindow();
+                    WireNewComponentEditorHooks(newComponentVm, window, vm);
+                    window.DataContext = newComponentVm;
+                    // Closing the window (via Save, the titlebar X, or Alt+F4) always cancels
+                    // any Meep compute still running so it doesn't keep burning CPU/Docker
+                    // resources after the user has moved on. Wired against the CURRENT
+                    // DataContext because the dedup above may swap in a fresh view model.
+                    window.Closing += (_, _) => (window.DataContext as NewComponentViewModel)?.CancelCompute();
                     if (editKey is not null)
                     {
                         _openComponentEditWindows[editKey] = window;
@@ -931,6 +890,65 @@ public partial class MainWindow : Window
             $"Could not restore the built-in original of '{pdkName}'.\n\n"
             + "See the Error Console for details.",
             "Restore failed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Wires one <see cref="NewComponentViewModel"/> to the window that hosts it — file
+    /// pickers, overwrite confirm, stored-S-matrices dialog, the "New PDK…" creation hook, and
+    /// Saved→Close. Runs both for a brand-new editor window and when the editor dedup swaps a
+    /// freshly loaded view model into an already-open window (PR #742 review, finding 2), so
+    /// the two paths can never drift apart.
+    /// </summary>
+    private void WireNewComponentEditorHooks(NewComponentViewModel newComponentVm, NewComponentWindow window, MainViewModel vm)
+    {
+        // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the view model
+        // only knows the file's already-read contents (PickPyFile's contract), never a path,
+        // so it can't own a FileDialogService itself.
+        newComponentVm.PickPyFile = async () =>
+        {
+            var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
+                "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
+            return path is null ? null : await File.ReadAllTextAsync(path);
+        };
+        newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
+            "Load S-Parameter File",
+            "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
+        newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
+        {
+            var template = vm.LeftPanel.AllTemplates
+                .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
+            ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+            return System.Threading.Tasks.Task.CompletedTask;
+        };
+        // Confirm before overwriting an existing component name in the target PDK
+        // (new or existing custom PDK — the message names whichever applies).
+        newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
+        {
+            var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
+                "Overwrite?", new[] { "Cancel", "Overwrite" });
+            return choice == 1;
+        };
+        // Save closes the window that currently hosts this view model.
+        newComponentVm.Saved += (_, _) => window.Close();
+        // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, CP-T4): opens the
+        // purpose-built CreateCustomPdkWindow — not the general Fabrication Process editor —
+        // so creating a brand-new named PDK is a small, focused dialog instead of the full
+        // view/edit-existing-process tool. Modal (ShowDialog, owner = the New Component window
+        // itself) so its PDK dropdown cannot be left mid-selection while the modal is open.
+        newComponentVm.CreateNewPdk = async () =>
+        {
+            // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also registers
+            // the new (possibly component-less) PDK into the library, so cancelling the
+            // component afterwards no longer leaves the PDK invisible until the next restart
+            // (PR #739 review).
+            var createdPath = await ShowCreateCustomPdkDialogAsync(window);
+            if (createdPath is null)
+                return null;
+
+            var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+            return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+        };
     }
 
     /// <summary>

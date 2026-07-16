@@ -267,26 +267,57 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
-    public void RefreshFromFreshEdit_adoptsTheFreshOnDiskState_andReportsNoUnsavedChanges()
+    public void HasUnsavedEditChanges_tracksTheGeometryBackend()
     {
-        // Dedup scenario (PR #742 review, finding 2): the already-open editor holds a stale
-        // snapshot; a second ✏ click builds a fresh VM from the current on-disk template. The
-        // stale-but-clean editor must adopt that fresh state instead of silently keeping (and
-        // later saving) the outdated one.
-        var (staleVm, _, rawCode) = BuildWithSeededPdk();
-        staleVm.LoadForEdit(BuildTemplate(rawCode));
+        // PR #742 review, finding 4: a backend switch is user input like any other — the
+        // dedup's "no unsaved changes → adopt fresh state" guard must never throw it away.
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
 
-        // Fresh VM over the same on-disk store, as a second ✏ click would build it.
-        var (freshVm, _) = Build(Store(), new List<ProcessDefinition> { new() { Name = "SiN 300" } });
-        var changedOnDisk = rawCode + "\n# changed on disk since the first window opened";
-        var freshTemplate = BuildTemplate(changedOnDisk);
-        freshVm.LoadForEdit(freshTemplate);
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
 
-        staleVm.RefreshFromFreshEdit(freshVm);
+        vm.SelectedBackend = GeometryBackend.Nazca;
+        vm.HasUnsavedEditChanges.ShouldBeTrue("switching the geometry backend is an unsaved user change");
 
-        staleVm.Code.ShouldBe(changedOnDisk);
-        staleVm.ComponentName.ShouldBe("comp1");
-        staleVm.HasUnsavedEditChanges.ShouldBeFalse();
+        vm.SelectedBackend = GeometryBackend.GdsFactory;
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_tracksTheSelectedTargetPdk()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("comp1", rawCode));
+        store.CreateNamedPdkWithProcess("Other Lib", process, "gdsfactory", null);
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.SelectedPdkChoice = vm.PdkChoices.First(c => !c.IsNewPdk && c.Pdk!.Name == "Other Lib");
+        vm.HasUnsavedEditChanges.ShouldBeTrue("re-targeting the save to another PDK is an unsaved user change");
+    }
+
+    [Fact]
+    public async Task Save_whenTheStoreThrows_reportsTheError_insteadOfSilentlySwallowingIt()
+    {
+        // PR #742 review, finding 2: Save() had try/finally with no catch, so a store failure
+        // (e.g. the target file vanished after a fork revert) faulted the AsyncRelayCommand
+        // silently — the Save button looked like it did nothing.
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+        vm.ConfirmOverwrite = (_, _) => Task.FromResult(true);
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        File.Delete(filePath); // the save target disappears underneath the open editor
+
+        await Should.NotThrowAsync(async () => await vm.SaveCommand.ExecuteAsync(null));
+
+        vm.SavedDraft.ShouldBeNull();
+        vm.StatusText.ShouldContain("Save failed");
+        vm.IsBusy.ShouldBeFalse();
     }
 
     [Fact]
