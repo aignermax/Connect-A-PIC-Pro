@@ -6,6 +6,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Process;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services;
 
@@ -30,16 +31,48 @@ public class AiGridService : IAiGridService
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
 
     /// <summary>
+    /// By-value-compatible member PDK names for the active process (issue placement-livemembers),
+    /// mirroring <c>CanvasInteractionViewModel.GetLiveMemberPdkNames</c> so the AI placement path
+    /// obeys the same by-value process lock as manual placement (#732). Wired by
+    /// <c>MainViewModel</c> to <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }
+
+    /// <summary>
     /// Resolves a placed core component's PDK source from the loaded library
     /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
     /// path checks the group's children instead of the group's null source (#653).
     /// </summary>
     public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
 
-    private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
-        SingleProcessPolicy.CheckPlacement(
-            GetActiveProcess?.Invoke(), pdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+    /// <summary>
+    /// Per-instance raw-code override store the AI placement path seeds into (issue
+    /// rawcode authoring), mirroring the manual-placement wiring on
+    /// <c>CanvasInteractionViewModel.NazcaOverrideStore</c>. Wired by <c>MainViewModel</c>
+    /// to <c>FileOperations.StoredNazcaOverrides</c>.
+    /// </summary>
+    public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
+
+    /// <summary>
+    /// Snapshot of the process-guard inputs (active process, agnostic tool PDKs, live by-value
+    /// member set), resolved ONCE per public entry point and reused across per-template /
+    /// per-clipboard-item loops — re-invoking the callbacks per candidate made
+    /// <see cref="GetAvailableComponentTypes"/> O(Templates × PDKs) (review Finding 5).
+    /// Short-lived (one call); never cached across calls, so it can't go stale.
+    /// </summary>
+    private sealed record ProcessGuard(
+        ActiveProcessSelection? Active,
+        IReadOnlyCollection<string> AgnosticPdkNames,
+        IReadOnlyCollection<string>? LiveMemberPdkNames);
+
+    /// <summary>Resolves the guard inputs from the wired callbacks (see <see cref="ProcessGuard"/>).</summary>
+    private ProcessGuard ResolveProcessGuard() => new(
+        GetActiveProcess?.Invoke(),
+        GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+        GetLiveMemberPdkNames?.Invoke());
+
+    private static (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource, ProcessGuard guard) =>
+        SingleProcessPolicy.CheckPlacement(guard.Active, pdkSource, guard.AgnosticPdkNames, guard.LiveMemberPdkNames);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -118,7 +151,7 @@ public class AiGridService : IAiGridService
 
         // Single-process enforcement (issue #570): the AI path must not bypass the
         // same gate manual placement goes through.
-        var (isAllowed, blockReason) = CheckProcess(template.PdkSource);
+        var (isAllowed, blockReason) = CheckProcess(template.PdkSource, ResolveProcessGuard());
         if (!isAllowed)
             return blockReason ?? $"Cannot place '{componentType}' — it belongs to another process.";
 
@@ -126,7 +159,7 @@ public class AiGridService : IAiGridService
         var centeredX = x - template.WidthMicrometers / 2;
         var centeredY = y - template.HeightMicrometers / 2;
 
-        var cmd = PlaceComponentCommand.TryCreate(_canvas, template, centeredX, centeredY);
+        var cmd = PlaceComponentCommand.TryCreate(_canvas, template, centeredX, centeredY, NazcaOverrideStore);
         if (cmd == null)
             return $"Cannot place '{componentType}' — no valid position found near ({x:F0}, {y:F0})µm. Try a different position.";
 
@@ -208,10 +241,13 @@ public class AiGridService : IAiGridService
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<string> GetAvailableComponentTypes() =>
-        _leftPanel.AllTemplates
-            .Where(t => CheckProcess(t.PdkSource).IsAllowed)
+    public IReadOnlyList<string> GetAvailableComponentTypes()
+    {
+        var guard = ResolveProcessGuard();
+        return _leftPanel.AllTemplates
+            .Where(t => CheckProcess(t.PdkSource, guard).IsAllowed)
             .Select(t => t.Name).Distinct().ToList();
+    }
 
     /// <inheritdoc/>
     public string CreateGroup(IReadOnlyList<string> componentIds, string? groupName = null)
@@ -329,8 +365,9 @@ public class AiGridService : IAiGridService
 
         // Single-process enforcement (issues #570/#653) — mirrors the paste gate;
         // PeekPdkSources expands groups to their resolved children.
+        var guard = ResolveProcessGuard();
         var copyBlockReason = tempClipboard.PeekPdkSources()
-            .Select(pdk => CheckProcess(pdk))
+            .Select(pdk => CheckProcess(pdk, guard))
             .Where(check => !check.IsAllowed)
             .Select(check => check.BlockReason)
             .FirstOrDefault();

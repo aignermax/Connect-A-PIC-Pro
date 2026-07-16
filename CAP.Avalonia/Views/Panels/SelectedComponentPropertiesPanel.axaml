@@ -87,15 +87,23 @@
                      not a free numeric field. -->
                 <DataTemplate x:Key="LightSourceTpl" x:DataType="editors:LightSourceEditorViewModel">
                     <StackPanel>
+                        <!-- Laser on/off (#690): a coupler with its laser off is listen-only,
+                             i.e. an output. Shares LaserConfig with the canvas laser icon. -->
+                        <TextBlock Text="Laser" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <ToggleSwitch IsChecked="{Binding LaserConfig.IsEnabled, Mode=TwoWay}"
+                                      OnContent="On — input" OffContent="Off — output"
+                                      FontSize="11" Margin="0,0,0,4"/>
                         <TextBlock Text="Wavelength" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
                         <ComboBox ItemsSource="{Binding WavelengthOptions}"
                                   SelectedValue="{Binding LaserConfig.WavelengthNm, Mode=TwoWay}"
                                   SelectedValueBinding="{Binding WavelengthNm}"
                                   DisplayMemberBinding="{Binding Label}"
+                                  IsEnabled="{Binding LaserConfig.IsEnabled}"
                                   HorizontalAlignment="Stretch" Margin="0,0,0,6"/>
                         <TextBlock Text="Input power" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
                         <Slider Minimum="0" Maximum="1"
                                 Value="{Binding LaserConfig.InputPower, Mode=TwoWay}"
+                                IsEnabled="{Binding LaserConfig.IsEnabled}"
                                 TickFrequency="0.1" IsSnapToTickEnabled="True"/>
                         <TextBlock Foreground="#cccccc" FontSize="10">
                             <Run Text="Power: "/>

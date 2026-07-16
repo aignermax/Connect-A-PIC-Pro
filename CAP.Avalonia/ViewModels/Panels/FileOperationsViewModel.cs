@@ -82,6 +82,14 @@ public partial class FileOperationsViewModel : ObservableObject
     public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
 
     /// <summary>
+    /// Supplies the process-derived metal routing parameters (trace width, GDS layer,
+    /// crossing policy) for electrical connections at export time (issue #682). Wired by
+    /// MainViewModel to the active process' PDK definitions; null falls back to
+    /// <see cref="CAP_Core.Routing.MetalRouting.MetalRoutingSpec.Default"/>.
+    /// </summary>
+    public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? MetalRoutingSpecProvider { get; set; }
+
+    /// <summary>
     /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
     /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
     /// analyzer-only tool PDKs never count toward a legacy design's process attribution
@@ -155,10 +163,6 @@ public partial class FileOperationsViewModel : ObservableObject
     /// the gdsfactory export instead. Null in headless contexts.
     /// </summary>
     public Func<Task>? RequestGdsFactoryExport { get; set; }
-
-    /// <summary>Supplies the metal trace style for electrical routing (issue #682), resolved
-    /// from the design's active process. Null falls back to <see cref="MetalTraceStyle.Default"/>.</summary>
-    public Func<MetalTraceStyle>? MetalStyleProvider { get; set; }
 
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
@@ -436,6 +440,7 @@ public partial class FileOperationsViewModel : ObservableObject
             SliderValue = c.HasSliders ? c.SliderValue : null,
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
+            LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
             IsLocked = c.Component.IsLocked ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
@@ -455,7 +460,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// fallback lookup in <see cref="Services.SMatrixOverrideApplicator.ApplyAll"/> so PDK-template
     /// overrides reach every instance of the template.
     /// </summary>
-    private string? ResolveTemplateKey(Component component)
+    public string? ResolveTemplateKey(Component component)
     {
         var pdkSource = FindTemplatePdkSource(component);
         if (pdkSource == null) return null;
@@ -1111,6 +1116,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.WavelengthNm = compData.LaserWavelengthNm.Value;
             if (compData.LaserPower.HasValue)
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
+            if (compData.LaserEnabled.HasValue)
+                vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
         }
 
         // Restore lock state
@@ -1449,9 +1456,10 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script
+                // Export Python script (metal spec: process-derived electrical routing, #682)
                 var nazcaCode = _nazcaExporter.Export(
-                    _canvas, overrides: StoredNazcaOverrides, metalStyle: MetalStyleProvider?.Invoke());
+                    _canvas, overrides: StoredNazcaOverrides,
+                    metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
                 // Warn if any instance has a gdsfactory-backend override: the Nazca export

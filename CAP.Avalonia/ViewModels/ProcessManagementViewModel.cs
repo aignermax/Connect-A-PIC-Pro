@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -29,21 +30,29 @@ public partial class ProcessManagementViewModel : ObservableObject
     private IReadOnlyList<PdkDraft> _memberDrafts = new List<PdkDraft>();
 
     /// <summary>
-    /// Names of the layer/cross-section/material rows that belong to the currently loaded member
-    /// PDK(s), as opposed to rows pulled in later by <see cref="ImportFromPdk"/>'s <see cref="Merge"/>
-    /// from an unrelated reference PDK. <see cref="SaveProcess"/> only ever writes rows in these
-    /// sets, so an ad-hoc reference import can never corrupt the member PDK's own layer stack
-    /// (issue #686 review, Finding 2). Populated by <see cref="Load"/> / <see cref="ShowLockedProcess"/>
-    /// and by the manual Add* commands; a later <see cref="Merge"/> call (the import path) does
-    /// NOT add to these sets.
+    /// Row objects (<see cref="ProcessLayer"/>/<see cref="ProcessXsection"/>/<see cref="ProcessMaterial"/>)
+    /// that belong to the currently loaded member PDK(s), tracked by REFERENCE rather than by
+    /// name (issue #733 review, Finding 0). A name-based snapshot silently dropped every row
+    /// renamed after <see cref="Load"/> — including every row added via "+ Layer"/
+    /// "+ Cross-section"/"+ Material" (they start as NEW_LAYER/new_xs/NewMaterial and are always
+    /// renamed before saving) — because <see cref="SaveProcess"/> then filtered it out as "not in
+    /// the owned-names snapshot", silently discarding it. Tracking the row OBJECTS instead means a
+    /// rename can never un-own a row: only <see cref="Load"/>/<see cref="MarkAllRowsOwned"/> (rows
+    /// loaded from the process being edited) and the Add* commands (rows the user explicitly
+    /// created here) ever add to this set. A later <see cref="Merge"/> call (the reference-import
+    /// path via <see cref="ImportFromPdk"/>) does NOT add to it, so a foreign PDK's rows still can
+    /// never be written into this PDK's file (issue #686 review, Finding 2 — preserved).
     /// </summary>
-    private readonly HashSet<string> _ownLayerNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<object> _ownedRows = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>Cross-section names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
-    private readonly HashSet<string> _ownXsectionNames = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>Material names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
-    private readonly HashSet<string> _ownMaterialNames = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Process-level fields <see cref="ToProcess"/> doesn't rebuild from the editable grids
+    /// (issue #733 review, Finding 2); captured by <see cref="Load"/> so a Load()/ToProcess()
+    /// round-trip (e.g. the "Start from template" prefill) never silently drops them.</summary>
+    private List<int> _passThroughAllowedAngles = new();
+    private bool? _passThroughElectricalBridgeRequired;
+    private string? _passThroughFoundry;
+    private string? _passThroughVersion;
+    private double? _passThroughCoreThicknessNm;
 
     /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
     public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
@@ -116,8 +125,48 @@ public partial class ProcessManagementViewModel : ObservableObject
         Replace(Layers, process.Layers);
         Replace(Xsections, process.Xsections);
         Replace(Materials, process.Materials);
+        // Preserve the fields ToProcess() doesn't rebuild from the grids (issue #733 review,
+        // Finding 2) so a later ToProcess() call emits them unchanged instead of silently
+        // dropping them.
+        _passThroughAllowedAngles = new List<int>(process.AllowedAngles);
+        _passThroughElectricalBridgeRequired = process.ElectricalBridgeRequired;
+        _passThroughFoundry = process.Foundry;
+        _passThroughVersion = process.Version;
+        _passThroughCoreThicknessNm = process.CoreThicknessNm;
         MarkAllRowsOwned();
         HasProcess = true;
+    }
+
+    /// <summary>
+    /// Raised after <see cref="SaveProcess"/> has written the edited process back to a PDK's
+    /// JSON file on disk. The UI layer subscribes to re-apply the design's active process lock
+    /// by value, so an edit that changes a custom PDK's fingerprint (or newly declares one) is
+    /// reflected immediately without requiring a restart (issue #726 follow-up).
+    /// </summary>
+    public event EventHandler? ProcessSaved;
+
+    /// <summary>
+    /// Opens this editor scoped to exactly one custom PDK (issue #726 follow-up): the toolbar-wide
+    /// "Fabrication Process" dialog with its preset/import pickers is gone, replaced by a small
+    /// "Edit…" button per custom PDK in PDK Management. This loads <paramref name="draft"/>'s own
+    /// process (or a blank one named after the draft, if it declares none yet) and scopes
+    /// <see cref="SaveProcess"/> to that single PDK. It never reads or writes the design's active
+    /// fabrication process selection — only the PDK's own JSON file, via <see cref="PdkFilePathResolver"/>.
+    /// </summary>
+    public void LoadForSinglePdkEdit(PdkDraft draft)
+    {
+        // Loads a deep copy (issue #733 review, Finding 3), never draft.Process itself: the
+        // editable grids would otherwise alias the live in-memory PDK, so every keystroke would
+        // mutate it immediately — before the user ever presses Save, and even if the editor
+        // window is closed without saving. Only SaveProcess writes the edit back to draft.Process.
+        var process = draft.Process == null
+            ? new ProcessDefinition { Name = draft.Name }
+            : ProcessDefinitionCloner.Clone(draft.Process);
+        Load(process);
+        _memberDrafts = new List<PdkDraft> { draft };
+        StatusText = draft.Process == null
+            ? $"'{draft.Name}' has no process yet. Add layers, cross-sections and materials, then Save."
+            : $"Editing the process of '{draft.Name}'. Adjust as needed, then Save to PDK.";
     }
 
     /// <summary>
@@ -151,31 +200,35 @@ public partial class ProcessManagementViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Snapshots the names currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
-    /// as belonging to the process being edited (issue #686 review, Finding 2) — called right after
-    /// the collections are populated from the process's OWN definition(s), before any later
-    /// <see cref="ImportFromPdk"/> reference import can add unrelated rows.
+    /// Marks every row currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
+    /// as belonging to the process being edited (issue #686 review, Finding 2; tracked by object
+    /// reference since issue #733 review, Finding 0) — called right after the collections are
+    /// populated from the process's OWN definition(s), before any later <see cref="ImportFromPdk"/>
+    /// reference import can add unrelated rows.
     /// </summary>
     private void MarkAllRowsOwned()
     {
-        _ownLayerNames.Clear();
-        _ownXsectionNames.Clear();
-        _ownMaterialNames.Clear();
+        _ownedRows.Clear();
         foreach (var layer in Layers)
-            if (layer.Name != null) _ownLayerNames.Add(layer.Name);
+            _ownedRows.Add(layer);
         foreach (var xs in Xsections)
-            if (xs.Name != null) _ownXsectionNames.Add(xs.Name);
+            _ownedRows.Add(xs);
         foreach (var mat in Materials)
-            if (mat.Name != null) _ownMaterialNames.Add(mat.Name);
+            _ownedRows.Add(mat);
     }
 
     /// <summary>Builds a process definition from the current editable state.</summary>
     public ProcessDefinition ToProcess() => new()
     {
         Name = ProcessName,
+        Foundry = _passThroughFoundry,
+        Version = _passThroughVersion,
+        CoreThicknessNm = _passThroughCoreThicknessNm,
         Layers = Layers.ToList(),
         Xsections = Xsections.ToList(),
         Materials = Materials.ToList(),
+        AllowedAngles = new List<int>(_passThroughAllowedAngles),
+        ElectricalBridgeRequired = _passThroughElectricalBridgeRequired,
     };
 
     /// <summary>
@@ -262,7 +315,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var layer = new ProcessLayer { Name = "NEW_LAYER" };
         Layers.Add(layer);
-        _ownLayerNames.Add(layer.Name);
+        _ownedRows.Add(layer);
     }
 
     /// <summary>Adds an empty cross-section row for manual entry.</summary>
@@ -271,7 +324,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var xsection = new ProcessXsection { Name = "new_xs" };
         Xsections.Add(xsection);
-        _ownXsectionNames.Add(xsection.Name);
+        _ownedRows.Add(xsection);
     }
 
     /// <summary>
@@ -292,7 +345,7 @@ public partial class ProcessManagementViewModel : ObservableObject
                 Description = "Electrical routing metal",
             };
             Layers.Add(metalLayer);
-            _ownLayerNames.Add(metalLayer.Name);
+            _ownedRows.Add(metalLayer);
         }
 
         var metalXsection = new ProcessXsection
@@ -304,7 +357,7 @@ public partial class ProcessManagementViewModel : ObservableObject
             Description = "Electrical routing trace",
         };
         Xsections.Add(metalXsection);
-        _ownXsectionNames.Add(metalXsection.Name);
+        _ownedRows.Add(metalXsection);
         HasProcess = true;
         StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
     }
@@ -314,7 +367,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// cross-section (issue #682). Only unambiguous single-member processes are written; the
     /// PDK's fingerprint fields (thickness, materials, angles) are preserved — only the layer
     /// stack, cross-sections and materials are updated, and only the rows that belong to this
-    /// member PDK (<see cref="_ownLayerNames"/> etc.) — an unrelated PDK pulled in via
+    /// member PDK (<see cref="_ownedRows"/>) — an unrelated PDK pulled in via
     /// <see cref="ImportFromPdk"/> for reference must never be written into this PDK's file
     /// (issue #686 review, Finding 2).
     /// </summary>
@@ -364,13 +417,18 @@ public partial class ProcessManagementViewModel : ObservableObject
             // user-editable stack/xsections/materials change, and update the in-memory draft so
             // the next export uses the new metal cross-section without a reload.
             var process = draft.Process ?? new ProcessDefinition { Name = ProcessName };
-            process.Layers = Layers.Where(l => l.Name != null && _ownLayerNames.Contains(l.Name)).ToList();
-            process.Xsections = Xsections.Where(x => x.Name != null && _ownXsectionNames.Contains(x.Name)).ToList();
-            process.Materials = Materials.Where(m => m.Name != null && _ownMaterialNames.Contains(m.Name)).ToList();
+            // Reflect a process rename made in the editor — draft.Process (when it already
+            // existed) still carries its OLD name until this assignment (issue #733 review,
+            // Finding 4).
+            process.Name = ProcessName;
+            process.Layers = Layers.Where(l => _ownedRows.Contains(l)).ToList();
+            process.Xsections = Xsections.Where(x => _ownedRows.Contains(x)).ToList();
+            process.Materials = Materials.Where(m => _ownedRows.Contains(m)).ToList();
             draft.Process = process;
 
             _pdkSaver.SaveToFile(draft, path);
             StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+            ProcessSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
@@ -384,7 +442,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var material = new ProcessMaterial { Name = "NewMaterial" };
         Materials.Add(material);
-        _ownMaterialNames.Add(material.Name);
+        _ownedRows.Add(material);
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)

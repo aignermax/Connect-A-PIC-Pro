@@ -10,6 +10,7 @@ using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Services;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
@@ -22,7 +23,8 @@ public enum InteractionMode
     PlaceComponent,
     PlaceGroupTemplate,
     Connect,
-    Delete
+    Delete,
+    Probe
 }
 
 /// <summary>
@@ -93,6 +95,21 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
 
     /// <summary>
+    /// Per-instance raw-code override store manual placement seeds into (issue rawcode
+    /// authoring). Wired by <c>MainViewModel</c> to <c>FileOperations.StoredNazcaOverrides</c>
+    /// so placing a raw-code template creates the override the raw-code preview/export path
+    /// reads, without any export-path changes. Null in tests that don't need placement seeding.
+    /// </summary>
+    public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
+
+    /// <summary>
+    /// Callback invoked when the user probes an element in Probe mode (issue #691):
+    /// carries the classified probe target plus the click position in canvas coordinates.
+    /// Wired by <c>MainViewModel</c> to open the mode-slice flyout at the click point.
+    /// </summary>
+    public Action<CAP_Core.Solvers.ModeProbe.ProbeTarget, double, double>? ProbeRequested { get; set; }
+
+    /// <summary>
     /// Callback returning the design's active process (issue #570), consulted before
     /// placement and paste so a component from a foreign PDK is rejected. Wired by
     /// <c>MainViewModel</c> to <c>FileOperationsViewModel.ActiveProcess</c>.
@@ -105,6 +122,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// Wired by <c>MainViewModel</c> to <c>LeftPanelViewModel.GetProcessAgnosticPdkNames</c>.
     /// </summary>
     public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
+
+    /// <summary>
+    /// Callback returning the by-value-compatible member PDK names for the active process
+    /// (issue placement-livemembers), computed live against the current PDK catalog rather than
+    /// trusting the persisted <see cref="ActiveProcessSelection.MemberPdkNames"/> snapshot
+    /// (#732). This is what allows a custom PDK registered after the process was saved — but
+    /// physically the same process — to be placed/pasted. Wired by <c>MainViewModel</c> to
+    /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>; null when unwired falls back to the
+    /// snapshot-only check.
+    /// </summary>
+    public Func<IReadOnlyCollection<string>?>? GetLiveMemberPdkNames { get; set; }
 
     /// <summary>
     /// Callback resolving the PDK source of a placed core component (groups carry none of
@@ -197,6 +225,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             InteractionMode.PlaceGroupTemplate => "Place mode: Select a group from Saved Groups",
             InteractionMode.Connect => "Connect mode: Move near a pin to start connection",
             InteractionMode.Delete => "Delete mode: Click on component or connection to delete",
+            InteractionMode.Probe => "Probe mode: Click a waveguide or coupler to inspect its mode slice",
             _ => "Ready"
         };
 
@@ -249,6 +278,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 break;
             case InteractionMode.Delete:
                 DeleteAt(canvasX, canvasY);
+                break;
+            case InteractionMode.Probe:
+                ProbeAt(canvasX, canvasY);
                 break;
         }
     }
@@ -336,7 +368,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         var (isAllowed, blockReason) = SingleProcessPolicy.CheckPlacement(
             GetActiveProcess?.Invoke(), SelectedTemplate.PdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            GetLiveMemberPdkNames?.Invoke());
         if (!isAllowed)
         {
             UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
@@ -346,7 +379,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
 
-        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY);
+        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY, NazcaOverrideStore);
         if (cmd == null)
         {
             UpdateStatus?.Invoke("No space available on chip for this component");
@@ -374,6 +407,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             GetActiveProcess?.Invoke(),
             ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
             GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>(),
+            GetLiveMemberPdkNames?.Invoke(),
             SelectedGroupTemplate.Name);
         if (!isAllowed)
         {
@@ -506,6 +540,39 @@ public partial class CanvasInteractionViewModel : ObservableObject
             _commandManager.ExecuteCommand(cmd);
             UpdateStatus?.Invoke("Deleted connection");
         }
+    }
+
+    /// <summary>
+    /// Probes the element at the given canvas position (issue #691): a clicked waveguide
+    /// connection carries its own width; a clicked component is classified as fiber
+    /// coupler / interference region and borrows the width of an attached connection.
+    /// Raises <see cref="ProbeRequested"/> so the host opens the mode-slice flyout.
+    /// </summary>
+    private void ProbeAt(double x, double y)
+    {
+        var component = ComponentAt(x, y);
+        if (component != null)
+        {
+            var attachedWidth = _canvas.Connections
+                .Where(c => c.Connection.StartPin.ParentComponent == component.Component
+                         || c.Connection.EndPin.ParentComponent == component.Component)
+                .Select(c => (double?)c.Connection.WidthMicrometers)
+                .FirstOrDefault();
+            var target = CAP_Core.Solvers.ModeProbe.ProbeTarget.ForComponent(component.Name, attachedWidth);
+            ProbeRequested?.Invoke(target, x, y);
+            return;
+        }
+
+        var connection = FindConnectionAt(x, y);
+        if (connection != null)
+        {
+            var target = CAP_Core.Solvers.ModeProbe.ProbeTarget.ForConnection(
+                connection.Connection.WidthMicrometers, connection.PathLength);
+            ProbeRequested?.Invoke(target, x, y);
+            return;
+        }
+
+        UpdateStatus?.Invoke("Probe mode: Click a waveguide or coupler to inspect its mode slice");
     }
 
     private WaveguideConnectionViewModel? FindConnectionAt(double x, double y)
@@ -645,6 +712,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     [RelayCommand]
+    private void SetProbeMode()
+    {
+        CurrentMode = InteractionMode.Probe;
+        SelectedTemplate = null;
+        SelectedGroupTemplate = null;
+        _connectionStartPin = null;
+    }
+
+    [RelayCommand]
     private void SetDeleteMode()
     {
         CurrentMode = InteractionMode.Delete;
@@ -702,11 +778,12 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         var active = GetActiveProcess?.Invoke();
         var agnosticPdkNames = GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>();
+        var liveMemberPdkNames = GetLiveMemberPdkNames?.Invoke();
         // PeekPdkSources expands groups to their resolved children (the clipboard's
         // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
         // smuggle foreign-process components past the paste guard (issue #653).
         var blockedCount = _canvas.Clipboard.PeekPdkSources()
-            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames).IsAllowed);
+            .Count(pdk => !SingleProcessPolicy.CheckPlacement(active, pdk, agnosticPdkNames, liveMemberPdkNames).IsAllowed);
         if (blockedCount > 0)
         {
             UpdateStatus?.Invoke(

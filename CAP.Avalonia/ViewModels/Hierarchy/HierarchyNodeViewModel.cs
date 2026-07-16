@@ -120,14 +120,6 @@ public partial class HierarchyNodeViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasSMatrixOverride;
 
-    /// <summary>
-    /// True when a per-instance Nazca parameter override is stored for this component.
-    /// Used to display the 🔧 badge in the hierarchy panel, distinct from the S-matrix badge.
-    /// Refreshed by <see cref="HierarchyPanelViewModel.RefreshOverrideMarkers"/>.
-    /// </summary>
-    [ObservableProperty]
-    private bool _hasNazcaOverride;
-
     public HierarchyNodeViewModel(Component component)
     {
         Component = component ?? throw new ArgumentNullException(nameof(component));

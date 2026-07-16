@@ -27,7 +27,15 @@ public enum DesignIssueType
     /// A component is placed outside the configured chip boundary.
     /// The component must be moved back into bounds before fabrication.
     /// </summary>
-    OutOfBounds
+    OutOfBounds,
+
+    /// <summary>
+    /// A placed component's PDK no longer matches the design's active fabrication process
+    /// (e.g. its process was edited and diverged from the locked process after the component
+    /// was placed — issue #570 follow-up). New placements from that PDK are blocked, but the
+    /// component itself is kept; this flags it for manual review.
+    /// </summary>
+    PdkProcessMismatch
 }
 
 /// <summary>

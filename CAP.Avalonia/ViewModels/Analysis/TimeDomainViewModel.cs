@@ -101,6 +101,15 @@ public partial class TimeDomainViewModel : ObservableObject
             return;
         }
 
+        // All lasers off means there is no input signal at all — say so instead of
+        // rendering an empty plot with status "Done" (#690, mirrors the eye analysis).
+        if (_canvas.Components.Where(c => c.IsLightSource).All(c => c.IsLaserOff)
+            && _canvas.Components.Any(c => c.IsLightSource))
+        {
+            StatusText = "No laser is switched on — turn the laser on at your input coupler.";
+            return;
+        }
+
         if (IsRunning) return;
         IsRunning = true;
         StatusText = "Building impulse responses…";

@@ -45,13 +45,23 @@ public class ComponentFdtdRequestFactory
     /// </summary>
     public async Task<FdtdSMatrixRequest?> BuildAsync(Component component, CancellationToken ct = default)
     {
-        var preview = await _preview.RenderAsync(component.NazcaModuleName, component.NazcaFunctionName, null, ct);
+        // Render the ACTUAL parametrised geometry (e.g. length=3.5), not the function's
+        // defaults — otherwise the FDTD S-matrix is computed for the wrong shape, and #580 E's
+        // template promotion would spread that default-geometry matrix to every instance of a
+        // parametrised type (#580 review). Every other RenderAsync call site passes params too.
+        var preview = await _preview.RenderAsync(
+            component.NazcaModuleName, component.NazcaFunctionName, component.NazcaFunctionParameters, ct);
         if (!preview.Success || preview.Polygons.Count == 0 || preview.Pins.Count == 0)
             return null;
 
         var componentPinNames = component.PhysicalPins?.Select(p => p.Name).ToList() ?? new List<string>();
 
-        return BuildFromPreview(preview, componentPinNames, _siliconLayer, _portWidthUm);
+        // Sweep the wavelengths the component is ALREADY defined at (e.g. SiEPIC's
+        // 980/1310/1550 nm), not a fixed 1.5–1.6 µm band — otherwise the recompute
+        // overwrites only its own range and leaves the others stale (#582).
+        var sweep = FdtdWavelengthPlanner.Plan(component.WaveLengthToSMatrixMap.Keys);
+
+        return BuildFromPreview(preview, componentPinNames, _siliconLayer, _portWidthUm, sweep);
     }
 
     /// <summary>
@@ -71,21 +81,30 @@ public class ComponentFdtdRequestFactory
     /// </param>
     /// <param name="siliconLayer">GDS layer carrying the optical waveguide.</param>
     /// <param name="portWidthUm">Port (waveguide) width in µm.</param>
+    /// <param name="sweep">
+    /// Wavelength sweep to run; null keeps the request's default 1.5–1.6 µm band
+    /// (used by flows without a placed component, e.g. the custom-PDK preview).
+    /// </param>
     public static FdtdSMatrixRequest BuildFromPreview(
         NazcaPreviewResult preview,
         IReadOnlyList<string> portNames,
         int siliconLayer = DefaultSiliconLayer,
-        double portWidthUm = DefaultPortWidthUm)
+        double portWidthUm = DefaultPortWidthUm,
+        FdtdWavelengthPlan? sweep = null)
     {
         ArgumentNullException.ThrowIfNull(preview);
         ArgumentNullException.ThrowIfNull(portNames);
 
+        sweep ??= FdtdWavelengthPlanner.Plan(Array.Empty<int>());
         return new FdtdSMatrixRequest
         {
             Polygons = BuildPolygons(preview.Polygons, siliconLayer),
             Ports = BuildPorts(preview.Pins, portNames, portWidthUm),
             LayerNumber = siliconLayer,
             Is3D = false, // 2D for a quick recompute; a 3D/accuracy toggle can come later
+            WavelengthStart = sweep.StartUm,
+            WavelengthStop = sweep.StopUm,
+            WavelengthPoints = sweep.Points,
         };
     }
 

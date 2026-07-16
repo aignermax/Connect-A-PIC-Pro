@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using CAP.Avalonia.Services.MetalRouting;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
@@ -9,6 +10,7 @@ using CAP_Core.Export;
 using CAP_Core.Export.InterconnectRouting;
 using CAP_Core.Routing;
 using CAP_Core.Routing.InterconnectRouting;
+using CAP_Core.Routing.MetalRouting;
 using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.Services;
@@ -43,30 +45,31 @@ public class SimpleNazcaExporter
     /// every placed instance's ACTUAL world pin positions — reported by the same nazca
     /// engine that writes the GDS — to '&lt;script&gt;.pins.json' next to the script.
     /// </param>
-    /// <param name="metalStyle">
-    /// Width and GDS layer for electrical (metal) routing traces (issue #682). Electrical
-    /// connections are emitted as metal on this layer instead of as optical waveguides;
-    /// null falls back to <see cref="MetalTraceStyle.Default"/>.
+    /// <param name="metalSpec">
+    /// Process-derived metal routing parameters for electrical connections (issue #682):
+    /// trace width, GDS layer/datatype, and waveguide-crossing policy. Electrical
+    /// connections are emitted as metal on that layer instead of as optical waveguides.
+    /// Null uses <see cref="MetalRoutingSpec.Default"/>.
     /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
         bool emitVerification = false,
-        MetalTraceStyle? metalStyle = null)
+        MetalRoutingSpec? metalSpec = null)
     {
         var sb = new StringBuilder();
+        var metal = metalSpec ?? MetalRoutingSpec.Default;
 
         // Build a flat map of overridden identifier -> RawCode (only non-null RawCode entries).
         var rawOverrides = BuildRawOverrides(overrides);
 
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
-        AppendHeader(sb, interconnectSettings);
+        AppendHeader(sb, interconnectSettings, metal);
         NazcaOverrideFactory.AppendFactories(sb, rawOverrides);
         AppendPdkComponentStubs(sb, canvas, rawOverrides);
         var componentNames = AppendComponents(sb, canvas, rawOverrides, overrides, emitVerification);
-        AppendConnections(sb, canvas, componentNames, rawOverrides,
-            metalStyle ?? MetalTraceStyle.Default, interconnectSettings.GdsLayer);
+        AppendConnections(sb, canvas, componentNames, rawOverrides, metal, interconnectSettings.GdsLayer);
         AppendFooter(sb);
         if (emitVerification)
             AppendVerificationEpilog(sb);
@@ -97,7 +100,7 @@ public class SimpleNazcaExporter
         return result;
     }
 
-    private static void AppendHeader(StringBuilder sb, InterconnectSettings settings)
+    private static void AppendHeader(StringBuilder sb, InterconnectSettings settings, MetalRoutingSpec metal)
     {
         var ci = CultureInfo.InvariantCulture;
         sb.AppendLine("import nazca as nd");
@@ -110,6 +113,7 @@ public class SimpleNazcaExporter
         if (settings.GdsLayer.HasValue)
             sb.AppendLine($"WG_LAYER = {settings.GdsLayer.Value}  # Waveguide GDS layer");
         sb.AppendLine();
+        NazcaMetalTraceWriter.AppendHeaderConstants(sb, metal);
         sb.AppendLine("# Create interconnect for waveguide routing");
         sb.AppendLine(settings.GdsLayer.HasValue
             ? "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS, layer=WG_LAYER)"
@@ -268,7 +272,13 @@ public class SimpleNazcaExporter
         var px1 = NazcaCoordinateMapper.NormalizeZero(w - offsetX).ToString("F2", ci);
         var py1 = NazcaCoordinateMapper.NormalizeZero(offsetY).ToString("F2", ci);
 
-        sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer=1).put(0, 0)");
+        // Purely electrical components (probe/bond pads, #682) are metal structures —
+        // draw their body on the metal layer instead of the waveguide layer.
+        var isMetalComponent = comp.PhysicalPins.Count > 0
+            && comp.PhysicalPins.All(p => p.MatterType == MatterType.Electricity);
+        var bodyLayer = isMetalComponent ? "METAL_LAYER" : "1";
+
+        sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer={bodyLayer}).put(0, 0)");
 
         // Pins relative to org: local = (OffsetX-ox, oy-OffsetY), the plain Y negation
         // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
@@ -459,7 +469,7 @@ public class SimpleNazcaExporter
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
         IReadOnlyDictionary<string, string> rawOverrides,
-        MetalTraceStyle metalStyle,
+        MetalRoutingSpec metalSpec,
         int? gdsLayer = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
@@ -468,6 +478,8 @@ public class SimpleNazcaExporter
 
         sb.AppendLine("        # Waveguide Connections");
 
+        var metalStyle = metalSpec.ToTraceStyle();
+        var metalConnections = new List<WaveguideConnection>();
         foreach (var connVm in canvas.Connections)
         {
             var conn = connVm.Connection;
@@ -481,8 +493,11 @@ public class SimpleNazcaExporter
             // connection is metal only when BOTH pins are electrical; a mixed optical+electrical
             // or all-optical connection stays a waveguide (issue #686 review — the earlier
             // "either pin" predicate would draw a mixed connection wholly on the metal layer,
-            // silently dropping the optical waveguide).
+            // silently dropping the optical waveguide). Metal connections are remembered so
+            // bridge markers can be placed where they cross optical paths (below).
             var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
+            if (metal != null)
+                metalConnections.Add(conn);
 
             // Issue #561: connections touching raw-code–overridden instances export
             // their REAL routed segments like any other connection — the override
@@ -513,7 +528,83 @@ public class SimpleNazcaExporter
                 AppendGroupFrozenPaths(sb, group, metalStyle);
         }
 
+        AppendBridgeMarkers(sb, canvas, metalConnections, metalSpec);
+
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Emits bridge markers for electrical metal traces (issue #682): when the active
+    /// process requires bridges, a marker is placed wherever a metal trace crosses an
+    /// optical waveguide path. The trace geometry itself is emitted inline by the
+    /// connection loop above (on the process metal layer).
+    /// </summary>
+    private static void AppendBridgeMarkers(
+        StringBuilder sb,
+        DesignCanvasViewModel canvas,
+        IReadOnlyList<WaveguideConnection> metalConnections,
+        MetalRoutingSpec metalSpec)
+    {
+        if (metalSpec.CrossingPolicy != ElectricalCrossingPolicy.BridgeRequired
+            || metalConnections.Count == 0)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine("        # Electrical bridge markers (metal over waveguide)");
+
+        var opticalPaths = CollectOpticalPaths(canvas);
+        foreach (var conn in metalConnections)
+        {
+            var segments = conn.GetPathSegments();
+            if (segments.Count == 0)
+                continue;
+
+            var crossings = WaveguideCrossingDetector.FindCrossings(segments, opticalPaths);
+            NazcaMetalTraceWriter.AppendBridges(sb, crossings, metalSpec);
+        }
+    }
+
+    /// <summary>
+    /// Collects the routed segment lists of all optical connections and frozen group
+    /// paths — the geometry a metal trace can cross and that bridges must span.
+    /// </summary>
+    private static List<IReadOnlyList<PathSegment>> CollectOpticalPaths(DesignCanvasViewModel canvas)
+    {
+        var paths = new List<IReadOnlyList<PathSegment>>();
+        foreach (var connVm in canvas.Connections)
+        {
+            var conn = connVm.Connection;
+            // Both-pins-electrical connections render as metal; everything else
+            // (including mixed pairs, which stay waveguides) is crossable geometry.
+            if (IsMetalConnection(conn.StartPin, conn.EndPin)) continue;
+            if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
+            if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
+            var segments = conn.GetPathSegments();
+            if (segments.Count > 0)
+                paths.Add(segments);
+        }
+
+        foreach (var compVm in canvas.Components)
+        {
+            if (compVm.Component is ComponentGroup group)
+                CollectGroupFrozenPaths(group, paths);
+        }
+        return paths;
+    }
+
+    /// <summary>Adds all frozen waveguide paths of a group (and nested groups) to the list.</summary>
+    private static void CollectGroupFrozenPaths(ComponentGroup group, List<IReadOnlyList<PathSegment>> paths)
+    {
+        foreach (var frozenPath in group.InternalPaths)
+        {
+            if (frozenPath?.Path?.Segments?.Count > 0)
+                paths.Add(frozenPath.Path.Segments);
+        }
+        foreach (var child in group.ChildComponents)
+        {
+            if (child is ComponentGroup nested)
+                CollectGroupFrozenPaths(nested, paths);
+        }
     }
 
     /// <summary>

@@ -23,4 +23,23 @@ public static class LightSourceClassifier
         return templateName.Contains("Grating Coupler", StringComparison.OrdinalIgnoreCase)
             || templateName.Contains("Edge Coupler", StringComparison.OrdinalIgnoreCase);
     }
+
+    /// <summary>
+    /// Component-based overload for contexts without a template name (group children,
+    /// components re-added by ungrouping): classifies by the identifier or the
+    /// PDK-derived Nazca function name (reliable — not user-editable, and preserved
+    /// through prefab serialize/deserialize where Identifier may become GUID-based).
+    /// </summary>
+    /// <param name="component">The component instance, may be null.</param>
+    public static bool IsLightInjectingCoupler(Core.Component? component)
+    {
+        if (component == null) return false;
+
+        var id = component.Identifier?.ToLowerInvariant() ?? "";
+        if (id.Contains("grating") || id.Contains("edge coupler"))
+            return true;
+
+        var nazcaName = component.NazcaFunctionName?.ToLowerInvariant() ?? "";
+        return nazcaName.Contains("_gc_") || nazcaName.Contains("edge_coupler") || nazcaName.Contains("grating");
+    }
 }

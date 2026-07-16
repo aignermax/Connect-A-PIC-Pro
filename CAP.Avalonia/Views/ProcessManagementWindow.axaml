@@ -4,7 +4,7 @@
         xmlns:controls="using:CAP.Avalonia.Controls"
         x:Class="CAP.Avalonia.Views.ProcessManagementWindow"
         x:CompileBindings="False"
-        Title="Fabrication Process"
+        Title="Edit Process"
         Width="820" Height="680"
         MinWidth="500" MinHeight="400"
         Background="#1e1e1e"
@@ -76,9 +76,9 @@
                             </StackPanel.Styles>
 
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff">
-                                Here you review the chip's layer stack, add a metal cross-section for
-                                electrical routing, and can import a real foundry PDK. Below is what
-                                each of those settings means and why it matters.
+                                Here you review this PDK's layer stack and add a metal cross-section
+                                for electrical routing. Below is what each of those settings means and
+                                why it matters.
                             </TextBlock>
 
                             <!-- Fabrication layer-stack animation (cross-section, builds bottom→top). -->
@@ -147,40 +147,9 @@
                 </controls:HelpFlyoutButton>
             </StackPanel>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#9999bb"
-                       Text="A chip is built in one fabrication process — chosen for this design at startup / File → New Design. Here you inspect and edit what that process is: layer stack and materials (future FDTD input) and design rules (why a fab may reject certain components). Import details from a foundry PDK (uPDK YAML / CSV tables) and adjust as needed."/>
-
-            <!-- Playground: explicit state instead of an empty page (#660) -->
-            <Border IsVisible="{Binding IsPlaygroundState}" Background="#4d3d1e" CornerRadius="4" Padding="8,6" Margin="0,4,0,0">
-                <TextBlock TextWrapping="Wrap" FontSize="12" Foreground="#ffcc66"
-                           Text="⚠ Playground — this design mixes components freely and has no single fabrication process. It is not manufacturable. Choose a real process via File → New Design to see its details here."/>
-            </Border>
-
-            <!-- Active process identity (#660) -->
-            <StackPanel IsVisible="{Binding HasProcess}" Spacing="2" Margin="0,4,0,0">
-                <TextBlock Text="{Binding FingerprintSummary}" FontSize="12" Foreground="#aaccee"/>
-                <StackPanel Orientation="Horizontal" Spacing="6">
-                    <TextBlock Text="Member PDKs:" FontSize="11" Foreground="#888"/>
-                    <TextBlock Text="{Binding MemberPdksText}" FontSize="11" Foreground="#ccc" TextWrapping="Wrap"/>
-                </StackPanel>
-            </StackPanel>
+                       Text="A chip is built in one fabrication process. Here you inspect and edit this PDK's own process: layer stack and materials (future FDTD input) and design rules (why a fab may reject certain components)."/>
 
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                <Button Content="Import from PDK…" Command="{Binding ImportFromPdkCommand}"
-                        Padding="12,6" Background="#3d4d6d"
-                        ToolTip.Tip="openEPDA uPDK (*.yaml) or a Nazca table_*.csv in the PDK folder"/>
-                <Button Content="New" Command="{Binding NewProcessCommand}"
-                        Padding="12,6" Background="#3d3d3d"
-                        ToolTip.Tip="Start a blank process (seeded with public SOI material defaults)"/>
-                <TextBlock Text="Load preset ▾" VerticalAlignment="Center" Foreground="#aaa" FontSize="11"/>
-                <ComboBox ItemsSource="{Binding AvailablePresets}" SelectedItem="{Binding SelectedPreset}" Width="220"
-                          PlaceholderText="Choose a bundled PDK…"
-                          ToolTip.Tip="Loads a bundled/loaded PDK's fabrication process (layer stack, cross-sections, materials) into the editor as a starting point">
-                    <ComboBox.ItemTemplate>
-                        <DataTemplate>
-                            <TextBlock Text="{Binding Name}"/>
-                        </DataTemplate>
-                    </ComboBox.ItemTemplate>
-                </ComboBox>
                 <Button Content="Save to PDK file…" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
                         Padding="12,6" Background="#2a4a2a"
                         ToolTip.Tip="Write the edited layer stack / cross-sections back into this process's PDK JSON on disk (asks for confirmation; only single-PDK processes; only this process's own rows are written)"/>

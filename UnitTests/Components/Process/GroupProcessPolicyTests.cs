@@ -89,4 +89,51 @@ public class GroupProcessPolicyTests
 
         isAllowed.ShouldBeTrue();
     }
+
+    /// <summary>
+    /// A child from a PDK missing from the persisted snapshot but present in the live
+    /// by-value member set (#732) must not block the group — mirrors
+    /// <c>SingleProcessPolicyTests.PdkNotInSnapshot_ButInLiveMemberSet_IsAllowed</c> at the
+    /// group level. The live set replaces the snapshot, so it lists ALL currently
+    /// compatible PDKs (including the snapshot member "Demo").
+    /// </summary>
+    [Fact]
+    public void ChildPdkOnlyInLiveMemberSet_IsAllowed()
+    {
+        var (isAllowed, _) = GroupProcessPolicy.CheckGroupPlacement(
+            Soi("Demo"), new[] { "Demo", "MyLib" },
+            liveMemberPdkNames: new[] { "Demo", "MyLib" });
+
+        isAllowed.ShouldBeTrue();
+    }
+
+    /// <summary>A child PDK absent from the (authoritative) live set still blocks the group.</summary>
+    [Fact]
+    public void ChildPdkNotInLiveMemberSet_StillBlocksGroup()
+    {
+        var (isAllowed, reason) = GroupProcessPolicy.CheckGroupPlacement(
+            Soi("Demo"), new[] { "Demo", "HHI-InP" },
+            liveMemberPdkNames: new[] { "Demo", "MyLib" });
+
+        isAllowed.ShouldBeFalse();
+        reason.ShouldNotBeNull();
+        reason!.ShouldContain("HHI-InP");
+        // The live-member child must not be listed as an offender.
+        reason.ShouldNotContain("'Demo'");
+    }
+
+    /// <summary>
+    /// Group-level mirror of the replace-not-union rule: a snapshot-member child whose PDK
+    /// dropped out of the live set (process edited incompatible after saving) blocks the group.
+    /// </summary>
+    [Fact]
+    public void SnapshotMemberChild_MissingFromLiveSet_BlocksGroup()
+    {
+        var (isAllowed, reason) = GroupProcessPolicy.CheckGroupPlacement(
+            Soi("Demo"), new[] { "Demo" },
+            liveMemberPdkNames: new[] { "MyLib" });
+
+        isAllowed.ShouldBeFalse();
+        reason!.ShouldContain("Demo");
+    }
 }

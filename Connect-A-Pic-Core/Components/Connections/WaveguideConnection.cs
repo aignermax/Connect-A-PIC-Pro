@@ -45,6 +45,16 @@ namespace CAP_Core.Components.Connections
         public const double FrozenEndpointToleranceMicrometers = 1.0;
 
         /// <summary>
+        /// True when this connection joins electrical pins and must be laid out as a
+        /// metal trace instead of an optical waveguide (issue #682). Cross-kind pairs
+        /// are rejected at creation time (see PinKindHelper), so checking one pin of
+        /// the pair is authoritative.
+        /// </summary>
+        public bool IsElectrical =>
+            StartPin?.MatterType == MatterType.Electricity ||
+            EndPin?.MatterType == MatterType.Electricity;
+
+        /// <summary>
         /// Target path length in micrometers. When set, the router will attempt to achieve this length.
         /// Null means no target length (just route the shortest valid path).
         /// </summary>

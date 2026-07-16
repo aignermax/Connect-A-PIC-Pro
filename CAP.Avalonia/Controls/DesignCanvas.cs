@@ -314,10 +314,12 @@ public class DesignCanvas : Control
     private void OnCanvasViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(DesignCanvasViewModel.ShowPowerFlow)
+            or nameof(DesignCanvasViewModel.IsSimulationModeActive)
             or nameof(DesignCanvasViewModel.IsRouting)
             or nameof(DesignCanvasViewModel.PanX)
             or nameof(DesignCanvasViewModel.PanY)
-            or nameof(DesignCanvasViewModel.SelectedComponent))
+            or nameof(DesignCanvasViewModel.SelectedComponent)
+            or nameof(DesignCanvasViewModel.ActiveProcessLabel))
         {
             // SelectedComponent: redraw so the highlight follows a selection made
             // outside the canvas (e.g. clicking a node in the hierarchy panel).

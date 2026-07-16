@@ -1,0 +1,176 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.Components.AddCustomComponent"
+        xmlns:vmp="using:CAP.Avalonia.ViewModels"
+        xmlns:dto="using:CAP_DataAccess.Components.ComponentDraftMapper.DTOs"
+        xmlns:conv="using:CAP.Avalonia.Converters"
+        x:Class="CAP.Avalonia.Views.CreateCustomPdkWindow"
+        x:DataType="vm:CreateCustomPdkViewModel"
+        Title="Create Custom PDK"
+        Width="640" Height="640"
+        MinWidth="480" MinHeight="420"
+        Background="#1e1e1e"
+        Foreground="White"
+        WindowStartupLocation="CenterOwner">
+
+    <DockPanel Margin="16">
+
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,10,0,0">
+            <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="#ffaa66" TextWrapping="Wrap"/>
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="Cancel" Click="OnCancelClick" Width="90"
+                        Background="#3d3d3d" Foreground="White"/>
+                <Button Content="Create PDK" Command="{Binding CreatePdkCommand}" Width="110"
+                        Background="#2a4a2a" Foreground="White" IsDefault="True"/>
+            </StackPanel>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel Spacing="12">
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="PDK name" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                    <TextBox Text="{Binding PdkName}" Watermark="e.g. MyFoundryPDK"/>
+                </StackPanel>
+
+                <Separator Background="#3d3d3d"/>
+
+                <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <RadioButton GroupName="processSource" Content="Use existing process"
+                                 IsChecked="{Binding ProcessSource,
+                                             Converter={x:Static conv:PdkProcessSourceToBoolConverter.Instance},
+                                             ConverterParameter=UseExisting}"/>
+                    <RadioButton GroupName="processSource" Content="Define new process"
+                                 IsChecked="{Binding ProcessSource,
+                                             Converter={x:Static conv:PdkProcessSourceToBoolConverter.Instance},
+                                             ConverterParameter=DefineNew}"/>
+                </StackPanel>
+
+                <StackPanel Spacing="4"
+                            IsVisible="{Binding ProcessSource,
+                                        Converter={x:Static conv:PdkProcessSourceToBoolConverter.Instance},
+                                        ConverterParameter=UseExisting}">
+                    <ComboBox ItemsSource="{Binding AvailableProcesses}"
+                              SelectedItem="{Binding SelectedExistingProcess}"
+                              PlaceholderText="Choose a loaded process…"
+                              HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="dto:ProcessDefinition">
+                                <TextBlock Text="{Binding Name}"/>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- One IsVisible for the whole define-new region on this outer wrapper; the DataContext swap happens only on an inner child so this binding stays on CreateCustomPdkViewModel. -->
+                <StackPanel Spacing="10"
+                            IsVisible="{Binding ProcessSource,
+                                        Converter={x:Static conv:PdkProcessSourceToBoolConverter.Instance},
+                                        ConverterParameter=DefineNew}">
+
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Start from template (optional)" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                        <ComboBox ItemsSource="{Binding AvailableProcesses}"
+                                  SelectedItem="{Binding SelectedTemplate}"
+                                  PlaceholderText="Choose a process to start from…"
+                                  HorizontalAlignment="Stretch">
+                            <ComboBox.ItemTemplate>
+                                <DataTemplate x:DataType="dto:ProcessDefinition">
+                                    <TextBlock Text="{Binding Name}"/>
+                                </DataTemplate>
+                            </ComboBox.ItemTemplate>
+                        </ComboBox>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="Core thickness (nm)" VerticalAlignment="Center" Foreground="#aaa"/>
+                        <TextBox Text="{Binding CoreThicknessNm}" Width="120" Watermark="e.g. 220"/>
+                    </StackPanel>
+
+                    <!-- Inner panel swaps DataContext to ProcessDefinitionEditor and carries no IsVisible (owned by the outer wrapper). -->
+                    <StackPanel Spacing="10"
+                                DataContext="{Binding ProcessDefinitionEditor}"
+                                x:DataType="vmp:ProcessManagementViewModel">
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Process name" VerticalAlignment="Center" Foreground="#aaa"/>
+                            <TextBox Text="{Binding ProcessName}" Width="240"/>
+                        </StackPanel>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Layer stack" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                            <Button Content="+ Layer" Command="{Binding AddLayerCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="2*,1*,1*,1*,3*">
+                            <TextBlock Grid.Column="0" Text="Name" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="1" Text="Layer" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="2" Text="Datatype" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="3" Text="Field" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="4" Text="Description" Foreground="#888" FontSize="10"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Layers}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="dto:ProcessLayer">
+                                    <Grid ColumnDefinitions="2*,1*,1*,1*,3*" Margin="0,1">
+                                        <TextBox Grid.Column="0" Text="{Binding Name}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="1" Text="{Binding Layer}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="2" Text="{Binding Datatype}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="3" Text="{Binding Field}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="4" Text="{Binding Description}" FontSize="11"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Cross-sections (waveguide / metal)" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                            <Button Content="+ Cross-section" Command="{Binding AddXsectionCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                            <Button Content="+ Metal (electrical)" Command="{Binding AddMetalXsectionCommand}" FontSize="10" Padding="6,1" Background="#4a3a2a"/>
+                        </StackPanel>
+                        <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*">
+                            <TextBlock Grid.Column="0" Text="Name" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="1" Text="Kind" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="2" Text="Width µm" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="3" Text="Min R µm" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="4" Text="Rec. R µm" Foreground="#888" FontSize="10"/>
+                            <TextBlock Grid.Column="5" Text="Description" Foreground="#888" FontSize="10"/>
+                        </Grid>
+                        <ItemsControl ItemsSource="{Binding Xsections}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="dto:ProcessXsection">
+                                    <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*" Margin="0,1">
+                                        <TextBox Grid.Column="0" Text="{Binding Name}" FontSize="11" Margin="0,0,2,0"/>
+                                        <ComboBox Grid.Column="1" FontSize="11" Margin="0,0,2,0" HorizontalAlignment="Stretch"
+                                                  ItemsSource="{x:Static vmp:ProcessManagementViewModel.XsectionKinds}"
+                                                  SelectedItem="{Binding Kind}"/>
+                                        <TextBox Grid.Column="2" Text="{Binding WidthUm}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="3" Text="{Binding MinRadiusUm}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="4" Text="{Binding RecommendedRadiusUm}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="5" Text="{Binding Description}" FontSize="11"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <TextBlock Text="Materials" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                            <Button Content="+ Material" Command="{Binding AddMaterialCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                        </StackPanel>
+                        <ItemsControl ItemsSource="{Binding Materials}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="dto:ProcessMaterial">
+                                    <Grid ColumnDefinitions="2*,2*" Margin="0,1">
+                                        <TextBox Grid.Column="0" Text="{Binding Name}" FontSize="11" Margin="0,0,2,0"/>
+                                        <TextBox Grid.Column="1" Text="{Binding Role}" FontSize="11"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

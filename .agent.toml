@@ -2,6 +2,6 @@ build_cmd = "dotnet build"
 test_cmd = "dotnet test UnitTests/UnitTests.csproj"
 ui_test_cmd = "dotnet test UnitTests/UnitTests.csproj --filter Category=UiScreenshots"
 tech_stack = ["csharp", "avalonia", "dotnet"]
-agents_enabled = ["coder", "reviewer", "qa"]
+agents_enabled = ["coder", "reviewer", "qa", "pr-feedback"]
 command_timeout_sec = 1800
 qa_review_enabled = true

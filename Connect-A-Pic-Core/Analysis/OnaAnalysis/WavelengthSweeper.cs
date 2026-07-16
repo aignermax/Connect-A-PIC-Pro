@@ -99,7 +99,13 @@ namespace CAP_Core.Analysis.OnaAnalysis
                 // loader, which would spuriously trigger this warning.
                 if (component.IsAnalysisTool) continue;
 
-                string key = component.NazcaFunctionName ?? component.Identifier;
+                // gdsfactory-backend components have no real Nazca function — their
+                // NazcaFunctionName is a synthesized "nazca_<name>" placeholder, which made
+                // warnings mislabel e.g. 'cspdk.sin300.coupler_straight' as
+                // 'nazca_coupler_straight' (#712). Prefer the real gdsfactory factory name.
+                string key = component.GdsFactoryFunction
+                    ?? component.NazcaFunctionName
+                    ?? component.Identifier;
                 var definedWavelengths = component.WaveLengthToSMatrixMap.Keys;
 
                 if (definedWavelengths.Count == 1)
