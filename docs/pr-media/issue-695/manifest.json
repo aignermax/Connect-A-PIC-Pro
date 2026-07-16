@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-dock-collapsed.png",
+    "caption": "The analysis dock starts collapsed to its 26 px header bar above the error console."
+  },
+  {
+    "file": "02-transient-tab-compact-headers.png",
+    "caption": "Expanding the dock shows the Transient tab with the new compact 26 px / 12 px tab strip, leaving the reclaimed vertical space to the plot area."
+  },
+  {
+    "file": "03-eye-ber-tab-compact-headers.png",
+    "caption": "The Eye / BER tab uses the same compact headers \u2014 the style is scoped to this TabControl only, so no other tabs in the app change."
+  }
+]
