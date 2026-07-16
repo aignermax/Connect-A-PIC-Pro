@@ -147,7 +147,7 @@
                                         <DataTemplate>
                                             <Button HorizontalAlignment="Stretch"
                                                     HorizontalContentAlignment="Left"
-                                                    Margin="0,2" Padding="10,7"
+                                                    Margin="0,2" Padding="10,3"
                                                     Command="{Binding ExportCommand}"
                                                     Background="{Binding Background}"
                                                     ToolTip.Tip="{Binding Description}">
@@ -191,7 +191,7 @@
                                 <Grid ColumnDefinitions="*,Auto" Margin="0,2">
                                     <Button Grid.Column="0" HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Left"
-                                            Padding="10,7"
+                                            Padding="10,3"
                                             Background="#3d3d5d"
                                             Command="{Binding LoadPdkCommand}"
                                             ToolTip.Tip="Load a PDK component library (JSON)">
@@ -210,7 +210,7 @@
 
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Command="{Binding OpenPdkOffsetEditorCommand}"
                                         ToolTip.Tip="Calibrate NazcaOriginOffset per component and verify pin alignment against the rendered GDS">
@@ -223,7 +223,7 @@
 
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Click="OpenModeSolverDialog_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
@@ -234,7 +234,7 @@
                                 </Button>
                                 <Button HorizontalAlignment="Stretch"
                                         HorizontalContentAlignment="Left"
-                                        Margin="0,2" Padding="10,7"
+                                        Margin="0,2" Padding="10,3"
                                         Background="#3d3d5d"
                                         Click="OpenPdkResolutionCheckDialog_Click">
                                     <StackPanel Orientation="Horizontal" Spacing="10">
