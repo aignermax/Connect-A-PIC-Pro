@@ -6,12 +6,10 @@ using CAP_DataAccess.Import;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Notifications;
-using CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using NazcaCodeOverride = CAP_DataAccess.Persistence.PIR.NazcaCodeOverride;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
 
@@ -26,7 +24,6 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private Dictionary<string, ComponentSMatrixData>? _storedSMatrices;
     private Component? _liveComponent;
     private string _smatrixKey = string.Empty;
-    private Func<string>? _smatrixKeyResolver;
     private string _displayName = string.Empty;
     private Action? _onChanged;
     private bool _isUserGlobalScope;
@@ -34,10 +31,6 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private IReadOnlyList<Pin>? _effectivePins;
     private IReadOnlyList<string>? _availablePinNames;
     private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
-
-    public InstanceNazcaOverrideViewModel? NazcaOverride { get; private set; }
-
-    public InstanceNazcaCodeEditorViewModel? NazcaCodeEditor { get; private set; }
 
     [ObservableProperty]
     private string _title = "Component Settings";
@@ -93,21 +86,10 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Dictionary<int, SMatrix>? effectiveSMatrices = null,
         IReadOnlyList<Pin>? effectivePins = null,
         IReadOnlyList<string>? availablePinNames = null,
-        Dictionary<string, NazcaCodeOverride>? storedNazcaOverrides = null,
-        string? templateFunctionName = null,
-        string? templateFunctionParameters = null,
-        string? templateModuleName = null,
-        NazcaComponentPreviewService? nazcaPreviewService = null,
-        string? nazcaTemplateCode = null,
-        Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null,
-        Action? nazcaDimensionsChanged = null,
-        Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
         Func<string>? smatrixKeyResolver = null,
-        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
-        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
     {
         _smatrixKey = smatrixKey;
-        _smatrixKeyResolver = smatrixKeyResolver;
         _propagateToTemplate = propagateToTemplate;
         _displayName = displayName;
         _storedSMatrices = storedSMatrices;
@@ -122,58 +104,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
             : $"Component Settings: {displayName}";
         StatusText = string.Empty;
 
-        if (liveComponent != null && storedNazcaOverrides != null && templateFunctionName != null)
-        {
-            NazcaOverride = new InstanceNazcaOverrideViewModel(
-                entityKey,
-                storedNazcaOverrides,
-                liveComponent,
-                templateFunctionName,
-                templateFunctionParameters ?? string.Empty,
-                templateModuleName,
-                OnNazcaGeometryChanged);
-        }
-        else
-        {
-            NazcaOverride = null;
-        }
-        OnPropertyChanged(nameof(NazcaOverride));
-
-        if (liveComponent != null && storedNazcaOverrides != null && nazcaTemplateCode != null)
-        {
-            NazcaCodeEditor = new InstanceNazcaCodeEditorViewModel(
-                entityKey,
-                storedNazcaOverrides,
-                liveComponent,
-                templateModuleName,
-                templateFunctionName ?? string.Empty,
-                templateFunctionParameters,
-                nazcaTemplateCode,
-                nazcaPreviewService,
-                nazcaOverlapCheck,
-                nazcaDimensionsChanged,
-                OnNazcaGeometryChanged,
-                nazcaPinsChanged,
-                gdsFactoryPreviewService);
-        }
-        else
-        {
-            NazcaCodeEditor = null;
-        }
-        OnPropertyChanged(nameof(NazcaCodeEditor));
-
         SolverStatus = string.Empty;
         RefreshEntries(notifyChanged: false);
         RefreshEffectiveEntries();
         OnPropertyChanged(nameof(CanRecalculate));
         RecalculateSMatrixCommand.NotifyCanExecuteChanged();
-    }
-
-    private void OnNazcaGeometryChanged()
-    {
-        if (_smatrixKeyResolver != null)
-            _smatrixKey = _smatrixKeyResolver();
-        RefreshEntries(notifyChanged: true);
     }
 
     [RelayCommand]

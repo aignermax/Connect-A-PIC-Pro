@@ -1151,79 +1151,20 @@ public partial class MainWindow : Window
                 .ToList();
         }
 
-        // Resolve Nazca template values for per-instance mode.
-        // When no override is stored yet, the live component's current values ARE the template values.
-        // When an override was applied from a previous session, use the saved template reference
-        // from within the stored override record so "Reset to template" always targets the
-        // correct PDK defaults rather than the already-overridden live values.
-        string? templateFunctionName = null;
-        string? templateFunctionParameters = null;
-        string? templateModuleName = null;
-        if (liveComponent != null)
-        {
-            if (vm.FileOperations.StoredNazcaOverrides.TryGetValue(entityKey, out var existingNazca))
-            {
-                templateFunctionName = existingNazca.TemplateFunctionName ?? liveComponent.NazcaFunctionName;
-                templateFunctionParameters = existingNazca.TemplateFunctionParameters ?? liveComponent.NazcaFunctionParameters;
-                templateModuleName = existingNazca.TemplateModuleName ?? liveComponent.NazcaModuleName;
-            }
-            else
-            {
-                templateFunctionName = liveComponent.NazcaFunctionName;
-                templateFunctionParameters = liveComponent.NazcaFunctionParameters;
-                templateModuleName = liveComponent.NazcaModuleName;
-            }
-        }
+        string? templateFunctionName = liveComponent?.NazcaFunctionName;
+        string? templateFunctionParameters = liveComponent?.NazcaFunctionParameters;
+        string? templateModuleName = liveComponent?.NazcaModuleName;
 
-        // Per-instance raw Nazca code editor (issue #556) — only in per-instance mode.
-        var nazcaPreviewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
-            as CAP_Core.Export.NazcaComponentPreviewService;
-        var gdsFactoryPreviewService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
-            as CAP_Core.Export.GdsFactoryComponentPreviewService;
-        string? nazcaTemplateCode = null;
-        Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null;
-        Action? nazcaDimensionsChanged = null;
-        Action<IReadOnlyList<CAP_Core.Components.Core.PhysicalPin>>? nazcaPinsChanged = null;
-        if (liveComponent != null && !isTemplateMode)
-        {
-            nazcaTemplateCode = NazcaCodeTemplateBuilder.Build(
-                templateModuleName, templateFunctionName, templateFunctionParameters);
-            nazcaOverlapCheck = (w, h) => FindOverlappingComponentNames(vm, liveComponent, w, h);
-            nazcaDimensionsChanged = () =>
-            {
-                var compVm = vm.Canvas.Components.FirstOrDefault(c => c.Component == liveComponent);
-                compVm?.NotifyDimensionsChanged();
-                // Repaint the canvas immediately so the resized footprint shows on Apply.
-                DesignCanvasControl.InvalidateVisual();
-            };
-            nazcaPinsChanged = _ =>
-            {
-                // Issue #561: Connections auf die neuen Override-Pins umhaengen bzw.
-                // mit Warnung trennen, Pin-VMs auffrischen, Routen + Simulation neu.
-                var warnings = vm.Canvas.OnComponentPinsChanged(liveComponent);
-                foreach (var warning in warnings)
-                    errorConsole?.LogWarning(warning);
-                DesignCanvasControl.InvalidateVisual();
-            };
-        }
-
-        // S-matrix overrides (FDTD recompute / file import) are stored under the
-        // component's geometry identity so a copy inherits them; the per-instance
-        // Nazca raw-code override keeps using entityKey (component.Identifier).
-        // The library/template path has no live component and keeps the {PdkSource}::{Name} key.
-        // Resolve lazily so the dialog can re-derive the key after a Nazca geometry override
-        // (raw code / parameters) changes the identity mid-session.
+        // S-matrix overrides (FDTD recompute / file import) are stored under the component's
+        // geometry identity so a copy inherits them; the library/template path keys on entityKey.
         Func<string> smatrixKeyResolver = liveComponent != null
-            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(
-                liveComponent,
-                c => vm.FileOperations.StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null)
+            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(liveComponent)
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
-        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
-        // the user-global template override — but only while the instance geometry
-        // still matches the template draft (no Nazca override active). Everything
-        // is checked at invoke time so mid-session geometry edits are honoured.
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to the
+        // user-global template override — but only while the instance geometry still matches
+        // the template draft.
         Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
         if (liveComponent != null && userStore != null)
         {
@@ -1231,13 +1172,10 @@ public partial class MainWindow : Window
             {
                 var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
                 if (templateKey == null)
-                    return false; // no matching PDK template (e.g. user group)
+                    return false;
 
-                vm.FileOperations.StoredNazcaOverrides
-                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
                 if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
-                        liveComponent, nazcaOverride,
-                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                        liveComponent, templateModuleName, templateFunctionName, templateFunctionParameters))
                     return false;
 
                 userStore.Overrides[templateKey] = data;
@@ -1260,18 +1198,8 @@ public partial class MainWindow : Window
             effectiveSMatrices: effectiveSMatrices,
             effectivePins: effectivePins,
             availablePinNames: availablePinNames,
-            storedNazcaOverrides: isTemplateMode ? null : vm.FileOperations.StoredNazcaOverrides,
-            templateFunctionName: templateFunctionName,
-            templateFunctionParameters: templateFunctionParameters,
-            templateModuleName: templateModuleName,
-            nazcaPreviewService: nazcaPreviewService,
-            nazcaTemplateCode: nazcaTemplateCode,
-            nazcaOverlapCheck: nazcaOverlapCheck,
-            nazcaDimensionsChanged: nazcaDimensionsChanged,
-            nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
-            propagateToTemplate: propagateToTemplate,
-            gdsFactoryPreviewService: gdsFactoryPreviewService);
+            propagateToTemplate: propagateToTemplate);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         dialog.Show(this);
