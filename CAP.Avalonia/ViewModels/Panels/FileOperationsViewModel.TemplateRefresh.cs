@@ -5,6 +5,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
 using CAP.Avalonia.ViewModels.Library;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
@@ -20,16 +21,20 @@ public partial class FileOperationsViewModel
     /// <summary>
     /// Rebuilds the base wavelength-to-S-matrix map of every placed instance of
     /// <paramref name="template"/> from the template's (just saved) PDK definition — real
-    /// persisted data only, nothing fabricated — then re-applies project-local and user-global
+    /// persisted data only, nothing fabricated — then re-applies user-global and project-local
     /// overrides on top so an explicit override still wins over the refreshed PDK default.
+    /// Instances inside <see cref="ComponentGroup"/>s are refreshed too (the group structure
+    /// itself is never touched), and the running simulation is invalidated so the power-flow
+    /// overlay never keeps rendering light computed from the old matrices.
     /// </summary>
     /// <param name="template">The freshly registered library template after an editor save.</param>
     public void RefreshInstancesFromTemplate(ComponentTemplate template)
     {
+        // The save path treats component/PDK names case-insensitively; the instance match must
+        // too, or a case-only rename silently skips every placed instance.
         var templateKey = $"{template.PdkSource}::{template.Name}";
-        var matching = _canvas.Components
-            .Select(vm => vm.Component)
-            .Where(c => ResolveTemplateKey(c) == templateKey)
+        var matching = FlattenGroupChildren(_canvas.Components.Select(vm => vm.Component))
+            .Where(c => string.Equals(ResolveTemplateKey(c), templateKey, StringComparison.OrdinalIgnoreCase))
             .ToList();
         if (matching.Count == 0)
             return;
@@ -38,6 +43,27 @@ public partial class FileOperationsViewModel
             RebuildBaseSMatrices(component, template);
 
         ReapplyOverridesTo(matching);
+        _canvas.InvalidateSimulation();
+    }
+
+    /// <summary>
+    /// Yields all placed leaf components, descending into <see cref="ComponentGroup"/>s
+    /// (read-only traversal — groups are never restructured).
+    /// </summary>
+    private static IEnumerable<Component> FlattenGroupChildren(IEnumerable<Component> components)
+    {
+        foreach (var component in components)
+        {
+            if (component is ComponentGroup group)
+            {
+                foreach (var child in FlattenGroupChildren(group.ChildComponents))
+                    yield return child;
+            }
+            else
+            {
+                yield return component;
+            }
+        }
     }
 
     /// <summary>Replaces a component's base matrices with the ones the template now defines.</summary>
@@ -50,6 +76,17 @@ public partial class FileOperationsViewModel
         if (logicalPins.Count == 0)
             return;
 
+        // A pin rename/count change means the saved definition no longer describes this live
+        // instance: rebuilding would silently produce half-populated or zero matrices
+        // (PdkTemplateConverter skips unknown pin names). Keep the instance's current physics.
+        if (!TemplatePinsMatchInstance(template, logicalPins))
+        {
+            _errorConsole?.LogWarning(
+                $"Template pins changed — placed instance '{component.Identifier}' keeps its previous " +
+                $"S-matrix; replace it to adopt the new definition of '{template.Name}'.");
+            return;
+        }
+
         try
         {
             var map = BuildWavelengthMap(template, logicalPins, component.GetAllSliders());
@@ -58,12 +95,36 @@ public partial class FileOperationsViewModel
         }
         catch (Exception ex)
         {
-            // A pin/name mismatch means the live instance no longer matches the saved geometry —
-            // keep its current matrices rather than guessing (no silent physics).
+            // Any other rebuild failure: keep current matrices rather than guessing (no silent physics).
             _errorConsole?.LogWarning(
                 $"Could not refresh the S-matrix of '{component.Identifier}' from the saved " +
                 $"definition of '{template.Name}': {ex.Message}");
         }
+    }
+
+    /// <summary>
+    /// True when the saved template's pins (definitions AND every pin name its stored S-matrix
+    /// data references) resolve one-to-one against the live instance's pins.
+    /// </summary>
+    private static bool TemplatePinsMatchInstance(ComponentTemplate template, List<Pin> instancePins)
+    {
+        var instanceNames = new HashSet<string>(
+            instancePins.Select(p => p.Name), StringComparer.OrdinalIgnoreCase);
+        var templateNames = new HashSet<string>(
+            template.PinDefinitions.Select(d => d.Name), StringComparer.OrdinalIgnoreCase);
+        return templateNames.SetEquals(instanceNames)
+            && DraftConnectionsResolveAgainst(template.SourceDraft?.SMatrix, instanceNames);
+    }
+
+    /// <summary>True when every pin name in the persisted S-matrix data exists on the instance.</summary>
+    private static bool DraftConnectionsResolveAgainst(PdkSMatrixDraft? draft, HashSet<string> pinNames)
+    {
+        if (draft is null)
+            return true;
+        var connections = (draft.Connections ?? new List<SMatrixConnection>())
+            .Concat(draft.WavelengthData?.SelectMany(e => e.Connections)
+                    ?? Enumerable.Empty<SMatrixConnection>());
+        return connections.All(c => pinNames.Contains(c.FromPin) && pinNames.Contains(c.ToPin));
     }
 
     /// <summary>
@@ -89,12 +150,15 @@ public partial class FileOperationsViewModel
     }
 
     /// <summary>
-    /// Re-applies stored overrides to <paramref name="components"/> in the same order the
-    /// placement handler uses: project-local instance overrides first, then user-global
-    /// template overrides — so explicit overrides always beat the refreshed PDK default.
+    /// Re-applies stored overrides to <paramref name="components"/> with the documented
+    /// precedence per-instance &gt; user-global &gt; template: user-global template overrides
+    /// first, project-local per-instance overrides LAST so they win the last-write-per-wavelength
+    /// application.
     /// </summary>
     private void ReapplyOverridesTo(IReadOnlyList<Component> components)
     {
+        ApplyUserGlobalOverrides(components);
+
         if (StoredSMatrices.Count > 0)
         {
             Services.SMatrixOverrideApplicator.ApplyAll(
@@ -105,7 +169,5 @@ public partial class FileOperationsViewModel
                 errorConsole: _errorConsole,
                 keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate);
         }
-
-        ApplyUserGlobalOverrides(components);
     }
 }
