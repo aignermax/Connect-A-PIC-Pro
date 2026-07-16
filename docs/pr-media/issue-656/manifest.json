@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-collapsed.png",
+    "caption": "The read-only Photonic Registry panel starts collapsed in the right sidebar."
+  },
+  {
+    "file": "02-loaded-list.png",
+    "caption": "Expanding the panel loads the registry index and lists components with status chips and simulation tiers."
+  },
+  {
+    "file": "03-process-mismatch.png",
+    "caption": "Components targeting a process other than the design\u0027s active one are flagged with a \u0027different process\u0027 badge."
+  },
+  {
+    "file": "04-details.png",
+    "caption": "Selecting a component shows its description, ports, parameters, artifact provenance, and license."
+  }
+]
