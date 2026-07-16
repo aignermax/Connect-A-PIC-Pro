@@ -81,7 +81,7 @@
                                 <TextBlock Text="Nazca example:" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox Grid.Column="0" x:Name="NazcaExampleBox" IsReadOnly="True"
-                                             Text="import nazca as nd&#10;component = nd.Cell(name='my_component')"
+                                             Text="import nazca as nd&#10;&#10;def component():&#10;    with nd.Cell(name='my_component') as c:&#10;        nd.strt(length=20, width=0.5).put(0)&#10;        nd.Pin('a0').put(0, 0, 180)&#10;        nd.Pin('b0').put(20, 0, 0)&#10;    return c"
                                              AcceptsReturn="True" TextWrapping="NoWrap"
                                              FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="10"
                                              Background="#101018" Foreground="#dddddd"/>

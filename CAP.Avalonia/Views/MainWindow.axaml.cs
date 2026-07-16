@@ -45,6 +45,9 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly System.Collections.Generic.Dictionary<string, NewComponentWindow> _openComponentEditWindows = new();
 
+    /// <summary>Open Component Settings dialogs keyed by entity, so a repeat open activates the existing one.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, ComponentSettingsDialog> _openComponentSettingsDialogs = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -1057,6 +1060,12 @@ public partial class MainWindow : Window
         MainViewModel vm,
         ComponentTemplate? templateForDefaults = null)
     {
+        if (_openComponentSettingsDialogs.TryGetValue(entityKey, out var existingDialog))
+        {
+            existingDialog.Activate();
+            return;
+        }
+
         var errorConsole = App.Services.GetService(typeof(CAP_Core.ErrorConsoleService))
             as CAP_Core.ErrorConsoleService;
         var userStore = App.Services.GetService(typeof(UserSMatrixOverrideStore))
@@ -1202,6 +1211,8 @@ public partial class MainWindow : Window
             propagateToTemplate: propagateToTemplate);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
+        _openComponentSettingsDialogs[entityKey] = dialog;
+        dialog.Closed += (_, _) => _openComponentSettingsDialogs.Remove(entityKey);
         dialog.Show(this);
     }
 
