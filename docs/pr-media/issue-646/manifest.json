@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-override-editor-nazca-backend.png",
+    "caption": "Component Settings: the per-instance override editor with the Backend toggle on Nazca \u2014 this instance\u0027s custom geometry is authored as Nazca code."
+  },
+  {
+    "file": "02-override-editor-gdsfactory-backend.png",
+    "caption": "Switching the toggle to gdsfactory re-targets the docs button, quick-help and preview to the gdsfactory backend."
+  },
+  {
+    "file": "03-export-dialog-mixed-backend-info.png",
+    "caption": "The gdsfactory export dialog lists Nazca-backend overrides that are rendered by Nazca and merged into the single exported GDS."
+  }
+]
