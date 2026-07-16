@@ -15,6 +15,7 @@ namespace UnitTests.UI.Flows;
 /// JSON stays byte-identical.
 /// </summary>
 [Trait("Category", "UiFlows")]
+[Collection("UiFlows")]
 public class UiFlowEditForkTests
 {
     private const string PdkName = "Demo PDK";

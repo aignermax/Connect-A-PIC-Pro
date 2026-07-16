@@ -40,6 +40,7 @@ internal sealed class UiFlowTestHost : IDisposable
     public string UserPdkRoot { get; }
 
     private readonly string _prefsPath;
+    private readonly IServiceProvider? _previousServices;
 
     public UiFlowTestHost()
     {
@@ -80,6 +81,7 @@ internal sealed class UiFlowTestHost : IDisposable
         // null-tolerant except the flows under test, which need the UserPdkStore).
         var services = new ServiceCollection();
         services.AddSingleton(UserPdkStore);
+        _previousServices = App.Services;
         App.OverrideServicesForTesting(services.BuildServiceProvider());
 
         Window = new MainWindow { DataContext = Vm };
@@ -126,10 +128,14 @@ internal sealed class UiFlowTestHost : IDisposable
         Window.Close();
         Dispatcher.UIThread.RunJobs();
 
-        try { File.Delete(_prefsPath); } catch (IOException) { }
+        // App.Services is process-global static state — restore it so later suites in the same
+        // test process never resolve this host's (deleted) temp store.
+        App.OverrideServicesForTesting(_previousServices!);
+
+        try { File.Delete(_prefsPath); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         if (Directory.Exists(UserPdkRoot))
         {
-            try { Directory.Delete(UserPdkRoot, true); } catch (IOException) { }
+            try { Directory.Delete(UserPdkRoot, true); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         }
     }
 }

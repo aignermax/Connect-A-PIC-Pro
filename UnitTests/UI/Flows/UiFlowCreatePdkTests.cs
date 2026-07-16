@@ -15,6 +15,7 @@ namespace UnitTests.UI.Flows;
 /// appears in the PDK-Management list with its file in the (temp) user-pdks root.
 /// </summary>
 [Trait("Category", "UiFlows")]
+[Collection("UiFlows")]
 public class UiFlowCreatePdkTests
 {
     private const string NewPdkName = "My Flow PDK";
