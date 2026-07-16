@@ -16,8 +16,16 @@ public partial class LeftPanelViewModel
         await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
     }
 
-    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath) =>
+    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath)
+    {
+        // A save under a still-loaded bundled PDK's name is the deferred fork-on-save: the
+        // saved file is the user's copy of the whole PDK and replaces (shadows) the bundled
+        // entry instead of being registered next to it.
+        if (TryShadowBundledPdkWithSavedFork(pdkName, filePath))
+            return;
+
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
+    }
 
     internal void RemoveMigratedLibraryTemplate(string oldPdkName, string componentName)
     {
@@ -56,17 +64,18 @@ public partial class LeftPanelViewModel
         if (ShowNewComponentWindowAsync is null || _addCustomComponentDeps is null) return;
 
         var pdkInfo = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource);
-        if (pdkInfo is { IsBundled: true, FilePath: not null })
-        {
-            var forked = ForkBundledPdkForEdit(pdkInfo, template);
-            if (forked is null) return;
-            template = forked;
-        }
 
         var vm = NewComponentWindowLauncher.BuildViewModel(
             _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(),
             RegisterSavedCustomComponent, RemoveMigratedLibraryTemplate);
-        if (!vm.LoadForEdit(template))
+
+        // A bundled component opens read-only-sourced with a DEFERRED fork: nothing is written
+        // to disk until "Save changes" actually creates the user's copy of the PDK
+        // (fork-on-save; closing without saving leaves no trace).
+        var loaded = pdkInfo is { IsBundled: true, FilePath: not null }
+            ? vm.LoadForEditBundled(template, pdkInfo.FilePath, ResolvePdkProcess(pdkInfo))
+            : vm.LoadForEdit(template);
+        if (!loaded)
         {
             // No half-initialized "New Component" window when the edit session cannot be set up
             // (PR #742 review, finding 4) — surface LoadForEdit's reason instead.
@@ -77,26 +86,29 @@ public partial class LeftPanelViewModel
         await ShowNewComponentWindowAsync(vm);
     }
 
-    private ComponentTemplate? ForkBundledPdkForEdit(PdkInfoViewModel bundled, ComponentTemplate template)
+    /// <summary>
+    /// The fabrication process a PDK declares — from the already-loaded draft when available,
+    /// otherwise read from its file (a bundled PDK registered without a loaded draft, e.g. in
+    /// tests). The deferred fork-on-save needs it to describe the fork target.
+    /// </summary>
+    private ProcessDefinition? ResolvePdkProcess(PdkInfoViewModel pdkInfo)
     {
-        var store = _addCustomComponentDeps?.UserPdkStore;
-        if (store is null || bundled.FilePath is null)
+        if (pdkInfo.FilePath is null)
             return null;
 
-        var forkPath = store.ForkBundledPdk(bundled.FilePath, bundled.Name);
+        var normalized = Path.GetFullPath(pdkInfo.FilePath);
+        var draft = _loadedPdkDrafts.FirstOrDefault(d =>
+            d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized);
+        if (draft?.Process is { } process)
+            return process;
 
-        RemoveTemplatesForPdk(bundled.Name);
-        _loadedPdkDrafts.RemoveAll(d => string.Equals(d.FilePath, bundled.FilePath, System.StringComparison.OrdinalIgnoreCase));
-        var bundledRow = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == bundled.Name && p.IsBundled);
-        if (bundledRow != null)
-            PdkManager.LoadedPdks.Remove(bundledRow);
-
-        TryReloadUserPdk(forkPath);
-        ReapplyActiveProcessAfterPdkChange();
-        FilterComponents();
-
-        return AllTemplates.FirstOrDefault(t =>
-            string.Equals(t.Name, template.Name, System.StringComparison.OrdinalIgnoreCase)
-            && t.PdkSource == bundled.Name);
+        try
+        {
+            return _pdkLoader.LoadFromFile(pdkInfo.FilePath).Process;
+        }
+        catch
+        {
+            return null;
+        }
     }
 }

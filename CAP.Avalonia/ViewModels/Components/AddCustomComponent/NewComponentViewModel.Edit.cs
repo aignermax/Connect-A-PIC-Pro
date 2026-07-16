@@ -1,12 +1,24 @@
 using System.Linq;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.ViewModels.Library;
+using CAP_DataAccess.Components.AddCustomComponent;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
 public partial class NewComponentViewModel
 {
     private string? _editingOriginalName;
+
+    private string? _pendingForkSourcePath;
+    private string? _pendingForkTargetPath;
+
+    /// <summary>
+    /// True while this editor session edits a bundled (read-only foundry) component whose PDK
+    /// has not been forked yet: the fork is deferred to the first successful save, so closing
+    /// the window without saving leaves nothing on disk.
+    /// </summary>
+    public bool HasPendingBundledFork => _pendingForkSourcePath is not null;
 
     private string? _editOriginalPdkFilePath;
     private string? _editOriginalPdkName;
@@ -85,6 +97,40 @@ public partial class NewComponentViewModel
         _loadedName = ComponentName;
         _loadedCode = Code;
         IsEditMode = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Prefills this editor from a BUNDLED component's template without forking its PDK yet.
+    /// The fork target (the user copy of the whole PDK in user-pdks) is offered as the selected
+    /// PDK choice; the copy itself is only created when "Save changes" runs
+    /// (<see cref="HasPendingBundledFork"/>). Returns false — leaving no trace on disk — when
+    /// the bundled PDK declares no fabrication process or the template cannot be loaded.
+    /// </summary>
+    public bool LoadForEditBundled(ComponentTemplate template, string bundledFilePath, ProcessDefinition? process)
+    {
+        if (process is null)
+        {
+            StatusText = $"Cannot edit '{template.Name}': its PDK '{template.PdkSource}' declares no fabrication process.";
+            return false;
+        }
+
+        var forkTargetPath = _store.ResolveNamedPath(template.PdkSource);
+        var forkChoice = PdkChoice.For(new UserPdkInfo(template.PdkSource, forkTargetPath, process));
+        _pdkChoices.Insert(0, forkChoice);
+        OnPropertyChanged(nameof(PdkChoices));
+
+        if (!LoadForEdit(template))
+        {
+            _pdkChoices.Remove(forkChoice);
+            OnPropertyChanged(nameof(PdkChoices));
+            return false;
+        }
+
+        _pendingForkSourcePath = bundledFilePath;
+        _pendingForkTargetPath = forkTargetPath;
+        if (string.IsNullOrEmpty(StatusText))
+            StatusText = "Editing a built-in component — \"Save changes\" creates your own editable copy of its PDK.";
         return true;
     }
 

@@ -118,8 +118,10 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public async Task EditCustomComponent_forBundledTemplate_forksIntoUserStore_andOpensEditor()
+    public async Task EditCustomComponent_forBundledTemplate_opensEditorWithoutForking_untilSave()
     {
+        // Fork-on-save semantics: just LOOKING at a bundled component (✏ click) must leave the
+        // disk untouched — only "Save changes" creates the user copy of the PDK.
         var userStore = CreateUserPdkStore();
         var vm = CreateLeftPanelViewModel(userStore);
 
@@ -133,7 +135,8 @@ public class LibraryEditActionTests : IDisposable
         await vm.EditCustomComponentCommand.ExecuteAsync(template);
 
         showCalls.ShouldBe(1);
-        userStore.NamedPdkExists(bundledName).ShouldBeTrue();
+        userStore.NamedPdkExists(bundledName).ShouldBeFalse(
+            "opening the editor must not fork the bundled PDK — only saving does");
         File.Exists(bundledPath).ShouldBeTrue();
     }
 

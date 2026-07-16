@@ -91,7 +91,11 @@ public partial class NewComponentViewModel
         }
 
         MigratedFromPdkName = null;
+        // While a bundled fork is pending, the "original" is the read-only built-in PDK — a
+        // save into a different PDK is a copy-out, never a migration that would remove the
+        // bundled component from the library.
         var isMigration = IsEditMode
+            && !HasPendingBundledFork
             && _editOriginalPdkFilePath is not null
             && !PathsEqual(_editOriginalPdkFilePath, pdk.FilePath);
         if (isMigration &&
@@ -119,12 +123,28 @@ public partial class NewComponentViewModel
 
             var isSelfEdit = IsEditMode && !isMigration &&
                 string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
-            if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
+            // The deferred fork-on-save: the target file does not exist until now, so probe
+            // name collisions against the bundled source the fork will be copied from.
+            var executesPendingFork = HasPendingBundledFork
+                && _pendingForkTargetPath is not null
+                && PathsEqual(pdk.FilePath, _pendingForkTargetPath);
+            var collisionProbePath = executesPendingFork ? _pendingForkSourcePath! : pdk.FilePath;
+            if (!isSelfEdit && _store.ComponentExistsInFile(collisionProbePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
+            if (executesPendingFork)
+            {
+                _store.ForkBundledPdk(_pendingForkSourcePath!, pdk.Name);
+            }
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
+            if (executesPendingFork)
+            {
+                // From here on this session edits the user's copy directly.
+                _pendingForkSourcePath = null;
+                _pendingForkTargetPath = null;
+            }
 
             if (isMigration && TryRemoveFromOriginalPdk(_editingOriginalName ?? name))
             {
