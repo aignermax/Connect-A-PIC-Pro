@@ -1012,11 +1012,36 @@ public partial class MainWindow : Window
         var portMappingDialog = App.Services.GetService(typeof(IPortMappingDialogService))
             as IPortMappingDialogService;
 
+        // FDTD "Recalculate S-matrix": wire the solver service and a factory that
+        // renders the component's geometry/pins into an FDTD request. Both are
+        // optional — the dialog hides the recompute button when they're absent.
+        var fdtdService = App.Services.GetService(typeof(CAP_Core.Solvers.Fdtd.IFdtdSMatrixService))
+            as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
+        var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
+            as CAP_Core.Export.NazcaComponentPreviewService;
+        Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
+        if (fdtdService != null && previewService != null)
+        {
+            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(previewService);
+            fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
+        }
+
+        // Guided Docker setup (issue #649): shown when the availability probe
+        // reports Docker missing or its engine stopped.
+        var dockerSetupDialog = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.IDockerSetupDialogService))
+            as CAP.Avalonia.Services.Solvers.IDockerSetupDialogService;
+        var notificationService = App.Services.GetService(typeof(INotificationService))
+            as INotificationService;
+
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
             importers: null,
-            portMappingDialog: portMappingDialog);
+            portMappingDialog: portMappingDialog,
+            fdtdService: fdtdService,
+            fdtdRequestFactory: fdtdRequestFactory,
+            notificationService: notificationService,
+            dockerSetupDialog: dockerSetupDialog);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode

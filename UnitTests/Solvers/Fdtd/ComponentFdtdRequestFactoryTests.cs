@@ -114,4 +114,48 @@ public class ComponentFdtdRequestFactoryTests
             "The clone must render against the original PDK module, not the nazca.demofab fallback.");
         request.ShouldNotBeNull();
     }
+
+    [Fact]
+    public async Task BuildAsync_SweepsTheComponentsExistingWavelengths_NotTheFixedDefaultBand()
+    {
+        // #582: the SiEPIC-style component is defined at 980/1310/1550 nm; a fixed
+        // 1.5–1.6 µm sweep would leave 980/1310 stale in the effective S-matrix.
+        var component = TestComponentFactory.CreateStraightWaveGuide(); // map: 980/1310/1550 nm
+
+        var preview = new Mock<NazcaComponentPreviewService>(
+            MockBehavior.Loose, "python3", "preview.py", (TimeSpan?)null, (ProcessLaunchFactory?)null) { CallBase = false };
+        preview.Setup(s => s.RenderAsync(
+                It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new NazcaPreviewResult
+            {
+                Success = true,
+                Polygons = new[] { Poly(1) },
+                Pins = new[] { new NazcaPreviewPin { Name = "a0", X = 0, Y = 0, Angle = 0 } },
+            });
+
+        var factory = new ComponentFdtdRequestFactory(preview.Object);
+        var request = await factory.BuildAsync(component);
+
+        request.ShouldNotBeNull();
+        request!.WavelengthStart.ShouldBe(0.98, 1e-9);
+        request.WavelengthStop.ShouldBe(1.55, 1e-9);
+        request.WavelengthPoints.ShouldBe(20); // 30 nm GCD grid hits 980, 1310 and 1550 exactly
+    }
+
+    [Fact]
+    public void BuildFromPreview_WithoutSweep_KeepsDefaultBand()
+    {
+        var preview = new NazcaPreviewResult
+        {
+            Success = true,
+            Polygons = new[] { Poly(1) },
+            Pins = new[] { new NazcaPreviewPin { Name = "a0", X = 0, Y = 0, Angle = 0 } },
+        };
+
+        var request = ComponentFdtdRequestFactory.BuildFromPreview(preview, new[] { "port 1" });
+
+        request.WavelengthStart.ShouldBe(1.5);
+        request.WavelengthStop.ShouldBe(1.6);
+        request.WavelengthPoints.ShouldBe(11);
+    }
 }

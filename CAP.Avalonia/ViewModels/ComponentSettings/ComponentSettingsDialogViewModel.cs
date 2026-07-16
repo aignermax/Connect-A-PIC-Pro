@@ -8,6 +8,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride;
 using CAP_Core.Export;
+using CAP_Core.Solvers.Fdtd;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using NazcaCodeOverride = CAP_DataAccess.Persistence.PIR.NazcaCodeOverride;
@@ -20,6 +21,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private readonly ErrorConsoleService? _errorConsole;
     private readonly IReadOnlyList<ISParameterImporter> _importers;
     private readonly IPortMappingDialogService? _portMappingDialog;
+    private readonly INotificationService? _notificationService;
 
     private Dictionary<string, ComponentSMatrixData>? _storedSMatrices;
     private Component? _liveComponent;
@@ -60,11 +62,19 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IFileDialogService fileDialogService,
         ErrorConsoleService? errorConsole = null,
         IReadOnlyList<ISParameterImporter>? importers = null,
-        IPortMappingDialogService? portMappingDialog = null)
+        IPortMappingDialogService? portMappingDialog = null,
+        IFdtdSMatrixService? fdtdService = null,
+        Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
+        INotificationService? notificationService = null,
+        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
         _portMappingDialog = portMappingDialog;
+        _notificationService = notificationService;
+        _fdtdService = fdtdService;
+        _fdtdRequestFactory = fdtdRequestFactory;
+        _dockerSetupDialog = dockerSetupDialog;
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),
@@ -152,8 +162,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         }
         OnPropertyChanged(nameof(NazcaCodeEditor));
 
+        SolverStatus = string.Empty;
         RefreshEntries(notifyChanged: false);
         RefreshEffectiveEntries();
+        OnPropertyChanged(nameof(CanRecalculate));
+        RecalculateSMatrixCommand.NotifyCanExecuteChanged();
     }
 
     private void OnNazcaGeometryChanged()

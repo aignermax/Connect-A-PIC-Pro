@@ -19,6 +19,17 @@ public partial class ComponentSettingsDialog : Window
     }
 
     /// <summary>
+    /// Cancels a running FDTD recompute when the dialog is closed — otherwise the
+    /// solve (and its Docker container) would keep running in the background.
+    /// </summary>
+    protected override void OnClosing(WindowClosingEventArgs e)
+    {
+        if (DataContext is ComponentSettingsDialogViewModel vm)
+            vm.CancelRecalculate();
+        base.OnClosing(e);
+    }
+
+    /// <summary>
     /// Fires the per-instance Nazca code editor's async source load once the dialog
     /// is visible (issue #556). Fire-and-forget so the dialog opens immediately; the
     /// editor populates as soon as the (cached) module-mode render returns. The VM's
