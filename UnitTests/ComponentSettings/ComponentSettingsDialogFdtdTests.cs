@@ -74,6 +74,78 @@ public class ComponentSettingsDialogFdtdTests
     }
 
     [Fact]
+    public async Task RecalculateSMatrix_WarnsAboutWavelengthsTheRunDidNotCover()
+    {
+        // #582: the test component is defined at 980/1310/1550 nm but the (fake)
+        // FDTD run only returns 1550 → 980/1310 keep their old values and the
+        // status must say so instead of leaving a silently mixed effective matrix.
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new FdtdSMatrixResult
+               {
+                   Success = true,
+                   Ports = new[] { "in", "out" }, // match the component's pin names → applies cleanly
+                   Wavelengths = new[] { 1.55 },
+                   Entries = new[]
+                   {
+                       new FdtdSEntry { Key = "out@0,in@0", Values = new[] { new Complex(0.95, 0.0) } },
+                       new FdtdSEntry { Key = "in@0,out@0", Values = new[] { new Complex(0.95, 0.0) } },
+                   },
+                   EnergySumPerInput = new Dictionary<string, double>(),
+               });
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("FDTD done");
+        vm.SolverStatus.ShouldContain("Not covered");
+        vm.SolverStatus.ShouldContain("980");
+        vm.SolverStatus.ShouldContain("1310");
+        vm.SolverStatus.ShouldNotContain("1550 nm"); // the covered wavelength is not stale
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_NoStaleWarning_WhenRunCoversAllWavelengths()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new FdtdSMatrixResult
+               {
+                   Success = true,
+                   Ports = new[] { "in", "out" },
+                   Wavelengths = new[] { 0.98, 1.31, 1.55 }, // covers every defined wavelength
+                   Entries = new[]
+                   {
+                       new FdtdSEntry { Key = "out@0,in@0", Values = new[] { new Complex(0.9, 0.0), new Complex(0.9, 0.0), new Complex(0.9, 0.0) } },
+                       new FdtdSEntry { Key = "in@0,out@0", Values = new[] { new Complex(0.9, 0.0), new Complex(0.9, 0.0), new Complex(0.9, 0.0) } },
+                   },
+                   EnergySumPerInput = new Dictionary<string, double>(),
+               });
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("FDTD done");
+        vm.SolverStatus.ShouldNotContain("Not covered");
+    }
+
+    [Fact]
     public async Task RecalculateSMatrix_OnFailure_SurfacesHintAndStoresNothing()
     {
         var service = new Mock<IFdtdSMatrixService>();

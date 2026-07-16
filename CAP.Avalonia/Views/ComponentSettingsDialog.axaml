@@ -90,7 +90,9 @@
                 <ItemsControl ItemsSource="{Binding EffectiveEntries}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="vm:EffectiveSMatrixEntryViewModel">
-                            <Grid ColumnDefinitions="80,60,*,90" Margin="0,1">
+                            <!-- Last column Auto: the source tag now carries provenance
+                                 (e.g. "Override active — FDTD Meep 2D", #582) and must not clip. -->
+                            <Grid ColumnDefinitions="80,60,*,Auto" Margin="0,1">
                                 <TextBlock Grid.Column="0"
                                            Text="{Binding WavelengthLabel}"
                                            Foreground="White"
@@ -117,7 +119,7 @@
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Right"
                                            IsVisible="{Binding IsOverridden}"
-                                           ToolTip.Tip="A user import has replaced the PDK default for this wavelength"/>
+                                           ToolTip.Tip="An override (file import or FDTD recompute) has replaced the PDK default for this wavelength"/>
                                 <TextBlock Grid.Column="3"
                                            Text="{Binding SourceTag}"
                                            Foreground="#777777"
