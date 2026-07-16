@@ -29,6 +29,23 @@
     text) lands Button/ComboBox at 24px (32 -> 24, a verified 25% reduction, no clipping).
     Hitting the full 40% would require also shrinking FontSize, which this change intentionally
     does not do (see PR notes for this trade-off).
+
+    Follow-up (field test found 3 gaps — TextBox/NumericUpDown untouched, Flyout/Transient
+    buttons still tall): verified against Avalonia.Themes.Fluent 11.3.13 source.
+    TextBox's ControlTheme (Controls/TextBox.xaml) and NumericUpDown's ControlTheme
+    (Controls/NumericUpDown.xaml) both read the SAME three keys for their outer control
+    (NumericUpDown's inner PART_TextBox padding is a TemplateBinding to NumericUpDown's own
+    Padding, so one override drives both controls):
+      TextControlThemeMinHeight = 32   (Accents/BaseResources.xaml)
+      TextControlThemeMinWidth  = 64   (unrelated to height — left untouched)
+      TextControlThemePadding   = 10,6,6,5
+    AutoCompleteBox (Controls/AutoCompleteBox.xaml) also reads TextControlThemePadding for
+    its own Padding, and its inner PART_TextBox reads the same three keys again — both layers
+    compact together, which is fine (no clipping: MinHeight is a floor, never a fixed Height).
+    NumericUpDown's spinner RepeatButtons already render compact: their Padding is
+    "{StaticResource ButtonPadding}" (Controls/ButtonSpinner.xaml), so they picked up the
+    ButtonPadding override above for free; their height stretches to the ButtonSpinner's
+    border, which now shrinks with TextControlThemeMinHeight.
   -->
   <Styles.Resources>
     <ResourceDictionary>
@@ -39,18 +56,33 @@
       <Thickness x:Key="ComboBoxPadding">12,1,0,2</Thickness>
       <Thickness x:Key="ComboBoxItemThemePadding">11,1,11,2</Thickness>
       <x:Double x:Key="ComboBoxMinHeight">21</x:Double>
+
+      <!-- TextBox / NumericUpDown / AutoCompleteBox: same reduce-vertical-only pattern as
+           Button/ComboBox above. Left=10/Right=6 unchanged (Right=6 leaves room for the
+           clear/reveal-password glyph button some TextBoxes host in InnerRightContent);
+           only Top/Bottom drop to the 1/2 floor. MinHeight 32 -> 21 matches ComboBoxMinHeight
+           so text inputs and combo boxes align at the same row height. -->
+      <Thickness x:Key="TextControlThemePadding">10,1,6,2</Thickness>
+      <x:Double x:Key="TextControlThemeMinHeight">21</x:Double>
     </ResourceDictionary>
   </Styles.Resources>
 
   <!-- FontSize 12 (down from the Fluent 14) closes the gap to the requested ~40% flatter:
-       with the reduced padding above, Button/ComboBox land at ~21px (32 -> ~21). Type
-       selectors match by StyleKey, so plain Button/ComboBox are hit while CheckBox/
-       ToggleButton/RadioButton (own StyleKeys and ControlThemes) stay untouched; views
-       that set FontSize locally (most of the dense panels use 9-11 already) win anyway. -->
+       with the reduced padding above, Button/ComboBox/TextBox/NumericUpDown land at ~21px
+       (32 -> ~21). Type selectors match by StyleKey, so plain Button/ComboBox/TextBox/
+       NumericUpDown are hit while CheckBox/ToggleButton/RadioButton (own StyleKeys and
+       ControlThemes) stay untouched; views that set FontSize locally (most of the dense
+       panels use 9-11 already) win anyway. -->
   <Style Selector="Button">
     <Setter Property="FontSize" Value="12"/>
   </Style>
   <Style Selector="ComboBox">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="TextBox">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="NumericUpDown">
     <Setter Property="FontSize" Value="12"/>
   </Style>
 </Styles>
