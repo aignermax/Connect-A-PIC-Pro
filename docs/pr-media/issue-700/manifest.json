@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-first-session-no-user-pdk.png",
+    "caption": "First session: searching the component library for \u0022MyLab\u0022 finds nothing and PDK Management lists only the bundled PDKs \u2014 no user PDK is loaded yet."
+  },
+  {
+    "file": "02-user-pdk-imported.png",
+    "caption": "The user imports \u0022MyLab User PDK\u0022 via Tools \u2192 Load PDK\u2026: its three components appear in the library and the PDK is listed under PDK Management as \uD83D\uDCC2 User."
+  },
+  {
+    "file": "03-after-restart-pdk-restored.png",
+    "caption": "After an app restart the PDK path recorded in preferences is reloaded at startup, so the user PDK and its components are back without re-importing (the fix for issue #700 \u2014 previously this view was empty again)."
+  }
+]
