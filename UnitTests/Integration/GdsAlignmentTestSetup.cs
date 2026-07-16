@@ -12,6 +12,10 @@ internal static class GdsAlignmentTestSetup
     /// <summary>Resolves (nazca-capable python, preview script path), or nulls to skip.</summary>
     public static async Task<(string? Python, string? Script)> ResolveEnvironmentAsync()
     {
+        // Opt-in gate: this alignment matrix spawns real python + GDS tooling. It runs only when
+        // the workflow points at a python (CI sets LUNIMA_TEST_PYTHON3); a plain local run skips.
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LUNIMA_TEST_PYTHON3")))
+            return (null, null);
         var python = await new PythonDiscoveryService().FindFirstNazcaPythonPathAsync();
         return (python, FindRealPreviewScript());
     }
