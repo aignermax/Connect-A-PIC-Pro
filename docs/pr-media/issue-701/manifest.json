@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-initial-gdsfactory.png",
+    "caption": "The New Component window opens in gdsfactory function-reference mode with the new backend selector and the S-matrix model choice defaulting to black box."
+  },
+  {
+    "file": "02-nazca-preview.png",
+    "caption": "Selecting the new nazca backend and rendering a preview extracts the size and pins from which the NazcaOriginOffset is derived on save."
+  },
+  {
+    "file": "03-raw-code-authoring.png",
+    "caption": "Checking the raw-code toggle swaps the function-reference fields for a cell-code editor, so a complete pasted nazca cell renders through the raw-code pipeline."
+  },
+  {
+    "file": "04-lossless-ideal-saved.png",
+    "caption": "Choosing the lossless 2-port pass-through ideal and saving stores the component in the process\u0027s user PDK with the exact unit S-matrix, confirmed in the status line."
+  }
+]
