@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-active-process-preselected.png",
+    "caption": "Opening the Fabrication Process editor now preselects the design\u0027s active process (SiEPIC EBeam / SOI-220) in the preset dropdown instead of an empty picker, next to the new \u0027Set as design process\u0027 button."
+  },
+  {
+    "file": "02-different-preset-picked.png",
+    "caption": "Picking another preset (CornerStone SiN) loads its layer stack, cross-sections and materials into the editor, ready to become the design\u0027s process."
+  },
+  {
+    "file": "03-guard-components-placed.png",
+    "caption": "With components on the canvas, \u0027Set as design process\u0027 refuses and explains that placed components carry S-matrices of the current process (one design = one process)."
+  },
+  {
+    "file": "04-design-process-switched.png",
+    "caption": "On an empty canvas the same click applies the selection: the design is now locked to SiN-300 and the status confirms the switch."
+  }
+]
