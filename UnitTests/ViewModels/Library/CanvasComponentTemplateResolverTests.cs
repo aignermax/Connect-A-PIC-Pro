@@ -107,4 +107,64 @@ public class CanvasComponentTemplateResolverTests
 
         result.ShouldBeNull();
     }
+
+    [Fact]
+    public void Resolve_MatchesPdkSourceAndName_CaseInsensitively_LikeTheNeighborMatchers()
+    {
+        var compVm = TestComponentFactory.CreateComponentViewModel();
+        compVm.TemplatePdkSource = "demo pdk";
+        compVm.TemplateName = "STRAIGHT WAVEGUIDE";
+        var library = new[] { MakeTemplate("Straight Waveguide", "Demo PDK") };
+
+        var result = CanvasComponentTemplateResolver.Resolve(compVm, library, resolvePdkSource: null);
+
+        result.ShouldBe(library[0]);
+    }
+
+    [Fact]
+    public void ResolveEditable_ReturnsTemplate_WhenResolvableAndEditable()
+    {
+        var compVm = TestComponentFactory.CreateComponentViewModel();
+        compVm.TemplatePdkSource = "Demo PDK";
+        compVm.TemplateName = "Straight Waveguide";
+        var library = new[] { MakeTemplate("Straight Waveguide", "Demo PDK") };
+
+        var result = CanvasComponentTemplateResolver.ResolveEditable(
+            compVm, library, resolvePdkSource: null, canEditTemplate: _ => true);
+
+        result.ShouldBe(library[0]);
+    }
+
+    [Fact]
+    public void ResolveEditable_ReturnsNull_WhenTemplateResolvesButIsNotEditable()
+    {
+        var compVm = TestComponentFactory.CreateComponentViewModel();
+        compVm.TemplatePdkSource = "Demo PDK";
+        compVm.TemplateName = "Straight Waveguide";
+        var library = new[] { MakeTemplate("Straight Waveguide", "Demo PDK") };
+
+        var result = CanvasComponentTemplateResolver.ResolveEditable(
+            compVm, library, resolvePdkSource: null, canEditTemplate: _ => false);
+
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void ResolveEditable_ReturnsNull_ForGroupLikeVmWithoutTemplate_WithoutAskingCanEdit()
+    {
+        // ComponentGroups (and legacy instances) carry no TemplateName — the caller must fall
+        // back to the classic per-instance settings dialog, not report a resolver error.
+        var compVm = TestComponentFactory.CreateComponentViewModel();
+        compVm.TemplatePdkSource = "Demo PDK";
+        compVm.TemplateName = null;
+        var library = new[] { MakeTemplate("Straight Waveguide", "Demo PDK") };
+        var canEditCalled = false;
+
+        var result = CanvasComponentTemplateResolver.ResolveEditable(
+            compVm, library, resolvePdkSource: null,
+            canEditTemplate: _ => { canEditCalled = true; return true; });
+
+        result.ShouldBeNull();
+        canEditCalled.ShouldBeFalse();
+    }
 }

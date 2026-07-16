@@ -16,7 +16,15 @@ public sealed class PdkTrashService
     public const int RetentionDays = 30;
 
     private static readonly Regex TimestampSuffix =
-        new(@"^(?<base>.+)-(?<date>\d{8})-(?<time>\d{6})(?:-\d+)?$", RegexOptions.Compiled);
+        new(@"^(?<base>.+)-(?<date>\d{8})-(?<time>\d{6})(?:-(?<counter>\d+))?$", RegexOptions.Compiled);
+
+    /// <summary>
+    /// Comparer for live-PDK file paths used as dictionary keys below. Case-insensitive only on
+    /// Windows: on case-sensitive file systems two paths differing in case are genuinely
+    /// different files and must not be collapsed into one dedup bucket.
+    /// </summary>
+    private static readonly StringComparer LivePathComparer =
+        OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
 
     private readonly string _root;
     private readonly PdkLoader _loader;
@@ -45,15 +53,23 @@ public sealed class PdkTrashService
         // Each component-delete backs up a full copy of the PDK file as it stood right before
         // that one delete. Sequential deletes (A, then B, then C) therefore leave overlapping
         // backups: the A-backup still contains B and C. Expand every RemovedComponents backup to
-        // one candidate entry PER missing component, then keep only the most recently written
-        // backup for each (livePath, componentName) pair - that is the backup whose delete
-        // actually removed that component. This is what makes Restore(entry) able to bring back
-        // exactly the one component the user clicked, without resurrecting later deletes.
-        var newestPerComponent = new Dictionary<(string LivePath, string Name), (DateTime WrittenAt, PdkTrashEntry Entry)>();
+        // one candidate entry PER missing component, then keep only the newest backup for each
+        // (livePath, componentName) pair - that is the backup whose delete actually removed that
+        // component. This is what makes Restore(entry) able to bring back exactly the one
+        // component the user clicked, without resurrecting later deletes.
+        //
+        // "Newest" is ranked by the DeletedAt timestamp encoded in the trash file's NAME, with
+        // the "-N" same-second collision counter as tiebreaker - never by the file's mtime,
+        // which a git checkout/sync rewrites and would then promote a stale backup.
+        //
+        // Live-path keys fold case only on Windows (see LivePathComparer); component names are
+        // matched case-insensitively everywhere, like the rest of the component-name handling.
+        var liveCache = new Dictionary<string, PdkDraft?>(LivePathComparer);
+        var newestPerComponent = new Dictionary<(string LivePath, string Name), ((DateTime DeletedAt, int Counter) Rank, PdkTrashEntry Entry)>();
 
         foreach (var path in Directory.GetFiles(TrashDirectory, "*.json"))
         {
-            var raw = TryReadRawInfo(path);
+            var raw = TryReadRawInfo(path, liveCache);
             if (raw is null)
                 continue;
 
@@ -64,14 +80,14 @@ public sealed class PdkTrashService
                 continue;
             }
 
-            var writtenAt = File.GetLastWriteTimeUtc(path);
+            var rank = (raw.DeletedAt, raw.CollisionCounter);
             foreach (var name in raw.ComponentNames)
             {
-                var key = (raw.LivePath.ToLowerInvariant(), name.ToLowerInvariant());
-                if (newestPerComponent.TryGetValue(key, out var existing) && existing.WrittenAt >= writtenAt)
+                var key = (PathKey(raw.LivePath), name.ToLowerInvariant());
+                if (newestPerComponent.TryGetValue(key, out var existing) && existing.Rank.CompareTo(rank) >= 0)
                     continue;
 
-                newestPerComponent[key] = (writtenAt,
+                newestPerComponent[key] = (rank,
                     new PdkTrashEntry(path, raw.PdkName, PdkTrashKind.RemovedComponents, raw.DeletedAt, raw.LivePath, new[] { name }));
             }
         }
@@ -80,10 +96,15 @@ public sealed class PdkTrashService
         return entries.OrderByDescending(e => e.DeletedAt).ToList();
     }
 
-    private sealed record RawTrashInfo(
-        string PdkName, PdkTrashKind Kind, DateTime DeletedAt, string LivePath, IReadOnlyList<string> ComponentNames);
+    /// <summary>Folds path case on Windows only — see <see cref="LivePathComparer"/>.</summary>
+    private static string PathKey(string path) =>
+        OperatingSystem.IsWindows() ? path.ToLowerInvariant() : path;
 
-    private RawTrashInfo? TryReadRawInfo(string trashPath)
+    private sealed record RawTrashInfo(
+        string PdkName, PdkTrashKind Kind, DateTime DeletedAt, int CollisionCounter,
+        string LivePath, IReadOnlyList<string> ComponentNames);
+
+    private RawTrashInfo? TryReadRawInfo(string trashPath, Dictionary<string, PdkDraft?> liveCache)
     {
         PdkDraft backup;
         try { backup = _loader.LoadFromFileForEditing(trashPath); }
@@ -95,20 +116,30 @@ public sealed class PdkTrashService
             return null;
 
         var deletedAt = ParseTimestamp(match.Groups["date"].Value, match.Groups["time"].Value);
+        var counter = match.Groups["counter"].Success
+            && int.TryParse(match.Groups["counter"].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var n)
+            ? n : 0;
         var livePath = Path.Combine(_root, match.Groups["base"].Value + ".json");
         var backupComponents = backup.Components.Select(c => c.Name).ToList();
-        var live = TryLoadLive(livePath);
+
+        // Several backups usually point at the same live PDK file (one backup per delete) —
+        // parse it once per ListEntries call, not once per trash file.
+        if (!liveCache.TryGetValue(livePath, out var live))
+        {
+            live = TryLoadLive(livePath);
+            liveCache[livePath] = live;
+        }
 
         bool sameLivePdk = live != null && string.Equals(live.Name, backup.Name, StringComparison.OrdinalIgnoreCase);
         if (!sameLivePdk)
-            return new RawTrashInfo(backup.Name, PdkTrashKind.DeletedPdk, deletedAt, livePath, backupComponents);
+            return new RawTrashInfo(backup.Name, PdkTrashKind.DeletedPdk, deletedAt, counter, livePath, backupComponents);
 
         var liveNames = live!.Components.Select(c => c.Name).ToHashSet(StringComparer.OrdinalIgnoreCase);
         var restorable = backup.Components
             .Where(c => !liveNames.Contains(c.Name))
             .Select(c => c.Name)
             .ToList();
-        return new RawTrashInfo(backup.Name, PdkTrashKind.RemovedComponents, deletedAt, livePath, restorable);
+        return new RawTrashInfo(backup.Name, PdkTrashKind.RemovedComponents, deletedAt, counter, livePath, restorable);
     }
 
     private PdkDraft? TryLoadLive(string livePath)

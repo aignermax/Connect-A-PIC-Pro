@@ -116,6 +116,16 @@ public partial class MainWindow : Window
                         && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
                         && existingComponentWindow.IsVisible)
                     {
+                        // Stale-state guard (PR #742 review, finding 2): the existing window may
+                        // hold an outdated snapshot (the file changed on disk since it opened) —
+                        // saving from it would silently overwrite the newer state. If the user
+                        // has no unsaved input there, adopt the freshly loaded template state;
+                        // if they do, only activate — user input is never thrown away.
+                        if (existingComponentWindow.DataContext is NewComponentViewModel existingVm
+                            && !existingVm.HasUnsavedEditChanges)
+                        {
+                            existingVm.RefreshFromFreshEdit(newComponentVm);
+                        }
                         // Un-minimize first: Activate() alone leaves a minimized window
                         // minimized, which looks like the ✏ button silently did nothing.
                         existingComponentWindow.WindowState = WindowState.Normal;
@@ -273,22 +283,15 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Wire up Component Settings dialog for hierarchy nodes
+                // Both component context-menu entry points share one routing (design
+                // 2026-07-16-pdk-ux-polish T4 + PR #742 review): PDK template resolvable and
+                // editable -> unified "Edit Component" editor; otherwise (ComponentGroups,
+                // template-less legacy instances, unloaded PDK) -> classic per-instance
+                // Component Settings dialog. See OpenComponentEditorOrSettings below.
                 vm.LeftPanel.HierarchyPanel.OpenComponentSettings = node =>
-                {
-                    ShowComponentSettingsDialog(
-                        node.Component.Identifier,
-                        node.Component.HumanReadableName ?? node.Component.Identifier,
-                        node.Component,
-                        vm);
-                };
-
-                // Wire up "Edit Component…" for the canvas context menu (design
-                // 2026-07-16-pdk-ux-polish T4): routes to the same unified editor hook as the
-                // library's ✏ button (fork-on-edit for bundled PDKs and window dedup both apply
-                // automatically), instead of the old per-instance ComponentSettingsDialog. See
-                // OpenCanvasComponentEditor below for the template resolution.
-                vm.CanvasInteraction.OpenComponentSettings = compVm => OpenCanvasComponentEditor(compVm, vm);
+                    OpenComponentEditorOrSettings(node.ComponentViewModel, node.Component, vm);
+                vm.CanvasInteraction.OpenComponentSettings = compVm =>
+                    OpenComponentEditorOrSettings(compVm, compVm.Component, vm);
 
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
@@ -959,29 +962,39 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
-    /// Opens the unified "Edit Component" editor for the PDK template behind a placed canvas
-    /// component (design 2026-07-16-pdk-ux-polish T4). Template resolution
-    /// (<c>TemplatePdkSource ?? ResolveComponentPdkSource</c> + <c>TemplateName</c> against
-    /// <c>LeftPanel.AllTemplates</c>) lives in <see cref="CanvasComponentTemplateResolver"/> so it
-    /// can be unit-tested without an Avalonia window. The resolved template is handed to
-    /// <see cref="LeftPanelViewModel.EditCustomComponentCommand"/> — the same hook the library's
-    /// ✏ button uses — so fork-on-edit for bundled PDKs and the "Edit Component" window dedup
-    /// both apply automatically without any duplicated logic here. If no template can be
-    /// resolved (e.g. its PDK was deleted after placement), logs an error and does nothing
-    /// further — no dialog opens, no crash.
+    /// Shared routing for both component context-menu entry points — the canvas ("Edit
+    /// Component…") and the hierarchy panel ("Component Settings…"). When the placed
+    /// component's PDK template can be resolved (<see cref="CanvasComponentTemplateResolver"/>)
+    /// AND <see cref="LeftPanelViewModel.CanEditTemplate"/> allows editing it, opens the unified
+    /// "Edit Component" editor via <see cref="LeftPanelViewModel.EditCustomComponentCommand"/> —
+    /// the same hook as the library's ✏ button, so fork-on-edit for bundled PDKs and the editor
+    /// window dedup apply automatically. Otherwise falls back to the classic per-instance
+    /// Component Settings dialog (the pre-#742 behavior): ComponentGroups and template-less
+    /// legacy instances keep their S-matrix settings view instead of a misleading
+    /// "template no longer available" error.
     /// </summary>
-    private static void OpenCanvasComponentEditor(CAP.Avalonia.ViewModels.Canvas.ComponentViewModel compVm, MainViewModel vm)
+    private void OpenComponentEditorOrSettings(
+        CAP.Avalonia.ViewModels.Canvas.ComponentViewModel? compVm,
+        CAP_Core.Components.Core.Component component,
+        MainViewModel vm)
     {
-        var template = CanvasComponentTemplateResolver.Resolve(
-            compVm, vm.LeftPanel.AllTemplates, vm.CanvasInteraction.ResolveComponentPdkSource);
-        if (template is null)
+        var template = compVm is null
+            ? null
+            : CanvasComponentTemplateResolver.ResolveEditable(
+                compVm, vm.LeftPanel.AllTemplates,
+                vm.CanvasInteraction.ResolveComponentPdkSource,
+                vm.LeftPanel.CanEditTemplate);
+        if (template is not null)
         {
-            vm.ErrorConsole.LogError(
-                $"Cannot open the component editor for '{compVm.DisplayName}': its PDK template is no longer available (was it deleted?).");
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
             return;
         }
 
-        vm.LeftPanel.EditCustomComponentCommand.Execute(template);
+        ShowComponentSettingsDialog(
+            component.Identifier,
+            component.HumanReadableName ?? component.Identifier,
+            component,
+            vm);
     }
 
     /// <summary>

@@ -66,7 +66,14 @@ public partial class LeftPanelViewModel
         var vm = NewComponentWindowLauncher.BuildViewModel(
             _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(),
             RegisterSavedCustomComponent, RemoveMigratedLibraryTemplate);
-        vm.LoadForEdit(template);
+        if (!vm.LoadForEdit(template))
+        {
+            // No half-initialized "New Component" window when the edit session cannot be set up
+            // (PR #742 review, finding 4) — surface LoadForEdit's reason instead.
+            _errorConsole?.LogError($"Cannot edit component '{template.Name}': {vm.StatusText}");
+            UpdateStatus?.Invoke(vm.StatusText);
+            return;
+        }
         await ShowNewComponentWindowAsync(vm);
     }
 

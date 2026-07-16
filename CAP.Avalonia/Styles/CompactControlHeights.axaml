@@ -11,10 +11,11 @@
     ControlThemes consume for sizing, instead of a Style Selector="Button"/"ComboBox".
     Reason: Avalonia's ToggleButton (and its subclasses CheckBox/RadioButton) derive from
     Button at the CLR level, so a type Selector="Button" Style would also match them.
-    These four resource keys, however, are read only by the plain Button and ComboBox
-    ControlThemes (verified against Avalonia.Themes.Fluent 11.3.13: CheckBox/RadioButton/
-    ToggleButton have their own CheckBoxMinHeight/RadioButtonMinHeight keys and no
-    "*Padding" key of their own, so they are untouched by this override).
+    Scope of the keys (verified against Avalonia.Themes.Fluent 11.3.13): ButtonPadding is
+    read not only by the plain Button ControlTheme but ALSO by ToggleButton and RepeatButton,
+    so those render equally compact — accepted, the compact look is intended app-wide.
+    CheckBox and RadioButton have their own keys (CheckBoxMinHeight/RadioButtonMinHeight, no
+    "*Padding" key of their own) and are untouched by this override.
 
     Measured Fluent defaults (headless Skia, FontSize 14, dark theme) before this change:
       ButtonPadding            = 8,5,8,6   -> Button renders at 32px tall

@@ -182,6 +182,43 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
+    public void ListEntries_PicksNewestBackupByFilenameTimestamp_NotByFileMtime()
+    {
+        // PR #742 review, finding 6: after a git checkout/sync the trash files' mtimes are
+        // rewritten, so the newest-backup-per-component dedup must rank by the DeletedAt
+        // timestamp encoded in the file NAME (with the "-N" same-second collision counter as
+        // tiebreaker), never by File.GetLastWriteTimeUtc.
+        var path = SeedPdk("My Lib", "A", "B");
+        _store.RemoveComponent(path, "A"); // backup 1: full pre-delete snapshot (A, B)
+        _store.RemoveComponent(path, "B"); // backup 2: snapshot (B) — the delete that removed B
+
+        var byFilenameRank = Directory.GetFiles(_trash.TrashDirectory, "*.json")
+            .OrderBy(FilenameRank).ToArray();
+        byFilenameRank.Length.ShouldBe(2);
+        var oldest = byFilenameRank[0];
+        var newest = byFilenameRank[1];
+
+        // Scramble mtimes the way a fresh checkout can: the OLDER backup looks newer on disk.
+        File.SetLastWriteTimeUtc(oldest, DateTime.UtcNow.AddHours(1));
+        File.SetLastWriteTimeUtc(newest, DateTime.UtcNow.AddHours(-1));
+
+        var entryB = _trash.ListEntries().Single(e => e.RestorableComponentNames.SequenceEqual(new[] { "B" }));
+        entryB.TrashFilePath.ShouldBe(newest, "B was removed by the second delete, whose backup is the newest by filename");
+
+        var entryA = _trash.ListEntries().Single(e => e.RestorableComponentNames.SequenceEqual(new[] { "A" }));
+        entryA.TrashFilePath.ShouldBe(oldest, "A was removed by the first delete");
+    }
+
+    /// <summary>Rank a trash file by the timestamp + collision counter encoded in its name.</summary>
+    private static (string Timestamp, int Counter) FilenameRank(string path)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            Path.GetFileNameWithoutExtension(path), @"-(\d{8}-\d{6})(?:-(\d+))?$");
+        match.Success.ShouldBeTrue($"unexpected trash file name: {path}");
+        return (match.Groups[1].Value, match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0);
+    }
+
+    [Fact]
     public void PurgeExpired_DeletesEntriesOlderThanRetention_KeepsRecentOnes()
     {
         var path = SeedPdk("My Lib", "A");

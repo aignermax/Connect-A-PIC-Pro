@@ -224,10 +224,69 @@ public class EditComponentModeTests : IDisposable
         var template = BuildTemplate(rawCode);
         template.PdkSource = "Unknown Pdk";
 
-        vm.LoadForEdit(template);
+        var loaded = vm.LoadForEdit(template);
 
+        loaded.ShouldBeFalse();
         vm.IsEditMode.ShouldBeFalse();
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void LoadForEdit_returnsTrue_onSuccess()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+
+        vm.LoadForEdit(BuildTemplate(rawCode)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_falseAfterLoadForEdit_trueAfterUserEdits()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.Code = rawCode + "\n# tweak";
+        vm.HasUnsavedEditChanges.ShouldBeTrue();
+
+        vm.Code = rawCode;
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.ComponentName = "renamed";
+        vm.HasUnsavedEditChanges.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_isFalse_outsideEditMode()
+    {
+        var (vm, _, _) = BuildWithSeededPdk();
+        vm.Code = "anything";
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void RefreshFromFreshEdit_adoptsTheFreshOnDiskState_andReportsNoUnsavedChanges()
+    {
+        // Dedup scenario (PR #742 review, finding 2): the already-open editor holds a stale
+        // snapshot; a second ✏ click builds a fresh VM from the current on-disk template. The
+        // stale-but-clean editor must adopt that fresh state instead of silently keeping (and
+        // later saving) the outdated one.
+        var (staleVm, _, rawCode) = BuildWithSeededPdk();
+        staleVm.LoadForEdit(BuildTemplate(rawCode));
+
+        // Fresh VM over the same on-disk store, as a second ✏ click would build it.
+        var (freshVm, _) = Build(Store(), new List<ProcessDefinition> { new() { Name = "SiN 300" } });
+        var changedOnDisk = rawCode + "\n# changed on disk since the first window opened";
+        var freshTemplate = BuildTemplate(changedOnDisk);
+        freshVm.LoadForEdit(freshTemplate);
+
+        staleVm.RefreshFromFreshEdit(freshVm);
+
+        staleVm.Code.ShouldBe(changedOnDisk);
+        staleVm.ComponentName.ShouldBe("comp1");
+        staleVm.HasUnsavedEditChanges.ShouldBeFalse();
     }
 
     [Fact]
