@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-source-group-with-override.png",
+    "caption": "The source design contains a group whose highlighted member carries a per-instance raw-code Nazca override in the design\u0027s override store."
+  },
+  {
+    "file": "02-template-persists-override.png",
+    "caption": "Saving the group to the design-independent library now persists the member\u0027s override JSON inside the template file, keyed by the template child identifier."
+  },
+  {
+    "file": "03-placed-in-empty-design.png",
+    "caption": "Placing the template in a fresh empty design seeds the override into that design\u0027s store under the new instance identifier \u2014 previously the store stayed empty."
+  },
+  {
+    "file": "04-nazca-export-contains-raw-code.png",
+    "caption": "The Nazca export of the new design emits the member\u0027s raw-code geometry (highlighted) instead of falling back to the default placeholder cell."
+  }
+]
