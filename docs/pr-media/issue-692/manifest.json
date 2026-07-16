@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-dialog-backend-picker-meep.png",
+    "caption": "Component Settings now shows an FDTD backend picker next to Recalculate, defaulting to the free local Meep (Docker) backend."
+  },
+  {
+    "file": "02-tidy3d-selected-missing-key-hint.png",
+    "caption": "Selecting Tidy3D (cloud) without an API key shows an actionable hint pointing to Settings \u2192 Tidy3D Cloud."
+  },
+  {
+    "file": "03-cloud-cost-confirmation.png",
+    "caption": "Recalculating via Tidy3D first shows the estimated FlexCredit cost and waits for explicit confirmation before submitting the cloud job."
+  },
+  {
+    "file": "04-settings-tidy3d-cloud-page.png",
+    "caption": "The new Settings \u2192 Tidy3D Cloud page stores the API key shared by the FDTD S-matrix backend and the Tidy3D mode solver."
+  }
+]
