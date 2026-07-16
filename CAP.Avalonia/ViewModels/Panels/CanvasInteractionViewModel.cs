@@ -737,26 +737,32 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         var selection = _canvas.Selection;
 
-        if (selection.HasMultipleSelected)
+        // The selection set is authoritative (box selection populates only the set);
+        // fall back to the primary SelectedComponent when the set is empty.
+        var targets = selection.SelectedComponents.ToList();
+        if (targets.Count == 0 && SelectedComponent != null)
+            targets.Add(SelectedComponent);
+
+        // Locked components are never deleted (Lock Elements).
+        var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
+        if (deletable.Count == 0)
         {
-            int count = selection.SelectedComponents.Count;
-            var cmd = new GroupDeleteCommand(_canvas, selection.SelectedComponents.ToList());
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted {count} components");
+            if (targets.Count > 0)
+                UpdateStatus?.Invoke("Selection is locked — unlock elements to delete them");
             return;
         }
 
-        if (SelectedComponent != null)
-        {
-            var name = SelectedComponent.Name;
-            var cmd = new DeleteComponentCommand(_canvas, SelectedComponent);
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted: {name}");
-        }
+        // One batch command for a multi-selection, so a single undo restores everything.
+        IUndoableCommand cmd = deletable.Count == 1
+            ? new DeleteComponentCommand(_canvas, deletable[0])
+            : new GroupDeleteCommand(_canvas, deletable);
+        _commandManager.ExecuteCommand(cmd);
+
+        selection.ClearSelection();
+        SelectedComponent = null;
+        UpdateStatus?.Invoke(deletable.Count == 1
+            ? $"Deleted: {deletable[0].Name}"
+            : $"Deleted {deletable.Count} components");
     }
 
     [RelayCommand]

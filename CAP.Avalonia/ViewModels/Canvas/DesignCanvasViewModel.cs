@@ -61,6 +61,21 @@ public partial class DesignCanvasViewModel : ObservableObject
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
     [ObservableProperty] private ComponentViewModel? _selectedComponent;
+
+    /// <summary>
+    /// Keeps the <see cref="Selection"/> set consistent with the primary
+    /// <see cref="SelectedComponent"/>: a single-selection set externally (canvas click,
+    /// hierarchy, tests) replaces the selection set. When the component is already part
+    /// of the current selection (e.g. right-clicking one of several box-selected
+    /// components), the multi-selection is kept intact.
+    /// </summary>
+    partial void OnSelectedComponentChanged(ComponentViewModel? value)
+    {
+        if (value == null) return;
+        if (!Selection.SelectedComponents.Contains(value))
+            Selection.SelectSingle(value);
+    }
+
     [ObservableProperty] private double _panX;
     [ObservableProperty] private double _panY;
     [ObservableProperty] private bool _isRouting;

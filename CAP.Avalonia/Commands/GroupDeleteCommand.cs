@@ -15,6 +15,13 @@ public class GroupDeleteCommand : IUndoableCommand
     private readonly List<DeletedComponentData> _deletedComponents = new();
 
     /// <summary>
+    /// Components actually removed by the last <see cref="Execute"/> run.
+    /// Locked components are skipped on Execute and must not be re-added on Undo,
+    /// otherwise they would end up on the canvas twice.
+    /// </summary>
+    private readonly List<DeletedComponentData> _removedComponents = new();
+
+    /// <summary>
     /// Creates a group delete command for the given components.
     /// </summary>
     public GroupDeleteCommand(
@@ -36,6 +43,7 @@ public class GroupDeleteCommand : IUndoableCommand
                 comp,
                 comp.Component,
                 comp.TemplateName,
+                comp.TemplatePdkSource,
                 comp.X,
                 comp.Y,
                 connections));
@@ -48,6 +56,8 @@ public class GroupDeleteCommand : IUndoableCommand
     /// <inheritdoc />
     public void Execute()
     {
+        _removedComponents.Clear();
+
         // Remove all components (RemoveComponent also removes their connections)
         foreach (var data in _deletedComponents)
         {
@@ -67,23 +77,24 @@ public class GroupDeleteCommand : IUndoableCommand
             }
 
             _canvas.RemoveComponent(data.ViewModel);
+            _removedComponents.Add(data);
         }
     }
 
     /// <inheritdoc />
     public void Undo()
     {
-        // Re-add components in original order
-        foreach (var data in _deletedComponents)
+        // Re-add only the components Execute actually removed (locked ones stayed put)
+        foreach (var data in _removedComponents)
         {
             data.Component.PhysicalX = data.X;
             data.Component.PhysicalY = data.Y;
-            data.ViewModel = _canvas.AddComponent(data.Component, data.TemplateName);
+            data.ViewModel = _canvas.AddComponent(data.Component, data.TemplateName, data.TemplatePdkSource);
         }
 
         // Re-add connections (deduplicate by connection identity)
         var restoredConnections = new HashSet<WaveguideConnection>();
-        foreach (var data in _deletedComponents)
+        foreach (var data in _removedComponents)
         {
             foreach (var (connection, _) in data.Connections)
             {
@@ -108,6 +119,7 @@ public class GroupDeleteCommand : IUndoableCommand
         public ComponentViewModel ViewModel { get; set; }
         public Component Component { get; }
         public string? TemplateName { get; }
+        public string? TemplatePdkSource { get; }
         public double X { get; }
         public double Y { get; }
         public List<(WaveguideConnection Connection, WaveguideConnectionViewModel Vm)> Connections { get; }
@@ -116,6 +128,7 @@ public class GroupDeleteCommand : IUndoableCommand
             ComponentViewModel viewModel,
             Component component,
             string? templateName,
+            string? templatePdkSource,
             double x,
             double y,
             List<(WaveguideConnection, WaveguideConnectionViewModel)> connections)
@@ -123,6 +136,7 @@ public class GroupDeleteCommand : IUndoableCommand
             ViewModel = viewModel;
             Component = component;
             TemplateName = templateName;
+            TemplatePdkSource = templatePdkSource;
             X = x;
             Y = y;
             Connections = connections;
