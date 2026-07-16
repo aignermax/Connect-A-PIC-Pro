@@ -161,16 +161,26 @@ public partial class LeftPanelViewModel
         return FindBundledCounterpart(pdkInfo.Name, template.Name) is not null;
     }
 
-    /// <summary>Reads the bundled original's definition of a component, if both exist.</summary>
-    private PdkComponentDraft? FindBundledCounterpart(string pdkName, string componentName)
+    private readonly Dictionary<string, PdkDraft> _bundledOriginDraftCache = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// The parsed bundled original of <paramref name="pdkName"/>, cached for the session —
+    /// bundled JSONs are read-only, so one parse per file suffices and repeated lookups (layer
+    /// checks, revert prompts) never re-hit the disk on the UI thread (PR #742 review,
+    /// finding 7). Read failures are logged and NOT cached, so a transient lock can recover.
+    /// </summary>
+    private PdkDraft? GetBundledOriginDraft(string pdkName)
     {
         if (!_bundledPdkCatalog.TryGetValue(pdkName, out var origin))
             return null;
+        if (_bundledOriginDraftCache.TryGetValue(pdkName, out var cached))
+            return cached;
 
         try
         {
-            return _pdkLoader.LoadFromFile(origin.FilePath).Components
-                .FirstOrDefault(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
+            var draft = _pdkLoader.LoadFromFile(origin.FilePath);
+            _bundledOriginDraftCache[pdkName] = draft;
+            return draft;
         }
         catch (Exception ex)
         {
@@ -178,6 +188,11 @@ public partial class LeftPanelViewModel
             return null;
         }
     }
+
+    /// <summary>Reads the bundled original's definition of a component, if both exist.</summary>
+    private PdkComponentDraft? FindBundledCounterpart(string pdkName, string componentName) =>
+        GetBundledOriginDraft(pdkName)?.Components
+            .FirstOrDefault(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
 
     /// <summary>
     /// Delete on a forked component that still exists in the bundled original = revert that one
