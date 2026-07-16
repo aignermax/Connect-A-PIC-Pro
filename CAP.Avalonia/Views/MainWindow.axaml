@@ -609,8 +609,10 @@
                             <ListBox.ItemTemplate>
                                 <DataTemplate x:DataType="vmLib:ComponentTemplate">
                                     <DockPanel Margin="0,1" HorizontalAlignment="Stretch">
+                                        <!-- Right margin keeps the hover icons off the row's right
+                                             edge (mirrors the preview's 6px gap on the left). -->
                                         <StackPanel Classes="itemActions" DockPanel.Dock="Right" Orientation="Horizontal"
-                                                    VerticalAlignment="Center">
+                                                    VerticalAlignment="Center" Margin="0,0,6,0">
                                             <Button Content="✏" Click="TemplateEditComponent_Click"
                                                     FontSize="11" Padding="4,0" MinWidth="0"
                                                     Background="Transparent" BorderThickness="0" Foreground="#c9c9c9"
