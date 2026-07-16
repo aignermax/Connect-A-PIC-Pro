@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -23,9 +24,25 @@ public static class CustomComponentLibraryRegistrar
     {
         var template = PdkTemplateConverter.ConvertToTemplate(draft, pdkName, null);
         template.IsCustom = true;
+
+        // An edit-save re-registers an existing component: the on-disk PDK already replaced the
+        // old entry (UserPdkStore.AppendToExistingPdk), so the in-memory library must too —
+        // otherwise "Show stored S-matrices" keeps resolving the STALE template (FirstOrDefault
+        // over AllTemplates) and the library lists the component twice (field-test fix, PR #742).
+        var stale = allTemplates
+            .Where(t => t.PdkSource == pdkName && string.Equals(t.Name, draft.Name, StringComparison.OrdinalIgnoreCase))
+            .ToList();
+        foreach (var old in stale)
+            allTemplates.Remove(old);
+
         allTemplates.Add(template);
         if (!categories.Contains(template.Category))
             categories.Add(template.Category);
+        foreach (var oldCategory in stale.Select(t => t.Category).Distinct())
+        {
+            if (!allTemplates.Any(t => t.Category == oldCategory))
+                categories.Remove(oldCategory);
+        }
 
         if (!pdkManager.IsPdkLoaded(filePath))
         {
@@ -33,6 +50,19 @@ public static class CustomComponentLibraryRegistrar
                 loadedPdkDrafts.Add(pdkLoader.LoadFromFileForEditing(filePath));
             pdkManager.RegisterPdk(pdkName, filePath, false, 1);
             preferencesService.AddUserPdkPath(filePath);
+        }
+        else
+        {
+            // Already-loaded PDK (the usual edit-save): mirror the on-disk replacement in the
+            // cached draft too, so divergence checks and later edit sessions see the new state.
+            var normalized = Path.GetFullPath(filePath);
+            var cachedDraft = loadedPdkDrafts.FirstOrDefault(d =>
+                d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized);
+            if (cachedDraft != null)
+            {
+                cachedDraft.Components.RemoveAll(c => string.Equals(c.Name, draft.Name, StringComparison.OrdinalIgnoreCase));
+                cachedDraft.Components.Add(draft);
+            }
         }
 
         reapplyActiveProcess();

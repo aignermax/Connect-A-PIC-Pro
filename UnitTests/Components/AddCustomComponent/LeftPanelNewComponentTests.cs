@@ -117,6 +117,40 @@ public class LeftPanelNewComponentTests : IDisposable
     }
 
     [Fact]
+    public void RegisterSavedCustomComponent_replacesTheStaleTemplate_afterAnEditSave()
+    {
+        // Field-test bug (PR #742): an edit-save re-registered the component WITHOUT removing
+        // the stale template, so "Show stored S-matrices" (FirstOrDefault over AllTemplates)
+        // kept showing the pre-edit matrices and the library listed the component twice.
+        var vm = CreateLeftPanelViewModel();
+        var (filePath, pdkName, draft) = SaveUserPdk("Proc");
+        vm.RegisterSavedCustomComponent(draft, pdkName, filePath);
+
+        var updated = SampleDraft();
+        updated.SMatrix = new PdkSMatrixDraft
+        {
+            WavelengthNm = 1550,
+            WavelengthData = new List<WavelengthSMatrixEntry>
+            {
+                new()
+                {
+                    WavelengthNm = 1550,
+                    Connections = new List<SMatrixConnection>
+                    {
+                        new() { FromPin = "o1", ToPin = "o2", Magnitude = 0.5, PhaseDegrees = 0 }
+                    }
+                }
+            }
+        };
+        vm.RegisterSavedCustomComponent(updated, pdkName, filePath);
+
+        var matches = vm.AllTemplates.Where(t => t.Name == "My Coupler" && t.PdkSource == pdkName).ToList();
+        matches.Count.ShouldBe(1);
+        matches[0].SourceDraft.ShouldBeSameAs(updated);
+        matches[0].CreateWavelengthSMatrixMap.ShouldNotBeNull();
+    }
+
+    [Fact]
     public void RegisterSavedCustomComponent_forActiveProcess_appearsImmediately()
     {
         var vm = CreateLeftPanelViewModel();
