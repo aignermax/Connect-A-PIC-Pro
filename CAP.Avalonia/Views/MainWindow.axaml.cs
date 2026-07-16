@@ -963,7 +963,14 @@ public partial class MainWindow : Window
                 new NazcaCsvProcessImporter(),
             }, new PdkJsonSaver());
 
-        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
+        // Loaded bundled PDK names are reserved: a user PDK under such a name would be taken
+        // for a fork of the built-in PDK and shadow it (PR #742 review, finding 1).
+        var reservedBundledNames = vm.LeftPanel.PdkManager.LoadedPdks
+            .Where(p => p.IsBundled || p.ShadowsBundledPdk)
+            .Select(p => p.Name)
+            .ToList();
+        var createVm = new CreateCustomPdkViewModel(
+            userPdkStore, availableProcesses, processDefinitionEditor, reservedBundledNames);
         var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
 
         string? createdPath = null;

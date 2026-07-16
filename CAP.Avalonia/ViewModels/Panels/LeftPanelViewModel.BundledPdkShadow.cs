@@ -64,8 +64,11 @@ public partial class LeftPanelViewModel
     /// <summary>
     /// After a save forked a bundled PDK (fork-on-save), swaps the library from the bundled
     /// entry to the user's copy: deregisters the bundled original in memory and registers the
-    /// fork with all its components. Returns false when <paramref name="pdkName"/> does not
-    /// name a loaded bundled PDK, so the caller falls back to the normal registration.
+    /// fork with all its components. The bundled entry is only displaced when the fork file
+    /// actually loads and registers (verified) — a failed fork load leaves the built-in PDK
+    /// fully registered and reports the problem (PR #742 review, finding 6). Returns false
+    /// when <paramref name="pdkName"/> does not name a loaded bundled PDK, so the caller falls
+    /// back to the normal registration.
     /// </summary>
     private bool TryShadowBundledPdkWithSavedFork(string pdkName, string forkFilePath)
     {
@@ -74,7 +77,16 @@ public partial class LeftPanelViewModel
         if (bundled is null)
             return false;
 
-        TryReloadUserPdk(forkFilePath);
+        // TryReloadUserPdk parses the fork BEFORE deregistering the bundled entry, so a
+        // failure here means nothing was changed.
+        if (!TryReloadUserPdk(forkFilePath))
+        {
+            _errorConsole?.LogError(
+                $"Your edit was saved to '{forkFilePath}', but the fork could not be loaded into the " +
+                $"library — the built-in '{pdkName}' remains active. See previous errors for details.");
+            return true;
+        }
+
         ReapplyActiveProcessAfterPdkChange();
         FilterComponents();
         return true;

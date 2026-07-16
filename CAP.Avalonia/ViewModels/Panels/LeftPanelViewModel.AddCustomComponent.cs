@@ -16,13 +16,24 @@ public partial class LeftPanelViewModel
         await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
     }
 
-    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath)
+    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath, bool savedViaBundledFork = false)
     {
-        // A save under a still-loaded bundled PDK's name is the deferred fork-on-save: the
-        // saved file is the user's copy of the whole PDK and replaces (shadows) the bundled
-        // entry instead of being registered next to it.
-        if (TryShadowBundledPdkWithSavedFork(pdkName, filePath))
+        // A save that executed the deferred fork-on-save: the saved file is the user's copy of
+        // the whole bundled PDK and replaces (shadows) the bundled entry instead of being
+        // registered next to it. Only that explicit fork flow may shadow — a save that merely
+        // SHARES a bundled PDK's name must not (PR #742 review, finding 1).
+        if (savedViaBundledFork && TryShadowBundledPdkWithSavedFork(pdkName, filePath))
             return;
+
+        // Defensive guard: never register a second library entry under a loaded bundled PDK's
+        // name — the UI blocks creating such PDKs, so reaching this means a stale/foreign file.
+        if (PdkManager.LoadedPdks.Any(p => p.IsBundled && p.Name.Equals(pdkName, StringComparison.OrdinalIgnoreCase)))
+        {
+            _errorConsole?.LogError(
+                $"Component '{draft.Name}' was saved to '{filePath}', but PDK '{pdkName}' collides with a " +
+                "built-in PDK's name and was not added to the library. Rename the PDK and save again.");
+            return;
+        }
 
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
     }

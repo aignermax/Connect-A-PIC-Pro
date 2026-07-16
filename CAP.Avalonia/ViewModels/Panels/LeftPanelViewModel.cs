@@ -330,8 +330,19 @@ public partial class LeftPanelViewModel : ObservableObject
 
             if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
             {
-                UpdateStatus?.Invoke($"PDK '{pdk.Name}' is already loaded");
-                return;
+                // A file named like a loaded BUNDLED PDK is the user's fork of it and shadows
+                // the built-in original — same semantics as the startup reload, so a fork
+                // works no matter WHEN its file appears (PR #742 review, finding 8). The
+                // file parsed successfully above, so deregistering here cannot strand the
+                // library without either entry. Any other name collision is still rejected.
+                var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
+                    p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
+                if (shadowedBundled is null)
+                {
+                    UpdateStatus?.Invoke($"PDK '{pdk.Name}' is already loaded");
+                    return;
+                }
+                DeregisterBundledPdkForShadow(shadowedBundled);
             }
 
             _loadedPdkDrafts.Add(pdk);
@@ -348,6 +359,7 @@ public partial class LeftPanelViewModel : ObservableObject
             }
 
             PdkManager.RegisterPdk(pdk.Name, filePath, false, addedCount);
+            MarkIfShadowsBundledPdk(pdk.Name);
             _preferencesService.AddUserPdkPath(filePath);
 
             ReapplyActiveProcessAfterPdkChange();

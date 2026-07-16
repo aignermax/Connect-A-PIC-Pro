@@ -54,6 +54,13 @@ public partial class NewComponentViewModel : ObservableObject
 
     public string? SavedFilePath { get; private set; }
 
+    /// <summary>
+    /// True when the last successful save executed the deferred bundled fork
+    /// (<see cref="HasPendingBundledFork"/>): only then may the library shadow the bundled
+    /// PDK with the saved file — a mere name match must not (PR #742 review, finding 1).
+    /// </summary>
+    public bool SavedViaPendingBundledFork { get; private set; }
+
     public event EventHandler? Saved;
 
     public Func<string, string, Task<bool>>? ConfirmOverwrite { get; set; }

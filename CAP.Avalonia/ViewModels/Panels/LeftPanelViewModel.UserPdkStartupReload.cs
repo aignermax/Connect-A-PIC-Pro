@@ -62,7 +62,13 @@ public partial class LeftPanelViewModel
         return result;
     }
 
-    private void TryReloadUserPdk(string path)
+    /// <summary>
+    /// Loads and registers one user PDK file; returns false when the file could not be loaded
+    /// or its name duplicates a loaded non-bundled PDK. The bundled entry is only deregistered
+    /// AFTER the fork file parsed successfully, so a broken fork never removes the built-in
+    /// PDK (PR #742 review, finding 6).
+    /// </summary>
+    private bool TryReloadUserPdk(string path)
     {
         PdkDraft pdk;
         try
@@ -72,25 +78,28 @@ public partial class LeftPanelViewModel
         catch (FileNotFoundException)
         {
             _preferencesService.RemoveUserPdkPath(path);
-            return;
+            return false;
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Skipped user PDK '{Path.GetFileName(path)}' at startup: {ex.Message}", ex);
-            return;
+            return false;
         }
 
         if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
         {
             // A user PDK named like a BUNDLED one is the user's fork of it ("copy-to-user on
             // first edit") — it shadows the built-in original, exactly like the session that
-            // created the fork did. Any other name collision is still skipped.
+            // created the fork did. At startup this is deliberately name-based: the file in
+            // user-pdks is the only truth about a fork's existence (the session that created
+            // it is gone), and creating non-fork PDKs under a bundled name is blocked in the
+            // UI (see CreateCustomPdkViewModel). Any other name collision is still skipped.
             var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
                 p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
             if (shadowedBundled is null)
             {
                 _errorConsole?.LogWarning($"User PDK '{pdk.Name}' at '{path}' duplicates an already-loaded PDK name; skipped at startup.");
-                return;
+                return false;
             }
             DeregisterBundledPdkForShadow(shadowedBundled);
         }
@@ -110,5 +119,6 @@ public partial class LeftPanelViewModel
 
         PdkManager.RegisterPdk(pdk.Name, path, false, addedCount);
         MarkIfShadowsBundledPdk(pdk.Name);
+        return true;
     }
 }

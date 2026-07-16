@@ -139,6 +139,9 @@ public partial class NewComponentViewModel
             }
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
+            // Only a save that actually executed the deferred fork may shadow the bundled
+            // PDK in the library — a mere name match must not (PR #742 review, finding 1).
+            SavedViaPendingBundledFork = executesPendingFork;
             if (executesPendingFork)
             {
                 // From here on this session edits the user's copy directly.
