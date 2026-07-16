@@ -94,6 +94,13 @@ public partial class LeftPanelViewModel : ObservableObject
         PdkManager.OnFilterChanged = FilterComponents;
     }
 
+    /// <summary>
+    /// Test seam (InternalsVisibleTo UnitTests): when set, <see cref="Initialize"/> scans this
+    /// directory for user PDKs instead of the real per-user user-pdks folder, so headless UI
+    /// tests never pick up (or write into) the developer's real forks.
+    /// </summary>
+    internal string? UserPdkStartupRootOverride { get; set; }
+
     public void Initialize()
     {
         LoadComponentLibrary();
@@ -102,7 +109,7 @@ public partial class LeftPanelViewModel : ObservableObject
 
         try
         {
-            _ = ReloadUserPdksAtStartupAsync();
+            _ = ReloadUserPdksAtStartupAsync(UserPdkStartupRootOverride);
         }
         catch (Exception ex)
         {

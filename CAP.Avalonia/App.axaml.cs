@@ -12,6 +12,13 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
 
+    /// <summary>
+    /// Test seam (InternalsVisibleTo UnitTests): headless UI-flow tests run without
+    /// <see cref="OnFrameworkInitializationCompleted"/>, so they install their own provider here —
+    /// MainWindow's code-behind resolves optional collaborators via <see cref="Services"/>.
+    /// </summary>
+    internal static void OverrideServicesForTesting(IServiceProvider services) => Services = services;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
