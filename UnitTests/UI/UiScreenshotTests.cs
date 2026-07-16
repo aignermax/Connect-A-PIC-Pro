@@ -183,7 +183,7 @@ public class UiScreenshotTests
             using (bitmap)
             {
                 distinctColors = CountDistinctSampledColors(bitmap);
-                bitmap.Save(path);
+                ScreenshotArtifacts.SavePng(bitmap, path);
             }
 
             captured.Add((path, distinctColors));

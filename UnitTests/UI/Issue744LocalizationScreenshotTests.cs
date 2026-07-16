@@ -65,8 +65,7 @@ public class Issue744LocalizationScreenshotTests
         window.DataContext = vm;
         Dispatcher.UIThread.RunJobs();
 
-        CaptureWindow(window, path);
-        return File.ReadAllBytes(path);
+        return CaptureWindow(window, path);
     }
 
     /// <summary>
@@ -88,16 +87,18 @@ public class Issue744LocalizationScreenshotTests
         CaptureWindow(window, path);
     }
 
-    private static void CaptureWindow(Avalonia.Controls.Window window, string path)
+    private static byte[] CaptureWindow(Avalonia.Controls.Window window, string path)
     {
         var bitmap = window.CaptureRenderedFrame();
         window.Close();
         Dispatcher.UIThread.RunJobs();
 
         bitmap.ShouldNotBeNull($"render miss for {Path.GetFileName(path)}");
+        byte[] bytes;
         using (bitmap)
-            bitmap!.Save(path);
-        new FileInfo(path).Length.ShouldBeGreaterThan(0);
+            bytes = ScreenshotArtifacts.SavePng(bitmap!, path);
+        bytes.Length.ShouldBeGreaterThan(0);
+        return bytes;
     }
 
     private static void WriteManifest(string outputDir)
@@ -111,7 +112,7 @@ public class Issue744LocalizationScreenshotTests
           {"file": "05-settings-language-picker.png", "caption": "New Settings → Language page: 'System (auto-detect)' is the default; each language is listed in its own native name so users always recognize theirs."}
         ]
         """;
-        File.WriteAllText(Path.Combine(outputDir, "manifest.json"), manifest);
+        ScreenshotArtifacts.WriteText(Path.Combine(outputDir, "manifest.json"), manifest);
     }
 
     /// <summary>Repo-root <c>artifacts/ui-screenshots/issue-744</c> (or <c>UI_SHOT_DIR/issue-744</c>).</summary>
