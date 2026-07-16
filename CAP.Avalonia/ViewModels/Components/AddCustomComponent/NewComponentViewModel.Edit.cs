@@ -50,16 +50,37 @@ public partial class NewComponentViewModel
     /// <summary>
     /// The S-matrix stored in the component's PDK definition when the edit session was loaded.
     /// A save without a fresh compute keeps it verbatim as long as the geometry (code + backend)
-    /// is unchanged — an edit-save must never silently wipe real computed/imported data. When the
-    /// geometry DID change, the stored matrix no longer describes the component and is dropped
-    /// (same conservative stale rule as a post-compute code edit; #582 semantics).
+    /// is unchanged AND the save targets the SAME PDK file — an edit-save must never silently
+    /// wipe real computed/imported data. When the geometry DID change the stored matrix no
+    /// longer describes the component; when the component MIGRATES to a different PDK the matrix
+    /// was computed under another PDK's process (same process NAME is not the same process).
+    /// Both drop to black box (same conservative stale rule as a post-compute code edit; #582).
     /// </summary>
     private PdkSMatrixDraft? _loadedSMatrixDraft;
 
     /// <summary>Whether the definition's stored S-matrix is still valid for the current geometry.</summary>
     private bool CanKeepLoadedSMatrix =>
         IsEditMode && _loadedSMatrixDraft is not null
-        && Code == _loadedCode && SelectedBackend == _loadedBackend;
+        && Code == _loadedCode && SelectedBackend == _loadedBackend
+        && PathsEqual(SelectedCustomPdk?.FilePath, _loadedPdkFilePath);
+
+    /// <summary>
+    /// True when every pin name the loaded S-matrix references exists among
+    /// <paramref name="renderedPinNames"/>. A JSON-defined component (no RawCode) is edited via
+    /// SYNTHESIZED code whose render may yield different pin names than the foundry definition —
+    /// persisting the stored matrix against renamed pins would later resolve to silent
+    /// zero-transmission matrices on placement.
+    /// </summary>
+    private bool LoadedSMatrixResolvesAgainstPins(IEnumerable<string> renderedPinNames)
+    {
+        if (_loadedSMatrixDraft is null)
+            return false;
+        var names = new HashSet<string>(renderedPinNames, StringComparer.OrdinalIgnoreCase);
+        var connections = (_loadedSMatrixDraft.Connections ?? new List<SMatrixConnection>())
+            .Concat(_loadedSMatrixDraft.WavelengthData?.SelectMany(e => e.Connections)
+                    ?? Enumerable.Empty<SMatrixConnection>());
+        return connections.All(c => names.Contains(c.FromPin) && names.Contains(c.ToPin));
+    }
 
     /// <summary>
     /// True when the user changed any editable field — name, code, geometry backend, or target

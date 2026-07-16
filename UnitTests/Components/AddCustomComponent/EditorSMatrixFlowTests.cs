@@ -66,7 +66,7 @@ public class EditorSMatrixFlowTests : IDisposable
     };
 
     private (NewComponentViewModel vm, Mock<IFdtdSMatrixService> fdtd, Mock<IComponentPreviewRenderer> gds, UserPdkStore store)
-        Build(bool renderSucceeds = true)
+        Build(bool renderSucceeds = true, bool withSecondPdk = false)
     {
         var nazca = new Mock<IComponentPreviewRenderer>();
         var gds = new Mock<IComponentPreviewRenderer>();
@@ -82,6 +82,12 @@ public class EditorSMatrixFlowTests : IDisposable
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
         var process = new ProcessDefinition { Name = "P" };
         store.SaveToNamedPdk("Lib", process, SeedComponent("comp1", StoredSMatrix(0.8)), "gdsfactory", null);
+        if (withSecondPdk)
+        {
+            // Same process NAME, different PDK file — a migration target that merely
+            // shares the process name with the source PDK.
+            store.SaveToNamedPdk("Lib2", new ProcessDefinition { Name = "P" }, SeedComponent("other"), "gdsfactory", null);
+        }
 
         var vm = new NewComponentViewModel(extractor, fdtd.Object, store, new List<ProcessDefinition> { process })
         {
@@ -192,6 +198,70 @@ public class EditorSMatrixFlowTests : IDisposable
 
         vm.LoadForEdit(EditTemplate(seeded)).ShouldBeTrue();
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task EditSave_movedToAnotherPdk_dropsTheStoredSMatrix_toBlackBox()
+    {
+        var (vm, _, _, store) = Build(withSecondPdk: true);
+        var seeded = new PdkLoader().LoadFromFileForEditing(
+                store.ListCustomPdks().Single(p => p.Name == "Lib").FilePath)
+            .Components.Single(c => c.Name == "comp1");
+
+        vm.LoadForEdit(EditTemplate(seeded)).ShouldBeTrue();
+        vm.SelectedPdkChoice = vm.PdkChoices.First(c => !c.IsNewPdk && c.Pdk!.Name == "Lib2");
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        // The stored matrix was computed under Lib's process definition. Even though Lib2's
+        // process shares the NAME "P", it is a different PDK — carrying the matrix over
+        // verbatim would be invented physics (#582 stale rule).
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
+        vm.StatusText.ShouldContain("Moved");
+    }
+
+    [Fact]
+    public async Task EditSave_ofAJsonDefinedComponent_whoseRenderedPinsDoNotMatchTheStoredMatrix_dropsIt()
+    {
+        var (vm, _, _, _) = Build();
+
+        // A foundry-style JSON definition: no RawCode (the editor synthesizes code from the
+        // function reference), stored matrix referencing pins opt1/opt2 — but rendering the
+        // synthesized code yields pins o1/o2 (RenderOk). Keeping the matrix would persist
+        // connections against pins the saved draft does not define -> silent zero physics later.
+        var mismatchedMatrix = new PdkSMatrixDraft
+        {
+            WavelengthNm = 1310,
+            WavelengthData = new List<WavelengthSMatrixEntry>
+            {
+                new()
+                {
+                    WavelengthNm = 1310,
+                    Connections = new List<SMatrixConnection>
+                    {
+                        new() { FromPin = "opt1", ToPin = "opt2", Magnitude = 0.8, PhaseDegrees = 0 },
+                    }
+                }
+            }
+        };
+        var template = new ComponentTemplate
+        {
+            Name = "comp1",
+            PdkSource = "Lib",
+            GdsFactoryFunction = "coupler",
+            SourceDraft = new PdkComponentDraft
+            {
+                Name = "comp1", WidthMicrometers = 5, HeightMicrometers = 1,
+                SMatrix = mismatchedMatrix,
+                Pins = new() { new PhysicalPinDraft { Name = "opt1" }, new PhysicalPinDraft { Name = "opt2" } }
+            },
+        };
+
+        vm.LoadForEdit(template).ShouldBeTrue();
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();

@@ -124,14 +124,19 @@ public partial class NewComponentViewModel
             }
 
             var reference = BuildReference();
-            // Priority: a fresh compute/import wins; otherwise an unchanged-geometry edit keeps
-            // the definition's stored matrix verbatim (never silently wiped); only a geometry
-            // change (or a from-scratch component without compute) saves a black box.
+            // Priority: a fresh compute/import wins; otherwise an unchanged-geometry same-PDK
+            // edit keeps the definition's stored matrix verbatim (never silently wiped) —
+            // provided the matrix still resolves against the rendered pins; a geometry change,
+            // a PDK migration, or a pin mismatch saves a black box (no invented physics).
+            var keepStored = _computedModel is null
+                && CanKeepLoadedSMatrix
+                && LoadedSMatrixResolvesAgainstPins(preview.Pins.Select(p => p.Name));
             var sMatrix = _computedModel is not null
                 ? FdtdSMatrixToDraftConverter.FromFdtd(_computedModel)
-                : CanKeepLoadedSMatrix
+                : keepStored
                     ? _loadedSMatrixDraft
                     : FdtdSMatrixToDraftConverter.BlackBox();
+            var droppedStoredSMatrix = _computedModel is null && !keepStored && _loadedSMatrixDraft is not null;
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
@@ -177,13 +182,16 @@ public partial class NewComponentViewModel
             // now lives in both PDKs) — don't overwrite it with a plain save-success message.
             if (!isMigration || MigratedFromPdkName != null)
             {
+                var dropNote = droppedStoredSMatrix
+                    ? " Its stored S-matrix was dropped (black box) — recompute it for this PDK/geometry."
+                    : "";
                 StatusText = MigratedFromPdkName != null
-                    ? $"Moved '{name}' to PDK '{pdk.Name}'."
+                    ? $"Moved '{name}' to PDK '{pdk.Name}'.{dropNote}"
                     : _computedModel is not null
                         ? "Saved with FDTD S-matrix."
                         : sMatrix is not null
                             ? "Saved — kept the component's stored S-matrix."
-                            : $"Saved without simulation model (black box). {StatusText}".Trim();
+                            : $"Saved without simulation model (black box).{dropNote} {StatusText}".Trim();
             }
             Saved?.Invoke(this, EventArgs.Empty);
         }
