@@ -35,5 +35,7 @@ public static class NewComponentWindowLauncher
 
         if (vm.MigratedFromPdkName is { } fromPdk)
             removeMigratedTemplate?.Invoke(fromPdk, vm.MigratedFromComponentName ?? vm.SavedDraft.Name);
+        else if (vm.RenamedAwayComponentName is { } oldName)
+            removeMigratedTemplate?.Invoke(pdk.Name, oldName);
     }
 }

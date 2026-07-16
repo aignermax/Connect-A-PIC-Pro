@@ -30,6 +30,9 @@ public partial class NewComponentViewModel
     /// <summary>The component's original name in the PDK it was migrated out of (for library cleanup).</summary>
     public string? MigratedFromComponentName { get; private set; }
 
+    /// <summary>The old name a same-PDK rename left behind, so the library drops the stale template.</summary>
+    public string? RenamedAwayComponentName { get; private set; }
+
     /// <summary>
     /// With <see cref="EditingOriginalName"/> identifies the on-disk component being edited,
     /// independent of any in-progress rename — the main window keys its open-editor-window

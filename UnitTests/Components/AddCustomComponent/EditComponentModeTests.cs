@@ -101,6 +101,24 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public async Task EditSave_renameWithinSamePdk_removesTheOriginal_noOrphan()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("comp1", rawCode));
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+        vm.ComponentName = "comp1Renamed";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        store.ComponentExistsInFile(path, "comp1Renamed").ShouldBeTrue();
+        store.ComponentExistsInFile(path, "comp1").ShouldBeFalse();
+    }
+
+    [Fact]
     public void WindowTitle_and_SaveButtonLabel_reflectEditMode()
     {
         var (vm, _, rawCode) = BuildWithSeededPdk();

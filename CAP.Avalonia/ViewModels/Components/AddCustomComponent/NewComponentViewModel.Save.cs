@@ -99,6 +99,7 @@ public partial class NewComponentViewModel
         }
 
         MigratedFromPdkName = null;
+        RenamedAwayComponentName = null;
         // While a bundled fork is pending, the "original" is the read-only built-in PDK — a save
         // into a different PDK is a copy-out, never a migration that would remove the original.
         var isMigration = IsEditMode
@@ -174,6 +175,15 @@ public partial class NewComponentViewModel
                 _editOriginalProcessName = SelectedProcess?.Name;
                 _editingOriginalName = name;
             }
+            else if (!isMigration && IsEditMode && _editingOriginalName is not null
+                     && !string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Same-PDK rename: AppendToExistingPdk keyed on the NEW name, so the old-named
+                // entry would orphan in the file (and library) without this removal.
+                TryRemoveRenamedOriginal(pdk.FilePath, _editingOriginalName);
+                RenamedAwayComponentName = _editingOriginalName;
+                _editingOriginalName = name;
+            }
 
             // A migration whose removal threw already set an explanatory StatusText (the component
             // now lives in both PDKs) — don't overwrite it with a plain save-success message.
@@ -221,6 +231,19 @@ public partial class NewComponentViewModel
             StatusText = $"Saved to '{SelectedCustomPdk?.Name}', but could not remove the original " +
                          $"copy from '{_editOriginalPdkName}': {ex.Message}";
             return false;
+        }
+    }
+
+    private void TryRemoveRenamedOriginal(string filePath, string originalName)
+    {
+        try
+        {
+            _store.RemoveComponent(filePath, originalName);
+        }
+        catch (Exception ex)
+        {
+            _errorConsole?.LogError(
+                $"Renamed component saved, but removing the old entry '{originalName}' failed: {ex.Message}", ex);
         }
     }
 
