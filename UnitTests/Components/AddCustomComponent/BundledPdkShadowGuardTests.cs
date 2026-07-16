@@ -178,6 +178,30 @@ public class BundledPdkShadowGuardTests : IDisposable
             "the misleading duplicate rejection must be gone for fork files");
     }
 
+    // -------------------------------------------- finding 9: unreadable PDK != missing process
+
+    [Fact]
+    public async Task EditBundledComponent_whosePdkFileIsUnreadable_logsTheReadError_notJustMissingProcess()
+    {
+        // ResolvePdkProcess used to swallow every load exception with a bare catch, so an
+        // unreadable/corrupt file was misreported as "declares no fabrication process" with
+        // nothing in the Error Console for support to act on.
+        var (leftPanel, _) = CreateLeftPanelWithBundledPdk();
+        var corruptPath = Path.Combine(_bundledDir, "ghost.json");
+        File.WriteAllText(corruptPath, "{ this is not a valid PDK json");
+        leftPanel.PdkManager.RegisterPdk("Ghost PDK", corruptPath, true, 1);
+        var template = new ComponentTemplate
+        {
+            Name = "Ghost Comp", PdkSource = "Ghost PDK", RawCode = Code, RawCodeBackend = "gdsfactory",
+        };
+        leftPanel.ShowNewComponentWindowAsync = _ => Task.CompletedTask;
+
+        await leftPanel.EditCustomComponentCommand.ExecuteAsync(template);
+
+        _errorConsole.Entries.ShouldContain(e => e.Message.Contains("Could not read PDK"),
+            "the real cause (unreadable file) must reach the Error Console, not just the misdiagnosis");
+    }
+
     [Fact]
     public async Task InteractiveLoadPdk_nameCollisionWithANonBundledPdk_isStillRejected()
     {

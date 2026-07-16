@@ -117,8 +117,12 @@ public partial class LeftPanelViewModel
         {
             return _pdkLoader.LoadFromFile(pdkInfo.FilePath).Process;
         }
-        catch
+        catch (Exception ex)
         {
+            // An unreadable/corrupt file is NOT "declares no fabrication process" — log the
+            // real cause so the user-facing misdiagnosis can be traced (PR #742 review,
+            // finding 9).
+            _errorConsole?.LogError($"Could not read PDK '{pdkInfo.Name}' at '{pdkInfo.FilePath}': {ex.Message}", ex);
             return null;
         }
     }
