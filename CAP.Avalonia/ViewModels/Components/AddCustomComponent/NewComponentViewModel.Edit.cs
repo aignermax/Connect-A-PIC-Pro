@@ -17,6 +17,18 @@ public partial class NewComponentViewModel
     /// <summary>The component's original name in the PDK it was migrated out of (for library cleanup).</summary>
     public string? MigratedFromComponentName { get; private set; }
 
+    /// <summary>
+    /// The PDK file path (or, lacking one, the PDK name) this edit session was loaded from.
+    /// Together with <see cref="EditingOriginalName"/> this identifies which on-disk component
+    /// is being edited, independent of any in-progress rename — used by the main window to key
+    /// its open-editor-window dictionary so a second "Edit…" click on the same component
+    /// activates the existing window instead of opening a duplicate (task-2 dedup).
+    /// </summary>
+    public string? EditOriginalPdkKey => _editOriginalPdkFilePath ?? _editOriginalPdkName;
+
+    /// <summary>The component's name at the time <see cref="LoadForEdit"/> was called.</summary>
+    public string? EditingOriginalName => _editingOriginalName;
+
     public void LoadForEdit(ComponentTemplate template)
     {
         var match = PdkChoices.FirstOrDefault(c => !c.IsNewPdk && c.Pdk?.Name == template.PdkSource);

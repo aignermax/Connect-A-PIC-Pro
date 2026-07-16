@@ -37,6 +37,16 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly System.Collections.Generic.Dictionary<string, ProcessManagementWindow> _openPdkEditWindows = new();
 
+    /// <summary>
+    /// Tracks the currently-open "Edit Component" window per component being edited, keyed by
+    /// <c>NewComponentViewModel.EditOriginalPdkKey + "::" + EditingOriginalName</c> (task-2
+    /// dedup). A second ✏ click on the same component activates the existing window instead of
+    /// opening a duplicate. "New Component" sessions (not editing anything yet) are never keyed
+    /// here, so multiple blank "New Component" windows can still be opened in parallel. Entries
+    /// are removed when their window closes.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, NewComponentWindow> _openComponentEditWindows = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -92,6 +102,27 @@ public partial class MainWindow : Window
                 // iterating on the design while it stays open.
                 vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
                 {
+                    // Dedup (task-2): a second ✏ click on the same component builds a brand-new
+                    // NewComponentViewModel (see LeftPanelViewModel.EditCustomComponent) with
+                    // LoadForEdit already applied, so by the time this hook runs IsEditMode and
+                    // the edit-identity fields are set. Activate the existing window for that
+                    // component instead of opening a duplicate. "New Component" sessions
+                    // (IsEditMode false) are never deduped — several can stay open at once.
+                    var editKey = newComponentVm.IsEditMode && newComponentVm.EditOriginalPdkKey is not null
+                        && newComponentVm.EditingOriginalName is not null
+                        ? $"{newComponentVm.EditOriginalPdkKey}::{newComponentVm.EditingOriginalName}"
+                        : null;
+                    if (editKey is not null
+                        && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
+                        && existingComponentWindow.IsVisible)
+                    {
+                        // Un-minimize first: Activate() alone leaves a minimized window
+                        // minimized, which looks like the ✏ button silently did nothing.
+                        existingComponentWindow.WindowState = WindowState.Normal;
+                        existingComponentWindow.Activate();
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    }
+
                     // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the
                     // view model only knows the file's already-read contents (PickPyFile's
                     // contract), never a path, so it can't own a FileDialogService itself.
@@ -145,6 +176,18 @@ public partial class MainWindow : Window
                         var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
                         return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
                     };
+                    if (editKey is not null)
+                    {
+                        _openComponentEditWindows[editKey] = window;
+                        // Only remove the entry if it still points at THIS window: if the key
+                        // was ever re-assigned to a newer window, the older window's Closed
+                        // handler must not deregister the newer one.
+                        window.Closed += (_, _) =>
+                        {
+                            if (_openComponentEditWindows.TryGetValue(editKey, out var tracked) && ReferenceEquals(tracked, window))
+                                _openComponentEditWindows.Remove(editKey);
+                        };
+                    }
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
                 };

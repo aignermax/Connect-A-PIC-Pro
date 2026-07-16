@@ -8,7 +8,7 @@
         x:Class="CAP.Avalonia.Views.NewComponentWindow"
         x:DataType="vm:NewComponentViewModel"
         Title="{Binding WindowTitle}"
-        Width="520" Height="740"
+        Width="520" Height="800"
         MinWidth="440" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
@@ -23,7 +23,8 @@
                     ToolTip.Tip="Saves the component into the selected PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
         </StackPanel>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      AllowAutoHide="False">
             <StackPanel Spacing="10">
 
                 <Border Background="#2a2440" CornerRadius="3" Padding="8,5" IsVisible="{Binding IsEditMode}">

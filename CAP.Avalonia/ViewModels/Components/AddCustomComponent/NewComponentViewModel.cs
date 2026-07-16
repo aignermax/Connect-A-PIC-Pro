@@ -43,7 +43,7 @@ public partial class NewComponentViewModel : ObservableObject
 
     public IReadOnlyList<GeometryBackend> AvailableBackends => _availableBackends;
 
-    public string WindowTitle => IsEditMode ? "Edit Component" : "New Component";
+    public string WindowTitle => IsEditMode ? $"Edit Component: {ComponentName}" : "New Component";
 
     public string SaveButtonLabel => IsEditMode ? "Save changes" : "Save";
 
@@ -90,6 +90,11 @@ public partial class NewComponentViewModel : ObservableObject
         InvalidatePreview();
     }
     partial void OnCodeChanged(string value) => InvalidatePreview();
+
+    // The edit-mode title includes the component name (task-2), so a rename while the
+    // window is open (or the initial LoadForEdit assignment, which sets ComponentName
+    // before IsEditMode) must also refresh the title binding.
+    partial void OnComponentNameChanged(string value) => OnPropertyChanged(nameof(WindowTitle));
 
     partial void OnIsEditModeChanged(bool value)
     {

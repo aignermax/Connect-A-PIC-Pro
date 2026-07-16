@@ -110,8 +110,60 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(BuildTemplate(rawCode));
 
-        vm.WindowTitle.ShouldBe("Edit Component");
+        vm.WindowTitle.ShouldBe("Edit Component: comp1");
         vm.SaveButtonLabel.ShouldBe("Save changes");
+    }
+
+    [Fact]
+    public void WindowTitle_afterLoadForEdit_includesTheTemplatesComponentName()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("test3", rawCode));
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+        var template = new ComponentTemplate
+        {
+            Name = "test3",
+            RawCode = rawCode,
+            RawCodeBackend = "gdsfactory",
+            PdkSource = "Lib",
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.WindowTitle.ShouldBe("Edit Component: test3");
+    }
+
+    [Fact]
+    public void LoadForEdit_raisesPropertyChanged_forWindowTitle_soABoundTitleBarRefreshes()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        var raisedWindowTitle = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.WindowTitle)) raisedWindowTitle = true;
+        };
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        raisedWindowTitle.ShouldBeTrue();
+        vm.WindowTitle.ShouldBe("Edit Component: comp1");
+    }
+
+    [Fact]
+    public void LoadForEdit_exposesTheEditIdentity_forWindowDedup()
+    {
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+
+        vm.EditOriginalPdkKey.ShouldBeNull();
+        vm.EditingOriginalName.ShouldBeNull();
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.EditOriginalPdkKey.ShouldBe(filePath);
+        vm.EditingOriginalName.ShouldBe("comp1");
     }
 
     [Fact]
