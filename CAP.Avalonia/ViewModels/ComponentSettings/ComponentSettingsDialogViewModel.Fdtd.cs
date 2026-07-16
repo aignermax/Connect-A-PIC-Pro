@@ -60,7 +60,13 @@ public partial class ComponentSettingsDialogViewModel
     private async Task RecalculateSMatrix()
     {
         if (_fdtdService == null || _fdtdRequestFactory == null || _liveComponent == null || _storedSMatrices == null)
+        {
+            // Defensive: the button is hidden while CanRecalculate is false, so this
+            // only trips when the dialog was never Configure()d — never fail silently.
+            SolverStatus = "FDTD recompute is not available for this dialog " +
+                "(no live component or solver wiring). Open the dialog from a placed component.";
             return;
+        }
 
         IsComputing = true;
         _recalcCts = new CancellationTokenSource();
@@ -88,10 +94,26 @@ public partial class ComponentSettingsDialogViewModel
             }
 
             SolverStatus = "Preparing component geometry…";
-            var request = await _fdtdRequestFactory(_liveComponent, _recalcCts.Token);
+            FdtdSMatrixRequest? request;
+            try
+            {
+                request = await _fdtdRequestFactory(_liveComponent, _recalcCts.Token);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The factory failed to obtain the component's geometry (broken Python
+                // env, missing foundry package, no polygons/pins) and already built an
+                // actionable message — show it instead of a dead-end generic status.
+                SolverStatus = ex.Message;
+                _errorConsole?.LogError(
+                    $"FDTD geometry export failed for '{_displayName}': {ex.Message}");
+                return;
+            }
             if (request == null)
             {
-                SolverStatus = "Could not export this component's geometry for FDTD.";
+                SolverStatus = "Could not export this component's geometry for FDTD — " +
+                    "check the component's preview (Edit Component → Preview) and the active " +
+                    "Python environment (Settings → Python Environments).";
                 return;
             }
 

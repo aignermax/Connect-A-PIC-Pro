@@ -1059,10 +1059,16 @@ public partial class MainWindow : Window
             as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
         var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
+        // gdsfactory-native components (CornerStone etc.) carry only a synthesized
+        // "nazca_<name>" placeholder as their Nazca function — their FDTD geometry must
+        // render through the gdsfactory backend, so the factory needs both renderers.
+        var gdsFactoryGeometryService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
+            as CAP_Core.Export.GdsFactoryComponentPreviewService;
         Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
         if (fdtdService != null && previewService != null)
         {
-            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(previewService);
+            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(
+                previewService, gdsFactoryGeometryService);
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
