@@ -283,15 +283,12 @@ public partial class MainWindow : Window
                         vm);
                 };
 
-                // Wire up Component Settings dialog for canvas context menu
-                vm.CanvasInteraction.OpenComponentSettings = compVm =>
-                {
-                    ShowComponentSettingsDialog(
-                        compVm.Component.Identifier,
-                        compVm.Component.HumanReadableName ?? compVm.Component.Identifier,
-                        compVm.Component,
-                        vm);
-                };
+                // Wire up "Edit Component…" for the canvas context menu (design
+                // 2026-07-16-pdk-ux-polish T4): routes to the same unified editor hook as the
+                // library's ✏ button (fork-on-edit for bundled PDKs and window dedup both apply
+                // automatically), instead of the old per-instance ComponentSettingsDialog. See
+                // OpenCanvasComponentEditor below for the template resolution.
+                vm.CanvasInteraction.OpenComponentSettings = compVm => OpenCanvasComponentEditor(compVm, vm);
 
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
@@ -962,6 +959,32 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens the unified "Edit Component" editor for the PDK template behind a placed canvas
+    /// component (design 2026-07-16-pdk-ux-polish T4). Template resolution
+    /// (<c>TemplatePdkSource ?? ResolveComponentPdkSource</c> + <c>TemplateName</c> against
+    /// <c>LeftPanel.AllTemplates</c>) lives in <see cref="CanvasComponentTemplateResolver"/> so it
+    /// can be unit-tested without an Avalonia window. The resolved template is handed to
+    /// <see cref="LeftPanelViewModel.EditCustomComponentCommand"/> — the same hook the library's
+    /// ✏ button uses — so fork-on-edit for bundled PDKs and the "Edit Component" window dedup
+    /// both apply automatically without any duplicated logic here. If no template can be
+    /// resolved (e.g. its PDK was deleted after placement), logs an error and does nothing
+    /// further — no dialog opens, no crash.
+    /// </summary>
+    private static void OpenCanvasComponentEditor(CAP.Avalonia.ViewModels.Canvas.ComponentViewModel compVm, MainViewModel vm)
+    {
+        var template = CanvasComponentTemplateResolver.Resolve(
+            compVm, vm.LeftPanel.AllTemplates, vm.CanvasInteraction.ResolveComponentPdkSource);
+        if (template is null)
+        {
+            vm.ErrorConsole.LogError(
+                $"Cannot open the component editor for '{compVm.DisplayName}': its PDK template is no longer available (was it deleted?).");
+            return;
+        }
+
+        vm.LeftPanel.EditCustomComponentCommand.Execute(template);
+    }
+
+    /// <summary>
     /// Creates and shows the Component Settings dialog for the given entity.
     ///
     /// Per-Instance mode (<paramref name="liveComponent"/> non-null): the dialog
@@ -989,36 +1012,11 @@ public partial class MainWindow : Window
         var portMappingDialog = App.Services.GetService(typeof(IPortMappingDialogService))
             as IPortMappingDialogService;
 
-        // FDTD "Recalculate S-matrix": wire the solver service and a factory that
-        // renders the component's geometry/pins into an FDTD request. Both are
-        // optional — the dialog hides the recompute button when they're absent.
-        var fdtdService = App.Services.GetService(typeof(CAP_Core.Solvers.Fdtd.IFdtdSMatrixService))
-            as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
-        var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
-            as CAP_Core.Export.NazcaComponentPreviewService;
-        Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
-        if (fdtdService != null && previewService != null)
-        {
-            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(previewService);
-            fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
-        }
-
-        // Guided Docker setup (issue #649): shown when the availability probe
-        // reports Docker missing or its engine stopped.
-        var dockerSetupDialog = App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.IDockerSetupDialogService))
-            as CAP.Avalonia.Services.Solvers.IDockerSetupDialogService;
-        var notificationService = App.Services.GetService(typeof(INotificationService))
-            as INotificationService;
-
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
             importers: null,
-            portMappingDialog: portMappingDialog,
-            fdtdService: fdtdService,
-            fdtdRequestFactory: fdtdRequestFactory,
-            notificationService: notificationService,
-            dockerSetupDialog: dockerSetupDialog);
+            portMappingDialog: portMappingDialog);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode

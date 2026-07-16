@@ -38,33 +38,10 @@
                     Background="#3d5d3d"
                     ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
                     IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="Recalculate S-matrix (FDTD)…"
-                    Command="{Binding RecalculateSMatrixCommand}"
-                    Padding="12,2"
-                    Background="#3d4d6d"
-                    IsVisible="{Binding CanRecalculate}"/>
         </StackPanel>
 
-        <Border DockPanel.Dock="Bottom"
-                Background="#161616"
-                CornerRadius="4"
-                Padding="8,6"
-                Margin="0,8,0,0"
-                IsVisible="{Binding SolverStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <!-- Grid (not StackPanel): a star column bounds text width so long messages wrap. -->
-            <Grid ColumnDefinitions="Auto,*">
-                <TextBlock Grid.Column="0" Text="⏳" FontSize="12" VerticalAlignment="Center"
-                           Margin="0,0,8,0"
-                           IsVisible="{Binding IsComputing}"/>
-                <TextBlock Grid.Column="1" Text="{Binding SolverStatus}"
-                           Foreground="#aaccaa"
-                           FontSize="11"
-                           TextWrapping="Wrap"/>
-            </Grid>
-        </Border>
-
         <TextBlock DockPanel.Dock="Top"
-                   Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it."
+                   Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load one from a file below to override it."
                    Foreground="Gray"
                    FontSize="11"
                    Margin="0,0,0,10"

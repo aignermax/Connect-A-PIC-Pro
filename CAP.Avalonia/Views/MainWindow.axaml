@@ -1038,7 +1038,7 @@
                                    MainViewModel="{Binding}">
                 <controls:DesignCanvas.ContextMenu>
                 <ContextMenu>
-                    <MenuItem Header="Component Settings…" Command="{Binding CanvasInteraction.OpenSelectedComponentSettingsCommand}">
+                    <MenuItem Header="Edit Component…" Command="{Binding CanvasInteraction.OpenSelectedComponentSettingsCommand}">
                         <MenuItem.Icon>
                             <TextBlock Text="⚙️" FontSize="14"/>
                         </MenuItem.Icon>
