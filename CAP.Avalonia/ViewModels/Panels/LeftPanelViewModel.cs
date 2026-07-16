@@ -139,13 +139,24 @@ public partial class LeftPanelViewModel : ObservableObject
         var pdkDir = ResolveBundledPdkDirectory(AppDomain.CurrentDomain.BaseDirectory);
         if (pdkDir == null) return;
 
+        LoadBundledPdksFrom(pdkDir);
+    }
+
+    /// <summary>
+    /// Loads every bundled (read-only foundry) PDK JSON from <paramref name="pdkDir"/> into the
+    /// library and records each one in the bundled-origin catalog, so a user fork created later
+    /// can shadow it and a deleted fork can restore it. A user fork found on disk at startup
+    /// does NOT suppress the bundled load here — the startup reload replaces (shadows) the
+    /// bundled entry instead, which keeps the built-in PDK available when the fork file turns
+    /// out to be unreadable.
+    /// </summary>
+    internal void LoadBundledPdksFrom(string pdkDir)
+    {
         foreach (var pdkFile in Directory.GetFiles(pdkDir, "*.json"))
         {
             try
             {
                 var pdk = _pdkLoader.LoadFromFile(pdkFile);
-                if (_addCustomComponentDeps?.UserPdkStore?.NamedPdkExists(pdk.Name) == true)
-                    continue;
                 _loadedPdkDrafts.Add(pdk);
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)
@@ -158,6 +169,7 @@ public partial class LeftPanelViewModel : ObservableObject
                 }
 
                 PdkManager.RegisterPdk(pdk.Name, pdkFile, true, componentCount);
+                RecordBundledPdkOrigin(pdk.Name, pdkFile, componentCount);
             }
             catch (CAP_DataAccess.Components.ComponentDraftMapper.PdkValidationException vex)
             {

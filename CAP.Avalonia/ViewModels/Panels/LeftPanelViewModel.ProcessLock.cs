@@ -71,9 +71,16 @@ public partial class LeftPanelViewModel
         return accepted.Select(a => a.Name).ToList();
     }
 
+    /// <summary>
+    /// True when <paramref name="name"/> carries foundry authority for the layer-consistency
+    /// reference: either a bundled PDK itself, or the user's fork shadowing one — the fork is a
+    /// copy of the foundry PDK under the same name and inherits its reference role, so forking
+    /// never demotes the foundry process below an unrelated custom PDK.
+    /// </summary>
     private bool IsBundledPdkName(string name) =>
         PdkManager.LoadedPdks.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) is { IsBundled: true };
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase))
+            is { IsBundled: true } or { ShadowsBundledPdk: true };
 
     private ActiveProcessSelection? _lastAppliedProcess;
 

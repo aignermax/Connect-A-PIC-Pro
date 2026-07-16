@@ -82,8 +82,17 @@ public partial class LeftPanelViewModel
 
         if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
         {
-            _errorConsole?.LogWarning($"User PDK '{pdk.Name}' at '{path}' duplicates an already-loaded PDK name; skipped at startup.");
-            return;
+            // A user PDK named like a BUNDLED one is the user's fork of it ("copy-to-user on
+            // first edit") — it shadows the built-in original, exactly like the session that
+            // created the fork did. Any other name collision is still skipped.
+            var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
+                p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
+            if (shadowedBundled is null)
+            {
+                _errorConsole?.LogWarning($"User PDK '{pdk.Name}' at '{path}' duplicates an already-loaded PDK name; skipped at startup.");
+                return;
+            }
+            DeregisterBundledPdkForShadow(shadowedBundled);
         }
 
         _loadedPdkDrafts.Add(pdk);
@@ -100,5 +109,6 @@ public partial class LeftPanelViewModel
         }
 
         PdkManager.RegisterPdk(pdk.Name, path, false, addedCount);
+        MarkIfShadowsBundledPdk(pdk.Name);
     }
 }

@@ -174,6 +174,15 @@ public partial class PdkInfoViewModel : ObservableObject
     [ObservableProperty]
     private bool _isLockedByProcess;
 
+    /// <summary>
+    /// True when this non-bundled PDK is the user's editable fork of a bundled PDK with the
+    /// same name (OrdinalIgnoreCase) — it "shadows" the read-only built-in original. Deleting
+    /// such a fork means "revert to the foundry truth": the copy goes to the trash and the
+    /// bundled original is re-registered.
+    /// </summary>
+    [ObservableProperty]
+    private bool _shadowsBundledPdk;
+
     public string Name { get; }
     public string? FilePath { get; }
     public bool IsBundled { get; }
