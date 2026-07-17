@@ -71,14 +71,39 @@ public partial class LeftPanelViewModel
         return accepted.Select(a => a.Name).ToList();
     }
 
-    private bool IsBundledPdkName(string name) =>
-        PdkManager.LoadedPdks.FirstOrDefault(p =>
-            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase)) is { IsBundled: true };
+    /// <summary>
+    /// True when <paramref name="name"/> carries foundry authority for the #570 layer-consistency
+    /// reference: a bundled PDK itself, or a user fork shadowing one. The fork inherits that
+    /// authority ONLY while its process is layer-consistent with the bundled original — a
+    /// hand-edited fork with renumbered layers must never become the layer reference and lock
+    /// genuine foundry PDKs out; it falls through the normal layer check instead.
+    /// </summary>
+    private bool IsBundledPdkName(string name)
+    {
+        var row = PdkManager.LoadedPdks.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (row is { IsBundled: true })
+            return true;
+        if (row is not { ShadowsBundledPdk: true })
+            return false;
+
+        var originalProcess = GetBundledOriginDraft(row.Name)?.Process;
+        if (originalProcess is null)
+            return false; // cannot validate against the foundry truth → no reference authority
+
+        var forkProcess = _loadedPdkDrafts.FirstOrDefault(d =>
+            string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process;
+        return ProcessLayerConsistency.LayersConsistent(originalProcess, forkProcess);
+    }
 
     private ActiveProcessSelection? _lastAppliedProcess;
 
     internal void ReapplyActiveProcessAfterPdkChange()
     {
+        // Every library mutation funnels through this hook, so the ✕-visibility flags are
+        // recomputed once per change — never per hover/binding.
+        RefreshTemplateDeletableFlags();
+
         if (_lastAppliedProcess is { IsPlayground: false })
             ApplyActiveProcess(_lastAppliedProcess, preserveMemberToggles: true);
     }

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +9,7 @@ using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -94,6 +96,13 @@ public partial class LeftPanelViewModel : ObservableObject
         PdkManager.OnFilterChanged = FilterComponents;
     }
 
+    /// <summary>
+    /// Test seam (InternalsVisibleTo UnitTests): when set, <see cref="Initialize"/> scans this
+    /// directory for user PDKs instead of the real per-user user-pdks folder, so headless UI
+    /// tests never pick up (or write into) the developer's real forks.
+    /// </summary>
+    internal string? UserPdkStartupRootOverride { get; set; }
+
     public void Initialize()
     {
         LoadComponentLibrary();
@@ -102,7 +111,7 @@ public partial class LeftPanelViewModel : ObservableObject
 
         try
         {
-            _ = ReloadUserPdksAtStartupAsync();
+            _ = ReloadUserPdksAtStartupAsync(UserPdkStartupRootOverride);
         }
         catch (Exception ex)
         {
@@ -130,7 +139,10 @@ public partial class LeftPanelViewModel : ObservableObject
             Categories.Add(category);
         }
 
-        UpdateStatus?.Invoke($"Loaded {AllTemplates.Count} component types");
+        UpdateStatus?.Invoke(string.Format(
+            CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
+            AllTemplates.Count));
         FilterComponents();
     }
 
@@ -139,13 +151,22 @@ public partial class LeftPanelViewModel : ObservableObject
         var pdkDir = ResolveBundledPdkDirectory(AppDomain.CurrentDomain.BaseDirectory);
         if (pdkDir == null) return;
 
+        LoadBundledPdksFrom(pdkDir);
+    }
+
+    /// <summary>
+    /// Loads every bundled PDK JSON from <paramref name="pdkDir"/> and records each in the
+    /// bundled-origin catalog. A user fork on disk does NOT suppress the bundled load here —
+    /// the startup reload replaces (shadows) the bundled entry instead, which keeps the
+    /// built-in PDK available when the fork file turns out to be unreadable.
+    /// </summary>
+    internal void LoadBundledPdksFrom(string pdkDir)
+    {
         foreach (var pdkFile in Directory.GetFiles(pdkDir, "*.json"))
         {
             try
             {
                 var pdk = _pdkLoader.LoadFromFile(pdkFile);
-                if (_addCustomComponentDeps?.UserPdkStore?.NamedPdkExists(pdk.Name) == true)
-                    continue;
                 _loadedPdkDrafts.Add(pdk);
                 int componentCount = 0;
                 foreach (var pdkComp in pdk.Components)
@@ -158,6 +179,7 @@ public partial class LeftPanelViewModel : ObservableObject
                 }
 
                 PdkManager.RegisterPdk(pdk.Name, pdkFile, true, componentCount);
+                RecordBundledPdkOrigin(pdk.Name, pdkFile, componentCount);
             }
             catch (CAP_DataAccess.Components.ComponentDraftMapper.PdkValidationException vex)
             {
@@ -318,8 +340,18 @@ public partial class LeftPanelViewModel : ObservableObject
 
             if (PdkManager.IsPdkNameLoaded(pdk.Name, null))
             {
-                UpdateStatus?.Invoke($"PDK '{pdk.Name}' is already loaded");
-                return;
+                // A file named like a loaded BUNDLED PDK is the user's fork and shadows the
+                // built-in original — same semantics as the startup reload. The file parsed
+                // successfully above, so deregistering here cannot strand the library without
+                // either entry. Any other name collision is still rejected.
+                var shadowedBundled = PdkManager.LoadedPdks.FirstOrDefault(p =>
+                    p.IsBundled && p.Name.Equals(pdk.Name, StringComparison.OrdinalIgnoreCase));
+                if (shadowedBundled is null)
+                {
+                    UpdateStatus?.Invoke($"PDK '{pdk.Name}' is already loaded");
+                    return;
+                }
+                DeregisterBundledPdkForShadow(shadowedBundled);
             }
 
             _loadedPdkDrafts.Add(pdk);
@@ -336,6 +368,7 @@ public partial class LeftPanelViewModel : ObservableObject
             }
 
             PdkManager.RegisterPdk(pdk.Name, filePath, false, addedCount);
+            MarkIfShadowsBundledPdk(pdk.Name);
             _preferencesService.AddUserPdkPath(filePath);
 
             ReapplyActiveProcessAfterPdkChange();

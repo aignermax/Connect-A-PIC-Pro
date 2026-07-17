@@ -56,13 +56,6 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Dictionary<string, ComponentSMatrixData> StoredSMatrices { get; } = new();
 
-    /// <summary>
-    /// Per-instance Nazca function parameter overrides. Keyed by component Identifier;
-    /// values hold the override and the original template values for reset.
-    /// Serialised to/from the .lun file's <c>NazcaOverrides</c> section.
-    /// </summary>
-    public Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride> StoredNazcaOverrides { get; } = new();
-
     [ObservableProperty]
     private bool _hasUnsavedChanges;
 
@@ -215,9 +208,10 @@ public partial class FileOperationsViewModel : ObservableObject
             .ToList();
         if (addedComponents.Count == 0) return;
 
-        // Reuse ApplyAll with a single-component view so the identifier /
-        // template-key lookup logic stays in one place. Re-applying the
-        // same matrix to an already-up-to-date component is a no-op.
+        // Precedence per-instance > user-global > template: user-global first, project-local
+        // per-instance LAST so they win the last-write-per-wavelength application.
+        ApplyUserGlobalOverrides(addedComponents);
+
         if (StoredSMatrices.Count > 0)
         {
             Services.SMatrixOverrideApplicator.ApplyAll(
@@ -228,16 +222,12 @@ public partial class FileOperationsViewModel : ObservableObject
                 errorConsole: _errorConsole,
                 keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate);
         }
-
-        ApplyUserGlobalOverrides(addedComponents);
-        ApplyAllNazcaOverrides(addedComponents);
     }
 
     /// <summary>
-    /// Applies the user-global PDK template S-matrix overrides to a set of
-    /// components. Project-local instance overrides (in <see cref="StoredSMatrices"/>)
-    /// take precedence and are intentionally applied first; this fills the
-    /// gap for components that don't have a project-local override.
+    /// Applies the user-global PDK template S-matrix overrides. Project-local instance
+    /// overrides take precedence and are intentionally applied AFTER these — application is
+    /// last-write-wins per wavelength.
     /// </summary>
     private void ApplyUserGlobalOverrides(IEnumerable<Component> components)
     {
@@ -399,8 +389,6 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (swept.Count > 0)
                     designData.SMatrices = swept;
             }
-            if (StoredNazcaOverrides.Count > 0)
-                designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
             designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
@@ -475,9 +463,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// raw-code override (if any) through <see cref="Services.ComponentGeometryKey.For"/>.
     /// </summary>
     private string ResolveGeometryKey(Component component) =>
-        CAP.Avalonia.Services.ComponentGeometryKey.For(
-            component,
-            c => StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null);
+        CAP.Avalonia.Services.ComponentGeometryKey.For(component);
 
     /// <summary>
     /// Returns true when the given override-store key (shape
@@ -873,11 +859,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         HasUnsavedChanges = true;
                     }
 
-                    // Apply per-instance overrides to live components so the
-                    // next simulation run picks up the stored S-matrices.
-                    // Falls back to "{pdkSource}::{templateName}" so PDK-template-scoped
-                    // overrides reach every instance of the template, not just renamed instances.
+                    // Precedence per-instance > user-global > template: user-global first,
+                    // project-local per-instance LAST (last-write-wins per wavelength).
                     var allComponents = _canvas.Components.Select(vm => vm.Component).ToList();
+                    ApplyUserGlobalOverrides(allComponents);
                     // Project load is the one place we hold the COMPLETE component set,
                     // so it is also the only place an orphan check is meaningful — let
                     // it surface genuinely unmatched overrides (renamed/removed).
@@ -889,7 +874,6 @@ public partial class FileOperationsViewModel : ObservableObject
                         errorConsole: _errorConsole,
                         keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate,
                         reportOrphans: true);
-                    ApplyUserGlobalOverrides(allComponents);
                 }
                 else
                 {
@@ -897,16 +881,6 @@ public partial class FileOperationsViewModel : ObservableObject
                     // user's PDK template edits show up in projects that never
                     // had any project-scoped overrides of their own.
                     ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
-                }
-
-                // Restore per-instance Nazca overrides and apply them to live components
-                StoredNazcaOverrides.Clear();
-                if (designData.NazcaOverrides != null)
-                {
-                    foreach (var kv in designData.NazcaOverrides)
-                        StoredNazcaOverrides[kv.Key] = kv.Value;
-
-                    ApplyAllNazcaOverrides(_canvas.Components.Select(vm => vm.Component));
                 }
 
                 _currentFilePath = filePath;
@@ -1006,57 +980,6 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.ConnectionManager.Clear();
         _commandManager.ClearHistory();
         StoredSMatrices.Clear();
-        StoredNazcaOverrides.Clear();
-    }
-
-    /// <summary>
-    /// Applies any stored per-instance Nazca overrides to the given components.
-    /// Called on project load and when a new component is added to the canvas.
-    /// </summary>
-    private void ApplyAllNazcaOverrides(IEnumerable<Component> components)
-    {
-        if (StoredNazcaOverrides.Count == 0)
-            return;
-
-        var pinChangedComponents = new List<Component>();
-        foreach (var component in components)
-        {
-            if (StoredNazcaOverrides.TryGetValue(component.Identifier, out var nazcaOverride))
-            {
-                component.NazcaFunctionName = nazcaOverride.FunctionName ?? component.NazcaFunctionName;
-                component.NazcaFunctionParameters = nazcaOverride.FunctionParameters ?? component.NazcaFunctionParameters;
-                if (nazcaOverride.ModuleName != null)
-                    component.NazcaModuleName = nazcaOverride.ModuleName;
-
-                // Issue #556: a raw-code override recomputes the component's size.
-                // Restore the persisted bbox-derived dimensions so the canvas thumbnail
-                // and layout reflect the edited geometry on load.
-                if (nazcaOverride.OverrideWidthMicrometers is { } w)
-                    component.WidthMicrometers = w;
-                if (nazcaOverride.OverrideHeightMicrometers is { } h)
-                    component.HeightMicrometers = h;
-
-                // Issue #561: a raw-code override may also redefine the component's ports.
-                // Restore the persisted override pins so in-app connections and export use
-                // the correct port layout after project load.
-                if (nazcaOverride.OverridePins?.Count > 0)
-                {
-                    OverridePinMapper.ApplyPinsToComponent(component, nazcaOverride.OverridePins);
-                    pinChangedComponents.Add(component);
-                }
-            }
-        }
-
-        // Connections (and the canvas pin view-models) were created against the
-        // template pins BEFORE the override replaced them, so they hold stale pin
-        // objects — the GDS export would then reference pins the override cell does
-        // not define. Re-anchor them onto the same-named new pins, drop the rest.
-        foreach (var component in pinChangedComponents)
-        {
-            var warnings = _canvas.OnComponentPinsChanged(component);
-            foreach (var warning in warnings)
-                _errorConsole?.LogWarning(warning);
-        }
     }
 
     /// <summary>
@@ -1458,21 +1381,8 @@ public partial class FileOperationsViewModel : ObservableObject
             {
                 // Export Python script (metal spec: process-derived electrical routing, #682)
                 var nazcaCode = _nazcaExporter.Export(
-                    _canvas, overrides: StoredNazcaOverrides,
-                    metalSpec: MetalRoutingSpecProvider?.Invoke());
+                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
-
-                // Warn if any instance has a gdsfactory-backend override: the Nazca export
-                // can't run gdsfactory code, so those instances use their PDK cell here.
-                var gfOverrides = StoredNazcaOverrides
-                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.RawCode)
-                                 && kv.Value.Backend == CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory)
-                    .Select(kv => kv.Key).ToList();
-                if (gfOverrides.Count > 0)
-                    _errorConsole?.LogWarning(
-                        $"Nazca export: {gfOverrides.Count} instance(s) have a gdsfactory override "
-                        + $"not applied here (PDK geometry used instead): {string.Join(", ", gfOverrides)}. "
-                        + "Use the gdsfactory export to honour them.");
 
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.

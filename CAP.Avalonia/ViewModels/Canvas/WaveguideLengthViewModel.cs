@@ -1,5 +1,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Connections;
 
 namespace CAP.Avalonia.ViewModels.Canvas;
@@ -41,7 +42,7 @@ public partial class WaveguideLengthViewModel : ObservableObject
     {
         get
         {
-            if (SelectedConnection == null) return "No connection selected";
+            if (SelectedConnection == null) return LocalizationService.Instance.Translate("Canvas.NoConnectionSelected");
             var conn = SelectedConnection.Connection;
             return $"{conn.StartPin.Name} → {conn.EndPin.Name}";
         }

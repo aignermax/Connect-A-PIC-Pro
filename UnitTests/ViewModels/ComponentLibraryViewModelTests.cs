@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
@@ -19,6 +20,12 @@ public class ComponentLibraryViewModelTests : IDisposable
 
     public ComponentLibraryViewModelTests()
     {
+        // The library StatusText is localized via LocalizationService.Instance, so pin English
+        // to keep these assertions culture-independent regardless of the CI/dev OS language
+        // (the only test that live-switches the shared instance is isolated in the
+        // "LocalizationSingleton" collection, which disables cross-collection parallelization).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
         // Create a temporary directory for testing
         _testLibraryPath = Path.Combine(Path.GetTempPath(), $"ComponentLibraryVmTests_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testLibraryPath);

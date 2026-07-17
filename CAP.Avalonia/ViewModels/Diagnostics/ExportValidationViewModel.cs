@@ -3,11 +3,11 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.CodeExporter;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels.Diagnostics;
 
@@ -18,7 +18,7 @@ namespace CAP.Avalonia.ViewModels.Diagnostics;
 public partial class ExportValidationViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _validationStatus = "Ready";
+    private string _validationStatus = LocalizationService.Instance.Translate("Diag.Ready");
 
     [ObservableProperty]
     private bool _isValid = false;
@@ -39,14 +39,6 @@ public partial class ExportValidationViewModel : ObservableObject
     private bool _hasResults = false;
 
     public ObservableCollection<ValidationMessage> Messages { get; } = new();
-
-    /// <summary>
-    /// Supplies the live per-instance Nazca overrides (keyed by component identifier)
-    /// so validation exports and checks the SAME script the production exporter emits.
-    /// Wired by <c>MainViewModel</c> to <c>FileOperations.StoredNazcaOverrides</c>; null
-    /// means "no overrides" (validation then behaves as a plain PDK export).
-    /// </summary>
-    public Func<IReadOnlyDictionary<string, NazcaCodeOverride>>? OverridesProvider { get; set; }
 
     private readonly SimpleNazcaExporter _exporter;
     private readonly ExportValidator _validator;
@@ -69,30 +61,23 @@ public partial class ExportValidationViewModel : ObservableObject
     {
         if (canvas == null)
         {
-            ValidationStatus = "No design to validate";
+            ValidationStatus = LocalizationService.Instance.Translate("Diag.Export.NoDesign");
             return;
         }
 
         Messages.Clear();
-        ValidationStatus = "Running validation...";
+        ValidationStatus = LocalizationService.Instance.Translate("Diag.Export.Running");
 
         try
         {
-            // Use the SAME overrides the production export uses, so the validator never
-            // checks a different script than the one shipped to fab.
-            var overrides = OverridesProvider?.Invoke();
-
             // Export to Nazca code
-            var nazcaCode = _exporter.Export(canvas, overrides: overrides);
+            var nazcaCode = _exporter.Export(canvas);
 
             // Collect components and connections
             var components = canvas.Components.Select(vm => vm.Component).ToList();
             var connections = canvas.Connections.Select(vm => vm.Connection).ToList();
 
-            // Run validation, passing the persisted bbox anchors of raw-code overrides
-            // so bbox-anchored placements are not flagged as position mismatches.
-            var result = _validator.Validate(
-                components, connections, nazcaCode, BuildOverrideAnchors(overrides));
+            var result = _validator.Validate(components, connections, nazcaCode, null);
 
             // Update UI with results
             DisplayResults(result);
@@ -100,34 +85,9 @@ public partial class ExportValidationViewModel : ObservableObject
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Export validation failed: {ex.Message}", ex);
-            ValidationStatus = $"Validation failed: {ex.Message}";
+            ValidationStatus = string.Format(LocalizationService.Instance.Translate("Diag.Export.Failed"), ex.Message);
             HasResults = false;
         }
-    }
-
-    /// <summary>
-    /// Extracts the persisted bbox anchors (XMin, YMax) from raw-code overrides into the
-    /// plain tuple map the Core validator accepts (Core must not reference CAP-DataAccess).
-    /// Only entries with a RawCode AND both anchor fields are placed bbox-anchored — those
-    /// are the ones whose expected position depends on the anchor.
-    /// </summary>
-    private static IReadOnlyDictionary<string, (double XMin, double YMax)>? BuildOverrideAnchors(
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
-    {
-        if (overrides == null)
-            return null;
-
-        var anchors = new Dictionary<string, (double XMin, double YMax)>(StringComparer.Ordinal);
-        foreach (var kv in overrides)
-        {
-            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode)
-                && kv.Value!.OverrideBboxXMinMicrometers is { } xMin
-                && kv.Value.OverrideBboxYMaxMicrometers is { } yMax)
-            {
-                anchors[kv.Key] = (xMin, yMax);
-            }
-        }
-        return anchors;
     }
 
     /// <summary>
@@ -143,11 +103,13 @@ public partial class ExportValidationViewModel : ObservableObject
 
         if (result.IsValid)
         {
-            ValidationStatus = $"✓ Validation passed ({PassedChecks}/{TotalChecks} checks)";
+            ValidationStatus = string.Format(
+                LocalizationService.Instance.Translate("Diag.Export.Passed"), PassedChecks, TotalChecks);
         }
         else
         {
-            ValidationStatus = $"✗ Validation failed ({FailedChecks} errors, {WarningCount} warnings)";
+            ValidationStatus = string.Format(
+                LocalizationService.Instance.Translate("Diag.Export.FailedSummary"), FailedChecks, WarningCount);
         }
 
         // Add errors
@@ -186,7 +148,9 @@ public partial class ExportValidationViewModel : ObservableObject
             Messages.Add(new ValidationMessage
             {
                 Severity = "Info",
-                Message = $"... and {result.Successes.Count - 10} more successful checks"
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("Diag.Export.MoreChecks"),
+                    result.Successes.Count - 10)
             });
         }
 
@@ -200,7 +164,7 @@ public partial class ExportValidationViewModel : ObservableObject
     public void ClearResults()
     {
         Messages.Clear();
-        ValidationStatus = "Ready";
+        ValidationStatus = LocalizationService.Instance.Translate("Diag.Ready");
         IsValid = false;
         TotalChecks = 0;
         PassedChecks = 0;

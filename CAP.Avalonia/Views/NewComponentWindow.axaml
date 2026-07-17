@@ -5,10 +5,11 @@
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
         xmlns:controls="using:CAP.Avalonia.Controls"
         xmlns:cs="using:CAP.Avalonia.ViewModels.ComponentSettings"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.NewComponentWindow"
         x:DataType="vm:NewComponentViewModel"
         Title="{Binding WindowTitle}"
-        Width="520" Height="740"
+        Width="520" Height="800"
         MinWidth="440" MinHeight="560"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
@@ -20,17 +21,18 @@
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
             <Button Content="{Binding SaveButtonLabel}" Command="{Binding SaveCommand}"
                     MinWidth="130" Padding="14,4" Background="#2a4a2a"
-                    ToolTip.Tip="Saves the component into the selected PDK. A save with no computed S-matrix is stored as a black box, never a fabricated one."/>
+                    ToolTip.Tip="{loc:Localize NewComponent.SaveTip}"/>
         </StackPanel>
 
-        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      AllowAutoHide="False">
             <StackPanel Spacing="10">
 
                 <Border Background="#2a2440" CornerRadius="3" Padding="8,5" IsVisible="{Binding IsEditMode}">
                     <StackPanel Spacing="2">
-                        <TextBlock Text="Editing the component definition — affects every placement"
+                        <TextBlock Text="{loc:Localize NewComponent.EditModeHeader}"
                                    FontWeight="Bold" FontSize="11" Foreground="#c9b3ff"/>
-                        <TextBlock Text="Changes here rewrite the component in its PDK and apply to all current and future placements. To tweak only one placement on the canvas, use “Component Settings…” on that component instead."
+                        <TextBlock Text="{loc:Localize NewComponent.EditModeDescription}"
                                    FontSize="10" Foreground="#9aa0b0" TextWrapping="Wrap"/>
                     </StackPanel>
                 </Border>
@@ -48,52 +50,52 @@
 
                 <Separator Background="#3d3d3d"/>
 
-                <TextBlock Text="Fabrication process" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="{loc:Localize NewComponent.FabricationProcess}" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBlock Text="{Binding SelectedProcess.Name}" Foreground="White" FontSize="12"/>
 
                 <Separator Background="#3d3d3d"/>
 
-                <TextBlock Text="Name" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
+                <TextBlock Text="{loc:Localize NewComponent.Name}" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <TextBox Text="{Binding ComponentName}" Background="#2d2d2d" Foreground="White"/>
 
                 <Separator Background="#3d3d3d"/>
 
                 <Grid ColumnDefinitions="*,Auto,Auto">
-                    <TextBlock Grid.Column="0" Text="Structure (Python code)" Foreground="#aaaaaa" FontSize="11"
+                    <TextBlock Grid.Column="0" Text="{loc:Localize NewComponent.StructureLabel}" Foreground="#aaaaaa" FontSize="11"
                                FontWeight="SemiBold" VerticalAlignment="Center"/>
-                    <controls:HelpFlyoutButton Grid.Column="1" Title="What goes here?" Margin="0,0,6,0">
+                    <controls:HelpFlyoutButton Grid.Column="1" Title="{loc:Localize NewComponent.HelpTitle}" Margin="0,0,6,0">
                         <controls:HelpFlyoutButton.HelpContent>
                             <StackPanel Spacing="8" MaxWidth="380">
                                 <TextBlock TextWrapping="Wrap" Foreground="#dddddd" FontSize="11"
-                                           Text="Your code must create a variable named component holding the rendered geometry — a gdsfactory Component or a Nazca Cell, matching the Backend selected below. Everything else (imports, helper functions, parameters) is up to you."/>
-                                <TextBlock Text="gdsfactory example:" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
+                                           Text="{loc:Localize NewComponent.HelpBody}"/>
+                                <TextBlock Text="{loc:Localize NewComponent.GdsFactoryExample}" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox Grid.Column="0" x:Name="GdsFactoryExampleBox" IsReadOnly="True"
                                              Text="import gdsfactory as gf&#10;component = gf.components.mmi1x2()"
                                              AcceptsReturn="True" TextWrapping="NoWrap"
                                              FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="10"
                                              Background="#101018" Foreground="#dddddd"/>
-                                    <Button Grid.Column="1" Content="Copy" Click="OnCopyGdsFactoryExample"
+                                    <Button Grid.Column="1" Content="{loc:Localize Context.Copy}" Click="OnCopyGdsFactoryExample"
                                             FontSize="10" Padding="6,1" Margin="4,0,0,0" VerticalAlignment="Top"
                                             Background="#33335a" Foreground="#ccccff" BorderThickness="0"/>
                                 </Grid>
-                                <TextBlock Text="Nazca example:" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
+                                <TextBlock Text="{loc:Localize NewComponent.NazcaExample}" Foreground="#aaaacc" FontSize="10" FontWeight="SemiBold"/>
                                 <Grid ColumnDefinitions="*,Auto">
                                     <TextBox Grid.Column="0" x:Name="NazcaExampleBox" IsReadOnly="True"
-                                             Text="import nazca as nd&#10;component = nd.Cell(name='my_component')"
+                                             Text="import nazca as nd&#10;&#10;def component():&#10;    with nd.Cell(name='my_component') as c:&#10;        nd.strt(length=20, width=0.5).put(0)&#10;        nd.Pin('a0').put(0, 0, 180)&#10;        nd.Pin('b0').put(20, 0, 0)&#10;    return c"
                                              AcceptsReturn="True" TextWrapping="NoWrap"
                                              FontFamily="Consolas, Cascadia Mono, Courier New, monospace" FontSize="10"
                                              Background="#101018" Foreground="#dddddd"/>
-                                    <Button Grid.Column="1" Content="Copy" Click="OnCopyNazcaExample"
+                                    <Button Grid.Column="1" Content="{loc:Localize Context.Copy}" Click="OnCopyNazcaExample"
                                             FontSize="10" Padding="6,1" Margin="4,0,0,0" VerticalAlignment="Top"
                                             Background="#33335a" Foreground="#ccccff" BorderThickness="0"/>
                                 </Grid>
                             </StackPanel>
                         </controls:HelpFlyoutButton.HelpContent>
                     </controls:HelpFlyoutButton>
-                    <Button Grid.Column="2" Content="Load from .py…" Command="{Binding LoadCodeFromFileCommand}"
+                    <Button Grid.Column="2" Content="{loc:Localize NewComponent.LoadFromPy}" Command="{Binding LoadCodeFromFileCommand}"
                             Background="#3d4d6d" FontSize="11"
-                            ToolTip.Tip="Reads a .py file's contents into the editor below"/>
+                            ToolTip.Tip="{loc:Localize NewComponent.LoadFromPyTip}"/>
                 </Grid>
 
                 <edit:TextEditor behaviors:TextEditorBindingBehavior.BoundText="{Binding Code, Mode=TwoWay}"
@@ -108,14 +110,14 @@
                                   VerticalScrollBarVisibility="Auto"/>
 
                 <Grid ColumnDefinitions="Auto,8,*,8,Auto">
-                    <TextBlock Grid.Column="0" Text="Backend:" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Localize NewComponent.Backend}" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <ComboBox Grid.Column="2"
                               ItemsSource="{Binding AvailableBackends}"
                               SelectedItem="{Binding SelectedBackend}"
                               Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch"/>
-                    <Button Grid.Column="4" Content="Preview" Command="{Binding RunPreviewCommand}"
+                    <Button Grid.Column="4" Content="{loc:Localize NewComponent.Preview}" Command="{Binding RunPreviewCommand}"
                             Width="90" Background="#3d4d6d"
-                            ToolTip.Tip="Renders the geometry and extracts its size and pins"/>
+                            ToolTip.Tip="{loc:Localize NewComponent.PreviewTip}"/>
                 </Grid>
 
                 <Image x:Name="PreviewThumbnail"
@@ -126,26 +128,26 @@
                        Cursor="Hand"
                        IsVisible="{Binding PreviewBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"
                        PointerPressed="OnPreviewThumbnailPointerPressed"
-                       ToolTip.Tip="Click to enlarge"/>
+                       ToolTip.Tip="{loc:Localize NewComponent.ClickToEnlarge}"/>
 
                 <Separator Background="#3d3d3d"/>
 
                 <TextBlock Text="S-matrix" Foreground="#aaaaaa" FontSize="11" FontWeight="SemiBold"/>
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="Compute with Meep" Command="{Binding ComputeSMatrixCommand}"
+                    <Button Content="{loc:Localize NewComponent.ComputeWithMeep}" Command="{Binding ComputeSMatrixCommand}"
                             Width="150" Background="#3d4d6d"
-                            ToolTip.Tip="Recomputes the S-matrix from the rendered geometry via the FDTD solver (optional)"/>
-                    <Button Content="Load from file…" Command="{Binding LoadSMatrixFromFileCommand}"
+                            ToolTip.Tip="{loc:Localize NewComponent.ComputeTip}"/>
+                    <Button Content="{loc:Localize NewComponent.LoadFromFile}" Command="{Binding LoadSMatrixFromFileCommand}"
                             Background="#3d5d3d"
-                            ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) for this component."/>
-                    <Button Content="Show stored S-matrices…" Command="{Binding ShowSMatricesCommand}"
+                            ToolTip.Tip="{loc:Localize NewComponent.LoadSMatrixTip}"/>
+                    <Button Content="{loc:Localize NewComponent.ShowStoredSMatrices}" Command="{Binding ShowSMatricesCommand}"
                             Background="#3d3d5d"
-                            ToolTip.Tip="Opens the stored per-wavelength S-matrices for this component (including foundry/PDK defaults)."/>
+                            ToolTip.Tip="{loc:Localize NewComponent.ShowStoredSMatricesTip}"/>
                 </StackPanel>
                 <ProgressBar IsIndeterminate="True" IsVisible="{Binding IsBusy}" Height="4" Background="#2d2d2d"/>
                 <TextBlock Text="{Binding StatusText}" Foreground="#dddddd" FontSize="11" TextWrapping="Wrap"/>
 
-                <Expander Header="S-matrix data" IsExpanded="False"
+                <Expander Header="{loc:Localize NewComponent.SMatrixData}" IsExpanded="False"
                           IsVisible="{Binding HasSMatrix}" Background="#161616">
                     <ItemsControl ItemsSource="{Binding SMatrixEntries}">
                         <ItemsControl.ItemTemplate>

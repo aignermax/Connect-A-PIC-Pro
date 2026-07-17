@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core;
 
 namespace CAP.Avalonia.ViewModels.Panels;
@@ -41,7 +42,7 @@ public partial class BottomPanelViewModel : ObservableObject
     public AnalysisDockViewModel Analysis { get; }
 
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = LocalizationService.Instance.Translate("Status.Ready");
 
     /// <summary>
     /// Initializes the bottom panel with injected sub-ViewModels.

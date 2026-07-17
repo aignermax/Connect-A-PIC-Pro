@@ -24,6 +24,7 @@ public partial class NewComponentViewModel : ObservableObject
     private readonly ComponentGeometryExtractor _extractor;
     private readonly IFdtdSMatrixService? _fdtd;
     private readonly UserPdkStore _store;
+    private readonly CAP_Core.ErrorConsoleService? _errorConsole;
 
     private GeometryExtractResult? _lastPreview;
 
@@ -43,7 +44,7 @@ public partial class NewComponentViewModel : ObservableObject
 
     public IReadOnlyList<GeometryBackend> AvailableBackends => _availableBackends;
 
-    public string WindowTitle => IsEditMode ? "Edit Component" : "New Component";
+    public string WindowTitle => IsEditMode ? $"Edit Component: {ComponentName}" : "New Component";
 
     public string SaveButtonLabel => IsEditMode ? "Save changes" : "Save";
 
@@ -53,6 +54,12 @@ public partial class NewComponentViewModel : ObservableObject
 
     public string? SavedFilePath { get; private set; }
 
+    /// <summary>
+    /// True when the last save executed the deferred bundled fork: only then may the library
+    /// shadow the bundled PDK with the saved file — a mere name match must not.
+    /// </summary>
+    public bool SavedViaPendingBundledFork { get; private set; }
+
     public event EventHandler? Saved;
 
     public Func<string, string, Task<bool>>? ConfirmOverwrite { get; set; }
@@ -61,11 +68,13 @@ public partial class NewComponentViewModel : ObservableObject
         ComponentGeometryExtractor extractor,
         IFdtdSMatrixService? fdtd,
         UserPdkStore store,
-        IReadOnlyList<ProcessDefinition> processes)
+        IReadOnlyList<ProcessDefinition> processes,
+        CAP_Core.ErrorConsoleService? errorConsole = null)
     {
         _extractor = extractor;
         _fdtd = fdtd;
         _store = store;
+        _errorConsole = errorConsole;
         Processes = processes;
 
         RefreshPdkChoices();
@@ -90,6 +99,9 @@ public partial class NewComponentViewModel : ObservableObject
         InvalidatePreview();
     }
     partial void OnCodeChanged(string value) => InvalidatePreview();
+
+    // The edit-mode title includes the component name, so a rename must refresh the title binding.
+    partial void OnComponentNameChanged(string value) => OnPropertyChanged(nameof(WindowTitle));
 
     partial void OnIsEditModeChanged(bool value)
     {
@@ -148,7 +160,21 @@ public partial class NewComponentViewModel : ObservableObject
             : null;
         StatusText = result.Success
             ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
-            : result.Error ?? "Preview render failed.";
+            : DescribeRenderError(result.Error);
         return result.Success;
+    }
+
+    /// <summary>
+    /// Shows the actionable foundry-package hint in the status bar and keeps the raw Python
+    /// error in the Error Console; unrecognised errors stay verbatim.
+    /// </summary>
+    private string DescribeRenderError(string? rawError)
+    {
+        var hint = CAP_Core.Export.FoundryEnvironmentErrorHint.Describe(rawError);
+        if (hint is null)
+            return rawError ?? "Preview render failed.";
+
+        _errorConsole?.LogError($"Component preview render failed: {rawError}");
+        return hint;
     }
 }

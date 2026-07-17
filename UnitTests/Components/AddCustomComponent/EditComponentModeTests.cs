@@ -5,6 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Export;
@@ -20,6 +21,9 @@ namespace UnitTests.Components.AddCustomComponent;
 
 public class EditComponentModeTests : IDisposable
 {
+    static EditComponentModeTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-edit-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()
@@ -101,6 +105,43 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public void LoadForEdit_nazcaFunctionReference_synthesizesValidDefComponent()
+    {
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = new ComponentTemplate
+        {
+            Name = "2x2 MMI", PdkSource = "Lib",
+            NazcaFunctionName = "demo.mmi2x2_dp", RawCodeBackend = "nazca", RawCode = null,
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.SelectedBackend.ShouldBe(GeometryBackend.Nazca);
+        vm.Code.ShouldContain("def component():");
+        vm.Code.ShouldContain("nazca.demofab");
+        vm.Code.ShouldContain("mmi2x2_dp");
+        vm.Code.ShouldNotContain("component = demo");
+    }
+
+    [Fact]
+    public async Task EditSave_renameWithinSamePdk_removesTheOriginal_noOrphan()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("comp1", rawCode));
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+        vm.ComponentName = "comp1Renamed";
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        store.ComponentExistsInFile(path, "comp1Renamed").ShouldBeTrue();
+        store.ComponentExistsInFile(path, "comp1").ShouldBeFalse();
+    }
+
+    [Fact]
     public void WindowTitle_and_SaveButtonLabel_reflectEditMode()
     {
         var (vm, _, rawCode) = BuildWithSeededPdk();
@@ -110,8 +151,60 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(BuildTemplate(rawCode));
 
-        vm.WindowTitle.ShouldBe("Edit Component");
+        vm.WindowTitle.ShouldBe("Edit Component: comp1");
         vm.SaveButtonLabel.ShouldBe("Save changes");
+    }
+
+    [Fact]
+    public void WindowTitle_afterLoadForEdit_includesTheTemplatesComponentName()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("test3", rawCode));
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+        var template = new ComponentTemplate
+        {
+            Name = "test3",
+            RawCode = rawCode,
+            RawCodeBackend = "gdsfactory",
+            PdkSource = "Lib",
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.WindowTitle.ShouldBe("Edit Component: test3");
+    }
+
+    [Fact]
+    public void LoadForEdit_raisesPropertyChanged_forWindowTitle_soABoundTitleBarRefreshes()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        var raisedWindowTitle = false;
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(vm.WindowTitle)) raisedWindowTitle = true;
+        };
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        raisedWindowTitle.ShouldBeTrue();
+        vm.WindowTitle.ShouldBe("Edit Component: comp1");
+    }
+
+    [Fact]
+    public void LoadForEdit_exposesTheEditIdentity_forWindowDedup()
+    {
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+
+        vm.EditOriginalPdkKey.ShouldBeNull();
+        vm.EditingOriginalName.ShouldBeNull();
+
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.EditOriginalPdkKey.ShouldBe(filePath);
+        vm.EditingOriginalName.ShouldBe("comp1");
     }
 
     [Fact]
@@ -172,10 +265,164 @@ public class EditComponentModeTests : IDisposable
         var template = BuildTemplate(rawCode);
         template.PdkSource = "Unknown Pdk";
 
-        vm.LoadForEdit(template);
+        var loaded = vm.LoadForEdit(template);
 
+        loaded.ShouldBeFalse();
         vm.IsEditMode.ShouldBeFalse();
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
+    public void LoadForEdit_returnsTrue_onSuccess()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+
+        vm.LoadForEdit(BuildTemplate(rawCode)).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_falseAfterLoadForEdit_trueAfterUserEdits()
+    {
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.Code = rawCode + "\n# tweak";
+        vm.HasUnsavedEditChanges.ShouldBeTrue();
+
+        vm.Code = rawCode;
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.ComponentName = "renamed";
+        vm.HasUnsavedEditChanges.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_isFalse_outsideEditMode()
+    {
+        var (vm, _, _) = BuildWithSeededPdk();
+        vm.Code = "anything";
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_tracksTheGeometryBackend()
+    {
+        // A backend switch is user input like any other — the
+        // dedup's "no unsaved changes → adopt fresh state" guard must never throw it away.
+        var (vm, _, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.SelectedBackend = GeometryBackend.Nazca;
+        vm.HasUnsavedEditChanges.ShouldBeTrue("switching the geometry backend is an unsaved user change");
+
+        vm.SelectedBackend = GeometryBackend.GdsFactory;
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasUnsavedEditChanges_tracksTheSelectedTargetPdk()
+    {
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var path = store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        store.AppendToExistingPdk(path, SeedComponent("comp1", rawCode));
+        store.CreateNamedPdkWithProcess("Other Lib", process, "gdsfactory", null);
+        var (vm, _) = Build(store, new List<ProcessDefinition> { process });
+        vm.LoadForEdit(BuildTemplate(rawCode));
+
+        vm.HasUnsavedEditChanges.ShouldBeFalse();
+
+        vm.SelectedPdkChoice = vm.PdkChoices.First(c => !c.IsNewPdk && c.Pdk!.Name == "Other Lib");
+        vm.HasUnsavedEditChanges.ShouldBeTrue("re-targeting the save to another PDK is an unsaved user change");
+    }
+
+    [Fact]
+    public async Task Save_whenTheStoreThrows_reportsTheError_insteadOfSilentlySwallowingIt()
+    {
+        // A store failure (e.g. the target file vanished after a fork revert) must not fault
+        // the AsyncRelayCommand silently — the Save button would look like it did nothing.
+        var (vm, filePath, rawCode) = BuildWithSeededPdk();
+        vm.LoadForEdit(BuildTemplate(rawCode));
+        vm.ConfirmOverwrite = (_, _) => Task.FromResult(true);
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        File.Delete(filePath); // the save target disappears underneath the open editor
+
+        await Should.NotThrowAsync(async () => await vm.SaveCommand.ExecuteAsync(null));
+
+        vm.SavedDraft.ShouldBeNull();
+        vm.StatusText.ShouldContain("Save failed");
+        vm.IsBusy.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void LoadForEdit_foundryComponentWithoutRawCode_synthesizesPdkRegistryCode_notModuleAttributeCall()
+    {
+        // Field bug: the synthesized editor code for a CornerStone component was
+        // "import cspdk\ncomponent = cspdk.sin300.coupler_straight()", which fails twice —
+        // "import cspdk" doesn't load the sin300 submodule (AttributeError: module 'cspdk'
+        // has no attribute 'sin300'), and cspdk cells are registered in the PDK registry,
+        // not as module attributes. The synthesis must use the exporter/preview pattern.
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = BuildTemplate(null!);
+        template.RawCode = null;
+        template.GdsFactoryFunction = "cspdk.sin300.coupler_straight";
+
+        vm.LoadForEdit(template);
+
+        vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
+        vm.Code.ShouldContain("import cspdk.sin300");
+        vm.Code.ShouldContain("cspdk.sin300.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('coupler_straight')");
+        vm.Code.ShouldNotContain("cspdk.sin300.coupler_straight()");
+    }
+
+    [Fact]
+    public void LoadForEdit_foundryComponentWithBareCellName_resolvesViaGetComponent()
+    {
+        // A bare (dotless) gdsfactory cell has no PDK module to import/activate —
+        // resolve it against the render script's default PDK instead of emitting
+        // the nonsensical "import straight".
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = BuildTemplate(null!);
+        template.RawCode = null;
+        template.GdsFactoryFunction = "straight";
+
+        vm.LoadForEdit(template);
+
+        vm.Code.ShouldContain("gf.get_component('straight')");
+        vm.Code.ShouldNotContain("import straight");
+    }
+
+    [Fact]
+    public async Task RunPreview_missingFoundryPackage_showsActionableHint_andLogsRawErrorToConsole()
+    {
+        // A raw "ModuleNotFoundError: No module named 'cspdk'" from the render subprocess
+        // is not actionable for the user — the status bar must point at the Python
+        // Environments settings while the raw error goes to the Error Console.
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        var nazca = new Mock<IComponentPreviewRenderer>();
+        var gds = new Mock<IComponentPreviewRenderer>();
+        gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+           .ReturnsAsync(NazcaPreviewResult.Fail("No module named 'cspdk'"));
+        var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var vm = new NewComponentViewModel(extractor, fdtd: null, store,
+            new List<ProcessDefinition> { process }, errorConsole);
+        vm.Code = "import cspdk.sin300\ncomponent = gf.get_component('coupler_straight')";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldContain("cspdk");
+        vm.StatusText.ShouldContain("Settings → Python Environments");
+        errorConsole.Entries.ShouldContain(e => e.Message.Contains("No module named 'cspdk'"));
     }
 
     [Fact]

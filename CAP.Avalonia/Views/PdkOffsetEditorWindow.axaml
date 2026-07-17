@@ -2,9 +2,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.PdkOffset"
         xmlns:libvm="using:CAP.Avalonia.ViewModels.Library"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.PdkOffsetEditorWindow"
         x:DataType="vm:PdkOffsetEditorViewModel"
-        Title="PDK Component Offset Editor"
+        Title="{loc:Localize PdkOffset.Title}"
         Width="1000" Height="700"
         MinWidth="700" MinHeight="500"
         Background="#1e1e1e"
@@ -16,17 +17,17 @@
         <DockPanel Grid.Column="0" Margin="8">
             <StackPanel DockPanel.Dock="Top" Margin="0,0,0,8" Spacing="6">
                 <DockPanel>
-                    <TextBlock Text="PDK Components" FontWeight="Bold" Foreground="LightGray"
+                    <TextBlock Text="{loc:Localize PdkOffset.PdkComponents}" FontWeight="Bold" Foreground="LightGray"
                                VerticalAlignment="Center" DockPanel.Dock="Left"/>
-                    <Button Content="Load PDK..." Command="{Binding LoadPdkFileCommand}"
+                    <Button Content="{loc:Localize PdkOffset.LoadPdk}" Command="{Binding LoadPdkFileCommand}"
                             DockPanel.Dock="Right" Padding="8,4" Background="#3d3d5d"/>
                 </DockPanel>
                 <ComboBox ItemsSource="{Binding AvailablePdks}"
                           SelectedItem="{Binding SelectedInstalledPdk}"
-                          PlaceholderText="Select installed PDK..."
+                          PlaceholderText="{loc:Localize PdkOffset.SelectPdkPlaceholder}"
                           HorizontalAlignment="Stretch"
                           Background="#2d2d2d" Foreground="White"
-                          ToolTip.Tip="Load an already-registered PDK directly into the editor">
+                          ToolTip.Tip="{loc:Localize PdkOffset.LoadInstalledPdkTip}">
                     <ComboBox.ItemTemplate>
                         <DataTemplate x:DataType="libvm:PdkInfoViewModel">
                             <TextBlock Text="{Binding DisplayText}"
@@ -39,25 +40,25 @@
             <Border DockPanel.Dock="Top" Margin="0,0,0,8" Padding="6"
                     Background="#1a2a3a" CornerRadius="4">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Batch operations" FontWeight="Bold" Foreground="LightGray" FontSize="11"/>
+                    <TextBlock Text="{loc:Localize PdkOffset.BatchOperations}" FontWeight="Bold" Foreground="LightGray" FontSize="11"/>
                     <Grid ColumnDefinitions="*,4,*">
-                        <Button Grid.Column="0" Content="🔍 Check All"
+                        <Button Grid.Column="0" Content="{loc:Localize PdkOffset.CheckAll}"
                                 Command="{Binding CheckAllCommand}"
                                 HorizontalAlignment="Stretch" Padding="6,4"
                                 Background="#3d3d5d" Foreground="White" FontSize="11"
-                                ToolTip.Tip="Render every component and report alignment status"/>
-                        <Button Grid.Column="2" Content="🪄 Try-Fix All"
+                                ToolTip.Tip="{loc:Localize PdkOffset.CheckAllTip}"/>
+                        <Button Grid.Column="2" Content="{loc:Localize PdkOffset.TryFixAll}"
                                 Command="{Binding TryFixAllCommand}"
                                 HorizontalAlignment="Stretch" Padding="6,4"
                                 Background="#5d3d8d" Foreground="White" FontSize="11"
-                                ToolTip.Tip="Auto-Calibrate every fixable component, then re-check"/>
+                                ToolTip.Tip="{loc:Localize PdkOffset.TryFixAllTip}"/>
                     </Grid>
                     <ProgressBar IsIndeterminate="True" Height="3" Foreground="#a080ff"
                                  IsVisible="{Binding IsBatchRunning}"/>
                     <TextBlock Text="{Binding BatchProgress}"
                                IsVisible="{Binding BatchProgress, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                Foreground="LightGray" FontSize="10" TextTrimming="CharacterEllipsis"/>
-                    <Button Content="✕ Cancel" Command="{Binding CancelBatchCommand}"
+                    <Button Content="{loc:Localize PdkOffset.Cancel}" Command="{Binding CancelBatchCommand}"
                             IsVisible="{Binding IsBatchRunning}"
                             HorizontalAlignment="Stretch" Padding="6,2"
                             Background="#5d3d3d" Foreground="LightGray" FontSize="10"/>
@@ -94,7 +95,7 @@
                 <!-- Component header -->
                 <Border Background="#252525" CornerRadius="4" Padding="10,8">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="No component selected." Foreground="LightGray"
+                        <TextBlock Text="{loc:Localize PdkOffset.NoComponentSelected}" Foreground="LightGray"
                                    IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNull}}"/>
                         <StackPanel Spacing="2"
                                     IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -129,18 +130,18 @@
                                           FormatString="F3"
                                           Increment="0.5"
                                           Background="#2d2d2d" Foreground="White"/>
-                            <Button Grid.Column="6" Content="Apply" Command="{Binding ApplyOffsetCommand}"
+                            <Button Grid.Column="6" Content="{loc:Localize Common.Apply}" Command="{Binding ApplyOffsetCommand}"
                                     Padding="12,4" Background="#3d5d3d"/>
                         </Grid>
                         <Grid ColumnDefinitions="Auto,120,20,Auto,120,*">
-                            <TextBlock Grid.Column="0" Text="Width:" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
+                            <TextBlock Grid.Column="0" Text="{loc:Localize PdkOffset.Width}" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
                             <NumericUpDown Grid.Column="1"
                                           Value="{Binding ComponentWidth}"
                                           FormatString="F3"
                                           Increment="0.5"
                                           Minimum="0.001"
                                           Background="#2d2d2d" Foreground="White"/>
-                            <TextBlock Grid.Column="3" Text="Height:" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
+                            <TextBlock Grid.Column="3" Text="{loc:Localize PdkOffset.Height}" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
                             <NumericUpDown Grid.Column="4"
                                           Value="{Binding ComponentHeight}"
                                           FormatString="F3"
@@ -148,12 +149,12 @@
                                           Minimum="0.001"
                                           Background="#2d2d2d" Foreground="White"/>
                         </Grid>
-                        <Button Content="🪄 Auto-Calibrate from GDS"
+                        <Button Content="{loc:Localize PdkOffset.AutoCalibrate}"
                                 Command="{Binding AutoCalibrateCommand}"
                                 HorizontalAlignment="Stretch"
                                 Padding="12,6" Background="#5d3d8d" Foreground="White"
-                                ToolTip.Tip="Derive Width / Height / NazcaOriginOffset from the rendered GDS bounding box and snap every Lunima pin to its matching Nazca pin. Available once the GDS preview has loaded."/>
-                        <TextBlock Text="Apply updates the preview and marks the file as changed. Click Save PDK to persist."
+                                ToolTip.Tip="{loc:Localize PdkOffset.AutoCalibrateTip}"/>
+                        <TextBlock Text="{loc:Localize PdkOffset.ApplyHint}"
                                    Foreground="Gray" FontSize="11"/>
                         <ProgressBar IsIndeterminate="True"
                                      IsVisible="{Binding IsNazcaRendering}"
@@ -169,21 +170,21 @@
                                     Command="{Binding CopyStatusCommand}"
                                     FontSize="11" Padding="6,2" Margin="4,0"
                                     Background="#3d3d3d" Foreground="LightGray"
-                                    ToolTip.Tip="Copy status text to clipboard"
+                                    ToolTip.Tip="{loc:Localize PdkOffset.CopyStatusTip}"
                                     IsVisible="{Binding NazcaOverlayStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
                                     VerticalAlignment="Center"/>
                             <CheckBox Grid.Column="2"
-                                      Content="Show Nazca GDS"
+                                      Content="{loc:Localize PdkOffset.ShowNazcaGds}"
                                       IsChecked="{Binding ShowNazcaOverlay}"
                                       Foreground="LightGray" FontSize="11"
-                                      ToolTip.Tip="Toggle the Nazca GDS overlay (dark green polygons + cyan pin stubs)"
+                                      ToolTip.Tip="{loc:Localize PdkOffset.ShowNazcaGdsTip}"
                                       VerticalAlignment="Center"/>
                         </Grid>
                         <TextBlock Text="{Binding PinAlignmentSummary}"
                                    Foreground="LightCyan" FontSize="11"
                                    TextWrapping="Wrap"
                                    IsVisible="{Binding PinAlignmentSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                        <Expander Header="Show per-pin deltas (Lunima vs Nazca)"
+                        <Expander Header="{loc:Localize PdkOffset.PerPinDeltas}"
                                   Foreground="LightGray" FontSize="11"
                                   IsExpanded="False"
                                   IsVisible="{Binding PinAlignmentResults.Count}">
@@ -206,7 +207,7 @@
                                 </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </Expander>
-                        <Expander Header="Show preview source (Python)"
+                        <Expander Header="{loc:Localize PdkOffset.PreviewSource}"
                                   Foreground="LightGray" FontSize="11"
                                   IsExpanded="False"
                                   IsVisible="{Binding PreviewSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
@@ -228,26 +229,26 @@
                         IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="Auto,*">
-                            <TextBlock Grid.Column="0" Text="Visual Pin Overlay" FontWeight="Bold"
+                            <TextBlock Grid.Column="0" Text="{loc:Localize PdkOffset.VisualPinOverlay}" FontWeight="Bold"
                                        Foreground="LightGray" VerticalAlignment="Center"/>
                             <StackPanel Grid.Column="1" Orientation="Horizontal"
                                         HorizontalAlignment="Right" Spacing="4">
-                                <TextBlock Text="Zoom:" Foreground="LightGray" FontSize="11"
+                                <TextBlock Text="{loc:Localize PdkOffset.Zoom}" Foreground="LightGray" FontSize="11"
                                            VerticalAlignment="Center"/>
                                 <Slider x:Name="ZoomSlider"
                                         Minimum="0.25" Maximum="8.0" Value="1.0"
                                         Width="160"
                                         TickFrequency="0.25" IsSnapToTickEnabled="False"
-                                        ToolTip.Tip="Drag to zoom the overlay; mouse wheel over the canvas also works"/>
+                                        ToolTip.Tip="{loc:Localize PdkOffset.ZoomTip}"/>
                                 <TextBlock Text="{Binding #ZoomSlider.Value, StringFormat={}{0:F2}x}"
                                            Foreground="LightGray" FontSize="11"
                                            VerticalAlignment="Center" Width="40"/>
                                 <Button Content="1:1" Command="{Binding ResetZoomCommand}"
                                         FontSize="11" Padding="6,2" Background="#3d3d3d" Foreground="LightGray"
-                                        ToolTip.Tip="Reset zoom to 100%"/>
+                                        ToolTip.Tip="{loc:Localize PdkOffset.ResetZoomTip}"/>
                             </StackPanel>
                         </Grid>
-                        <TextBlock Text="Blue = component bounding box  |  Cyan dots = pins  |  Orange crosshair = Nazca origin  |  Dark green = Nazca GDS polygons  |  Cyan stubs = Nazca pin exits  |  Drag with left mouse to pan, mouse-wheel to zoom"
+                        <TextBlock Text="{loc:Localize PdkOffset.OverlayLegend}"
                                    Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
                         <ScrollViewer x:Name="OverlayScrollViewer"
                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
@@ -274,13 +275,13 @@
                 <Border Background="#252525" CornerRadius="4" Padding="10,8"
                         IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <StackPanel Spacing="6">
-                        <TextBlock Text="Pin Positions relative to Nazca Origin" FontWeight="Bold" Foreground="LightGray"/>
+                        <TextBlock Text="{loc:Localize PdkOffset.PinPositionsTitle}" FontWeight="Bold" Foreground="LightGray"/>
                         <Grid ColumnDefinitions="80,90,90,90,90" Margin="0,4,0,2">
-                            <TextBlock Grid.Column="0" Text="Pin" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="1" Text="Local X" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="2" Text="Local Y" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="3" Text="Nazca X" Foreground="Cyan" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="4" Text="Nazca Y" Foreground="Cyan" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="0" Text="{loc:Localize PdkOffset.Pin}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Localize PdkOffset.LocalX}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Localize PdkOffset.LocalY}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="3" Text="{loc:Localize PdkOffset.NazcaX}" Foreground="Cyan" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="4" Text="{loc:Localize PdkOffset.NazcaY}" Foreground="Cyan" FontWeight="Bold"/>
                         </Grid>
                         <Rectangle Height="1" Fill="#3d3d3d"/>
                         <ItemsControl ItemsSource="{Binding PinPositions}">
@@ -304,28 +305,28 @@
                         IsVisible="{Binding BatchCheckResults.Count}">
                     <StackPanel Spacing="6">
                         <Grid ColumnDefinitions="*,Auto,Auto">
-                            <TextBlock Grid.Column="0" Text="Batch report (Check-All / Try-Fix-All)"
+                            <TextBlock Grid.Column="0" Text="{loc:Localize PdkOffset.BatchReport}"
                                        FontWeight="Bold" Foreground="LightGray"
                                        VerticalAlignment="Center"/>
-                            <Button Grid.Column="1" Content="📋 Copy report"
+                            <Button Grid.Column="1" Content="{loc:Localize PdkOffset.CopyReport}"
                                     Command="{Binding CopyBatchReportCommand}"
                                     FontSize="11" Padding="8,3" Margin="0,0,4,0"
                                     Background="#3d3d3d" Foreground="LightGray"
-                                    ToolTip.Tip="Copy the full table as Markdown — paste it into Claude for help"
+                                    ToolTip.Tip="{loc:Localize PdkOffset.CopyReportTip}"
                                     VerticalAlignment="Center"/>
-                            <Button Grid.Column="2" Content="📋 Copy errors"
+                            <Button Grid.Column="2" Content="{loc:Localize PdkOffset.CopyErrors}"
                                     Command="{Binding CopyBatchErrorsCommand}"
                                     FontSize="11" Padding="8,3"
                                     Background="#5d3d3d" Foreground="White"
-                                    ToolTip.Tip="Copy only the rows that aren't aligned — short, focused on what's left to fix"
+                                    ToolTip.Tip="{loc:Localize PdkOffset.CopyErrorsTip}"
                                     VerticalAlignment="Center"/>
                         </Grid>
                         <Grid ColumnDefinitions="20,*,80,80,140" Margin="0,4,0,2">
                             <TextBlock Grid.Column="0" Text="" Foreground="Gray"/>
-                            <TextBlock Grid.Column="1" Text="Component" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="2" Text="Pins L/N" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="3" Text="Δ max" Foreground="Gray" FontWeight="Bold"/>
-                            <TextBlock Grid.Column="4" Text="Status" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Localize PdkOffset.Component}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="2" Text="{loc:Localize PdkOffset.PinsLN}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="3" Text="{loc:Localize PdkOffset.DeltaMax}" Foreground="Gray" FontWeight="Bold"/>
+                            <TextBlock Grid.Column="4" Text="{loc:Localize PdkOffset.Status}" Foreground="Gray" FontWeight="Bold"/>
                         </Grid>
                         <Rectangle Height="1" Fill="#3d3d3d"/>
                         <ItemsControl ItemsSource="{Binding BatchCheckResults}">
@@ -354,9 +355,9 @@
                 <!-- Save + status bar -->
                 <Border Background="#252526" CornerRadius="4" Padding="10,8">
                     <DockPanel>
-                        <Button Content="💾 Save PDK" Command="{Binding SavePdkCommand}"
+                        <Button Content="{loc:Localize PdkOffset.SavePdk}" Command="{Binding SavePdkCommand}"
                                 DockPanel.Dock="Right" Padding="12,6" Background="#3d5d3d"
-                                ToolTip.Tip="Write all offset changes back to the PDK JSON file"/>
+                                ToolTip.Tip="{loc:Localize PdkOffset.SavePdkTip}"/>
                         <TextBlock Text="{Binding StatusText}"
                                    Foreground="LightGray" VerticalAlignment="Center" TextWrapping="Wrap"/>
                     </DockPanel>

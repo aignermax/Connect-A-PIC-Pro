@@ -28,7 +28,9 @@ public partial class LeftPanelViewModel
             return;
         }
 
+        // The restored file in user-pdks is the truth about a fork's existence, so a restore
+        // under a bundled PDK's name may shadow the built-in entry again.
         foreach (var component in result.RestoredComponents)
-            RegisterSavedCustomComponent(component, result.PdkName, result.RestoredPdkPath);
+            RegisterSavedCustomComponent(component, result.PdkName, result.RestoredPdkPath, savedViaBundledFork: true);
     }
 }

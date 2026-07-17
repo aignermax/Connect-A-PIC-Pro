@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_DataAccess.Import;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,7 +41,8 @@ public partial class NewComponentViewModel
         var importer = _sMatrixImporters.FirstOrDefault(i => i.SupportedExtensions.Contains(ext));
         if (importer is null)
         {
-            StatusText = $"Unsupported S-matrix file type: {ext}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.UnsupportedSMatrixFileType"), ext);
             return;
         }
 
@@ -57,14 +59,17 @@ public partial class NewComponentViewModel
             _computedModel = SParameterConverter.ToComponentSMatrixData(resolved);
             RefreshSMatrixEntries();
             var remapNote = _portsMappedByPosition
-                ? " Ports were auto-mapped to pins by position — verify the assignment."
+                ? LocalizationService.Instance.Translate("NewComp.PortsAutoMapped")
                 : "";
-            StatusText = $"Loaded S-matrix: {resolved.PortCount} ports, " +
-                         $"{resolved.SMatricesByWavelengthNm.Count} wavelength(s) from {Path.GetFileName(path)}.{remapNote}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.LoadedSMatrix"),
+                resolved.PortCount, resolved.SMatricesByWavelengthNm.Count,
+                Path.GetFileName(path), remapNote, SaveButtonLabel);
         }
         catch (Exception ex)
         {
-            StatusText = $"S-matrix import failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.SMatrixImportFailed"), ex.Message);
         }
         finally
         {
@@ -82,8 +87,9 @@ public partial class NewComponentViewModel
 
         if (imported.PortNames.Count != pinNames.Count)
         {
-            StatusText = $"Cannot import: file has {imported.PortNames.Count} port(s) " +
-                         $"but the component has {pinNames.Count} pin(s).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.CannotImportPortCountMismatch"),
+                imported.PortNames.Count, pinNames.Count);
             return null;
         }
 

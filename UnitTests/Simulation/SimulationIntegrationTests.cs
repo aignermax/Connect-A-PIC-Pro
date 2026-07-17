@@ -15,6 +15,7 @@ namespace UnitTests.Simulation;
 /// End-to-end integration tests verifying light propagation through a
 /// multi-component circuit: GC → Splitter → 2x DC → 4x GC outputs.
 /// </summary>
+[Trait("Category", "Slow")]
 public class SimulationIntegrationTests
 {
     private static readonly int[] AllWavelengths =

@@ -198,57 +198,6 @@ public class ComponentSettingsDialogViewModelTests
     }
 
     [Fact]
-    public async Task NazcaGeometryChange_ReResolvesSmatrixKey_RefreshesEntries()
-    {
-        // The bug: the dialog cached the S-matrix key computed when it opened. Overriding
-        // (or resetting) the Nazca geometry changes the component's geometry identity — and
-        // thus the key the S-matrix override is stored under — but the entry list kept showing
-        // the OLD geometry's entries until the window was closed and reopened. The dialog must
-        // re-resolve the key and rebuild the list when the geometry changes.
-        var liveComponent = TestComponentFactory.CreateSimpleTwoPortComponent();
-        liveComponent.Identifier = "comp_1";
-
-        // The underlying geometry has a stored S-matrix override; the raw-code geometry has none.
-        const string geoKey = "geo-key";
-        const string rawKey = "raw-key";
-        var store = MakeStore(geoKey, "1550");
-
-        // Start with an active raw-code override (so the dialog opens on the raw geometry key).
-        var nazcaOverrides = new Dictionary<string, NazcaCodeOverride>
-        {
-            ["comp_1"] = new NazcaCodeOverride { RawCode = "import nazca as nd\ndef component(): ..." },
-        };
-        // Resolver mirrors ComponentGeometryKey: raw override present ⇒ raw key, else geometry key.
-        string Resolver() =>
-            nazcaOverrides.TryGetValue("comp_1", out var o) && o.RawCode != null ? rawKey : geoKey;
-
-        var vm = NewVm();
-        vm.Configure(
-            entityKey: "comp_1",
-            smatrixKey: Resolver(),
-            displayName: "My Component",
-            storedSMatrices: store,
-            liveComponent: liveComponent,
-            storedNazcaOverrides: nazcaOverrides,
-            templateFunctionName: "ebeam_crossing4",
-            templateFunctionParameters: "",
-            templateModuleName: "siepic_ebeam_pdk",
-            nazcaTemplateCode: "def component(): pass",
-            smatrixKeyResolver: Resolver);
-
-        // On open the raw geometry has no stored S-matrix, so nothing is shown.
-        vm.HasSMatrices.ShouldBeFalse();
-        vm.NazcaCodeEditor.ShouldNotBeNull();
-
-        // Reset to template clears the raw override → geometry identity reverts to the geo key.
-        await vm.NazcaCodeEditor!.ResetToTemplateCommand.ExecuteAsync(null);
-
-        // The dialog must now reflect the geo geometry's stored override without a reopen.
-        vm.HasSMatrices.ShouldBeTrue();
-        vm.SMatrixEntries.Count.ShouldBe(1);
-    }
-
-    [Fact]
     public void LoadFromFile_UserCancels_NoMutationNoCrash()
     {
         // FileDialogService returns null when the user cancels — the command must exit

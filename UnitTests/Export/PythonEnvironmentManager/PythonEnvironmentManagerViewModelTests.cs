@@ -135,11 +135,13 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         var registry = CreateRegistry();
         var env = MakeEnv("gf-env");
         env.GdsFactoryVersion = "9.34.2";
+        env.CspdkVersion = "1.4.4";
         registry.AddOrUpdate(env);
 
         var reloaded = new PythonEnvironmentRegistry(_tempRegistryFile);
 
         reloaded.GetAll().Single().GdsFactoryVersion.ShouldBe("9.34.2");
+        reloaded.GetAll().Single().CspdkVersion.ShouldBe("1.4.4");
     }
 
     [Fact]

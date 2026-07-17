@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CAP_Core.Solvers.Fdtd;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -23,14 +24,14 @@ public partial class NewComponentViewModel
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
-        if (_lastPreview is not { Success: true } preview || SelectedProcess is null)
+        if (SelectedProcess is null)
         {
-            StatusText = "Render a preview and select a PDK before computing the S-matrix.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SelectPdkBeforeCompute");
             return;
         }
         if (_fdtd is null)
         {
-            StatusText = "FDTD solver is not configured.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.FdtdNotConfigured");
             return;
         }
 
@@ -38,6 +39,13 @@ public partial class NewComponentViewModel
         _computeCts = new CancellationTokenSource();
         try
         {
+            // Render the geometry ourselves when no preview exists yet, like Save does;
+            // a render failure leaves its reason in StatusText and computes nothing.
+            if (!await EnsurePreviewAsync() || _lastPreview is not { Success: true } preview)
+            {
+                return;
+            }
+
             var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
@@ -52,17 +60,19 @@ public partial class NewComponentViewModel
             if (!result.Success)
             {
                 _computedModel = null;
-                StatusText = result.Error ?? "FDTD solve failed.";
+                StatusText = result.Error ?? LocalizationService.Instance.Translate("NewComp.FdtdSolveFailed");
                 return;
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.SMatrixComputed"),
+                result.Wavelengths.Count, SaveButtonLabel);
         }
         catch (OperationCanceledException)
         {
             _computedModel = null;
-            StatusText = "S-matrix computation cancelled.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SMatrixComputationCancelled");
         }
         finally
         {
@@ -80,25 +90,30 @@ public partial class NewComponentViewModel
         var name = ComponentName?.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            StatusText = "Enter a component name before saving.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.EnterNameBeforeSaving");
             return;
         }
         var pdk = SelectedCustomPdk;
         if (pdk is null)
         {
-            StatusText = "Select a PDK before saving.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SelectPdkBeforeSaving");
             return;
         }
 
         MigratedFromPdkName = null;
+        RenamedAwayComponentName = null;
+        // While a bundled fork is pending, the "original" is the read-only built-in PDK — a save
+        // into a different PDK is a copy-out, never a migration that would remove the original.
         var isMigration = IsEditMode
+            && !HasPendingBundledFork
             && _editOriginalPdkFilePath is not null
             && !PathsEqual(_editOriginalPdkFilePath, pdk.FilePath);
         if (isMigration &&
             !string.Equals(_editOriginalProcessName, SelectedProcess?.Name, StringComparison.OrdinalIgnoreCase))
         {
-            StatusText = $"Cannot move '{name}' to PDK '{pdk.Name}': it uses a different fabrication " +
-                         $"process ('{SelectedProcess?.Name}' vs '{_editOriginalProcessName}').";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.CannotMoveDifferentProcess"),
+                name, pdk.Name, SelectedProcess?.Name, _editOriginalProcessName);
             return;
         }
 
@@ -111,20 +126,48 @@ public partial class NewComponentViewModel
             }
 
             var reference = BuildReference();
-            var sMatrix = _computedModel is null
-                ? FdtdSMatrixToDraftConverter.BlackBox()
-                : FdtdSMatrixToDraftConverter.FromFdtd(_computedModel);
+            // A fresh compute/import wins; otherwise an unchanged-geometry same-PDK edit keeps
+            // the stored matrix verbatim (never silently wiped) provided it still resolves
+            // against the rendered pins. Everything else saves a black box — no invented physics.
+            var keepStored = _computedModel is null
+                && CanKeepLoadedSMatrix
+                && LoadedSMatrixResolvesAgainstPins(preview.Pins.Select(p => p.Name));
+            var sMatrix = _computedModel is not null
+                ? FdtdSMatrixToDraftConverter.FromFdtd(_computedModel)
+                : keepStored
+                    ? _loadedSMatrixDraft
+                    : FdtdSMatrixToDraftConverter.BlackBox();
+            var droppedStoredSMatrix = _computedModel is null && !keepStored && _loadedSMatrixDraft is not null;
             var backend = SelectedBackend == GeometryBackend.GdsFactory ? "gdsfactory" : "nazca";
             var draft = CustomComponentDraftFactory.Build(name, reference, preview, sMatrix, Code, backend);
 
             var isSelfEdit = IsEditMode && !isMigration &&
                 string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase);
-            if (!isSelfEdit && _store.ComponentExistsInFile(pdk.FilePath, name) && !await ConfirmCollision(name, pdk.Name))
+            // The deferred fork-on-save: the target file does not exist until now, so probe
+            // name collisions against the bundled source the fork will be copied from.
+            var executesPendingFork = HasPendingBundledFork
+                && _pendingForkTargetPath is not null
+                && PathsEqual(pdk.FilePath, _pendingForkTargetPath);
+            var collisionProbePath = executesPendingFork ? _pendingForkSourcePath! : pdk.FilePath;
+            if (!isSelfEdit && _store.ComponentExistsInFile(collisionProbePath, name) && !await ConfirmCollision(name, pdk.Name))
             {
                 return;
             }
+            if (executesPendingFork)
+            {
+                _store.ForkBundledPdk(_pendingForkSourcePath!, pdk.Name);
+            }
             SavedFilePath = _store.AppendToExistingPdk(pdk.FilePath, draft);
             SavedDraft = draft;
+            // Only a save that actually executed the deferred fork may shadow the bundled
+            // PDK in the library — a mere name match must not.
+            SavedViaPendingBundledFork = executesPendingFork;
+            if (executesPendingFork)
+            {
+                // From here on this session edits the user's copy directly.
+                _pendingForkSourcePath = null;
+                _pendingForkTargetPath = null;
+            }
 
             if (isMigration && TryRemoveFromOriginalPdk(_editingOriginalName ?? name))
             {
@@ -135,18 +178,40 @@ public partial class NewComponentViewModel
                 _editOriginalProcessName = SelectedProcess?.Name;
                 _editingOriginalName = name;
             }
+            else if (!isMigration && IsEditMode && _editingOriginalName is not null
+                     && !string.Equals(name, _editingOriginalName, StringComparison.OrdinalIgnoreCase))
+            {
+                // Same-PDK rename: AppendToExistingPdk keyed on the NEW name, so the old-named
+                // entry would orphan in the file (and library) without this removal.
+                TryRemoveRenamedOriginal(pdk.FilePath, _editingOriginalName);
+                RenamedAwayComponentName = _editingOriginalName;
+                _editingOriginalName = name;
+            }
 
             // A migration whose removal threw already set an explanatory StatusText (the component
             // now lives in both PDKs) — don't overwrite it with a plain save-success message.
             if (!isMigration || MigratedFromPdkName != null)
             {
+                var dropNote = droppedStoredSMatrix
+                    ? LocalizationService.Instance.Translate("NewComp.DroppedSMatrixNote")
+                    : "";
                 StatusText = MigratedFromPdkName != null
-                    ? $"Moved '{name}' to PDK '{pdk.Name}'."
-                    : _computedModel is null
-                        ? $"Saved without simulation model (black box). {StatusText}".Trim()
-                        : "Saved with FDTD S-matrix.";
+                    ? string.Format(LocalizationService.Instance.Translate("NewComp.Moved"), name, pdk.Name, dropNote)
+                    : _computedModel is not null
+                        ? LocalizationService.Instance.Translate("NewComp.SavedWithFdtd")
+                        : sMatrix is not null
+                            ? LocalizationService.Instance.Translate("NewComp.SavedKeptStored")
+                            : string.Format(
+                                LocalizationService.Instance.Translate("NewComp.SavedBlackBox"), dropNote, StatusText).Trim();
             }
             Saved?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            // Without this catch the AsyncRelayCommand swallows the fault and Save looks like it
+            // did nothing — e.g. when the fork file was trashed underneath an open editor.
+            StatusText = string.Format(LocalizationService.Instance.Translate("NewComp.SaveFailed"), ex.Message);
+            _errorConsole?.LogError($"Saving component '{name}' to PDK '{pdk.Name}' failed: {ex.Message}", ex);
         }
         finally
         {
@@ -167,9 +232,23 @@ public partial class NewComponentViewModel
         }
         catch (Exception ex)
         {
-            StatusText = $"Saved to '{SelectedCustomPdk?.Name}', but could not remove the original " +
-                         $"copy from '{_editOriginalPdkName}': {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.SavedButOriginalRemoveFailed"),
+                SelectedCustomPdk?.Name, _editOriginalPdkName, ex.Message);
             return false;
+        }
+    }
+
+    private void TryRemoveRenamedOriginal(string filePath, string originalName)
+    {
+        try
+        {
+            _store.RemoveComponent(filePath, originalName);
+        }
+        catch (Exception ex)
+        {
+            _errorConsole?.LogError(
+                $"Renamed component saved, but removing the old entry '{originalName}' failed: {ex.Message}", ex);
         }
     }
 
@@ -177,12 +256,13 @@ public partial class NewComponentViewModel
     {
         if (ConfirmOverwrite is null)
         {
-            StatusText = $"'{componentName}' already exists in '{targetName}'.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.AlreadyExists"), componentName, targetName);
             return false;
         }
         if (!await ConfirmOverwrite(componentName, targetName))
         {
-            StatusText = "Save cancelled.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SaveCancelled");
             return false;
         }
         return true;

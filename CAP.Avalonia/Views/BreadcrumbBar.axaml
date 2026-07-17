@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="clr-namespace:CAP.Avalonia.ViewModels.Canvas"
              xmlns:core="clr-namespace:CAP_Core.Components.Core;assembly=CAP-Core"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.BreadcrumbBar"
              x:DataType="vm:DesignCanvasViewModel">
 
@@ -12,21 +13,21 @@
           IsVisible="{Binding IsInGroupEditMode}">
     <StackPanel Orientation="Horizontal" Spacing="5">
       <!-- Exit to Root button -->
-      <Button Content="⬅ Exit"
+      <Button Content="{loc:Localize Breadcrumb.Exit}"
               Background="#3d3d3d"
               Foreground="LightBlue"
               Padding="8,4"
-              ToolTip.Tip="Exit to root level (Esc)"
+              ToolTip.Tip="{loc:Localize Breadcrumb.ExitTip}"
               Command="{Binding $parent[UserControl].((vm:DesignCanvasViewModel)DataContext).ExitToRootCommand}" />
 
       <TextBlock Text="📁" VerticalAlignment="Center" Foreground="LightGray" />
 
       <!-- Root breadcrumb -->
-      <Button Content="Root"
+      <Button Content="{loc:Localize Breadcrumb.Root}"
               Background="Transparent"
               Foreground="LightGray"
               Padding="5,2"
-              ToolTip.Tip="Return to root level"
+              ToolTip.Tip="{loc:Localize Breadcrumb.RootTip}"
               Command="{Binding $parent[UserControl].((vm:DesignCanvasViewModel)DataContext).NavigateToBreadcrumbLevelCommand}"
               CommandParameter="{x:Null}" />
 
@@ -56,7 +57,7 @@
       </ItemsControl>
 
       <!-- Current edit indicator -->
-      <TextBlock Text="(editing)"
+      <TextBlock Text="{loc:Localize Breadcrumb.Editing}"
                  VerticalAlignment="Center"
                  Foreground="Orange"
                  FontStyle="Italic"

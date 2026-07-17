@@ -4,6 +4,7 @@ using CAP_Core.Components.Core;
 using CAP_Core.Routing;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Diagnostics;
@@ -68,7 +69,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
         if (_canvas == null || IsAnalyzing) return;
 
         IsAnalyzing = true;
-        StatusText = "Analyzing routes...";
+        StatusText = LocalizationService.Instance.Translate("Diag.Routing.Analyzing");
         ResultText = "";
         ExportedJsonPath = "";
 
@@ -80,7 +81,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
 
             if (TotalConnections == 0)
             {
-                StatusText = "No connections to analyze";
+                StatusText = LocalizationService.Instance.Translate("Diag.Routing.NoConnectionsAnalyze");
                 ValidConnections = 0;
                 IssueCount = 0;
                 return;
@@ -113,12 +114,13 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
             ValidConnections = valid;
             IssueCount = totalIssues;
             ResultText = sb.ToString();
-            StatusText = $"Done: {valid}/{TotalConnections} valid, {totalIssues} issues";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Diag.Routing.DoneFormat"), valid, TotalConnections, totalIssues);
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Routing diagnostics failed: {ex.Message}", ex);
-            StatusText = $"Analysis failed: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.AnalysisFailedFormat"), ex.Message);
         }
         finally
         {
@@ -163,7 +165,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
     {
         if (_canvas == null)
         {
-            StatusText = "No connections to export";
+            StatusText = LocalizationService.Instance.Translate("Diag.Routing.NoConnectionsExport");
             return;
         }
 
@@ -173,7 +175,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
 
             if (paths.Count == 0)
             {
-                StatusText = "No connections to export";
+                StatusText = LocalizationService.Instance.Translate("Diag.Routing.NoConnectionsExport");
                 return;
             }
 
@@ -190,18 +192,20 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
 
             if (filePath == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Diag.Routing.ExportCancelled");
                 return;
             }
 
             await File.WriteAllTextAsync(filePath, json);
             ExportedJsonPath = filePath;
-            StatusText = $"Exported {paths.Count} paths to {Path.GetFileName(filePath)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Diag.Routing.ExportedFormat"),
+                paths.Count, Path.GetFileName(filePath));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Failed to export routing paths: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.Routing.ExportFailedFormat"), ex.Message);
         }
     }
 
@@ -220,7 +224,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
     {
         if (_canvas == null)
         {
-            StatusText = "No connections to copy";
+            StatusText = LocalizationService.Instance.Translate("Diag.Routing.NoConnectionsCopy");
             return;
         }
 
@@ -230,7 +234,7 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
 
             if (paths.Count == 0)
             {
-                StatusText = "No connections to copy";
+                StatusText = LocalizationService.Instance.Translate("Diag.Routing.NoConnectionsCopy");
                 return;
             }
 
@@ -240,17 +244,18 @@ public partial class RoutingDiagnosticsViewModel : ObservableObject
             if (CopyToClipboard != null)
             {
                 await CopyToClipboard(json);
-                StatusText = $"Copied {paths.Count} paths to clipboard";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Diag.Routing.CopiedFormat"), paths.Count);
             }
             else
             {
-                StatusText = "Clipboard not available";
+                StatusText = LocalizationService.Instance.Translate("Diag.ClipboardUnavailable");
             }
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Failed to copy routing paths to clipboard: {ex.Message}", ex);
-            StatusText = $"Copy failed: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.Routing.CopyFailedFormat"), ex.Message);
         }
     }
 

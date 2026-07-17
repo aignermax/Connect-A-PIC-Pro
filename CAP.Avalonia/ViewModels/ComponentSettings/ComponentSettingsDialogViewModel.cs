@@ -5,13 +5,12 @@ using CAP_Core.LightCalculation;
 using CAP_DataAccess.Import;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Notifications;
-using CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using NazcaCodeOverride = CAP_DataAccess.Persistence.PIR.NazcaCodeOverride;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
 
@@ -26,7 +25,6 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private Dictionary<string, ComponentSMatrixData>? _storedSMatrices;
     private Component? _liveComponent;
     private string _smatrixKey = string.Empty;
-    private Func<string>? _smatrixKeyResolver;
     private string _displayName = string.Empty;
     private Action? _onChanged;
     private bool _isUserGlobalScope;
@@ -35,12 +33,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private IReadOnlyList<string>? _availablePinNames;
     private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
 
-    public InstanceNazcaOverrideViewModel? NazcaOverride { get; private set; }
-
-    public InstanceNazcaCodeEditorViewModel? NazcaCodeEditor { get; private set; }
-
     [ObservableProperty]
-    private string _title = "Component Settings";
+    private string _title = LocalizationService.Instance.Translate("CompSettings.DefaultTitle");
 
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -93,21 +87,10 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Dictionary<int, SMatrix>? effectiveSMatrices = null,
         IReadOnlyList<Pin>? effectivePins = null,
         IReadOnlyList<string>? availablePinNames = null,
-        Dictionary<string, NazcaCodeOverride>? storedNazcaOverrides = null,
-        string? templateFunctionName = null,
-        string? templateFunctionParameters = null,
-        string? templateModuleName = null,
-        NazcaComponentPreviewService? nazcaPreviewService = null,
-        string? nazcaTemplateCode = null,
-        Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null,
-        Action? nazcaDimensionsChanged = null,
-        Action<IReadOnlyList<PhysicalPin>>? nazcaPinsChanged = null,
         Func<string>? smatrixKeyResolver = null,
-        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
-        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
     {
         _smatrixKey = smatrixKey;
-        _smatrixKeyResolver = smatrixKeyResolver;
         _propagateToTemplate = propagateToTemplate;
         _displayName = displayName;
         _storedSMatrices = storedSMatrices;
@@ -118,62 +101,15 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _effectivePins = effectivePins;
         _availablePinNames = availablePinNames;
         Title = isUserGlobalScope
-            ? $"Component Settings: {displayName} (applies to all projects)"
-            : $"Component Settings: {displayName}";
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.TitleGlobal"), displayName)
+            : string.Format(LocalizationService.Instance.Translate("CompSettings.TitleScoped"), displayName);
         StatusText = string.Empty;
-
-        if (liveComponent != null && storedNazcaOverrides != null && templateFunctionName != null)
-        {
-            NazcaOverride = new InstanceNazcaOverrideViewModel(
-                entityKey,
-                storedNazcaOverrides,
-                liveComponent,
-                templateFunctionName,
-                templateFunctionParameters ?? string.Empty,
-                templateModuleName,
-                OnNazcaGeometryChanged);
-        }
-        else
-        {
-            NazcaOverride = null;
-        }
-        OnPropertyChanged(nameof(NazcaOverride));
-
-        if (liveComponent != null && storedNazcaOverrides != null && nazcaTemplateCode != null)
-        {
-            NazcaCodeEditor = new InstanceNazcaCodeEditorViewModel(
-                entityKey,
-                storedNazcaOverrides,
-                liveComponent,
-                templateModuleName,
-                templateFunctionName ?? string.Empty,
-                templateFunctionParameters,
-                nazcaTemplateCode,
-                nazcaPreviewService,
-                nazcaOverlapCheck,
-                nazcaDimensionsChanged,
-                OnNazcaGeometryChanged,
-                nazcaPinsChanged,
-                gdsFactoryPreviewService);
-        }
-        else
-        {
-            NazcaCodeEditor = null;
-        }
-        OnPropertyChanged(nameof(NazcaCodeEditor));
 
         SolverStatus = string.Empty;
         RefreshEntries(notifyChanged: false);
         RefreshEffectiveEntries();
         OnPropertyChanged(nameof(CanRecalculate));
         RecalculateSMatrixCommand.NotifyCanExecuteChanged();
-    }
-
-    private void OnNazcaGeometryChanged()
-    {
-        if (_smatrixKeyResolver != null)
-            _smatrixKey = _smatrixKeyResolver();
-        RefreshEntries(notifyChanged: true);
     }
 
     [RelayCommand]
@@ -183,7 +119,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
             return;
 
         var path = await _fileDialogService.ShowOpenFileDialogAsync(
-            "Select S-Parameter File",
+            LocalizationService.Instance.Translate("CompSettings.SelectSParamFileTitle"),
             "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
 
         if (path == null)
@@ -192,12 +128,13 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         var importer = FindImporter(path);
         if (importer == null)
         {
-            StatusText = $"Unsupported file type: {Path.GetExtension(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("CompSettings.UnsupportedFileType"), Path.GetExtension(path));
             return;
         }
 
         IsImporting = true;
-        StatusText = "Importing…";
+        StatusText = LocalizationService.Instance.Translate("CompSettings.Importing");
 
         try
         {
@@ -219,7 +156,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         catch (Exception ex)
         {
             _errorConsole?.LogError($"S-parameter import failed for '{path}'", ex);
-            StatusText = $"Import failed: {ex.Message}" + (_errorConsole != null ? " (see Error Console)" : "");
+            StatusText = string.Format(LocalizationService.Instance.Translate("CompSettings.ImportFailed"), ex.Message)
+                + (_errorConsole != null ? LocalizationService.Instance.Translate("CompSettings.SeeErrorConsoleSuffix") : "");
         }
         finally
         {
@@ -241,7 +179,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         if (_liveComponent != null && int.TryParse(entry.WavelengthKey, out int wavelengthNm))
             _liveComponent.WaveLengthToSMatrixMap.Remove(wavelengthNm);
 
-        StatusText = $"Removed wavelength {entry.WavelengthKey} nm. Reload design to restore PDK default.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("CompSettings.RemovedWavelength"), entry.WavelengthKey);
         RefreshEntries(notifyChanged: true);
     }
 }

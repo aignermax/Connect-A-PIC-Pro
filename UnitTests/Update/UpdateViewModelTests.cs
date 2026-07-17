@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Update;
@@ -14,6 +15,13 @@ namespace UnitTests.Update;
 /// </summary>
 public class UpdateViewModelTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public UpdateViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private const string NewerReleaseJson = """
         {
           "tag_name": "v99.0.0",

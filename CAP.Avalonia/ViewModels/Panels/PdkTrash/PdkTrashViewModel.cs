@@ -1,5 +1,6 @@
 using System;
 using System.Collections.ObjectModel;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -40,7 +41,7 @@ public partial class PdkTrashViewModel : ObservableObject
     private void Open()
     {
         Refresh();
-        StatusText = HasEntries ? "" : "Trash is empty.";
+        StatusText = HasEntries ? "" : LocalizationService.Instance.Translate("PdkTrash.Empty");
         IsOpen = true;
     }
 
@@ -55,13 +56,21 @@ public partial class PdkTrashViewModel : ObservableObject
             var result = _trash.Restore(item.Entry);
             OnRestored?.Invoke(result);
             StatusText = result.Kind == PdkTrashKind.DeletedPdk
-                ? $"Restored '{result.PdkName}'."
-                : $"Restored {result.RestoredComponents.Count} component(s) to '{result.PdkName}'.";
+                ? string.Format(
+                    LocalizationService.Instance.Translate("PdkTrash.Status.RestoredPdk"), result.PdkName)
+                : result.RestoredComponents.Count == 1
+                    ? string.Format(
+                        LocalizationService.Instance.Translate("PdkTrash.Status.RestoredComponent"),
+                        result.RestoredComponents[0].Name, result.PdkName)
+                    : string.Format(
+                        LocalizationService.Instance.Translate("PdkTrash.Status.RestoredComponents"),
+                        result.RestoredComponents.Count, result.PdkName);
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Restore from trash failed: {ex.Message}", ex);
-            StatusText = $"Restore failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkTrash.Status.RestoreFailed"), ex.Message);
         }
         Refresh();
     }

@@ -10,7 +10,6 @@ using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Services;
-using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
@@ -82,25 +81,12 @@ public partial class CanvasInteractionViewModel : ObservableObject
     public Action? ClearComponentTemplateSelection { get; set; }
 
     /// <summary>
-    /// Callback invoked when the user requests "Component Settings…" from the canvas context menu.
-    /// Wired by <c>MainWindow.axaml.cs</c> to open the component settings dialog.
+    /// Callback for "Edit Component…" from the canvas context menu. Wired by
+    /// <c>MainWindow.axaml.cs</c> to the unified "Edit Component" editor when the component's
+    /// PDK template is resolvable and editable, falling back to the per-instance
+    /// <c>ComponentSettingsDialog</c> otherwise (ComponentGroups, template-less instances).
     /// </summary>
     public Action<ComponentViewModel>? OpenComponentSettings { get; set; }
-
-    /// <summary>
-    /// Callback invoked after a paste with the source→copy identifier map, so the host can
-    /// carry identifier-keyed per-instance state (e.g. Nazca raw-code overrides) onto the copies.
-    /// Wired by <c>MainViewModel</c> to propagate <c>StoredNazcaOverrides</c>.
-    /// </summary>
-    public Action<IReadOnlyDictionary<string, string>>? OnComponentsPasted { get; set; }
-
-    /// <summary>
-    /// Per-instance raw-code override store manual placement seeds into (issue rawcode
-    /// authoring). Wired by <c>MainViewModel</c> to <c>FileOperations.StoredNazcaOverrides</c>
-    /// so placing a raw-code template creates the override the raw-code preview/export path
-    /// reads, without any export-path changes. Null in tests that don't need placement seeding.
-    /// </summary>
-    public IDictionary<string, NazcaCodeOverride>? NazcaOverrideStore { get; set; }
 
     /// <summary>
     /// Callback invoked when the user probes an element in Probe mode (issue #691):
@@ -379,7 +365,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
         double centeredX = x - SelectedTemplate.WidthMicrometers / 2;
         double centeredY = y - SelectedTemplate.HeightMicrometers / 2;
 
-        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY, NazcaOverrideStore);
+        var cmd = PlaceComponentCommand.TryCreate(_canvas, SelectedTemplate, centeredX, centeredY);
         if (cmd == null)
         {
             UpdateStatus?.Invoke("No space available on chip for this component");
@@ -734,26 +720,31 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         var selection = _canvas.Selection;
 
-        if (selection.HasMultipleSelected)
+        // The selection set is authoritative (box selection populates only the set);
+        // fall back to the primary SelectedComponent when the set is empty.
+        var targets = selection.SelectedComponents.ToList();
+        if (targets.Count == 0 && SelectedComponent != null)
+            targets.Add(SelectedComponent);
+
+        var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
+        if (deletable.Count == 0)
         {
-            int count = selection.SelectedComponents.Count;
-            var cmd = new GroupDeleteCommand(_canvas, selection.SelectedComponents.ToList());
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted {count} components");
+            if (targets.Count > 0)
+                UpdateStatus?.Invoke("Selection is locked — unlock elements to delete them");
             return;
         }
 
-        if (SelectedComponent != null)
-        {
-            var name = SelectedComponent.Name;
-            var cmd = new DeleteComponentCommand(_canvas, SelectedComponent);
-            _commandManager.ExecuteCommand(cmd);
-            selection.ClearSelection();
-            SelectedComponent = null;
-            UpdateStatus?.Invoke($"Deleted: {name}");
-        }
+        // One batch command for a multi-selection, so a single undo restores everything.
+        IUndoableCommand cmd = deletable.Count == 1
+            ? new DeleteComponentCommand(_canvas, deletable[0])
+            : new GroupDeleteCommand(_canvas, deletable);
+        _commandManager.ExecuteCommand(cmd);
+
+        selection.ClearSelection();
+        SelectedComponent = null;
+        UpdateStatus?.Invoke(deletable.Count == 1
+            ? $"Deleted: {deletable[0].Name}"
+            : $"Deleted {deletable.Count} components");
     }
 
     [RelayCommand]
@@ -797,9 +788,6 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         if (cmd.Result != null)
         {
-            // Carry identifier-keyed state (Nazca overrides) onto the copies before they render.
-            OnComponentsPasted?.Invoke(cmd.Result.IdentifierMap);
-
             _canvas.Selection.ClearSelection();
             foreach (var comp in cmd.Result.Components)
             {
@@ -989,8 +977,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Opens the Component Settings dialog for the currently selected canvas component.
-    /// Only enabled when exactly one component is selected.
+    /// Opens the unified "Edit Component" editor for the currently selected canvas component's
+    /// PDK template, or the per-instance Component Settings dialog when no editable template
+    /// resolves (e.g. ComponentGroups). Only enabled when a component is selected.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanOpenSelectedComponentSettings))]
     private void OpenSelectedComponentSettings()

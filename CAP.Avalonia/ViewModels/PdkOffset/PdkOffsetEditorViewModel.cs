@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Avalonia.Threading;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -48,7 +49,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     // of the most recent successful render without rerunning the Python helper.
     private NazcaPreviewResult? _lastNazcaResult;
 
-    [ObservableProperty] private string _statusText = "Load a PDK file to begin.";
+    [ObservableProperty]
+    private string _statusText = LocalizationService.Instance.Translate("PdkOffset.Status.LoadToBegin");
 
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AutoCalibrateCommand))]
@@ -230,7 +232,7 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     {
         if (FileDialogService == null)
         {
-            StatusText = "File dialog service not available.";
+            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.NoFileDialog");
             return;
         }
 
@@ -246,7 +248,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Failed to load PDK: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.LoadFailed"), ex.Message);
         }
     }
 
@@ -259,13 +262,14 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     {
         if (SelectedComponent == null)
         {
-            StatusText = "Select a component before applying an offset.";
+            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.SelectComponentFirst");
             return;
         }
 
         if (!double.IsFinite(OffsetX) || !double.IsFinite(OffsetY))
         {
-            StatusText = $"Offset values must be finite numbers (got X={OffsetX}, Y={OffsetY}).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.OffsetNotFinite"), OffsetX, OffsetY);
             return;
         }
 
@@ -278,7 +282,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         RefreshPinPositions(SelectedComponent.Draft);
         RefreshCanvasMarkers(SelectedComponent.Draft);
         HasUnsavedChanges = true;
-        StatusText = $"Offset updated for '{SelectedComponent.ComponentName}'. Click Save to persist.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.OffsetUpdated"), SelectedComponent.ComponentName);
     }
 
     /// <summary>Saves the current PDK draft back to its source JSON file.</summary>
@@ -287,7 +292,7 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     {
         if (_loadedPdk == null || string.IsNullOrEmpty(_loadedFilePath))
         {
-            StatusText = "No PDK loaded — nothing to save.";
+            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.NothingToSave");
             return;
         }
 
@@ -295,11 +300,13 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         {
             _pdkSaver.SaveToFile(_loadedPdk, _loadedFilePath);
             HasUnsavedChanges = false;
-            StatusText = $"Saved to {Path.GetFileName(_loadedFilePath)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.SavedTo"), Path.GetFileName(_loadedFilePath));
         }
         catch (Exception ex)
         {
-            StatusText = $"Save failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.SaveFailed"), ex.Message);
         }
     }
 
@@ -309,7 +316,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
 
         if (string.IsNullOrEmpty(value.FilePath))
         {
-            StatusText = $"'{value.Name}' has no file path available for editing.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.NoFilePath"), value.Name);
             return;
         }
 
@@ -319,7 +327,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Failed to load PDK: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.LoadFailed"), ex.Message);
         }
     }
 
@@ -342,8 +351,8 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
 
         if (value.Status == OffsetStatus.Missing)
         {
-            StatusText = $"'{value.ComponentName}' has no offset in the JSON. Entering 0 and " +
-                         "clicking Apply will record it as calibrated-to-zero.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.NoOffsetInJson"), value.ComponentName);
         }
 
         // Reset overlay state for new component
@@ -387,8 +396,9 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
 
         var missing = Components.Count(c => c.Status == OffsetStatus.Missing);
         var zero   = Components.Count(c => c.Status == OffsetStatus.ZeroOffset);
-        StatusText = $"Loaded {_loadedPdk.Name}: {Components.Count} components " +
-                     $"({missing} missing offset, {zero} at zero).";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.LoadedPdk"),
+            _loadedPdk.Name, Components.Count, missing, zero);
         SelectedComponent = null;
         // Components.Count is not an ObservableProperty — manually nudge so the
         // batch buttons re-evaluate CanExecute now that the list has rows.
@@ -427,5 +437,6 @@ public record PinAlignmentInfo(
     bool IsAligned)
 {
     /// <summary>Display-only label — '✓ aligned' or '✗ off' for the per-pin row.</summary>
-    public string AlignedLabel => IsAligned ? "✓ aligned" : "✗ off";
+    public string AlignedLabel => LocalizationService.Instance.Translate(
+        IsAligned ? "PdkOffset.AlignedLabel.Aligned" : "PdkOffset.AlignedLabel.Off");
 }

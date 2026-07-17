@@ -9,6 +9,7 @@ namespace UnitTests.Routing;
 /// <summary>
 /// Tests for 8-direction (45° diagonal) octile routing (Issue #552).
 /// </summary>
+[Trait("Category", "Slow")]
 public class DiagonalRoutingTests
 {
     private const double CellSize = 1.0;

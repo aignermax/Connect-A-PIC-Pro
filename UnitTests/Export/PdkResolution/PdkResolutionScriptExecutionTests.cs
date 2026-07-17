@@ -1,5 +1,6 @@
 using CAP_Core.Export.PdkResolution;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export.PdkResolution;
 
@@ -10,6 +11,7 @@ namespace UnitTests.Export.PdkResolution;
 /// activate-PDK-then-get_component path (issue #515 review). Skips silently when no
 /// cspdk-capable interpreter is present (e.g. CI), like the other script-execution tests.
 /// </summary>
+[Trait("Category", "Slow")]
 public class PdkResolutionScriptExecutionTests
 {
     [SkippableFact]

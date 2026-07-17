@@ -44,69 +44,6 @@ public class GdsFactoryExporterTests
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
 
     [Fact]
-    public void NazcaExport_SkipsGdsFactoryBackendOverride()
-    {
-        // Safety: a gdsfactory-backend override must NOT be emitted into the Nazca script
-        // (its gdsfactory Python would crash the Nazca run); the PDK cell is used instead.
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var store = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "component = gf.components.mmi1x2()",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
-            },
-        };
-
-        var nazca = new CAP.Avalonia.Services.SimpleNazcaExporter().Export(canvas, overrides: store);
-
-        nazca.ShouldNotContain("gf.components.mmi1x2");   // gdsfactory code not in the Nazca script
-    }
-
-    [Fact]
-    public void Export_GdsFactoryBackendOverride_EmittedAsFactory()
-    {
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "component = gf.components.straight(length=12)",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
-            },
-        };
-
-        var script = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells), overrides);
-
-        script.ShouldContain("def override_C1(");
-        script.ShouldContain("component = gf.components.straight(length=12)");
-        script.ShouldContain("c.add_ref(override_C1())");
-        script.ShouldNotContain("gf.get_component('ebeam_y_1550')");  // override replaces the ubcpdk cell
-    }
-
-    [Fact]
-    public void Export_NazcaBackendOverride_IsNotHonoured_AndReportedAsMismatch()
-    {
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "import nazca as nd\ndef component(): ...",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.Nazca,
-            },
-        };
-
-        var script = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells), overrides);
-
-        script.ShouldNotContain("override_C1");                      // Nazca code not emitted
-        script.ShouldContain("gf.get_component('ebeam_y_1550')");    // uses the ubcpdk cell instead
-        GdsFactoryExporter.CollectBackendMismatches(canvas, overrides).ShouldBe(new[] { "C1" });
-    }
-
-    [Fact]
     public void Export_Standalone_HasGdsFactoryHeaderWithoutPdkActivation()
     {
         var script = ExportStandalone(CreateCanvasWithComponent("ebeam_y_1550"));

@@ -40,7 +40,8 @@ public static class MainViewModelTestHelper
         CommandManager? commandManager = null,
         UserPreferencesService? preferencesService = null,
         GroupLibraryManager? libraryManager = null,
-        DesignCanvasViewModel? canvas = null)
+        DesignCanvasViewModel? canvas = null,
+        LeftPanelViewModel? leftPanel = null)
     {
         canvas ??= new DesignCanvasViewModel();
         commandManager ??= new CommandManager();
@@ -52,7 +53,8 @@ public static class MainViewModelTestHelper
         simulationService ??= new SimulationService();
 
         var pdkLoader = new PdkLoader();
-        var leftPanel = CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager);
+        // A caller-supplied LeftPanel (UI-flow tests) must share canvas/prefs with the rest of the VM.
+        leftPanel ??= CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager);
         var rightPanel = CreateRightPanelViewModel(canvas, preferencesService);
         var bottomPanel = CreateBottomPanelViewModel(canvas, commandManager);
 

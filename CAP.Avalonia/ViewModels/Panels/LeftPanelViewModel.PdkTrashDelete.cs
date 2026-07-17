@@ -52,6 +52,11 @@ public partial class LeftPanelViewModel
         if (pdkInfo?.FilePath is null || userPdkStore is null)
             return;
 
+        // On a fork of a bundled PDK, deleting a component that the built-in original also has
+        // means "revert to the foundry truth", not "make the component disappear".
+        if (TryRevertComponentToBundled(pdkInfo, userPdkStore, template))
+            return;
+
         string? result;
         try
         {

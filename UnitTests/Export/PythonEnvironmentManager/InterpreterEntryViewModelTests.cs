@@ -44,6 +44,30 @@ public class InterpreterEntryViewModelTests
     }
 
     [Fact]
+    public void ManagedRow_ShowsCspdkVersion_OrNotInstalled()
+    {
+        // Field bug: a CornerStone component fails in an env without cspdk, but the
+        // interpreter list didn't show whether cspdk was present — now it must.
+        var withCspdk = new PythonEnvironment
+        {
+            Name = "full", VenvPath = "x",
+            PythonVersion = "3.13.5", NazcaVersion = "0.6.1",
+            GdsFactoryVersion = "9.44.0", CspdkVersion = "1.4.4",
+        };
+        var withoutCspdk = new PythonEnvironment
+        {
+            Name = "no-pdk", VenvPath = "x",
+            PythonVersion = "3.13.5", NazcaVersion = "0.6.1",
+            GdsFactoryVersion = "9.44.0", CspdkVersion = null,
+        };
+
+        new InterpreterEntryViewModel(withCspdk, isActive: false)
+            .DisplayText.ShouldContain("cspdk 1.4.4");
+        new InterpreterEntryViewModel(withoutCspdk, isActive: false)
+            .DisplayText.ShouldContain("cspdk not installed");
+    }
+
+    [Fact]
     public void SystemRow_IsNotManaged_AndHasNoBadge()
     {
         var install = new CAP_Core.Export.PythonDiscoveryService.PythonInstallation

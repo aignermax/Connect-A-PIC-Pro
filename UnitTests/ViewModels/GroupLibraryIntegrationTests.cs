@@ -1,5 +1,6 @@
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
@@ -21,6 +22,12 @@ public class GroupLibraryIntegrationTests : IDisposable
 
     public GroupLibraryIntegrationTests()
     {
+        // The library StatusText is localized via LocalizationService.Instance, so pin English
+        // to keep these assertions culture-independent regardless of the CI/dev OS language
+        // (the only test that live-switches the shared instance is isolated in the
+        // "LocalizationSingleton" collection, which disables cross-collection parallelization).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
         _testLibraryPath = Path.Combine(Path.GetTempPath(), $"GroupLibraryIntegTests_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testLibraryPath);
         _libraryManager = new GroupLibraryManager(_testLibraryPath);

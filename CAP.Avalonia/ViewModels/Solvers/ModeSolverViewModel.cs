@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Solvers.ModeSolver;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -118,7 +119,7 @@ public partial class ModeSolverViewModel : ObservableObject
         HasResult   = false;
         HasStderr   = false;
         RawStderr   = "";
-        StatusText  = "Solving…";
+        StatusText  = LocalizationService.Instance.Translate("Solver.Solving");
 
         try
         {
@@ -141,12 +142,14 @@ public partial class ModeSolverViewModel : ObservableObject
                 Modes      = result.Modes;
                 OnPropertyChanged(nameof(Modes));
                 HasResult  = true;
-                StatusText = $"Done — {result.Modes.Count} mode(s) using {result.BackendUsed}.";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Solver.Done"),
+                    result.Modes.Count, result.BackendUsed);
             }
             else
             {
                 HasResult  = false;
-                StatusText = result.Error ?? "Solve failed.";
+                StatusText = result.Error ?? LocalizationService.Instance.Translate("Solver.SolveFailed");
 
                 if (!string.IsNullOrWhiteSpace(result.RawStderr))
                 {
@@ -160,7 +163,7 @@ public partial class ModeSolverViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Cancelled.";
+            StatusText = LocalizationService.Instance.Translate("Solver.Cancelled");
         }
         finally
         {
@@ -179,21 +182,22 @@ public partial class ModeSolverViewModel : ObservableObject
         ModeSolverResult failure, ModeSolverRequest request, CancellationToken ct)
     {
         var progress = new Progress<string>(m => StatusText = m);
-        StatusText = $"Installing {failure.MissingBackend}… (first use can take a few minutes)";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Solver.Installing"), failure.MissingBackend);
         var installed = await EnsureBackendAsync!(failure.MissingBackend!, progress, ct);
         if (!installed)
         {
-            StatusText = $"Auto-install of '{failure.MissingBackend}' did not complete — see "
-                + $"Settings → Python environment for details, or run: pip install {failure.MissingBackend}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Solver.AutoInstallIncomplete"), failure.MissingBackend);
             return null;
         }
 
-        StatusText = "Backend installed — retrying…";
+        StatusText = LocalizationService.Instance.Translate("Solver.BackendInstalledRetrying");
         var retry = await _service.SolveAsync(request, ct);
         if (!retry.Success && retry.MissingBackend == failure.MissingBackend)
         {
-            StatusText = $"Installed '{failure.MissingBackend}' but it is still unavailable — "
-                + "check Settings → Python environment.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Solver.BackendStillUnavailable"), failure.MissingBackend);
             return null;
         }
         return retry;

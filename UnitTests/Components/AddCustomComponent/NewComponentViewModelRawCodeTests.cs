@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -17,6 +18,9 @@ namespace UnitTests.Components.AddCustomComponent;
 
 public class NewComponentViewModelRawCodeTests : IDisposable
 {
+    static NewComponentViewModelRawCodeTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-raw-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()
@@ -122,7 +126,12 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         vm.LoadForEdit(template);
 
         vm.IsEditMode.ShouldBeTrue();
-        vm.Code.ShouldContain("cspdk.sin300.coupler()");
+        // cspdk cells live in the PDK registry, not as module attributes —
+        // "cspdk.sin300.coupler()" raises AttributeError (field bug). The synthesized
+        // code must use the import + activate + gf.get_component pattern instead.
+        vm.Code.ShouldContain("import cspdk.sin300");
+        vm.Code.ShouldContain("cspdk.sin300.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('coupler')");
         vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
     }
 

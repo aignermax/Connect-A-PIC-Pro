@@ -3,6 +3,7 @@ using global::Avalonia.Controls;
 using global::Avalonia.Controls.ApplicationLifetimes;
 using global::Avalonia.Layout;
 using global::Avalonia.Media;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.Services;
 
@@ -70,7 +71,7 @@ public class InputDialogService : IInputDialogService
             var textBox = new TextBox
             {
                 Text = defaultValue,
-                Watermark = "Enter " + label.ToLower(),
+                Watermark = string.Format(LocalizationService.Instance.Translate("Dialog.EnterWatermark"), label.ToLower()),
                 Background = new SolidColorBrush(Color.Parse("#1e1e1e")),
                 Foreground = Brushes.White,
                 BorderBrush = new SolidColorBrush(Color.Parse("#3e3e3e"))
@@ -91,7 +92,7 @@ public class InputDialogService : IInputDialogService
 
         var okButton = new Button
         {
-            Content = "OK",
+            Content = LocalizationService.Instance.Translate("Common.Ok"),
             Width = 80,
             Background = new SolidColorBrush(Color.Parse("#0d6efd")),
             Foreground = Brushes.White
@@ -99,7 +100,7 @@ public class InputDialogService : IInputDialogService
 
         var cancelButton = new Button
         {
-            Content = "Cancel",
+            Content = LocalizationService.Instance.Translate("Common.Cancel"),
             Width = 80,
             Background = new SolidColorBrush(Color.Parse("#3d3d3d")),
             Foreground = Brushes.White

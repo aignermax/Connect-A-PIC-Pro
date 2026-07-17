@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Process;
 using Moq;
 using Shouldly;
@@ -15,6 +16,17 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class MainViewModelProcessTests
 {
+    /// <summary>
+    /// The active-process badge now reads the localized <c>LocalizationService.Instance</c>,
+    /// so these tests pin English to stay culture-independent regardless of the CI/dev OS
+    /// language. The only test that live-switches the shared instance is isolated in the
+    /// "LocalizationSingleton" collection, so it never flips the language concurrently here.
+    /// </summary>
+    public MainViewModelProcessTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void ProcessCatalogProvider_IsWired_AndReturnsAtLeastOneGroup()
     {

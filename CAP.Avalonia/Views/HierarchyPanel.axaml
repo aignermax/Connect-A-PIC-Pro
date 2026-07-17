@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels.Hierarchy"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.HierarchyPanel"
              x:DataType="vm:HierarchyPanelViewModel"
              Background="#1e1e1e">
@@ -12,7 +13,7 @@
                 Padding="8,6"
                 BorderBrush="#3d3d3d"
                 BorderThickness="0,0,0,1">
-            <TextBlock Text="Hierarchy"
+            <TextBlock Text="{loc:Localize Hierarchy.Title}"
                        FontWeight="SemiBold"
                        FontSize="13"
                        Foreground="LightBlue"/>
@@ -21,7 +22,10 @@
         <!-- Tree View -->
         <ScrollViewer HorizontalScrollBarVisibility="Auto"
                       VerticalScrollBarVisibility="Auto">
+            <!-- SelectionMode=Multiple: a canvas box selection highlights ALL selected
+                 nodes; single-selection mode would immediately deselect all but one. -->
             <TreeView ItemsSource="{Binding RootNodes}"
+                      SelectionMode="Multiple"
                       Background="Transparent"
                       Padding="4">
 
@@ -54,8 +58,8 @@
                                 PointerPressed="TreeNode_PointerPressed">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Component Settings…" Command="{Binding OpenSettingsCommand}"/>
-                                    <MenuItem Header="Rename" Command="{Binding StartRenameCommand}"/>
+                                    <MenuItem Header="{loc:Localize Hierarchy.ComponentSettings}" Command="{Binding OpenSettingsCommand}"/>
+                                    <MenuItem Header="{loc:Localize Common.Rename}" Command="{Binding StartRenameCommand}"/>
                                 </ContextMenu>
                             </Border.ContextMenu>
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -100,7 +104,7 @@
                                            VerticalAlignment="Center"
                                            Margin="2,0,0,0"
                                            IsVisible="{Binding HasSMatrixOverride}"
-                                           ToolTip.Tip="Per-instance S-matrix override active"/>
+                                           ToolTip.Tip="{loc:Localize Hierarchy.SMatrixOverrideTip}"/>
 
                                 <!-- Focus Button -->
                                 <Button Content="🎯"
@@ -111,7 +115,7 @@
                                         Background="Transparent"
                                         BorderThickness="0"
                                         FontSize="12"
-                                        ToolTip.Tip="Zoom to component"
+                                        ToolTip.Tip="{loc:Localize Hierarchy.ZoomToComponent}"
                                         Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>

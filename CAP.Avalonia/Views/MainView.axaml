@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:controls="using:CAP.Avalonia.Controls"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.MainView"
              x:DataType="vm:MainViewModel">
 
@@ -15,11 +16,11 @@
             <StackPanel Orientation="Horizontal">
                 <Button Content="+" Command="{Binding ZoomInCommand}" Width="40" Margin="5"/>
                 <Button Content="-" Command="{Binding ZoomOutCommand}" Width="40" Margin="5"/>
-                <Button Content="Reset" Command="{Binding ResetZoomCommand}" Width="60" Margin="5"/>
+                <Button Content="{loc:Localize MainView.ResetZoom}" Command="{Binding ResetZoomCommand}" Width="60" Margin="5"/>
                 <TextBlock Text="{Binding ZoomLevel, StringFormat=Zoom: {0:P0}}"
                            VerticalAlignment="Center" Margin="10,0" Foreground="White"/>
                 <Border Width="1" Background="#555" Margin="5,5"/>
-                <Button Content="Simulate (L)" Command="{Binding RunSimulationCommand}" Width="100" Margin="5"/>
+                <Button Content="{loc:Localize MainView.Simulate}" Command="{Binding RunSimulationCommand}" Width="100" Margin="5"/>
             </StackPanel>
         </ScrollViewer>
 

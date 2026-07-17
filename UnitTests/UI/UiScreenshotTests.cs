@@ -37,6 +37,10 @@ public class UiScreenshotTests
     [AvaloniaFact]
     public void CaptureAllUiScreenshots()
     {
+        // Opt-in: a full headless Avalonia render is heavy enough to destabilise a desktop
+        // session, so this runs only when screenshots are explicitly requested via UI_SHOT_DIR.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UI_SHOT_DIR")))
+            return;
         var outputDir = ResolveOutputDirectory();
         ClearStalePngs(outputDir);
         Directory.CreateDirectory(outputDir);
@@ -183,7 +187,7 @@ public class UiScreenshotTests
             using (bitmap)
             {
                 distinctColors = CountDistinctSampledColors(bitmap);
-                bitmap.Save(path);
+                ScreenshotArtifacts.SavePng(bitmap, path);
             }
 
             captured.Add((path, distinctColors));

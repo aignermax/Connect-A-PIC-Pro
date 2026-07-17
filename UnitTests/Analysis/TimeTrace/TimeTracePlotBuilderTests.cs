@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Analysis.TimeTrace;
 using OxyPlot.Series;
 using Shouldly;
@@ -15,6 +16,16 @@ namespace UnitTests.Analysis.TimeTrace;
 /// </summary>
 public class TimeTracePlotBuilderTests
 {
+    /// <summary>
+    /// Pins the UI language to English so the axis-title assertions ("Time (ps)" /
+    /// "Time (ns)") are locale-independent — the axis title is now localized (#749)
+    /// and would otherwise vary with the runner's OS culture.
+    /// </summary>
+    public TimeTracePlotBuilderTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private static TimeDomainResult MakeResult(
         double[] timeAxis, params (Guid pin, double[] trace)[] traces)
     {

@@ -50,6 +50,7 @@ public static class PdkTemplateConverter
             NazcaOriginOffsetY = nazcaOriginOffsetY,
             RawCode = pdkComp.RawCode,
             RawCodeBackend = pdkComp.RawCodeBackend,
+            SourceDraft = pdkComp,
         };
 
         if (pdkComp.SMatrix?.WavelengthData is { Count: > 0 } wlData)

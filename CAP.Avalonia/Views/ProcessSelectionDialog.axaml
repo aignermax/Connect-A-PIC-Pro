@@ -1,11 +1,12 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vmp="using:CAP.Avalonia.ViewModels.Process"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.ProcessSelectionDialog"
         x:Name="DialogRoot"
         x:DataType="vmp:ProcessSelectionViewModel"
         x:CompileBindings="True"
-        Title="Choose fabrication process"
+        Title="{loc:Localize ProcessSelection.Title}"
         Width="460" Height="420"
         MinWidth="360" MinHeight="300"
         Background="#1e1e1e"
@@ -16,7 +17,7 @@
 
         <!-- Heading -->
         <TextBlock DockPanel.Dock="Top"
-                   Text="Choose fabrication process"
+                   Text="{loc:Localize ProcessSelection.Title}"
                    FontWeight="SemiBold"
                    FontSize="15"
                    Foreground="LightBlue"
@@ -24,7 +25,7 @@
 
         <!-- Explanation -->
         <TextBlock DockPanel.Dock="Top"
-                   Text="A design is locked to one fabrication process — components from incompatible PDKs can't be mixed on the same chip. Choose Playground to prototype freely with any component (not manufacturable)."
+                   Text="{loc:Localize ProcessSelection.Explanation}"
                    Foreground="#bbbbbb"
                    FontSize="11"
                    TextWrapping="Wrap"
@@ -36,13 +37,13 @@
                     HorizontalAlignment="Right"
                     Margin="0,12,0,0"
                     Spacing="8">
-            <Button Content="Cancel"
+            <Button Content="{loc:Localize Common.Cancel}"
                     Click="OnCancelClick"
                     IsCancel="True"
                     Width="80"
                     Background="#3d3d3d"
                     Foreground="White"/>
-            <Button Content="Start design"
+            <Button Content="{loc:Localize ProcessSelection.StartDesign}"
                     Click="OnStartDesignClick"
                     IsEnabled="{Binding CanConfirm}"
                     Width="110"

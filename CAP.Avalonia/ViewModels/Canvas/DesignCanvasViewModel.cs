@@ -61,6 +61,25 @@ public partial class DesignCanvasViewModel : ObservableObject
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
     [ObservableProperty] private ComponentViewModel? _selectedComponent;
+
+    /// <summary>
+    /// Keeps the <see cref="Selection"/> set consistent with the primary selection. Selecting a
+    /// component that is already part of the current multi-selection (e.g. right-clicking one of
+    /// several box-selected components) keeps the set intact.
+    /// </summary>
+    partial void OnSelectedComponentChanged(ComponentViewModel? value)
+    {
+        if (value == null)
+        {
+            // Deselecting the primary must also clear the multi-selection set — otherwise DEL
+            // acts on a stale selection and deletes components that appear deselected.
+            Selection.ClearSelection();
+            return;
+        }
+        if (!Selection.SelectedComponents.Contains(value))
+            Selection.SelectSingle(value);
+    }
+
     [ObservableProperty] private double _panX;
     [ObservableProperty] private double _panY;
     [ObservableProperty] private bool _isRouting;

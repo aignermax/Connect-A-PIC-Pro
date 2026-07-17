@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager;
 
 namespace CAP.Avalonia.ViewModels.Settings;
@@ -7,23 +8,22 @@ namespace CAP.Avalonia.ViewModels.Settings;
 /// Nazca, health-check, repair, remove, set active). Lives in Settings — not the
 /// Properties sidebar — because environments are application-wide configuration.
 /// </summary>
-public class PythonEnvironmentsSettingsPage : ISettingsPage
+public class PythonEnvironmentsSettingsPage : LocalizedSettingsPage
 {
     /// <inheritdoc/>
-    public string Title => "Python Environments";
+    public override string Icon => "📦";
 
     /// <inheritdoc/>
-    public string Icon => "📦";
+    public override string? Category => "Export";
 
     /// <inheritdoc/>
-    public string? Category => "Export";
-
-    /// <inheritdoc/>
-    public object ViewModel { get; }
+    public override object ViewModel { get; }
 
     /// <summary>Initializes a new instance of <see cref="PythonEnvironmentsSettingsPage"/>.</summary>
     /// <param name="viewModel">The shared environment-manager ViewModel from DI.</param>
-    public PythonEnvironmentsSettingsPage(PythonEnvironmentManagerViewModel viewModel)
+    /// <param name="localization">The process-wide localization service.</param>
+    public PythonEnvironmentsSettingsPage(PythonEnvironmentManagerViewModel viewModel, LocalizationService localization)
+        : base("Settings.Section.PythonEnvironments", localization)
     {
         ViewModel = viewModel;
     }
@@ -33,6 +33,6 @@ public class PythonEnvironmentsSettingsPage : ISettingsPage
     /// environments + system Pythons, each with Nazca and gdsfactory versions) is populated
     /// without a manual refresh (issue #645).
     /// </summary>
-    public void OnSelected() =>
+    public override void OnSelected() =>
         ((PythonEnvironmentManagerViewModel)ViewModel).RefreshInterpretersCommand.Execute(null);
 }

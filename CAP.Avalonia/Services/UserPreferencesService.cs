@@ -329,6 +329,21 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Gets the UI language preference: a shipped language code ("en", "de",
+    /// "zh-Hans", "es") or "system" to follow the OS display language (default).
+    /// </summary>
+    public string GetUiLanguage() => _preferences.UiLanguage;
+
+    /// <summary>
+    /// Sets the UI language preference and saves. See <see cref="GetUiLanguage"/> for values.
+    /// </summary>
+    public void SetUiLanguage(string languageCodeOrSystem)
+    {
+        _preferences.UiLanguage = languageCodeOrSystem;
+        Save();
+    }
+
+    /// <summary>
     /// Clears any skipped update version and saves preferences.
     /// </summary>
     public void ClearSkippedUpdateVersion()
@@ -438,4 +453,10 @@ public class UserPreferences
     /// Global interconnect GDS layer. Null = PDK/Nazca default layer.
     /// </summary>
     public int? InterconnectGdsLayer { get; set; }
+
+    /// <summary>
+    /// UI language: a shipped language code ("en", "de", "zh-Hans", "es") or
+    /// "system" (default) to auto-detect the OS display language at startup.
+    /// </summary>
+    public string UiLanguage { get; set; } = "system";
 }

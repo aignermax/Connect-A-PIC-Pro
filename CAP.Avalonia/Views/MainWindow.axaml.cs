@@ -37,6 +37,17 @@ public partial class MainWindow : Window
     /// </summary>
     private readonly System.Collections.Generic.Dictionary<string, ProcessManagementWindow> _openPdkEditWindows = new();
 
+    /// <summary>
+    /// Open "Edit Component" windows keyed by <c>EditOriginalPdkKey + "::" + EditingOriginalName</c>:
+    /// a second ✏ click on the same component activates the existing window instead of opening
+    /// a duplicate. "New Component" sessions are never keyed here, so several blank windows can
+    /// stay open in parallel.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, NewComponentWindow> _openComponentEditWindows = new();
+
+    /// <summary>Open Component Settings dialogs keyed by entity, so a repeat open activates the existing one.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, ComponentSettingsDialog> _openComponentSettingsDialogs = new();
+
     public MainWindow()
     {
         InitializeComponent();
@@ -92,59 +103,54 @@ public partial class MainWindow : Window
                 // iterating on the design while it stays open.
                 vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
                 {
-                    // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the
-                    // view model only knows the file's already-read contents (PickPyFile's
-                    // contract), never a path, so it can't own a FileDialogService itself.
-                    newComponentVm.PickPyFile = async () =>
+                    // By the time this hook runs, LoadForEdit was already applied — IsEditMode
+                    // and the edit-identity fields are set, so the dedup key can be built here.
+                    var editKey = newComponentVm.IsEditMode && newComponentVm.EditOriginalPdkKey is not null
+                        && newComponentVm.EditingOriginalName is not null
+                        ? $"{newComponentVm.EditOriginalPdkKey}::{newComponentVm.EditingOriginalName}"
+                        : null;
+                    if (editKey is not null
+                        && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
+                        && existingComponentWindow.IsVisible)
                     {
-                        var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
-                            "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
-                        return path is null ? null : await File.ReadAllTextAsync(path);
-                    };
-                    newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
-                        "Load S-Parameter File",
-                        "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
-                    newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
-                    {
-                        var template = vm.LeftPanel.AllTemplates
-                            .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
-                        ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+                        // The existing window may hold an outdated snapshot (file changed on
+                        // disk since it opened) — saving from it would overwrite the newer
+                        // state. If the user has no unsaved input, adopt the freshly loaded
+                        // view model WHOLESALE (a field-by-field copy would lose the edit
+                        // bookkeeping); otherwise only activate — input is never thrown away.
+                        if (existingComponentWindow.DataContext is NewComponentViewModel existingVm
+                            && !existingVm.HasUnsavedEditChanges)
+                        {
+                            WireNewComponentEditorHooks(newComponentVm, existingComponentWindow, vm);
+                            existingComponentWindow.DataContext = newComponentVm;
+                        }
+                        // Un-minimize first: Activate() alone leaves a minimized window
+                        // minimized, which looks like the ✏ button silently did nothing.
+                        existingComponentWindow.WindowState = WindowState.Normal;
+                        existingComponentWindow.Activate();
                         return System.Threading.Tasks.Task.CompletedTask;
-                    };
-                    // Confirm before overwriting an existing component name in the target PDK
-                    // (new or existing custom PDK — the message names whichever applies).
-                    newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
-                    {
-                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
-                            $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
-                            "Overwrite?", new[] { "Cancel", "Overwrite" });
-                        return choice == 1;
-                    };
-                    // "New PDK…" sentinel modal creation hook (#723/#727 follow-up, CP-T4): opens
-                    // the purpose-built CreateCustomPdkWindow — not the general Fabrication
-                    // Process editor — so creating a brand-new named PDK is a small, focused
-                    // dialog instead of the full view/edit-existing-process tool. Modal
-                    // (ShowDialog, owner = the New Component window itself) so its PDK dropdown
-                    // cannot be left mid-selection while the modal is open.
-                    var window = new NewComponentWindow { DataContext = newComponentVm };
-                    // Save closes the window; closing the window (via Save, the titlebar X, or
-                    // Alt+F4) always cancels any Meep compute still running so it doesn't keep
-                    // burning CPU/Docker resources after the user has moved on.
-                    newComponentVm.Saved += (_, _) => window.Close();
-                    window.Closing += (_, _) => newComponentVm.CancelCompute();
-                    newComponentVm.CreateNewPdk = async () =>
-                    {
-                        // Shared dialog wiring (see ShowCreateCustomPdkDialogAsync) — it also
-                        // registers the new (possibly component-less) PDK into the library, so
-                        // cancelling the component afterwards no longer leaves the PDK invisible
-                        // until the next restart (PR #739 review).
-                        var createdPath = await ShowCreateCustomPdkDialogAsync(window);
-                        if (createdPath is null)
-                            return null;
+                    }
 
-                        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
-                        return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
-                    };
+                    var window = new NewComponentWindow();
+                    WireNewComponentEditorHooks(newComponentVm, window, vm);
+                    window.DataContext = newComponentVm;
+                    // Closing the window (via Save, the titlebar X, or Alt+F4) always cancels
+                    // any Meep compute still running so it doesn't keep burning CPU/Docker
+                    // resources after the user has moved on. Wired against the CURRENT
+                    // DataContext because the dedup above may swap in a fresh view model.
+                    window.Closing += (_, _) => (window.DataContext as NewComponentViewModel)?.CancelCompute();
+                    if (editKey is not null)
+                    {
+                        _openComponentEditWindows[editKey] = window;
+                        // Only remove the entry if it still points at THIS window: if the key
+                        // was ever re-assigned to a newer window, the older window's Closed
+                        // handler must not deregister the newer one.
+                        window.Closed += (_, _) =>
+                        {
+                            if (_openComponentEditWindows.TryGetValue(editKey, out var tracked) && ReferenceEquals(tracked, window))
+                                _openComponentEditWindows.Remove(editKey);
+                        };
+                    }
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
                 };
@@ -230,25 +236,12 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Wire up Component Settings dialog for hierarchy nodes
+                // Both component context-menu entry points share one routing — see
+                // OpenComponentEditorOrSettings.
                 vm.LeftPanel.HierarchyPanel.OpenComponentSettings = node =>
-                {
-                    ShowComponentSettingsDialog(
-                        node.Component.Identifier,
-                        node.Component.HumanReadableName ?? node.Component.Identifier,
-                        node.Component,
-                        vm);
-                };
-
-                // Wire up Component Settings dialog for canvas context menu
+                    OpenComponentEditorOrSettings(node.ComponentViewModel, node.Component, vm);
                 vm.CanvasInteraction.OpenComponentSettings = compVm =>
-                {
-                    ShowComponentSettingsDialog(
-                        compVm.Component.Identifier,
-                        compVm.Component.HumanReadableName ?? compVm.Component.Identifier,
-                        compVm.Component,
-                        vm);
-                };
+                    OpenComponentEditorOrSettings(compVm, compVm.Component, vm);
 
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
@@ -670,12 +663,19 @@ public partial class MainWindow : Window
         if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanDeleteTemplate(template))
             return;
 
+        // On a fork of a bundled PDK, a component the built-in original also has is not
+        // deleted but reverted to the foundry definition.
+        var isRevertToBundled = vm.LeftPanel.IsComponentRevertToBundled(template);
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{template.Name}' and restore the built-in original?\n\n"
+              + "A full backup of your customized PDK file is saved to user-pdks/.trash first. "
+              + "Placed instances on the canvas are kept."
+            : $"Move component '{template.Name}' to trash?\n\n"
+              + "The PDK file is rewritten without this component; a full pre-edit backup "
+              + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
+              + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.";
         var choice = await new MessageBoxService().ShowChoicePromptAsync(
-            $"Move component '{template.Name}' to trash?\n\n"
-            + "The PDK file is rewritten without this component; a full pre-edit backup "
-            + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
-            + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.",
-            "Delete Component?", new[] { "Cancel", "Move to Trash" });
+            prompt, "Delete Component?", new[] { "Cancel", isRevertToBundled ? "Restore Original" : "Move to Trash" });
         if (choice != 1)
             return;
 
@@ -821,15 +821,36 @@ public partial class MainWindow : Window
         // relocate it into a hidden app-data folder (PR #739 review), so that path only
         // deregisters and leaves the file untouched.
         var isManaged = userPdkStore.IsInManagedRoot(pdk.FilePath);
-        var prompt = isManaged
-            ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
-              + "The file is moved to user-pdks/.trash and can be restored manually."
-            : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
-              + $"The file stays untouched at:\n{pdk.FilePath}";
+        // A fork of a bundled PDK "reverts to the foundry truth" instead: the user's copy is
+        // removed and the read-only built-in original reappears in the library.
+        var bundledCount = pdk.ShadowsBundledPdk
+            ? vm.LeftPanel.GetBundledOriginalComponentCount(pdk.Name)
+            : null;
+        var isRevertToBundled = bundledCount is not null;
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{pdk.Name}' and restore the built-in original (its {bundledCount} components)?\n\n"
+              + (isManaged
+                  ? "Your copy is moved to the trash."
+                  : $"Your file stays untouched at:\n{pdk.FilePath}")
+            : isManaged
+                ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+                  + "The file is moved to user-pdks/.trash and can be restored manually."
+                : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
+                  + $"The file stays untouched at:\n{pdk.FilePath}";
+        var confirmLabel = isRevertToBundled ? "Restore Original" : isManaged ? "Move to Trash" : "Remove";
         var choice = await new MessageBoxService().ShowChoicePromptAsync(
-            prompt, "Delete PDK?", new[] { "Cancel", isManaged ? "Move to Trash" : "Remove" });
+            prompt, "Delete PDK?", new[] { "Cancel", confirmLabel });
         if (choice != 1)
             return;
+
+        if (isRevertToBundled && isManaged)
+        {
+            // The revert is all-or-nothing: a false here means nothing was changed —
+            // tell the user instead of closing as if it worked.
+            if (!vm.LeftPanel.RevertShadowForkToBundled(pdk))
+                await ShowRestoreOriginalFailedAsync(pdk.Name);
+            return;
+        }
 
         if (isManaged)
         {
@@ -845,6 +866,68 @@ public partial class MainWindow : Window
         }
 
         vm.LeftPanel.UnregisterPdk(pdk.FilePath);
+        if (isRevertToBundled && !vm.LeftPanel.RestoreBundledPdk(pdk.Name))
+            await ShowRestoreOriginalFailedAsync(pdk.Name);
+    }
+
+    private static async Task ShowRestoreOriginalFailedAsync(string pdkName)
+    {
+        await new MessageBoxService().ShowChoicePromptAsync(
+            $"Could not restore the built-in original of '{pdkName}'.\n\n"
+            + "See the Error Console for details.",
+            "Restore failed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Wires one <see cref="NewComponentViewModel"/> to the window that hosts it. Runs both for
+    /// a brand-new editor window and when the editor dedup swaps a freshly loaded view model
+    /// into an already-open window, so the two paths can never drift apart.
+    /// </summary>
+    private void WireNewComponentEditorHooks(NewComponentViewModel newComponentVm, NewComponentWindow window, MainViewModel vm)
+    {
+        // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the view model
+        // only knows the file's already-read contents (PickPyFile's contract), never a path,
+        // so it can't own a FileDialogService itself.
+        newComponentVm.PickPyFile = async () =>
+        {
+            var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
+                "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
+            return path is null ? null : await File.ReadAllTextAsync(path);
+        };
+        newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
+            "Load S-Parameter File",
+            "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
+        newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
+        {
+            var template = vm.LeftPanel.AllTemplates
+                .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
+            ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+            return System.Threading.Tasks.Task.CompletedTask;
+        };
+        // Confirm before overwriting an existing component name in the target PDK
+        // (new or existing custom PDK — the message names whichever applies).
+        newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
+        {
+            var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
+                "Overwrite?", new[] { "Cancel", "Overwrite" });
+            return choice == 1;
+        };
+        newComponentVm.Saved += (_, _) => window.Close();
+        // "New PDK…" opens the purpose-built CreateCustomPdkWindow, not the general Fabrication
+        // Process editor. Modal with the New Component window as owner, so its PDK dropdown
+        // cannot be left mid-selection while the modal is open.
+        newComponentVm.CreateNewPdk = async () =>
+        {
+            // ShowCreateCustomPdkDialogAsync also registers the new (possibly component-less)
+            // PDK, so cancelling the component afterwards doesn't leave the PDK invisible.
+            var createdPath = await ShowCreateCustomPdkDialogAsync(window);
+            if (createdPath is null)
+                return null;
+
+            var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+            return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+        };
     }
 
     /// <summary>
@@ -893,7 +976,14 @@ public partial class MainWindow : Window
                 new NazcaCsvProcessImporter(),
             }, new PdkJsonSaver());
 
-        var createVm = new CreateCustomPdkViewModel(userPdkStore, availableProcesses, processDefinitionEditor);
+        // Loaded bundled PDK names are reserved: a user PDK under such a name would be taken
+        // for a fork of the built-in PDK and shadow it.
+        var reservedBundledNames = vm.LeftPanel.PdkManager.LoadedPdks
+            .Where(p => p.IsBundled || p.ShadowsBundledPdk)
+            .Select(p => p.Name)
+            .ToList();
+        var createVm = new CreateCustomPdkViewModel(
+            userPdkStore, availableProcesses, processDefinitionEditor, reservedBundledNames);
         var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
 
         string? createdPath = null;
@@ -919,6 +1009,37 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Shared routing for both component context-menu entry points (canvas and hierarchy):
+    /// an editable PDK template opens the unified "Edit Component" editor via the same command
+    /// as the library's ✏ button, so fork-on-edit and window dedup apply automatically;
+    /// otherwise (ComponentGroups, template-less legacy instances) falls back to the
+    /// per-instance Component Settings dialog instead of a misleading error.
+    /// </summary>
+    private void OpenComponentEditorOrSettings(
+        CAP.Avalonia.ViewModels.Canvas.ComponentViewModel? compVm,
+        CAP_Core.Components.Core.Component component,
+        MainViewModel vm)
+    {
+        var template = compVm is null
+            ? null
+            : CanvasComponentTemplateResolver.ResolveEditable(
+                compVm, vm.LeftPanel.AllTemplates,
+                vm.CanvasInteraction.ResolveComponentPdkSource,
+                vm.LeftPanel.CanEditTemplate);
+        if (template is not null)
+        {
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
+            return;
+        }
+
+        ShowComponentSettingsDialog(
+            component.Identifier,
+            component.HumanReadableName ?? component.Identifier,
+            component,
+            vm);
+    }
+
+    /// <summary>
     /// Creates and shows the Component Settings dialog for the given entity.
     ///
     /// Per-Instance mode (<paramref name="liveComponent"/> non-null): the dialog
@@ -939,6 +1060,12 @@ public partial class MainWindow : Window
         MainViewModel vm,
         ComponentTemplate? templateForDefaults = null)
     {
+        if (_openComponentSettingsDialogs.TryGetValue(entityKey, out var existingDialog))
+        {
+            existingDialog.Activate();
+            return;
+        }
+
         var errorConsole = App.Services.GetService(typeof(CAP_Core.ErrorConsoleService))
             as CAP_Core.ErrorConsoleService;
         var userStore = App.Services.GetService(typeof(UserSMatrixOverrideStore))
@@ -953,10 +1080,15 @@ public partial class MainWindow : Window
             as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
         var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
+        // gdsfactory-native components carry only a synthesized "nazca_<name>" placeholder as
+        // their Nazca function, so the factory needs both renderers.
+        var gdsFactoryGeometryService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
+            as CAP_Core.Export.GdsFactoryComponentPreviewService;
         Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
         if (fdtdService != null && previewService != null)
         {
-            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(previewService);
+            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(
+                previewService, gdsFactoryGeometryService);
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
@@ -1028,79 +1160,20 @@ public partial class MainWindow : Window
                 .ToList();
         }
 
-        // Resolve Nazca template values for per-instance mode.
-        // When no override is stored yet, the live component's current values ARE the template values.
-        // When an override was applied from a previous session, use the saved template reference
-        // from within the stored override record so "Reset to template" always targets the
-        // correct PDK defaults rather than the already-overridden live values.
-        string? templateFunctionName = null;
-        string? templateFunctionParameters = null;
-        string? templateModuleName = null;
-        if (liveComponent != null)
-        {
-            if (vm.FileOperations.StoredNazcaOverrides.TryGetValue(entityKey, out var existingNazca))
-            {
-                templateFunctionName = existingNazca.TemplateFunctionName ?? liveComponent.NazcaFunctionName;
-                templateFunctionParameters = existingNazca.TemplateFunctionParameters ?? liveComponent.NazcaFunctionParameters;
-                templateModuleName = existingNazca.TemplateModuleName ?? liveComponent.NazcaModuleName;
-            }
-            else
-            {
-                templateFunctionName = liveComponent.NazcaFunctionName;
-                templateFunctionParameters = liveComponent.NazcaFunctionParameters;
-                templateModuleName = liveComponent.NazcaModuleName;
-            }
-        }
+        string? templateFunctionName = liveComponent?.NazcaFunctionName;
+        string? templateFunctionParameters = liveComponent?.NazcaFunctionParameters;
+        string? templateModuleName = liveComponent?.NazcaModuleName;
 
-        // Per-instance raw Nazca code editor (issue #556) — only in per-instance mode.
-        var nazcaPreviewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
-            as CAP_Core.Export.NazcaComponentPreviewService;
-        var gdsFactoryPreviewService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
-            as CAP_Core.Export.GdsFactoryComponentPreviewService;
-        string? nazcaTemplateCode = null;
-        Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null;
-        Action? nazcaDimensionsChanged = null;
-        Action<IReadOnlyList<CAP_Core.Components.Core.PhysicalPin>>? nazcaPinsChanged = null;
-        if (liveComponent != null && !isTemplateMode)
-        {
-            nazcaTemplateCode = NazcaCodeTemplateBuilder.Build(
-                templateModuleName, templateFunctionName, templateFunctionParameters);
-            nazcaOverlapCheck = (w, h) => FindOverlappingComponentNames(vm, liveComponent, w, h);
-            nazcaDimensionsChanged = () =>
-            {
-                var compVm = vm.Canvas.Components.FirstOrDefault(c => c.Component == liveComponent);
-                compVm?.NotifyDimensionsChanged();
-                // Repaint the canvas immediately so the resized footprint shows on Apply.
-                DesignCanvasControl.InvalidateVisual();
-            };
-            nazcaPinsChanged = _ =>
-            {
-                // Issue #561: Connections auf die neuen Override-Pins umhaengen bzw.
-                // mit Warnung trennen, Pin-VMs auffrischen, Routen + Simulation neu.
-                var warnings = vm.Canvas.OnComponentPinsChanged(liveComponent);
-                foreach (var warning in warnings)
-                    errorConsole?.LogWarning(warning);
-                DesignCanvasControl.InvalidateVisual();
-            };
-        }
-
-        // S-matrix overrides (FDTD recompute / file import) are stored under the
-        // component's geometry identity so a copy inherits them; the per-instance
-        // Nazca raw-code override keeps using entityKey (component.Identifier).
-        // The library/template path has no live component and keeps the {PdkSource}::{Name} key.
-        // Resolve lazily so the dialog can re-derive the key after a Nazca geometry override
-        // (raw code / parameters) changes the identity mid-session.
+        // S-matrix overrides (FDTD recompute / file import) are stored under the component's
+        // geometry identity so a copy inherits them; the library/template path keys on entityKey.
         Func<string> smatrixKeyResolver = liveComponent != null
-            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(
-                liveComponent,
-                c => vm.FileOperations.StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null)
+            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(liveComponent)
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
-        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
-        // the user-global template override — but only while the instance geometry
-        // still matches the template draft (no Nazca override active). Everything
-        // is checked at invoke time so mid-session geometry edits are honoured.
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to the
+        // user-global template override — but only while the instance geometry still matches
+        // the template draft.
         Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
         if (liveComponent != null && userStore != null)
         {
@@ -1108,13 +1181,10 @@ public partial class MainWindow : Window
             {
                 var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
                 if (templateKey == null)
-                    return false; // no matching PDK template (e.g. user group)
+                    return false;
 
-                vm.FileOperations.StoredNazcaOverrides
-                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
                 if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
-                        liveComponent, nazcaOverride,
-                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                        liveComponent, templateModuleName, templateFunctionName, templateFunctionParameters))
                     return false;
 
                 userStore.Overrides[templateKey] = data;
@@ -1137,20 +1207,12 @@ public partial class MainWindow : Window
             effectiveSMatrices: effectiveSMatrices,
             effectivePins: effectivePins,
             availablePinNames: availablePinNames,
-            storedNazcaOverrides: isTemplateMode ? null : vm.FileOperations.StoredNazcaOverrides,
-            templateFunctionName: templateFunctionName,
-            templateFunctionParameters: templateFunctionParameters,
-            templateModuleName: templateModuleName,
-            nazcaPreviewService: nazcaPreviewService,
-            nazcaTemplateCode: nazcaTemplateCode,
-            nazcaOverlapCheck: nazcaOverlapCheck,
-            nazcaDimensionsChanged: nazcaDimensionsChanged,
-            nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
-            propagateToTemplate: propagateToTemplate,
-            gdsFactoryPreviewService: gdsFactoryPreviewService);
+            propagateToTemplate: propagateToTemplate);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
+        _openComponentSettingsDialogs[entityKey] = dialog;
+        dialog.Closed += (_, _) => _openComponentSettingsDialogs.Remove(entityKey);
         dialog.Show(this);
     }
 

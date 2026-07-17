@@ -25,6 +25,8 @@ public class Issue582FdtdCoverageScreenshotTests
     [AvaloniaFact]
     public async Task CaptureFdtdCoverageWalkthrough()
     {
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UI_SHOT_DIR")))
+            return; // opt-in: heavy headless render, only on explicit request (see UiScreenshotTests)
         var outputDir = ResolveOutputDirectory();
         Directory.CreateDirectory(outputDir);
 
@@ -106,9 +108,10 @@ public class Issue582FdtdCoverageScreenshotTests
         Dispatcher.UIThread.RunJobs();
 
         bitmap.ShouldNotBeNull($"render miss for {Path.GetFileName(path)}");
+        byte[] bytes;
         using (bitmap)
-            bitmap!.Save(path);
-        new FileInfo(path).Length.ShouldBeGreaterThan(0);
+            bytes = ScreenshotArtifacts.SavePng(bitmap!, path);
+        bytes.Length.ShouldBeGreaterThan(0);
     }
 
     private static void WriteManifest(string outputDir)
@@ -120,7 +123,7 @@ public class Issue582FdtdCoverageScreenshotTests
           {"file": "03-full-coverage.png", "caption": "Fixed recompute sweeps the component's own wavelengths: every row is FDTD-overridden and no stale warning appears."}
         ]
         """;
-        File.WriteAllText(Path.Combine(outputDir, "manifest.json"), manifest);
+        ScreenshotArtifacts.WriteText(Path.Combine(outputDir, "manifest.json"), manifest);
     }
 
     /// <summary>Repo-root <c>artifacts/ui-screenshots/issue-582</c> (or <c>UI_SHOT_DIR/issue-582</c>).</summary>

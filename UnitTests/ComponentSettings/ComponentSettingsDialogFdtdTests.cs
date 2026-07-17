@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
@@ -17,6 +18,10 @@ namespace UnitTests.ComponentSettings;
 /// </summary>
 public class ComponentSettingsDialogFdtdTests
 {
+    // Status strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+    public ComponentSettingsDialogFdtdTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private static Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>> FakeFactory() =>
         (_, _) => Task.FromResult<FdtdSMatrixRequest?>(new FdtdSMatrixRequest
         {
@@ -241,6 +246,54 @@ public class ComponentSettingsDialogFdtdTests
         await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
 
         propagateCalled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenGeometryExportThrows_ShowsTheActionableMessage_AndStoresNothing()
+    {
+        // The request factory throws with a user-actionable message (e.g. missing cspdk).
+        // The dialog must show that message — not a generic dead-end — and must not solve.
+        const string factoryMessage =
+            "The foundry package 'cspdk' is not installed in the active Python environment — " +
+            "open Settings → Python Environments and re-run Install to add it.";
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        var store = new Dictionary<string, ComponentSMatrixData>();
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: (_, _) => throw new InvalidOperationException(factoryMessage));
+        vm.Configure("comp", "comp", "Comp", store,
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldBe(factoryMessage);
+        store.ShouldBeEmpty();
+        vm.IsComputing.ShouldBeFalse();
+        service.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenFactoryReturnsNull_ShowsActionableStatus_NotAGenericDeadEnd()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: (_, _) => Task.FromResult<FdtdSMatrixRequest?>(null));
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("Could not export this component's geometry");
+        vm.SolverStatus.ShouldContain("Settings → Python Environments"); // where to go next
     }
 
     [Fact]

@@ -9,6 +9,7 @@ namespace UnitTests.Export;
 /// Integration tests for Python configuration.
 /// Tests Core (GdsExportService, PythonDiscoveryService) + ViewModel (GdsExportViewModel) integration.
 /// </summary>
+[Trait("Category", "Slow")]
 public class PythonConfigurationIntegrationTests
 {
     [Fact]

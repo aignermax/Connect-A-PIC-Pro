@@ -14,6 +14,7 @@ namespace UnitTests.Routing;
 /// <summary>
 /// Tests for HPA* hierarchical pathfinding, sector graph, and distance transform.
 /// </summary>
+[Trait("Category", "Slow")]
 public class HierarchicalPathfinderTests
 {
     [Fact]

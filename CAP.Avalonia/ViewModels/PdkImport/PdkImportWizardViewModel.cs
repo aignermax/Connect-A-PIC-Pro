@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Export;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.ViewModels.PdkImport;
 
@@ -58,7 +59,7 @@ public partial class PdkImportWizardViewModel : ObservableObject
 
     /// <summary>Status text shown during parsing and saving operations.</summary>
     [ObservableProperty]
-    private string _statusText = "Initializing...";
+    private string _statusText = LocalizationService.Instance.Translate("PdkImport.StatusInitializing");
 
     /// <summary>Error text shown when parsing or saving fails.</summary>
     [ObservableProperty]
@@ -126,7 +127,7 @@ public partial class PdkImportWizardViewModel : ObservableObject
         ErrorText = "";
         CurrentStep = WizardStep.Parsing;
         ParsedComponents.Clear();
-        StatusText = "Starting parser...";
+        StatusText = LocalizationService.Instance.Translate("PdkImport.StatusStartingParser");
 
         try
         {
@@ -141,8 +142,12 @@ public partial class PdkImportWizardViewModel : ObservableObject
 
             var warningCount = ParsedComponents.Count(c => c.HasWarnings);
             StatusText = warningCount > 0
-                ? $"Parsed {ParsedComponents.Count} component(s) — {warningCount} with warnings."
-                : $"Parsed {ParsedComponents.Count} component(s) successfully.";
+                ? string.Format(
+                    LocalizationService.Instance.Translate("PdkImport.StatusParsedWithWarnings"),
+                    ParsedComponents.Count, warningCount)
+                : string.Format(
+                    LocalizationService.Instance.Translate("PdkImport.StatusParsedSuccess"),
+                    ParsedComponents.Count);
 
             CurrentStep = WizardStep.Review;
         }
@@ -150,7 +155,7 @@ public partial class PdkImportWizardViewModel : ObservableObject
         {
             ErrorText = ex.Message;
             HasError = true;
-            StatusText = "Parsing failed. See error details below.";
+            StatusText = LocalizationService.Instance.Translate("PdkImport.StatusParsingFailed");
         }
         finally
         {
@@ -201,23 +206,23 @@ public partial class PdkImportWizardViewModel : ObservableObject
     {
         if (_parseResult == null)
         {
-            StatusText = "Parsing hasn't finished yet.";
+            StatusText = LocalizationService.Instance.Translate("PdkImport.StatusParsingNotFinished");
             return;
         }
         if (string.IsNullOrWhiteSpace(OutputPath))
         {
-            StatusText = "Choose an output path first.";
+            StatusText = LocalizationService.Instance.Translate("PdkImport.StatusChooseOutputPath");
             return;
         }
         if (!ParsedComponents.Any(c => c.IsSelected))
         {
-            StatusText = "Select at least one component before saving.";
+            StatusText = LocalizationService.Instance.Translate("PdkImport.StatusSelectComponent");
             return;
         }
 
         IsLoading = true;
         HasError = false;
-        StatusText = "Saving JSON...";
+        StatusText = LocalizationService.Instance.Translate("PdkImport.StatusSavingJson");
 
         try
         {
@@ -227,14 +232,16 @@ public partial class PdkImportWizardViewModel : ObservableObject
             var draft = _importService.ConvertToPdkDraft(filteredResult);
             await _importService.SaveToJsonAsync(draft, OutputPath);
 
-            StatusText = $"Saved {draft.Components.Count} component(s) to {Path.GetFileName(OutputPath)}.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkImport.StatusSaved"),
+                draft.Components.Count, Path.GetFileName(OutputPath));
             OnCompleted?.Invoke(OutputPath);
         }
         catch (Exception ex)
         {
             ErrorText = ex.Message;
             HasError = true;
-            StatusText = "Save failed. See error details below.";
+            StatusText = LocalizationService.Instance.Translate("PdkImport.StatusSaveFailed");
         }
         finally
         {

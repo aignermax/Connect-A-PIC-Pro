@@ -118,8 +118,10 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public async Task EditCustomComponent_forBundledTemplate_forksIntoUserStore_andOpensEditor()
+    public async Task EditCustomComponent_forBundledTemplate_opensEditorWithoutForking_untilSave()
     {
+        // Fork-on-save semantics: just LOOKING at a bundled component (✏ click) must leave the
+        // disk untouched — only "Save changes" creates the user copy of the PDK.
         var userStore = CreateUserPdkStore();
         var vm = CreateLeftPanelViewModel(userStore);
 
@@ -133,8 +135,28 @@ public class LibraryEditActionTests : IDisposable
         await vm.EditCustomComponentCommand.ExecuteAsync(template);
 
         showCalls.ShouldBe(1);
-        userStore.NamedPdkExists(bundledName).ShouldBeTrue();
+        userStore.NamedPdkExists(bundledName).ShouldBeFalse(
+            "opening the editor must not fork the bundled PDK — only saving does");
         File.Exists(bundledPath).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task EditCustomComponent_whenLoadForEditFails_opensNoWindow()
+    {
+        // A template whose PDK is registered (so CanEditTemplate
+        // passes) but has no matching entry in the user PDK store makes LoadForEdit fail —
+        // that must NOT leave a half-initialized "New Component" window on screen.
+        var userStore = CreateUserPdkStore(); // empty store: no custom PDK to edit into
+        var vm = CreateLeftPanelViewModel(userStore);
+        vm.PdkManager.RegisterPdk("Ghost Pdk", "/tmp/ghost.json", isBundled: false, componentCount: 1);
+        var template = new ComponentTemplate { Name = "X", PdkSource = "Ghost Pdk" };
+
+        var showCalls = 0;
+        vm.ShowNewComponentWindowAsync = _ => { showCalls++; return Task.CompletedTask; };
+
+        await vm.EditCustomComponentCommand.ExecuteAsync(template);
+
+        showCalls.ShouldBe(0, "LoadForEdit failed, so no editor window may open");
     }
 
     [Fact]

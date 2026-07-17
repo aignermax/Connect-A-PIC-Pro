@@ -155,6 +155,70 @@ public sealed class PdkTrashServiceTests : IDisposable
     }
 
     [Fact]
+    public void SequentialRemovals_ListEntries_OnePerComponent_RestoringOneDoesNotCascade()
+    {
+        var path = SeedPdk("My Lib", "A", "B", "C");
+        _store.RemoveComponent(path, "A");
+        _store.RemoveComponent(path, "B");
+        _store.RemoveComponent(path, "C");
+
+        var entries = _trash.ListEntries();
+
+        entries.Count.ShouldBe(3, "one entry per removed component, not one per backup file");
+        entries.ShouldAllBe(e => e.Kind == PdkTrashKind.RemovedComponents);
+        entries.ShouldAllBe(e => e.RestorableComponentNames.Count == 1,
+            "each entry must name exactly the one component it restores");
+        entries.SelectMany(e => e.RestorableComponentNames).ShouldBe(new[] { "A", "B", "C" }, ignoreOrder: true);
+
+        var entryA = entries.Single(e => e.RestorableComponentNames[0] == "A");
+        _trash.Restore(entryA);
+
+        new PdkLoader().LoadFromFileForEditing(path).Components.Select(c => c.Name)
+            .ShouldBe(new[] { "A" }, "restoring A must not cascade-restore B or C");
+
+        var remaining = _trash.ListEntries();
+        remaining.SelectMany(e => e.RestorableComponentNames).ShouldBe(new[] { "B", "C" }, ignoreOrder: true,
+            "B and C must still be listed and restorable after restoring A");
+    }
+
+    [Fact]
+    public void ListEntries_PicksNewestBackupByFilenameTimestamp_NotByFileMtime()
+    {
+        // After a git checkout/sync the trash files' mtimes are
+        // rewritten, so the newest-backup-per-component dedup must rank by the DeletedAt
+        // timestamp encoded in the file NAME (with the "-N" same-second collision counter as
+        // tiebreaker), never by File.GetLastWriteTimeUtc.
+        var path = SeedPdk("My Lib", "A", "B");
+        _store.RemoveComponent(path, "A"); // backup 1: full pre-delete snapshot (A, B)
+        _store.RemoveComponent(path, "B"); // backup 2: snapshot (B) — the delete that removed B
+
+        var byFilenameRank = Directory.GetFiles(_trash.TrashDirectory, "*.json")
+            .OrderBy(FilenameRank).ToArray();
+        byFilenameRank.Length.ShouldBe(2);
+        var oldest = byFilenameRank[0];
+        var newest = byFilenameRank[1];
+
+        // Scramble mtimes the way a fresh checkout can: the OLDER backup looks newer on disk.
+        File.SetLastWriteTimeUtc(oldest, DateTime.UtcNow.AddHours(1));
+        File.SetLastWriteTimeUtc(newest, DateTime.UtcNow.AddHours(-1));
+
+        var entryB = _trash.ListEntries().Single(e => e.RestorableComponentNames.SequenceEqual(new[] { "B" }));
+        entryB.TrashFilePath.ShouldBe(newest, "B was removed by the second delete, whose backup is the newest by filename");
+
+        var entryA = _trash.ListEntries().Single(e => e.RestorableComponentNames.SequenceEqual(new[] { "A" }));
+        entryA.TrashFilePath.ShouldBe(oldest, "A was removed by the first delete");
+    }
+
+    /// <summary>Rank a trash file by the timestamp + collision counter encoded in its name.</summary>
+    private static (string Timestamp, int Counter) FilenameRank(string path)
+    {
+        var match = System.Text.RegularExpressions.Regex.Match(
+            Path.GetFileNameWithoutExtension(path), @"-(\d{8}-\d{6})(?:-(\d+))?$");
+        match.Success.ShouldBeTrue($"unexpected trash file name: {path}");
+        return (match.Groups[1].Value, match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : 0);
+    }
+
+    [Fact]
     public void PurgeExpired_DeletesEntriesOlderThanRetention_KeepsRecentOnes()
     {
         var path = SeedPdk("My Lib", "A");
