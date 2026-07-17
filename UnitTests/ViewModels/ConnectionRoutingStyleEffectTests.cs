@@ -60,8 +60,10 @@ public class ConnectionRoutingStyleEffectTests
         connVm.Connection.Type.ShouldBe(style);
         connVm.Connection.IsRouteFrozen.ShouldBeTrue();
 
+        // The styled route uses the connection's OWN radius (its model default) — the
+        // InterconnectSettings export defaults are deliberately not stamped onto it.
         var expected = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, style, InterconnectSettings.DefaultBendRadiusMicrometers);
+            startPin, endPin, style, connVm.Connection.BendRadiusMicrometers);
 
         var actual = connVm.Connection.RoutedPath;
         actual.ShouldNotBeNull();
@@ -103,10 +105,11 @@ public class ConnectionRoutingStyleEffectTests
 
         var routingVm = new ConnectionRoutingViewModel(canvas);
         routingVm.SelectedConnection = connVm;
+        var originalRadius = connVm!.Connection.BendRadiusMicrometers;
 
         routingVm.SelectedStyle = WaveguideType.SBend;
         await canvas.RecalculateRoutesAsync();
-        connVm!.Connection.IsRouteFrozen.ShouldBeTrue();
+        connVm.Connection.IsRouteFrozen.ShouldBeTrue();
 
         // Back to Auto: the frozen styled route must be released and re-routed automatically.
         routingVm.SelectedStyle = WaveguideType.Auto;
@@ -114,6 +117,12 @@ public class ConnectionRoutingStyleEffectTests
 
         connVm.Connection.Type.ShouldBe(WaveguideType.Auto);
         connVm.Connection.IsRouteFrozen.ShouldBeFalse();
+
+        // Regression: styling must not stamp the 50 µm interconnect EXPORT default onto the
+        // connection — that fed the A* router's minimum bend radius after returning to Auto
+        // and produced unusably wide, overlapping routes.
+        connVm.Connection.BendRadiusMicrometers.ShouldBe(originalRadius,
+            "switching styles must not change the connection's own bend radius");
         connVm.Connection.RoutedPath.ShouldNotBeNull();
 
         // The automatic route arrives AT the end pin, unlike the styled Straight/SBend primitive.

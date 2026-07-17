@@ -283,7 +283,7 @@ public class DesignCanvas : Control
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),
-            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual),
+            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new HoverHighlightGestureRecognizer(_interactionState, InvalidateVisual),
         ];
     }

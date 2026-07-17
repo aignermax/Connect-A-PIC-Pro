@@ -1,6 +1,5 @@
 using System.Collections.ObjectModel;
 using CAP_Core.Components.Connections;
-using CAP_Core.Routing.InterconnectRouting;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CAP.Avalonia.ViewModels.Canvas;
@@ -73,12 +72,10 @@ public partial class ConnectionRoutingViewModel : ObservableObject
             // Back to automatic, collision-avoiding A* routing.
             conn.IsRouteFrozen = false;
         }
-        else
-        {
-            // Radius/width come automatically from the interconnect defaults — no manual UI.
-            conn.WidthMicrometers = InterconnectSettings.DefaultWidthMicrometers;
-            conn.BendRadiusMicrometers = InterconnectSettings.DefaultBendRadiusMicrometers;
-        }
+        // Width/radius stay the connection's own values (its model defaults) — no manual UI.
+        // Deliberately NOT stamped with the InterconnectSettings export defaults: their 50 µm
+        // bend radius is a Nazca header constant, and writing it onto the connection made the
+        // A* route unusably wide after switching back to Auto (it feeds the router's minimum).
 
         // Drop the current route so the style change takes effect immediately: incremental
         // routing keeps any route whose endpoints still match, so the stale path would otherwise
