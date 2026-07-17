@@ -39,18 +39,16 @@ public class AiService : IAiService
 
     /// <summary>
     /// Appends a directive to answer in the active UI language onto the base system
-    /// prompt. English is the no-op default; other shipped languages map to their
-    /// English name so the model replies in the same language as the interface.
+    /// prompt. The language name is read from the shipped-language registry
+    /// (<see cref="SupportedLanguage.All"/>), so adding a language there is enough —
+    /// there is no second list to keep in sync here. Unknown codes fall back to English.
     /// </summary>
     private static string BuildSystemPrompt()
     {
-        var language = LocalizationService.Instance.ActiveLanguageCode switch
-        {
-            "de" => "German",
-            "es" => "Spanish",
-            "zh-Hans" => "Chinese",
-            _ => "English"
-        };
+        var active = LocalizationService.Instance.ActiveLanguageCode;
+        var language = SupportedLanguage.All
+            .FirstOrDefault(l => string.Equals(l.Code, active, StringComparison.OrdinalIgnoreCase))
+            ?.EnglishName ?? SupportedLanguage.English.EnglishName;
         return $"{SystemPrompt} Always respond in {language}.";
     }
 
