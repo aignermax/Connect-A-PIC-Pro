@@ -4,27 +4,20 @@ namespace CAP.Avalonia.ViewModels.Settings;
 
 /// <summary>
 /// Settings page hosting the UI language picker (System / English / Deutsch /
-/// 中文 / Español). The page title is read at construction; pages are transient,
-/// so a re-opened Settings window shows the sidebar in the newly chosen language.
+/// 中文 / Español). The nav title updates live when the language is switched.
 /// </summary>
-public class LanguageSettingsPage : ISettingsPage
+public class LanguageSettingsPage : LocalizedSettingsPage
 {
     /// <inheritdoc/>
-    public string Title { get; }
+    public override string Icon => "🌐";
 
     /// <inheritdoc/>
-    public string Icon => "🌐";
-
-    /// <inheritdoc/>
-    public string? Category => null;
-
-    /// <inheritdoc/>
-    public object ViewModel { get; }
+    public override object ViewModel { get; }
 
     /// <summary>Initializes a new instance of <see cref="LanguageSettingsPage"/>.</summary>
     public LanguageSettingsPage(LanguageSettingsViewModel viewModel, LocalizationService localization)
+        : base("Settings.Language.PageTitle", localization)
     {
         ViewModel = viewModel;
-        Title = localization.Translate("Settings.Language.PageTitle");
     }
 }

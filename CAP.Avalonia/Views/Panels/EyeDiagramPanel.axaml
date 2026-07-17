@@ -3,6 +3,7 @@
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:panels="using:CAP.Avalonia.Views.Panels"
              xmlns:oxy="using:OxyPlot.Avalonia"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.EyeDiagramPanel"
              x:DataType="vm:MainViewModel">
 
@@ -22,39 +23,38 @@
 
     <StackPanel Margin="6,4">
         <!-- No heading/separator: the tab header already reads "Eye / BER". -->
-        <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap">
-            PRBS-modulated transient → eye persistence heat map, Q-factor and BER (shot/thermal/RIN noise).
-        </TextBlock>
+        <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"
+                   Text="{loc:Localize EyeDiagram.Description}"/>
 
         <!-- Parameters + Run: laid out horizontally, wrapping responsively (right, then down). -->
         <WrapPanel Orientation="Horizontal">
             <StackPanel Margin="0,0,12,4">
-                <TextBlock Text="Bit rate (Gbps)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <TextBlock Text="{loc:Localize EyeDiagram.BitRate}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.BitRateGbps}"
                                Minimum="1" Maximum="1000" Increment="5" Width="120" FormatString="F1"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4">
-                <TextBlock Text="PRBS pattern" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <TextBlock Text="{loc:Localize EyeDiagram.PrbsPattern}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <ComboBox ItemsSource="{Binding BottomPanel.Analysis.Eye.PrbsOrders}"
                           SelectedItem="{Binding BottomPanel.Analysis.Eye.SelectedPrbsOrder}"
                           Width="110"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4">
-                <TextBlock Text="Threshold (rel.)" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <TextBlock Text="{loc:Localize EyeDiagram.Threshold}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
                 <NumericUpDown Value="{Binding BottomPanel.Analysis.Eye.ThresholdRelative}"
                                Minimum="0.05" Maximum="0.95" Increment="0.05" Width="110" FormatString="F2"/>
             </StackPanel>
             <!-- Run sits to the right of the fields; the spacer aligns it with the field row. -->
             <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom">
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
-                <Button Content="Run Eye Analysis" Classes="analysis" Background="#5d3d5d"
+                <Button Content="{loc:Localize EyeDiagram.RunButton}" Classes="analysis" Background="#5d3d5d"
                         Command="{Binding BottomPanel.Analysis.Eye.RunEyeAnalysisCommand}"
                         IsEnabled="{Binding BottomPanel.Analysis.Eye.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom"
                         IsVisible="{Binding BottomPanel.Analysis.Eye.HasResult}">
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
-                <Button Content="Export CSV" Classes="analysis" Background="#3d3d5d"
+                <Button Content="{loc:Localize Common.ExportCsv}" Classes="analysis" Background="#3d3d5d"
                         Command="{Binding BottomPanel.Analysis.Eye.ExportCsvCommand}"/>
             </StackPanel>
             <!-- Plain-language help: what an eye diagram is, why the opening
@@ -64,7 +64,7 @@
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
                 <Button Content="?" Classes="analysis" Background="#3d5d3d" Width="26"
                         HorizontalContentAlignment="Center"
-                        ToolTip.Tip="What is an eye diagram? (plain-language explainer)">
+                        ToolTip.Tip="{loc:Localize EyeDiagram.HelpTip}">
                     <Button.Flyout>
                         <Flyout Placement="Top">
                             <panels:EyeHelpFlyout/>

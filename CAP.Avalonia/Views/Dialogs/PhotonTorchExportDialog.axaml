@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.Export"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.PhotonTorchExportDialog"
         x:DataType="vm:PhotonTorchExportViewModel"
-        Title="Export — PhotonTorch"
+        Title="{loc:Localize PhotonTorchExport.Title}"
         Width="400" Height="380"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -15,47 +16,47 @@
         <!-- Buttons docked at the bottom so they're always visible regardless of form height -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Open Folder"
+            <Button Content="{loc:Localize Common.OpenFolder}"
                     Command="{Binding OpenOutputDirectoryCommand}"
                     Width="100" Background="#2d4d3d" FontSize="11"
                     IsVisible="{Binding LastExportSucceeded}"/>
-            <Button Content="Export…"
+            <Button Content="{loc:Localize Common.ExportEllipsis}"
                     Command="{Binding ExportCommand}"
                     Width="90" Background="#3d4d6d"
                     IsEnabled="{Binding IsExporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="Close" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
+            <Button Content="{loc:Localize Common.Close}" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
         </StackPanel>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
-                <TextBlock Text="🔦 PhotonTorch Export" FontSize="15" FontWeight="SemiBold"
+                <TextBlock Text="{loc:Localize PhotonTorchExport.Heading}" FontSize="15" FontWeight="SemiBold"
                            Foreground="LightBlue"/>
-                <TextBlock Text="Export to PhotonTorch for time-domain GPU-accelerated simulation. Click Export… to choose where to save."
+                <TextBlock Text="{loc:Localize PhotonTorchExport.Description}"
                            Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
 
                 <Separator Background="#3d3d3d"/>
 
                 <!-- Wavelength -->
-                <TextBlock Text="Wavelength (nm):" Foreground="Gray" FontSize="11"/>
+                <TextBlock Text="{loc:Localize PhotonTorchExport.WavelengthNm}" Foreground="Gray" FontSize="11"/>
                 <NumericUpDown Value="{Binding WavelengthNm}"
                                Minimum="1260" Maximum="1625" Increment="10"
                                FormatString="F0"
                                Background="#2d2d2d" Foreground="White"/>
 
                 <!-- Simulation mode -->
-                <CheckBox Content="Time-domain simulation (vs. steady-state)"
+                <CheckBox Content="{loc:Localize PhotonTorchExport.TimeDomain}"
                           IsChecked="{Binding UseTimeDomain}"
                           Foreground="White"/>
 
                 <!-- Time-domain settings -->
                 <StackPanel IsVisible="{Binding UseTimeDomain}" Margin="10,0,0,0" Spacing="6">
-                    <TextBlock Text="Bit rate (Gbit/s):" Foreground="Gray" FontSize="11"/>
+                    <TextBlock Text="{loc:Localize PhotonTorchExport.BitRate}" Foreground="Gray" FontSize="11"/>
                     <NumericUpDown Value="{Binding BitRateGbps}"
                                    Minimum="0.1" Maximum="100" Increment="1"
                                    FormatString="F1"
                                    Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Text="Time steps:" Foreground="Gray" FontSize="11"/>
+                    <TextBlock Text="{loc:Localize PhotonTorchExport.TimeSteps}" Foreground="Gray" FontSize="11"/>
                     <NumericUpDown Value="{Binding TimeDomainSteps}"
                                    Minimum="100" Maximum="10000" Increment="100"
                                    FormatString="F0"

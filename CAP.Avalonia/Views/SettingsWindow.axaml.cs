@@ -1,3 +1,5 @@
+using System;
+using System.Linq;
 using Avalonia.Controls;
 using CAP.Avalonia.ViewModels.Settings;
 
@@ -24,5 +26,17 @@ public partial class SettingsWindow : Window
     {
         if (DataContext is SettingsWindowViewModel vm)
             vm.SelectPage(typeof(PythonEnvironmentsSettingsPage));
+    }
+
+    /// <summary>
+    /// Releases the settings pages' language-change subscriptions when the window
+    /// closes, so transient pages don't accumulate handlers on the localization singleton.
+    /// </summary>
+    protected override void OnClosed(EventArgs e)
+    {
+        base.OnClosed(e);
+        if (DataContext is SettingsWindowViewModel vm)
+            foreach (var page in vm.Pages.OfType<IDisposable>())
+                page.Dispose();
     }
 }

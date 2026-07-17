@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:panels="using:CAP.Avalonia.Views.Panels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.AnalysisDockPanel"
              x:DataType="vm:MainViewModel">
 
@@ -16,13 +17,13 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         Height="26" Padding="8,0"
-                        ToolTip.Tip="Toggle analysis dock">
+                        ToolTip.Tip="{loc:Localize AnalysisDock.ToggleTip}">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Text="▶" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
                                    IsVisible="{Binding BottomPanel.Analysis.IsVisible, Converter={x:Static BoolConverters.Not}}"/>
                         <TextBlock Text="▼" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
                                    IsVisible="{Binding BottomPanel.Analysis.IsVisible}"/>
-                        <TextBlock Text="Analysis" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Localize AnalysisDock.Title}" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
             </DockPanel>
@@ -31,7 +32,7 @@
             <Border x:Name="ResizeGrip"
                     IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
                     Height="5" Background="#3d3d3d" Cursor="SizeNorthSouth"
-                    ToolTip.Tip="Drag to resize the analysis dock"
+                    ToolTip.Tip="{loc:Localize AnalysisDock.ResizeTip}"
                     PointerPressed="ResizeGrip_PointerPressed"
                     PointerMoved="ResizeGrip_PointerMoved"
                     PointerReleased="ResizeGrip_PointerReleased"/>
@@ -40,12 +41,12 @@
             <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
                     Height="{Binding BottomPanel.Analysis.DockHeight}" Background="#161616">
                 <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}">
-                    <TabItem Header="Transient">
+                    <TabItem Header="{loc:Localize AnalysisDock.TabTransient}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <panels:TimeDomainPanel/>
                         </ScrollViewer>
                     </TabItem>
-                    <TabItem Header="Eye / BER">
+                    <TabItem Header="{loc:Localize AnalysisDock.TabEyeBer}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <panels:EyeDiagramPanel/>
                         </ScrollViewer>

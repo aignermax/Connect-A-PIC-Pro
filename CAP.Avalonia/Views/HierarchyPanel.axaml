@@ -58,8 +58,8 @@
                                 PointerPressed="TreeNode_PointerPressed">
                             <Border.ContextMenu>
                                 <ContextMenu>
-                                    <MenuItem Header="Component Settings…" Command="{Binding OpenSettingsCommand}"/>
-                                    <MenuItem Header="Rename" Command="{Binding StartRenameCommand}"/>
+                                    <MenuItem Header="{loc:Localize Hierarchy.ComponentSettings}" Command="{Binding OpenSettingsCommand}"/>
+                                    <MenuItem Header="{loc:Localize Common.Rename}" Command="{Binding StartRenameCommand}"/>
                                 </ContextMenu>
                             </Border.ContextMenu>
                             <StackPanel Orientation="Horizontal" Spacing="6">
@@ -104,7 +104,7 @@
                                            VerticalAlignment="Center"
                                            Margin="2,0,0,0"
                                            IsVisible="{Binding HasSMatrixOverride}"
-                                           ToolTip.Tip="Per-instance S-matrix override active"/>
+                                           ToolTip.Tip="{loc:Localize Hierarchy.SMatrixOverrideTip}"/>
 
                                 <!-- Focus Button -->
                                 <Button Content="🎯"
@@ -115,7 +115,7 @@
                                         Background="Transparent"
                                         BorderThickness="0"
                                         FontSize="12"
-                                        ToolTip.Tip="Zoom to component"
+                                        ToolTip.Tip="{loc:Localize Hierarchy.ZoomToComponent}"
                                         Margin="4,0,0,0"/>
                             </StackPanel>
                         </Border>
