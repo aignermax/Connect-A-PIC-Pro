@@ -36,7 +36,7 @@ public partial class MainViewModel : ObservableObject
     private DesignCanvasViewModel _canvas;
 
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = LocalizationService.Instance.Translate("Status.Ready");
 
     /// <summary>
     /// Human-readable label for the design's active fabrication process (issue #570),
@@ -45,7 +45,7 @@ public partial class MainViewModel : ObservableObject
     /// <see cref="RefreshProcessIndicator"/>. Bound by the toolbar indicator chip.
     /// </summary>
     [ObservableProperty]
-    private string _activeProcessLabel = "No process selected";
+    private string _activeProcessLabel = LocalizationService.Instance.Translate("Process.NoneSelected");
 
     /// <summary>
     /// True when the active process is Playground (mixing PDKs allowed, chip not
@@ -441,14 +441,14 @@ public partial class MainViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    StatusText = $"Failed to load template '{template.Name}': {ex.Message}";
+                    StatusText = string.Format(LocalizationService.Instance.Translate("Status.TemplateLoadFailed"), template.Name, ex.Message);
                     BottomPanel.ErrorConsole.Log($"Failed to load template '{template.Name}': {ex.Message}", CAP_Contracts.Logger.LogLevel.Error, ex);
                     return;
                 }
 
                 if (template.TemplateGroup == null)
                 {
-                    StatusText = $"Template '{template.Name}' could not be loaded - file may be corrupted";
+                    StatusText = string.Format(LocalizationService.Instance.Translate("Status.TemplateCorrupted"), template.Name);
                     return;
                 }
             }
@@ -767,11 +767,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             _urlLauncher.Open(url);
-            StatusText = "Opening PDK help documentation in browser...";
+            StatusText = LocalizationService.Instance.Translate("Status.OpeningPdkHelp");
         }
         catch (Exception ex)
         {
-            StatusText = $"Could not open browser: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.CouldNotOpenBrowser"), ex.Message);
         }
     }
 
@@ -802,11 +802,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (CommandManager.Undo())
         {
-            StatusText = $"Undone: {CommandManager.RedoDescription ?? "action"}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.Undone"), CommandManager.RedoDescription ?? "action");
         }
         else
         {
-            StatusText = "Nothing to undo";
+            StatusText = LocalizationService.Instance.Translate("Status.NothingToUndo");
         }
     }
 
@@ -817,11 +817,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (CommandManager.Redo())
         {
-            StatusText = $"Redone: {CommandManager.UndoDescription ?? "action"}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.Redone"), CommandManager.UndoDescription ?? "action");
         }
         else
         {
-            StatusText = "Nothing to redo";
+            StatusText = LocalizationService.Instance.Translate("Status.NothingToRedo");
         }
     }
 
@@ -852,7 +852,7 @@ public partial class MainViewModel : ObservableObject
         {
             Canvas.ShowPowerFlow = false;
             Canvas.PowerFlowVisualizer.IsEnabled = false;
-            StatusText = "Simulation overlay OFF";
+            StatusText = LocalizationService.Instance.Translate("Status.SimulationOverlayOff");
             return;
         }
 
@@ -869,13 +869,13 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            StatusText = "Running simulation...";
+            StatusText = LocalizationService.Instance.Translate("Status.RunningSimulation");
             var result = await Simulation.RunAsync(Canvas);
 
             if (result.Success)
             {
-                StatusText = $"Simulation complete: {result.LightSourceCount} source(s), " +
-                             $"{result.ConnectionCount} connections @ {result.WavelengthSummary}";
+                StatusText = string.Format(LocalizationService.Instance.Translate("Status.SimulationComplete"),
+                             result.LightSourceCount, result.ConnectionCount, result.WavelengthSummary);
 
                 if (result.SystemMatrix != null)
                 {
@@ -889,7 +889,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Simulation error: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.SimulationError"), ex.Message);
             BottomPanel.ErrorConsole.Log($"Simulation failed: {ex.Message}", CAP_Contracts.Logger.LogLevel.Error, ex);
 
         }
