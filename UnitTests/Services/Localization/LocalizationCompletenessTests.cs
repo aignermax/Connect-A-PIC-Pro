@@ -27,6 +27,7 @@ public partial class LocalizationCompletenessTests
     [InlineData("de")]
     [InlineData("zh-Hans")]
     [InlineData("es")]
+    [InlineData("ja")]
     public void EveryLanguage_CoversExactlyTheEnglishKeySet(string code)
     {
         var en = LocalizationResourceLoader.Load(SupportedLanguage.English.Code);
@@ -43,6 +44,7 @@ public partial class LocalizationCompletenessTests
     [InlineData("de")]
     [InlineData("zh-Hans")]
     [InlineData("es")]
+    [InlineData("ja")]
     public void EveryLanguage_HasNoEmptyValues(string code)
     {
         var table = LocalizationResourceLoader.Load(code);
