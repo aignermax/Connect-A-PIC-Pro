@@ -32,6 +32,7 @@ namespace UnitTests.Export;
 /// <c>python3</c>, <c>python</c>.
 /// </para>
 /// </summary>
+[Trait("Category", "Slow")]
 public class SaxScriptExecutionTests
 {
     private readonly ITestOutputHelper _output;

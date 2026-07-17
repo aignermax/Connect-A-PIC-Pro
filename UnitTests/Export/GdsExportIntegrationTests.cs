@@ -10,6 +10,7 @@ namespace UnitTests.Export;
 /// Integration tests for GdsExportViewModel and GdsExportService.
 /// Tests the complete flow from ViewModel to core service.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsExportIntegrationTests
 {
     /// <summary>Pin the UI language so status-text assertions match the English literals
