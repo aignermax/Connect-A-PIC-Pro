@@ -241,15 +241,12 @@ public partial class AiAssistantViewModel : ObservableObject
         var hasKey = _aiService.IsConfigured;
         var gridCapable = _toolRegistry != null;
 
+        var loc = Services.Localization.LocalizationService.Instance;
         var welcome = (hasKey, gridCapable) switch
         {
-            (false, _) =>
-                "Hello! I'm your AI Design Assistant. Configure your Claude API key in the settings below to get started.",
-            (true, true) =>
-                "Hello! I'm your AI Design Assistant with grid manipulation capabilities. " +
-                "Ask me to build a photonic circuit and I'll place components and connections for you!",
-            (true, false) =>
-                "Hello! I'm your AI Design Assistant. Describe a photonic circuit and I'll help you design it."
+            (false, _) => loc.Translate("AiAssistant.Welcome.NoKey"),
+            (true, true) => loc.Translate("AiAssistant.Welcome.GridCapable"),
+            (true, false) => loc.Translate("AiAssistant.Welcome.Basic")
         };
 
         Messages.Add(new AiChatMessage { Role = AiChatRole.Assistant, Content = welcome });

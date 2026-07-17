@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.AI;
 
 namespace CAP.Avalonia.Services;
@@ -36,6 +37,21 @@ public class AiService : IAiService
         "If get_grid_state() shows fewer components than expected, report the discrepancy honestly — do NOT claim success. " +
         "Be concise and report what you did. Keep responses under 300 words.";
 
+    /// <summary>
+    /// Appends a directive to answer in the active UI language onto the base system
+    /// prompt. The language name is read from the shipped-language registry
+    /// (<see cref="SupportedLanguage.All"/>), so adding a language there is enough —
+    /// there is no second list to keep in sync here. Unknown codes fall back to English.
+    /// </summary>
+    private static string BuildSystemPrompt()
+    {
+        var active = LocalizationService.Instance.ActiveLanguageCode;
+        var language = SupportedLanguage.All
+            .FirstOrDefault(l => string.Equals(l.Code, active, StringComparison.OrdinalIgnoreCase))
+            ?.EnglishName ?? SupportedLanguage.English.EnglishName;
+        return $"{SystemPrompt} Always respond in {language}.";
+    }
+
     /// <inheritdoc/>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
 
@@ -67,7 +83,7 @@ public class AiService : IAiService
         {
             model = ModelId,
             max_tokens = MaxTokens,
-            system = SystemPrompt,
+            system = BuildSystemPrompt(),
             messages
         };
 
@@ -111,7 +127,7 @@ public class AiService : IAiService
             {
                 model = ModelId,
                 max_tokens = MaxTokens,
-                system = SystemPrompt,
+                system = BuildSystemPrompt(),
                 tools = toolDefs,
                 messages
             };

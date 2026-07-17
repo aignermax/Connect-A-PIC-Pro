@@ -1,35 +1,36 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.RoutingDiagnosticsPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Routing Diagnostics:" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
-        <Button Content="Analyze Routes"
+        <TextBlock Text="{loc:Localize RoutingDiag.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <Button Content="{loc:Localize RoutingDiag.AnalyzeButton}"
                 Command="{Binding RightPanel.RoutingDiagnostics.RunDiagnosticsCommand}"
                 MinWidth="110" Margin="0,5,0,5" Padding="8,4"
                 Background="#5d3d3d" HorizontalAlignment="Stretch"
                 IsEnabled="{Binding RightPanel.RoutingDiagnostics.IsAnalyzing, Converter={x:Static BoolConverters.Not}}"/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-            <Button Content="Export JSON"
+            <Button Content="{loc:Localize RoutingDiag.ExportJson}"
                     Command="{Binding RightPanel.RoutingDiagnostics.ExportPathsJsonCommand}"
                     MinWidth="100" Margin="0,0,5,0" Padding="8,4" Background="#3d3d5d"/>
             <Button Content="📋"
                     Command="{Binding RightPanel.RoutingDiagnostics.CopyPathsJsonToClipboardCommand}"
-                    Width="36" Background="#3d3d5d" ToolTip.Tip="Copy JSON to clipboard"/>
+                    Width="36" Background="#3d3d5d" ToolTip.Tip="{loc:Localize RoutingDiag.CopyTip}"/>
         </StackPanel>
         <TextBlock Text="{Binding RightPanel.RoutingDiagnostics.StatusText}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,3"
                    IsVisible="{Binding RightPanel.RoutingDiagnostics.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,5"
                     IsVisible="{Binding RightPanel.RoutingDiagnostics.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-            <TextBlock Text="Valid: " Foreground="Gray"/>
+            <TextBlock Text="{loc:Localize RoutingDiag.Valid}" Foreground="Gray"/>
             <TextBlock Text="{Binding RightPanel.RoutingDiagnostics.ValidConnections}" Foreground="LightGreen"/>
             <TextBlock Text="/" Foreground="Gray"/>
             <TextBlock Text="{Binding RightPanel.RoutingDiagnostics.TotalConnections}" Foreground="White"/>
-            <TextBlock Text="  Issues: " Foreground="Gray"/>
+            <TextBlock Text="{loc:Localize RoutingDiag.Issues}" Foreground="Gray"/>
             <TextBlock Text="{Binding RightPanel.RoutingDiagnostics.IssueCount}" Foreground="Salmon"/>
         </StackPanel>
         <ScrollViewer MaxHeight="150" Margin="0,5,0,0"

@@ -10,6 +10,13 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- UI string tables (issue #744). LogicalName avoids MSBuild's culture-suffix
+         detection turning them into satellite assemblies (which behaves differently
+         per OS); they stay embedded in the main assembly. -->
+    <EmbeddedResource Include="Assets/i18n/*.json" LogicalName="i18n.%(Filename)%(Extension)" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia" Version="11.2.1" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.2.1" />
     <PackageReference Include="Avalonia.Skia" Version="11.2.1" />

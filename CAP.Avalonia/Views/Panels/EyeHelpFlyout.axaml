@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.EyeHelpFlyout"
              MaxWidth="420">
 
@@ -70,7 +71,7 @@
     <ScrollViewer MaxHeight="440">
         <StackPanel Margin="12" Spacing="8">
 
-            <TextBlock Text="What is an eye diagram?"
+            <TextBlock Text="{loc:Localize EyeHelp.Title}"
                        FontWeight="Bold" FontSize="13" Foreground="White"/>
 
             <!-- Looping animation: waveform slices stack up into an eye. -->
@@ -86,12 +87,12 @@
                           StrokeThickness="1" StrokeDashArray="2,2"/>
                     <Line StartPoint="110,15" EndPoint="110,75" Stroke="#666666"
                           StrokeThickness="1" StrokeDashArray="2,2"/>
-                    <TextBlock Canvas.Left="14" Canvas.Top="76" Text="signal, cut per bit"
+                    <TextBlock Canvas.Left="14" Canvas.Top="76" Text="{loc:Localize EyeHelp.DiagramSignal}"
                                FontSize="9" Foreground="Gray"/>
                     <!-- Arrow: slices get stacked -->
                     <Line StartPoint="152,45" EndPoint="200,45" Stroke="#909090" StrokeThickness="2"/>
                     <Polyline Points="192,39 202,45 192,51" Stroke="#909090" StrokeThickness="2"/>
-                    <TextBlock Canvas.Left="148" Canvas.Top="24" Text="stack" FontSize="9" Foreground="Gray"/>
+                    <TextBlock Canvas.Left="148" Canvas.Top="24" Text="{loc:Localize EyeHelp.DiagramStack}" FontSize="9" Foreground="Gray"/>
                     <!-- Right: the eye forms from overlaid slices. -->
                     <Path Classes="eyeTrace1" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
                           Data="M 215,25 L 355,25"/>
@@ -104,66 +105,44 @@
                     <Ellipse Classes="eyeOpening" Canvas.Left="265" Canvas.Top="33"
                              Width="40" Height="24" Opacity="0"
                              Stroke="#FFD54F" StrokeThickness="2" StrokeDashArray="3,2"/>
-                    <TextBlock Canvas.Left="248" Canvas.Top="76" Text="the open 'eye'"
+                    <TextBlock Canvas.Left="248" Canvas.Top="76" Text="{loc:Localize EyeHelp.DiagramEye}"
                                FontSize="9" Foreground="Gray"/>
                 </Canvas>
             </Border>
 
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                Signal quality at a glance: the output waveform is cut into slices,
-                one bit long each, and all slices are drawn on top of each other.
-                Where the 1s and 0s stay apart, an open "eye" appears in the middle.
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.Intro}"/>
 
-            <TextBlock Text="Why does it matter?" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize EyeHelp.WhyTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                A receiver must decide, in the middle of every bit, whether it sees a
-                1 or a 0. A wide-open eye means that decision is easy and data arrives
-                error-free. Noise, echoes and pulse spreading squeeze the eye shut —
-                this plot shows how much margin your circuit leaves.
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.WhyBody}"/>
 
-            <TextBlock Text="What does Run Eye Analysis do?" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize EyeHelp.RunTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                It sends a pseudo-random bit stream (PRBS, like real data traffic) at
-                the chosen bit rate through your circuit, stacks the strongest output
-                into a brightness map (bright = the signal passes there often), and
-                computes the quality numbers below the plot — including realistic
-                receiver noise (shot, thermal and laser RIN).
-            </TextBlock>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                Light enters at couplers with the laser switched on; couplers with
-                the laser switched off are your outputs — the eye is measured there
-                (toggle the laser icon on the canvas or the switch in the properties
-                panel).
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.RunBody1}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.RunBody2}"/>
 
-            <TextBlock Text="Reading the numbers" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize EyeHelp.ReadingTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
             <StackPanel Spacing="5">
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                    <Run FontWeight="Bold" Foreground="#4FC3F7">Q factor</Run>
-                    <Run> — how far apart the 1-level and 0-level sit compared to the
-                    noise. Bigger is better; Q ≈ 7 is roughly "error-free" in practice.</Run>
+                    <Run FontWeight="Bold" Foreground="#4FC3F7" Text="{loc:Localize EyeHelp.QLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.QBody}"/>
                 </TextBlock>
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
                     <Run FontWeight="Bold" Foreground="#FF8A65">BER</Run>
-                    <Run> — the estimated bit-error rate: the chance a bit is read
-                    wrongly. 1E-12 means about one error per trillion bits (excellent);
-                    1E-3 means the link is unusable without error correction.</Run>
+                    <Run Text="{loc:Localize EyeHelp.BerBody}"/>
                 </TextBlock>
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                    <Run FontWeight="Bold" Foreground="#FFD54F">Threshold</Run>
-                    <Run> — the decision level between 0 and 1, as a fraction of the
-                    signal range. 0.5 = exactly in the middle; move it if your 1s and
-                    0s are asymmetric.</Run>
+                    <Run FontWeight="Bold" Foreground="#FFD54F" Text="{loc:Localize EyeHelp.ThresholdLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.ThresholdBody}"/>
                 </TextBlock>
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                    <Run FontWeight="Bold" Foreground="#81C784">Eye height / width / jitter</Run>
-                    <Run> — the vertical and horizontal opening of the eye, and how
-                    much the signal edges wander in time. More opening = more margin.</Run>
+                    <Run FontWeight="Bold" Foreground="#81C784" Text="{loc:Localize EyeHelp.EyeMetricsLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.EyeMetricsBody}"/>
                 </TextBlock>
             </StackPanel>
 

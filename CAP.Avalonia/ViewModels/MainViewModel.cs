@@ -1,8 +1,10 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components.Core;
 using CAP_Core;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -34,7 +36,7 @@ public partial class MainViewModel : ObservableObject
     private DesignCanvasViewModel _canvas;
 
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = LocalizationService.Instance.Translate("Status.Ready");
 
     /// <summary>
     /// Human-readable label for the design's active fabrication process (issue #570),
@@ -43,7 +45,7 @@ public partial class MainViewModel : ObservableObject
     /// <see cref="RefreshProcessIndicator"/>. Bound by the toolbar indicator chip.
     /// </summary>
     [ObservableProperty]
-    private string _activeProcessLabel = "No process selected";
+    private string _activeProcessLabel = LocalizationService.Instance.Translate("Process.NoneSelected");
 
     /// <summary>
     /// True when the active process is Playground (mixing PDKs allowed, chip not
@@ -439,14 +441,14 @@ public partial class MainViewModel : ObservableObject
                 }
                 catch (Exception ex)
                 {
-                    StatusText = $"Failed to load template '{template.Name}': {ex.Message}";
+                    StatusText = string.Format(LocalizationService.Instance.Translate("Status.TemplateLoadFailed"), template.Name, ex.Message);
                     BottomPanel.ErrorConsole.Log($"Failed to load template '{template.Name}': {ex.Message}", CAP_Contracts.Logger.LogLevel.Error, ex);
                     return;
                 }
 
                 if (template.TemplateGroup == null)
                 {
-                    StatusText = $"Template '{template.Name}' could not be loaded - file may be corrupted";
+                    StatusText = string.Format(LocalizationService.Instance.Translate("Status.TemplateCorrupted"), template.Name);
                     return;
                 }
             }
@@ -538,6 +540,12 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
         };
 
+        // Re-read the localized active-process badge when the UI language switches (#570 i18n).
+        // Only the label is recomputed — the PDK process lock is left untouched on a mere
+        // language change.
+        LocalizationService.Instance.PropertyChanged += (_, _) =>
+            UpdateActiveProcessLabel(FileOperations.ActiveProcess);
+
         FileOperations.ZoomToFitAfterLoad = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);
@@ -569,14 +577,25 @@ public partial class MainViewModel : ObservableObject
     private void RefreshProcessIndicator()
     {
         var p = FileOperations.ActiveProcess;
+        UpdateActiveProcessLabel(p);
+        LeftPanel.ApplyActiveProcess(p);
+    }
+
+    /// <summary>
+    /// Recomputes the localized <see cref="ActiveProcessLabel"/> and <see cref="IsPlayground"/>
+    /// flag and mirrors the label into the canvas HUD — without re-applying the PDK process
+    /// lock. Called on process change and on UI language switch so the badge re-reads live.
+    /// </summary>
+    private void UpdateActiveProcessLabel(CAP_Core.Components.Process.ActiveProcessSelection? p)
+    {
+        var loc = LocalizationService.Instance;
         IsPlayground = p?.IsPlayground == true;
-        ActiveProcessLabel = p == null ? "No process selected"
-            : p.IsPlayground ? "Playground — not manufacturable"
-            : $"Process: {p.DisplayName}";
+        ActiveProcessLabel = p == null ? loc.Translate("Process.NoneSelected")
+            : p.IsPlayground ? loc.Translate("Process.PlaygroundBadge")
+            : string.Format(CultureInfo.InvariantCulture, loc.Translate("Process.Prefix"), p.DisplayName);
         // Mirror into the canvas VM so the status HUD (CanvasOverlayRenderer) can show the
         // active process in the grid overlay, not only at the bottom of the PDK panel.
         Canvas.ActiveProcessLabel = ActiveProcessLabel;
-        LeftPanel.ApplyActiveProcess(p);
     }
 
     // Canvas interaction delegates
@@ -748,11 +767,11 @@ public partial class MainViewModel : ObservableObject
         try
         {
             _urlLauncher.Open(url);
-            StatusText = "Opening PDK help documentation in browser...";
+            StatusText = LocalizationService.Instance.Translate("Status.OpeningPdkHelp");
         }
         catch (Exception ex)
         {
-            StatusText = $"Could not open browser: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.CouldNotOpenBrowser"), ex.Message);
         }
     }
 
@@ -783,11 +802,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (CommandManager.Undo())
         {
-            StatusText = $"Undone: {CommandManager.RedoDescription ?? "action"}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.Undone"), CommandManager.RedoDescription ?? "action");
         }
         else
         {
-            StatusText = "Nothing to undo";
+            StatusText = LocalizationService.Instance.Translate("Status.NothingToUndo");
         }
     }
 
@@ -798,11 +817,11 @@ public partial class MainViewModel : ObservableObject
     {
         if (CommandManager.Redo())
         {
-            StatusText = $"Redone: {CommandManager.UndoDescription ?? "action"}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.Redone"), CommandManager.UndoDescription ?? "action");
         }
         else
         {
-            StatusText = "Nothing to redo";
+            StatusText = LocalizationService.Instance.Translate("Status.NothingToRedo");
         }
     }
 
@@ -833,7 +852,7 @@ public partial class MainViewModel : ObservableObject
         {
             Canvas.ShowPowerFlow = false;
             Canvas.PowerFlowVisualizer.IsEnabled = false;
-            StatusText = "Simulation overlay OFF";
+            StatusText = LocalizationService.Instance.Translate("Status.SimulationOverlayOff");
             return;
         }
 
@@ -850,13 +869,13 @@ public partial class MainViewModel : ObservableObject
 
         try
         {
-            StatusText = "Running simulation...";
+            StatusText = LocalizationService.Instance.Translate("Status.RunningSimulation");
             var result = await Simulation.RunAsync(Canvas);
 
             if (result.Success)
             {
-                StatusText = $"Simulation complete: {result.LightSourceCount} source(s), " +
-                             $"{result.ConnectionCount} connections @ {result.WavelengthSummary}";
+                StatusText = string.Format(LocalizationService.Instance.Translate("Status.SimulationComplete"),
+                             result.LightSourceCount, result.ConnectionCount, result.WavelengthSummary);
 
                 if (result.SystemMatrix != null)
                 {
@@ -870,7 +889,7 @@ public partial class MainViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Simulation error: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Status.SimulationError"), ex.Message);
             BottomPanel.ErrorConsole.Log($"Simulation failed: {ex.Message}", CAP_Contracts.Logger.LogLevel.Error, ex);
 
         }

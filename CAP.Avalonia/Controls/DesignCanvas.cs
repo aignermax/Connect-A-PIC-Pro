@@ -6,6 +6,7 @@ using Avalonia.Media;
 using CAP.Avalonia.Controls.Handlers;
 using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.Gestures;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
@@ -107,6 +108,24 @@ public class DesignCanvas : Control
         // right-clicked element. Tunnel phase runs before the menu evaluates its command CanExecute.
         AddHandler(ContextRequestedEvent, OnContextRequested, RoutingStrategies.Tunnel);
     }
+
+    /// <inheritdoc/>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        LocalizationService.Instance.PropertyChanged += OnLocalizationChanged;
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        LocalizationService.Instance.PropertyChanged -= OnLocalizationChanged;
+    }
+
+    // Redraw the code-drawn HUD (mode indicator, status line) in the newly chosen language.
+    private void OnLocalizationChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => InvalidateVisual();
 
     // ── Rendering ──────────────────────────────────────────────────────────
 

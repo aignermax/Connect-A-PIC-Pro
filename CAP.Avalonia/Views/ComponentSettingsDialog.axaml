@@ -5,6 +5,7 @@
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
         xmlns:services="using:CAP.Avalonia.Services"
         xmlns:edit="using:AvaloniaEdit"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.ComponentSettingsDialog"
         x:Name="DialogRoot"
         x:DataType="vm:ComponentSettingsDialogViewModel"
@@ -32,13 +33,13 @@
         </Border>
 
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-            <Button Content="Load S-matrix from file…"
+            <Button Content="{loc:Localize ComponentSettings.LoadFromFile}"
                     Command="{Binding LoadFromFileCommand}"
                     Padding="12,2"
                     Background="#3d5d3d"
-                    ToolTip.Tip="Import numerical S-parameters (Lumerical .dat) or Touchstone (.s2p/.s4p) data for this component."
+                    ToolTip.Tip="{loc:Localize ComponentSettings.LoadTip}"
                     IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="Recalculate S-matrix (FDTD)…"
+            <Button Content="{loc:Localize ComponentSettings.Recalculate}"
                     Command="{Binding RecalculateSMatrixCommand}"
                     Padding="12,2"
                     Background="#3d4d6d"
@@ -64,7 +65,7 @@
         </Border>
 
         <TextBlock DockPanel.Dock="Top"
-                   Text="No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it."
+                   Text="{loc:Localize ComponentSettings.NoCustomSMatrix}"
                    Foreground="Gray"
                    FontSize="11"
                    Margin="0,0,0,10"
@@ -72,7 +73,7 @@
                    IsVisible="{Binding HasSMatrices, Converter={x:Static BoolConverters.Not}}"/>
 
         <TextBlock DockPanel.Dock="Top"
-                   Text="Currently effective S-matrix"
+                   Text="{loc:Localize ComponentSettings.EffectiveSMatrix}"
                    Foreground="#aaaacc"
                    FontSize="11"
                    FontWeight="SemiBold"
@@ -119,7 +120,7 @@
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Right"
                                            IsVisible="{Binding IsOverridden}"
-                                           ToolTip.Tip="An override (file import or FDTD recompute) has replaced the PDK default for this wavelength"/>
+                                           ToolTip.Tip="{loc:Localize ComponentSettings.OverriddenTip}"/>
                                 <TextBlock Grid.Column="3"
                                            Text="{Binding SourceTag}"
                                            Foreground="#777777"
@@ -127,7 +128,7 @@
                                            VerticalAlignment="Center"
                                            HorizontalAlignment="Right"
                                            IsVisible="{Binding !IsOverridden}"
-                                           ToolTip.Tip="Comes from the PDK definition; no user override"/>
+                                           ToolTip.Tip="{loc:Localize ComponentSettings.PdkDefaultTip}"/>
                             </Grid>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
@@ -139,10 +140,10 @@
               ColumnDefinitions="110,80,*,80"
               Margin="0,0,0,4"
               IsVisible="{Binding HasSMatrices}">
-            <TextBlock Grid.Column="0" Text="Wavelength" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
-            <TextBlock Grid.Column="1" Text="Size" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
-            <TextBlock Grid.Column="2" Text="Strongest couplings" Foreground="#888888" FontSize="10" FontWeight="SemiBold"
-                       ToolTip.Tip="Top off-diagonal magnitudes |S_ij| in the form input port → output port. Diagonal entries (reflections) are skipped because they're ≈0 for passive devices."/>
+            <TextBlock Grid.Column="0" Text="{loc:Localize ComponentSettings.Wavelength}" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
+            <TextBlock Grid.Column="1" Text="{loc:Localize ComponentSettings.Size}" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
+            <TextBlock Grid.Column="2" Text="{loc:Localize ComponentSettings.StrongestCouplings}" Foreground="#888888" FontSize="10" FontWeight="SemiBold"
+                       ToolTip.Tip="{loc:Localize ComponentSettings.CouplingsTip}"/>
             <TextBlock Grid.Column="3" Text="" Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
         </Grid>
 
@@ -198,7 +199,7 @@
                                         FontSize="14"
                                         VerticalAlignment="Center"
                                         HorizontalAlignment="Center"
-                                        ToolTip.Tip="Remove this wavelength entry"/>
+                                        ToolTip.Tip="{loc:Localize ComponentSettings.RemoveEntryTip}"/>
                             </Grid>
                         </Border>
                     </DataTemplate>

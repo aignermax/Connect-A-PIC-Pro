@@ -144,9 +144,10 @@ public class Issue742PdkUxPolishScreenshotTests
         Dispatcher.UIThread.RunJobs();
 
         bitmap.ShouldNotBeNull($"render miss for {Path.GetFileName(path)}");
+        byte[] bytes;
         using (bitmap)
-            bitmap!.Save(path);
-        new FileInfo(path).Length.ShouldBeGreaterThan(0);
+            bytes = ScreenshotArtifacts.SavePng(bitmap!, path);
+        bytes.Length.ShouldBeGreaterThan(0);
     }
 
     private static void WriteManifest(string outputDir)
@@ -158,7 +159,7 @@ public class Issue742PdkUxPolishScreenshotTests
           {"file": "03-trash-per-component.png", "caption": "Trash lists each removed component by its own name (PDK shown as detail), so Restore recovers exactly the clicked component instead of the whole backup diff."}
         ]
         """;
-        File.WriteAllText(Path.Combine(outputDir, "manifest.json"), manifest);
+        ScreenshotArtifacts.WriteText(Path.Combine(outputDir, "manifest.json"), manifest);
     }
 
     /// <summary>Repo-root <c>artifacts/ui-screenshots/issue-739</c> (or <c>UI_SHOT_DIR/issue-739</c>).</summary>
