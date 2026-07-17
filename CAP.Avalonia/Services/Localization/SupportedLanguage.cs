@@ -20,9 +20,12 @@ public sealed record SupportedLanguage(string Code, string NativeName)
     /// <summary>Spanish.</summary>
     public static readonly SupportedLanguage Spanish = new("es", "Español");
 
+    /// <summary>Japanese.</summary>
+    public static readonly SupportedLanguage Japanese = new("ja", "日本語");
+
     /// <summary>All languages the UI ships with, in picker order.</summary>
     public static readonly IReadOnlyList<SupportedLanguage> All =
-        new[] { English, German, ChineseSimplified, Spanish };
+        new[] { English, German, ChineseSimplified, Spanish, Japanese };
 
     /// <summary>Returns true when <paramref name="code"/> is one of the shipped language codes.</summary>
     public static bool IsSupportedCode(string? code) =>
