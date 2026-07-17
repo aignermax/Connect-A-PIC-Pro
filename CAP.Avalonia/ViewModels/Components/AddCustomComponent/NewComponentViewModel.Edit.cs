@@ -1,5 +1,6 @@
 using System.Linq;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -98,7 +99,9 @@ public partial class NewComponentViewModel
         var match = PdkChoices.FirstOrDefault(c => !c.IsNewPdk && c.Pdk?.Name == template.PdkSource);
         if (match is null)
         {
-            StatusText = $"Cannot edit '{template.Name}': its PDK '{template.PdkSource}' is not a custom PDK.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.CannotEditNotCustomPdk"),
+                template.Name, template.PdkSource);
             return false;
         }
 
@@ -113,11 +116,11 @@ public partial class NewComponentViewModel
             {
                 code = s.Code;
                 backend = s.Backend;
-                StatusText = "Loaded the foundry definition as editable code — adjust and save to fork it.";
+                StatusText = LocalizationService.Instance.Translate("NewComp.LoadedFoundryDefinition");
             }
             else
             {
-                StatusText = "No stored code for this component — enter code to edit.";
+                StatusText = LocalizationService.Instance.Translate("NewComp.NoStoredCode");
             }
         }
         SelectedBackend = backend;
@@ -147,7 +150,9 @@ public partial class NewComponentViewModel
     {
         if (process is null)
         {
-            StatusText = $"Cannot edit '{template.Name}': its PDK '{template.PdkSource}' declares no fabrication process.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.CannotEditNoProcess"),
+                template.Name, template.PdkSource);
             return false;
         }
 
@@ -166,7 +171,7 @@ public partial class NewComponentViewModel
         _pendingForkSourcePath = bundledFilePath;
         _pendingForkTargetPath = forkTargetPath;
         if (string.IsNullOrEmpty(StatusText))
-            StatusText = "Editing a built-in component — \"Save changes\" creates your own editable copy of its PDK.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.EditingBuiltIn");
         return true;
     }
 

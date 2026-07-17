@@ -1,4 +1,5 @@
 using CAP_Core.Export;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Export;
 using Shouldly;
 using Xunit;
@@ -11,6 +12,13 @@ namespace UnitTests.Export;
 /// </summary>
 public class GdsExportIntegrationTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public GdsExportIntegrationTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public async Task ViewModel_CheckEnvironment_UpdatesStatusProperties()
     {

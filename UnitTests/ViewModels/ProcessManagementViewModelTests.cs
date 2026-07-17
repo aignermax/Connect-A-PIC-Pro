@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using Moq;
@@ -15,6 +16,13 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class ProcessManagementViewModelTests
 {
+    /// <summary>Status messages are localized (issue #749); pin English so substring
+    /// assertions stay culture-independent regardless of the CI/dev OS language.</summary>
+    public ProcessManagementViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void Load_PopulatesCollectionsAndSetsHasProcess()
     {

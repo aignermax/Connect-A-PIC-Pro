@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Import;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
@@ -15,22 +16,23 @@ public partial class ComponentSettingsDialogViewModel
 
         if (imported.PortNames.Count != _availablePinNames.Count)
         {
-            StatusText = $"Cannot import: file has {imported.PortNames.Count} port(s), " +
-                         $"but '{_displayName}' has {_availablePinNames.Count} pin(s).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("CompSettings.CannotImportPortCount"),
+                imported.PortNames.Count, _displayName, _availablePinNames.Count);
             return null;
         }
 
         if (_portMappingDialog == null)
         {
-            StatusText = $"Imported port names don't match component pins on '{_displayName}'. " +
-                         $"Re-run with a port-mapping dialog wired up to resolve this interactively.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("CompSettings.NoPortMappingDialog"), _displayName);
             return null;
         }
 
         var mapping = await _portMappingDialog.ShowAsync(_displayName, imported.PortNames, _availablePinNames);
         if (mapping == null)
         {
-            StatusText = "Import cancelled — no port mapping was confirmed.";
+            StatusText = LocalizationService.Instance.Translate("CompSettings.ImportCancelledNoMapping");
             return null;
         }
 
@@ -43,19 +45,28 @@ public partial class ComponentSettingsDialogViewModel
         ApplyResult? applyResult)
     {
         var fileName = Path.GetFileName(path);
-        var portInfo = $"{imported.PortCount} ports, {imported.SMatricesByWavelengthNm.Count} wavelengths";
+        var portInfo = string.Format(
+            LocalizationService.Instance.Translate("CompSettings.PortInfo"),
+            imported.PortCount, imported.SMatricesByWavelengthNm.Count);
 
         if (applyResult == null)
-            return $"Imported {portInfo} from '{fileName}'.";
+            return string.Format(LocalizationService.Instance.Translate("CompSettings.Imported"), portInfo, fileName);
 
         if (applyResult.IsTotalFailure)
-            return $"Imported {portInfo} from '{fileName}', but no wavelength could be applied to the live component (see Error Console).";
+            return string.Format(
+                LocalizationService.Instance.Translate("CompSettings.ImportedNoneApplied"), portInfo, fileName);
 
         if (applyResult.IsPartial)
-            return $"Imported {portInfo}; applied {applyResult.Applied} of {applyResult.Applied + applyResult.Skipped.Count} wavelength(s) — {applyResult.Skipped.Count} skipped (see Error Console).";
+            return string.Format(
+                LocalizationService.Instance.Translate("CompSettings.ImportedPartial"),
+                portInfo, applyResult.Applied, applyResult.Applied + applyResult.Skipped.Count, applyResult.Skipped.Count);
 
-        var replacedNote = applyResult.Replaced > 0 ? $" ({applyResult.Replaced} replaced)" : "";
-        return $"Imported {portInfo} from '{fileName}'; applied {applyResult.Applied} wavelength(s){replacedNote}.";
+        var replacedNote = applyResult.Replaced > 0
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.ReplacedNote"), applyResult.Replaced)
+            : "";
+        return string.Format(
+            LocalizationService.Instance.Translate("CompSettings.ImportedApplied"),
+            portInfo, fileName, applyResult.Applied, replacedNote);
     }
 
     private ISParameterImporter? FindImporter(string path)

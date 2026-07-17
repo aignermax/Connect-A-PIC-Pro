@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
 using CAP_Core.Export;
@@ -12,6 +13,11 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class NazcaComponentPreviewServiceTests
 {
+    /// <summary>Alignment/status summaries are localized (issue #749); pin English so substring
+    /// assertions stay culture-independent regardless of the CI/dev OS language.</summary>
+    public NazcaComponentPreviewServiceTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     /// <summary>
     /// Resolves a working Python 3 path by running a minimal subprocess validation.
     /// Returns null when Python is not available or cannot execute scripts.

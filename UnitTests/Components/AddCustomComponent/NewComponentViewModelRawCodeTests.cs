@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -17,6 +18,9 @@ namespace UnitTests.Components.AddCustomComponent;
 
 public class NewComponentViewModelRawCodeTests : IDisposable
 {
+    static NewComponentViewModelRawCodeTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-raw-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()

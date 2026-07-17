@@ -1,6 +1,7 @@
 using System.Globalization;
 using CAP_Core.Analysis.EyeDiagram;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -89,13 +90,13 @@ public partial class EyeDiagramViewModel : ObservableObject
     {
         if (_canvas == null || _canvas.Components.Count == 0)
         {
-            StatusText = "No circuit loaded.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoCircuit");
             return;
         }
         if (IsRunning) return;
 
         IsRunning = true;
-        StatusText = "Running PRBS transient simulation…";
+        StatusText = LocalizationService.Instance.Translate("Analysis.Eye.RunningPrbs");
         MetricsText = "";
         _lastHistogram = null;
 
@@ -118,7 +119,8 @@ public partial class EyeDiagramViewModel : ObservableObject
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Eye-diagram analysis failed: {ex.Message}", ex);
-            StatusText = $"Failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.Failed"), ex.Message);
         }
         finally
         {
@@ -142,17 +144,19 @@ public partial class EyeDiagramViewModel : ObservableObject
             }
             if (path == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled");
                 return;
             }
 
             await File.WriteAllTextAsync(path, _lastHistogram.ToCsv());
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Eye histogram export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
     }
 

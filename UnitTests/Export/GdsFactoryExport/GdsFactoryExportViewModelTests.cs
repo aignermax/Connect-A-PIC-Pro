@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP_Core.Export;
@@ -9,6 +10,13 @@ namespace UnitTests.Export.GdsFactoryExport;
 /// <summary>Tests for the gdsfactory export dialog ViewModel (#581).</summary>
 public class GdsFactoryExportViewModelTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public GdsFactoryExportViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private sealed class FixedPathFileDialog : IFileDialogService
     {
         private readonly string? _path;

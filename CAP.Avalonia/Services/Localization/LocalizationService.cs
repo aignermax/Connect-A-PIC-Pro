@@ -92,11 +92,18 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
     private IReadOnlyDictionary<string, string> GetTable(string code)
     {
-        if (!_tables.TryGetValue(code, out var table))
+        // Guard the lazy cache: Translate() is read from many threads at once (every ViewModel
+        // constructed in parallel touches it), and a plain Dictionary populated without a lock
+        // corrupts under concurrent first-time inserts. The cached table itself is immutable, so
+        // only the populate step needs the lock.
+        lock (_tables)
         {
-            table = _tableLoader(code);
-            _tables[code] = table;
+            if (!_tables.TryGetValue(code, out var table))
+            {
+                table = _tableLoader(code);
+                _tables[code] = table;
+            }
+            return table;
         }
-        return table;
     }
 }

@@ -3,6 +3,7 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Analysis;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Diagnostics;
@@ -14,7 +15,7 @@ namespace CAP.Avalonia.ViewModels.Diagnostics;
 public partial class ComponentDimensionViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = LocalizationService.Instance.Translate("Diag.Ready");
 
     [ObservableProperty]
     private bool _hasIssues;
@@ -53,7 +54,7 @@ public partial class ComponentDimensionViewModel : ObservableObject
     {
         if (_canvas == null)
         {
-            StatusText = "No design loaded";
+            StatusText = LocalizationService.Instance.Translate("Diag.Dimension.NoDesign");
             return;
         }
 
@@ -66,7 +67,7 @@ public partial class ComponentDimensionViewModel : ObservableObject
             Issues.Add(new DimensionIssue
             {
                 ComponentName = result.ComponentName,
-                Issue = result.Issue ?? "Unknown issue",
+                Issue = result.Issue ?? LocalizationService.Instance.Translate("Diag.Dimension.UnknownIssue"),
                 CurrentDimensions = $"{result.CurrentWidth:F1} × {result.CurrentHeight:F1} µm",
                 RecommendedDimensions = $"{result.RecommendedWidth:F1} × {result.RecommendedHeight:F1} µm"
             });
@@ -75,8 +76,8 @@ public partial class ComponentDimensionViewModel : ObservableObject
         IssueCount = Issues.Count;
         HasIssues = IssueCount > 0;
         StatusText = HasIssues
-            ? $"Found {IssueCount} component(s) with dimension issues"
-            : "All components have valid dimensions";
+            ? string.Format(LocalizationService.Instance.Translate("Diag.Dimension.FoundIssues"), IssueCount)
+            : LocalizationService.Instance.Translate("Diag.Dimension.AllValid");
     }
 
     /// <summary>
@@ -102,7 +103,7 @@ public partial class ComponentDimensionViewModel : ObservableObject
         }
 
         await CopyToClipboard(sb.ToString());
-        StatusText = $"Copied {IssueCount} issue(s) to clipboard";
+        StatusText = string.Format(LocalizationService.Instance.Translate("Diag.Dimension.CopiedToClipboard"), IssueCount);
     }
 }
 

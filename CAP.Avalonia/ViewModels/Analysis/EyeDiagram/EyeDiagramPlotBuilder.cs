@@ -1,4 +1,5 @@
 using CAP_Core.Analysis.EyeDiagram;
+using CAP.Avalonia.Services.Localization;
 using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Series;
@@ -64,7 +65,7 @@ internal static class EyeDiagramPlotBuilder
     {
         var model = new PlotModel
         {
-            Title = "Eye Diagram",
+            Title = LocalizationService.Instance.Translate("Analysis.Eye.ChartTitle"),
             Background = OxyColors.Black,
             TextColor = PlotForeground,
             TitleColor = PlotForeground,

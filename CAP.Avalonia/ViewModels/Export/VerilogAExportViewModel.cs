@@ -4,6 +4,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP_Core;
 using CAP_Core.Export;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Export;
@@ -84,7 +85,7 @@ public partial class VerilogAExportViewModel : ObservableObject
         if (IsExporting) return;
         if (FileDialogService == null)
         {
-            StatusText = "Export not available";
+            StatusText = LocalizationService.Instance.Translate("Export.NotAvailable");
             return;
         }
 
@@ -95,7 +96,7 @@ public partial class VerilogAExportViewModel : ObservableObject
 
         if (components.Count == 0)
         {
-            StatusText = "No components to export.";
+            StatusText = LocalizationService.Instance.Translate("Export.VerilogA.NoComponents");
             return;
         }
 
@@ -110,7 +111,7 @@ public partial class VerilogAExportViewModel : ObservableObject
         var circuitName = SanitizeCircuitName(Path.GetFileNameWithoutExtension(filePath));
 
         IsExporting = true;
-        StatusText = "Exporting...";
+        StatusText = LocalizationService.Instance.Translate("Export.VerilogA.Exporting");
         LastExportSucceeded = false;
         // Reset state from any previous run so a failure here doesn't leave the
         // dialog pointing at stale data (e.g., last successful directory/file count).
@@ -135,7 +136,8 @@ public partial class VerilogAExportViewModel : ObservableObject
 
             if (!result.Success)
             {
-                StatusText = $"✗ Export failed: {result.ErrorMessage}";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Export.VerilogA.ExportFailed"), result.ErrorMessage);
                 return;
             }
 
@@ -146,21 +148,26 @@ public partial class VerilogAExportViewModel : ObservableObject
             LastFileCount = result.TotalFileCount;
             LastOutputDirectory = circuitOutputDir;
             LastExportSucceeded = true;
-            StatusText = $"✓ Exported {result.TotalFileCount} files to {circuitOutputDir}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.VerilogA.Exported"),
+                result.TotalFileCount, circuitOutputDir);
         }
         catch (InvalidOperationException ex)
         {
             // Design-level issue surfaced by the exporter (orphan pin, unmapped
             // component type, missing ports, …).
-            StatusText = $"✗ Export rejected: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.VerilogA.Rejected"), ex.Message);
         }
         catch (IOException ex)
         {
-            StatusText = $"✗ Could not write files: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.VerilogA.WriteFailed"), ex.Message);
         }
         catch (UnauthorizedAccessException ex)
         {
-            StatusText = $"✗ Access denied: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.VerilogA.AccessDenied"), ex.Message);
         }
         finally
         {

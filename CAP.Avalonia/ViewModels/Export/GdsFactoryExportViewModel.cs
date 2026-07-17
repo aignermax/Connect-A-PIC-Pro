@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsFactoryExport;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core;
 using CAP_Core.Export;
@@ -81,13 +82,13 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     {
         if (FileDialogService == null)
         {
-            StatusText = "Export not available (no file dialog service).";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.NotAvailable");
             return;
         }
 
         if (_canvas.Components.Count == 0)
         {
-            StatusText = "Nothing to export — add some components first.";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.NothingToExport");
             return;
         }
 
@@ -119,8 +120,9 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         var stem = Path.GetFileNameWithoutExtension(filePath);
         if (PythonModuleShadowing.ShadowsPythonModule(stem))
         {
-            StatusText = $"'{Path.GetFileName(filePath)}' shadows the Python module "
-                + $"'{stem.ToLowerInvariant()}' — please choose a different file name (e.g. chip1.py).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.Shadows"),
+                Path.GetFileName(filePath), stem.ToLowerInvariant());
             return;
         }
 
@@ -137,18 +139,18 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
                     MetalRoutingSpecProvider?.Invoke()));
 
-            StatusText = "Running gdsfactory to generate the GDS...";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Running");
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
 
             // gdsfactory missing → auto-install into a managed environment and retry once.
             if (!result.Success && IsGdsFactoryMissing(result.ErrorMessage) && EnsureGdsFactoryAsync != null)
             {
                 var progress = new Progress<string>(m => StatusText = m);
-                StatusText = "gdsfactory not found — installing it into a managed environment...";
+                StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Installing");
                 var installed = await EnsureGdsFactoryAsync(progress, CancellationToken.None);
                 if (installed)
                 {
-                    StatusText = "Retrying GDS generation...";
+                    StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Retrying");
                     result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
                 }
             }
@@ -160,7 +162,8 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         catch (Exception ex)
         {
             _errorConsole?.LogError($"gdsfactory export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.ExportFailed"), ex.Message);
         }
         finally
         {
@@ -195,9 +198,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     {
         var scriptName = Path.GetFileName(filePath);
         if (result.Success && result.GdsPath != null)
-            return $"Exported {scriptName} and opened {Path.GetFileName(result.GdsPath)}.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.ExportedOpened"),
+                scriptName, Path.GetFileName(result.GdsPath));
         if (result.Success)
-            return $"Exported {scriptName}.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.Exported"), scriptName);
 
         // Full traceback goes to the (copyable) Error Console only — the dialog shows a
         // short, actionable line so it doesn't duplicate an uncopyable wall of text.
@@ -215,10 +221,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         var gdsFactoryMissing = errorMessage?.Contains("No module named 'gdsfactory'",
             StringComparison.OrdinalIgnoreCase) == true;
         if (gdsFactoryMissing)
-            return $"Exported {scriptName}, but gdsfactory is not installed in the active "
-                + "environment. Install it under Settings → Python Environments → Install gdsfactory, "
-                + "then export again.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.MissingGdsFactory"), scriptName);
 
-        return $"Exported {scriptName}, but the GDS run failed — see the Error Console for details.";
+        return string.Format(
+            LocalizationService.Instance.Translate("Export.GdsFactory.RunFailed"), scriptName);
     }
 }

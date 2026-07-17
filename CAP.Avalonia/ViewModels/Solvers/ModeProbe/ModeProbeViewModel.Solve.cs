@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.IO;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Solvers.ModeProbe;
 using CAP_Core.Solvers.ModeSolver;
 using CommunityToolkit.Mvvm.Input;
@@ -25,7 +26,7 @@ public partial class ModeProbeViewModel
         var crossSection = ResolveCrossSection();
         IsSolving = true;
         ResetResult();
-        StatusText = "Solving…";
+        StatusText = LocalizationService.Instance.Translate("ModeProbe.Solving");
 
         try
         {
@@ -44,7 +45,7 @@ public partial class ModeProbeViewModel
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Cancelled.";
+            StatusText = LocalizationService.Instance.Translate("ModeProbe.Cancelled");
         }
         finally
         {
@@ -93,7 +94,7 @@ public partial class ModeProbeViewModel
             .FirstOrDefault();
         if (fundamental == null)
         {
-            StatusText = "No guided mode found for this cross-section.";
+            StatusText = LocalizationService.Instance.Translate("ModeProbe.NoGuidedMode");
             return;
         }
 
@@ -112,12 +113,13 @@ public partial class ModeProbeViewModel
 
         UpdateFiberOverlap();
         HasResult = true;
-        StatusText = $"Solved with {result.BackendUsed}.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("ModeProbe.SolvedWith"), result.BackendUsed);
     }
 
     private void ApplyFailure(ModeSolverResult result)
     {
-        StatusText = result.Error ?? "Solve failed.";
+        StatusText = result.Error ?? LocalizationService.Instance.Translate("ModeProbe.SolveFailed");
         if (!string.IsNullOrWhiteSpace(result.MissingBackend))
             StatusText += $"  →  pip install {result.MissingBackend} (Settings → Python environment)";
     }
@@ -136,23 +138,24 @@ public partial class ModeProbeViewModel
         ModeSolverResult failure, ProbeCrossSection crossSection, CancellationToken ct)
     {
         var progress = new Progress<string>(m => StatusText = m);
-        StatusText = $"Installing {failure.MissingBackend}… (first use can take a few minutes)";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("ModeProbe.Installing"), failure.MissingBackend);
         var installed = await EnsureBackendAsync!(failure.MissingBackend!, progress, ct);
         if (!installed)
         {
-            StatusText = $"Auto-install of '{failure.MissingBackend}' did not complete — see "
-                + $"Settings → Python environment for details, or run: pip install {failure.MissingBackend}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ModeProbe.AutoInstallIncomplete"), failure.MissingBackend);
             return null;
         }
 
-        StatusText = "Backend installed — retrying…";
+        StatusText = LocalizationService.Instance.Translate("ModeProbe.BackendInstalledRetrying");
         var retry = await _service.SolveAsync(BuildRequest(crossSection), ct);
         if (!retry.Success && retry.MissingBackend == failure.MissingBackend)
         {
             // uv reported success but the backend still can't be imported (partial install,
             // wrong ABI, missing runtime config). Don't loop — say so plainly (#691 review).
-            StatusText = $"Installed '{failure.MissingBackend}' but it is still unavailable — "
-                + "check Settings → Python environment.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ModeProbe.BackendStillUnavailable"), failure.MissingBackend);
             return null;
         }
         return retry;

@@ -3,6 +3,7 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.CodeExporter;
 using CAP_Core.Components;
@@ -17,7 +18,7 @@ namespace CAP.Avalonia.ViewModels.Diagnostics;
 public partial class ExportValidationViewModel : ObservableObject
 {
     [ObservableProperty]
-    private string _validationStatus = "Ready";
+    private string _validationStatus = LocalizationService.Instance.Translate("Diag.Ready");
 
     [ObservableProperty]
     private bool _isValid = false;
@@ -60,12 +61,12 @@ public partial class ExportValidationViewModel : ObservableObject
     {
         if (canvas == null)
         {
-            ValidationStatus = "No design to validate";
+            ValidationStatus = LocalizationService.Instance.Translate("Diag.Export.NoDesign");
             return;
         }
 
         Messages.Clear();
-        ValidationStatus = "Running validation...";
+        ValidationStatus = LocalizationService.Instance.Translate("Diag.Export.Running");
 
         try
         {
@@ -84,7 +85,7 @@ public partial class ExportValidationViewModel : ObservableObject
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Export validation failed: {ex.Message}", ex);
-            ValidationStatus = $"Validation failed: {ex.Message}";
+            ValidationStatus = string.Format(LocalizationService.Instance.Translate("Diag.Export.Failed"), ex.Message);
             HasResults = false;
         }
     }
@@ -102,11 +103,13 @@ public partial class ExportValidationViewModel : ObservableObject
 
         if (result.IsValid)
         {
-            ValidationStatus = $"✓ Validation passed ({PassedChecks}/{TotalChecks} checks)";
+            ValidationStatus = string.Format(
+                LocalizationService.Instance.Translate("Diag.Export.Passed"), PassedChecks, TotalChecks);
         }
         else
         {
-            ValidationStatus = $"✗ Validation failed ({FailedChecks} errors, {WarningCount} warnings)";
+            ValidationStatus = string.Format(
+                LocalizationService.Instance.Translate("Diag.Export.FailedSummary"), FailedChecks, WarningCount);
         }
 
         // Add errors
@@ -145,7 +148,9 @@ public partial class ExportValidationViewModel : ObservableObject
             Messages.Add(new ValidationMessage
             {
                 Severity = "Info",
-                Message = $"... and {result.Successes.Count - 10} more successful checks"
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("Diag.Export.MoreChecks"),
+                    result.Successes.Count - 10)
             });
         }
 
@@ -159,7 +164,7 @@ public partial class ExportValidationViewModel : ObservableObject
     public void ClearResults()
     {
         Messages.Clear();
-        ValidationStatus = "Ready";
+        ValidationStatus = LocalizationService.Instance.Translate("Diag.Ready");
         IsValid = false;
         TotalChecks = 0;
         PassedChecks = 0;
