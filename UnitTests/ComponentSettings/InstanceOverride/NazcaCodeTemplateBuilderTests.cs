@@ -1,6 +1,7 @@
 using CAP.Avalonia.Services;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.ComponentSettings.InstanceOverride;
 
@@ -12,6 +13,7 @@ namespace UnitTests.ComponentSettings.InstanceOverride;
 /// integration test runs the generated code through the real preview script to prove
 /// the seeded template actually renders — the end-to-end check that was missing.
 /// </summary>
+[Trait("Category", "Slow")]
 public class NazcaCodeTemplateBuilderTests
 {
     [Fact]

@@ -47,6 +47,7 @@ namespace UnitTests.Integration;
 /// NazcaCoordinateMapperTests (hand-computed expectations) and by GdsExportAlignmentTests
 /// (verified against the real nazca engine that writes the GDS).
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsCoordinateVerificationTests
 {
     private const double PinAlignmentTolerance = 0.01; // µm — tight, 10 nm

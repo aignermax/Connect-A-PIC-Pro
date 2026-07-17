@@ -4,10 +4,12 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport;
 
 /// <summary>Tests for the gdsfactory export dialog ViewModel (#581).</summary>
+[Trait("Category", "Slow")]
 public class GdsFactoryExportViewModelTests
 {
     /// <summary>Pin the UI language so status-text assertions match the English literals

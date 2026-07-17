@@ -16,6 +16,7 @@ namespace UnitTests.UI.Flows;
 /// </summary>
 [Trait("Category", "UiFlows")]
 [Collection("UiFlows")]
+[Trait("Category", "Slow")]
 public class UiFlowEditForkTests
 {
     private const string PdkName = "Demo PDK";

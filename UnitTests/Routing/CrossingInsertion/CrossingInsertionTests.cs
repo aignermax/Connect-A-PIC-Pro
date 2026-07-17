@@ -17,6 +17,7 @@ namespace UnitTests.Routing.CrossingInsertion;
 /// component is placed at the intersection and both nets are split into
 /// sub-connections docked at its ports.
 /// </summary>
+[Trait("Category", "Slow")]
 public class CrossingInsertionTests
 {
     /// <summary>Bend loss that makes the detour clearly worse than one crossing (~0.18 dB).</summary>

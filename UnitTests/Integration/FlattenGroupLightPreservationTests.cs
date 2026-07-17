@@ -10,6 +10,7 @@ using CAP_Core.Tiles;
 using Shouldly;
 using System.Numerics;
 using UnitTests.Simulation;
+using Xunit;
 
 namespace UnitTests.Integration;
 
@@ -18,6 +19,7 @@ namespace UnitTests.Integration;
 /// Verifies that grouping/ungrouping is a purely organizational operation with no simulation effect.
 /// Covers issue #319: groups must not "swallow" light during simulation.
 /// </summary>
+[Trait("Category", "Slow")]
 public class FlattenGroupLightPreservationTests
 {
     private static readonly int[] AllWavelengths = { StandardWaveLengths.RedNM };
