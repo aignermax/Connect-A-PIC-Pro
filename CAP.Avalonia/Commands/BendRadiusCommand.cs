@@ -44,7 +44,11 @@ public sealed class BendRadiusCommand : IUndoableCommand
 
     private void ApplyRadius(double radius)
     {
-        BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, radius, out _);
+        // The route may have been rebuilt since this command was recorded (style change or
+        // endpoint move clears the overrides and can shift bend indices) — then the apply
+        // legitimately fails. Degrade to a no-op instead of pretending geometry changed.
+        if (!BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, radius, out _))
+            return;
         _connection.NotifyPathChanged();
         _afterApply?.Invoke();
     }

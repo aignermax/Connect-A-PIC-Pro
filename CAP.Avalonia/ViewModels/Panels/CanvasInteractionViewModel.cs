@@ -54,6 +54,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
     [ObservableProperty]
     private WaveguideConnectionViewModel? _selectedWaveguideConnection;
 
+    /// <summary>
+    /// True when the selected connection is an optical waveguide. Electrical connections are
+    /// metal traces (#682): they get no routing style and no bend handles, so the routing
+    /// panel binds its visibility to this instead of the raw selection.
+    /// </summary>
+    public bool IsOpticalConnectionSelected =>
+        SelectedWaveguideConnection is { } conn && !conn.Connection.IsElectrical;
+
+    partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
+        OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+
     private PhysicalPin? _connectionStartPin;
     private double _moveStartX;
     private double _moveStartY;

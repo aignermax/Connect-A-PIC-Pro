@@ -63,6 +63,10 @@ public partial class ConnectionRoutingViewModel : ObservableObject
             return;
 
         var conn = SelectedConnection.Connection;
+        // Electrical connections are metal traces (#682) — they never take a routing style.
+        // The panel is hidden for them; this guards the programmatic path as well.
+        if (conn.IsElectrical)
+            return;
         conn.Type = value;
         if (value == WaveguideType.Auto)
         {
