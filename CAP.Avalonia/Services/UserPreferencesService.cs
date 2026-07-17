@@ -304,6 +304,21 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Gets the UI language preference: a shipped language code ("en", "de",
+    /// "zh-Hans", "es") or "system" to follow the OS display language (default).
+    /// </summary>
+    public string GetUiLanguage() => _preferences.UiLanguage;
+
+    /// <summary>
+    /// Sets the UI language preference and saves. See <see cref="GetUiLanguage"/> for values.
+    /// </summary>
+    public void SetUiLanguage(string languageCodeOrSystem)
+    {
+        _preferences.UiLanguage = languageCodeOrSystem;
+        Save();
+    }
+
+    /// <summary>
     /// Clears any skipped update version and saves preferences.
     /// </summary>
     public void ClearSkippedUpdateVersion()
@@ -398,4 +413,10 @@ public class UserPreferences
     /// Default chip height in millimeters for new projects (default 5 mm).
     /// </summary>
     public double DefaultChipHeightMm { get; set; } = 5.0;
+
+    /// <summary>
+    /// UI language: a shipped language code ("en", "de", "zh-Hans", "es") or
+    /// "system" (default) to auto-detect the OS display language at startup.
+    /// </summary>
+    public string UiLanguage { get; set; } = "system";
 }
