@@ -4,6 +4,7 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Process;
 using CAP_DataAccess.Persistence;
@@ -352,7 +353,14 @@ public partial class FileOperationsViewModel : ObservableObject
                         IsLocked = c.Connection.IsLocked ? true : null,
                         TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
                         IsTargetLengthEnabled = c.Connection.IsTargetLengthEnabled ? true : null,
-                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null
+                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null,
+                        RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
+                        WidthMicrometers = c.Connection.WidthMicrometers,
+                        BendRadiusMicrometers = c.Connection.BendRadiusMicrometers,
+                        IsRouteFrozen = c.Connection.IsRouteFrozen ? true : null,
+                        BendRadiusOverrides = c.Connection.BendRadiusOverrides.Count > 0
+                            ? new Dictionary<int, double>(c.Connection.BendRadiusOverrides)
+                            : null
                     };
                 }).ToList()
             };
@@ -1264,6 +1272,31 @@ public partial class FileOperationsViewModel : ObservableObject
                 connVm.Connection.IsTargetLengthEnabled = true;
             if (connData.LengthToleranceMicrometers.HasValue)
                 connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers.Value;
+        }
+
+        // Restore routing style / interconnect settings / freeze state (issue #574)
+        if (connVm != null)
+            RestoreRoutingSettings(connVm.Connection, connData);
+    }
+
+    /// <summary>
+    /// Restores per-connection routing style, width/radius and freeze state from saved data.
+    /// </summary>
+    private static void RestoreRoutingSettings(WaveguideConnection connection, ConnectionData connData)
+    {
+        if (connData.RoutingStyle != null &&
+            Enum.TryParse<WaveguideType>(connData.RoutingStyle, out var style))
+            connection.Type = style;
+        if (connData.WidthMicrometers.HasValue)
+            connection.WidthMicrometers = connData.WidthMicrometers.Value;
+        if (connData.BendRadiusMicrometers.HasValue)
+            connection.BendRadiusMicrometers = connData.BendRadiusMicrometers.Value;
+        if (connData.IsRouteFrozen == true)
+            connection.IsRouteFrozen = true;
+        if (connData.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in connData.BendRadiusOverrides)
+                connection.BendRadiusOverrides[bendIndex] = radius;
         }
     }
 

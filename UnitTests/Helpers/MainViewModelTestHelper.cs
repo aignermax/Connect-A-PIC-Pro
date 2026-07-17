@@ -172,6 +172,7 @@ public static class MainViewModelTestHelper
             canvas,
             commandManager,
             new WaveguideLengthViewModel(),
+            new ConnectionRoutingViewModel(canvas),
             new ElementLockViewModel(),
             new ErrorConsoleViewModel(errorConsoleService),
             new AnalysisDockViewModel(new TimeDomainViewModel(), new EyeDiagramViewModel()));

@@ -434,6 +434,11 @@ public class WaveguideConnectionManager
     /// </summary>
     private static bool IsRouteStillValid(WaveguideConnection connection, WaveguideRouter router)
     {
+        // Frozen paths with matching endpoints are always kept as-is: manual bend edits
+        // must survive re-routing. RecalculateTransmission handles the unfreeze case.
+        if (connection.IsRouteFrozen && connection.FrozenPathStillMatchesPins())
+            return true;
+
         if (connection.RoutedPath == null || !connection.IsPathValid)
             return false;
 

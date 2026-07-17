@@ -262,6 +262,49 @@
                         </StackPanel>
                     </DataTemplate>
 
+                    <!-- Interconnect defaults (issue #574) -->
+                    <DataTemplate DataType="{x:Type settings:InterconnectSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{loc:Localize Settings.Interconnect.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Interconnect.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.Width}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding WidthMicrometers}"
+                                               Minimum="0.05" Maximum="100" Increment="0.05"
+                                               Width="130" FormatString="F2"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.BendRadius}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding BendRadiusMicrometers}"
+                                               Minimum="0.5" Maximum="10000" Increment="1"
+                                               Width="130" FormatString="F1"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.GdsLayer}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <TextBox Text="{Binding GdsLayerText}" Width="130" Watermark="{loc:Localize Settings.Interconnect.GdsLayerWatermark}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                                <Button Content="{loc:Localize Settings.Interconnect.Apply}"
+                                        Command="{Binding ApplyCommand}"
+                                        Padding="16,4" Background="#3d5d5d"/>
+                                <Button Content="{loc:Localize Settings.Interconnect.Reset}"
+                                        Command="{Binding ResetToDefaultsCommand}"
+                                        Padding="16,4"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="LightGreen" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
                     <!-- Language — UI language picker (issue #744) -->
                     <DataTemplate DataType="{x:Type settings:LanguageSettingsViewModel}">
                         <StackPanel Spacing="8">

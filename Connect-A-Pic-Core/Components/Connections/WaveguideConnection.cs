@@ -24,6 +24,27 @@ namespace CAP_Core.Components.Connections
         public bool IsLocked { get; set; }
 
         /// <summary>
+        /// When true, the current routed path is frozen: re-routing keeps the existing
+        /// geometry as long as both endpoints still match. Moving an endpoint beyond the
+        /// tolerance automatically unfreezes the connection and clears bend overrides.
+        /// Set automatically when a manual per-bend radius override is applied.
+        /// </summary>
+        public bool IsRouteFrozen { get; set; }
+
+        /// <summary>
+        /// Manual per-bend radius overrides in micrometers, keyed by the index of the
+        /// bend among the path's bend segments (0 = first bend along the path).
+        /// Cleared automatically when the connection is re-routed from scratch.
+        /// </summary>
+        public Dictionary<int, double> BendRadiusOverrides { get; } = new();
+
+        /// <summary>
+        /// Tolerance in micrometers for deciding whether a frozen path still matches
+        /// the current pin positions.
+        /// </summary>
+        public const double FrozenEndpointToleranceMicrometers = 1.0;
+
+        /// <summary>
         /// True when this connection joins electrical pins and must be laid out as a
         /// metal trace instead of an optical waveguide (issue #682). Cross-kind pairs
         /// are rejected at creation time (see PinKindHelper), so checking one pin of
@@ -153,12 +174,61 @@ namespace CAP_Core.Components.Connections
                 return;
             }
 
+            if (IsRouteFrozen)
+            {
+                if (FrozenPathStillMatchesPins())
+                {
+                    // Keep manually edited geometry; just refresh the loss values.
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // An endpoint moved: unfreeze and discard manual bend edits.
+                IsRouteFrozen = false;
+                BendRadiusOverrides.Clear();
+            }
+
             // Update router settings
             router.MinBendRadiusMicrometers = BendRadiusMicrometers;
 
             // Route the connection using two-phase A* (Phase 1 quick, Phase 2 extended)
             RoutedPath = router.Route(StartPin, EndPin, cancellationToken);
 
+            UpdateLossFromPath(wavelengthNm);
+        }
+
+        /// <summary>
+        /// Checks whether the frozen path's endpoints still match the current pin positions
+        /// within <see cref="FrozenEndpointToleranceMicrometers"/>.
+        /// </summary>
+        public bool FrozenPathStillMatchesPins()
+        {
+            if (RoutedPath == null || RoutedPath.Segments.Count == 0 || StartPin == null || EndPin == null)
+                return false;
+
+            var (startX, startY) = StartPin.GetAbsolutePosition();
+            var (endX, endY) = EndPin.GetAbsolutePosition();
+            var first = RoutedPath.Segments[0];
+            var last = RoutedPath.Segments[^1];
+
+            return Distance(first.StartPoint.X, first.StartPoint.Y, startX, startY) <= FrozenEndpointToleranceMicrometers
+                && Distance(last.EndPoint.X, last.EndPoint.Y, endX, endY) <= FrozenEndpointToleranceMicrometers;
+        }
+
+        private static double Distance(double x1, double y1, double x2, double y2)
+        {
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        /// <summary>
+        /// Recalculates <see cref="TotalLossDb"/> and <see cref="TransmissionCoefficient"/>
+        /// from the current <see cref="RoutedPath"/> geometry.
+        /// </summary>
+        /// <param name="wavelengthNm">Wavelength in nm used when a <see cref="DispersionModel"/> is set.</param>
+        public void UpdateLossFromPath(double wavelengthNm = 1550.0)
+        {
             // Calculate total loss from actual path
             double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
             double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm; // µm to cm
@@ -185,14 +255,7 @@ namespace CAP_Core.Components.Connections
         public void RestoreCachedPath(RoutedPath cachedPath, double wavelengthNm = 1550.0)
         {
             RoutedPath = cachedPath;
-
-            double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
-            double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm;
-            double bendLoss = BendCount * BendLossDbPer90Deg;
-            TotalLossDb = propagationLoss + bendLoss;
-
-            double amplitudeCoefficient = Math.Pow(10, -TotalLossDb / 20.0);
-            TransmissionCoefficient = new Complex(amplitudeCoefficient, 0);
+            UpdateLossFromPath(wavelengthNm);
         }
 
         /// <summary>

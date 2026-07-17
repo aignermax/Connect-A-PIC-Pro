@@ -7,7 +7,9 @@ using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
+using CAP_Core.Export.InterconnectRouting;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Routing.MetalRouting;
 
 namespace CAP.Avalonia.Services;
@@ -18,6 +20,13 @@ namespace CAP.Avalonia.Services;
 /// </summary>
 public class SimpleNazcaExporter
 {
+    /// <summary>
+    /// Optional source of global interconnect settings (waveguide width/bend radius/GDS layer,
+    /// issue #574). When null, the historical export defaults (<see cref="InterconnectSettings"/>)
+    /// are used.
+    /// </summary>
+    public Func<InterconnectSettings>? SettingsSource { get; set; }
+
     /// <summary>
     /// Exports the full design to a Python/Nazca script.
     /// </summary>
@@ -42,11 +51,12 @@ public class SimpleNazcaExporter
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
+        var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
 
-        AppendHeader(sb, metal);
+        AppendHeader(sb, interconnectSettings, metal);
         AppendPdkComponentStubs(sb, canvas);
         var componentNames = AppendComponents(sb, canvas, emitVerification);
-        AppendConnections(sb, canvas, componentNames, metal);
+        AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer);
         AppendFooter(sb);
         if (emitVerification)
             AppendVerificationEpilog(sb);
@@ -54,19 +64,24 @@ public class SimpleNazcaExporter
         return sb.ToString();
     }
 
-    private static void AppendHeader(StringBuilder sb, MetalRoutingSpec metal)
+    private static void AppendHeader(StringBuilder sb, InterconnectSettings settings, MetalRoutingSpec metal)
     {
+        var ci = CultureInfo.InvariantCulture;
         sb.AppendLine("import nazca as nd");
         sb.AppendLine("import nazca.demofab as demo");
         sb.AppendLine("from nazca.interconnects import Interconnect");
         sb.AppendLine();
         sb.AppendLine("# PDK Configuration");
-        sb.AppendLine("WG_WIDTH = 0.45  # Waveguide width in µm");
-        sb.AppendLine("BEND_RADIUS = 50  # Minimum bend radius in µm");
+        sb.AppendLine($"WG_WIDTH = {settings.WidthMicrometers.ToString("0.0###", ci)}  # Waveguide width in µm");
+        sb.AppendLine($"BEND_RADIUS = {settings.BendRadiusMicrometers.ToString("0.###", ci)}  # Minimum bend radius in µm");
+        if (settings.GdsLayer.HasValue)
+            sb.AppendLine($"WG_LAYER = {settings.GdsLayer.Value}  # Waveguide GDS layer");
         sb.AppendLine();
         NazcaMetalTraceWriter.AppendHeaderConstants(sb, metal);
         sb.AppendLine("# Create interconnect for waveguide routing");
-        sb.AppendLine("ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
+        sb.AppendLine(settings.GdsLayer.HasValue
+            ? "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS, layer=WG_LAYER)"
+            : "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
         sb.AppendLine();
     }
 
@@ -383,7 +398,8 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
-        MetalRoutingSpec metalSpec)
+        MetalRoutingSpec metalSpec,
+        int? gdsLayer = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -411,6 +427,21 @@ public class SimpleNazcaExporter
             var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
             if (metal != null)
                 metalConnections.Add(conn);
+
+            // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
+            // export a single Nazca primitive (strt/sinebend/bend/euler/cobra) on the
+            // waveguide layer instead of the routed segments. An electrical connection
+            // must stay a metal trace (issue #682) — never emit it as an optical
+            // primitive even if a style was set, so styled export is gated on metal == null.
+            if (metal == null)
+            {
+                var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer);
+                if (styledLine != null)
+                {
+                    sb.AppendLine(styledLine);
+                    continue;
+                }
+            }
 
             // Routed connections export their real segments; only routeless
             // connections fall back to a p2p interconnect.
