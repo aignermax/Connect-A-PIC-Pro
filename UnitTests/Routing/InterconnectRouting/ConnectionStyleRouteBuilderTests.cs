@@ -15,54 +15,61 @@ using Xunit;
 namespace UnitTests.Routing.InterconnectRouting;
 
 /// <summary>
-/// Verifies that an explicit routing style reshapes the visible route into the matching
-/// primitive geometry, that Auto keeps the collision-avoiding A* route, and that the built
-/// canvas geometry shares its basis (distance / radius / turn) with the Nazca exporter.
+/// Verifies that each explicit routing style produces a visibly distinct, smooth curve that
+/// reaches BOTH pins exactly, that Auto keeps the collision-avoiding A* route, and that the
+/// built canvas geometry shares its basis with the Nazca exporter.
 /// </summary>
 public class ConnectionStyleRouteBuilderTests
 {
-    private const double Radius = 10.0;
+    private const double PinTolerance = 0.5;
 
     [Fact]
-    public void Straight_ProducesSingleStraightSegmentOfPinDistance()
+    public void Straight_AlignedPins_ProducesSingleStraightSegmentOfPinDistance()
     {
         var conn = CreateConnection(WaveguideType.Straight);
 
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
         path.Segments.Count.ShouldBe(1);
         path.Segments[0].ShouldBeOfType<StraightSegment>();
         path.Segments[0].LengthMicrometers.ShouldBe(50.0, 0.01);
     }
 
+    [Fact]
+    public void Straight_OffsetPins_FallsBackToConnectedArcS_NoFloatingStub()
+    {
+        // Offset pins cannot be joined by one straight; Straight must fall back to the
+        // connected two-arc S so the route never ends in mid-air.
+        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
+
+        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
+        AssertConnectsBothPins(conn, path);
+    }
+
     [Theory]
     [InlineData(WaveguideType.Bend)]
     [InlineData(WaveguideType.Euler)]
-    public void ArcStyles_AngledOffsetPins_BuildStubArcStub_ReachingEndPinExactly(WaveguideType type)
+    public void ArcStyles_AngledPins_BuildStubArcStub_WithGenerousRadius(WaveguideType type)
     {
         // End pin at (100, 55) pointing 270° → arrival direction 90°, a 90° turn. The corner of
-        // the two pin axes is at (100, 25): 50 µm ahead of the start pin, 30 µm before the end.
+        // the two pin axes is at (100, 25): legs 50 µm (start) and 30 µm (end). The largest
+        // fitting radius is min(50, 30)/tan(45°) = 30 µm; the builder uses 0.9 × that = 27 µm,
+        // leaving straight stubs of 50−27 = 23 µm and 30−27 = 3 µm.
         var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
 
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
-        // Stub – arc – stub: exactly one arc with the requested radius and the 90° sweep.
         path.Segments.Count.ShouldBe(3);
         path.Segments[0].ShouldBeOfType<StraightSegment>();
         var bend = path.Segments[1].ShouldBeOfType<BendSegment>();
         path.Segments[2].ShouldBeOfType<StraightSegment>();
-        bend.RadiusMicrometers.ShouldBe(Radius, 0.01);
+        bend.RadiusMicrometers.ShouldBe(30.0 * SBendGeometry.GenerousRadiusFactor, 0.01);
         Math.Abs(bend.SweepAngleDegrees).ShouldBe(90.0, 0.01);
-
-        // Both pins are hit exactly (tangent length τ = r·tan(45°) = 10 → stubs 40 µm and 20 µm).
-        var (startX, startY) = conn.StartPin.GetAbsolutePosition();
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        path.Segments[0].StartPoint.X.ShouldBe(startX, 0.5);
-        path.Segments[0].StartPoint.Y.ShouldBe(startY, 0.5);
-        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
-        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
-        path.Segments[0].LengthMicrometers.ShouldBe(40.0, 0.1);
-        path.Segments[2].LengthMicrometers.ShouldBe(20.0, 0.1);
+        path.Segments[0].LengthMicrometers.ShouldBe(23.0, 0.1);
+        path.Segments[2].LengthMicrometers.ShouldBe(3.0, 0.1);
+        AssertConnectsBothPins(conn, path);
     }
 
     [Fact]
@@ -72,30 +79,11 @@ public class ConnectionStyleRouteBuilderTests
         // radius handles (GetBendCorners) find it.
         var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
 
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
         var corners = BendRadiusEditor.GetBendCorners(path.Segments);
         corners.Count.ShouldBe(1);
-        corners[0].RadiusMicrometers.ShouldBe(Radius, 0.01);
-    }
-
-    [Fact]
-    public void Bend_RadiusTooLargeForCorner_ClampsRadius_StillReachesEndPin()
-    {
-        // The corner legs are 50 µm and 30 µm; a 100 µm radius needs τ = 100 µm of tangent —
-        // impossible. The radius must be clamped to ~30 µm, never abandoned to a straight line.
-        const double requestedRadius = 100.0;
-        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
-
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, requestedRadius);
-
-        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
-        bend.RadiusMicrometers.ShouldBeLessThan(requestedRadius);
-        bend.RadiusMicrometers.ShouldBe(30.0, 0.5); // min(t, s) / tan(45°), minus the safety margin
-
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
-        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
+        corners[0].RadiusMicrometers.ShouldBe(30.0 * SBendGeometry.GenerousRadiusFactor, 0.01);
     }
 
     [Fact]
@@ -113,86 +101,87 @@ public class ConnectionStyleRouteBuilderTests
     }
 
     [Fact]
+    public void Bend_ParallelOffsetPins_BuildsGenerousTwoArcS_WithHandles()
+    {
+        // A single arc cannot join parallel offset pins; Bend builds the two-arc S with the
+        // generous radius: 0.9 × the largest fitting radius for the inner span, and the arcs
+        // stay interior (flanked by straights) so the radius handles can grab them.
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20); // end pin angle 180 → parallel
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
+
+        var bends = path.Segments.OfType<BendSegment>().ToList();
+        bends.Count.ShouldBe(2);
+        bends[0].RadiusMicrometers.ShouldBe(
+            MaxTwoArcRadius(longitudinal: 50, lateral: 20) * SBendGeometry.GenerousRadiusFactor, 0.05);
+        BendRadiusEditor.GetBendCorners(path.Segments).Count.ShouldBe(2);
+        AssertConnectsBothPins(conn, path);
+    }
+
+    [Fact]
+    public void SBend_OffsetParallelPins_ProducesSmoothSinePolyline()
+    {
+        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
+
+        // A pure polyline: many straight chords, no BendSegments (a smooth sine has no single
+        // radius — correctly, no radius handles either).
+        path.Segments.Count.ShouldBe(SineBendGeometry.SampleCount);
+        path.Segments.ShouldAllBe(s => s is StraightSegment);
+        BendRadiusEditor.GetBendCorners(path.Segments).ShouldBeEmpty();
+
+        // Arrives at the end pin exactly and parallel to the start heading.
+        AssertConnectsBothPins(conn, path);
+        NormalizeSigned(path.Segments[^1].EndAngleDegrees).ShouldBe(0.0, 3.0);
+        AssertSmooth(path.Segments);
+    }
+
+    [Fact]
+    public void Cobra_OffsetParallelPins_ProducesSmoothHermitePolyline_DistinctFromSine()
+    {
+        var conn = CreateConnection(WaveguideType.Cobra, endOffsetY: 20);
+
+        var cobra = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, WaveguideType.Cobra);
+        var sine = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, WaveguideType.SBend);
+
+        cobra.Segments.Count.ShouldBe(CobraGeometry.SampleCount);
+        cobra.Segments.ShouldAllBe(s => s is StraightSegment);
+        AssertConnectsBothPins(conn, cobra);
+        AssertSmooth(cobra.Segments);
+
+        // The cobra (Hermite) curve is a different shape than the sine bend: away from the
+        // midpoint their lateral profiles must visibly diverge.
+        double maxDeviation = 0;
+        for (int i = 0; i < cobra.Segments.Count; i++)
+        {
+            double dy = Math.Abs(cobra.Segments[i].EndPoint.Y - sine.Segments[i].EndPoint.Y);
+            maxDeviation = Math.Max(maxDeviation, dy);
+        }
+        maxDeviation.ShouldBeGreaterThan(0.5, "cobra and sine bend must be visibly different curves");
+    }
+
+    [Fact]
     public void SBend_ReachesEndPinExactly()
     {
         var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
 
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        var last = path.Segments[^1];
-        last.EndPoint.X.ShouldBe(endX, 0.5);
-        last.EndPoint.Y.ShouldBe(endY, 0.5);
-    }
-
-    [Theory]
-    [InlineData(WaveguideType.SBend)]
-    [InlineData(WaveguideType.Cobra)]
-    public void PointToPoint_OffsetParallelPins_ProducesRealSCurve_NotDiagonalStraight(WaveguideType type)
-    {
-        // Parallel pins (end pin faces the start, arrival angle 0) with a lateral offset — the
-        // layout that used to collapse to a single diagonal straight for everything but Auto.
-        var conn = CreateConnection(type, endOffsetY: 20);
-
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
-
-        // A real S: more than one segment, with two arcs — never a lone diagonal StraightSegment.
-        path.Segments.Count.ShouldBeGreaterThan(1);
-        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
-
-        // Reaches the end pin exactly and arrives parallel to the start heading (0°).
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        var last = path.Segments[^1];
-        last.EndPoint.X.ShouldBe(endX, 0.5);
-        last.EndPoint.Y.ShouldBe(endY, 0.5);
-        last.EndAngleDegrees.ShouldBe(0.0, 0.5);
+        AssertConnectsBothPins(conn, path);
     }
 
     [Fact]
-    public void SBend_RadiusTooLargeForOffset_ReducesRadius_StillReachesEndPin()
+    public void Cobra_AngledPins_HonorsArrivalAngle()
     {
-        // A large lateral offset over a short forward span cannot host the requested 20 µm radius;
-        // the builder must shrink the radius rather than fall back to a straight.
-        const double requestedRadius = 20.0;
-        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 40);
+        // End pin pointing 270° → the curve must arrive heading 90° — something the sine
+        // bend (always parallel arrival) cannot do; this is cobra's distinguishing contract.
+        var conn = CreateConnection(WaveguideType.Cobra, endOffsetY: 30, endPinAngleDegrees: 270);
 
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, requestedRadius);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
-        path.Segments.OfType<BendSegment>().ShouldNotBeEmpty();
-        var maxRadius = path.Segments.OfType<BendSegment>().Max(b => b.RadiusMicrometers);
-        maxRadius.ShouldBeLessThan(requestedRadius); // reduced to fit the offset
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
-        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
-    }
-
-    [Fact]
-    public void Bend_ParallelOffsetPins_FallsBackToSCurve_NotDiagonalStraight()
-    {
-        // A single arc cannot join parallel offset pins; Bend falls back to an S-bend.
-        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20); // end pin angle 180 → parallel
-
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
-
-        path.Segments.Count.ShouldBeGreaterThan(1);
-        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
-        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
-        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
-        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
-    }
-
-    [Fact]
-    public void Straight_OffsetPins_RunsAlongHeading_NotDiagonalToEndPin()
-    {
-        // Straight is nd.strt along the start heading; it must stay horizontal (heading 0),
-        // never a silent diagonal to an offset end pin.
-        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
-
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
-
-        path.Segments.Count.ShouldBe(1);
-        var straight = path.Segments[0].ShouldBeOfType<StraightSegment>();
-        straight.StartPoint.Y.ShouldBe(straight.EndPoint.Y, 0.01); // no lateral drift
+        AssertConnectsBothPins(conn, path);
+        NormalizeSigned(path.Segments[^1].EndAngleDegrees - 90.0).ShouldBe(0.0, 4.0);
     }
 
     [Fact]
@@ -224,10 +213,10 @@ public class ConnectionStyleRouteBuilderTests
     [Fact]
     public void StyledGeometry_SharesBasisWithNazcaExport()
     {
-        // Straight: canvas segment length must equal the exporter's nd.strt(length=...).
+        // Straight (aligned): canvas segment length must equal the exporter's nd.strt(length=...).
         var straight = CreateConnection(WaveguideType.Straight);
         var straightPath = ConnectionStyleRouteBuilder.Build(
-            straight.StartPin, straight.EndPin, straight.Type, straight.BendRadiusMicrometers);
+            straight.StartPin, straight.EndPin, straight.Type);
         double exportedLength = ParseArg(NazcaConnectionStyleWriter.Format(straight)!, "length");
         straightPath.Segments[0].LengthMicrometers.ShouldBe(exportedLength, 0.05);
     }
@@ -243,6 +232,55 @@ public class ConnectionStyleRouteBuilderTests
         var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
 
         NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
+    }
+
+    [Fact]
+    public void Straight_OffsetPins_HasNoSinglePrimitiveExport_SegmentsAreTheTruth()
+    {
+        // The offset Straight falls back to the arc-S on canvas; an nd.strt would end in
+        // mid-air, so the exporter must write the exact canvas segments instead.
+        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
+
+        NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
+    }
+
+    /// <summary>Route must start at the start pin and end at the end pin (±0.5 µm).</summary>
+    private static void AssertConnectsBothPins(WaveguideConnection conn, RoutedPath path)
+    {
+        var (startX, startY) = conn.StartPin.GetAbsolutePosition();
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        path.Segments[0].StartPoint.X.ShouldBe(startX, PinTolerance);
+        path.Segments[0].StartPoint.Y.ShouldBe(startY, PinTolerance);
+        path.Segments[^1].EndPoint.X.ShouldBe(endX, PinTolerance);
+        path.Segments[^1].EndPoint.Y.ShouldBe(endY, PinTolerance);
+    }
+
+    /// <summary>Consecutive polyline chords may only turn by a few degrees — no kinks.</summary>
+    private static void AssertSmooth(IReadOnlyList<PathSegment> segments)
+    {
+        for (int i = 1; i < segments.Count; i++)
+        {
+            double turn = Math.Abs(NormalizeSigned(
+                segments[i].StartAngleDegrees - segments[i - 1].EndAngleDegrees));
+            turn.ShouldBeLessThan(6.0, $"kink of {turn:F1}° between chords {i - 1} and {i}");
+        }
+    }
+
+    /// <summary>Largest two-arc-S radius for the inner span (mirrors <see cref="SBendGeometry"/>:
+    /// 20% stubs each side, max R = inner / (2·sin φ0) with φ0 = 2·atan2(|lateral|, inner)).</summary>
+    private static double MaxTwoArcRadius(double longitudinal, double lateral)
+    {
+        double inner = longitudinal * 0.6;
+        double phi0 = 2.0 * Math.Atan2(Math.Abs(lateral), inner);
+        return inner / (2.0 * Math.Sin(phi0));
+    }
+
+    private static double NormalizeSigned(double angleDegrees)
+    {
+        double a = angleDegrees % 360.0;
+        if (a > 180.0) a -= 360.0;
+        if (a <= -180.0) a += 360.0;
+        return a;
     }
 
     private static double ParseArg(string line, string name)

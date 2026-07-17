@@ -1,6 +1,7 @@
 using System.Globalization;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
+using CAP_Core.Routing.InterconnectRouting;
 
 namespace CAP_Core.Export.InterconnectRouting;
 
@@ -14,8 +15,9 @@ namespace CAP_Core.Export.InterconnectRouting;
 /// parameterized only by (radius, angle) and therefore CANNOT land on an arbitrary end pin —
 /// exporting one would leave the GDS physically disconnected. Those styles are exported through
 /// the segment exporter (<c>SimpleNazcaExporter.AppendSegmentExport</c>), which writes exactly
-/// the canvas stub–arc–stub segments built by <c>ConnectionStyleRouteBuilder</c>, so the
-/// exported geometry reaches both pins and matches the canvas by construction.
+/// the canvas arc segments built by <c>ConnectionStyleRouteBuilder</c>, so the exported
+/// geometry reaches both pins and matches the canvas by construction. Straight likewise
+/// returns null for laterally offset pins, whose canvas route is the connected arc-S fallback.
 /// </summary>
 public static class NazcaConnectionStyleWriter
 {
@@ -38,6 +40,19 @@ public static class NazcaConnectionStyleWriter
             return null;
 
         var geometry = ComputeLocalGeometry(connection.StartPin, connection.EndPin);
+
+        // Straight only has a single-primitive form for (nearly) collinear pins; an offset
+        // Straight falls back to the arc-S on canvas (ConnectionStyleRouteBuilder) and must be
+        // exported as those exact segments — an nd.strt would end in mid-air. Same threshold
+        // as the canvas so canvas and GDS always agree.
+        if (connection.Type == WaveguideType.Straight && !IsAlignedForward(geometry))
+            return null;
+
+        // nd.sinebend needs a positive forward run; the degenerate canvas fallback
+        // (end pin behind the start) is exported as its exact segments instead.
+        if (connection.Type == WaveguideType.SBend && geometry.LocalDx <= 0)
+            return null;
+
         var ci = CultureInfo.InvariantCulture;
         string w = connection.WidthMicrometers.ToString("F2", ci);
         string layer = gdsLayer.HasValue ? $", layer={gdsLayer.Value}" : string.Empty;
@@ -57,6 +72,12 @@ public static class NazcaConnectionStyleWriter
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported waveguide style."),
         };
     }
+
+    /// <summary>True when the end pin lies ahead of the start pin and (nearly) on its axis,
+    /// i.e. the layout a plain <c>nd.strt</c> can actually connect.</summary>
+    private static bool IsAlignedForward(LocalGeometry g) =>
+        g.LocalDx > 0 &&
+        Math.Abs(g.LocalDy) < ConnectionStyleRouteBuilder.StraightAlignmentToleranceMicrometers;
 
     /// <summary>End-pin geometry expressed in the start pin's Nazca frame.</summary>
     private readonly record struct LocalGeometry(

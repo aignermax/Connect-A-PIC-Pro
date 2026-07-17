@@ -25,7 +25,7 @@ public class StyledRouteHandleEditPersistenceTests
     [Fact]
     public void HandleEdit_OnStyledRoute_SurvivesRecalc_WhilePinsUnchanged()
     {
-        var conn = CreateStyledSBendConnection();
+        var conn = CreateStyledArcSConnection();
         var router = new WaveguideRouter();
         conn.RecalculateTransmission(router);
 
@@ -46,7 +46,7 @@ public class StyledRouteHandleEditPersistenceTests
     [Fact]
     public void HandleEdit_OnStyledRoute_IsDiscarded_WhenEndpointMoves()
     {
-        var conn = CreateStyledSBendConnection();
+        var conn = CreateStyledArcSConnection();
         var router = new WaveguideRouter();
         conn.RecalculateTransmission(router);
 
@@ -67,14 +67,16 @@ public class StyledRouteHandleEditPersistenceTests
         last.EndPoint.Y.ShouldBe(endY, 0.5);
     }
 
-    private static WaveguideConnection CreateStyledSBendConnection()
+    /// <summary>Parallel offset pins with the Bend style: the styled route is the two-arc S,
+    /// which carries the in-canvas radius handles (SBend/Cobra are handle-less polylines).</summary>
+    private static WaveguideConnection CreateStyledArcSConnection()
     {
         var startComponent = CreateTestComponent(0, 0);
         var endComponent = CreateTestComponent(100, 30);
 
         return new WaveguideConnection
         {
-            Type = WaveguideType.SBend,
+            Type = WaveguideType.Bend,
             BendRadiusMicrometers = DefaultRadius,
             StartPin = new PhysicalPin
             {

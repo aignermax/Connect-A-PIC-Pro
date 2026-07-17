@@ -60,10 +60,10 @@ public class ConnectionRoutingStyleEffectTests
         connVm.Connection.Type.ShouldBe(style);
         connVm.Connection.IsRouteFrozen.ShouldBeTrue();
 
-        // The styled route uses the connection's OWN radius (its model default) — the
-        // InterconnectSettings export defaults are deliberately not stamped onto it.
-        var expected = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, style, connVm.Connection.BendRadiusMicrometers);
+        // The styled route derives its curve entirely from the pin geometry (generous radius
+        // for arc styles, sampled sine/Hermite for the smooth styles) — the InterconnectSettings
+        // export defaults are deliberately not stamped onto it.
+        var expected = ConnectionStyleRouteBuilder.Build(startPin, endPin, style);
 
         var actual = connVm.Connection.RoutedPath;
         actual.ShouldNotBeNull();

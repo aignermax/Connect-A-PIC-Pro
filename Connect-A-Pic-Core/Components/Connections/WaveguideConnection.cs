@@ -194,7 +194,7 @@ namespace CAP_Core.Components.Connections
                 // routing and the exporter treat it as a fixed route and never replace it with
                 // the A* result.
                 BendRadiusOverrides.Clear();
-                RoutedPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, BendRadiusMicrometers);
+                RoutedPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type);
                 IsRouteFrozen = true;
                 UpdateLossFromPath(wavelengthNm);
                 return;
@@ -255,7 +255,10 @@ namespace CAP_Core.Components.Connections
         /// <param name="wavelengthNm">Wavelength in nm used when a <see cref="DispersionModel"/> is set.</param>
         public void UpdateLossFromPath(double wavelengthNm = 1550.0)
         {
-            // Calculate total loss from actual path
+            // Calculate total loss from actual path. Smooth polyline styles (SBend/Cobra)
+            // contain no BendSegments, so BendCount is 0 for them: their bend loss is
+            // APPROXIMATED as pure propagation loss over the sampled curve length — a
+            // conservative simplification for adiabatic curves without a single radius.
             double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
             double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm; // µm to cm
             double bendLoss = BendCount * BendLossDbPer90Deg;

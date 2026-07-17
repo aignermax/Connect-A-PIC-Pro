@@ -3,20 +3,21 @@ using CAP_Core.Routing.AStarPathfinder;
 namespace CAP_Core.Routing.InterconnectRouting;
 
 /// <summary>
-/// Builds a symmetric S-bend that connects two parallel pins offset laterally from one another:
-/// it starts at the start pin heading, shifts sideways by the requested lateral offset and
-/// arrives PARALLEL to the start heading — the curve an <c>nd.sinebend(distance, offset)</c>
-/// produces in the Nazca export.
+/// Builds a symmetric arc S-bend that connects two parallel pins offset laterally from one
+/// another: it starts at the start pin heading, shifts sideways by the requested lateral
+/// offset and arrives PARALLEL to the start heading. Used by the Bend/Euler styles for
+/// parallel-offset pins and as the connected fallback of the Straight style.
 ///
 /// Layout is <c>stub – arc – straight – arc – stub</c>: two arcs of a single radius sweep by
 /// equal, opposite angles φ, joined by a middle straight, and framed by two short entry/exit
 /// straight stubs. The stubs make the arcs INTERIOR bends (flanked by straights on both sides),
 /// which is what lets the in-canvas radius handles grab them (<see cref="BendRadiusEditor"/>).
 ///
-/// φ and the middle straight are solved analytically for the inner span (total minus the two
-/// stubs). When the requested radius is too large to fit the offset (which would need a negative
-/// middle straight), the radius is reduced to the largest value that still fits instead of giving
-/// up — so a valid curve is always drawn rather than falling back to a diagonal.
+/// The radius is GENEROUS by design: <see cref="GenerousRadiusFactor"/> × the largest radius
+/// that still fits the offset. The factor &lt; 1 leaves a small middle straight, keeping both
+/// arcs interior so the radius handles keep working — a pure two-arc S (factor 1) would put
+/// the arcs back-to-back and lose the handles. φ and the middle straight are solved
+/// analytically for the inner span (total minus the two stubs).
 /// </summary>
 public static class SBendGeometry
 {
@@ -27,6 +28,10 @@ public static class SBendGeometry
     /// <summary>Fraction of the forward reach reserved for each entry/exit straight stub.</summary>
     private const double StubFraction = 0.2;
 
+    /// <summary>Fraction of the maximum fitting radius the arcs actually use. Below 1 so a
+    /// middle straight remains between the two arcs (see class remarks).</summary>
+    public const double GenerousRadiusFactor = 0.9;
+
     /// <summary>
     /// Builds the S-bend segments in app-space, or returns null when no meaningful S can be
     /// formed (end pin not ahead of the start, negligible lateral offset, or a sweep too small
@@ -35,15 +40,13 @@ public static class SBendGeometry
     /// <param name="startX">Start pin X in app-space micrometers.</param>
     /// <param name="startY">Start pin Y in app-space micrometers.</param>
     /// <param name="startAngleDegrees">Start pin heading in degrees.</param>
-    /// <param name="longitudinal">Forward reach along the start heading (µm), i.e. the exporter's
-    /// <c>distance</c>. Must be positive.</param>
-    /// <param name="lateral">Signed lateral offset perpendicular to the start heading (µm), i.e.
-    /// the exporter's <c>offset</c>. Its sign selects the turn direction.</param>
-    /// <param name="radiusMicrometers">Requested bend radius; auto-reduced when too large.</param>
+    /// <param name="longitudinal">Forward reach along the start heading (µm). Must be positive.</param>
+    /// <param name="lateral">Signed lateral offset perpendicular to the start heading (µm).
+    /// Its sign selects the turn direction.</param>
     /// <returns>Stub–arc–straight–arc–stub segments, or null in a degenerate case.</returns>
     public static IReadOnlyList<PathSegment>? BuildSymmetricS(
         double startX, double startY, double startAngleDegrees,
-        double longitudinal, double lateral, double radiusMicrometers)
+        double longitudinal, double lateral)
     {
         if (longitudinal <= Epsilon || Math.Abs(lateral) <= Epsilon)
             return null;
@@ -59,9 +62,10 @@ public static class SBendGeometry
         if (sinPhi0 <= Epsilon)
             return null;
 
-        // Largest radius that still fits without a negative middle straight (pure two-arc S).
+        // Largest radius that still fits without a negative middle straight (pure two-arc S);
+        // the generous factor keeps a small middle straight so the arcs stay handle-grabbable.
         double maxRadius = innerLongitudinal / (2.0 * sinPhi0);
-        double radius = Math.Min(radiusMicrometers, maxRadius);
+        double radius = maxRadius * GenerousRadiusFactor;
         if (radius <= Epsilon)
             return null;
 

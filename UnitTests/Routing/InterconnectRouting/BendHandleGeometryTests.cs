@@ -10,18 +10,18 @@ using Xunit;
 namespace UnitTests.Routing.InterconnectRouting;
 
 /// <summary>
-/// Verifies the in-canvas bend-radius handle support: that a styled S-route exposes editable
-/// bend corners, and that the pointer→radius mapping used by the drag round-trips.
+/// Verifies the in-canvas bend-radius handle support: that a styled arc S-route (Bend with
+/// parallel offset pins) exposes editable bend corners, and that the pointer→radius mapping
+/// used by the drag round-trips. SBend/Cobra are smooth polylines without a single radius,
+/// so they intentionally expose no handles — the arc styles are the handle carriers.
 /// </summary>
 public class BendHandleGeometryTests
 {
-    private const double Radius = 10.0;
-
     [Fact]
     public void GetBendCorners_StyledSRoute_ReturnsOneCornerPerArc()
     {
-        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
         var corners = BendRadiusEditor.GetBendCorners(path.Segments);
 
@@ -36,8 +36,8 @@ public class BendHandleGeometryTests
     [Fact]
     public void HandlePointAndProjection_RoundTripToRadius()
     {
-        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
         var corner = BendRadiusEditor.GetBendCorners(path.Segments)[0];
 
         // The handle sits at Corner + Radius·HandleFactor·Bisector; projecting that point back
@@ -52,8 +52,8 @@ public class BendHandleGeometryTests
     [Fact]
     public void DraggingHandleOutward_IncreasesBendRadius()
     {
-        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
         conn.RestoreCachedPath(path);
         var corner = BendRadiusEditor.GetBendCorners(conn.GetPathSegments())[0];
 
