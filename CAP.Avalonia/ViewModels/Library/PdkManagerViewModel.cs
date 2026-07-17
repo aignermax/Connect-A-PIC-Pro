@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -186,7 +188,10 @@ public partial class PdkInfoViewModel : ObservableObject
     public string? FilePath { get; }
     public bool IsBundled { get; }
     public int ComponentCount { get; }
-    public string SourceType => IsBundled ? "Bundled" : "User";
+
+    /// <summary>Localized source label ("Bundled"/"User"), re-read on language switch.</summary>
+    public string SourceType =>
+        LocalizationService.Instance.Translate(IsBundled ? "Pdk.Bundled" : "Pdk.User");
 
     public PdkInfoViewModel(string name, string? filePath, bool isBundled, int componentCount)
     {
@@ -194,8 +199,38 @@ public partial class PdkInfoViewModel : ObservableObject
         FilePath = filePath;
         IsBundled = isBundled;
         ComponentCount = componentCount;
+        SubscribeToLanguageChanges();
     }
 
     public string DisplayText => $"{Name} ({ComponentCount} components)";
-    public string SourceBadge => IsBundled ? "📦 Bundled" : "📂 User";
+
+    /// <summary>Localized source badge with an emoji prefix; re-read on language switch.</summary>
+    public string SourceBadge => IsBundled
+        ? $"📦 {LocalizationService.Instance.Translate("Pdk.Bundled")}"
+        : $"📂 {LocalizationService.Instance.Translate("Pdk.User")}";
+
+    /// <summary>
+    /// Re-raises the localized badge properties when the UI language switches. The subscription
+    /// is weak: the handler holds only a <see cref="WeakReference{T}"/> to this VM and detaches
+    /// itself once the VM is collected, so unloading a PDK never leaks it into the process-wide
+    /// <see cref="LocalizationService.Instance"/> (PdkInfoViewModel has no Dispose lifecycle).
+    /// </summary>
+    private void SubscribeToLanguageChanges()
+    {
+        var weakSelf = new WeakReference<PdkInfoViewModel>(this);
+        PropertyChangedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            if (weakSelf.TryGetTarget(out var self))
+            {
+                self.OnPropertyChanged(nameof(SourceType));
+                self.OnPropertyChanged(nameof(SourceBadge));
+            }
+            else
+            {
+                LocalizationService.Instance.PropertyChanged -= handler;
+            }
+        };
+        LocalizationService.Instance.PropertyChanged += handler;
+    }
 }

@@ -1,8 +1,10 @@
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components.Core;
 using CAP_Core;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -538,6 +540,12 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
         };
 
+        // Re-read the localized active-process badge when the UI language switches (#570 i18n).
+        // Only the label is recomputed — the PDK process lock is left untouched on a mere
+        // language change.
+        LocalizationService.Instance.PropertyChanged += (_, _) =>
+            UpdateActiveProcessLabel(FileOperations.ActiveProcess);
+
         FileOperations.ZoomToFitAfterLoad = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);
@@ -569,14 +577,25 @@ public partial class MainViewModel : ObservableObject
     private void RefreshProcessIndicator()
     {
         var p = FileOperations.ActiveProcess;
+        UpdateActiveProcessLabel(p);
+        LeftPanel.ApplyActiveProcess(p);
+    }
+
+    /// <summary>
+    /// Recomputes the localized <see cref="ActiveProcessLabel"/> and <see cref="IsPlayground"/>
+    /// flag and mirrors the label into the canvas HUD — without re-applying the PDK process
+    /// lock. Called on process change and on UI language switch so the badge re-reads live.
+    /// </summary>
+    private void UpdateActiveProcessLabel(CAP_Core.Components.Process.ActiveProcessSelection? p)
+    {
+        var loc = LocalizationService.Instance;
         IsPlayground = p?.IsPlayground == true;
-        ActiveProcessLabel = p == null ? "No process selected"
-            : p.IsPlayground ? "Playground — not manufacturable"
-            : $"Process: {p.DisplayName}";
+        ActiveProcessLabel = p == null ? loc.Translate("Process.NoneSelected")
+            : p.IsPlayground ? loc.Translate("Process.PlaygroundBadge")
+            : string.Format(CultureInfo.InvariantCulture, loc.Translate("Process.Prefix"), p.DisplayName);
         // Mirror into the canvas VM so the status HUD (CanvasOverlayRenderer) can show the
         // active process in the grid overlay, not only at the bottom of the PDK panel.
         Canvas.ActiveProcessLabel = ActiveProcessLabel;
-        LeftPanel.ApplyActiveProcess(p);
     }
 
     // Canvas interaction delegates

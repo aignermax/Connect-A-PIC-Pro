@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,6 +9,7 @@ using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Creation;
 using CAP_Core.Components;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -137,7 +139,10 @@ public partial class LeftPanelViewModel : ObservableObject
             Categories.Add(category);
         }
 
-        UpdateStatus?.Invoke($"Loaded {AllTemplates.Count} component types");
+        UpdateStatus?.Invoke(string.Format(
+            CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
+            AllTemplates.Count));
         FilterComponents();
     }
 

@@ -18,6 +18,7 @@ namespace UnitTests.UI;
 /// to <c>artifacts/ui-screenshots/issue-744/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue744LocalizationScreenshotTests
 {
     [AvaloniaFact]
