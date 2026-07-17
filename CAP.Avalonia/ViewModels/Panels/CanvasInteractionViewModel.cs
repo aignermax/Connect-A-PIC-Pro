@@ -565,15 +565,43 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         const double hitTolerance = 10.0;
 
+        // Hit-test the ACTUAL routed path (its segments), not the straight endpoint
+        // line — otherwise a bent/L-shaped route can't be clicked where it's drawn.
+        // Pick the closest connection within tolerance so overlapping paths resolve
+        // to the one nearest the cursor.
+        WaveguideConnectionViewModel? closest = null;
+        var closestDistance = hitTolerance;
         foreach (var conn in _canvas.Connections)
         {
-            var distance = PointToLineDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
-            if (distance <= hitTolerance)
+            var distance = DistanceToConnectionPath(conn, x, y);
+            if (distance <= closestDistance)
             {
-                return conn;
+                closestDistance = distance;
+                closest = conn;
             }
         }
-        return null;
+        return closest;
+    }
+
+    /// <summary>
+    /// Shortest distance from a canvas point to a connection's drawn path: the minimum
+    /// over its routed segments (arcs approximated by their chord — fine at the 10 px
+    /// hit tolerance), or the straight endpoint line when the connection isn't routed yet.
+    /// </summary>
+    private static double DistanceToConnectionPath(WaveguideConnectionViewModel conn, double x, double y)
+    {
+        var segments = conn.Connection.GetPathSegments();
+        if (segments.Count == 0)
+            return PointToLineDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
+
+        var min = double.MaxValue;
+        foreach (var seg in segments)
+        {
+            var d = PointToLineDistance(
+                x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
+            if (d < min) min = d;
+        }
+        return min;
     }
 
     private static double PointToLineDistance(double px, double py, double x1, double y1, double x2, double y2)
