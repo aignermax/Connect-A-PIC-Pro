@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CAP_Core.Export.PythonEnvironmentManager;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -94,6 +95,8 @@ public partial class InterpreterEntryViewModel : ObservableObject
         var gds = e.GdsFactoryVersion != null ? $"gdsfactory {e.GdsFactoryVersion}" : "gdsfactory not installed";
         // Without cspdk every CornerStone component fails to render — its absence must be visible.
         var cspdk = e.CspdkVersion != null ? $"cspdk {e.CspdkVersion}" : "cspdk not installed";
-        return $"Managed · {e.Name} · {py} · {nazca} · {gds} · {cspdk}";
+        return string.Format(
+            LocalizationService.Instance.Translate("Export.PyEnv.ManagedText"),
+            e.Name, py, nazca, gds, cspdk);
     }
 }

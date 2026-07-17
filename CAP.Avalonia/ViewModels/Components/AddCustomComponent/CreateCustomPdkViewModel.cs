@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Collections.Specialized;
 using System.Linq;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -65,14 +66,15 @@ public partial class CreateCustomPdkViewModel : ObservableObject
         // mistaken for a fork of the built-in PDK and silently displace its whole library.
         if (_reservedBundledPdkNames.Contains(PdkName, StringComparer.OrdinalIgnoreCase))
         {
-            StatusText = $"'{PdkName}' is a built-in PDK's name — choose a different name. " +
-                         "(To customize a built-in PDK, edit one of its components instead; saving forks it automatically.)";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.PdkNameReservedBuiltIn"), PdkName);
             return;
         }
 
         if (_store.ListCustomPdks().Any(p => string.Equals(p.Name, PdkName, StringComparison.OrdinalIgnoreCase)))
         {
-            StatusText = $"A PDK named '{PdkName}' already exists.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.PdkAlreadyExists"), PdkName);
             return;
         }
 

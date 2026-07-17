@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CAP_Core.Components;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Simulation;
 
 namespace CAP.Avalonia.ViewModels.Canvas;
@@ -117,9 +118,11 @@ public partial class ComponentViewModel : ObservableObject
     {
         get
         {
-            if (TemplateName?.Contains("Phase") == true) return "Phase (°)";
-            if (TemplateName?.Contains("Directional") == true) return "Coupling (%)";
-            return "Parameter";
+            if (TemplateName?.Contains("Phase") == true)
+                return LocalizationService.Instance.Translate("Canvas.SliderLabel.Phase");
+            if (TemplateName?.Contains("Directional") == true)
+                return LocalizationService.Instance.Translate("Canvas.SliderLabel.Coupling");
+            return LocalizationService.Instance.Translate("Canvas.SliderLabel.Parameter");
         }
     }
 

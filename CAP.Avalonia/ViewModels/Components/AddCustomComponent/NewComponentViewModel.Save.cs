@@ -3,6 +3,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CAP_Core.Solvers.Fdtd;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -25,12 +26,12 @@ public partial class NewComponentViewModel
         if (IsBusy) return;
         if (SelectedProcess is null)
         {
-            StatusText = "Select a PDK before computing the S-matrix.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SelectPdkBeforeCompute");
             return;
         }
         if (_fdtd is null)
         {
-            StatusText = "FDTD solver is not configured.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.FdtdNotConfigured");
             return;
         }
 
@@ -59,18 +60,19 @@ public partial class NewComponentViewModel
             if (!result.Success)
             {
                 _computedModel = null;
-                StatusText = result.Error ?? "FDTD solve failed.";
+                StatusText = result.Error ?? LocalizationService.Instance.Translate("NewComp.FdtdSolveFailed");
                 return;
             }
 
             _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = $"S-matrix computed ({result.Wavelengths.Count} wavelength(s)) — " +
-                         $"\"{SaveButtonLabel}\" writes it into the component definition.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.SMatrixComputed"),
+                result.Wavelengths.Count, SaveButtonLabel);
         }
         catch (OperationCanceledException)
         {
             _computedModel = null;
-            StatusText = "S-matrix computation cancelled.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SMatrixComputationCancelled");
         }
         finally
         {
@@ -88,13 +90,13 @@ public partial class NewComponentViewModel
         var name = ComponentName?.Trim();
         if (string.IsNullOrWhiteSpace(name))
         {
-            StatusText = "Enter a component name before saving.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.EnterNameBeforeSaving");
             return;
         }
         var pdk = SelectedCustomPdk;
         if (pdk is null)
         {
-            StatusText = "Select a PDK before saving.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SelectPdkBeforeSaving");
             return;
         }
 
@@ -109,8 +111,9 @@ public partial class NewComponentViewModel
         if (isMigration &&
             !string.Equals(_editOriginalProcessName, SelectedProcess?.Name, StringComparison.OrdinalIgnoreCase))
         {
-            StatusText = $"Cannot move '{name}' to PDK '{pdk.Name}': it uses a different fabrication " +
-                         $"process ('{SelectedProcess?.Name}' vs '{_editOriginalProcessName}').";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.CannotMoveDifferentProcess"),
+                name, pdk.Name, SelectedProcess?.Name, _editOriginalProcessName);
             return;
         }
 
@@ -190,15 +193,16 @@ public partial class NewComponentViewModel
             if (!isMigration || MigratedFromPdkName != null)
             {
                 var dropNote = droppedStoredSMatrix
-                    ? " Its stored S-matrix was dropped (black box) — recompute it for this PDK/geometry."
+                    ? LocalizationService.Instance.Translate("NewComp.DroppedSMatrixNote")
                     : "";
                 StatusText = MigratedFromPdkName != null
-                    ? $"Moved '{name}' to PDK '{pdk.Name}'.{dropNote}"
+                    ? string.Format(LocalizationService.Instance.Translate("NewComp.Moved"), name, pdk.Name, dropNote)
                     : _computedModel is not null
-                        ? "Saved with FDTD S-matrix."
+                        ? LocalizationService.Instance.Translate("NewComp.SavedWithFdtd")
                         : sMatrix is not null
-                            ? "Saved — kept the component's stored S-matrix."
-                            : $"Saved without simulation model (black box).{dropNote} {StatusText}".Trim();
+                            ? LocalizationService.Instance.Translate("NewComp.SavedKeptStored")
+                            : string.Format(
+                                LocalizationService.Instance.Translate("NewComp.SavedBlackBox"), dropNote, StatusText).Trim();
             }
             Saved?.Invoke(this, EventArgs.Empty);
         }
@@ -206,7 +210,7 @@ public partial class NewComponentViewModel
         {
             // Without this catch the AsyncRelayCommand swallows the fault and Save looks like it
             // did nothing — e.g. when the fork file was trashed underneath an open editor.
-            StatusText = $"Save failed: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("NewComp.SaveFailed"), ex.Message);
             _errorConsole?.LogError($"Saving component '{name}' to PDK '{pdk.Name}' failed: {ex.Message}", ex);
         }
         finally
@@ -228,8 +232,9 @@ public partial class NewComponentViewModel
         }
         catch (Exception ex)
         {
-            StatusText = $"Saved to '{SelectedCustomPdk?.Name}', but could not remove the original " +
-                         $"copy from '{_editOriginalPdkName}': {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.SavedButOriginalRemoveFailed"),
+                SelectedCustomPdk?.Name, _editOriginalPdkName, ex.Message);
             return false;
         }
     }
@@ -251,12 +256,13 @@ public partial class NewComponentViewModel
     {
         if (ConfirmOverwrite is null)
         {
-            StatusText = $"'{componentName}' already exists in '{targetName}'.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.AlreadyExists"), componentName, targetName);
             return false;
         }
         if (!await ConfirmOverwrite(componentName, targetName))
         {
-            StatusText = "Save cancelled.";
+            StatusText = LocalizationService.Instance.Translate("NewComp.SaveCancelled");
             return false;
         }
         return true;

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AiTools;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.ViewModels.AI;
 
@@ -83,7 +84,7 @@ public partial class AiAssistantViewModel : ObservableObject
 
         IsTyping = true;
         SendMessageCommand.NotifyCanExecuteChanged();
-        StatusText = "AI is thinking...";
+        StatusText = LocalizationService.Instance.Translate("AiAssistant.Thinking");
 
         _cancellationSource = new CancellationTokenSource();
 
@@ -110,7 +111,7 @@ public partial class AiAssistantViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Request cancelled.";
+            StatusText = LocalizationService.Instance.Translate("Ai.RequestCancelled");
         }
         finally
         {
@@ -135,7 +136,7 @@ public partial class AiAssistantViewModel : ObservableObject
         Messages.Add(new AiChatMessage
         {
             Role = AiChatRole.Assistant,
-            Content = "Chat history cleared. How can I help you design your photonic circuit?"
+            Content = LocalizationService.Instance.Translate("Ai.HistoryCleared")
         });
         StatusText = "";
     }
@@ -172,7 +173,8 @@ public partial class AiAssistantViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Could not save API key: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Ai.SaveKeyFailed"), ex.Message);
         }
     }
 
@@ -188,7 +190,7 @@ public partial class AiAssistantViewModel : ObservableObject
         catch
         {
             // Non-fatal: the user can navigate manually. Surface the fallback URL so they are not blocked.
-            StatusText = "Could not open browser. Visit: console.anthropic.com/settings/keys";
+            StatusText = LocalizationService.Instance.Translate("Ai.OpenBrowserFailed");
         }
     }
 
@@ -200,12 +202,13 @@ public partial class AiAssistantViewModel : ObservableObject
 
     private async Task<string> DispatchToolAsync(string toolName, string inputJson)
     {
-        if (_toolRegistry == null) return "Tool registry not available.";
+        if (_toolRegistry == null) return LocalizationService.Instance.Translate("Ai.NoToolRegistry");
 
         var tool = _toolRegistry.GetTool(toolName);
-        if (tool == null) return $"Unknown tool: {toolName}";
+        if (tool == null)
+            return string.Format(LocalizationService.Instance.Translate("Ai.UnknownTool"), toolName);
 
-        StatusText = $"Executing: {toolName}...";
+        StatusText = string.Format(LocalizationService.Instance.Translate("Ai.Executing"), toolName);
         try
         {
             using var doc = JsonDocument.Parse(inputJson);
@@ -213,7 +216,8 @@ public partial class AiAssistantViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            return $"Tool '{toolName}' failed: {ex.Message}";
+            return string.Format(
+                LocalizationService.Instance.Translate("Ai.ToolFailed"), toolName, ex.Message);
         }
         finally
         {

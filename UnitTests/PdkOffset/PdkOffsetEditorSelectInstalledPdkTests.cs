@@ -1,4 +1,5 @@
 using System.IO;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -14,6 +15,11 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class PdkOffsetEditorSelectInstalledPdkTests
 {
+    /// <summary>StatusText is localized (issue #749); pin English so substring assertions
+    /// stay culture-independent regardless of the CI/dev OS language.</summary>
+    public PdkOffsetEditorSelectInstalledPdkTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private const string TwoPdkJson = @"{
         ""fileFormatVersion"": 1,
         ""name"": ""Registry PDK"",

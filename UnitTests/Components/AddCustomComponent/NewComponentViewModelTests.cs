@@ -5,6 +5,7 @@ using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
@@ -19,6 +20,9 @@ namespace UnitTests.Components.AddCustomComponent;
 
 public class NewComponentViewModelTests : IDisposable
 {
+    static NewComponentViewModelTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()

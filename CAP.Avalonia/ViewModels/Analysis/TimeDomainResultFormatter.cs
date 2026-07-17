@@ -1,5 +1,6 @@
 using System.Text;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.ViewModels.Analysis;
 
@@ -14,7 +15,8 @@ internal static class TimeDomainResultFormatter
     /// </summary>
     internal static string FormatResult(TimeDomainResult result)
     {
-        if (result.PinTraces.Count == 0) return "No signal at any output pin.";
+        if (result.PinTraces.Count == 0)
+            return LocalizationService.Instance.Translate("Analysis.TimeDomain.NoSignalOutput");
 
         var sb = new StringBuilder();
         sb.AppendLine($"{"Pin (short)",-20} {"Peak Power",12} {"Peak Time (ps)",14}");

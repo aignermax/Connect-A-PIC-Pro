@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
@@ -17,6 +18,10 @@ namespace UnitTests.ComponentSettings;
 /// </summary>
 public class ComponentSettingsDialogFdtdTests
 {
+    // Status strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+    public ComponentSettingsDialogFdtdTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private static Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>> FakeFactory() =>
         (_, _) => Task.FromResult<FdtdSMatrixRequest?>(new FdtdSMatrixRequest
         {

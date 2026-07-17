@@ -3,6 +3,7 @@ using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Analysis.TimeTrace;
 using CAP.Avalonia.ViewModels.Canvas;
 using OxyPlot;
@@ -97,7 +98,7 @@ public partial class TimeDomainViewModel : ObservableObject
     {
         if (_canvas == null || _canvas.Components.Count == 0)
         {
-            StatusText = "No circuit loaded.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoCircuit");
             return;
         }
 
@@ -106,13 +107,13 @@ public partial class TimeDomainViewModel : ObservableObject
         if (_canvas.Components.Where(c => c.IsLightSource).All(c => c.IsLaserOff)
             && _canvas.Components.Any(c => c.IsLightSource))
         {
-            StatusText = "No laser is switched on — turn the laser on at your input coupler.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoLaserOn");
             return;
         }
 
         if (IsRunning) return;
         IsRunning = true;
-        StatusText = "Building impulse responses…";
+        StatusText = LocalizationService.Instance.Translate("Analysis.TimeDomain.BuildingImpulseResponses");
         ResultText = "";
         _lastResult = null;
         ClearPlot();
@@ -125,17 +126,20 @@ public partial class TimeDomainViewModel : ObservableObject
             ResultText = TimeDomainResultFormatter.FormatResult(result);
             BuildPlot(result);
             OnPropertyChanged(nameof(HasResult));
-            StatusText = $"Done — {result.PinTraces.Count} output pin(s)";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.TimeDomain.DonePins"), result.PinTraces.Count);
         }
         catch (InvalidOperationException ex)
         {
-            StatusText = $"Cannot run: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.TimeDomain.CannotRun"), ex.Message);
             _errorConsole?.LogError($"Time-domain simulation blocked: {ex.Message}", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Time-domain simulation failed: {ex.Message}", ex);
-            StatusText = $"Failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.Failed"), ex.Message);
         }
         finally
         {
@@ -162,18 +166,20 @@ public partial class TimeDomainViewModel : ObservableObject
 
             if (path == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled");
                 return;
             }
 
             var csv = TimeDomainResultFormatter.BuildCsvContent(_lastResult);
             await File.WriteAllTextAsync(path, csv);
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"CSV export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
     }
 

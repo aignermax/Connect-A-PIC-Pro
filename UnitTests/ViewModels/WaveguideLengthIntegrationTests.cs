@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
@@ -13,6 +14,13 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class WaveguideLengthIntegrationTests
 {
+    /// <summary>Pin the UI language so the "No connection selected" assertion matches the
+    /// English literal regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public WaveguideLengthIntegrationTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void ViewModel_InitializesWithNoConnection()
     {

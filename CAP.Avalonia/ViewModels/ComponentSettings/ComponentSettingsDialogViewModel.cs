@@ -5,6 +5,7 @@ using CAP_Core.LightCalculation;
 using CAP_DataAccess.Import;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Notifications;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
@@ -33,7 +34,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
 
     [ObservableProperty]
-    private string _title = "Component Settings";
+    private string _title = LocalizationService.Instance.Translate("CompSettings.DefaultTitle");
 
     [ObservableProperty]
     private string _statusText = string.Empty;
@@ -100,8 +101,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _effectivePins = effectivePins;
         _availablePinNames = availablePinNames;
         Title = isUserGlobalScope
-            ? $"Component Settings: {displayName} (applies to all projects)"
-            : $"Component Settings: {displayName}";
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.TitleGlobal"), displayName)
+            : string.Format(LocalizationService.Instance.Translate("CompSettings.TitleScoped"), displayName);
         StatusText = string.Empty;
 
         SolverStatus = string.Empty;
@@ -118,7 +119,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
             return;
 
         var path = await _fileDialogService.ShowOpenFileDialogAsync(
-            "Select S-Parameter File",
+            LocalizationService.Instance.Translate("CompSettings.SelectSParamFileTitle"),
             "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
 
         if (path == null)
@@ -127,12 +128,13 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         var importer = FindImporter(path);
         if (importer == null)
         {
-            StatusText = $"Unsupported file type: {Path.GetExtension(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("CompSettings.UnsupportedFileType"), Path.GetExtension(path));
             return;
         }
 
         IsImporting = true;
-        StatusText = "Importing…";
+        StatusText = LocalizationService.Instance.Translate("CompSettings.Importing");
 
         try
         {
@@ -154,7 +156,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         catch (Exception ex)
         {
             _errorConsole?.LogError($"S-parameter import failed for '{path}'", ex);
-            StatusText = $"Import failed: {ex.Message}" + (_errorConsole != null ? " (see Error Console)" : "");
+            StatusText = string.Format(LocalizationService.Instance.Translate("CompSettings.ImportFailed"), ex.Message)
+                + (_errorConsole != null ? LocalizationService.Instance.Translate("CompSettings.SeeErrorConsoleSuffix") : "");
         }
         finally
         {
@@ -176,7 +179,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         if (_liveComponent != null && int.TryParse(entry.WavelengthKey, out int wavelengthNm))
             _liveComponent.WaveLengthToSMatrixMap.Remove(wavelengthNm);
 
-        StatusText = $"Removed wavelength {entry.WavelengthKey} nm. Reload design to restore PDK default.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("CompSettings.RemovedWavelength"), entry.WavelengthKey);
         RefreshEntries(notifyChanged: true);
     }
 }

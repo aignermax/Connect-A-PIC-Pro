@@ -3,6 +3,7 @@ using System.Diagnostics;
 using System.Threading;
 using System.Threading.Tasks;
 using Avalonia.Threading;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Solvers.Fdtd;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
@@ -16,15 +17,19 @@ public partial class NewComponentViewModel
     private async Task<FdtdSMatrixResult> RunSolveWithLiveStatusAsync(FdtdSMatrixRequest request, CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();
-        const string baseMessage = "Running FDTD (Meep). First run builds the solver image (several minutes)";
+        var baseMessage = LocalizationService.Instance.Translate("NewComp.FdtdBaseMessage");
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
-        timer.Tick += (_, _) => StatusText = $"{baseMessage} — {stopwatch.Elapsed:m\\:ss} elapsed…";
+        timer.Tick += (_, _) => StatusText = string.Format(
+            LocalizationService.Instance.Translate("NewComp.FdtdElapsed"),
+            baseMessage, stopwatch.Elapsed.ToString(@"m\:ss"));
         StatusText = $"{baseMessage}…";
         timer.Start();
 
         var progress = new Progress<string>(
-            line => StatusText = $"FDTD running ({stopwatch.Elapsed:m\\:ss}): {Shorten(line)}");
+            line => StatusText = string.Format(
+                LocalizationService.Instance.Translate("NewComp.FdtdRunning"),
+                stopwatch.Elapsed.ToString(@"m\:ss"), Shorten(line)));
         try
         {
             return await _fdtd!.SolveAsync(request, progress, ct);

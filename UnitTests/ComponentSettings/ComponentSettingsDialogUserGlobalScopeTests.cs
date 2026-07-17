@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_DataAccess.Persistence.PIR;
 using Moq;
@@ -22,6 +23,8 @@ public class ComponentSettingsDialogUserGlobalScopeTests : IDisposable
 
     public ComponentSettingsDialogUserGlobalScopeTests()
     {
+        // Status/title strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
         _tempStorePath = Path.Combine(Path.GetTempPath(), $"sparam-overrides-{Guid.NewGuid()}.json");
         _tempSparamPath = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.sparam");
         WriteMinimalSparamFile(_tempSparamPath);
