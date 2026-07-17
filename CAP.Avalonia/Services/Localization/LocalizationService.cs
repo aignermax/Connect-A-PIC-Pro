@@ -64,6 +64,10 @@ public sealed class LocalizationService : INotifyPropertyChanged
         ActiveLanguageCode = code;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ActiveLanguageCode)));
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
+        // Also an empty name ("all properties changed"): Avalonia re-evaluates every binding on
+        // this source — including the [Key] indexer bindings — so every {loc:Localize} string
+        // updates live on a language switch. "Item[]" alone does not refresh them in Avalonia.
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
     }
 
     /// <summary>Translates a key: active table → English table → the key itself.</summary>

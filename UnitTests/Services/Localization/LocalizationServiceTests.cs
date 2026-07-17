@@ -33,6 +33,20 @@ public class LocalizationServiceTests
     }
 
     [Fact]
+    public void SetLanguage_RaisesAllPropertiesChanged_soLocBindingsRefreshLive()
+    {
+        var service = CreateService();
+        var names = new List<string?>();
+        service.PropertyChanged += (_, e) => names.Add(e.PropertyName);
+
+        service.SetLanguage("de");
+
+        // An empty/null name tells Avalonia to re-evaluate every binding on the source,
+        // including the [Key] indexer bindings — this is what makes a language switch live.
+        names.ShouldContain(n => string.IsNullOrEmpty(n));
+    }
+
+    [Fact]
     public void Translate_MissingInActiveLanguage_FallsBackToEnglish()
     {
         var service = CreateService();
