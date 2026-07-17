@@ -21,20 +21,21 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         var vm = rc.ViewModel;
         var allGroups = WaveguideFilteringHelper.CollectAllGroups(vm.Components.Select(c => c.Component));
 
+        var hovered = rc.InteractionState.HoveredConnection;
         foreach (var conn in vm.Connections)
         {
             if (!WaveguideFilteringHelper.IsConnectionInternalToAnyGroup(conn.Connection, allGroups))
-                DrawWaveguideConnection(context, conn, vm);
+                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered));
         }
 
         if (vm.ShowPowerFlow && rc.InteractionState.HoveredConnection != null)
             DrawPowerHoverLabel(context, rc.InteractionState.HoveredConnection, vm);
     }
 
-    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
+    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm, bool isHovered)
     {
         var segments = conn.Connection.GetPathSegments();
-        var pen = CreateWaveguidePen(conn, vm);
+        var pen = CreateWaveguidePen(conn, vm, isHovered);
         bool pathIsStale = segments.Count > 0 && IsPathStale(segments, conn);
 
         if (segments.Count == 0 || pathIsStale)
@@ -61,11 +62,21 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         PinKindHelper.IsElectrical(conn.Connection.StartPin)
         && PinKindHelper.IsElectrical(conn.Connection.EndPin);
 
-    private static Pen CreateWaveguidePen(WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
+    /// <summary>Extra stroke width (px) added to the connection under the cursor.</summary>
+    private const double HoverThicknessBoost = 2.0;
+
+    private static Pen CreateWaveguidePen(WaveguideConnectionViewModel conn, DesignCanvasViewModel vm, bool isHovered)
     {
+        // Selection styling wins over hover — a selected connection is already emphasized.
         if (conn.IsSelected)
             return new Pen(Brushes.Yellow, 3);
 
+        return Emphasize(CreateBasePen(conn, vm), isHovered);
+    }
+
+    /// <summary>Builds the connection's normal (non-selected, non-hovered) pen.</summary>
+    private static Pen CreateBasePen(WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
+    {
         // Electrical connections are metal traces: a thick copper/gold strip, distinct from
         // optical waveguides. They carry no optical power flow, so this takes precedence over the
         // power-flow styling below.
@@ -89,6 +100,35 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
 
         return new Pen(Brushes.Orange, 2);
     }
+
+    /// <summary>
+    /// Emphasizes the hovered connection so the user sees it is clickable: keeps the base pen's
+    /// colour intent but draws it thicker and brighter (a solid-colour brush is lightened toward
+    /// white). Returns the pen unchanged when not hovered.
+    /// </summary>
+    private static Pen Emphasize(Pen basePen, bool isHovered)
+    {
+        if (!isHovered)
+            return basePen;
+
+        var brush = basePen.Brush is ISolidColorBrush solid
+            ? new SolidColorBrush(Lighten(solid.Color))
+            : basePen.Brush;
+
+        return new Pen(brush, basePen.Thickness + HoverThicknessBoost)
+        {
+            DashStyle = basePen.DashStyle,
+            LineCap = PenLineCap.Round,
+            LineJoin = PenLineJoin.Round,
+        };
+    }
+
+    /// <summary>Blends a colour halfway toward white for a brighter hover highlight.</summary>
+    private static Color Lighten(Color c) => Color.FromArgb(
+        c.A,
+        (byte)((c.R + 255) / 2),
+        (byte)((c.G + 255) / 2),
+        (byte)((c.B + 255) / 2));
 
     private static bool IsPathStale(IReadOnlyList<CAP_Core.Routing.PathSegment> segments, WaveguideConnectionViewModel conn)
     {

@@ -272,6 +272,18 @@ namespace CAP_Core.Components.Connections
         }
 
         /// <summary>
+        /// Discards the current <see cref="RoutedPath"/> so the next routing pass rebuilds it from
+        /// scratch. Needed when the routing intent changes (e.g. the user picks a new
+        /// <see cref="Type"/>) but no component moved: incremental routing keeps any route whose
+        /// endpoints still match, so without this the stale path would survive and the new style
+        /// would only take effect after the next component move.
+        /// </summary>
+        public void InvalidateRoute()
+        {
+            RoutedPath = null;
+        }
+
+        /// <summary>
         /// Gets all path segments for rendering or export.
         /// </summary>
         public IReadOnlyList<PathSegment> GetPathSegments()

@@ -76,6 +76,12 @@ public partial class ConnectionRoutingViewModel : ObservableObject
             conn.BendRadiusMicrometers = InterconnectSettings.DefaultBendRadiusMicrometers;
         }
 
+        // Drop the current route so the style change takes effect immediately: incremental
+        // routing keeps any route whose endpoints still match, so the stale path would otherwise
+        // survive until a component moved. RecalculateRoutesAsync then rebuilds it — the styled
+        // primitive for an explicit style, or the A* route for Auto.
+        conn.InvalidateRoute();
+
         _ = _canvas.RecalculateRoutesAsync();
     }
 }

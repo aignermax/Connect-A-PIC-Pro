@@ -308,23 +308,49 @@ public class DesignCanvasHitTesting
 
     /// <summary>
     /// Finds the connection nearest to the given canvas point within tolerance.
+    /// Hit-tests the ACTUAL routed path (its segments), not just the straight endpoint line,
+    /// so a bent/L-shaped/styled route is picked up where it is actually drawn. Returns the
+    /// closest connection within tolerance so overlapping paths resolve to the nearest one.
+    /// Mirrors the selection hit test in <c>CanvasInteractionViewModel.FindConnectionAt</c>.
     /// </summary>
     public static WaveguideConnectionViewModel? HitTestConnection(Point canvasPoint, DesignCanvasViewModel? vm)
     {
         if (vm == null) return null;
 
+        WaveguideConnectionViewModel? closest = null;
+        double closestDistance = ConnectionHitTolerance;
         foreach (var conn in vm.Connections)
         {
-            double distance = PointToSegmentDistance(
-                canvasPoint.X, canvasPoint.Y,
-                conn.StartX, conn.StartY,
-                conn.EndX, conn.EndY);
-
-            if (distance <= ConnectionHitTolerance)
-                return conn;
+            double distance = DistanceToConnectionPath(conn, canvasPoint.X, canvasPoint.Y);
+            if (distance <= closestDistance)
+            {
+                closestDistance = distance;
+                closest = conn;
+            }
         }
 
-        return null;
+        return closest;
+    }
+
+    /// <summary>
+    /// Shortest distance from a canvas point to a connection's drawn path: the minimum over its
+    /// routed segments (arcs approximated by their chord — fine at the 10 px tolerance), or the
+    /// straight endpoint line when the connection has not been routed yet.
+    /// </summary>
+    private static double DistanceToConnectionPath(WaveguideConnectionViewModel conn, double x, double y)
+    {
+        var segments = conn.Connection.GetPathSegments();
+        if (segments.Count == 0)
+            return PointToSegmentDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
+
+        double min = double.MaxValue;
+        foreach (var seg in segments)
+        {
+            double d = PointToSegmentDistance(
+                x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
+            if (d < min) min = d;
+        }
+        return min;
     }
 
     /// <summary>
