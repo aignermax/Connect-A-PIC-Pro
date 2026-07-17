@@ -20,6 +20,10 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// </summary>
 public static class ConnectionStyleRouteBuilder
 {
+    /// <summary>Below this |turn| (degrees) two pins count as parallel: a single bend cannot
+    /// join them, so a parallel <see cref="WaveguideType.Bend"/> falls back to an S-bend.</summary>
+    private const double ParallelTurnThresholdDegrees = 1.0;
+
     /// <summary>
     /// Builds the styled route between two pins.
     /// </summary>
@@ -54,12 +58,13 @@ public static class ConnectionStyleRouteBuilder
             // the correct radius and sweep, sharing endpoints/basis with the exported primitive.
             WaveguideType.Bend => BuildArc(sx, sy, startAngle, arrivalAngle, radius, ex, ey),
             WaveguideType.Euler => BuildArc(sx, sy, startAngle, arrivalAngle, radius, ex, ey),
-            // SBend (nd.sinebend) and Cobra (nd.cobra) are point-to-point primitives that reach
-            // the end pin at its arrival angle. The exact sine / cobra curve is APPROXIMATED by
-            // the router's approach S-bend (bend–straight–bend), which reaches the identical end
-            // point and arrival angle — same endpoints/radius basis, curve shape approximated.
-            WaveguideType.SBend => BuildPointToPoint(sx, sy, startAngle, ex, ey, arrivalAngle, radius),
-            WaveguideType.Cobra => BuildPointToPoint(sx, sy, startAngle, ex, ey, arrivalAngle, radius),
+            // SBend (nd.sinebend) and Cobra (nd.cobra) are point-to-point primitives. The exact
+            // sine / cobra curve is APPROXIMATED by a symmetric S-bend (arc–straight–arc) that
+            // shifts by the same lateral offset over the same forward distance and arrives
+            // parallel to the start heading — the identical (distance, offset) basis the exporter
+            // feeds to nd.sinebend, and the parallel-arrival case of nd.cobra.
+            WaveguideType.SBend => BuildPointToPoint(sx, sy, startAngle, ex, ey, radius),
+            WaveguideType.Cobra => BuildPointToPoint(sx, sy, startAngle, ex, ey, radius),
             _ => BuildStraight(sx, sy, startAngle, distance),
         };
     }
@@ -81,6 +86,26 @@ public static class ConnectionStyleRouteBuilder
     {
         double sweep = NormalizeSigned(arrivalAngle - startAngle);
         var path = new RoutedPath();
+
+        if (Math.Abs(sweep) < ParallelTurnThresholdDegrees)
+        {
+            // Parallel pins: a single arc cannot bridge a lateral offset and still arrive at the
+            // pin angle (physically impossible). Fall back to a symmetric S-bend — the valid way
+            // to connect two parallel offset pins. Note: nd.bend(angle≈0) is degenerate for such
+            // a layout, so Bend is meant for pins that face each other at an angle.
+            var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
+            var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral, radius);
+            if (sBend != null)
+            {
+                foreach (var segment in sBend)
+                    path.Segments.Add(segment);
+                return path;
+            }
+            // No lateral offset either → the pins are collinear: a straight along the heading.
+            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, startAngle));
+            return path;
+        }
+
         var builder = new BendBuilder(radius);
         var bend = builder.BuildBend(sx, sy, startAngle, startAngle + sweep, BendMode.Flexible, radius);
         if (bend != null)
@@ -92,23 +117,40 @@ public static class ConnectionStyleRouteBuilder
     }
 
     private static RoutedPath BuildPointToPoint(double sx, double sy, double startAngle,
-                                                double ex, double ey, double arrivalAngle, double radius)
+                                                double ex, double ey, double radius)
     {
         var path = new RoutedPath();
-        var bendBuilder = new BendBuilder(radius);
-        var sbend = new SBendBuilder(bendBuilder, radius);
-        double x = sx, y = sy, angle = startAngle;
+        var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
 
-        if (!sbend.TryBuildApproachSBend(path, ref x, ref y, ref angle, ex, ey, arrivalAngle)
-            || path.Segments.Count == 0)
+        var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral, radius);
+        if (sBend != null)
         {
-            // Too little room for a two-bend approach: fall back to a direct straight so the
-            // curve still visibly connects the pins.
-            path.Segments.Clear();
-            double directAngle = Math.Atan2(ey - sy, ex - sx) * 180.0 / Math.PI;
-            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, directAngle));
+            foreach (var segment in sBend)
+                path.Segments.Add(segment);
+            return path;
         }
+
+        // Degenerate: end pin behind the start, or the offset is too small to warrant an arc.
+        // A direct straight still visibly connects the pins (near-collinear, so barely diagonal).
+        double directAngle = Math.Atan2(ey - sy, ex - sx) * 180.0 / Math.PI;
+        path.Segments.Add(new StraightSegment(sx, sy, ex, ey, directAngle));
         return path;
+    }
+
+    /// <summary>
+    /// End-pin displacement expressed in the start pin's frame: longitudinal (along the start
+    /// heading) and signed lateral (perpendicular, positive toward increasing heading). Matches
+    /// the (distance, offset) basis of <c>NazcaConnectionStyleWriter</c>.
+    /// </summary>
+    private static (double Longitudinal, double Lateral) LocalFrame(
+        double sx, double sy, double ex, double ey, double startAngle)
+    {
+        double dx = ex - sx;
+        double dy = ey - sy;
+        double rad = -startAngle * Math.PI / 180.0;
+        double longitudinal = dx * Math.Cos(rad) - dy * Math.Sin(rad);
+        double lateral = dx * Math.Sin(rad) + dy * Math.Cos(rad);
+        return (longitudinal, lateral);
     }
 
     private static double Distance(double x1, double y1, double x2, double y2)

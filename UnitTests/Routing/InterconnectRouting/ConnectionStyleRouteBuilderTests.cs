@@ -62,6 +62,76 @@ public class ConnectionStyleRouteBuilderTests
         last.EndPoint.Y.ShouldBe(endY, 0.5);
     }
 
+    [Theory]
+    [InlineData(WaveguideType.SBend)]
+    [InlineData(WaveguideType.Cobra)]
+    public void PointToPoint_OffsetParallelPins_ProducesRealSCurve_NotDiagonalStraight(WaveguideType type)
+    {
+        // Parallel pins (end pin faces the start, arrival angle 0) with a lateral offset — the
+        // layout that used to collapse to a single diagonal straight for everything but Auto.
+        var conn = CreateConnection(type, endOffsetY: 20);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+
+        // A real S: more than one segment, with two arcs — never a lone diagonal StraightSegment.
+        path.Segments.Count.ShouldBeGreaterThan(1);
+        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
+
+        // Reaches the end pin exactly and arrives parallel to the start heading (0°).
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        var last = path.Segments[^1];
+        last.EndPoint.X.ShouldBe(endX, 0.5);
+        last.EndPoint.Y.ShouldBe(endY, 0.5);
+        last.EndAngleDegrees.ShouldBe(0.0, 0.5);
+    }
+
+    [Fact]
+    public void SBend_RadiusTooLargeForOffset_ReducesRadius_StillReachesEndPin()
+    {
+        // A large lateral offset over a short forward span cannot host the requested 20 µm radius;
+        // the builder must shrink the radius rather than fall back to a straight.
+        const double requestedRadius = 20.0;
+        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 40);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, requestedRadius);
+
+        path.Segments.OfType<BendSegment>().ShouldNotBeEmpty();
+        var maxRadius = path.Segments.OfType<BendSegment>().Max(b => b.RadiusMicrometers);
+        maxRadius.ShouldBeLessThan(requestedRadius); // reduced to fit the offset
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
+        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
+    }
+
+    [Fact]
+    public void Bend_ParallelOffsetPins_FallsBackToSCurve_NotDiagonalStraight()
+    {
+        // A single arc cannot join parallel offset pins; Bend falls back to an S-bend.
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20); // end pin angle 180 → parallel
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+
+        path.Segments.Count.ShouldBeGreaterThan(1);
+        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
+        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
+    }
+
+    [Fact]
+    public void Straight_OffsetPins_RunsAlongHeading_NotDiagonalToEndPin()
+    {
+        // Straight is nd.strt along the start heading; it must stay horizontal (heading 0),
+        // never a silent diagonal to an offset end pin.
+        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+
+        path.Segments.Count.ShouldBe(1);
+        var straight = path.Segments[0].ShouldBeOfType<StraightSegment>();
+        straight.StartPoint.Y.ShouldBe(straight.EndPoint.Y, 0.01); // no lateral drift
+    }
+
     [Fact]
     public void ExplicitStyle_RecalculateFreezesStyledGeometry_NotAStar()
     {
