@@ -33,12 +33,15 @@ public class Issue744LocalizationScreenshotTests
             CaptureMainWindowIn("de", Path.Combine(outputDir, "02-main-window-german.png"));
             var chinese = CaptureMainWindowIn("zh-Hans", Path.Combine(outputDir, "03-main-window-chinese.png"));
             CaptureMainWindowIn("es", Path.Combine(outputDir, "04-main-window-spanish.png"));
-            CaptureLanguageSettingsPage(Path.Combine(outputDir, "05-settings-language-picker.png"));
+            var japanese = CaptureMainWindowIn("ja", Path.Combine(outputDir, "05-main-window-japanese.png"));
+            CaptureLanguageSettingsPage(Path.Combine(outputDir, "06-settings-language-picker.png"));
 
-            // The Chinese render must differ from the English one — a font-fallback
+            // The Chinese and Japanese renders must differ from the English one — a font-fallback
             // failure (tofu boxes everywhere or unchanged text) would keep them equal.
             chinese.SequenceEqual(english).ShouldBeFalse(
                 "Chinese UI render is pixel-identical to English — CJK strings did not render");
+            japanese.SequenceEqual(english).ShouldBeFalse(
+                "Japanese UI render is pixel-identical to English — CJK strings did not render");
         }
         finally
         {
@@ -70,8 +73,8 @@ public class Issue744LocalizationScreenshotTests
     }
 
     /// <summary>
-    /// 05 — the new Settings → Language page: a "System (auto-detect)" default plus
-    /// every shipped language under its native name (English, Deutsch, 中文, Español).
+    /// 06 — the new Settings → Language page: a "System (auto-detect)" default plus
+    /// every shipped language under its native name (English, Deutsch, 中文, Español, 日本語).
     /// </summary>
     private static void CaptureLanguageSettingsPage(string path)
     {
@@ -109,8 +112,9 @@ public class Issue744LocalizationScreenshotTests
           {"file": "01-main-window-english.png", "caption": "Baseline: the main window in English — toolbar, panels, tooltips and status bar now read their strings from the localization service instead of hardcoded AXAML text."},
           {"file": "02-main-window-german.png", "caption": "The same window live-switched to German: every extracted string (Modus, Eigenschaften, Komponentenbibliothek…) re-reads instantly via the Item[] binding — no restart."},
           {"file": "03-main-window-chinese.png", "caption": "Simplified Chinese: CJK glyphs (模式, 属性, 元件库) render in the headless Skia host; the test asserts this frame differs from the English baseline."},
-          {"file": "04-main-window-spanish.png", "caption": "Spanish: the fourth shipped language (Modo, Propiedades, Biblioteca de componentes) — any key missing from a translation would silently fall back to English, never a raw key."},
-          {"file": "05-settings-language-picker.png", "caption": "New Settings → Language page: 'System (auto-detect)' is the default; each language is listed in its own native name so users always recognize theirs."}
+          {"file": "04-main-window-spanish.png", "caption": "Spanish (Modo, Propiedades, Biblioteca de componentes) — any key missing from a translation would silently fall back to English, never a raw key."},
+          {"file": "05-main-window-japanese.png", "caption": "Japanese (モード, プロパティ, コンポーネントライブラリ): the fifth shipped language. Added because Japanese users are less comfortable defaulting to English; the AI assistant also replies in Japanese. The test asserts this frame differs from the English baseline."},
+          {"file": "06-settings-language-picker.png", "caption": "New Settings → Language page: 'System (auto-detect)' is the default; each language is listed in its own native name (English, Deutsch, 中文, Español, 日本語) so users always recognize theirs."}
         ]
         """;
         ScreenshotArtifacts.WriteText(Path.Combine(outputDir, "manifest.json"), manifest);
