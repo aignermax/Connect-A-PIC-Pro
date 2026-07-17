@@ -1,52 +1,53 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.ConnectionRoutingPanel"
              x:DataType="vm:MainViewModel">
 
     <!-- Connection Routing (style, width/radius, freeze, per-bend radius — issue #574) -->
     <StackPanel IsVisible="{Binding CanvasInteraction.SelectedWaveguideConnection, Converter={x:Static ObjectConverters.IsNotNull}}">
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Routing:" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <TextBlock Text="{loc:Localize Routing.Connection.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
 
-        <TextBlock Text="Style:" Foreground="Gray" Margin="0,0,0,3"/>
+        <TextBlock Text="{loc:Localize Routing.Connection.Style}" Foreground="Gray" Margin="0,0,0,3"/>
         <ComboBox ItemsSource="{Binding BottomPanel.ConnectionRouting.RoutingStyles}"
                   SelectedItem="{Binding BottomPanel.ConnectionRouting.SelectedStyle}"
                   Width="180" Margin="0,0,0,8"/>
 
-        <TextBlock Text="Width (µm):" Foreground="Gray" Margin="0,0,0,3"/>
+        <TextBlock Text="{loc:Localize Routing.Connection.Width}" Foreground="Gray" Margin="0,0,0,3"/>
         <NumericUpDown Value="{Binding BottomPanel.ConnectionRouting.WidthMicrometers}"
                        Minimum="0.05" Maximum="100"
                        Increment="0.05" Width="180" FormatString="F2" Margin="0,0,0,5"/>
 
-        <TextBlock Text="Bend Radius (µm):" Foreground="Gray" Margin="0,0,0,3"/>
+        <TextBlock Text="{loc:Localize Routing.Connection.BendRadius}" Foreground="Gray" Margin="0,0,0,3"/>
         <NumericUpDown Value="{Binding BottomPanel.ConnectionRouting.BendRadiusMicrometers}"
                        Minimum="0.5" Maximum="10000"
                        Increment="1" Width="180" FormatString="F1" Margin="0,0,0,8"/>
 
-        <CheckBox Content="Freeze Route"
+        <CheckBox Content="{loc:Localize Routing.Connection.FreezeRoute}"
                   IsChecked="{Binding BottomPanel.ConnectionRouting.IsRouteFrozen}"
                   Foreground="White" Margin="0,0,0,8"/>
 
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,3">
-            <Run Text="Bends in path: "/>
+            <Run Text="{loc:Localize Routing.Connection.BendsInPath}"/>
             <Run Text="{Binding BottomPanel.ConnectionRouting.BendCount}" Foreground="White"/>
         </TextBlock>
 
         <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,5">
-            <TextBlock Text="Bend #" Foreground="Gray" VerticalAlignment="Center"/>
+            <TextBlock Text="{loc:Localize Routing.Connection.BendNumber}" Foreground="Gray" VerticalAlignment="Center"/>
             <NumericUpDown Value="{Binding BottomPanel.ConnectionRouting.BendNumber}"
                            Minimum="1" Maximum="99" Increment="1"
                            Width="90" FormatString="F0"/>
         </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="5" Margin="0,0,0,5">
-            <TextBlock Text="Radius" Foreground="Gray" VerticalAlignment="Center"/>
+            <TextBlock Text="{loc:Localize Routing.Connection.Radius}" Foreground="Gray" VerticalAlignment="Center"/>
             <NumericUpDown Value="{Binding BottomPanel.ConnectionRouting.BendOverrideRadiusMicrometers}"
                            Minimum="0.5" Maximum="10000" Increment="1"
                            Width="110" FormatString="F1"/>
             <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center"/>
         </StackPanel>
-        <Button Content="Apply Bend Radius"
+        <Button Content="{loc:Localize Routing.Connection.ApplyBendRadius}"
                 Command="{Binding BottomPanel.ConnectionRouting.ApplyBendRadiusCommand}"
                 Width="160" Margin="0,0,0,5" Background="#5d4d3d"/>
 
