@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Media;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
@@ -23,12 +24,13 @@ public sealed class CanvasOverlayRenderer : ICanvasRenderer
     {
         if (mainVm == null) return;
 
+        var loc = LocalizationService.Instance;
         string modeText = mainVm.CanvasInteraction.CurrentMode switch
         {
-            InteractionMode.Select => "[S] Select",
-            InteractionMode.PlaceComponent => "[P] Place",
-            InteractionMode.Connect => "[C] Connect",
-            InteractionMode.Delete => "[D] Delete",
+            InteractionMode.Select => $"[S] {loc.Translate("Canvas.Mode.Select")}",
+            InteractionMode.PlaceComponent => $"[P] {loc.Translate("Canvas.Mode.Place")}",
+            InteractionMode.Connect => $"[C] {loc.Translate("Canvas.Mode.Connect")}",
+            InteractionMode.Delete => $"[D] {loc.Translate("Canvas.Mode.Delete")}",
             _ => ""
         };
 
@@ -56,9 +58,14 @@ public sealed class CanvasOverlayRenderer : ICanvasRenderer
         // the full key legend is already displayed under the canvas.
         string processInfo = string.IsNullOrEmpty(vm.ActiveProcessLabel) ? "" : $" | {vm.ActiveProcessLabel}";
 
+        var loc = LocalizationService.Instance;
+        string zoomLabel = loc.Translate("Canvas.Hud.Zoom");
+        string componentsLabel = loc.Translate("Canvas.Hud.Components");
+        string connectionsLabel = loc.Translate("Canvas.Hud.Connections");
+
         context.DrawText(
             new FormattedText(
-                $"Zoom: {zoom:P0} | Components: {vm.Components.Count} | Connections: {vm.Connections.Count}{processInfo}",
+                $"{zoomLabel}: {zoom:P0} | {componentsLabel}: {vm.Components.Count} | {connectionsLabel}: {vm.Connections.Count}{processInfo}",
                 System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight,
                 new Typeface("Arial"),

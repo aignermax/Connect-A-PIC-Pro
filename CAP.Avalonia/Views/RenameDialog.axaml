@@ -1,21 +1,22 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.RenameDialog"
-        Title="Rename Group Template"
+        Title="{loc:Localize Rename.Title}"
         Width="340" Height="130"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
         Background="#1e1e1e"
         Foreground="White">
     <StackPanel Margin="15" Spacing="8">
-        <TextBlock Text="Enter new name:" Foreground="LightGray"/>
+        <TextBlock Text="{loc:Localize Rename.EnterNewName}" Foreground="LightGray"/>
         <TextBox x:Name="NameTextBox"
                  Background="#2d2d2d"
                  Foreground="White"
                  CaretBrush="White"/>
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="OK" Width="80" Click="OnOkClicked"/>
-            <Button Content="Cancel" Width="80" Click="OnCancelClicked"/>
+            <Button Content="{loc:Localize Common.Ok}" Width="80" Click="OnOkClicked"/>
+            <Button Content="{loc:Localize Common.Cancel}" Width="80" Click="OnCancelClicked"/>
         </StackPanel>
     </StackPanel>
 </Window>

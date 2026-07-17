@@ -58,9 +58,9 @@
                 <!-- ONA Analyzer: just an "open window" button -->
                 <DataTemplate x:Key="OnaAnalyzerTpl" x:DataType="editors:OnaAnalyzerEditorViewModel">
                     <StackPanel>
-                        <TextBlock Text="Wavelength sweep is configured in the dedicated tool window."
+                        <TextBlock Text="{loc:Localize SelectedProps.OnaDescription}"
                                    Foreground="Gray" FontSize="10" Margin="0,2,0,8" TextWrapping="Wrap"/>
-                        <Button Content="Open ONA Sweep…"
+                        <Button Content="{loc:Localize SelectedProps.OpenOnaSweep}"
                                 Command="{Binding OpenSweepCommand}"
                                 Width="180" HorizontalAlignment="Left" Background="#3d5d5d"/>
                     </StackPanel>
@@ -90,24 +90,24 @@
                     <StackPanel>
                         <!-- Laser on/off (#690): a coupler with its laser off is listen-only,
                              i.e. an output. Shares LaserConfig with the canvas laser icon. -->
-                        <TextBlock Text="Laser" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <TextBlock Text="{loc:Localize SelectedProps.Laser}" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
                         <ToggleSwitch IsChecked="{Binding LaserConfig.IsEnabled, Mode=TwoWay}"
-                                      OnContent="On — input" OffContent="Off — output"
+                                      OnContent="{loc:Localize SelectedProps.LaserOn}" OffContent="{loc:Localize SelectedProps.LaserOff}"
                                       FontSize="11" Margin="0,0,0,4"/>
-                        <TextBlock Text="Wavelength" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <TextBlock Text="{loc:Localize SelectedProps.Wavelength}" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
                         <ComboBox ItemsSource="{Binding WavelengthOptions}"
                                   SelectedValue="{Binding LaserConfig.WavelengthNm, Mode=TwoWay}"
                                   SelectedValueBinding="{Binding WavelengthNm}"
                                   DisplayMemberBinding="{Binding Label}"
                                   IsEnabled="{Binding LaserConfig.IsEnabled}"
                                   HorizontalAlignment="Stretch" Margin="0,0,0,6"/>
-                        <TextBlock Text="Input power" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
+                        <TextBlock Text="{loc:Localize SelectedProps.InputPower}" Foreground="Gray" FontSize="10" Margin="0,0,0,2"/>
                         <Slider Minimum="0" Maximum="1"
                                 Value="{Binding LaserConfig.InputPower, Mode=TwoWay}"
                                 IsEnabled="{Binding LaserConfig.IsEnabled}"
                                 TickFrequency="0.1" IsSnapToTickEnabled="True"/>
                         <TextBlock Foreground="#cccccc" FontSize="10">
-                            <Run Text="Power: "/>
+                            <Run Text="{loc:Localize SelectedProps.Power}"/>
                             <Run Text="{Binding LaserConfig.InputPower, StringFormat={}{0:F2}}"/>
                         </TextBlock>
                     </StackPanel>

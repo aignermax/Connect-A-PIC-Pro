@@ -88,7 +88,7 @@
                     Command="{Binding RightPanel.AiAssistant.CancelRequestCommand}"
                     Background="#5d2d2d" Foreground="White"
                     Width="28"
-                    ToolTip.Tip="Cancel AI request"
+                    ToolTip.Tip="{loc:Localize AiPanel.CancelTip}"
                     IsVisible="{Binding RightPanel.AiAssistant.IsTyping}"/>
         </Grid>
 
@@ -102,7 +102,7 @@
                 FontSize="11"
                 IsVisible="{Binding RightPanel.AiAssistant.IsApiKeySet,
                             Converter={x:Static BoolConverters.Not}}"
-                ToolTip.Tip="Open Settings → AI Assistant to configure your Claude API key"/>
+                ToolTip.Tip="{loc:Localize AiPanel.SetApiKeyTip}"/>
     </StackPanel>
 
 </UserControl>
