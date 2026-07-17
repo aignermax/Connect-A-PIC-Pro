@@ -35,18 +35,81 @@ public class ConnectionStyleRouteBuilderTests
         path.Segments[0].LengthMicrometers.ShouldBe(50.0, 0.01);
     }
 
-    [Fact]
-    public void Bend_ProducesSingleArcWithGivenRadiusAndTurnMagnitude()
+    [Theory]
+    [InlineData(WaveguideType.Bend)]
+    [InlineData(WaveguideType.Euler)]
+    public void ArcStyles_AngledOffsetPins_BuildStubArcStub_ReachingEndPinExactly(WaveguideType type)
     {
-        // End pin points 90° in app space → the waveguide turns by 90°.
-        var conn = CreateConnection(WaveguideType.Bend, endPinAngleDegrees: 90);
+        // End pin at (100, 55) pointing 270° → arrival direction 90°, a 90° turn. The corner of
+        // the two pin axes is at (100, 25): 50 µm ahead of the start pin, 30 µm before the end.
+        var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
 
         var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
 
-        path.Segments.Count.ShouldBe(1);
-        var bend = path.Segments[0].ShouldBeOfType<BendSegment>();
+        // Stub – arc – stub: exactly one arc with the requested radius and the 90° sweep.
+        path.Segments.Count.ShouldBe(3);
+        path.Segments[0].ShouldBeOfType<StraightSegment>();
+        var bend = path.Segments[1].ShouldBeOfType<BendSegment>();
+        path.Segments[2].ShouldBeOfType<StraightSegment>();
         bend.RadiusMicrometers.ShouldBe(Radius, 0.01);
         Math.Abs(bend.SweepAngleDegrees).ShouldBe(90.0, 0.01);
+
+        // Both pins are hit exactly (tangent length τ = r·tan(45°) = 10 → stubs 40 µm and 20 µm).
+        var (startX, startY) = conn.StartPin.GetAbsolutePosition();
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        path.Segments[0].StartPoint.X.ShouldBe(startX, 0.5);
+        path.Segments[0].StartPoint.Y.ShouldBe(startY, 0.5);
+        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
+        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
+        path.Segments[0].LengthMicrometers.ShouldBe(40.0, 0.1);
+        path.Segments[2].LengthMicrometers.ShouldBe(20.0, 0.1);
+    }
+
+    [Fact]
+    public void Bend_AngledPins_ArcIsGrabbableByRadiusHandles()
+    {
+        // The stubs make the arc an interior bend (flanked by straights), so the in-canvas
+        // radius handles (GetBendCorners) find it.
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, Radius);
+
+        var corners = BendRadiusEditor.GetBendCorners(path.Segments);
+        corners.Count.ShouldBe(1);
+        corners[0].RadiusMicrometers.ShouldBe(Radius, 0.01);
+    }
+
+    [Fact]
+    public void Bend_RadiusTooLargeForCorner_ClampsRadius_StillReachesEndPin()
+    {
+        // The corner legs are 50 µm and 30 µm; a 100 µm radius needs τ = 100 µm of tangent —
+        // impossible. The radius must be clamped to ~30 µm, never abandoned to a straight line.
+        const double requestedRadius = 100.0;
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
+
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type, requestedRadius);
+
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBeLessThan(requestedRadius);
+        bend.RadiusMicrometers.ShouldBe(30.0, 0.5); // min(t, s) / tan(45°), minus the safety margin
+
+        var (endX, endY) = conn.EndPin.GetAbsolutePosition();
+        path.Segments[^1].EndPoint.X.ShouldBe(endX, 0.5);
+        path.Segments[^1].EndPoint.Y.ShouldBe(endY, 0.5);
+    }
+
+    [Fact]
+    public void Bend_AngledPins_RecalculatedRouteStaysValid_NoRebuildChurn()
+    {
+        // Incremental routing keeps a frozen route only while FrozenPathStillMatchesPins():
+        // since the stub–arc–stub reaches both pins, a styled Bend must satisfy it — otherwise
+        // WaveguideConnectionManager.IsRouteStillValid would reject and rebuild it on every pass.
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
+
+        conn.RecalculateTransmission(new WaveguideRouter());
+
+        conn.IsRouteFrozen.ShouldBeTrue();
+        conn.FrozenPathStillMatchesPins().ShouldBeTrue();
     }
 
     [Fact]
@@ -167,16 +230,19 @@ public class ConnectionStyleRouteBuilderTests
             straight.StartPin, straight.EndPin, straight.Type, straight.BendRadiusMicrometers);
         double exportedLength = ParseArg(NazcaConnectionStyleWriter.Format(straight)!, "length");
         straightPath.Segments[0].LengthMicrometers.ShouldBe(exportedLength, 0.05);
+    }
 
-        // Bend: canvas arc radius/turn magnitude must equal the exporter's nd.bend(radius, angle).
-        var bendConn = CreateConnection(WaveguideType.Bend, endPinAngleDegrees: 90);
-        bendConn.BendRadiusMicrometers = Radius;
-        var bendPath = ConnectionStyleRouteBuilder.Build(
-            bendConn.StartPin, bendConn.EndPin, bendConn.Type, bendConn.BendRadiusMicrometers);
-        var arc = (BendSegment)bendPath.Segments[0];
-        string bendLine = NazcaConnectionStyleWriter.Format(bendConn)!;
-        arc.RadiusMicrometers.ShouldBe(ParseArg(bendLine, "radius"), 0.01);
-        Math.Abs(arc.SweepAngleDegrees).ShouldBe(Math.Abs(ParseArg(bendLine, "angle")), 0.01);
+    [Theory]
+    [InlineData(WaveguideType.Bend)]
+    [InlineData(WaveguideType.Euler)]
+    public void ArcStyles_HaveNoSinglePrimitiveExport_SegmentsAreTheTruth(WaveguideType type)
+    {
+        // A lone nd.bend/nd.euler is parameterized by (radius, angle) only and cannot land on an
+        // arbitrary end pin. Format therefore returns null and the exporter writes the exact
+        // canvas segments instead — canvas and GDS are identical by construction.
+        var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
+
+        NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
     }
 
     private static double ParseArg(string line, string name)

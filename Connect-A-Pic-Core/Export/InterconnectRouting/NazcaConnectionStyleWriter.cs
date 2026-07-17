@@ -5,10 +5,17 @@ using CAP_Core.Components.Core;
 namespace CAP_Core.Export.InterconnectRouting;
 
 /// <summary>
-/// Emits a single Nazca primitive for a connection with an explicit routing style
-/// (<see cref="WaveguideType"/> other than Auto). The primitive is placed absolutely
-/// at the start pin's Nazca position/angle; point-to-point styles (sinebend, cobra)
-/// receive the end pin expressed in the start pin's local frame.
+/// Emits a single Nazca primitive for a connection with an explicit point-to-point routing
+/// style (Straight, SBend, Cobra). The primitive is placed absolutely at the start pin's Nazca
+/// position/angle; point-to-point styles (sinebend, cobra) receive the end pin expressed in the
+/// start pin's local frame.
+///
+/// Bend and Euler return null on purpose: a single <c>nd.bend</c>/<c>nd.euler</c> is
+/// parameterized only by (radius, angle) and therefore CANNOT land on an arbitrary end pin —
+/// exporting one would leave the GDS physically disconnected. Those styles are exported through
+/// the segment exporter (<c>SimpleNazcaExporter.AppendSegmentExport</c>), which writes exactly
+/// the canvas stub–arc–stub segments built by <c>ConnectionStyleRouteBuilder</c>, so the
+/// exported geometry reaches both pins and matches the canvas by construction.
 /// </summary>
 public static class NazcaConnectionStyleWriter
 {
@@ -16,36 +23,35 @@ public static class NazcaConnectionStyleWriter
     private const double DegreesToRadians = Math.PI / 180.0;
 
     /// <summary>
-    /// Formats the Nazca export line for a styled connection, or null when the
-    /// style is <see cref="WaveguideType.Auto"/> (handled by the segment exporter).
+    /// Formats the Nazca export line for a styled point-to-point connection, or null when the
+    /// connection is handled by the segment exporter instead: Auto (routed segments) as well as
+    /// Bend and Euler, whose single-primitive form cannot reach an arbitrary end pin (see class
+    /// remarks) — their exact canvas segments are the exported truth.
     /// </summary>
     /// <param name="connection">Connection carrying style, width and bend radius.</param>
     /// <param name="gdsLayer">Optional GDS layer appended to the primitive call.</param>
-    /// <returns>A single Python line, or null for Auto style.</returns>
+    /// <returns>A single Python line, or null for segment-exported styles.</returns>
     public static string? Format(WaveguideConnection connection, int? gdsLayer = null)
     {
-        if (connection.Type == WaveguideType.Auto ||
+        if (connection.Type is WaveguideType.Auto or WaveguideType.Bend or WaveguideType.Euler ||
             connection.StartPin == null || connection.EndPin == null)
             return null;
 
         var geometry = ComputeLocalGeometry(connection.StartPin, connection.EndPin);
         var ci = CultureInfo.InvariantCulture;
         string w = connection.WidthMicrometers.ToString("F2", ci);
-        string r = connection.BendRadiusMicrometers.ToString("F2", ci);
         string layer = gdsLayer.HasValue ? $", layer={gdsLayer.Value}" : string.Empty;
-        string primitive = FormatPrimitive(connection.Type, geometry, w, r, layer, ci);
+        string primitive = FormatPrimitive(connection.Type, geometry, w, layer, ci);
         return $"{Indent}{primitive}.put({Fmt(geometry.StartX, ci)}, {Fmt(geometry.StartY, ci)}, {Fmt(geometry.StartAngle, ci)})";
     }
 
     private static string FormatPrimitive(
-        WaveguideType type, LocalGeometry g, string w, string r, string layer, CultureInfo ci)
+        WaveguideType type, LocalGeometry g, string w, string layer, CultureInfo ci)
     {
         return type switch
         {
             WaveguideType.Straight => $"nd.strt(length={Fmt(g.Distance, ci)}, width={w}{layer})",
             WaveguideType.SBend => $"nd.sinebend(width={w}, distance={Fmt(g.LocalDx, ci)}, offset={Fmt(g.LocalDy, ci)}{layer})",
-            WaveguideType.Bend => $"nd.bend(radius={r}, angle={Fmt(g.LocalDa, ci)}, width={w}{layer})",
-            WaveguideType.Euler => $"nd.euler(width={w}, radius={r}, angle={Fmt(g.LocalDa, ci)}{layer})",
             WaveguideType.Cobra =>
                 $"nd.cobra(xya=({Fmt(g.LocalDx, ci)}, {Fmt(g.LocalDy, ci)}, {Fmt(g.LocalDa, ci)}), width1={w}, width2={w}{layer})",
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Unsupported waveguide style."),

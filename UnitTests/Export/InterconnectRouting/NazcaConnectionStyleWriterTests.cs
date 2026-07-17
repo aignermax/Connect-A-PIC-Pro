@@ -41,27 +41,18 @@ public class NazcaConnectionStyleWriterTests
         line.ShouldBe("        nd.sinebend(width=0.50, distance=50.00, offset=-20.00).put(50.00, -25.00, 0.00)");
     }
 
-    [Fact]
-    public void Format_Bend_EmitsBendWithArrivalAngle()
+    [Theory]
+    [InlineData(WaveguideType.Bend)]
+    [InlineData(WaveguideType.Euler)]
+    public void Format_ArcStyles_ReturnsNull_SegmentExporterOwnsThem(WaveguideType type)
     {
-        // End pin pointing 90° in app space → waveguide arrives at Nazca angle 90.
-        var conn = CreateConnection(WaveguideType.Bend, endPinAngleDegrees: 90);
+        // nd.bend/nd.euler are (radius, angle) primitives: a single one cannot land on an
+        // arbitrary end pin, so these styles export their exact canvas segments via
+        // SimpleNazcaExporter.AppendSegmentExport instead of a styled primitive line.
+        var conn = CreateConnection(type, endPinAngleDegrees: 90);
         conn.BendRadiusMicrometers = 10;
 
-        var line = NazcaConnectionStyleWriter.Format(conn);
-
-        line.ShouldBe("        nd.bend(radius=10.00, angle=90.00, width=0.50).put(50.00, -25.00, 0.00)");
-    }
-
-    [Fact]
-    public void Format_Euler_EmitsEulerPrimitive()
-    {
-        var conn = CreateConnection(WaveguideType.Euler, endPinAngleDegrees: 90);
-        conn.BendRadiusMicrometers = 12;
-
-        var line = NazcaConnectionStyleWriter.Format(conn);
-
-        line.ShouldBe("        nd.euler(width=0.50, radius=12.00, angle=90.00).put(50.00, -25.00, 0.00)");
+        NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
     }
 
     [Fact]

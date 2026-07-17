@@ -20,9 +20,21 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// </summary>
 public static class ConnectionStyleRouteBuilder
 {
+    private const double DegreesToRadians = Math.PI / 180.0;
+    private const double Epsilon = 1e-6;
+
     /// <summary>Below this |turn| (degrees) two pins count as parallel: a single bend cannot
-    /// join them, so a parallel <see cref="WaveguideType.Bend"/> falls back to an S-bend.</summary>
-    private const double ParallelTurnThresholdDegrees = 1.0;
+    /// join them, so a parallel <see cref="WaveguideType.Bend"/> falls back to an S-bend.
+    /// Matches the minimum sweep <see cref="BendBuilder.BuildBend"/> accepts.</summary>
+    private const double MinArcSweepDegrees = 2.0;
+
+    /// <summary>Above this |turn| the tangent length r·tan(|sweep|/2) diverges and the corner
+    /// construction becomes numerically unstable; fall back to the S-bend instead.</summary>
+    private const double MaxArcSweepDegrees = 179.0;
+
+    /// <summary>Safety factor applied when clamping the radius to the corner's tangent budget,
+    /// so the arc's tangent points stay strictly inside the stub straights.</summary>
+    private const double RadiusClampSafety = 0.999;
 
     /// <summary>
     /// Builds the styled route between two pins.
@@ -52,10 +64,13 @@ public static class ConnectionStyleRouteBuilder
         return type switch
         {
             WaveguideType.Straight => BuildStraight(sx, sy, startAngle, distance),
-            // Bend is a single circular arc (nd.bend). Euler (nd.euler) is a clothoid with
-            // adiabatic curvature; an exact clothoid is out of scope, so it is APPROXIMATED
-            // by the same circular arc of the given radius and turn angle — visibly a bend of
-            // the correct radius and sweep, sharing endpoints/basis with the exported primitive.
+            // Bend and Euler are built as stub–arc–stub: the corner is the intersection of the
+            // two pin axes, the arc of the requested radius is inscribed at that corner (clamped
+            // when it does not fit) and short straight stubs connect it to BOTH pins EXACTLY.
+            // Euler (nd.euler) is a clothoid with adiabatic curvature; an exact clothoid is out
+            // of scope, so it is APPROXIMATED by the circular arc of the same radius and turn.
+            // The exporter emits these exact segments (see NazcaConnectionStyleWriter), so the
+            // canvas curve and the GDS are identical by construction.
             WaveguideType.Bend => BuildArc(sx, sy, startAngle, arrivalAngle, radius, ex, ey),
             WaveguideType.Euler => BuildArc(sx, sy, startAngle, arrivalAngle, radius, ex, ey),
             // SBend (nd.sinebend) and Cobra (nd.cobra) are point-to-point primitives. The exact
@@ -81,39 +96,91 @@ public static class ConnectionStyleRouteBuilder
         return path;
     }
 
+    /// <summary>
+    /// Builds the Bend/Euler route as stub–arc–stub so it reaches BOTH pins exactly.
+    /// Degenerate layouts (parallel axes, corner behind a pin) fall back to the analytic
+    /// S-bend via <see cref="BuildPointToPoint"/> — never a silent diagonal.
+    /// </summary>
     private static RoutedPath BuildArc(double sx, double sy, double startAngle,
                                        double arrivalAngle, double radius, double ex, double ey)
     {
         double sweep = NormalizeSigned(arrivalAngle - startAngle);
-        var path = new RoutedPath();
-
-        if (Math.Abs(sweep) < ParallelTurnThresholdDegrees)
+        if (Math.Abs(sweep) >= MinArcSweepDegrees && Math.Abs(sweep) <= MaxArcSweepDegrees)
         {
-            // Parallel pins: a single arc cannot bridge a lateral offset and still arrive at the
-            // pin angle (physically impossible). Fall back to a symmetric S-bend — the valid way
-            // to connect two parallel offset pins. Note: nd.bend(angle≈0) is degenerate for such
-            // a layout, so Bend is meant for pins that face each other at an angle.
-            var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
-            var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral, radius);
-            if (sBend != null)
-            {
-                foreach (var segment in sBend)
-                    path.Segments.Add(segment);
-                return path;
-            }
-            // No lateral offset either → the pins are collinear: a straight along the heading.
-            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, startAngle));
-            return path;
+            var arcPath = TryBuildStubArcStub(sx, sy, startAngle, sweep, radius, ex, ey);
+            if (arcPath != null)
+                return arcPath;
         }
 
-        var builder = new BendBuilder(radius);
-        var bend = builder.BuildBend(sx, sy, startAngle, startAngle + sweep, BendMode.Flexible, radius);
-        if (bend != null)
-            path.Segments.Add(bend);
-        else
-            // Turn angle is negligible: a straight run to the end pin represents nd.bend(angle≈0).
-            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, startAngle));
+        // Parallel pins (sweep ≈ 0 / 180°) or a corner not ahead of both pins: a single arc
+        // cannot join the pins, so fall back to the symmetric S-bend (or a collinear straight).
+        return BuildPointToPoint(sx, sy, startAngle, ex, ey, radius);
+    }
+
+    /// <summary>
+    /// Inscribes a circular arc at the corner C where the start pin's forward axis meets the
+    /// end pin's backward axis: solving P1 + t·u1 = C = P2 − s·u2 gives the leg lengths t and s
+    /// (both must be positive, i.e. C lies AHEAD of both pins). The arc spans the tangent
+    /// length τ = r·tan(|sweep|/2) on each leg — from C − τ·u1 to C + τ·u2, its center
+    /// perpendicular to the start heading on the turn side (<see cref="BendBuilder"/>) — and is
+    /// framed by straight stubs to P1 and P2, so the route hits both pins exactly. When τ would
+    /// overrun a leg, the radius is clamped to min(t, s)·tan(|sweep|/2)⁻¹ (with a small safety
+    /// margin) instead of giving up. Returns null when the layout is degenerate.
+    /// </summary>
+    private static RoutedPath? TryBuildStubArcStub(
+        double sx, double sy, double startAngle, double sweep, double radius, double ex, double ey)
+    {
+        var u1 = UnitVector(startAngle);
+        var u2 = UnitVector(startAngle + sweep);
+        double det = u1.X * u2.Y - u1.Y * u2.X; // = sin(sweep), guarded by the sweep range
+        if (Math.Abs(det) < Epsilon)
+            return null;
+
+        double dx = ex - sx;
+        double dy = ey - sy;
+        double t = (dx * u2.Y - dy * u2.X) / det; // P1 → corner along u1
+        double s = (u1.X * dy - u1.Y * dx) / det; // corner → P2 along u2
+        if (t <= Epsilon || s <= Epsilon)
+            return null;
+
+        double tanHalfSweep = Math.Tan(Math.Abs(sweep) * DegreesToRadians / 2.0);
+        double clampedRadius = Math.Min(radius, Math.Min(t, s) * RadiusClampSafety / tanHalfSweep);
+        if (clampedRadius <= Epsilon)
+            return null;
+        double tangent = clampedRadius * tanHalfSweep;
+
+        double cornerX = sx + t * u1.X;
+        double cornerY = sy + t * u1.Y;
+        double arcStartX = cornerX - tangent * u1.X;
+        double arcStartY = cornerY - tangent * u1.Y;
+
+        var bend = new BendBuilder(clampedRadius).BuildBend(
+            arcStartX, arcStartY, startAngle, startAngle + sweep, BendMode.Flexible, clampedRadius);
+        if (bend == null)
+            return null;
+
+        var path = new RoutedPath();
+        AppendStubIfMeaningful(path, sx, sy, arcStartX, arcStartY, startAngle);
+        path.Segments.Add(bend);
+        AppendStubIfMeaningful(path, bend.EndPoint.X, bend.EndPoint.Y, ex, ey, startAngle + sweep);
         return path;
+    }
+
+    /// <summary>Adds a straight stub (skipped when shorter than <see cref="Epsilon"/>).</summary>
+    private static void AppendStubIfMeaningful(
+        RoutedPath path, double fromX, double fromY, double toX, double toY, double angleDegrees)
+    {
+        double dx = toX - fromX;
+        double dy = toY - fromY;
+        if (Math.Sqrt(dx * dx + dy * dy) <= Epsilon)
+            return;
+        path.Segments.Add(new StraightSegment(fromX, fromY, toX, toY, angleDegrees));
+    }
+
+    private static (double X, double Y) UnitVector(double angleDegrees)
+    {
+        double rad = angleDegrees * DegreesToRadians;
+        return (Math.Cos(rad), Math.Sin(rad));
     }
 
     private static RoutedPath BuildPointToPoint(double sx, double sy, double startAngle,

@@ -36,7 +36,7 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
     {
         var segments = conn.Connection.GetPathSegments();
         var pen = CreateWaveguidePen(conn, vm, isHovered);
-        bool pathIsStale = segments.Count > 0 && IsPathStale(segments, conn);
+        bool pathIsStale = segments.Count > 0 && UsesStaleFallback(conn) && IsPathStale(segments, conn);
 
         if (segments.Count == 0 || pathIsStale)
         {
@@ -129,6 +129,17 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         (byte)((c.R + 255) / 2),
         (byte)((c.G + 255) / 2),
         (byte)((c.B + 255) / 2));
+
+    /// <summary>
+    /// Only automatic, non-frozen routes may be replaced by the straight endpoint-to-endpoint
+    /// fallback when their endpoints drift (<see cref="IsPathStale"/>). Styled (non-Auto) and
+    /// frozen routes always draw their REAL geometry: their curve is the truth the user chose
+    /// and the exporter writes — e.g. an honest Straight between non-collinear pins visibly
+    /// stops short of the end pin instead of being faked into a diagonal line.
+    /// </summary>
+    private static bool UsesStaleFallback(WaveguideConnectionViewModel conn) =>
+        conn.Connection.Type == CAP_Core.Components.Connections.WaveguideType.Auto
+        && !conn.Connection.IsRouteFrozen;
 
     private static bool IsPathStale(IReadOnlyList<CAP_Core.Routing.PathSegment> segments, WaveguideConnectionViewModel conn)
     {

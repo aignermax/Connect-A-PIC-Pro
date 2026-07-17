@@ -63,13 +63,20 @@ public class NazcaExportInterconnectSettingsTests
     }
 
     [Fact]
-    public void Export_ConnectionWithEulerStyle_EmitsEulerPrimitive()
+    public void Export_ConnectionWithEulerStyle_EmitsExactRouteSegments_NotEulerPrimitive()
     {
-        var canvas = CreateCanvasWithConnection(WaveguideType.Euler);
+        // A single nd.euler(radius, angle) cannot land on an arbitrary end pin, so Euler (like
+        // Bend) exports the exact canvas stub–arc–stub segments via the segment exporter:
+        // the arc appears as an nd.bend segment line, and never as an nd.euler primitive.
+        var canvas = CreateCanvasWithConnection(
+            WaveguideType.Euler, endOffsetY: 30, endPinAngleDegrees: 270);
+        var conn = canvas.Connections[0].Connection;
+        conn.RecalculateTransmission(new CAP_Core.Routing.WaveguideRouter());
 
         var result = new SimpleNazcaExporter().Export(canvas);
 
-        result.ShouldContain("nd.euler(");
+        result.ShouldNotContain("nd.euler(");
+        result.ShouldContain("nd.bend(");
     }
 
     [Fact]
@@ -84,11 +91,12 @@ public class NazcaExportInterconnectSettingsTests
         result.ShouldNotContain("nd.cobra(");
     }
 
-    private static DesignCanvasViewModel CreateCanvasWithConnection(WaveguideType type)
+    private static DesignCanvasViewModel CreateCanvasWithConnection(
+        WaveguideType type, double endOffsetY = 0, double endPinAngleDegrees = 180)
     {
         var canvas = new DesignCanvasViewModel();
         var compA = CreateTestComponent(0, 0);
-        var compB = CreateTestComponent(200, 0);
+        var compB = CreateTestComponent(200, endOffsetY);
         canvas.Components.Add(new ComponentViewModel(compA));
         canvas.Components.Add(new ComponentViewModel(compB));
 
@@ -108,7 +116,7 @@ public class NazcaExportInterconnectSettingsTests
                 Name = "input",
                 OffsetXMicrometers = 0,
                 OffsetYMicrometers = 25,
-                AngleDegrees = 180,
+                AngleDegrees = endPinAngleDegrees,
                 ParentComponent = compB,
             },
         };
