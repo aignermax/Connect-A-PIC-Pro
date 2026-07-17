@@ -1,6 +1,7 @@
 using System.Numerics;
 using CAP_Core.LightCalculation.MaterialDispersion;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Components.Core;
 
 namespace CAP_Core.Components.Connections
@@ -171,6 +172,18 @@ namespace CAP_Core.Components.Connections
                 RoutedPath = null;
                 TransmissionCoefficient = Complex.One;
                 TotalLossDb = 0;
+                return;
+            }
+
+            if (Type != WaveguideType.Auto)
+            {
+                // Explicit style: the visible curve is the styled primitive rebuilt from the
+                // current pins, so it tracks component moves while ignoring obstacles by design.
+                // Frozen so incremental routing and the exporter treat it as a fixed route and
+                // never replace it with the A* result.
+                RoutedPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, BendRadiusMicrometers);
+                IsRouteFrozen = true;
+                UpdateLossFromPath(wavelengthNm);
                 return;
             }
 
