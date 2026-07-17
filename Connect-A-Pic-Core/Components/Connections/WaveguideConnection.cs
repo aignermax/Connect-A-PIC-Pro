@@ -177,10 +177,23 @@ namespace CAP_Core.Components.Connections
 
             if (Type != WaveguideType.Auto)
             {
+                // A styled route the user has hand-edited (bend radius via the canvas handles,
+                // recorded in BendRadiusOverrides) is sacred: keep it as long as its endpoints
+                // still match the pins, only refreshing the losses. Rebuilding here would
+                // silently wipe the manual edit on every unrelated recalculation.
+                if (BendRadiusOverrides.Count > 0 && FrozenPathStillMatchesPins())
+                {
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
                 // Explicit style: the visible curve is the styled primitive rebuilt from the
                 // current pins, so it tracks component moves while ignoring obstacles by design.
-                // Frozen so incremental routing and the exporter treat it as a fixed route and
-                // never replace it with the A* result.
+                // An endpoint move (or style change, which invalidates the route) discards any
+                // manual bend edits — mirroring the Auto unfreeze behavior. Frozen so incremental
+                // routing and the exporter treat it as a fixed route and never replace it with
+                // the A* result.
+                BendRadiusOverrides.Clear();
                 RoutedPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, BendRadiusMicrometers);
                 IsRouteFrozen = true;
                 UpdateLossFromPath(wavelengthNm);
