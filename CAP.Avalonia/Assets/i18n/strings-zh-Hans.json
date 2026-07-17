@@ -147,5 +147,29 @@
   "Settings.Language.Description": "选择用户界面的语言。\"系统\"跟随操作系统的显示语言；不支持的系统语言将回退到英语。",
   "Settings.Language.SystemOption": "系统（自动检测）",
   "Settings.Language.PickerLabel": "界面语言：",
-  "Settings.Language.RestartNote": "文本会立即切换。设置侧边栏和部分窗口标题将在下次打开时更新。导出的文件（GDS、Nazca、网表）绝不受界面语言影响。"
+  "Settings.Language.RestartNote": "文本会立即切换。设置侧边栏和部分窗口标题将在下次打开时更新。导出的文件（GDS、Nazca、网表）绝不受界面语言影响。",
+
+  "Hierarchy.Title": "层级",
+
+  "AiAssistant.Title": "AI 设计助手",
+  "AiAssistant.Description": "用自然语言描述您的光子电路。",
+  "AiAssistant.Send": "发送",
+  "AiAssistant.Clear": "清除",
+  "AiAssistant.Thinking": "AI 正在思考…",
+  "AiAssistant.InputPlaceholder": "描述您的光子电路…",
+  "AiAssistant.SetApiKey": "⚙ 在设置中设置 API 密钥",
+
+  "DesignChecks.Title": "设计检查：",
+  "DesignChecks.Run": "运行设计检查",
+  "DesignChecks.Prev": "<< 上一个",
+  "DesignChecks.Next": "下一个 >>",
+
+  "Properties.SelectedComponent": "选定组件：",
+  "Properties.EmptyState": "未选择组件。点击画布上的组件以在此查看其属性。",
+  "Properties.Type": "类型：",
+  "Properties.Position": "位置：",
+  "Properties.Dimensions": "尺寸：",
+
+  "Netlist.Title": "网表 (gdsfactory YAML)：",
+  "Netlist.Generate": "生成"
 }

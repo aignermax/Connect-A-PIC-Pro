@@ -147,5 +147,29 @@
   "Settings.Language.Description": "Elija el idioma de la interfaz de usuario. \"Sistema\" sigue el idioma de visualización del sistema operativo; los idiomas no compatibles recurren al inglés.",
   "Settings.Language.SystemOption": "Sistema (detección automática)",
   "Settings.Language.PickerLabel": "Idioma de la interfaz:",
-  "Settings.Language.RestartNote": "Los textos cambian de inmediato. La barra lateral de Ajustes y algunos títulos de ventana se actualizan la próxima vez que se abren. Los archivos exportados (GDS, Nazca, netlists) nunca se ven afectados por el idioma de la interfaz."
+  "Settings.Language.RestartNote": "Los textos cambian de inmediato. La barra lateral de Ajustes y algunos títulos de ventana se actualizan la próxima vez que se abren. Los archivos exportados (GDS, Nazca, netlists) nunca se ven afectados por el idioma de la interfaz.",
+
+  "Hierarchy.Title": "Jerarquía",
+
+  "AiAssistant.Title": "Asistente de diseño IA",
+  "AiAssistant.Description": "Describa su circuito fotónico en lenguaje natural.",
+  "AiAssistant.Send": "Enviar",
+  "AiAssistant.Clear": "Borrar",
+  "AiAssistant.Thinking": "La IA está pensando…",
+  "AiAssistant.InputPlaceholder": "Describa su circuito fotónico…",
+  "AiAssistant.SetApiKey": "⚙ Configurar clave API en Ajustes",
+
+  "DesignChecks.Title": "Comprobaciones de diseño:",
+  "DesignChecks.Run": "Ejecutar comprobaciones de diseño",
+  "DesignChecks.Prev": "<< Ant.",
+  "DesignChecks.Next": "Sig. >>",
+
+  "Properties.SelectedComponent": "Componente seleccionado:",
+  "Properties.EmptyState": "Ningún componente seleccionado. Haga clic en un componente del lienzo para ver aquí sus propiedades.",
+  "Properties.Type": "Tipo: ",
+  "Properties.Position": "Posición:",
+  "Properties.Dimensions": "Dimensiones:",
+
+  "Netlist.Title": "Netlist (gdsfactory YAML):",
+  "Netlist.Generate": "Generar"
 }

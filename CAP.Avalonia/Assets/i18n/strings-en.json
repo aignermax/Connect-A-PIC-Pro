@@ -147,5 +147,29 @@
   "Settings.Language.Description": "Choose the language of the user interface. \"System\" follows your operating system's display language; unsupported system languages fall back to English.",
   "Settings.Language.SystemOption": "System (auto-detect)",
   "Settings.Language.PickerLabel": "UI language:",
-  "Settings.Language.RestartNote": "Texts switch immediately. The Settings sidebar and some window titles update the next time they are opened. Exported files (GDS, Nazca, netlists) are never affected by the UI language."
+  "Settings.Language.RestartNote": "Texts switch immediately. The Settings sidebar and some window titles update the next time they are opened. Exported files (GDS, Nazca, netlists) are never affected by the UI language.",
+
+  "Hierarchy.Title": "Hierarchy",
+
+  "AiAssistant.Title": "AI Design Assistant",
+  "AiAssistant.Description": "Describe your photonic circuit in natural language.",
+  "AiAssistant.Send": "Send",
+  "AiAssistant.Clear": "Clear",
+  "AiAssistant.Thinking": "AI is thinking...",
+  "AiAssistant.InputPlaceholder": "Describe your photonic circuit...",
+  "AiAssistant.SetApiKey": "⚙ Set API key in Settings",
+
+  "DesignChecks.Title": "Design Checks:",
+  "DesignChecks.Run": "Run Design Checks",
+  "DesignChecks.Prev": "<< Prev",
+  "DesignChecks.Next": "Next >>",
+
+  "Properties.SelectedComponent": "Selected Component:",
+  "Properties.EmptyState": "No component selected. Click a component on the canvas to see its properties here.",
+  "Properties.Type": "Type: ",
+  "Properties.Position": "Position:",
+  "Properties.Dimensions": "Dimensions:",
+
+  "Netlist.Title": "Netlist (gdsfactory YAML):",
+  "Netlist.Generate": "Generate"
 }

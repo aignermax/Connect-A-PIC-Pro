@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels.Hierarchy"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.HierarchyPanel"
              x:DataType="vm:HierarchyPanelViewModel"
              Background="#1e1e1e">
@@ -12,7 +13,7 @@
                 Padding="8,6"
                 BorderBrush="#3d3d3d"
                 BorderThickness="0,0,0,1">
-            <TextBlock Text="Hierarchy"
+            <TextBlock Text="{loc:Localize Hierarchy.Title}"
                        FontWeight="SemiBold"
                        FontSize="13"
                        Foreground="LightBlue"/>

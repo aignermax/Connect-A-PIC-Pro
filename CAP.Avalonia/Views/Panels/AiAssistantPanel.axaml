@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:ai="using:CAP.Avalonia.ViewModels.AI"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.AiAssistantPanel"
              x:DataType="vm:MainViewModel">
 
@@ -11,19 +12,19 @@
         <!-- Header row -->
         <DockPanel Margin="0,0,0,8">
             <TextBlock DockPanel.Dock="Left"
-                       Text="AI Design Assistant"
+                       Text="{loc:Localize AiAssistant.Title}"
                        Foreground="#7EC8E3"
                        FontWeight="SemiBold"
                        VerticalAlignment="Center"/>
             <Button DockPanel.Dock="Right"
-                    Content="Clear"
+                    Content="{loc:Localize AiAssistant.Clear}"
                     Command="{Binding RightPanel.AiAssistant.ClearHistoryCommand}"
                     FontSize="10" Padding="6,2"
                     Background="#3d3d3d" Foreground="Gray"
                     HorizontalAlignment="Right"/>
         </DockPanel>
 
-        <TextBlock Text="Describe your photonic circuit in natural language."
+        <TextBlock Text="{loc:Localize AiAssistant.Description}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"/>
 
         <!-- Chat history -->
@@ -55,7 +56,7 @@
         </Border>
 
         <!-- Typing indicator -->
-        <TextBlock Text="AI is thinking..."
+        <TextBlock Text="{loc:Localize AiAssistant.Thinking}"
                    Foreground="Gray" FontSize="10" FontStyle="Italic"
                    Margin="0,0,0,5"
                    IsVisible="{Binding RightPanel.AiAssistant.IsTyping}"/>
@@ -71,14 +72,14 @@
             <TextBox Grid.Column="0"
                      x:Name="UserInputTextBox"
                      Text="{Binding RightPanel.AiAssistant.UserInput}"
-                     Watermark="Describe your photonic circuit..."
+                     Watermark="{loc:Localize AiAssistant.InputPlaceholder}"
                      Background="#1e1e1e" Foreground="White" BorderBrush="#3e3e3e"
                      TextWrapping="Wrap" AcceptsReturn="False"
                      FontSize="11" Margin="0,0,5,0"
                      IsEnabled="{Binding RightPanel.AiAssistant.IsTyping,
                                  Converter={x:Static BoolConverters.Not}}"/>
             <Button Grid.Column="1"
-                    Content="Send"
+                    Content="{loc:Localize AiAssistant.Send}"
                     Command="{Binding RightPanel.AiAssistant.SendMessageCommand}"
                     Background="#2d5d7d" Foreground="White"
                     Width="50" Margin="0,0,4,0"/>
@@ -93,7 +94,7 @@
 
         <!-- API-key shortcut: visible only when no key is configured yet.
              Clicking opens Settings pre-selected on the AI Assistant page. -->
-        <Button Content="⚙ Set API key in Settings"
+        <Button Content="{loc:Localize AiAssistant.SetApiKey}"
                 Command="{Binding OpenAiSettingsCommand}"
                 HorizontalAlignment="Stretch"
                 Margin="0,5,0,0" Padding="6,4"

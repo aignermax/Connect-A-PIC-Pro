@@ -902,12 +902,14 @@
                     <!-- Global unlock controls -->
                     <Button Content="{loc:Localize Lock.UnlockAllComponents}"
                             Command="{Binding BottomPanel.ElementLock.UnlockAllComponentsCommand}"
-                            Width="160" Margin="0,5,0,5"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Margin="0,5,0,5"
                             Background="#3d4d5d"/>
 
                     <Button Content="{loc:Localize Lock.UnlockAllConnections}"
                             Command="{Binding BottomPanel.ElementLock.UnlockAllConnectionsCommand}"
-                            Width="160" Margin="0,0,0,5"
+                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
+                            Margin="0,0,0,5"
                             Background="#3d4d5d"/>
 
                     <!-- Status display -->

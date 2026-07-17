@@ -147,5 +147,29 @@
   "Settings.Language.Description": "Die Sprache der Benutzeroberfläche wählen. \"System\" folgt der Anzeigesprache des Betriebssystems; nicht unterstützte Systemsprachen fallen auf Englisch zurück.",
   "Settings.Language.SystemOption": "System (automatisch erkennen)",
   "Settings.Language.PickerLabel": "Oberflächensprache:",
-  "Settings.Language.RestartNote": "Texte wechseln sofort. Die Einstellungs-Seitenleiste und einige Fenstertitel aktualisieren sich beim nächsten Öffnen. Exportierte Dateien (GDS, Nazca, Netzlisten) werden von der Oberflächensprache nie beeinflusst."
+  "Settings.Language.RestartNote": "Texte wechseln sofort. Die Einstellungs-Seitenleiste und einige Fenstertitel aktualisieren sich beim nächsten Öffnen. Exportierte Dateien (GDS, Nazca, Netzlisten) werden von der Oberflächensprache nie beeinflusst.",
+
+  "Hierarchy.Title": "Hierarchie",
+
+  "AiAssistant.Title": "KI-Design-Assistent",
+  "AiAssistant.Description": "Beschreiben Sie Ihren photonischen Schaltkreis in natürlicher Sprache.",
+  "AiAssistant.Send": "Senden",
+  "AiAssistant.Clear": "Löschen",
+  "AiAssistant.Thinking": "KI denkt nach…",
+  "AiAssistant.InputPlaceholder": "Beschreiben Sie Ihren photonischen Schaltkreis…",
+  "AiAssistant.SetApiKey": "⚙ API-Schlüssel in Einstellungen festlegen",
+
+  "DesignChecks.Title": "Design-Prüfungen:",
+  "DesignChecks.Run": "Design-Prüfungen ausführen",
+  "DesignChecks.Prev": "<< Zurück",
+  "DesignChecks.Next": "Weiter >>",
+
+  "Properties.SelectedComponent": "Ausgewählte Komponente:",
+  "Properties.EmptyState": "Keine Komponente ausgewählt. Klicken Sie auf eine Komponente auf der Arbeitsfläche, um hier ihre Eigenschaften zu sehen.",
+  "Properties.Type": "Typ: ",
+  "Properties.Position": "Position:",
+  "Properties.Dimensions": "Abmessungen:",
+
+  "Netlist.Title": "Netzliste (gdsfactory YAML):",
+  "Netlist.Generate": "Erzeugen"
 }
