@@ -357,6 +357,13 @@ public partial class MainViewModel : ObservableObject
             }
         };
 
+        // Analysis-output picker (#754): the dock header button and both analysis tabs
+        // can switch the canvas into the eyedropper picker mode.
+        Action activateOutputPicker = () => CanvasInteraction.SetPickAnalysisOutputModeCommand.Execute(null);
+        BottomPanel.Analysis.Output.PickRequested = activateOutputPicker;
+        BottomPanel.Analysis.Eye.RequestOutputPicker = activateOutputPicker;
+        BottomPanel.Analysis.Transient.RequestOutputPicker = activateOutputPicker;
+
         // Wire up callbacks
         CanvasInteraction.OnSelectionChanged = comp =>
         {
@@ -1014,6 +1021,13 @@ public class DesignFileData
     /// Null or empty for designs without external data.
     /// </summary>
     public List<ExternalReferenceData>? ExternalReferences { get; set; }
+
+    /// <summary>
+    /// Identifier of the coupler designated as THE analysis output for the Eye/BER
+    /// and Transient analyses (#754). Null when no coupler is designated (automatic
+    /// selection). Older files without this field load with no designation.
+    /// </summary>
+    public string? AnalysisOutputCoupler { get; set; }
 
     /// <summary>
     /// Chip width in micrometers as configured in the Chip Size settings.

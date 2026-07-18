@@ -186,6 +186,8 @@ public partial class FileOperationsViewModel : ObservableObject
         // Track changes to mark project as unsaved
         _canvas.Components.CollectionChanged += (s, e) => HasUnsavedChanges = true;
         _canvas.Connections.CollectionChanged += (s, e) => HasUnsavedChanges = true;
+        // The analysis-output designation (#754) is part of the design file too.
+        _canvas.AnalysisOutput.PropertyChanged += (s, e) => HasUnsavedChanges = true;
 
         // Apply any stored S-matrix override the moment a component lands
         // on the canvas. Without this, the override only takes effect after
@@ -389,6 +391,11 @@ public partial class FileOperationsViewModel : ObservableObject
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
             designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
+            // Persist the designated analysis-output coupler (#754) by its Identifier —
+            // the runtime Component.Id is regenerated on every load.
+            designData.AnalysisOutputCoupler = _canvas.AnalysisOutput.CouplerId is Guid outputId
+                ? componentsList.FirstOrDefault(c => c.Component.Id == outputId)?.Component.Identifier
+                : null;
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -797,6 +804,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         $"(width: {hasWidth}, height: {hasHeight}). Falling back to current canvas size.");
                 }
 
+                // Restore the designated analysis-output coupler (#754); files without
+                // the field (older versions) simply load with no designation.
+                RestoreAnalysisOutput(designData);
+
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
 
@@ -975,8 +986,36 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.Connections.Clear();
         _canvas.AllPins.Clear();
         _canvas.ConnectionManager.Clear();
+        _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
         StoredSMatrices.Clear();
+    }
+
+    /// <summary>
+    /// Restores the analysis-output designation (#754) from a loaded design file,
+    /// re-anchoring the stored component Identifier to the freshly created component's
+    /// runtime id. A stale reference (component renamed/removed outside the app) is
+    /// cleared with a warning instead of silently pinning a wrong output.
+    /// </summary>
+    private void RestoreAnalysisOutput(DesignFileData designData)
+    {
+        if (designData.AnalysisOutputCoupler == null)
+        {
+            _canvas.AnalysisOutput.Clear();
+            return;
+        }
+
+        var coupler = _canvas.Components
+            .FirstOrDefault(c => c.Component.Identifier == designData.AnalysisOutputCoupler);
+        if (coupler != null)
+        {
+            _canvas.AnalysisOutput.Designate(coupler.Component.Id);
+            return;
+        }
+
+        _canvas.AnalysisOutput.Clear();
+        _errorConsole?.LogWarning(
+            $"Designated analysis output '{designData.AnalysisOutputCoupler}' was not found in the design — designation cleared.");
     }
 
     /// <summary>

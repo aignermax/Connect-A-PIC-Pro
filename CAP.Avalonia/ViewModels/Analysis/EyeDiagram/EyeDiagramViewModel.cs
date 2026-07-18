@@ -2,6 +2,7 @@ using System.Globalization;
 using CAP_Core.Analysis.EyeDiagram;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.Services.Localization;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Canvas;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -61,6 +62,14 @@ public partial class EyeDiagramViewModel : ObservableObject
     /// <summary>File dialog service for CSV export. Set by MainViewModel.</summary>
     public Services.IFileDialogService? FileDialogService { get; set; }
 
+    /// <summary>
+    /// Callback that activates the canvas analysis-output picker (#754). Invoked when a
+    /// run is ambiguous (several possible outputs, none designated) or the designation
+    /// became invalid, so the user can pick instead of facing a modal dialog. Wired by
+    /// <c>MainViewModel</c>.
+    /// </summary>
+    public Action? RequestOutputPicker { get; set; }
+
     private readonly CAP_Core.ErrorConsoleService? _errorConsole;
     private DesignCanvasViewModel? _canvas;
     private EyeHistogram? _lastHistogram;
@@ -95,6 +104,14 @@ public partial class EyeDiagramViewModel : ObservableObject
         }
         if (IsRunning) return;
 
+        // Resolve the analysis output BEFORE simulating (#754): an invalid designation
+        // aborts with a clear warning instead of silently guessing; an ambiguous design
+        // (several off couplers, none designated) activates the canvas picker.
+        var resolution = AnalysisOutputResolver.Resolve(_canvas!);
+        if (ReportInvalidDesignation(resolution)) return;
+        if (resolution.State == AnalysisOutputState.MultipleCandidates)
+            RequestOutputPicker?.Invoke();
+
         IsRunning = true;
         StatusText = LocalizationService.Instance.Translate("Analysis.Eye.RunningPrbs");
         MetricsText = "";
@@ -102,7 +119,7 @@ public partial class EyeDiagramViewModel : ObservableObject
 
         try
         {
-            var outcome = await Task.Run(RunAnalysisCore);
+            var outcome = await Task.Run(() => RunAnalysisCore(resolution));
             if (outcome.Error != null || outcome.Histogram == null)
             {
                 // Expected "can't run" conditions (no light source / no output traces) are surfaced
@@ -166,10 +183,35 @@ public partial class EyeDiagramViewModel : ObservableObject
     private sealed record EyeRunOutcome(
         EyeHistogram? Histogram, EyeMetrics? Metrics, string? Error, string? Warning = null);
 
-    private EyeRunOutcome RunAnalysisCore()
+    /// <summary>
+    /// Surfaces an invalid designation (#754) as a status warning and activates the
+    /// picker. Returns true when the run must not proceed.
+    /// </summary>
+    private bool ReportInvalidDesignation(AnalysisOutputResolution resolution)
+    {
+        if (resolution.State == AnalysisOutputState.DesignatedMissing)
+        {
+            StatusText = LocalizationService.Instance.Translate("Analysis.Output.DesignatedMissing");
+            RequestOutputPicker?.Invoke();
+            return true;
+        }
+        if (resolution.State == AnalysisOutputState.DesignatedLaserOn)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Output.DesignatedLaserOn"),
+                resolution.Output!.Name);
+            return true;
+        }
+        return false;
+    }
+
+    private EyeRunOutcome RunAnalysisCore(AnalysisOutputResolution resolution)
     {
         var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
         var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas!);
+        var designatedPinIds = resolution.State == AnalysisOutputState.DesignatedValid
+            ? AnalysisOutputResolver.CollectLightPinIds(resolution.Output!)
+            : null;
 
         double bitRateHz = BitRateGbps * GigabitsToBits;
         var sweepDef = TimeSignalDefinition.FromWavelengthSweep(CenterWavelengthNm, SpanNm, FreqPoints);
@@ -195,9 +237,11 @@ public partial class EyeDiagramViewModel : ObservableObject
             return new EyeRunOutcome(null, null,
                 "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
 
-        // Analyse the trace at a coupler whose laser is off (a true output, #690);
-        // fall back to the strongest trace (with a warning) for all-lasers-on designs.
-        var selection = EyeTraceSelector.Select(result, outputPinIds);
+        // Analyse the trace at the designated output coupler (#754) or, without a
+        // designation, at a coupler whose laser is off (a true output, #690); fall
+        // back to the strongest trace (with a warning) for all-lasers-on designs.
+        var selection = EyeTraceSelector.Select(result, outputPinIds, designatedPinIds,
+            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates);
         if (selection.Trace == null)
             return new EyeRunOutcome(null, null, selection.Error);
         var trace = selection.Trace;

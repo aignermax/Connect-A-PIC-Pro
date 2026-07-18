@@ -81,6 +81,60 @@ public class EyeTraceSelectorTests
     }
 
     [Fact]
+    public void Select_DesignatedOutputWins_OverStrongerOffCouplerTrace()
+    {
+        var designatedPin = Guid.NewGuid();
+        var strongerOffPin = Guid.NewGuid();
+        var result = BuildResult(
+            (designatedPin, new[] { 0.1, 0.2 }),
+            (strongerOffPin, new[] { 5.0, 9.0 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { designatedPin, strongerOffPin },
+            designatedPinIds: new[] { designatedPin });
+
+        selection.Trace.ShouldBe(result.PinTraces[designatedPin]);
+        selection.Warning.ShouldBeNull("an explicit designation needs no warning");
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputWithoutSignal_ReturnsError()
+    {
+        var designatedPin = Guid.NewGuid();
+        var otherPin = Guid.NewGuid();
+        var result = BuildResult((otherPin, new[] { 1.0, 2.0 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { otherPin },
+            designatedPinIds: new[] { designatedPin });
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtOutputError);
+    }
+
+    [Fact]
+    public void Select_MultipleCandidatesWithoutDesignation_WarnsExplicitly()
+    {
+        var weakOutput = Guid.NewGuid();
+        var strongOutput = Guid.NewGuid();
+        var result = BuildResult(
+            (weakOutput, new[] { 0.1, 0.2 }),
+            (strongOutput, new[] { 0.3, 0.8 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { weakOutput, strongOutput },
+            hasMultipleCandidates: true);
+
+        selection.Trace.ShouldBe(result.PinTraces[strongOutput]);
+        selection.Warning.ShouldBe(EyeTraceSelector.MultipleOutputsWarning);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
     public void Select_HandlesEmptyTraceArrays()
     {
         var outputPin = Guid.NewGuid();

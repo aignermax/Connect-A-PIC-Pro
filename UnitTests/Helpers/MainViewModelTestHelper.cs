@@ -6,6 +6,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -174,6 +175,9 @@ public static class MainViewModelTestHelper
             new ConnectionRoutingViewModel(canvas),
             new ElementLockViewModel(),
             new ErrorConsoleViewModel(errorConsoleService),
-            new AnalysisDockViewModel(new TimeDomainViewModel(), new EyeDiagramViewModel()));
+            new AnalysisDockViewModel(
+                new TimeDomainViewModel(),
+                new EyeDiagramViewModel(),
+                new AnalysisOutputPanelViewModel()));
     }
 }
