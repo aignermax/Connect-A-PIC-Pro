@@ -39,7 +39,25 @@ public class RoutingStyleCanvasDiagnosticTests
         WaveguideType.SBend, WaveguideType.Cobra,
     };
 
-    /// <summary>Captures all styles in the offset and the aligned layout (12 PNGs).</summary>
+    /// <summary>
+    /// Layouts as end-component positions (the start component is fixed at (40, 40), so its
+    /// "out" pin sits at (290, 165) heading 0°). Besides the everyday aligned/offset cases
+    /// these include the layouts that historically made the first Bend arc leave the start
+    /// pin AGAINST its direction: small (~10 µm) and large ±Y offsets and an end pin BEHIND
+    /// the start pin (negative forward reach).
+    /// </summary>
+    private static readonly (string Name, double EndX, double EndY)[] Layouts =
+    {
+        ("aligned", 490, 40),
+        ("offset-down", 490, 120),
+        ("offset-up", 490, -40),
+        ("small-offset-down", 490, 50),
+        ("small-offset-up", 490, 30),
+        ("large-offset-down", 490, 240),
+        ("behind", 120, 300),
+    };
+
+    /// <summary>Captures all styles in every layout (one PNG per style × layout).</summary>
     [AvaloniaFact]
     public async Task CaptureAllRoutingStylesOnTheCanvas()
     {
@@ -52,24 +70,25 @@ public class RoutingStyleCanvasDiagnosticTests
         foreach (var stale in Directory.GetFiles(outputDir, "*.png"))
             File.Delete(stale);
 
-        await CaptureLayout(outputDir, "offset", endOffsetY: 80);
-        await CaptureLayout(outputDir, "aligned", endOffsetY: 0);
+        foreach (var (name, endX, endY) in Layouts)
+            await CaptureLayout(outputDir, name, endX, endY);
 
-        Directory.GetFiles(outputDir, "*.png").Length.ShouldBe(Styles.Length * 2,
+        Directory.GetFiles(outputDir, "*.png").Length.ShouldBe(Styles.Length * Layouts.Length,
             "every style × layout must yield a PNG");
     }
 
     /// <summary>Builds one two-component design, then re-styles its single connection once
     /// per <see cref="Styles"/> entry and captures the canvas after each restyle.</summary>
-    private static async Task CaptureLayout(string outputDir, string layoutName, double endOffsetY)
+    private static async Task CaptureLayout(
+        string outputDir, string layoutName, double endCompX, double endCompY)
     {
         var canvas = new DesignCanvasViewModel();
         var startComp = TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
         startComp.PhysicalX = 40;
         startComp.PhysicalY = 40;
         var endComp = TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
-        endComp.PhysicalX = 490;
-        endComp.PhysicalY = 40 + endOffsetY;
+        endComp.PhysicalX = endCompX;
+        endComp.PhysicalY = endCompY;
         canvas.AddComponent(startComp);
         canvas.AddComponent(endComp);
 

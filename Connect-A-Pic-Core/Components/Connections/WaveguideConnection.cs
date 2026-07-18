@@ -148,10 +148,20 @@ namespace CAP_Core.Components.Connections
                 // routing and the exporter treat it as a fixed route and never replace it with
                 // the A* result.
                 BendRadiusOverrides.Clear();
-                RoutedPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type);
-                IsRouteFrozen = true;
-                UpdateLossFromPath(wavelengthNm);
-                return;
+                var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type);
+                if (styledPath != null)
+                {
+                    RoutedPath = styledPath;
+                    IsRouteFrozen = true;
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // The styled primitive cannot leave the start pin along the pin direction for
+                // this layout (e.g. the end pin lies behind the start pin). Rather than drawing
+                // a broken curve into the component, fall through to the A* route below; the
+                // style is kept and takes effect again once the layout allows it.
+                IsRouteFrozen = false;
             }
 
             if (IsRouteFrozen)

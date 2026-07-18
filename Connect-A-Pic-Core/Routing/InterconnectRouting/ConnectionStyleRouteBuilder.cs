@@ -26,6 +26,11 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// (<see cref="WaveguideConnection.BendRadiusOverrides"/>) take precedence — the styled
 /// branch of <c>WaveguideConnection.RecalculateTransmission</c> keeps a hand-edited path
 /// instead of rebuilding it here.
+///
+/// INVARIANT: every built route leaves the start pin ALONG the pin's direction (the first
+/// segment is tangential to the start heading, never backwards into the component). When a
+/// style cannot cover the layout that way (e.g. the end pin lies behind the start pin),
+/// <see cref="Build"/> returns null and the caller falls back to the A* route.
 /// </summary>
 public static class ConnectionStyleRouteBuilder
 {
@@ -41,14 +46,19 @@ public static class ConnectionStyleRouteBuilder
     /// construction becomes numerically unstable; fall back to the S-bend instead.</summary>
     private const double MaxArcSweepDegrees = 179.0;
 
+    /// <summary>Below this lateral offset (µm) facing pins with no S-bend solution count as
+    /// collinear and degenerate to the exact pin-to-pin straight (which is tangential).</summary>
+    private const double AlignedStraightToleranceMicrometers = 0.5;
+
     /// <summary>
     /// Builds the styled route between two pins. All styles reach the end pin exactly.
     /// </summary>
     /// <param name="startPin">Source pin; the primitive starts here at the pin angle.</param>
     /// <param name="endPin">Target pin; every style arrives here (angled styles at its input angle).</param>
     /// <param name="type">The explicit routing style (must not be <see cref="WaveguideType.Auto"/>).</param>
-    /// <returns>A routed path in app-space coordinates.</returns>
-    public static RoutedPath Build(PhysicalPin startPin, PhysicalPin endPin, WaveguideType type)
+    /// <returns>A routed path in app-space coordinates, or null when the style cannot leave
+    /// the start pin along its direction for this layout (caller falls back to A*).</returns>
+    public static RoutedPath? Build(PhysicalPin startPin, PhysicalPin endPin, WaveguideType type)
     {
         var (sx, sy) = startPin.GetAbsolutePosition();
         var (ex, ey) = endPin.GetAbsolutePosition();
@@ -66,31 +76,31 @@ public static class ConnectionStyleRouteBuilder
         };
     }
 
-    /// <summary>SBend: the sine curve polyline; degenerate layouts (end pin behind the start)
-    /// fall back to the arc-S / direct straight so the pins always stay connected.</summary>
-    private static RoutedPath BuildSine(double sx, double sy, double startAngle, double ex, double ey)
+    /// <summary>SBend: the sine curve polyline; layouts without a positive forward run fall
+    /// back to the tangential arc-S, or to A* (null) when the end pin is behind the start.</summary>
+    private static RoutedPath? BuildSine(double sx, double sy, double startAngle, double ex, double ey)
     {
         var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
         var segments = SineBendGeometry.Build(sx, sy, startAngle, longitudinal, lateral);
-        return segments != null ? ToPath(segments) : BuildArcS(sx, sy, startAngle, ex, ey);
+        return segments != null ? ToPath(segments) : TryBuildArcS(sx, sy, startAngle, ex, ey);
     }
 
-    /// <summary>Cobra: the Hermite polyline honoring both end angles; coincident pins fall
-    /// back to the arc-S / direct straight.</summary>
-    private static RoutedPath BuildCobra(
+    /// <summary>Cobra: the Hermite polyline honoring both end angles — tangential at the start
+    /// by construction, even for an end pin behind the start. Only coincident pins fail.</summary>
+    private static RoutedPath? BuildCobra(
         double sx, double sy, double startAngle, double arrivalAngle, double ex, double ey)
     {
         var segments = CobraGeometry.Build(sx, sy, startAngle, ex, ey, arrivalAngle);
-        return segments != null ? ToPath(segments) : BuildArcS(sx, sy, startAngle, ex, ey);
+        return segments != null ? ToPath(segments) : null;
     }
 
     /// <summary>
     /// Builds the Bend route as stub–arc–stub so it reaches BOTH pins exactly.
     /// Degenerate layouts (parallel axes, corner behind a pin) fall back to the two-arc S
-    /// via <see cref="BuildArcS"/> — never a silent diagonal.
+    /// via <see cref="TryBuildArcS"/>; when even that is impossible the route is null (A*).
     /// </summary>
-    private static RoutedPath BuildArc(double sx, double sy, double startAngle,
-                                       double arrivalAngle, double ex, double ey)
+    private static RoutedPath? BuildArc(double sx, double sy, double startAngle,
+                                        double arrivalAngle, double ex, double ey)
     {
         double sweep = NormalizeSigned(arrivalAngle - startAngle);
         if (Math.Abs(sweep) >= MinArcSweepDegrees && Math.Abs(sweep) <= MaxArcSweepDegrees)
@@ -102,7 +112,7 @@ public static class ConnectionStyleRouteBuilder
 
         // Parallel pins (sweep ≈ 0 / 180°) or a corner not ahead of both pins: a single arc
         // cannot join the pins, so fall back to the symmetric S-bend (or a collinear straight).
-        return BuildArcS(sx, sy, startAngle, ex, ey);
+        return TryBuildArcS(sx, sy, startAngle, ex, ey);
     }
 
     /// <summary>
@@ -177,21 +187,27 @@ public static class ConnectionStyleRouteBuilder
 
     /// <summary>
     /// The two-arc S with the generous radius (<see cref="SBendGeometry"/>), shared by the
-    /// Bend parallel-pin case and the degenerate cases of the polyline styles. When even the
-    /// S is impossible (end pin behind the start), a direct straight still visibly connects
-    /// the pins — never a free-floating stub.
+    /// Bend parallel-pin case and the degenerate cases of the sine polyline. Facing collinear
+    /// pins degenerate to the exact pin-to-pin straight (still tangential). Anything else —
+    /// above all an end pin BEHIND the start pin — returns null: a forced curve would have to
+    /// leave the start pin against its direction (through the component), so the caller falls
+    /// back to the A* route instead.
     /// </summary>
-    private static RoutedPath BuildArcS(double sx, double sy, double startAngle, double ex, double ey)
+    private static RoutedPath? TryBuildArcS(double sx, double sy, double startAngle, double ex, double ey)
     {
         var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
         var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral);
         if (sBend != null)
             return ToPath(sBend);
 
-        var path = new RoutedPath();
-        double directAngle = Math.Atan2(ey - sy, ex - sx) * 180.0 / Math.PI;
-        path.Segments.Add(new StraightSegment(sx, sy, ex, ey, directAngle));
-        return path;
+        if (longitudinal > Epsilon && Math.Abs(lateral) < AlignedStraightToleranceMicrometers)
+        {
+            var path = new RoutedPath();
+            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, startAngle));
+            return path;
+        }
+
+        return null;
     }
 
     private static RoutedPath ToPath(IReadOnlyList<PathSegment> segments)
