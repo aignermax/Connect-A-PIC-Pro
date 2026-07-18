@@ -19,10 +19,10 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
         /// <summary>
         /// Conservative universal minimum bend radius (µm) used when no process declares one
         /// (playground, no selection, or PDKs without optical minima). Real optical waveguides
-        /// cannot bend arbitrarily tightly — 5 µm is a typical tight SOI radius, so even
-        /// process-less editing keeps physically plausible curves instead of sharp corners.
+        /// cannot bend arbitrarily tightly — 10 µm (the A* router default) keeps even
+        /// process-less editing physically plausible instead of allowing sharp corners.
         /// </summary>
-        public const double FallbackMinimumMicrometers = 5.0;
+        public const double FallbackMinimumMicrometers = 10.0;
 
         /// <summary>
         /// Resolves the minimum waveguide bend radius from the active process selection and the

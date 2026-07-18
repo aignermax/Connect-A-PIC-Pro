@@ -47,6 +47,15 @@ public class RoutingOrchestrator
     public Action? RepaintRequested { get; set; }
 
     /// <summary>
+    /// Callback returning the minimum waveguide bend radius (µm) allowed by the design's active
+    /// fabrication process (wired by <c>MainViewModel</c> to <c>WaveguideBendRadiusResolver</c>,
+    /// same source as the bend-handle clamp). Consulted at the start of every routing pass and
+    /// pushed onto <see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>, so a process
+    /// switch takes effect on the next reroute. When unwired, the router floor stays unchanged.
+    /// </summary>
+    public Func<double>? GetProcessMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>
     /// Raised when IsRouting or RoutingStatusText changes.
     /// </summary>
     public event Action? StateChanged;
@@ -102,6 +111,11 @@ public class RoutingOrchestrator
     /// </summary>
     public async Task RecalculateRoutesAsync()
     {
+        // Refresh the process bend-radius floor before every pass (still on the caller's
+        // UI thread — the provider reads ViewModel state).
+        if (GetProcessMinBendRadiusMicrometers != null)
+            _router.ProcessMinBendRadiusMicrometers = GetProcessMinBendRadiusMicrometers();
+
         _routingCts?.Cancel();
         _routingCts?.Dispose();
         _routingCts = new CancellationTokenSource();

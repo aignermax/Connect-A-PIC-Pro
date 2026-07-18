@@ -129,6 +129,10 @@ namespace CAP_Core.Components.Connections
                 return;
             }
 
+            // The effective bend radius honors both the connection's own setting and the
+            // fabrication process' minimum: the larger of the two governs the geometry.
+            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
+
             if (Type != WaveguideType.Auto)
             {
                 // A styled route the user has hand-edited (bend radius via the canvas handles,
@@ -148,7 +152,7 @@ namespace CAP_Core.Components.Connections
                 // routing and the exporter treat it as a fixed route and never replace it with
                 // the A* result.
                 BendRadiusOverrides.Clear();
-                var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type);
+                var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, effectiveBendRadius);
                 if (styledPath != null)
                 {
                     RoutedPath = styledPath;
@@ -179,7 +183,7 @@ namespace CAP_Core.Components.Connections
             }
 
             // Update router settings
-            router.MinBendRadiusMicrometers = BendRadiusMicrometers;
+            router.MinBendRadiusMicrometers = effectiveBendRadius;
 
             // Route the connection using two-phase A* (Phase 1 quick, Phase 2 extended)
             RoutedPath = router.Route(StartPin, EndPin, cancellationToken);
