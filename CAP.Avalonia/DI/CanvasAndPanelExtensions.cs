@@ -70,7 +70,6 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<ComponentEditorFactory>();
 
         // Bottom panel sub-ViewModels
-        services.AddTransient<WaveguideLengthViewModel>();
         services.AddTransient<ConnectionRoutingViewModel>();
         services.AddTransient<ElementLockViewModel>();
         services.AddTransient<ErrorConsoleViewModel>();

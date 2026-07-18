@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using CAP.Avalonia.Controls.Canvas.BendHandles;
 using CAP.Avalonia.Controls.Handlers;
 using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.Gestures;
@@ -69,6 +70,7 @@ public class DesignCanvas : Control
     private readonly GridRenderer _gridRenderer;
     private readonly PathfindingOverlayRenderer _pathfindingOverlayRenderer;
     private readonly WaveguideConnectionRenderer _waveguideConnectionRenderer;
+    private readonly BendHandleRenderer _bendHandleRenderer;
     private readonly ComponentRenderer _componentRenderer;
     private readonly PreviewRenderer _previewRenderer;
     private readonly CanvasOverlayRenderer _overlayRenderer;
@@ -97,6 +99,7 @@ public class DesignCanvas : Control
         _gridRenderer = new GridRenderer();
         _pathfindingOverlayRenderer = new PathfindingOverlayRenderer();
         _waveguideConnectionRenderer = new WaveguideConnectionRenderer();
+        _bendHandleRenderer = new BendHandleRenderer();
         _componentRenderer = new ComponentRenderer();
         _previewRenderer = new PreviewRenderer();
         _overlayRenderer = new CanvasOverlayRenderer();
@@ -157,6 +160,8 @@ public class DesignCanvas : Control
             _waveguideConnectionRenderer.Render(context, rc);
             _componentRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
+            // Bend-radius handles draw last so they sit on top of the routed path and components.
+            _bendHandleRenderer.Render(context, rc);
         }
 
         _overlayRenderer.Render(context, rc);
@@ -272,11 +277,14 @@ public class DesignCanvas : Control
     {
         _gestureRecognizers =
         [
+            // First: a bend-radius handle grab must win over selection / component drag (#574).
+            new BendHandleGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PanGestureRecognizer(_interactionState, InvalidateVisual),
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),
-            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual),
+            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
+            new HoverHighlightGestureRecognizer(_interactionState, InvalidateVisual),
         ];
     }
 

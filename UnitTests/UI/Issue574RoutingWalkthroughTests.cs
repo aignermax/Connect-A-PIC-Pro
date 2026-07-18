@@ -24,10 +24,9 @@ using Xunit;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Visual walkthrough for PR #631 (issue #574): renders the per-connection routing
-/// panel through its user flow (select connection → pick style/width/radius →
-/// apply a manual bend radius which freezes the route) and the new Settings →
-/// Interconnects page. Writes step-ordered PNGs + manifest.json to
+/// Visual walkthrough for the per-connection routing panel: renders its user flow
+/// (select connection → pick a routing style, which reshapes the visible curve) and the
+/// Settings → Interconnects page. Writes step-ordered PNGs + manifest.json to
 /// <c>artifacts/ui-screenshots/issue-574/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
@@ -58,29 +57,16 @@ public class Issue574RoutingWalkthroughTests
             caption = "Selecting a waveguide connection shows the new Routing section with style, width, bend radius, freeze toggle and per-bend radius editor.",
         });
 
-        // Step 2: the user picks an explicit routing style and tweaks width/radius.
+        // Step 2: the user picks an explicit routing style; the connection's Type updates and
+        // the visible canvas curve is reshaped into the matching primitive geometry.
         var routing = vm.BottomPanel.ConnectionRouting;
         routing.SelectedStyle = WaveguideType.SBend;
-        routing.WidthMicrometers = 0.8;
-        routing.BendRadiusMicrometers = 30;
-        Capture(new ConnectionRoutingPanel(), vm, 320, 560, outputDir, "02-style-width-radius.png");
+        connection.Type.ShouldBe(WaveguideType.SBend);
+        Capture(new ConnectionRoutingPanel(), vm, 320, 560, outputDir, "02-style-selected.png");
         manifest.Add(new
         {
-            file = "02-style-width-radius.png",
-            caption = "Choosing the SBend style and setting width 0.80 µm / bend radius 30 µm applies immediately to the selected connection.",
-        });
-
-        // Step 3: applying a manual radius to bend #1 freezes the route.
-        routing.BendNumber = 1;
-        routing.BendOverrideRadiusMicrometers = 25;
-        routing.ApplyBendRadiusCommand.Execute(null);
-        routing.IsRouteFrozen.ShouldBeTrue();
-        routing.StatusText.ShouldNotBeNullOrEmpty();
-        Capture(new ConnectionRoutingPanel(), vm, 320, 560, outputDir, "03-bend-radius-applied.png");
-        manifest.Add(new
-        {
-            file = "03-bend-radius-applied.png",
-            caption = "Apply Bend Radius sets bend #1 to 25 µm and freezes the route, confirmed by the checked Freeze Route box and the status line.",
+            file = "02-style-selected.png",
+            caption = "Choosing the SBend style applies immediately; width and bend radius come automatically from the interconnect defaults — no manual number fields.",
         });
 
         // Step 4: the new Settings → Interconnects page with global export defaults.

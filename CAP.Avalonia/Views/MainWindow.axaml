@@ -826,51 +826,6 @@
                                 IsVisible="{Binding RightPanel.Sweep.ResultText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                     </StackPanel>
 
-                    <!-- Waveguide Length Configuration (visible when connection is selected) -->
-                    <StackPanel IsVisible="{Binding CanvasInteraction.SelectedWaveguideConnection, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-                        <TextBlock Text="{loc:Localize Waveguide.Title}" Foreground="Magenta" Margin="0,0,0,5" FontWeight="SemiBold"/>
-                        <TextBlock Text="{Binding BottomPanel.WaveguideLength.ConnectionName}"
-                                   Foreground="White" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"/>
-
-                        <TextBlock Text="{loc:Localize Waveguide.CurrentLength}" Foreground="Gray" Margin="0,5,0,3"/>
-                        <TextBlock Foreground="White" Margin="0,0,0,5">
-                            <Run Text="{Binding BottomPanel.WaveguideLength.CurrentLengthMicrometers, StringFormat={}{0:F2}}"/>
-                            <Run Text=" µm" Foreground="Gray"/>
-                        </TextBlock>
-
-                        <CheckBox Content="{loc:Localize Waveguide.EnableTarget}"
-                                  IsChecked="{Binding BottomPanel.WaveguideLength.IsTargetLengthEnabled}"
-                                  Foreground="White" Margin="0,5,0,8"/>
-
-                        <StackPanel IsVisible="{Binding BottomPanel.WaveguideLength.IsTargetLengthEnabled}">
-                            <TextBlock Text="{loc:Localize Waveguide.TargetLength}" Foreground="Gray" Margin="0,5,0,3"/>
-                            <NumericUpDown Value="{Binding BottomPanel.WaveguideLength.TargetLengthMicrometers}"
-                                           Minimum="10" Maximum="10000"
-                                           Increment="10" Width="180" FormatString="F2" Margin="0,0,0,5"/>
-
-                            <TextBlock Text="{loc:Localize Waveguide.Tolerance}" Foreground="Gray" Margin="0,5,0,3"/>
-                            <NumericUpDown Value="{Binding BottomPanel.WaveguideLength.ToleranceMicrometers}"
-                                           Minimum="0.1" Maximum="100"
-                                           Increment="0.5" Width="180" FormatString="F2" Margin="0,0,0,8"/>
-
-                            <Button Content="{loc:Localize Waveguide.SetTargetToCurrent}"
-                                    Command="{Binding BottomPanel.WaveguideLength.SetTargetToCurrentCommand}"
-                                    Width="160" Margin="0,5,0,5"
-                                    Background="#5d3d5d"/>
-
-                            <Button Content="{loc:Localize Common.Apply}"
-                                    Command="{Binding BottomPanel.WaveguideLength.ApplyTargetLengthCommand}"
-                                    Width="100" Margin="0,5,0,5"
-                                    Background="#3d5d3d"/>
-
-                            <TextBlock Text="{Binding BottomPanel.WaveguideLength.LengthStatusText}"
-                                       Foreground="{Binding BottomPanel.WaveguideLength.LengthStatusColor}"
-                                       FontSize="10" Margin="0,5,0,5"
-                                       TextWrapping="Wrap"/>
-                        </StackPanel>
-                    </StackPanel>
-
                     <!-- Connection Routing (style, width/radius, freeze, per-bend radius — issue #574) -->
                     <panels:ConnectionRoutingPanel/>
 

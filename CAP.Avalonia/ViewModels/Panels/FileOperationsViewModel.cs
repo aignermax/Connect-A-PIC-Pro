@@ -351,9 +351,6 @@ public partial class FileOperationsViewModel : ObservableObject
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
                         IsLocked = c.Connection.IsLocked ? true : null,
-                        TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
-                        IsTargetLengthEnabled = c.Connection.IsTargetLengthEnabled ? true : null,
-                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null,
                         RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
                         WidthMicrometers = c.Connection.WidthMicrometers,
                         BendRadiusMicrometers = c.Connection.BendRadiusMicrometers,
@@ -1263,17 +1260,6 @@ public partial class FileOperationsViewModel : ObservableObject
             connVm.Connection.IsLocked = true;
         }
 
-        // Restore target length configuration
-        if (connVm != null)
-        {
-            if (connData.TargetLengthMicrometers.HasValue)
-                connVm.Connection.TargetLengthMicrometers = connData.TargetLengthMicrometers.Value;
-            if (connData.IsTargetLengthEnabled == true)
-                connVm.Connection.IsTargetLengthEnabled = true;
-            if (connData.LengthToleranceMicrometers.HasValue)
-                connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers.Value;
-        }
-
         // Restore routing style / interconnect settings / freeze state (issue #574)
         if (connVm != null)
             RestoreRoutingSettings(connVm.Connection, connData);
@@ -1284,8 +1270,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     private static void RestoreRoutingSettings(WaveguideConnection connection, ConnectionData connData)
     {
-        if (connData.RoutingStyle != null &&
-            Enum.TryParse<WaveguideType>(connData.RoutingStyle, out var style))
+        // Legacy styles removed from WaveguideType: "Euler" was drawn as the same generous
+        // arc as Bend (migrate to Bend); "Straight" (and any other unknown name) falls back
+        // to Auto by simply not parsing — the connection keeps its default Type.
+        if (connData.RoutingStyle == "Euler")
+            connection.Type = WaveguideType.Bend;
+        else if (connData.RoutingStyle != null &&
+            Enum.TryParse<WaveguideType>(connData.RoutingStyle, ignoreCase: false, out var style) &&
+            Enum.IsDefined(style))
             connection.Type = style;
         if (connData.WidthMicrometers.HasValue)
             connection.WidthMicrometers = connData.WidthMicrometers.Value;

@@ -429,10 +429,13 @@ public class SimpleNazcaExporter
                 metalConnections.Add(conn);
 
             // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
-            // export a single Nazca primitive (strt/sinebend/bend/euler/cobra) on the
-            // waveguide layer instead of the routed segments. An electrical connection
-            // must stay a metal trace (issue #682) — never emit it as an optical
-            // primitive even if a style was set, so styled export is gated on metal == null.
+            // point-to-point styles export a single Nazca primitive (strt/sinebend/cobra)
+            // on the waveguide layer instead of the routed segments; Bend and Euler return
+            // null here and fall through to AppendSegmentExport below, which writes their
+            // exact canvas stub–arc–stub segments (a lone nd.bend/nd.euler cannot land on
+            // an arbitrary end pin). An electrical connection must stay a metal trace
+            // (issue #682) — never emit it as an optical primitive even if a style was
+            // set, so styled export is gated on metal == null.
             if (metal == null)
             {
                 var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer);

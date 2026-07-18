@@ -54,6 +54,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
     [ObservableProperty]
     private WaveguideConnectionViewModel? _selectedWaveguideConnection;
 
+    /// <summary>
+    /// True when the selected connection is an optical waveguide. Electrical connections are
+    /// metal traces (#682): they get no routing style and no bend handles, so the routing
+    /// panel binds its visibility to this instead of the raw selection.
+    /// </summary>
+    public bool IsOpticalConnectionSelected =>
+        SelectedWaveguideConnection is { } conn && !conn.Connection.IsElectrical;
+
+    partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
+        OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+
     private PhysicalPin? _connectionStartPin;
     private double _moveStartX;
     private double _moveStartY;
@@ -127,6 +138,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// component library. When unwired, group children resolve to null (treated as built-in).
     /// </summary>
     public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+
+    /// <summary>
+    /// Callback returning the minimum allowed waveguide bend radius (µm) of the design's active
+    /// fabrication process, consulted by the in-canvas bend-handle drag so an edit cannot shrink
+    /// a bend below what the process permits. Wired by <c>MainViewModel</c> to
+    /// <c>WaveguideBendRadiusResolver.Resolve</c>; when unwired (or the process is unresolvable)
+    /// the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
+    /// </summary>
+    public Func<double>? GetMinBendRadiusMicrometers { get; set; }
 
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
@@ -565,15 +585,43 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         const double hitTolerance = 10.0;
 
+        // Hit-test the ACTUAL routed path (its segments), not the straight endpoint
+        // line — otherwise a bent/L-shaped route can't be clicked where it's drawn.
+        // Pick the closest connection within tolerance so overlapping paths resolve
+        // to the one nearest the cursor.
+        WaveguideConnectionViewModel? closest = null;
+        var closestDistance = hitTolerance;
         foreach (var conn in _canvas.Connections)
         {
-            var distance = PointToLineDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
-            if (distance <= hitTolerance)
+            var distance = DistanceToConnectionPath(conn, x, y);
+            if (distance <= closestDistance)
             {
-                return conn;
+                closestDistance = distance;
+                closest = conn;
             }
         }
-        return null;
+        return closest;
+    }
+
+    /// <summary>
+    /// Shortest distance from a canvas point to a connection's drawn path: the minimum
+    /// over its routed segments (arcs approximated by their chord — fine at the 10 px
+    /// hit tolerance), or the straight endpoint line when the connection isn't routed yet.
+    /// </summary>
+    private static double DistanceToConnectionPath(WaveguideConnectionViewModel conn, double x, double y)
+    {
+        var segments = conn.Connection.GetPathSegments();
+        if (segments.Count == 0)
+            return PointToLineDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
+
+        var min = double.MaxValue;
+        foreach (var seg in segments)
+        {
+            var d = PointToLineDistance(
+                x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
+            if (d < min) min = d;
+        }
+        return min;
     }
 
     private static double PointToLineDistance(double px, double py, double x1, double y1, double x2, double y2)

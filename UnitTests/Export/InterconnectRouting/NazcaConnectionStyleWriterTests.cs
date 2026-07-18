@@ -21,16 +21,6 @@ public class NazcaConnectionStyleWriterTests
     }
 
     [Fact]
-    public void Format_Straight_EmitsStrtWithPinToPinLength()
-    {
-        var conn = CreateConnection(WaveguideType.Straight);
-
-        var line = NazcaConnectionStyleWriter.Format(conn);
-
-        line.ShouldBe("        nd.strt(length=50.00, width=0.50).put(50.00, -25.00, 0.00)");
-    }
-
-    [Fact]
     public void Format_SBend_EmitsSinebendWithLocalDistanceAndOffset()
     {
         var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
@@ -42,26 +32,15 @@ public class NazcaConnectionStyleWriterTests
     }
 
     [Fact]
-    public void Format_Bend_EmitsBendWithArrivalAngle()
+    public void Format_Bend_ReturnsNull_SegmentExporterOwnsIt()
     {
-        // End pin pointing 90° in app space → waveguide arrives at Nazca angle 90.
+        // nd.bend is a (radius, angle) primitive: a single one cannot land on an arbitrary
+        // end pin, so Bend exports its exact canvas segments via
+        // SimpleNazcaExporter.AppendSegmentExport instead of a styled primitive line.
         var conn = CreateConnection(WaveguideType.Bend, endPinAngleDegrees: 90);
         conn.BendRadiusMicrometers = 10;
 
-        var line = NazcaConnectionStyleWriter.Format(conn);
-
-        line.ShouldBe("        nd.bend(radius=10.00, angle=90.00, width=0.50).put(50.00, -25.00, 0.00)");
-    }
-
-    [Fact]
-    public void Format_Euler_EmitsEulerPrimitive()
-    {
-        var conn = CreateConnection(WaveguideType.Euler, endPinAngleDegrees: 90);
-        conn.BendRadiusMicrometers = 12;
-
-        var line = NazcaConnectionStyleWriter.Format(conn);
-
-        line.ShouldBe("        nd.euler(width=0.50, radius=12.00, angle=90.00).put(50.00, -25.00, 0.00)");
+        NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
     }
 
     [Fact]
@@ -77,17 +56,17 @@ public class NazcaConnectionStyleWriterTests
     [Fact]
     public void Format_WithGdsLayer_AppendsLayerArgument()
     {
-        var conn = CreateConnection(WaveguideType.Straight);
+        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
 
         var line = NazcaConnectionStyleWriter.Format(conn, gdsLayer: 3);
 
-        line.ShouldBe("        nd.strt(length=50.00, width=0.50, layer=3).put(50.00, -25.00, 0.00)");
+        line.ShouldBe("        nd.sinebend(width=0.50, distance=50.00, offset=-20.00, layer=3).put(50.00, -25.00, 0.00)");
     }
 
     [Fact]
     public void Format_MissingPins_ReturnsNull()
     {
-        var conn = new WaveguideConnection { Type = WaveguideType.Straight };
+        var conn = new WaveguideConnection { Type = WaveguideType.SBend };
 
         NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
     }

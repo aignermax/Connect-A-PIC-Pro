@@ -171,7 +171,6 @@ public static class MainViewModelTestHelper
         return new BottomPanelViewModel(
             canvas,
             commandManager,
-            new WaveguideLengthViewModel(),
             new ConnectionRoutingViewModel(canvas),
             new ElementLockViewModel(),
             new ErrorConsoleViewModel(errorConsoleService),

@@ -1,6 +1,7 @@
 using System.Numerics;
 using CAP_Core.LightCalculation.MaterialDispersion;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Components.Core;
 
 namespace CAP_Core.Components.Connections
@@ -55,22 +56,6 @@ namespace CAP_Core.Components.Connections
             EndPin?.MatterType == MatterType.Electricity;
 
         /// <summary>
-        /// Target path length in micrometers. When set, the router will attempt to achieve this length.
-        /// Null means no target length (just route the shortest valid path).
-        /// </summary>
-        public double? TargetLengthMicrometers { get; set; } = null;
-
-        /// <summary>
-        /// Whether the target length constraint is enabled.
-        /// </summary>
-        public bool IsTargetLengthEnabled { get; set; } = false;
-
-        /// <summary>
-        /// Tolerance for target length matching in micrometers. Default: ±1µm.
-        /// </summary>
-        public double LengthToleranceMicrometers { get; set; } = 1.0;
-
-        /// <summary>
         /// Propagation loss in dB per centimeter.
         /// Typical values for silicon photonics:
         /// - High-quality strip waveguides: 0.3-0.5 dB/cm
@@ -112,36 +97,6 @@ namespace CAP_Core.Components.Connections
         public double PathLengthMicrometers => RoutedPath?.TotalLengthMicrometers ?? 0;
 
         /// <summary>
-        /// Difference between actual path length and target length in micrometers.
-        /// Positive = actual is longer, negative = actual is shorter than target.
-        /// Returns null if target length is not enabled or not set.
-        /// </summary>
-        public double? LengthDifference
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                return PathLengthMicrometers - TargetLengthMicrometers.Value;
-            }
-        }
-
-        /// <summary>
-        /// Indicates if the current path length matches the target within tolerance.
-        /// Returns null if target length is not enabled.
-        /// </summary>
-        public bool? IsLengthMatched
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                var diff = Math.Abs(LengthDifference.Value);
-                return diff <= LengthToleranceMicrometers;
-            }
-        }
-
-        /// <summary>
         /// Gets the transmission coefficient calculated from current geometry and loss parameters.
         /// Call RecalculateTransmission() after component positions change.
         /// </summary>
@@ -172,6 +127,41 @@ namespace CAP_Core.Components.Connections
                 TransmissionCoefficient = Complex.One;
                 TotalLossDb = 0;
                 return;
+            }
+
+            if (Type != WaveguideType.Auto)
+            {
+                // A styled route the user has hand-edited (bend radius via the canvas handles,
+                // recorded in BendRadiusOverrides) is sacred: keep it as long as its endpoints
+                // still match the pins, only refreshing the losses. Rebuilding here would
+                // silently wipe the manual edit on every unrelated recalculation.
+                if (BendRadiusOverrides.Count > 0 && FrozenPathStillMatchesPins())
+                {
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // Explicit style: the visible curve is the styled primitive rebuilt from the
+                // current pins, so it tracks component moves while ignoring obstacles by design.
+                // An endpoint move (or style change, which invalidates the route) discards any
+                // manual bend edits — mirroring the Auto unfreeze behavior. Frozen so incremental
+                // routing and the exporter treat it as a fixed route and never replace it with
+                // the A* result.
+                BendRadiusOverrides.Clear();
+                var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type);
+                if (styledPath != null)
+                {
+                    RoutedPath = styledPath;
+                    IsRouteFrozen = true;
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // The styled primitive cannot leave the start pin along the pin direction for
+                // this layout (e.g. the end pin lies behind the start pin). Rather than drawing
+                // a broken curve into the component, fall through to the A* route below; the
+                // style is kept and takes effect again once the layout allows it.
+                IsRouteFrozen = false;
             }
 
             if (IsRouteFrozen)
@@ -229,7 +219,10 @@ namespace CAP_Core.Components.Connections
         /// <param name="wavelengthNm">Wavelength in nm used when a <see cref="DispersionModel"/> is set.</param>
         public void UpdateLossFromPath(double wavelengthNm = 1550.0)
         {
-            // Calculate total loss from actual path
+            // Calculate total loss from actual path. Smooth polyline styles (SBend/Cobra)
+            // contain no BendSegments, so BendCount is 0 for them: their bend loss is
+            // APPROXIMATED as pure propagation loss over the sampled curve length — a
+            // conservative simplification for adiabatic curves without a single radius.
             double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
             double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm; // µm to cm
             double bendLoss = BendCount * BendLossDbPer90Deg;
@@ -256,6 +249,18 @@ namespace CAP_Core.Components.Connections
         {
             RoutedPath = cachedPath;
             UpdateLossFromPath(wavelengthNm);
+        }
+
+        /// <summary>
+        /// Discards the current <see cref="RoutedPath"/> so the next routing pass rebuilds it from
+        /// scratch. Needed when the routing intent changes (e.g. the user picks a new
+        /// <see cref="Type"/>) but no component moved: incremental routing keeps any route whose
+        /// endpoints still match, so without this the stale path would survive and the new style
+        /// would only take effect after the next component move.
+        /// </summary>
+        public void InvalidateRoute()
+        {
+            RoutedPath = null;
         }
 
         /// <summary>
