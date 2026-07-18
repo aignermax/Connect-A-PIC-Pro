@@ -5,8 +5,8 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// <summary>
 /// Builds a symmetric arc S-bend that connects two parallel pins offset laterally from one
 /// another: it starts at the start pin heading, shifts sideways by the requested lateral
-/// offset and arrives PARALLEL to the start heading. Used by the Bend/Euler styles for
-/// parallel-offset pins and as the connected fallback of the Straight style.
+/// offset and arrives PARALLEL to the start heading. Used by the Bend style for
+/// parallel-offset pins and as the connected fallback of the polyline styles.
 ///
 /// Layout is <c>stub – arc – straight – arc – stub</c>: two arcs of a single radius sweep by
 /// equal, opposite angles φ, joined by a middle straight, and framed by two short entry/exit

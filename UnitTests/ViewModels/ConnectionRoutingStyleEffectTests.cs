@@ -19,9 +19,9 @@ public class ConnectionRoutingStyleEffectTests
     private const double GeometryTolerance = 0.5;
 
     [Theory]
-    [InlineData(WaveguideType.Straight)]
     [InlineData(WaveguideType.Bend)]
     [InlineData(WaveguideType.SBend)]
+    [InlineData(WaveguideType.Cobra)]
     public async Task SettingStyle_RebuildsRoutedPathAsStyledPrimitive_WithoutMovingComponents(WaveguideType style)
     {
         var canvas = new DesignCanvasViewModel();

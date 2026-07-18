@@ -20,7 +20,7 @@ namespace UnitTests.UI;
 /// once per <see cref="WaveguideType"/> in two everyday layouts (parallel pins with a lateral
 /// offset, and axially aligned pins) and writes one PNG each to
 /// <c>UI_SHOT_DIR/routing-styles/{layout}-{style}.png</c>. The images are the ground truth
-/// for judging that SBend (sine), Cobra (Hermite), Bend/Euler (generous arcs) and Straight
+/// for judging that SBend (sine), Cobra (Hermite) and Bend (generous arcs)
 /// draw visibly distinct, smooth curves that connect BOTH pins.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
@@ -35,8 +35,8 @@ public class RoutingStyleCanvasDiagnosticTests
 
     private static readonly WaveguideType[] Styles =
     {
-        WaveguideType.Auto, WaveguideType.Straight, WaveguideType.Bend,
-        WaveguideType.SBend, WaveguideType.Euler, WaveguideType.Cobra,
+        WaveguideType.Auto, WaveguideType.Bend,
+        WaveguideType.SBend, WaveguideType.Cobra,
     };
 
     /// <summary>Captures all styles in the offset and the aligned layout (12 PNGs).</summary>

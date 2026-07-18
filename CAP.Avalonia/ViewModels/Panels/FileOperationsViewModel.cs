@@ -1284,8 +1284,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     private static void RestoreRoutingSettings(WaveguideConnection connection, ConnectionData connData)
     {
-        if (connData.RoutingStyle != null &&
-            Enum.TryParse<WaveguideType>(connData.RoutingStyle, out var style))
+        // Legacy styles removed from WaveguideType: "Euler" was drawn as the same generous
+        // arc as Bend (migrate to Bend); "Straight" (and any other unknown name) falls back
+        // to Auto by simply not parsing — the connection keeps its default Type.
+        if (connData.RoutingStyle == "Euler")
+            connection.Type = WaveguideType.Bend;
+        else if (connData.RoutingStyle != null &&
+            Enum.TryParse<WaveguideType>(connData.RoutingStyle, ignoreCase: false, out var style) &&
+            Enum.IsDefined(style))
             connection.Type = style;
         if (connData.WidthMicrometers.HasValue)
             connection.WidthMicrometers = connData.WidthMicrometers.Value;

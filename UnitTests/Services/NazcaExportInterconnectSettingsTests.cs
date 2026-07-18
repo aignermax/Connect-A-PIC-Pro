@@ -63,13 +63,13 @@ public class NazcaExportInterconnectSettingsTests
     }
 
     [Fact]
-    public void Export_ConnectionWithEulerStyle_EmitsExactRouteSegments_NotEulerPrimitive()
+    public void Export_ConnectionWithBendStyle_EmitsExactRouteSegments_NotSingleBendPrimitive()
     {
-        // A single nd.euler(radius, angle) cannot land on an arbitrary end pin, so Euler (like
-        // Bend) exports the exact canvas stub–arc–stub segments via the segment exporter:
-        // the arc appears as an nd.bend segment line, and never as an nd.euler primitive.
+        // A single nd.bend(radius, angle) cannot land on an arbitrary end pin, so Bend
+        // exports the exact canvas stub–arc–stub segments via the segment exporter:
+        // the arc appears as an nd.bend segment line, never as one styled primitive line.
         var canvas = CreateCanvasWithConnection(
-            WaveguideType.Euler, endOffsetY: 30, endPinAngleDegrees: 270);
+            WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
         var conn = canvas.Connections[0].Connection;
         conn.RecalculateTransmission(new CAP_Core.Routing.WaveguideRouter());
 

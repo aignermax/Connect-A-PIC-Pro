@@ -24,9 +24,11 @@ public class ConnectionStyleRouteBuilderTests
     private const double PinTolerance = 0.5;
 
     [Fact]
-    public void Straight_AlignedPins_ProducesSingleStraightSegmentOfPinDistance()
+    public void Bend_AlignedFacingPins_ProducesSingleStraightSegmentOfPinDistance()
     {
-        var conn = CreateConnection(WaveguideType.Straight);
+        // Collinear facing pins have a 0° turn — no arc exists, and the degenerate S-bend
+        // collapses to the exact pin-to-pin straight.
+        var conn = CreateConnection(WaveguideType.Bend);
 
         var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
@@ -36,28 +38,13 @@ public class ConnectionStyleRouteBuilderTests
     }
 
     [Fact]
-    public void Straight_OffsetPins_FallsBackToConnectedArcS_NoFloatingStub()
-    {
-        // Offset pins cannot be joined by one straight; Straight must fall back to the
-        // connected two-arc S so the route never ends in mid-air.
-        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
-
-        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
-
-        path.Segments.OfType<BendSegment>().Count().ShouldBe(2);
-        AssertConnectsBothPins(conn, path);
-    }
-
-    [Theory]
-    [InlineData(WaveguideType.Bend)]
-    [InlineData(WaveguideType.Euler)]
-    public void ArcStyles_AngledPins_BuildStubArcStub_WithGenerousRadius(WaveguideType type)
+    public void Bend_AngledPins_BuildsStubArcStub_WithGenerousRadius()
     {
         // End pin at (100, 55) pointing 270° → arrival direction 90°, a 90° turn. The corner of
         // the two pin axes is at (100, 25): legs 50 µm (start) and 30 µm (end). The largest
         // fitting radius is min(50, 30)/tan(45°) = 30 µm; the builder uses 0.9 × that = 27 µm,
         // leaving straight stubs of 50−27 = 23 µm and 30−27 = 3 µm.
-        var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
 
         var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
 
@@ -187,7 +174,7 @@ public class ConnectionStyleRouteBuilderTests
     [Fact]
     public void ExplicitStyle_RecalculateFreezesStyledGeometry_NotAStar()
     {
-        var conn = CreateConnection(WaveguideType.Straight);
+        var conn = CreateConnection(WaveguideType.Bend);
         var router = new WaveguideRouter();
 
         conn.RecalculateTransmission(router);
@@ -213,33 +200,22 @@ public class ConnectionStyleRouteBuilderTests
     [Fact]
     public void StyledGeometry_SharesBasisWithNazcaExport()
     {
-        // Straight (aligned): canvas segment length must equal the exporter's nd.strt(length=...).
-        var straight = CreateConnection(WaveguideType.Straight);
-        var straightPath = ConnectionStyleRouteBuilder.Build(
-            straight.StartPin, straight.EndPin, straight.Type);
-        double exportedLength = ParseArg(NazcaConnectionStyleWriter.Format(straight)!, "length");
-        straightPath.Segments[0].LengthMicrometers.ShouldBe(exportedLength, 0.05);
-    }
-
-    [Theory]
-    [InlineData(WaveguideType.Bend)]
-    [InlineData(WaveguideType.Euler)]
-    public void ArcStyles_HaveNoSinglePrimitiveExport_SegmentsAreTheTruth(WaveguideType type)
-    {
-        // A lone nd.bend/nd.euler is parameterized by (radius, angle) only and cannot land on an
-        // arbitrary end pin. Format therefore returns null and the exporter writes the exact
-        // canvas segments instead — canvas and GDS are identical by construction.
-        var conn = CreateConnection(type, endOffsetY: 30, endPinAngleDegrees: 270);
-
-        NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
+        // SBend: the canvas sine polyline and the exporter's nd.sinebend(distance=…) must use
+        // the same forward run, so canvas and GDS share their curve basis.
+        var sBend = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
+        var sBendPath = ConnectionStyleRouteBuilder.Build(sBend.StartPin, sBend.EndPin, sBend.Type);
+        double exportedDistance = ParseArg(NazcaConnectionStyleWriter.Format(sBend)!, "distance");
+        double canvasForwardRun = sBendPath.Segments[^1].EndPoint.X - sBendPath.Segments[0].StartPoint.X;
+        canvasForwardRun.ShouldBe(exportedDistance, 0.05);
     }
 
     [Fact]
-    public void Straight_OffsetPins_HasNoSinglePrimitiveExport_SegmentsAreTheTruth()
+    public void Bend_HasNoSinglePrimitiveExport_SegmentsAreTheTruth()
     {
-        // The offset Straight falls back to the arc-S on canvas; an nd.strt would end in
-        // mid-air, so the exporter must write the exact canvas segments instead.
-        var conn = CreateConnection(WaveguideType.Straight, endOffsetY: 20);
+        // A lone nd.bend is parameterized by (radius, angle) only and cannot land on an
+        // arbitrary end pin. Format therefore returns null and the exporter writes the exact
+        // canvas segments instead — canvas and GDS are identical by construction.
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
 
         NazcaConnectionStyleWriter.Format(conn).ShouldBeNull();
     }

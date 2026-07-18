@@ -15,14 +15,10 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// (<see cref="SineBendGeometry"/>); export stays <c>nd.sinebend</c>, same curve basis.</item>
 /// <item><b>Cobra</b> — a cubic Hermite matching position and angle at both ends
 /// (<see cref="CobraGeometry"/>); export stays <c>nd.cobra</c>.</item>
-/// <item><b>Bend / Euler</b> — circular-arc geometry with a GENEROUS radius (0.9 × the largest
+/// <item><b>Bend</b> — circular-arc geometry with a GENEROUS radius (0.9 × the largest
 /// fitting radius): stub–arc–stub for angled pins, a two-arc S (<see cref="SBendGeometry"/>)
-/// for parallel-offset pins. Euler (<c>nd.euler</c>, a clothoid) is APPROXIMATED by the
-/// circular arc of the same turn — documented, visually identical to Bend for now.
-/// Exported as exact segments, so canvas and GDS match by construction.</item>
-/// <item><b>Straight</b> — an exact pin-to-pin straight when the pins are (nearly) collinear
-/// (lateral offset &lt; <see cref="StraightAlignmentToleranceMicrometers"/>); otherwise it
-/// falls back to the connected arc-S rather than a straight ending in mid-air.</item>
+/// for parallel-offset pins. Exported as exact segments, so canvas and GDS match by
+/// construction.</item>
 /// </list>
 ///
 /// The route is forced: it follows the user's chosen style and deliberately ignores
@@ -35,12 +31,6 @@ public static class ConnectionStyleRouteBuilder
 {
     private const double DegreesToRadians = Math.PI / 180.0;
     private const double Epsilon = 1e-6;
-
-    /// <summary>Below this lateral offset (µm) two facing pins count as collinear and the
-    /// Straight style draws a true pin-to-pin straight; at or above it, Straight falls back
-    /// to the connected arc-S. Shared with <c>NazcaConnectionStyleWriter</c>, which switches
-    /// from the <c>nd.strt</c> primitive to exact segment export at the same threshold.</summary>
-    public const double StraightAlignmentToleranceMicrometers = 0.5;
 
     /// <summary>Below this |turn| (degrees) two pins count as parallel: a single bend cannot
     /// join them, so a parallel <see cref="WaveguideType.Bend"/> falls back to an S-bend.
@@ -69,31 +59,11 @@ public static class ConnectionStyleRouteBuilder
 
         return type switch
         {
-            WaveguideType.Straight => BuildStraight(sx, sy, startAngle, ex, ey),
-            WaveguideType.Bend or WaveguideType.Euler => BuildArc(sx, sy, startAngle, arrivalAngle, ex, ey),
+            WaveguideType.Bend => BuildArc(sx, sy, startAngle, arrivalAngle, ex, ey),
             WaveguideType.SBend => BuildSine(sx, sy, startAngle, ex, ey),
             WaveguideType.Cobra => BuildCobra(sx, sy, startAngle, arrivalAngle, ex, ey),
-            _ => BuildStraight(sx, sy, startAngle, ex, ey),
+            _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not an explicit routing style."),
         };
-    }
-
-    /// <summary>
-    /// Straight: an exact pin-to-pin straight when the end pin lies ahead and (nearly) on the
-    /// start pin's axis. Offset pins CANNOT be joined by one straight, so the route falls
-    /// back to the connected arc-S.
-    /// </summary>
-    private static RoutedPath BuildStraight(double sx, double sy, double startAngle, double ex, double ey)
-    {
-        var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
-        if (longitudinal > Epsilon && Math.Abs(lateral) < StraightAlignmentToleranceMicrometers)
-        {
-            var path = new RoutedPath();
-            double directAngle = Math.Atan2(ey - sy, ex - sx) * 180.0 / Math.PI;
-            path.Segments.Add(new StraightSegment(sx, sy, ex, ey, directAngle));
-            return path;
-        }
-
-        return BuildArcS(sx, sy, startAngle, ex, ey);
     }
 
     /// <summary>SBend: the sine curve polyline; degenerate layouts (end pin behind the start)
@@ -115,7 +85,7 @@ public static class ConnectionStyleRouteBuilder
     }
 
     /// <summary>
-    /// Builds the Bend/Euler route as stub–arc–stub so it reaches BOTH pins exactly.
+    /// Builds the Bend route as stub–arc–stub so it reaches BOTH pins exactly.
     /// Degenerate layouts (parallel axes, corner behind a pin) fall back to the two-arc S
     /// via <see cref="BuildArcS"/> — never a silent diagonal.
     /// </summary>
@@ -207,9 +177,9 @@ public static class ConnectionStyleRouteBuilder
 
     /// <summary>
     /// The two-arc S with the generous radius (<see cref="SBendGeometry"/>), shared by the
-    /// Bend/Euler parallel-pin case, the Straight offset fallback and the degenerate cases of
-    /// the polyline styles. When even the S is impossible (end pin behind the start), a direct
-    /// straight still visibly connects the pins — never a free-floating stub.
+    /// Bend parallel-pin case and the degenerate cases of the polyline styles. When even the
+    /// S is impossible (end pin behind the start), a direct straight still visibly connects
+    /// the pins — never a free-floating stub.
     /// </summary>
     private static RoutedPath BuildArcS(double sx, double sy, double startAngle, double ex, double ey)
     {
