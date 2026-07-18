@@ -22,6 +22,14 @@ public class RoutedPath
     public bool IsInvalidGeometry { get; set; } = false;
 
     /// <summary>
+    /// True when the path could only be routed with a bend radius below the active
+    /// fabrication process' minimum (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>).
+    /// The geometry itself is clean, but the design violates the process rule; the
+    /// design checks surface it as a <c>BendRadiusBelowProcessMinimum</c> issue.
+    /// </summary>
+    public bool ViolatesProcessMinBendRadius { get; set; } = false;
+
+    /// <summary>
     /// Debug information: The raw A* grid path used to generate this path.
     /// Only populated when A* routing is used.
     /// </summary>

@@ -10,17 +10,22 @@ namespace CAP_Core.Routing;
 public class WaveguideRouter
 {
     /// <summary>
-    /// Minimum bend radius in micrometers. Violating this causes high loss.
+    /// The connection's minimum bend radius in micrometers. Violating this causes high loss.
     /// </summary>
     public double MinBendRadiusMicrometers { get; set; } = 10.0;
 
     /// <summary>
     /// Bend-radius floor (µm) imposed by the active fabrication process
-    /// (<c>WaveguideBendRadiusResolver</c>). <see cref="Components.Connections.WaveguideConnection.RecalculateTransmission"/>
-    /// combines it with the per-connection bend radius via <c>Math.Max</c>, so no automatic
-    /// route can bend tighter than the process permits. 0 means no process constraint.
+    /// (<c>WaveguideBendRadiusResolver</c>). <see cref="Route"/> first attempts the larger of
+    /// this floor and <see cref="MinBendRadiusMicrometers"/>; when no clean path exists at the
+    /// floor it retries at the connection radius and marks the result with
+    /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/> so the design checks surface the
+    /// violation. 0 means no process constraint.
     /// </summary>
     public double ProcessMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>Tolerance (µm) below which two bend radii count as equal.</summary>
+    private const double RadiusToleranceMicrometers = 1e-6;
 
     /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
@@ -174,9 +179,13 @@ public class WaveguideRouter
 
     /// <summary>
     /// Routes a waveguide between two pins using two-phase A* pathfinding.
-    /// Phase 1 uses a limited node budget for fast results.
-    /// Phase 2 uses an extended node budget for complex routes (triggers <see cref="OnComplexRouteStarted"/>).
-    /// Falls back to Manhattan (marked as blocked) if both A* phases fail.
+    /// The first attempt honors the process bend-radius floor
+    /// (<see cref="ProcessMinBendRadiusMicrometers"/>); when no clean path exists at the floor,
+    /// it retries at the connection radius and marks the result with
+    /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/>. Falls back to Manhattan routing
+    /// if all A* attempts fail; a self-intersecting or blocked fallback at the floor radius
+    /// is discarded in favor of the connection radius, and unresolvable results are marked
+    /// <see cref="RoutedPath.IsBlockedFallback"/>.
     /// </summary>
     /// <param name="startPin">Source pin.</param>
     /// <param name="endPin">Target pin.</param>
@@ -191,33 +200,97 @@ public class WaveguideRouter
 
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
+        double connectionRadius = MinBendRadiusMicrometers;
+        double effectiveRadius = Math.Max(connectionRadius, ProcessMinBendRadiusMicrometers);
+        bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
+
         if (PathfindingGrid != null)
         {
             var astarPath = new RoutedPath();
-            if (TryRouteAStar(startX, startY, startAngle, endX, endY, endInputAngle,
-                              astarPath, startPin, endPin, cancellationToken))
+            if (TryRouteAStar(effectiveRadius, startX, startY, startAngle, endX, endY, endInputAngle,
+                              astarPath, startPin, endPin, cancellationToken)
+                && IsCleanAStarResult(astarPath))
             {
-                if (astarPath.IsValid) return astarPath;
+                return astarPath;
+            }
+
+            // Controlled degradation: the process floor found no clean path — retry at the
+            // connection radius and surface the violation instead of degenerate geometry.
+            if (floorRaisesRadius)
+            {
+                astarPath = new RoutedPath();
+                if (TryRouteAStar(connectionRadius, startX, startY, startAngle, endX, endY, endInputAngle,
+                                  astarPath, startPin, endPin, cancellationToken)
+                    && IsCleanAStarResult(astarPath))
+                {
+                    astarPath.ViolatesProcessMinBendRadius = true;
+                    return astarPath;
+                }
             }
         }
 
-        // A* failed - try Manhattan routing as fallback
-        var path = new RoutedPath();
-        // Use small lead-in/lead-out for smoother transitions (15% of bend radius)
-        double leadLength = MinBendRadiusMicrometers * 0.15;
-        var manhattan = new ManhattanRouter(MinBendRadiusMicrometers, leadOut: leadLength, leadIn: leadLength);
-        manhattan.Route(startX, startY, startAngle, endX, endY, endInputAngle, path);
+        return RouteManhattanFallback(startX, startY, startAngle, endX, endY, endInputAngle,
+                                      connectionRadius, effectiveRadius, floorRaisesRadius);
+    }
 
-        // Check if the Manhattan path collides with existing obstacles
-        // Manhattan routing doesn't use PathfindingGrid, so we check manually
-        if (path.Segments.Count == 0 || !path.IsValid || IsPathBlocked(path.Segments))
+    /// <summary>
+    /// Manhattan (CSC) fallback when all A* attempts fail. Tries the process floor radius
+    /// first; a result that loops through itself or crosses obstacles is discarded in favor
+    /// of the connection radius (marked as a process-minimum violation). A result that is
+    /// still blocked or self-intersecting is marked <see cref="RoutedPath.IsBlockedFallback"/>.
+    /// </summary>
+    private RoutedPath RouteManhattanFallback(
+        double startX, double startY, double startAngle,
+        double endX, double endY, double endInputAngle,
+        double connectionRadius, double effectiveRadius, bool floorRaisesRadius)
+    {
+        var path = RouteManhattan(startX, startY, startAngle, endX, endY, endInputAngle, effectiveRadius);
+        if (IsCleanFallback(path)) return path;
+
+        if (floorRaisesRadius)
         {
-            // Path is blocked - mark as faulty fallback
-            path.IsBlockedFallback = true;
+            var relaxed = RouteManhattan(startX, startY, startAngle, endX, endY, endInputAngle, connectionRadius);
+            relaxed.ViolatesProcessMinBendRadius = true;
+            if (IsCleanFallback(relaxed)) return relaxed;
+
+            // Both radii failed — keep the tighter (shorter, less loop-prone) geometry.
+            relaxed.IsBlockedFallback = true;
+            return relaxed;
         }
 
+        path.IsBlockedFallback = true;
         return path;
     }
+
+    /// <summary>Runs the Manhattan (CSC) router at the given bend radius.</summary>
+    private static RoutedPath RouteManhattan(
+        double startX, double startY, double startAngle,
+        double endX, double endY, double endInputAngle, double bendRadius)
+    {
+        var path = new RoutedPath();
+        // Use small lead-in/lead-out for smoother transitions (15% of bend radius)
+        double leadLength = bendRadius * 0.15;
+        var manhattan = new ManhattanRouter(bendRadius, leadOut: leadLength, leadIn: leadLength);
+        manhattan.Route(startX, startY, startAngle, endX, endY, endInputAngle, path);
+        return path;
+    }
+
+    /// <summary>
+    /// An A* result is accepted only when its segments connect and the smoothed geometry
+    /// does not intersect itself (arcs can drift when the grid path is tighter than planned).
+    /// </summary>
+    private static bool IsCleanAStarResult(RoutedPath path) =>
+        path.IsValid && !PathIntersectionDetector.HasSelfIntersection(path);
+
+    /// <summary>
+    /// A fallback path is acceptable as-is only when it has connected segments, does not
+    /// pass through obstacles, and does not intersect itself (no loops/teardrops).
+    /// </summary>
+    private bool IsCleanFallback(RoutedPath path) =>
+        path.Segments.Count > 0
+        && path.IsValid
+        && !IsPathBlocked(path.Segments)
+        && !PathIntersectionDetector.HasSelfIntersection(path);
 
     /// <summary>
     /// Checks if any segment in a path passes through blocked cells.
@@ -243,19 +316,28 @@ public class WaveguideRouter
     }
 
     /// <summary>
-    /// Attempts to route using two-phase A* pathfinding with obstacle avoidance.
+    /// Attempts to route using two-phase A* pathfinding with obstacle avoidance at the given
+    /// bend radius. The cost model (minimum straight run before turns) and the path smoother
+    /// are synced to that radius, so the grid path leaves room for the arcs that will be built.
     /// Phase 1 uses <see cref="Phase1MaxNodes"/> for fast results.
     /// Phase 2 uses <see cref="Phase2MaxNodes"/> and fires <see cref="OnComplexRouteStarted"/> if Phase 1 fails.
     /// </summary>
-    private bool TryRouteAStar(double startX, double startY, double startAngle,
+    private bool TryRouteAStar(double bendRadius,
+                                double startX, double startY, double startAngle,
                                 double endX, double endY, double endInputAngle,
                                 RoutedPath path, PhysicalPin startPin, PhysicalPin endPin,
                                 CancellationToken cancellationToken = default)
     {
         if (PathfindingGrid == null) return false;
 
-        double corridorLength = MinBendRadiusMicrometers * 3;
-        double corridorWidth = MinBendRadiusMicrometers;
+        // Sync the cost model to the radius of THIS attempt: turns must be spaced far
+        // enough apart that the smoother can realize them as arcs of this radius.
+        CostCalculator.MinBendRadiusMicrometers = bendRadius;
+        CostCalculator.MinStraightRunCells =
+            (int)Math.Ceiling(bendRadius * 2 / PathfindingGrid.CellSizeMicrometers);
+
+        double corridorLength = bendRadius * 3;
+        double corridorWidth = bendRadius;
 
         var clearedStart = PathfindingGrid.ClearPinCorridor(
             startX, startY, startAngle, corridorLength, corridorWidth);
@@ -378,7 +460,7 @@ public class WaveguideRouter
 
             if (gridPath == null || gridPath.Count < 2) return false;
 
-            var smoother = new PathSmoother(PathfindingGrid, MinBendRadiusMicrometers, AllowedBendRadii);
+            var smoother = new PathSmoother(PathfindingGrid, bendRadius, AllowedRadiiIncluding(bendRadius));
             var smoothedPath = smoother.ConvertToSegments(gridPath, startPin, endPin);
 
             path.Segments.AddRange(smoothedPath.Segments);
@@ -394,6 +476,22 @@ public class WaveguideRouter
             PathfindingGrid.RestoreCells(clearedEndApproach);
             PathfindingGrid.RestoreCells(clearedEndTerminal);
         }
+    }
+
+    /// <summary>
+    /// The allowed bend radii extended with the current attempt's radius, so the smoother
+    /// builds arcs of exactly that radius instead of snapping up to the next foundry value
+    /// (which would not match the setbacks the grid path was planned with).
+    /// </summary>
+    private List<double> AllowedRadiiIncluding(double bendRadius)
+    {
+        if (AllowedBendRadii.Count == 0 ||
+            AllowedBendRadii.Any(r => Math.Abs(r - bendRadius) < RadiusToleranceMicrometers))
+            return AllowedBendRadii;
+
+        var radii = new List<double>(AllowedBendRadii) { bendRadius };
+        radii.Sort();
+        return radii;
     }
 
     /// <summary>

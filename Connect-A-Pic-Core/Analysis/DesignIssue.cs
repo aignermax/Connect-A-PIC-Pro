@@ -35,7 +35,14 @@ public enum DesignIssueType
     /// was placed — issue #570 follow-up). New placements from that PDK are blocked, but the
     /// component itself is kept; this flags it for manual review.
     /// </summary>
-    PdkProcessMismatch
+    PdkProcessMismatch,
+
+    /// <summary>
+    /// The route could only be found with a bend radius below the active fabrication
+    /// process' minimum bend radius (the router's controlled degradation). The geometry
+    /// is clean, but fabrication rules are violated — free up space or reroute manually.
+    /// </summary>
+    BendRadiusBelowProcessMinimum
 }
 
 /// <summary>

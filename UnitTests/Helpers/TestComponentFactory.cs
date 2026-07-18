@@ -135,6 +135,38 @@ namespace UnitTests
         }
 
         /// <summary>
+        /// Creates a 250×250 µm component with four physical pins (two per side), mimicking
+        /// a directional coupler: west0/east0 in the upper row, west1/east1 in the lower row.
+        /// </summary>
+        public static Component CreateFourPinCouplerWithPhysicalPins(string idSuffix)
+        {
+            var component = CreateStraightWaveGuide();
+            component.Identifier = $"coupler_{idSuffix}";
+            component.WidthMicrometers = 250;
+            component.HeightMicrometers = 250;
+
+            AddPhysicalPin(component, "west0", 0, 80, 180);
+            AddPhysicalPin(component, "west1", 0, 180, 180);
+            AddPhysicalPin(component, "east0", 250, 80, 0);
+            AddPhysicalPin(component, "east1", 250, 180, 0);
+            return component;
+        }
+
+        /// <summary>Adds a physical pin at the given component-relative offset and angle.</summary>
+        private static void AddPhysicalPin(
+            Component component, string name, double offsetX, double offsetY, double angleDegrees)
+        {
+            component.PhysicalPins.Add(new PhysicalPin
+            {
+                Name = name,
+                ParentComponent = component,
+                OffsetXMicrometers = offsetX,
+                OffsetYMicrometers = offsetY,
+                AngleDegrees = angleDegrees,
+            });
+        }
+
+        /// <summary>
         /// Creates a basic component for testing (uses CreateStraightWaveGuide).
         /// </summary>
         public static Component CreateBasicComponent()
