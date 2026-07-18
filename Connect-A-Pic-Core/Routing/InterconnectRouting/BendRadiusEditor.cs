@@ -143,7 +143,13 @@ public static class BendRadiusEditor
             return false;
         var bisector = (X: bx / bisLength, Y: by / bisLength);
 
-        double handleFactor = 1.0 / sinHalf - 1.0;
+        // Corner→center distance is √(τ² + r²) = r/cos(halfSweep) (right triangle over the
+        // tangent point), so the arc's nearest point to the corner — where the handle is
+        // drawn — sits at r·(1/cos(halfSweep) − 1) along the bisector.
+        double cosHalf = Math.Cos(halfSweepRad);
+        if (cosHalf <= epsilon)
+            return false;
+        double handleFactor = 1.0 / cosHalf - 1.0;
         corner = new BendCorner(bendIndex, cornerPoint, bisector, bend.RadiusMicrometers, handleFactor);
         return true;
     }

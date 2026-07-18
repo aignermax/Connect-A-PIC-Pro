@@ -50,6 +50,33 @@ public class BendHandleGeometryTests
     }
 
     [Fact]
+    public void HandlePoint_LiesOnTheArc_ForNon90DegreeSweeps()
+    {
+        var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20);
+        var path = ConnectionStyleRouteBuilder.Build(conn.StartPin, conn.EndPin, conn.Type);
+        var bends = path.Segments.OfType<BendSegment>().ToList();
+        var corners = BendRadiusEditor.GetBendCorners(path.Segments);
+        corners.Count.ShouldBe(bends.Count);
+
+        for (int i = 0; i < corners.Count; i++)
+        {
+            // Guard: this fixture must exercise NON-90° sweeps — at exactly 90° sin equals cos,
+            // so a wrong placement factor would still pass and the test would prove nothing.
+            (Math.Abs(Math.Abs(bends[i].SweepAngleDegrees) - 90.0) > 5).ShouldBeTrue(
+                $"fixture sweep was {bends[i].SweepAngleDegrees:F1}° — adjust the layout");
+
+            // The handle is the arc's nearest point to the corner, so it must sit ON the arc:
+            // exactly RadiusMicrometers away from the bend center.
+            var handle = BendHandleGeometry.HandlePoint(corners[i]);
+            double distToCenter = Math.Sqrt(
+                Math.Pow(handle.X - bends[i].Center.X, 2) +
+                Math.Pow(handle.Y - bends[i].Center.Y, 2));
+            distToCenter.ShouldBe(bends[i].RadiusMicrometers, 0.01,
+                "the drag handle must sit ON the arc, not float away from it");
+        }
+    }
+
+    [Fact]
     public void DraggingHandleOutward_IncreasesBendRadius()
     {
         var conn = CreateConnection(WaveguideType.Bend, endOffsetY: 20);
@@ -57,16 +84,21 @@ public class BendHandleGeometryTests
         conn.RestoreCachedPath(path);
         var corner = BendRadiusEditor.GetBendCorners(conn.GetPathSegments())[0];
 
-        // Simulate a drag that pushes the handle 3 µm further out along the bisector.
+        // Mapping: pushing the handle further out along the bisector means a larger radius.
+        // (For shallow sweeps the factor is small, so tiny handle motion = big radius change —
+        // physically correct; hence no fixed-µm apply here.)
         var handle = BendHandleGeometry.HandlePoint(corner);
         var pointer = (X: handle.X + 3 * corner.Bisector.X, Y: handle.Y + 3 * corner.Bisector.Y);
         double distance = BendHandleGeometry.ProjectDistance(corner.Corner, corner.Bisector, pointer);
         double newRadius = BendHandleGeometry.RadiusFromDistance(distance, corner.HandleFactor);
-
         newRadius.ShouldBeGreaterThan(corner.RadiusMicrometers);
-        BendRadiusEditor.TryApplyOverride(conn, corner.BendIndex, newRadius, out var error).ShouldBeTrue(error);
+
+        // Apply: a modestly smaller radius always fits on the flanking straights (the styled S
+        // is built near the maximum radius, so growing has almost no headroom by design).
+        double smaller = corner.RadiusMicrometers * 0.8;
+        BendRadiusEditor.TryApplyOverride(conn, corner.BendIndex, smaller, out var error).ShouldBeTrue(error);
         var updated = (BendSegment)conn.GetPathSegments().First(s => s is BendSegment);
-        updated.RadiusMicrometers.ShouldBe(newRadius, 1e-6);
+        updated.RadiusMicrometers.ShouldBe(smaller, 1e-6);
     }
 
     /// <summary>Mirrors the fixture in <c>ConnectionStyleRouteBuilderTests</c>.</summary>
