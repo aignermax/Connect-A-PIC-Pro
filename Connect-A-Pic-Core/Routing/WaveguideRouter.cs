@@ -15,6 +15,14 @@ public class WaveguideRouter
     public double MinBendRadiusMicrometers { get; set; } = 10.0;
 
     /// <summary>
+    /// Bend-radius floor (µm) imposed by the active fabrication process
+    /// (<c>WaveguideBendRadiusResolver</c>). <see cref="Components.Connections.WaveguideConnection.RecalculateTransmission"/>
+    /// combines it with the per-connection bend radius via <c>Math.Max</c>, so no automatic
+    /// route can bend tighter than the process permits. 0 means no process constraint.
+    /// </summary>
+    public double ProcessMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
     /// If empty, any radius >= MinBendRadiusMicrometers is allowed.
     /// When set, bends will snap to the smallest allowed radius that fits.

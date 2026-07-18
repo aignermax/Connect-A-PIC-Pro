@@ -56,9 +56,16 @@ public static class ConnectionStyleRouteBuilder
     /// <param name="startPin">Source pin; the primitive starts here at the pin angle.</param>
     /// <param name="endPin">Target pin; every style arrives here (angled styles at its input angle).</param>
     /// <param name="type">The explicit routing style (must not be <see cref="WaveguideType.Auto"/>).</param>
+    /// <param name="minBendRadiusMicrometers">Bend-radius floor (µm) — typically the larger of
+    /// the connection's radius and the fabrication process' minimum. Raises the arc radius of
+    /// the Bend/S geometry above the generous default when the floor still fits the layout;
+    /// a floor that does not fit is ignored and the fitting radius keeps governing (the
+    /// documented exception). 0 applies no floor. Polyline styles (SBend/Cobra) carry no
+    /// single radius and are unaffected.</param>
     /// <returns>A routed path in app-space coordinates, or null when the style cannot leave
     /// the start pin along its direction for this layout (caller falls back to A*).</returns>
-    public static RoutedPath? Build(PhysicalPin startPin, PhysicalPin endPin, WaveguideType type)
+    public static RoutedPath? Build(PhysicalPin startPin, PhysicalPin endPin, WaveguideType type,
+                                    double minBendRadiusMicrometers = 0)
     {
         var (sx, sy) = startPin.GetAbsolutePosition();
         var (ex, ey) = endPin.GetAbsolutePosition();
@@ -69,8 +76,8 @@ public static class ConnectionStyleRouteBuilder
 
         return type switch
         {
-            WaveguideType.Bend => BuildArc(sx, sy, startAngle, arrivalAngle, ex, ey),
-            WaveguideType.SBend => BuildSine(sx, sy, startAngle, ex, ey),
+            WaveguideType.Bend => BuildArc(sx, sy, startAngle, arrivalAngle, ex, ey, minBendRadiusMicrometers),
+            WaveguideType.SBend => BuildSine(sx, sy, startAngle, ex, ey, minBendRadiusMicrometers),
             WaveguideType.Cobra => BuildCobra(sx, sy, startAngle, arrivalAngle, ex, ey),
             _ => throw new ArgumentOutOfRangeException(nameof(type), type, "Not an explicit routing style."),
         };
@@ -78,11 +85,12 @@ public static class ConnectionStyleRouteBuilder
 
     /// <summary>SBend: the sine curve polyline; layouts without a positive forward run fall
     /// back to the tangential arc-S, or to A* (null) when the end pin is behind the start.</summary>
-    private static RoutedPath? BuildSine(double sx, double sy, double startAngle, double ex, double ey)
+    private static RoutedPath? BuildSine(double sx, double sy, double startAngle, double ex, double ey,
+                                         double minBendRadius)
     {
         var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
         var segments = SineBendGeometry.Build(sx, sy, startAngle, longitudinal, lateral);
-        return segments != null ? ToPath(segments) : TryBuildArcS(sx, sy, startAngle, ex, ey);
+        return segments != null ? ToPath(segments) : TryBuildArcS(sx, sy, startAngle, ex, ey, minBendRadius);
     }
 
     /// <summary>Cobra: the Hermite polyline honoring both end angles — tangential at the start
@@ -100,19 +108,20 @@ public static class ConnectionStyleRouteBuilder
     /// via <see cref="TryBuildArcS"/>; when even that is impossible the route is null (A*).
     /// </summary>
     private static RoutedPath? BuildArc(double sx, double sy, double startAngle,
-                                        double arrivalAngle, double ex, double ey)
+                                        double arrivalAngle, double ex, double ey,
+                                        double minBendRadius)
     {
         double sweep = NormalizeSigned(arrivalAngle - startAngle);
         if (Math.Abs(sweep) >= MinArcSweepDegrees && Math.Abs(sweep) <= MaxArcSweepDegrees)
         {
-            var arcPath = TryBuildStubArcStub(sx, sy, startAngle, sweep, ex, ey);
+            var arcPath = TryBuildStubArcStub(sx, sy, startAngle, sweep, ex, ey, minBendRadius);
             if (arcPath != null)
                 return arcPath;
         }
 
         // Parallel pins (sweep ≈ 0 / 180°) or a corner not ahead of both pins: a single arc
         // cannot join the pins, so fall back to the symmetric S-bend (or a collinear straight).
-        return TryBuildArcS(sx, sy, startAngle, ex, ey);
+        return TryBuildArcS(sx, sy, startAngle, ex, ey, minBendRadius);
     }
 
     /// <summary>
@@ -122,11 +131,14 @@ public static class ConnectionStyleRouteBuilder
     /// radius <see cref="SBendGeometry.GenerousRadiusFactor"/> × min(t, s) / tan(|sweep|/2) —
     /// the largest radius whose tangent length τ = r·tan(|sweep|/2) fits both legs, scaled
     /// slightly down so straight stubs remain on both sides and the radius handles can grab
-    /// the arc. The route is stub – arc – stub and hits both pins exactly.
+    /// the arc. A bend-radius floor above the generous value raises the arc radius as far as
+    /// the legs still fit (<see cref="SBendGeometry.ApplyRadiusFloor"/>). The route is
+    /// stub – arc – stub and hits both pins exactly.
     /// Returns null when the layout is degenerate.
     /// </summary>
     private static RoutedPath? TryBuildStubArcStub(
-        double sx, double sy, double startAngle, double sweep, double ex, double ey)
+        double sx, double sy, double startAngle, double sweep, double ex, double ey,
+        double minBendRadius)
     {
         var u1 = UnitVector(startAngle);
         var u2 = UnitVector(startAngle + sweep);
@@ -142,11 +154,13 @@ public static class ConnectionStyleRouteBuilder
             return null;
 
         double tanHalfSweep = Math.Tan(Math.Abs(sweep) * DegreesToRadians / 2.0);
-        // NOTE: for very close pins this generous radius can theoretically fall below the active
-        // process' minimum bend radius (WaveguideBendRadiusResolver). Styled routes are geometric
-        // previews and are deliberately NOT clamped here — only the manual bend-handle edit path
-        // (BendRadiusEditor.TryApplyOverride) enforces the process minimum.
-        double radius = Math.Min(t, s) * SBendGeometry.GenerousRadiusFactor / tanHalfSweep;
+        // The generous radius is the default; a bend-radius floor (connection radius / process
+        // minimum) raises it as long as the floor's tangent still fits both legs. When even the
+        // largest fitting radius is below the floor, the fit keeps governing: for very close
+        // pins the arc can fall below the process minimum (only the manual bend-handle edit
+        // path, BendRadiusEditor.TryApplyOverride, hard-enforces it).
+        double maxFittingRadius = Math.Min(t, s) / tanHalfSweep;
+        double radius = SBendGeometry.ApplyRadiusFloor(maxFittingRadius, minBendRadius);
         if (radius <= Epsilon)
             return null;
         double tangent = radius * tanHalfSweep;
@@ -193,10 +207,11 @@ public static class ConnectionStyleRouteBuilder
     /// leave the start pin against its direction (through the component), so the caller falls
     /// back to the A* route instead.
     /// </summary>
-    private static RoutedPath? TryBuildArcS(double sx, double sy, double startAngle, double ex, double ey)
+    private static RoutedPath? TryBuildArcS(double sx, double sy, double startAngle, double ex, double ey,
+                                            double minBendRadius)
     {
         var (longitudinal, lateral) = LocalFrame(sx, sy, ex, ey, startAngle);
-        var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral);
+        var sBend = SBendGeometry.BuildSymmetricS(sx, sy, startAngle, longitudinal, lateral, minBendRadius);
         if (sBend != null)
             return ToPath(sBend);
 

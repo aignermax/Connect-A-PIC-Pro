@@ -43,10 +43,12 @@ public static class SBendGeometry
     /// <param name="longitudinal">Forward reach along the start heading (µm). Must be positive.</param>
     /// <param name="lateral">Signed lateral offset perpendicular to the start heading (µm).
     /// Its sign selects the turn direction.</param>
+    /// <param name="minBendRadiusMicrometers">Bend-radius floor (µm, see
+    /// <see cref="ApplyRadiusFloor"/>); 0 applies no floor.</param>
     /// <returns>Stub–arc–straight–arc–stub segments, or null in a degenerate case.</returns>
     public static IReadOnlyList<PathSegment>? BuildSymmetricS(
         double startX, double startY, double startAngleDegrees,
-        double longitudinal, double lateral)
+        double longitudinal, double lateral, double minBendRadiusMicrometers = 0)
     {
         if (longitudinal <= Epsilon || Math.Abs(lateral) <= Epsilon)
             return null;
@@ -64,8 +66,9 @@ public static class SBendGeometry
 
         // Largest radius that still fits without a negative middle straight (pure two-arc S);
         // the generous factor keeps a small middle straight so the arcs stay handle-grabbable.
+        // A bend-radius floor (process minimum) may raise the radius up to that fit limit.
         double maxRadius = innerLongitudinal / (2.0 * sinPhi0);
-        double radius = maxRadius * GenerousRadiusFactor;
+        double radius = ApplyRadiusFloor(maxRadius, minBendRadiusMicrometers);
         if (radius <= Epsilon)
             return null;
 
@@ -80,6 +83,23 @@ public static class SBendGeometry
 
         return Assemble(startX, startY, startAngleDegrees,
                         sweepDegrees * Math.Sign(lateral), middleStraight, stub, radius);
+    }
+
+    /// <summary>
+    /// Picks the styled-arc radius from the largest geometrically fitting radius and a
+    /// bend-radius floor (the larger of the connection's radius and the fabrication process'
+    /// minimum): the generous default is <see cref="GenerousRadiusFactor"/> × the fit; a floor
+    /// above it wins as long as it still fits the layout. A floor beyond the fit is ignored —
+    /// the fitting radius keeps governing (the documented styled-route exception).
+    /// </summary>
+    /// <param name="maxFittingRadius">Largest radius the layout can geometrically accommodate (µm).</param>
+    /// <param name="minBendRadiusMicrometers">Bend-radius floor (µm); 0 applies no floor.</param>
+    /// <returns>The radius to build the arc(s) with (µm).</returns>
+    public static double ApplyRadiusFloor(double maxFittingRadius, double minBendRadiusMicrometers)
+    {
+        double generous = maxFittingRadius * GenerousRadiusFactor;
+        bool floorFits = minBendRadiusMicrometers > generous && minBendRadiusMicrometers <= maxFittingRadius;
+        return floorFits ? minBendRadiusMicrometers : generous;
     }
 
     /// <summary>

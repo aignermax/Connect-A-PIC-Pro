@@ -281,9 +281,14 @@ public partial class MainViewModel : ObservableObject
         // command) must not shrink a bend below what the active process allows. Same
         // active-process + live-member lookup as the metal spec; falls back to the absolute
         // minimum when no process is resolvable (playground / no declared optical minimum).
-        CanvasInteraction.GetMinBendRadiusMicrometers = () =>
+        Func<double> resolveMinBendRadiusMicrometers = () =>
             CAP_DataAccess.Components.ComponentDraftMapper.WaveguideBendRadiusResolver.Resolve(
                 FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts(), getLiveMemberPdkNames());
+        CanvasInteraction.GetMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
+        // The same process minimum floors the automatic routing and the styled curves:
+        // the orchestrator refreshes the router before every routing pass, so AUTO cannot
+        // bend tighter than the active process allows.
+        _canvas.Routing.GetProcessMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
