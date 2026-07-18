@@ -277,6 +277,13 @@ public partial class MainViewModel : ObservableObject
                 FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts(), getLiveMemberPdkNames());
         FileOperations.MetalRoutingSpecProvider = metalSpecProvider;
         GdsFactoryExport.MetalRoutingSpecProvider = metalSpecProvider;
+        // Minimum waveguide bend radius (#574): an in-canvas bend-handle drag (and its undo/redo
+        // command) must not shrink a bend below what the active process allows. Same
+        // active-process + live-member lookup as the metal spec; falls back to the absolute
+        // minimum when no process is resolvable (playground / no declared optical minimum).
+        CanvasInteraction.GetMinBendRadiusMicrometers = () =>
+            CAP_DataAccess.Components.ComponentDraftMapper.WaveguideBendRadiusResolver.Resolve(
+                FileOperations.ActiveProcess, LeftPanel.GetLoadedPdkDrafts(), getLiveMemberPdkNames());
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]

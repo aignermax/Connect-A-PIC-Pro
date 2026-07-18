@@ -15,7 +15,9 @@ namespace CAP.Avalonia.Gestures;
 /// selected waveguide connection and drags it along the corner bisector to set the radius live.
 /// Registered first so a handle grab wins over selection and component drag. Handles write the
 /// radius directly onto the connection (there is no number panel); the whole drag is committed
-/// as one <see cref="BendRadiusCommand"/> on release so Ctrl+Z reverts it exactly.
+/// as one <see cref="BendRadiusCommand"/> on release so Ctrl+Z reverts it exactly. The active
+/// fabrication process' minimum bend radius is resolved once at drag start and clamps the whole
+/// edit — a drag below it keeps the last valid geometry and paints the handle red.
 /// </summary>
 public sealed class BendHandleGestureRecognizer : IGestureRecognizer
 {
@@ -33,6 +35,7 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
     private double _handleFactor;
     private double _radiusAtPress;
     private double _lastValidRadius;
+    private double _minRadiusMicrometers = BendRadiusEditor.MinRadiusMicrometers;
 
     /// <summary>Initializes a new instance of <see cref="BendHandleGestureRecognizer"/>.</summary>
     /// <param name="state">Shared interaction state carrying the active-bend highlight fields.</param>
@@ -60,16 +63,17 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
             var (hx, hy) = BendHandleGeometry.HandlePoint(corner);
             if (Distance(canvasPoint.X, canvasPoint.Y, hx, hy) <= grab)
             {
-                Capture(selected, corner);
+                Capture(selected, corner, ResolveMinRadius(mainVm));
                 return true;
             }
         }
         return false;
     }
 
-    private void Capture(WaveguideConnectionViewModel connection, BendCorner corner)
+    private void Capture(WaveguideConnectionViewModel connection, BendCorner corner, double minRadiusMicrometers)
     {
         _connection = connection;
+        _minRadiusMicrometers = minRadiusMicrometers;
         _bendIndex = corner.BendIndex;
         _corner = corner.Corner;
         _bisector = corner.Bisector;
@@ -95,7 +99,7 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
         double distance = BendHandleGeometry.ProjectDistance(_corner, _bisector, (canvasPoint.X, canvasPoint.Y));
         double newRadius = BendHandleGeometry.RadiusFromDistance(distance, _handleFactor);
 
-        if (BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, newRadius, out _))
+        if (BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, newRadius, out _, _minRadiusMicrometers))
         {
             _lastValidRadius = newRadius;
             _state.ActiveBendClamped = false;
@@ -103,8 +107,8 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
         }
         else
         {
-            // Requested radius rejected (too large / too small): keep the last valid geometry and
-            // let the renderer paint the handle red.
+            // Requested radius rejected (too large / below the process minimum): keep the last
+            // valid geometry and let the renderer paint the handle red.
             _state.ActiveBendClamped = true;
         }
         _invalidate();
@@ -118,7 +122,8 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
         if (mainVm != null && Math.Abs(_lastValidRadius - _radiusAtPress) > MeaningfulChangeMicrometers)
         {
             mainVm.CommandManager.ExecuteCommand(
-                new BendRadiusCommand(_connection, _bendIndex, _radiusAtPress, _lastValidRadius, _invalidate));
+                new BendRadiusCommand(_connection, _bendIndex, _radiusAtPress, _lastValidRadius,
+                                      _invalidate, _minRadiusMicrometers));
         }
         ResetDrag();
     }
@@ -128,7 +133,7 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
     {
         if (_connection != null)
         {
-            BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, _radiusAtPress, out _);
+            BendRadiusEditor.TryApplyOverride(_connection.Connection, _bendIndex, _radiusAtPress, out _, _minRadiusMicrometers);
             _connection.NotifyPathChanged();
         }
         ResetDrag();
@@ -140,6 +145,19 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
         _state.ActiveBendClamped = false;
         _connection = null;
         _invalidate();
+    }
+
+    /// <summary>
+    /// Resolves the minimum bend radius (µm) for the drag that is about to start: the active
+    /// fabrication process' minimum via <see cref="ViewModels.Panels.CanvasInteractionViewModel"/>,
+    /// or the absolute fallback when no provider/process is available. Captured once per drag so
+    /// live clamping, the committed <see cref="BendRadiusCommand"/> and <see cref="Cancel"/> all
+    /// enforce the same bound.
+    /// </summary>
+    private static double ResolveMinRadius(MainViewModel mainVm)
+    {
+        double? resolved = mainVm.CanvasInteraction.GetMinBendRadiusMicrometers?.Invoke();
+        return resolved is > 0 ? resolved.Value : BendRadiusEditor.MinRadiusMicrometers;
     }
 
     private static bool IsOptical(WaveguideConnectionViewModel conn) =>
