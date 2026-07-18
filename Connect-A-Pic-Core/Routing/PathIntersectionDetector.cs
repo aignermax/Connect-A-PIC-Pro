@@ -58,6 +58,85 @@ public static class PathIntersectionDetector
     }
 
     /// <summary>
+    /// Returns true when the two paths properly cross each other. Cheaper than
+    /// <see cref="MinimumDistance"/> for the common non-crossing case: disjoint
+    /// bounding boxes are rejected first and no distances are computed. Touching
+    /// endpoints do not count as crossings (only proper intersections do).
+    /// </summary>
+    public static bool Crosses(RoutedPath first, RoutedPath second)
+    {
+        var a = SamplePolyline(first);
+        var b = SamplePolyline(second);
+        if (a.Count < 2 || b.Count < 2 || !BoundsOverlap(a, b))
+            return false;
+
+        for (int i = 0; i < a.Count - 1; i++)
+        {
+            for (int j = 0; j < b.Count - 1; j++)
+            {
+                if (SegmentsIntersect(a[i], a[i + 1], b[j], b[j + 1]))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>True when the axis-aligned bounding boxes of the two polylines overlap.</summary>
+    private static bool BoundsOverlap(
+        List<(double X, double Y)> a, List<(double X, double Y)> b)
+    {
+        double aMinX = a.Min(p => p.X), aMaxX = a.Max(p => p.X);
+        double aMinY = a.Min(p => p.Y), aMaxY = a.Max(p => p.Y);
+        double bMinX = b.Min(p => p.X), bMaxX = b.Max(p => p.X);
+        double bMinY = b.Min(p => p.Y), bMaxY = b.Max(p => p.Y);
+        return aMinX <= bMaxX && bMinX <= aMaxX && aMinY <= bMaxY && bMinY <= aMaxY;
+    }
+
+    /// <summary>
+    /// Returns true when the path enters the given axis-aligned rectangle: a sampled
+    /// point lies strictly inside it or a polyline segment crosses one of its edges.
+    /// Shrink the rectangle by a small tolerance when path endpoints legitimately sit
+    /// on its boundary (pins are placed on component edges).
+    /// </summary>
+    public static bool IntersectsRectangle(
+        RoutedPath path, double minX, double minY, double maxX, double maxY)
+    {
+        var points = SamplePolyline(path);
+        for (int i = 0; i < points.Count - 1; i++)
+        {
+            if (SegmentIntersectsRectangle(points[i], points[i + 1], minX, minY, maxX, maxY))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// True when the segment has an endpoint strictly inside the rectangle or
+    /// properly crosses one of its four edges.
+    /// </summary>
+    private static bool SegmentIntersectsRectangle(
+        (double X, double Y) a, (double X, double Y) b,
+        double minX, double minY, double maxX, double maxY)
+    {
+        static bool Inside((double X, double Y) p, double x1, double y1, double x2, double y2)
+            => p.X > x1 && p.X < x2 && p.Y > y1 && p.Y < y2;
+
+        if (Inside(a, minX, minY, maxX, maxY) || Inside(b, minX, minY, maxX, maxY))
+            return true;
+
+        var corners = new (double X, double Y)[]
+        {
+            (minX, minY), (maxX, minY), (maxX, maxY), (minX, maxY),
+        };
+        for (int i = 0; i < 4; i++)
+        {
+            if (SegmentsIntersect(a, b, corners[i], corners[(i + 1) % 4]))
+                return true;
+        }
+        return false;
+    }
+
+    /// <summary>
     /// Samples the path's segments (straights and arcs) into one polyline.
     /// Joints closer than <see cref="JointToleranceMicrometers"/> are merged so
     /// touching segment ends never read as intersections.

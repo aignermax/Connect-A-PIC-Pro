@@ -46,6 +46,14 @@ public partial class WaveguideRouter
         var clearedEndTerminal = PathfindingGrid.ClearPinCorridor(
             endX, endY, endInputAngle, corridorLength, corridorWidth);
 
+        // Flat PDK components place pins closer together than one grid cell, so a sibling
+        // route registered as an obstacle buries this pin. Clear only the single-cell line
+        // of SIBLING cells along each pin's outward axis (foreign waveguides stay blocked).
+        var clearedStartFanout = PathfindingGrid.ClearPinFanoutWaveguideCells(
+            startX, startY, startAngle, corridorLength);
+        var clearedEndFanout = PathfindingGrid.ClearPinFanoutWaveguideCells(
+            endX, endY, endFacingAngle, corridorLength);
+
         try
         {
             var (gridStartX, gridStartY) = PathfindingGrid.PhysicalToGrid(startX, startY);
@@ -170,6 +178,8 @@ public partial class WaveguideRouter
             PathfindingGrid.RestoreCells(clearedStart);
             PathfindingGrid.RestoreCells(clearedEndApproach);
             PathfindingGrid.RestoreCells(clearedEndTerminal);
+            PathfindingGrid.RestoreCells(clearedStartFanout);
+            PathfindingGrid.RestoreCells(clearedEndFanout);
         }
     }
 

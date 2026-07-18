@@ -8,7 +8,7 @@ namespace CAP_Core.Routing.AStarPathfinder;
 /// Handles coordinate conversion between physical micrometers and grid cells,
 /// and tracks which cells are blocked by component obstacles.
 /// </summary>
-public class PathfindingGrid
+public partial class PathfindingGrid
 {
     /// <summary>
     /// Grid resolution in micrometers per cell.
@@ -540,6 +540,7 @@ public class PathfindingGrid
         lock (_waveguideCellsLock)
         {
             _waveguideCells.Clear();
+            _waveguideEndpoints.Clear();
         }
         lock (_pinZoneLock)
         {
@@ -635,6 +636,9 @@ public class PathfindingGrid
         lock (_waveguideCellsLock)
         {
             _waveguideCells[connectionId] = cells;
+            _waveguideEndpoints[connectionId] = (
+                (segmentList[0].StartPoint.X, segmentList[0].StartPoint.Y),
+                (segmentList[^1].EndPoint.X, segmentList[^1].EndPoint.Y));
         }
         OnWaveguideCellsAdded?.Invoke(cells);
     }
@@ -650,6 +654,7 @@ public class PathfindingGrid
             if (!_waveguideCells.TryGetValue(connectionId, out cells))
                 return;
             _waveguideCells.Remove(connectionId);
+            _waveguideEndpoints.Remove(connectionId);
         }
 
         foreach (var (gx, gy) in cells)
