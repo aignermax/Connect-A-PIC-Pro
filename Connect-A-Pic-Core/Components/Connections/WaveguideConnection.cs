@@ -56,22 +56,6 @@ namespace CAP_Core.Components.Connections
             EndPin?.MatterType == MatterType.Electricity;
 
         /// <summary>
-        /// Target path length in micrometers. When set, the router will attempt to achieve this length.
-        /// Null means no target length (just route the shortest valid path).
-        /// </summary>
-        public double? TargetLengthMicrometers { get; set; } = null;
-
-        /// <summary>
-        /// Whether the target length constraint is enabled.
-        /// </summary>
-        public bool IsTargetLengthEnabled { get; set; } = false;
-
-        /// <summary>
-        /// Tolerance for target length matching in micrometers. Default: ±1µm.
-        /// </summary>
-        public double LengthToleranceMicrometers { get; set; } = 1.0;
-
-        /// <summary>
         /// Propagation loss in dB per centimeter.
         /// Typical values for silicon photonics:
         /// - High-quality strip waveguides: 0.3-0.5 dB/cm
@@ -111,36 +95,6 @@ namespace CAP_Core.Components.Connections
         /// Calculated path length in micrometers between the two pins.
         /// </summary>
         public double PathLengthMicrometers => RoutedPath?.TotalLengthMicrometers ?? 0;
-
-        /// <summary>
-        /// Difference between actual path length and target length in micrometers.
-        /// Positive = actual is longer, negative = actual is shorter than target.
-        /// Returns null if target length is not enabled or not set.
-        /// </summary>
-        public double? LengthDifference
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                return PathLengthMicrometers - TargetLengthMicrometers.Value;
-            }
-        }
-
-        /// <summary>
-        /// Indicates if the current path length matches the target within tolerance.
-        /// Returns null if target length is not enabled.
-        /// </summary>
-        public bool? IsLengthMatched
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                var diff = Math.Abs(LengthDifference.Value);
-                return diff <= LengthToleranceMicrometers;
-            }
-        }
 
         /// <summary>
         /// Gets the transmission coefficient calculated from current geometry and loss parameters.

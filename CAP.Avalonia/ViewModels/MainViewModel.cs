@@ -422,11 +422,9 @@ public partial class MainViewModel : ObservableObject
             }
             else if (e.PropertyName == nameof(CanvasInteraction.SelectedWaveguideConnection))
             {
-                // Feed the selected connection into the right-panel sub-ViewModels
-                // (length matching + routing options, issue #574).
-                var connection = CanvasInteraction.SelectedWaveguideConnection;
-                BottomPanel.WaveguideLength.SelectedConnection = connection;
-                BottomPanel.ConnectionRouting.SelectedConnection = connection;
+                // Feed the selected connection into the routing options panel (issue #574).
+                BottomPanel.ConnectionRouting.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
             }
         };
 
@@ -1138,9 +1136,6 @@ public class ConnectionData
     public List<PathSegmentData>? CachedSegments { get; set; }
     public bool? IsBlockedFallback { get; set; }
     public bool? IsLocked { get; set; }
-    public double? TargetLengthMicrometers { get; set; }
-    public bool? IsTargetLengthEnabled { get; set; }
-    public double? LengthToleranceMicrometers { get; set; }
 
     /// <summary>Routing style name (WaveguideType); null = Auto (issue #574).</summary>
     public string? RoutingStyle { get; set; }

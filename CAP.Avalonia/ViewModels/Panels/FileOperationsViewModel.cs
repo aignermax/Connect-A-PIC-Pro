@@ -351,9 +351,6 @@ public partial class FileOperationsViewModel : ObservableObject
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
                         IsLocked = c.Connection.IsLocked ? true : null,
-                        TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
-                        IsTargetLengthEnabled = c.Connection.IsTargetLengthEnabled ? true : null,
-                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null,
                         RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
                         WidthMicrometers = c.Connection.WidthMicrometers,
                         BendRadiusMicrometers = c.Connection.BendRadiusMicrometers,
@@ -1261,17 +1258,6 @@ public partial class FileOperationsViewModel : ObservableObject
         if (connVm != null && connData.IsLocked == true)
         {
             connVm.Connection.IsLocked = true;
-        }
-
-        // Restore target length configuration
-        if (connVm != null)
-        {
-            if (connData.TargetLengthMicrometers.HasValue)
-                connVm.Connection.TargetLengthMicrometers = connData.TargetLengthMicrometers.Value;
-            if (connData.IsTargetLengthEnabled == true)
-                connVm.Connection.IsTargetLengthEnabled = true;
-            if (connData.LengthToleranceMicrometers.HasValue)
-                connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers.Value;
         }
 
         // Restore routing style / interconnect settings / freeze state (issue #574)

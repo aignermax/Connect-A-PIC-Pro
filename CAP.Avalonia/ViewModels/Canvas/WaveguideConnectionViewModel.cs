@@ -16,10 +16,6 @@ public partial class WaveguideConnectionViewModel : ObservableObject
     public double PathLength => Connection.PathLengthMicrometers;
     public double LossDb => Connection.TotalLossDb;
     public bool IsBlockedFallback => Connection.IsBlockedFallback;
-    public bool IsTargetLengthEnabled => Connection.IsTargetLengthEnabled;
-    public double? TargetLengthMicrometers => Connection.TargetLengthMicrometers;
-    public bool? IsLengthMatched => Connection.IsLengthMatched;
-    public double? LengthDifference => Connection.LengthDifference;
 
     public WaveguideConnectionViewModel(WaveguideConnection connection)
     {
@@ -35,9 +31,5 @@ public partial class WaveguideConnectionViewModel : ObservableObject
         OnPropertyChanged(nameof(PathLength));
         OnPropertyChanged(nameof(LossDb));
         OnPropertyChanged(nameof(IsBlockedFallback));
-        OnPropertyChanged(nameof(IsTargetLengthEnabled));
-        OnPropertyChanged(nameof(TargetLengthMicrometers));
-        OnPropertyChanged(nameof(IsLengthMatched));
-        OnPropertyChanged(nameof(LengthDifference));
     }
 }
