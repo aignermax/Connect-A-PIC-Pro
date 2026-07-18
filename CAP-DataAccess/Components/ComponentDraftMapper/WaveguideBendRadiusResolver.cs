@@ -12,11 +12,18 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
     /// Mirrors the <see cref="MetalRoutingSpecFactory"/> / <see cref="MetalTraceStyleResolver"/>
     /// pattern of turning an <see cref="ActiveProcessSelection"/> plus the loaded PDK drafts into
     /// a routing parameter. When no process is resolvable (playground / no selection / no optical
-    /// minimum declared) it falls back to <see cref="BendRadiusEditor.MinRadiusMicrometers"/>,
-    /// preserving the previous absolute-minimum behaviour.
+    /// minimum declared) it falls back to <see cref="FallbackMinimumMicrometers"/>.
     /// </summary>
     public static class WaveguideBendRadiusResolver
     {
+        /// <summary>
+        /// Conservative universal minimum bend radius (µm) used when no process declares one
+        /// (playground, no selection, or PDKs without optical minima). Real optical waveguides
+        /// cannot bend arbitrarily tightly — 5 µm is a typical tight SOI radius, so even
+        /// process-less editing keeps physically plausible curves instead of sharp corners.
+        /// </summary>
+        public const double FallbackMinimumMicrometers = 5.0;
+
         /// <summary>
         /// Resolves the minimum waveguide bend radius from the active process selection and the
         /// loaded PDK drafts. Null selection/drafts or playground mode yields the fallback.
@@ -36,7 +43,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             IReadOnlyCollection<string>? effectiveMemberPdkNames = null)
         {
             if (active == null || active.IsPlayground || loadedPdks == null)
-                return BendRadiusEditor.MinRadiusMicrometers;
+                return FallbackMinimumMicrometers;
 
             var memberNames = effectiveMemberPdkNames ?? (IEnumerable<string>)active.MemberPdkNames;
             var definitions = memberNames
@@ -51,14 +58,14 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
         /// <summary>
         /// Resolves the minimum waveguide bend radius from process definitions directly: the
         /// smallest positive <see cref="ProcessXsection.MinRadiusUm"/> among their optical
-        /// cross-sections. Returns <see cref="BendRadiusEditor.MinRadiusMicrometers"/> when none
+        /// cross-sections. Returns <see cref="FallbackMinimumMicrometers"/> when none
         /// declares a positive optical minimum.
         /// </summary>
         /// <param name="processes">Process definitions to inspect; null entries are ignored.</param>
         public static double Resolve(IEnumerable<ProcessDefinition?>? processes)
         {
             if (processes == null)
-                return BendRadiusEditor.MinRadiusMicrometers;
+                return FallbackMinimumMicrometers;
 
             double? smallest = null;
             foreach (var process in processes)
@@ -76,7 +83,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 }
             }
 
-            return smallest ?? BendRadiusEditor.MinRadiusMicrometers;
+            return smallest ?? FallbackMinimumMicrometers;
         }
     }
 }

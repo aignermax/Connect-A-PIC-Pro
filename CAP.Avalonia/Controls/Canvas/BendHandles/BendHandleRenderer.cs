@@ -77,7 +77,17 @@ public sealed class BendHandleRenderer : ICanvasRenderer
         var formatted = new FormattedText(text, CultureInfo.CurrentCulture, FlowDirection.LeftToRight,
             LabelTypeface, LabelFontPx / zoom, LabelBrush);
         double offset = (HandleRadiusPx + LabelOffsetPx) / zoom;
-        var origin = new Point(hx + offset * corner.Bisector.X, hy + offset * corner.Bisector.Y);
-        context.DrawText(formatted, origin);
+        double originX = hx + offset * corner.Bisector.X;
+        double originY = hy + offset * corner.Bisector.Y;
+
+        // DrawText renders from the text's TOP-LEFT corner, so for a bisector pointing left/up
+        // the box would grow back over the handle circle and hide the value. Anchor the side of
+        // the text box that faces the handle instead, so it always grows away from it.
+        if (corner.Bisector.X < 0)
+            originX -= formatted.Width;
+        if (corner.Bisector.Y < 0)
+            originY -= formatted.Height;
+
+        context.DrawText(formatted, new Point(originX, originY));
     }
 }

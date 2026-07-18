@@ -44,14 +44,14 @@ public class WaveguideBendRadiusResolverTests
         };
 
         WaveguideBendRadiusResolver.Resolve(new[] { definition })
-            .ShouldBe(BendRadiusEditor.MinRadiusMicrometers);
+            .ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
     }
 
     [Fact]
     public void Resolve_NullProcesses_FallsBackToAbsoluteFloor()
     {
         WaveguideBendRadiusResolver.Resolve((IEnumerable<ProcessDefinition?>?)null)
-            .ShouldBe(BendRadiusEditor.MinRadiusMicrometers);
+            .ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
     }
 
     [Fact]
@@ -91,14 +91,14 @@ public class WaveguideBendRadiusResolverTests
         };
 
         WaveguideBendRadiusResolver.Resolve(ActiveProcessSelection.Playground(), new List<PdkDraft> { pdk })
-            .ShouldBe(BendRadiusEditor.MinRadiusMicrometers);
+            .ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
     }
 
     [Fact]
     public void Resolve_NullSelectionOrDrafts_FallsBackToAbsoluteFloor()
     {
         WaveguideBendRadiusResolver.Resolve(null, new List<PdkDraft>())
-            .ShouldBe(BendRadiusEditor.MinRadiusMicrometers);
+            .ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
     }
 
     [Fact]
