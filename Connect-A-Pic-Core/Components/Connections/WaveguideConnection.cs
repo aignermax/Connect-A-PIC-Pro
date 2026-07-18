@@ -182,8 +182,10 @@ namespace CAP_Core.Components.Connections
                 BendRadiusOverrides.Clear();
             }
 
-            // Update router settings
-            router.MinBendRadiusMicrometers = effectiveBendRadius;
+            // Update router settings. The router owns the process floor: it first attempts
+            // max(connection radius, process minimum) and degrades to the connection radius
+            // with RoutedPath.ViolatesProcessMinBendRadius set when the floor finds no clean path.
+            router.MinBendRadiusMicrometers = BendRadiusMicrometers;
 
             // Route the connection using two-phase A* (Phase 1 quick, Phase 2 extended)
             RoutedPath = router.Route(StartPin, EndPin, cancellationToken);

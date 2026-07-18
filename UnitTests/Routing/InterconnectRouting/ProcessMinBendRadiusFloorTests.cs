@@ -16,7 +16,9 @@ namespace UnitTests.Routing.InterconnectRouting;
 /// (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>, e.g. 30 µm for the
 /// Cornerstone SiN process) floors the effective bend radius everywhere: the AUTO (A*)
 /// route, the Manhattan fallback, and the styled Bend/S geometry. The per-connection
-/// radius and the process minimum combine via max — the larger one governs.
+/// radius and the process minimum combine via max — the larger one governs. When the
+/// floor cannot be realized geometrically, the router degrades to the connection radius
+/// and flags the route (see <c>ProcessMinRadiusDegradationTests</c>).
 /// </summary>
 public class ProcessMinBendRadiusFloorTests
 {
@@ -30,10 +32,11 @@ public class ProcessMinBendRadiusFloorTests
 
         connection.RecalculateTransmission(router);
 
-        router.MinBendRadiusMicrometers.ShouldBe(CornerstoneSinMinRadius);
+        // With enough room the router must realize the floor — no degradation flag.
         var bends = connection.GetPathSegments().OfType<BendSegment>().ToList();
         bends.ShouldNotBeEmpty();
         bends.ShouldAllBe(b => b.RadiusMicrometers >= CornerstoneSinMinRadius - 1e-6);
+        connection.RoutedPath!.ViolatesProcessMinBendRadius.ShouldBeFalse();
     }
 
     [Fact]

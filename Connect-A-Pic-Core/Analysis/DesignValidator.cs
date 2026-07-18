@@ -87,6 +87,18 @@ public class DesignValidator
                 midY,
                 $"Blocked path: {startName} to {endName}"));
         }
+
+        if (connection.RoutedPath?.ViolatesProcessMinBendRadius == true)
+        {
+            var startName = FormatPinName(connection.StartPin);
+            var endName = FormatPinName(connection.EndPin);
+            issues.Add(new DesignIssue(
+                DesignIssueType.BendRadiusBelowProcessMinimum,
+                connection,
+                midX,
+                midY,
+                $"Bend radius below process minimum: {startName} to {endName}"));
+        }
     }
 
     /// <summary>
