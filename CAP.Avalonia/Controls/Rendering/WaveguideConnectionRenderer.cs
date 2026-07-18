@@ -193,6 +193,19 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
             new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight, new Typeface("Arial"), 10, labelBrush),
             new Point(midX, midY - 15));
+
+        // Badge for a manually styled connection (Type != Auto): shows the Nazca style name
+        // above the label so it's obvious at a glance that the autorouter no longer owns this
+        // route. Style names are Nazca terms and stay untranslated, like the picker entries.
+        if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto)
+        {
+            context.DrawText(
+                new FormattedText(conn.Connection.Type.ToString(),
+                    System.Globalization.CultureInfo.CurrentCulture,
+                    FlowDirection.LeftToRight,
+                    new Typeface("Arial", FontStyle.Normal, FontWeight.Bold), 9, Brushes.Orange),
+                new Point(midX, midY - 28));
+        }
     }
 
     private static void DrawPowerHoverLabel(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
