@@ -121,6 +121,45 @@ public class BendRadiusEditorTests
     }
 
     [Fact]
+    public void TryApplyOverride_BelowProcessMinimum_FailsWithError()
+    {
+        var conn = CreateConnectionWithBend(radius: 10);
+
+        var ok = BendRadiusEditor.TryApplyOverride(conn, 0, 3, out var error, minRadiusMicrometers: 5);
+
+        ok.ShouldBeFalse();
+        error.ShouldNotBeNull();
+        error!.ShouldContain("5");
+        conn.IsRouteFrozen.ShouldBeFalse();
+        conn.BendRadiusOverrides.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void TryApplyOverride_AtProcessMinimum_Succeeds()
+    {
+        var conn = CreateConnectionWithBend(radius: 10);
+
+        BendRadiusEditor.TryApplyOverride(conn, 0, 5, out var error, minRadiusMicrometers: 5)
+            .ShouldBeTrue(error);
+        conn.BendRadiusOverrides.ShouldContainKeyAndValue(0, 5);
+    }
+
+    [Fact]
+    public void TryApplyOverride_DefaultMinimum_PreservesAbsoluteFloor()
+    {
+        var conn = CreateConnectionWithBend(radius: 10);
+
+        // No explicit minimum → default absolute floor of 0.1 µm still applies.
+        BendRadiusEditor.TryApplyOverride(conn, 0, 0.05, out var error).ShouldBeFalse();
+        error.ShouldNotBeNull();
+
+        // A radius above the absolute floor but below a typical process minimum still succeeds
+        // when no process minimum is supplied (preserves prior behaviour / existing tests).
+        BendRadiusEditor.TryApplyOverride(conn, 0, 1, out var ok).ShouldBeTrue();
+        ok.ShouldBeNull();
+    }
+
+    [Fact]
     public void CountBends_CountsOnlyBendSegments()
     {
         var conn = CreateConnectionWithBend();

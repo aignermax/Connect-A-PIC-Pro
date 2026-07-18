@@ -162,6 +162,10 @@ public static class ConnectionStyleRouteBuilder
             return null;
 
         double tanHalfSweep = Math.Tan(Math.Abs(sweep) * DegreesToRadians / 2.0);
+        // NOTE: for very close pins this generous radius can theoretically fall below the active
+        // process' minimum bend radius (WaveguideBendRadiusResolver). Styled routes are geometric
+        // previews and are deliberately NOT clamped here — only the manual bend-handle edit path
+        // (BendRadiusEditor.TryApplyOverride) enforces the process minimum.
         double radius = Math.Min(t, s) * SBendGeometry.GenerousRadiusFactor / tanHalfSweep;
         if (radius <= Epsilon)
             return null;

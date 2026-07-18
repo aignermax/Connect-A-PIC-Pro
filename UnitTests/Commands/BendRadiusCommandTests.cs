@@ -34,6 +34,41 @@ public class BendRadiusCommandTests
         applyCount.ShouldBe(2); // afterApply runs on both Execute and Undo
     }
 
+    [Fact]
+    public void Execute_BelowProcessMinimum_DegradesToNoOp()
+    {
+        var conn = CreateConnectionWithBend(radius: 10);
+        var vm = new WaveguideConnectionViewModel(conn);
+        int applyCount = 0;
+
+        // A radius below the process minimum must never be committed — even if a stale command
+        // (recorded before the process changed) replays it, the geometry stays untouched.
+        var command = new BendRadiusCommand(vm, bendIndex: 0, beforeRadius: 10, afterRadius: 3,
+                                            afterApply: () => applyCount++, minRadiusMicrometers: 5);
+
+        command.Execute();
+
+        BendRadius(conn).ShouldBe(10, Tolerance);
+        conn.BendRadiusOverrides.ShouldBeEmpty();
+        applyCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public void ExecuteThenUndo_WithProcessMinimum_AppliesAndRestores()
+    {
+        var conn = CreateConnectionWithBend(radius: 10);
+        var vm = new WaveguideConnectionViewModel(conn);
+
+        var command = new BendRadiusCommand(vm, bendIndex: 0, beforeRadius: 10, afterRadius: 20,
+                                            minRadiusMicrometers: 5);
+
+        command.Execute();
+        BendRadius(conn).ShouldBe(20, Tolerance);
+
+        command.Undo();
+        BendRadius(conn).ShouldBe(10, Tolerance);
+    }
+
     private static double BendRadius(WaveguideConnection conn) =>
         ((BendSegment)conn.RoutedPath!.Segments[1]).RadiusMicrometers;
 

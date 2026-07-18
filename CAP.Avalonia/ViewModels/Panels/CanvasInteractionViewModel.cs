@@ -139,6 +139,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// </summary>
     public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
 
+    /// <summary>
+    /// Callback returning the minimum allowed waveguide bend radius (µm) of the design's active
+    /// fabrication process, consulted by the in-canvas bend-handle drag so an edit cannot shrink
+    /// a bend below what the process permits. Wired by <c>MainViewModel</c> to
+    /// <c>WaveguideBendRadiusResolver.Resolve</c>; when unwired (or the process is unresolvable)
+    /// the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
+    /// </summary>
+    public Func<double>? GetMinBendRadiusMicrometers { get; set; }
+
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
