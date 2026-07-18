@@ -398,6 +398,7 @@ public class WaveguideConnectionManager
 
         // Route only the invalid/new connections
         int failedCount = 0;
+        var routedSoFar = new List<WaveguideConnection>(validConnections);
         foreach (var connection in invalidConnections)
         {
             if (cancellationToken.IsCancellationRequested)
@@ -415,9 +416,13 @@ public class WaveguideConnectionManager
                     connection.RoutedPath.Segments,
                     WaveguideWidthMicrometers);
 
-                // NOTE: Blocked fallbacks are NOT counted as failures in incremental routing.
-                // They have valid geometry and are registered as obstacles, but we'll try
-                // to improve them via full re-route ordering strategies later.
+                // A route that geometrically crosses a sibling counts as a failure so the
+                // full re-route with ordering strategies gets a chance to untangle it.
+                // Blocked fallbacks are otherwise NOT counted as failures here: they have
+                // valid geometry and are registered as obstacles.
+                if (CrossesAnyRoutedSibling(connection, routedSoFar))
+                    failedCount++;
+                routedSoFar.Add(connection);
             }
             else
             {
@@ -484,6 +489,7 @@ public class WaveguideConnectionManager
         router.PathfindingGrid!.ClearAllWaveguideObstacles();
 
         int failedCount = 0;
+        var routedSoFar = new List<WaveguideConnection>();
 
         // Route each connection sequentially
         foreach (var connection in orderedConnections)
@@ -506,11 +512,15 @@ public class WaveguideConnectionManager
                     connection.RoutedPath.Segments,
                     WaveguideWidthMicrometers);
 
-                // Count blocked fallbacks as routing failures for ordering optimization
-                if (connection.IsBlockedFallback)
+                // Count blocked fallbacks and routes that geometrically cross a sibling
+                // as routing failures for ordering optimization. Grid obstacles cannot
+                // represent sub-cell pin pitches (flat PDK components), so the geometric
+                // check decides whether an ordering counts as clean.
+                if (connection.IsBlockedFallback || CrossesAnyRoutedSibling(connection, routedSoFar))
                 {
                     failedCount++;
                 }
+                routedSoFar.Add(connection);
             }
             else
             {
@@ -519,6 +529,18 @@ public class WaveguideConnectionManager
         }
 
         return (failedCount == 0, failedCount);
+    }
+
+    /// <summary>
+    /// True when the connection's routed geometry properly crosses any already-routed
+    /// sibling in this pass. Touching endpoints (shared fan-out regions) do not count.
+    /// </summary>
+    private static bool CrossesAnyRoutedSibling(
+        WaveguideConnection connection, List<WaveguideConnection> routedSoFar)
+    {
+        return routedSoFar.Any(other =>
+            other.RoutedPath != null &&
+            PathIntersectionDetector.Crosses(connection.RoutedPath!, other.RoutedPath));
     }
 
     /// <summary>
