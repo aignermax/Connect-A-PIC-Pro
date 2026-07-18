@@ -23,7 +23,13 @@ public enum InteractionMode
     PlaceGroupTemplate,
     Connect,
     Delete,
-    Probe
+    Probe,
+
+    /// <summary>
+    /// Eyedropper-style picker (#754): the next click on a coupler designates it as
+    /// THE analysis output for the Eye/BER and Transient tabs.
+    /// </summary>
+    PickAnalysisOutput
 }
 
 /// <summary>
@@ -232,6 +238,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
             InteractionMode.Connect => "Connect mode: Move near a pin to start connection",
             InteractionMode.Delete => "Delete mode: Click on component or connection to delete",
             InteractionMode.Probe => "Probe mode: Click a waveguide or coupler to inspect its mode slice",
+            InteractionMode.PickAnalysisOutput =>
+                Services.Localization.LocalizationService.Instance.Translate("Analysis.Output.PickPrompt"),
             _ => "Ready"
         };
 
@@ -288,7 +296,36 @@ public partial class CanvasInteractionViewModel : ObservableObject
             case InteractionMode.Probe:
                 ProbeAt(canvasX, canvasY);
                 break;
+            case InteractionMode.PickAnalysisOutput:
+                PickAnalysisOutputAt(canvasX, canvasY);
+                break;
         }
+    }
+
+    /// <summary>
+    /// Designates the coupler at the given canvas position as THE analysis output
+    /// (#754). A coupler whose laser is still on is switched off first (explicit user
+    /// intent: the output listens). Clicking anything else keeps the picker active
+    /// with a status hint; a successful pick returns to Select mode.
+    /// </summary>
+    private void PickAnalysisOutputAt(double x, double y)
+    {
+        var loc = Services.Localization.LocalizationService.Instance;
+        var component = ComponentAt(x, y);
+        if (component?.IsLightSource != true)
+        {
+            UpdateStatus?.Invoke(loc.Translate("Analysis.Output.PickNotACoupler"));
+            return;
+        }
+
+        bool laserWasOn = component.LaserConfig!.IsEnabled;
+        if (laserWasOn)
+            _commandManager.ExecuteCommand(new ToggleLaserCommand(component));
+
+        _canvas.AnalysisOutput.Designate(component.Component.Id);
+        var messageKey = laserWasOn ? "Analysis.Output.DesignatedLaserOff" : "Analysis.Output.Designated";
+        UpdateStatus?.Invoke(string.Format(loc.Translate(messageKey), component.Name));
+        CurrentMode = InteractionMode.Select;
     }
 
     /// <summary>
@@ -749,6 +786,19 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private void SetProbeMode()
     {
         CurrentMode = InteractionMode.Probe;
+        SelectedTemplate = null;
+        SelectedGroupTemplate = null;
+        _connectionStartPin = null;
+    }
+
+    /// <summary>
+    /// Activates the analysis-output picker (#754): candidate couplers light up on the
+    /// canvas and the next coupler click designates the analysis output.
+    /// </summary>
+    [RelayCommand]
+    private void SetPickAnalysisOutputMode()
+    {
+        CurrentMode = InteractionMode.PickAnalysisOutput;
         SelectedTemplate = null;
         SelectedGroupTemplate = null;
         _connectionStartPin = null;

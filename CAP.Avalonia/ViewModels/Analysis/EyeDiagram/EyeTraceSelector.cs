@@ -1,12 +1,14 @@
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 
 /// <summary>
-/// Picks the trace the eye/BER analysis should evaluate (#690). A coupler with
-/// its laser switched off is the design's output, so its trace is preferred.
-/// When every coupler is still emitting (legacy design) the strongest trace is
-/// used as a fallback, with a warning that the choice is arbitrary.
+/// Picks the trace the eye/BER analysis should evaluate (#690, #754). A user-designated
+/// output coupler always wins; otherwise a coupler with its laser switched off is the
+/// design's output. When several off couplers compete the strongest trace is used with
+/// an explicit warning to pick one; when every coupler is still emitting (legacy design)
+/// the strongest trace is used as a fallback, warning that the choice is arbitrary.
 /// </summary>
 internal static class EyeTraceSelector
 {
@@ -17,6 +19,13 @@ internal static class EyeTraceSelector
     /// <summary>Error shown when the designated output coupler(s) receive no light.</summary>
     public const string NoSignalAtOutputError =
         "No light arrives at the coupler(s) with the laser switched off — check the path from your input coupler.";
+
+    /// <summary>
+    /// Warning shown when several off couplers compete and none is designated (#754):
+    /// the strongest trace is evaluated, but the user should pick the output explicitly.
+    /// </summary>
+    public static string MultipleOutputsWarning =>
+        LocalizationService.Instance.Translate("Analysis.Output.MultipleCandidatesWarning");
 
     /// <summary>
     /// Outcome of the selection: either a <see cref="Trace"/> (possibly with a
@@ -32,20 +41,45 @@ internal static class EyeTraceSelector
     /// Flow ids of the light pins on couplers whose laser is off (true outputs).
     /// Empty when every laser is on.
     /// </param>
-    public static Selection Select(TimeDomainResult result, IReadOnlyCollection<Guid> outputCouplerPinIds)
+    /// <param name="designatedPinIds">
+    /// Flow ids of the light pins on the user-designated output coupler (#754), or
+    /// null when no coupler is designated. When set, only these pins are evaluated.
+    /// </param>
+    /// <param name="hasMultipleCandidates">
+    /// True when several off couplers compete without a designation, so the fallback
+    /// choice gets an explicit warning instead of guessing silently (#754).
+    /// </param>
+    public static Selection Select(
+        TimeDomainResult result,
+        IReadOnlyCollection<Guid> outputCouplerPinIds,
+        IReadOnlyCollection<Guid>? designatedPinIds = null,
+        bool hasMultipleCandidates = false)
     {
+        if (designatedPinIds != null)
+        {
+            var designated = TracesFor(result, designatedPinIds);
+            return designated.Count == 0
+                ? new Selection(null, null, NoSignalAtOutputError)
+                : new Selection(SelectStrongest(designated), null, null);
+        }
+
         if (outputCouplerPinIds.Count == 0)
             return new Selection(SelectStrongest(result.PinTraces.Values), AllLasersOnWarning, null);
 
-        var candidates = result.PinTraces
-            .Where(kv => outputCouplerPinIds.Contains(kv.Key))
+        var candidates = TracesFor(result, outputCouplerPinIds);
+        if (candidates.Count == 0)
+            return new Selection(null, null, NoSignalAtOutputError);
+
+        var warning = hasMultipleCandidates ? MultipleOutputsWarning : null;
+        return new Selection(SelectStrongest(candidates), warning, null);
+    }
+
+    /// <summary>Traces of the result whose pin id is in the given set.</summary>
+    private static List<double[]> TracesFor(TimeDomainResult result, IReadOnlyCollection<Guid> pinIds) =>
+        result.PinTraces
+            .Where(kv => pinIds.Contains(kv.Key))
             .Select(kv => kv.Value)
             .ToList();
-
-        return candidates.Count == 0
-            ? new Selection(null, null, NoSignalAtOutputError)
-            : new Selection(SelectStrongest(candidates), null, null);
-    }
 
     /// <summary>Picks the highest-peak trace. The caller guarantees at least one exists.</summary>
     private static double[] SelectStrongest(IEnumerable<double[]> traces) =>

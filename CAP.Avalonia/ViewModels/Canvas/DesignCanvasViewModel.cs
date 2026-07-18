@@ -35,6 +35,14 @@ public partial class DesignCanvasViewModel : ObservableObject
 
     // ── UI services (pre-existing) ────────────────────────────────────────
     public SelectionManager Selection { get; } = new();
+
+    /// <summary>
+    /// Design-wide designation of THE output coupler evaluated by the Eye/BER and
+    /// Transient analyses (issue #754). Single source of truth for both tabs;
+    /// persisted with the design file.
+    /// </summary>
+    public AnalysisOutputDesignation AnalysisOutput { get; } = new();
+
     public ComponentClipboard Clipboard { get; } = new();
     public PowerFlowVisualizer PowerFlowVisualizer { get; } = new();
     public AlignmentGuideViewModel AlignmentGuide { get; } = new();
