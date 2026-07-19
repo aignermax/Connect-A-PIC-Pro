@@ -298,28 +298,45 @@ public partial class WaveguideRouter
     public bool IsPathBlocked(IEnumerable<PathSegment> segments)
     {
         if (PathfindingGrid == null) return false;
+        return IsPathBlocked(segments, PathfindingGrid.IsBlocked);
+    }
 
+    /// <summary>
+    /// Checks if any segment in a path passes through cells blocked by COMPONENTS
+    /// (including frozen group paths), ignoring registered waveguide obstacles.
+    /// Use this to judge component collisions of an existing route regardless of
+    /// which sibling routes are currently in the grid.
+    /// </summary>
+    public bool IsPathBlockedByComponents(IEnumerable<PathSegment> segments)
+    {
+        if (PathfindingGrid == null) return false;
+        return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponent);
+    }
+
+    /// <summary>Checks all segments against the given cell-blocked predicate.</summary>
+    private bool IsPathBlocked(IEnumerable<PathSegment> segments, Func<int, int, bool> isCellBlocked)
+    {
         foreach (var segment in segments)
         {
             if (segment is StraightSegment)
             {
                 if (IsLineBlocked(segment.StartPoint.X, segment.StartPoint.Y,
-                                  segment.EndPoint.X, segment.EndPoint.Y))
+                                  segment.EndPoint.X, segment.EndPoint.Y, isCellBlocked))
                     return true;
             }
             else if (segment is BendSegment bend)
             {
-                if (IsArcBlocked(bend)) return true;
+                if (IsArcBlocked(bend, isCellBlocked)) return true;
             }
         }
         return false;
     }
 
-
     /// <summary>
     /// Checks if a straight line passes through any blocked cells.
     /// </summary>
-    private bool IsLineBlocked(double x1, double y1, double x2, double y2)
+    private bool IsLineBlocked(double x1, double y1, double x2, double y2,
+                               Func<int, int, bool> isCellBlocked)
     {
         if (PathfindingGrid == null) return false;
 
@@ -339,36 +356,26 @@ public partial class WaveguideRouter
             double px = x1 + dx * t;
             double py = y1 + dy * t;
             var (gx, gy) = PathfindingGrid.PhysicalToGrid(px, py);
-            if (PathfindingGrid.IsBlocked(gx, gy)) return true;
+            if (isCellBlocked(gx, gy)) return true;
         }
         return false;
     }
 
     /// <summary>
     /// Checks if an arc segment passes through blocked cells.
+    /// The arc endpoints themselves are skipped (they legitimately touch pin corridors).
     /// </summary>
-    private bool IsArcBlocked(BendSegment bend)
+    private bool IsArcBlocked(BendSegment bend, Func<int, int, bool> isCellBlocked)
     {
         if (PathfindingGrid == null) return false;
 
-        double startRad = bend.StartAngleDegrees * Math.PI / 180;
-        double sweepRad = bend.SweepAngleDegrees * Math.PI / 180;
-        double arcLength = Math.Abs(sweepRad) * bend.RadiusMicrometers;
         double stepLength = PathfindingGrid.CellSizeMicrometers * 0.5;
-        int numSamples = Math.Max(10, (int)Math.Ceiling(arcLength / stepLength));
+        var samples = ArcSampling.SamplePoints(bend, stepLength).ToList();
 
-        double sign = Math.Sign(bend.SweepAngleDegrees);
-        if (sign == 0) sign = 1;
-
-        for (int i = 1; i < numSamples; i++)
+        for (int i = 1; i < samples.Count - 1; i++)
         {
-            double t = (double)i / numSamples;
-            double angle = startRad + sweepRad * t;
-            double px = bend.Center.X + bend.RadiusMicrometers * Math.Cos(angle - Math.PI / 2 * sign);
-            double py = bend.Center.Y + bend.RadiusMicrometers * Math.Sin(angle - Math.PI / 2 * sign);
-
-            var (gx, gy) = PathfindingGrid.PhysicalToGrid(px, py);
-            if (PathfindingGrid.IsBlocked(gx, gy)) return true;
+            var (gx, gy) = PathfindingGrid.PhysicalToGrid(samples[i].X, samples[i].Y);
+            if (isCellBlocked(gx, gy)) return true;
         }
         return false;
     }

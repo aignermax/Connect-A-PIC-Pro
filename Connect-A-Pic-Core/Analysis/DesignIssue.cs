@@ -42,7 +42,14 @@ public enum DesignIssueType
     /// process' minimum bend radius (the router's controlled degradation). The geometry
     /// is clean, but fabrication rules are violated — free up space or reroute manually.
     /// </summary>
-    BendRadiusBelowProcessMinimum
+    BendRadiusBelowProcessMinimum,
+
+    /// <summary>
+    /// A styled (forced-shape) route passes through a component. Styled routes ignore
+    /// obstacles by design and are never auto-rerouted, so the collision must be resolved
+    /// manually — move the component or pick a different routing style.
+    /// </summary>
+    StyledRouteThroughComponent
 }
 
 /// <summary>

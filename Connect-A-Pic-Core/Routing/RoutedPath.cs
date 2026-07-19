@@ -30,6 +30,14 @@ public class RoutedPath
     public bool ViolatesProcessMinBendRadius { get; set; } = false;
 
     /// <summary>
+    /// True when a STYLED (forced-shape) route passes through a component obstacle.
+    /// Styled routes deliberately ignore obstacles and are never auto-rerouted, so a
+    /// collision cannot be resolved by the router; the design checks surface it as a
+    /// <c>StyledRouteThroughComponent</c> issue instead. Refreshed on every routing pass.
+    /// </summary>
+    public bool PassesThroughComponent { get; set; } = false;
+
+    /// <summary>
     /// Debug information: The raw A* grid path used to generate this path.
     /// Only populated when A* routing is used.
     /// </summary>
