@@ -5,7 +5,7 @@ using CAP_Core.Components.Core;
 
 namespace CAP_Core.Components.Connections;
 
-public class WaveguideConnectionManager
+public partial class WaveguideConnectionManager
 {
     private readonly WaveguideRouter _router;
 
@@ -255,6 +255,15 @@ public class WaveguideConnectionManager
     {
         RouteAllConnections(progressCallback, cancellationToken);
         RunCrossingInsertionPass(cancellationToken);
+
+        // Any crossing that survived routing, the ordering cascade AND crossing insertion
+        // is unavoidable in the current layout: degrade it visibly instead of drawing a
+        // silent crossing.
+        if (UseSequentialRouting && _router.PathfindingGrid != null &&
+            !cancellationToken.IsCancellationRequested)
+        {
+            MarkUnresolvedSiblingCrossings();
+        }
     }
 
     /// <summary>
@@ -376,8 +385,15 @@ public class WaveguideConnectionManager
             if (cancellationToken.IsCancellationRequested)
                 return (false, 0);
 
-            if (IsRouteStillValid(connection, router))
+            if (TryUnfreezeCollidedAutoRoute(connection, router))
             {
+                // A component overlaps the manually edited geometry: treat it like an
+                // endpoint move — the edit is discarded and the connection re-routed.
+                invalidConnections.Add(connection);
+            }
+            else if (IsRouteStillValid(connection, router))
+            {
+                RefreshStyledObstacleCollision(connection, router);
                 validConnections.Add(connection);
             }
             else
@@ -405,6 +421,7 @@ public class WaveguideConnectionManager
                 return (false, failedCount);
 
             connection.RecalculateTransmission(_router, cancellationToken: cancellationToken);
+            RefreshStyledObstacleCollision(connection, router);
             progressCallback?.Invoke();
 
             // Register ALL paths with valid geometry as obstacles, including blocked fallbacks.
@@ -498,6 +515,7 @@ public class WaveguideConnectionManager
                 return (false, failedCount);
 
             connection.RecalculateTransmission(_router, cancellationToken: cancellationToken);
+            RefreshStyledObstacleCollision(connection, router);
             progressCallback?.Invoke();
 
             // Register ANY path with valid geometry as an obstacle, including blocked fallbacks.

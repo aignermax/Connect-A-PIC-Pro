@@ -99,6 +99,18 @@ public class DesignValidator
                 midY,
                 $"Bend radius below process minimum: {startName} to {endName}"));
         }
+
+        if (connection.RoutedPath?.PassesThroughComponent == true)
+        {
+            var startName = FormatPinName(connection.StartPin);
+            var endName = FormatPinName(connection.EndPin);
+            issues.Add(new DesignIssue(
+                DesignIssueType.StyledRouteThroughComponent,
+                connection,
+                midX,
+                midY,
+                $"Styled route passes through a component: {startName} to {endName}"));
+        }
     }
 
     /// <summary>
