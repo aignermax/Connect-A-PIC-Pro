@@ -51,6 +51,20 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
+    /// Entry point for whole-PDK fork saves (PDK offset editor): the fork file
+    /// already contains the complete edited PDK, so the library only needs the
+    /// shadow swap. Logs when the name doesn't match a loaded bundled PDK —
+    /// the fork was saved but the library keeps its current registration.
+    /// </summary>
+    public void RegisterSavedPdkFork(string pdkName, string forkFilePath)
+    {
+        if (!TryShadowBundledPdkWithSavedFork(pdkName, forkFilePath))
+            _errorConsole?.LogError(
+                $"A fork of '{pdkName}' was saved to '{forkFilePath}', but no loaded bundled PDK " +
+                "matches that name — the library was not switched to the fork.");
+    }
+
+    /// <summary>
     /// Swaps the library from the bundled entry to the user's saved fork. Returns false when
     /// <paramref name="pdkName"/> is no loaded bundled PDK (caller registers normally). The
     /// bundled entry is only displaced once the fork actually loads — a failed load leaves the

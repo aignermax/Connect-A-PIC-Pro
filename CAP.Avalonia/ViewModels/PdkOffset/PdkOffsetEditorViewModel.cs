@@ -30,6 +30,14 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     private readonly PdkManagerViewModel _pdkManager;
     private readonly NazcaComponentPreviewService? _previewService;
 
+    /// <summary>
+    /// Store for the fork-on-save path: saving a BUNDLED PDK must never write
+    /// the bundled JSON (runtime invariant) — it writes the user's copy into
+    /// the managed user-pdks root instead, exactly like the component editor's
+    /// fork flow. Null (tests / legacy wiring) makes bundled saves refuse.
+    /// </summary>
+    private readonly CAP_DataAccess.Components.AddCustomComponent.UserPdkStore? _userPdkStore;
+
     /// <summary>gdsfactory preview back-end for gdsfactory-native components (#570); null → no preview.
     /// Typed as the base so it can be mocked in tests; DI injects the
     /// <see cref="GdsFactoryComponentPreviewService"/> instance.</summary>
@@ -234,14 +242,25 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         PdkJsonSaver pdkSaver,
         PdkManagerViewModel pdkManager,
         NazcaComponentPreviewService? previewService = null,
-        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null,
+        CAP_DataAccess.Components.AddCustomComponent.UserPdkStore? userPdkStore = null)
     {
         _pdkLoader = pdkLoader;
         _pdkSaver = pdkSaver;
         _pdkManager = pdkManager;
         _previewService = previewService;
         _gdsFactoryPreviewService = gdsFactoryPreviewService;
+        _userPdkStore = userPdkStore;
     }
+
+    /// <summary>
+    /// Raised after a bundled PDK was saved as a user fork:
+    /// (pdkName, forkFilePath). Wired by <see cref="MainViewModel"/> to
+    /// <c>LeftPanelViewModel.RegisterSavedPdkFork</c>, which swaps the library
+    /// from the bundled entry to the fork (shadow registration) — the same
+    /// mechanism the component editor's fork-on-save uses.
+    /// </summary>
+    public Action<string, string>? BundledPdkForkSaved { get; set; }
 
     /// <summary>Opens a file dialog and loads the selected PDK JSON file.</summary>
     [RelayCommand]
@@ -303,7 +322,14 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
             LocalizationService.Instance.Translate("PdkOffset.Status.OffsetUpdated"), SelectedComponent.ComponentName);
     }
 
-    /// <summary>Saves the current PDK draft back to its source JSON file.</summary>
+    /// <summary>
+    /// Saves the current PDK draft. Custom PDKs write back to their source
+    /// JSON file directly. BUNDLED PDKs are read-only at runtime (repo
+    /// invariant) — their save forks the edited draft into the managed
+    /// user-pdks root and shadow-registers the fork via
+    /// <see cref="BundledPdkForkSaved"/>, mirroring the component editor's
+    /// fork-on-save semantics.
+    /// </summary>
     [RelayCommand]
     private void SavePdk()
     {
@@ -315,6 +341,12 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
 
         try
         {
+            if (FindLoadedBundledPdkFor(_loadedFilePath) is { } bundled)
+            {
+                SaveBundledPdkAsFork(bundled);
+                return;
+            }
+
             _pdkSaver.SaveToFile(_loadedPdk, _loadedFilePath);
             HasUnsavedChanges = false;
             StatusText = string.Format(
@@ -325,6 +357,42 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
             StatusText = string.Format(
                 LocalizationService.Instance.Translate("PdkOffset.Status.SaveFailed"), ex.Message);
         }
+    }
+
+    /// <summary>
+    /// The loaded bundled-PDK library row matching <paramref name="filePath"/>,
+    /// or null when the loaded file is a custom (direct-save) PDK.
+    /// </summary>
+    private PdkInfoViewModel? FindLoadedBundledPdkFor(string filePath)
+    {
+        var normalized = Path.GetFullPath(filePath);
+        return _pdkManager.LoadedPdks.FirstOrDefault(p =>
+            p.IsBundled && p.FilePath != null &&
+            string.Equals(Path.GetFullPath(p.FilePath), normalized, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Fork-on-save for a bundled PDK: writes the edited draft to the user-pdks
+    /// root (backing up any pre-existing fork to .trash), retargets the editor
+    /// at the fork so subsequent saves go there directly, and notifies the
+    /// library so the fork shadows the bundled entry. The bundled JSON is
+    /// never written.
+    /// </summary>
+    private void SaveBundledPdkAsFork(PdkInfoViewModel bundled)
+    {
+        if (_userPdkStore == null)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Status.BundledReadOnly"), bundled.Name);
+            return;
+        }
+
+        var forkPath = _userPdkStore.SaveDraftAsFork(_loadedPdk!, bundled.Name);
+        _loadedFilePath = forkPath;
+        HasUnsavedChanges = false;
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.SavedForkTo"), Path.GetFileName(forkPath));
+        BundledPdkForkSaved?.Invoke(bundled.Name, forkPath);
     }
 
     partial void OnSelectedInstalledPdkChanged(PdkInfoViewModel? value)

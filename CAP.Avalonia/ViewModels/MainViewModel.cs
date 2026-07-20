@@ -323,6 +323,11 @@ public partial class MainViewModel : ObservableObject
         // into already-placed instances; explicit overrides keep winning.
         LeftPanel.TemplateDefinitionSaved = FileOperations.RefreshInstancesFromTemplate;
 
+        // Offset-editor fork-on-save: saving a bundled PDK writes the user's copy into
+        // user-pdks; the library must swap to (shadow with) that fork, same as the
+        // component editor's fork flow.
+        PdkOffsetEditor.BundledPdkForkSaved = LeftPanel.RegisterSavedPdkFork;
+
         // Single-process enforcement (issues #570/#653): every placement surface — manual
         // placement/paste, saved group templates, and the AI assistant — consults the
         // same active process, the same process-agnostic tool PDKs, and the same

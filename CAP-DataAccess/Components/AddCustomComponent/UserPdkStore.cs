@@ -37,6 +37,30 @@ public sealed class UserPdkStore
         return target;
     }
 
+    /// <summary>
+    /// Writes an edited whole-PDK draft as the user's fork of a bundled PDK
+    /// (offset-editor save path). The bundled JSON is never touched; the draft
+    /// is saved to the fork location in the managed root. If a fork already
+    /// exists (e.g. created earlier by the component editor), its previous
+    /// state is backed up to <c>.trash</c> before being replaced, so no user
+    /// edit is silently lost. Returns the fork file path.
+    /// </summary>
+    public string SaveDraftAsFork(PdkDraft draft, string pdkName)
+    {
+        var target = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        if (File.Exists(target))
+        {
+            var trashPath = ResolveTrashDestination(target);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(target, trashPath);
+        }
+
+        _saver.SaveToFile(draft, target);
+        return target;
+    }
+
     public PdkTrashService CreateTrashService() => new(_root, _loader, _saver);
 
     public string ResolvePath(ProcessDefinition process) =>
