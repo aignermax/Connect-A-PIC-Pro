@@ -21,6 +21,30 @@ public partial class WaveguideConnectionManager
     public List<WaveguideConnection> Connections { get; } = new();
 
     /// <summary>
+    /// Guards <see cref="Connections"/> against the routing race (round-5 review [3]):
+    /// UI-thread commands (ungroup, group-edit, undo/redo) mutate the list while a
+    /// fire-and-forget routing pass enumerates it on a Task.Run thread — a plain List
+    /// enumeration then throws "Collection was modified" and the pass dies with an
+    /// unobserved exception. Cancel-and-await before mutating is NOT an option: the
+    /// commands are synchronous (IUndoableCommand.Execute) and the routing semaphore is
+    /// released on a UI-thread continuation, so blocking the UI thread would deadlock.
+    /// Smallest robust fix: every mutation of the list takes this lock, and the routing
+    /// passes enumerate a snapshot taken under it. A pass may then work on a momentarily
+    /// stale set — harmless, because every mutating command ends with
+    /// RecalculateRoutesAsync, which cancels the stale pass and starts a fresh one.
+    /// </summary>
+    private readonly object _connectionsSync = new();
+
+    /// <summary>Copy of <see cref="Connections"/> taken under the mutation lock.</summary>
+    private List<WaveguideConnection> SnapshotConnections()
+    {
+        lock (_connectionsSync)
+        {
+            return Connections.ToList();
+        }
+    }
+
+    /// <summary>
     /// Default propagation loss applied to new connections (dB/cm).
     /// Default: 0.5 dB/cm (high-quality strip waveguide)
     /// </summary>
@@ -64,7 +88,10 @@ public partial class WaveguideConnectionManager
             PropagationLossDbPerCm = DefaultPropagationLossDbPerCm,
             BendLossDbPer90Deg = DefaultBendLossDbPer90Deg
         };
-        Connections.Add(connection);
+        lock (_connectionsSync)
+        {
+            Connections.Add(connection);
+        }
 
         // Recalculate ALL connections sequentially so the new one avoids existing waveguides
         // and existing ones are properly registered in the grid
@@ -92,7 +119,10 @@ public partial class WaveguideConnectionManager
         };
 
         connection.RestoreCachedPath(cachedPath);
-        Connections.Add(connection);
+        lock (_connectionsSync)
+        {
+            Connections.Add(connection);
+        }
 
         // Register cached route as obstacle for future routing
         var router = _router;
@@ -121,7 +151,10 @@ public partial class WaveguideConnectionManager
             PropagationLossDbPerCm = DefaultPropagationLossDbPerCm,
             BendLossDbPer90Deg = DefaultBendLossDbPer90Deg
         };
-        Connections.Add(connection);
+        lock (_connectionsSync)
+        {
+            Connections.Add(connection);
+        }
         return connection;
     }
 
@@ -154,7 +187,7 @@ public partial class WaveguideConnectionManager
         CrossingInsertion?.DissolveForComponent(component, this, _router);
 
         var router = _router;
-        var connectionsToRemove = Connections
+        var connectionsToRemove = SnapshotConnections()
             .Where(c => c.StartPin.ParentComponent == component ||
                         c.EndPin.ParentComponent == component)
             .ToList();
@@ -168,9 +201,12 @@ public partial class WaveguideConnectionManager
             }
         }
 
-        Connections.RemoveAll(c =>
-            c.StartPin.ParentComponent == component ||
-            c.EndPin.ParentComponent == component);
+        lock (_connectionsSync)
+        {
+            Connections.RemoveAll(c =>
+                c.StartPin.ParentComponent == component ||
+                c.EndPin.ParentComponent == component);
+        }
     }
 
     public void RemoveConnection(WaveguideConnection connection)
@@ -195,7 +231,10 @@ public partial class WaveguideConnectionManager
             router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
         }
 
-        Connections.Remove(connection);
+        lock (_connectionsSync)
+        {
+            Connections.Remove(connection);
+        }
 
         // Recalculate remaining connections - they might find better routes now
         if (Connections.Count > 0)
@@ -215,20 +254,29 @@ public partial class WaveguideConnectionManager
         {
             router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
         }
-        Connections.Remove(connection);
+        lock (_connectionsSync)
+        {
+            Connections.Remove(connection);
+        }
     }
 
     public void AddExistingConnection(WaveguideConnection connection)
     {
-        if (!Connections.Contains(connection))
+        lock (_connectionsSync)
         {
-            Connections.Add(connection);
+            if (!Connections.Contains(connection))
+            {
+                Connections.Add(connection);
+            }
         }
     }
 
     public void Clear()
     {
-        Connections.Clear();
+        lock (_connectionsSync)
+        {
+            Connections.Clear();
+        }
     }
 
     /// <summary>
@@ -310,14 +358,15 @@ public partial class WaveguideConnectionManager
 
             // Phase 2: Incremental routing failed for some connections.
             // Fall back to full re-route with ordering strategies.
-            result = TryRouteInOrder(Connections.ToList(), router, progressCallback, cancellationToken);
+            // Snapshots: this runs on the routing thread while UI commands may mutate the list.
+            result = TryRouteInOrder(SnapshotConnections(), router, progressCallback, cancellationToken);
             if (cancellationToken.IsCancellationRequested) return;
             if (result.allValid) return;
 
-            var bestOrder = Connections.ToList();
+            var bestOrder = SnapshotConnections();
             int bestFailedCount = result.failedCount;
 
-            var orderings = GenerateOrderings(Connections.ToList(), MaxRoutingAttempts - 1);
+            var orderings = GenerateOrderings(SnapshotConnections(), MaxRoutingAttempts - 1);
             foreach (var ordering in orderings)
             {
                 if (cancellationToken.IsCancellationRequested) return;
@@ -336,7 +385,7 @@ public partial class WaveguideConnectionManager
                 }
             }
 
-            if (!cancellationToken.IsCancellationRequested && bestOrder != Connections.ToList())
+            if (!cancellationToken.IsCancellationRequested)
             {
                 ReorderConnections(bestOrder);
                 TryRouteInOrder(bestOrder, router, progressCallback, cancellationToken);
@@ -344,8 +393,8 @@ public partial class WaveguideConnectionManager
         }
         else
         {
-            // Simple routing without collision avoidance
-            foreach (var connection in Connections)
+            // Simple routing without collision avoidance. Snapshot: see _connectionsSync.
+            foreach (var connection in SnapshotConnections())
             {
                 if (cancellationToken.IsCancellationRequested) return;
                 connection.RecalculateTransmission(_router, cancellationToken: cancellationToken);
@@ -380,7 +429,9 @@ public partial class WaveguideConnectionManager
         var validConnections = new List<WaveguideConnection>();
         var invalidConnections = new List<WaveguideConnection>();
 
-        foreach (var connection in Connections)
+        // Snapshot: this loop runs on the routing thread while UI commands (ungroup,
+        // undo/redo) may add or remove connections — see _connectionsSync.
+        foreach (var connection in SnapshotConnections())
         {
             if (cancellationToken.IsCancellationRequested)
                 return (false, 0);
@@ -620,12 +671,19 @@ public partial class WaveguideConnectionManager
     }
 
     /// <summary>
-    /// Reorders the internal Connections list to match the given order.
+    /// Reorders the internal Connections list to match the given order. Runs on the
+    /// routing thread; connections added by the UI since the snapshot are re-appended
+    /// so a concurrent add is never silently dropped by the reorder.
     /// </summary>
     private void ReorderConnections(List<WaveguideConnection> newOrder)
     {
-        Connections.Clear();
-        Connections.AddRange(newOrder);
+        lock (_connectionsSync)
+        {
+            var lateAdditions = Connections.Where(c => !newOrder.Contains(c)).ToList();
+            Connections.Clear();
+            Connections.AddRange(newOrder);
+            Connections.AddRange(lateAdditions);
+        }
     }
 
     /// <summary>
@@ -662,8 +720,9 @@ public partial class WaveguideConnectionManager
         }
         else
         {
-            // Simple routing: only recalculate affected connections
-            foreach (var connection in Connections)
+            // Simple routing: only recalculate affected connections.
+            // Snapshot: callers may run this off the UI thread — see _connectionsSync.
+            foreach (var connection in SnapshotConnections())
             {
                 if (connection.StartPin.ParentComponent == component ||
                     connection.EndPin.ParentComponent == component)
@@ -683,7 +742,8 @@ public partial class WaveguideConnectionManager
     public Dictionary<(Guid PinIdInflow, Guid PinIdOutflow), Complex> GetConnectionTransfers()
     {
         var transfers = new Dictionary<(Guid, Guid), Complex>();
-        foreach (var conn in Connections)
+        // Snapshot: simulation reads this while routing/commands may mutate the list.
+        foreach (var conn in SnapshotConnections())
         {
             // Only include connections where both physical pins have linked logical pins
             if (conn.StartPin.LogicalPin == null || conn.EndPin.LogicalPin == null)

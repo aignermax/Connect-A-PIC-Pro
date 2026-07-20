@@ -174,40 +174,9 @@ public class FrozenWaveguidePath : ICloneable
     /// </summary>
     public object Clone()
     {
-        var clonedPath = new RoutedPath
-        {
-            IsBlockedFallback = Path.IsBlockedFallback,
-            IsInvalidGeometry = Path.IsInvalidGeometry
-        };
-
-        // Deep clone all segments
-        foreach (var segment in Path.Segments)
-        {
-            if (segment is BendSegment bend)
-            {
-                clonedPath.Segments.Add(new BendSegment(
-                    bend.Center.X,
-                    bend.Center.Y,
-                    bend.RadiusMicrometers,
-                    bend.StartAngleDegrees,
-                    bend.SweepAngleDegrees
-                ));
-            }
-            else if (segment is StraightSegment straight)
-            {
-                clonedPath.Segments.Add(new StraightSegment(
-                    straight.StartPoint.X,
-                    straight.StartPoint.Y,
-                    straight.EndPoint.X,
-                    straight.EndPoint.Y,
-                    straight.StartAngleDegrees
-                ));
-            }
-        }
-
         var clone = new FrozenWaveguidePath
         {
-            Path = clonedPath,
+            Path = Path.DeepCopy(),
             PathId = Guid.NewGuid(),
             // StartPin and EndPin references must be updated after cloning by the ComponentGroup
         };

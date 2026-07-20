@@ -142,6 +142,50 @@ public class GroupConnectionSettingsRoundtripTests
         restored.RoutedPath!.Segments.ShouldNotBeEmpty();
     }
 
+    [Fact]
+    public void EnterGroupEditMode_TransmissionReflectsStoredLoss_NotTheManagerDefault()
+    {
+        // Round-5 review [5]: AddConnectionWithCachedRoute computes the transmission with
+        // the manager DEFAULT loss before the stored settings are applied; without the
+        // recompute a simulation in edit mode silently uses 0.5 dB/cm instead of 2.5.
+        var (canvas, vm1, vm2, _) = CreateCanvasWithConfiguredConnection();
+        new CreateGroupCommand(canvas, new List<ComponentViewModel> { vm1, vm2 }).Execute();
+
+        canvas.EnterGroupEditMode(GetCreatedGroup(canvas));
+
+        var editConnection = canvas.Connections.ShouldHaveSingleItem().Connection;
+        var lengthCm = editConnection.RoutedPath!.TotalLengthMicrometers / 10_000.0;
+        editConnection.TotalLossDb.ShouldBe(2.5 * lengthCm, 1e-9,
+            "the transmission must be computed from the restored 2.5 dB/cm, not the 0.5 dB/cm default");
+    }
+
+    [Fact]
+    public async Task Ungroup_RestoredGeometryIsIndependent_OfTheGroupsStoredUndoState()
+    {
+        // Round-5 review [4]: RestoreCachedPath used to alias the group's stored
+        // InternalPaths — a later in-place canvas edit (bend handles mutate segments)
+        // would corrupt the geometry the group re-renders after Undo.
+        var (canvas, vm1, vm2, connection) = CreateCanvasWithConfiguredConnection();
+        connection.Type = WaveguideType.Auto;
+        new CreateGroupCommand(canvas, new List<ComponentViewModel> { vm1, vm2 }).Execute();
+        var group = GetCreatedGroup(canvas);
+        var storedPath = group.InternalPaths.ShouldHaveSingleItem().Path;
+        var storedEndBefore = storedPath.Segments[^1].EndPoint;
+
+        new UngroupCommand(canvas, group).Execute();
+        await canvas.RecalculateRoutesAsync();
+
+        var restored = canvas.Connections.ShouldHaveSingleItem().Connection;
+        restored.RoutedPath.ShouldNotBeSameAs(storedPath,
+            "the live connection must not share the RoutedPath object kept for Undo");
+
+        // Simulate an in-place canvas edit of the live geometry.
+        restored.RoutedPath!.Segments[^1].EndPoint = (999, 999);
+
+        storedPath.Segments[^1].EndPoint.ShouldBe(storedEndBefore,
+            "the group's stored undo geometry must stay untouched by live edits");
+    }
+
     /// <summary>
     /// Builds a canvas with two pinned components joined by a connection that has
     /// every user-editable routing setting set to a non-default value, including a

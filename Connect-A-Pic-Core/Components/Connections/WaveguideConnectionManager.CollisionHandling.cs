@@ -57,7 +57,9 @@ public partial class WaveguideConnectionManager
     /// </summary>
     private void MarkUnresolvedSiblingCrossings()
     {
-        var routed = Connections
+        // Snapshot: runs at the end of the routing pass on the routing thread while
+        // UI commands may mutate the list — see _connectionsSync in the main partial.
+        var routed = SnapshotConnections()
             .Where(c => c.RoutedPath != null && c.IsPathValid)
             .ToList();
 

@@ -284,12 +284,22 @@ public class GroupEditService
 
             foreach (var frozenPath in group.InternalPaths)
             {
+                // DeepCopy: the group's stored InternalPaths must stay immutable while
+                // the sub-canvas connection is live — bend-handle edits mutate the
+                // segment objects in place and would otherwise leak into the stored
+                // geometry before the exit re-capture (round-5 review [4]).
                 var connection = _connectionManager.AddConnectionWithCachedRoute(
-                    frozenPath.StartPin, frozenPath.EndPin, frozenPath.Path);
+                    frozenPath.StartPin, frozenPath.EndPin, frozenPath.Path?.DeepCopy()!);
                 // The cached route restores only the geometry; without this the editor
                 // shows a fresh default connection ("Auto") although the curve renders
                 // correctly (field report round 5, finding a).
                 frozenPath.ApplySettingsTo(connection);
+                // AddConnectionWithCachedRoute already computed the transmission — but
+                // with the manager's DEFAULT loss, before the stored settings existed.
+                // Recompute from the same geometry so simulations in edit mode use the
+                // connection's restored PropagationLossDbPerCm (round-5 review [5];
+                // UngroupCommand applies settings before restoring and needs no refresh).
+                connection.UpdateLossFromPath();
                 var connVm = new WaveguideConnectionViewModel(connection);
                 _connections.Add(connVm);
             }

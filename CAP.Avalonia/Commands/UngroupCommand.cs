@@ -84,11 +84,16 @@ public class UngroupCommand : IUndoableCommand
                 // Re-attach the frozen geometry so a frozen route (and its manual
                 // bend edits) survives the re-route triggered below: RecalculateRoutes
                 // only keeps frozen/hand-edited paths whose endpoints still match.
-                // Both steps happen BEFORE the manager add so a concurrently running
-                // routing pass never sees a half-initialized connection.
+                // DeepCopy is essential: the group's InternalPaths stay stored for
+                // Undo, and a shared RoutedPath would let later canvas edits (bend
+                // handles mutate segments in place) corrupt the undone group's
+                // geometry. Both steps happen BEFORE the manager add so the published
+                // connection is never half-initialized; the manager itself guards its
+                // Connections list against the concurrently running routing pass
+                // (mutations locked, routing enumerates a snapshot).
                 if (frozenPath.Path != null && frozenPath.Path.Segments.Count > 0)
                 {
-                    connection.RestoreCachedPath(frozenPath.Path);
+                    connection.RestoreCachedPath(frozenPath.Path.DeepCopy());
                 }
 
                 _canvas.ConnectionManager.AddExistingConnection(connection);

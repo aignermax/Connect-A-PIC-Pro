@@ -156,7 +156,7 @@ public class CreateGroupCommand : IUndoableCommand
         {
             var frozenPath = new FrozenWaveguidePath
             {
-                Path = conn.RoutedPath != null ? ClonePath(conn.RoutedPath) : new RoutedPath(),
+                Path = conn.RoutedPath?.DeepCopy() ?? new RoutedPath(),
                 StartPin = conn.StartPin,
                 EndPin = conn.EndPin
             };
@@ -323,41 +323,4 @@ public class CreateGroupCommand : IUndoableCommand
         _canvas.InvalidateSimulation();
     }
 
-    /// <summary>
-    /// Creates a deep clone of a RoutedPath.
-    /// </summary>
-    private RoutedPath ClonePath(RoutedPath source)
-    {
-        var cloned = new RoutedPath
-        {
-            IsBlockedFallback = source.IsBlockedFallback,
-            IsInvalidGeometry = source.IsInvalidGeometry
-        };
-
-        foreach (var segment in source.Segments)
-        {
-            if (segment is BendSegment bend)
-            {
-                cloned.Segments.Add(new BendSegment(
-                    bend.Center.X,
-                    bend.Center.Y,
-                    bend.RadiusMicrometers,
-                    bend.StartAngleDegrees,
-                    bend.SweepAngleDegrees
-                ));
-            }
-            else if (segment is StraightSegment straight)
-            {
-                cloned.Segments.Add(new StraightSegment(
-                    straight.StartPoint.X,
-                    straight.StartPoint.Y,
-                    straight.EndPoint.X,
-                    straight.EndPoint.Y,
-                    straight.StartAngleDegrees
-                ));
-            }
-        }
-
-        return cloned;
-    }
 }
