@@ -47,8 +47,9 @@ public class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas))
             AppendPlacement(sb, comp, options, ref refIndex, ref activePdk);
         sb.AppendLine();
-        AppendRoutingPdkActivation(sb, canvas, options, ref activePdk);
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(canvas), metal);
+        var routingOwner = SelectRoutingCrossSectionOwner(canvas, options);
+        AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal);
         AppendFooter(sb);
         return sb.ToString();
     }
@@ -70,13 +71,29 @@ public class GdsFactoryExporter
     /// does not exist under a nitride PDK and crashed every export with a connection (#570 field
     /// test). Nazca/generic designs keep the explicit <c>width=WG_WIDTH</c>.
     /// </summary>
-    private static string RoutingWaveguideKwarg(DesignCanvasViewModel canvas)
-    {
-        var crossSection = EnumerateExportableComponents(canvas)
-            .Select(c => c.GdsFactoryRoutingCrossSection)
-            .FirstOrDefault(x => !string.IsNullOrEmpty(x));
-        return string.IsNullOrEmpty(crossSection) ? "width=WG_WIDTH" : $"cross_section='{crossSection}'";
-    }
+    /// <param name="routingOwner">Deterministically chosen cross-section owner, or null.</param>
+    private static string RoutingWaveguideKwarg(Component? routingOwner) =>
+        routingOwner == null
+            ? "width=WG_WIDTH"
+            : $"cross_section='{routingOwner.GdsFactoryRoutingCrossSection}'";
+
+    /// <summary>
+    /// Deterministic owner of the routing cross-section (#762 review, finding [5]): the
+    /// process with the MOST cross-section-bearing exportable components wins (routed
+    /// waveguides belong to the design's dominant process); ties break by ordinal
+    /// activation statement, and within the winning process the ordinal-smallest
+    /// cross-section name is used. Never canvas insertion order — reordering components
+    /// must not silently flip every routed waveguide to another process' geometry.
+    /// </summary>
+    private static Component? SelectRoutingCrossSectionOwner(
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options) =>
+        EnumerateExportableComponents(canvas)
+            .Where(c => !string.IsNullOrEmpty(c.GdsFactoryRoutingCrossSection))
+            .GroupBy(c => GdsFactoryPdkContext.ActivationOf(c, options), StringComparer.Ordinal)
+            .OrderByDescending(g => g.Count())
+            .ThenBy(g => g.Key, StringComparer.Ordinal)
+            .Select(g => g.OrderBy(c => c.GdsFactoryRoutingCrossSection, StringComparer.Ordinal).First())
+            .FirstOrDefault();
 
     /// <summary>
     /// Lists the distinct nazcaFunction names in the design that have no ubcpdk
@@ -109,7 +126,7 @@ public class GdsFactoryExporter
         if (modules.Count > 1)
             conflicts.AddRange(modules);
         else if (modules.Count == 1 &&
-                 EnumerateExportableComponents(canvas).Any(c => UsesUbcPdkCell(c, options)))
+                 EnumerateExportableComponents(canvas).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
             conflicts.Add(modules[0] + " + ubcpdk cells");
         return conflicts;
     }
@@ -201,25 +218,29 @@ public class GdsFactoryExporter
     /// Mixed-process export only: before the routed connections, activates the PDK owning the
     /// routing cross-section (or the generic PDK for the plain <c>width=WG_WIDTH</c> fallback),
     /// so <c>gf.components.straight(cross_section=…)</c> resolves against the right process.
-    /// No-op for single-backend designs.
+    /// The winning process is NAMED in the script so two exports of the same design are
+    /// auditable (#762 review, finding [5]). No-op for single-backend designs.
     /// </summary>
     private static void AppendRoutingPdkActivation(
-        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        StringBuilder sb, Component? routingOwner, GdsFactoryExportOptions options,
         ref string? activePdk)
     {
         if (activePdk == null)
             return;
-        var owner = EnumerateExportableComponents(canvas)
-            .FirstOrDefault(c => !string.IsNullOrEmpty(c.GdsFactoryRoutingCrossSection));
-        var activation = owner != null
-            ? GdsFactoryPdkContext.ActivationOf(owner, options)
+        var activation = routingOwner != null
+            ? GdsFactoryPdkContext.ActivationOf(routingOwner, options)
             : GdsFactoryPdkContext.GenericActivation;
-        if (activation == activePdk)
-            return;
-        sb.AppendLine("# Mixed-process design: routing uses this PDK's cross-section");
-        sb.AppendLine(activation);
+        sb.AppendLine(routingOwner != null
+            ? "# Mixed-process design: routed waveguides use cross-section " +
+              $"'{routingOwner.GdsFactoryRoutingCrossSection}' under {activation} " +
+              "(majority process, deterministic — independent of canvas order)"
+            : "# Mixed-process design: no routing cross-section found — waveguides use the generic width");
+        if (activation != activePdk)
+        {
+            sb.AppendLine(activation);
+            activePdk = activation;
+        }
         sb.AppendLine();
-        activePdk = activation;
     }
 
     private static void AppendStubs(
@@ -230,31 +251,23 @@ public class GdsFactoryExporter
         {
             // A real gdsfactory factory / ubcpdk cell replaces the stub.
             if (UsesGdsFactoryFactory(comp)
-                || UsesUbcPdkCell(comp, options))
+                || GdsFactoryPdkContext.UsesUbcPdkCell(comp, options))
                 continue;
             GdsFactoryStubWriter.AppendStub(sb, comp, generated);
         }
     }
-
-    private static bool UsesUbcPdkCell(Component comp, GdsFactoryExportOptions options) =>
-        GdsFactoryPdkContext.UsesUbcPdkCell(comp, options);
 
     /// <summary>
     /// True when the component exports via a real gdsfactory factory: it has a
     /// <see cref="Component.GdsFactoryFunction"/> that is module-qualified (contains a '.', e.g.
     /// "cspdk.sin300.mmi1x2"), so the header imports+activates its module and the placement can
     /// resolve the cell from the active PDK. A bare (dotless) name has no importable module and
-    /// falls through to a stub rather than emitting an unresolvable call (#570).
+    /// falls through to a stub rather than emitting an unresolvable call (#570). The
+    /// module-qualification rule itself has its single definition in
+    /// <see cref="GdsFactoryPdkContext.ModuleOf"/>.
     /// </summary>
     private static bool UsesGdsFactoryFactory(Component comp) =>
-        GdsFactoryModuleOf(comp.GdsFactoryFunction) != null;
-
-    /// <summary>
-    /// The Python module part of a module-qualified gdsfactory function — single definition
-    /// lives in <see cref="GdsFactoryPdkContext.ModuleOf"/> (#570 review).
-    /// </summary>
-    private static string? GdsFactoryModuleOf(string? gdsFactoryFunction) =>
-        GdsFactoryPdkContext.ModuleOf(gdsFactoryFunction);
+        GdsFactoryPdkContext.ModuleOf(comp.GdsFactoryFunction) != null;
 
     /// <summary>The cell name of a module-qualified gdsfactory function ("mmi1x2" from "cspdk.sin300.mmi1x2").</summary>
     private static string GdsFactoryCellOf(string gdsFactoryFunction) =>
@@ -266,7 +279,7 @@ public class GdsFactoryExporter
     /// </summary>
     private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
         EnumerateExportableComponents(canvas)
-            .Select(c => GdsFactoryModuleOf(c.GdsFactoryFunction))
+            .Select(c => GdsFactoryPdkContext.ModuleOf(c.GdsFactoryFunction))
             .Where(m => m != null)
             .Select(m => m!)
             .Distinct(StringComparer.Ordinal);
@@ -305,7 +318,7 @@ public class GdsFactoryExporter
             // cspdk exposes cells via the PDK registry (cspdk.sin300.cells / gf.get_component),
             // NOT as module attributes — "cspdk.sin300.mmi1x2()" raises AttributeError (#570 review).
             factory = $"gf.get_component('{GdsFactoryCellOf(comp.GdsFactoryFunction!)}')";
-        else if (UsesUbcPdkCell(comp, options))
+        else if (GdsFactoryPdkContext.UsesUbcPdkCell(comp, options))
             factory = $"gf.get_component('{UbcPdkCellMap.MapToUbcPdkCell(comp.NazcaFunctionName)}')";
         else
             factory = $"{GdsFactoryStubWriter.StubFunctionName(comp)}({StubArguments(comp)})";

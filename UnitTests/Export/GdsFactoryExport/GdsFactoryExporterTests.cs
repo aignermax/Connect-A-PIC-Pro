@@ -368,6 +368,85 @@ public class GdsFactoryExporterTests
         placeUbc.ShouldBeGreaterThan(activateUbc);
     }
 
+    private static CAP_Core.Components.Core.Component CreateRoutableComponent(
+        string id, string gdsFactoryFunction, string crossSection, double x)
+    {
+        var c = CreateSinComponent(id, gdsFactoryFunction, x, 0);
+        c.GdsFactoryRoutingCrossSection = crossSection;
+        return c;
+    }
+
+    private static void Connect(
+        DesignCanvasViewModel canvas,
+        CAP_Core.Components.Core.Component a,
+        CAP_Core.Components.Core.Component b) =>
+        canvas.Connections.Add(new WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
+
+    [Fact]
+    public void Export_MixedProcessRouting_IsIndependentOfCanvasInsertionOrder()
+    {
+        // Field round 4 review, finding [5]: the routing cross-section owner was "first
+        // component in canvas order" — inserting/reordering a component silently flipped
+        // every routed waveguide to another process' geometry. The choice must be
+        // deterministic and named in the script.
+        string RoutingChoice(params (string Id, string Func, string Xs)[] order)
+        {
+            var canvas = new DesignCanvasViewModel();
+            var comps = order
+                .Select((o, i) => CreateRoutableComponent(o.Id, o.Func, o.Xs, 50 * i))
+                .ToList();
+            foreach (var c in comps)
+                canvas.AddComponent(c, c.Identifier);
+            Connect(canvas, comps[0], comps[1]);
+            var script = ExportUbcPdk(canvas);
+            script.ShouldContain("cross_section='xs_sc'");   // the connection is routed with the winner
+            // The routing-choice comment names cross-section AND activation — the
+            // deterministic part (the activation line itself is skipped when that PDK
+            // is already active after the last placement).
+            var start = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
+            return script.Substring(start).Split('\n')[0].Trim();
+        }
+
+        var sinFirst = RoutingChoice(
+            ("A", "cspdk.sin300.mmi1x2", "xs_nc"), ("B", "cspdk.si220.mmi1x2", "xs_sc"));
+        var siFirst = RoutingChoice(
+            ("B", "cspdk.si220.mmi1x2", "xs_sc"), ("A", "cspdk.sin300.mmi1x2", "xs_nc"));
+
+        // Same design, different insertion order → identical routing process.
+        sinFirst.ShouldBe(siFirst);
+        sinFirst.ShouldContain("'xs_sc'");                 // deterministic tie-break, not canvas order
+        sinFirst.ShouldContain("cspdk.si220");             // the winning process is NAMED in the script
+    }
+
+    [Fact]
+    public void Export_MixedProcessRouting_MajorityProcessOwnsTheWaveguides()
+    {
+        // Two si220 components vs one sin300 (which happens to be FIRST in canvas order):
+        // the routed waveguides belong to the majority process.
+        var canvas = new DesignCanvasViewModel();
+        var sin = CreateRoutableComponent("A", "cspdk.sin300.mmi1x2", "xs_nc", 0);
+        var si1 = CreateRoutableComponent("B", "cspdk.si220.mmi1x2", "xs_sc", 50);
+        var si2 = CreateRoutableComponent("C", "cspdk.si220.straight", "xs_sc", 100);
+        canvas.AddComponent(sin, "SiN");
+        canvas.AddComponent(si1, "Si 1");
+        canvas.AddComponent(si2, "Si 2");
+        Connect(canvas, sin, si1);
+
+        var script = ExportUbcPdk(canvas);
+
+        var routingStart = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
+        routingStart.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
+        var routingSection = script.Substring(routingStart);
+        routingSection.ShouldContain("cspdk.si220.PDK.activate()");
+        routingSection.ShouldContain("cross_section='xs_sc'");
+    }
+
     [Fact]
     public void Export_SingleBackend_HasNoMixedProcessWarning()
     {
