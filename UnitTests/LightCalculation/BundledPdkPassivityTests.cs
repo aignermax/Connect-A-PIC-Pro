@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
 using CAP_Core.Tiles;
@@ -23,17 +24,18 @@ namespace UnitTests.LightCalculation;
 /// </summary>
 public class BundledPdkPassivityTests
 {
-    private const double PassivityTolerance = 1e-6;
+    private const double PassivityTolerance = TransitiveSMatrixCalculator.PassivityTolerance;
 
     /// <summary>
     /// Converted measurement sets (multi-wavelength data from vendor .sparam files) carry
     /// genuine measurement/fit noise that can overshoot passivity slightly (worst bundled
     /// case: Broadband DC TE 1550, +0.45%). The data is NOT silently normalized — the
-    /// runtime pre-check (<see cref="SingleHopPassivityChecker"/>) names such a component
-    /// the moment it is simulated. This band only pins the KNOWN noise level so a future
-    /// data regression (or a new hand-authored error) still fails the sweep.
+    /// runtime pre-check (<see cref="SingleHopPassivityChecker"/>) warns about such a
+    /// component (and tolerates exactly this band) the moment it is simulated. SINGLE
+    /// SOURCE OF TRUTH with the runtime: a future data regression above the band fails
+    /// this sweep AND aborts every run.
     /// </summary>
-    private const double MeasuredDataNoiseBand = 0.005;
+    private const double MeasuredDataNoiseBand = SingleHopPassivityChecker.MeasuredDataNoiseBand;
 
     /// <summary>Walks up from the test binary to the repo checkout containing the PDKs.</summary>
     private static string PdkDirectory()
@@ -76,10 +78,11 @@ public class BundledPdkPassivityTests
                     : PassivityTolerance;
 
                 var pins = CreatePins(component);
-                foreach (var (wavelengthNm, draft) in EnumerateWavelengthStops(component.SMatrix))
+                var template = PdkTemplateConverter.ConvertToTemplate(
+                    component, Path.GetFileNameWithoutExtension(pdkFile), nazcaModuleName: null);
+                foreach (var (wavelengthNm, matrix) in EnumerateProductionMatrices(template, component, pins))
                 {
-                    double sigma = LargestSingularValue(
-                        PdkTemplateConverter.CreateSMatrixFromPdk(pins, draft));
+                    double sigma = LargestSingularValue(matrix);
                     if (sigma > 1.0 + tolerance)
                     {
                         offenders.Add(
@@ -95,24 +98,22 @@ public class BundledPdkPassivityTests
     }
 
     /// <summary>
-    /// Mirrors <see cref="PdkTemplateConverter.ConvertToTemplate"/>: with wavelengthData
-    /// present only those stops are used; otherwise the base connections at the base λ.
+    /// Instantiates the matrices EXACTLY as production does — through the delegates
+    /// <see cref="PdkTemplateConverter.ConvertToTemplate"/> wires onto the template
+    /// (review finding [6]: no test-local mirror of the stop selection). Multi-stop
+    /// measurement sets come from <c>CreateWavelengthSMatrixMap</c>, single-stop
+    /// hand-authored matrices from <c>CreateSMatrix</c> at the draft's base λ.
     /// </summary>
-    private static IEnumerable<(int WavelengthNm, PdkSMatrixDraft Draft)> EnumerateWavelengthStops(
-        PdkSMatrixDraft sMatrix)
+    private static IEnumerable<(int WavelengthNm, SMatrix Matrix)> EnumerateProductionMatrices(
+        ComponentTemplate template, PdkComponentDraft component, List<Pin> pins)
     {
-        if (sMatrix.WavelengthData is { Count: > 0 } wavelengthData)
+        if (template.CreateWavelengthSMatrixMap is { } createMap)
         {
-            foreach (var entry in wavelengthData)
-            {
-                yield return (entry.WavelengthNm, new PdkSMatrixDraft
-                {
-                    WavelengthNm = entry.WavelengthNm,
-                    Connections = entry.Connections,
-                });
-            }
+            foreach (var (wavelengthNm, matrix) in createMap(pins))
+                yield return (wavelengthNm, matrix);
             yield break;
         }
-        yield return (sMatrix.WavelengthNm, sMatrix);
+        if (template.CreateSMatrix is { } createSingle)
+            yield return (component.SMatrix!.WavelengthNm, createSingle(pins));
     }
 }
