@@ -906,6 +906,7 @@
   "TransientHelp.PrbsBody": " — 一串 0/1 数据比特的伪随机流，类似真实的网络流量（例如 25 Gbit/s）。用它评估信号质量：输出端的 1 和 0 是否仍清晰可分？相同的种子总会产生相同的比特码型，因此结果可复现。",
   "TransientHelp.ReadingBody": "X 轴：时间，单位为皮秒或纳秒（见轴标签——1000 ps = 1 ns）。Y 轴：到达该输出端的光功率。每条彩色线是电路的一个输出引脚；用图下方的复选框可显示或隐藏线条。",
   "TransientHelp.ZoomNote": "缩放：按住 Ctrl（macOS 上为 Cmd）并在图表上滚动即可缩放；普通滚动会移动面板。按住鼠标右键拖动可平移。",
+  "Analysis.Chart.ZoomHint": "Ctrl+滚轮缩放（macOS 上为 Cmd）· 右键拖动平移 · 滚轮移动面板",
   "TransientHelp.ReadingTitle": "如何解读图表",
   "TransientHelp.SourcesTitle": "三种光源",
   "TransientHelp.Title": "瞬态模式做什么？",

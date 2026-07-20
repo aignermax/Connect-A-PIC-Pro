@@ -906,6 +906,7 @@
   "TransientHelp.PrbsBody": " — un flujo pseudoaleatorio de bits de datos 0/1, como el tráfico de red real (p. ej. 25 Gbit/s). Úsalo para evaluar la calidad de la señal: ¿siguen estando los unos y los ceros claramente separados en la salida? La misma semilla produce siempre el mismo patrón de bits, por lo que los resultados son reproducibles.",
   "TransientHelp.ReadingBody": "Eje X: el tiempo, en picosegundos o nanosegundos (mira la etiqueta del eje — 1000 ps = 1 ns). Eje Y: la potencia óptica que llega a esa salida. Cada línea de color es un pin de salida de tu circuito; usa las casillas bajo el gráfico para mostrar u ocultar líneas.",
   "TransientHelp.ZoomNote": "Zoom: mantén pulsada Ctrl (Cmd en macOS) y desplázate sobre el gráfico para hacer zoom; el desplazamiento normal mueve el panel. Arrastra con el botón derecho del ratón para desplazarte.",
+  "Analysis.Chart.ZoomHint": "Ctrl+desplazamiento para zoom (Cmd en macOS) · arrastre derecho para desplazar · desplazamiento mueve el panel",
   "TransientHelp.ReadingTitle": "Cómo interpretar el gráfico",
   "TransientHelp.SourcesTitle": "Las tres fuentes de luz",
   "TransientHelp.Title": "¿Qué hace el modo transitorio?",

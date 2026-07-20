@@ -906,6 +906,7 @@
   "TransientHelp.PrbsBody": " — 実際のネットワークトラフィック（例: 25 Gbit/s）のような 0/1 データビットの疑似ランダム列。信号品質の判断に使用します: 出力で 1 と 0 がまだ明確に分離していますか？同じシードは常に同じビットパターンを生成するため、結果は再現可能です。",
   "TransientHelp.ReadingBody": "X 軸: 時間、ピコ秒またはナノ秒（軸ラベルを参照 — 1000 ps = 1 ns）。Y 軸: その出力に届く光パワー。色付きの各線は回路の 1 つの出力ピンです。プロット下のチェックボックスで線の表示/非表示を切り替えてください。",
   "TransientHelp.ZoomNote": "ズーム: Ctrl（macOS では Cmd）を押しながらプロット上でスクロールするとズームします。通常のスクロールはパネルを移動します。右ドラッグでパンできます。",
+  "Analysis.Chart.ZoomHint": "Ctrl+スクロールでズーム（macOS では Cmd）· 右ドラッグでパン · スクロールでパネル移動",
   "TransientHelp.ReadingTitle": "プロットの読み方",
   "TransientHelp.SourcesTitle": "3 つの光源",
   "TransientHelp.Title": "過渡解析モードは何をしますか？",

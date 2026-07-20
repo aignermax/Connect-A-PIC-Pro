@@ -906,6 +906,7 @@
   "TransientHelp.PrbsBody": " — a pseudo-random stream of 0/1 data bits, like real network traffic (e.g. 25 Gbit/s). Use it to judge signal quality: are the 1s and 0s still clearly separated at the output? The same seed always produces the same bit pattern, so results are reproducible.",
   "TransientHelp.ReadingBody": "X axis: time, in picoseconds or nanoseconds (see the axis label — 1000 ps = 1 ns). Y axis: the optical power arriving at that output. Each coloured line is one output pin of your circuit; use the checkboxes under the plot to show or hide lines.",
   "TransientHelp.ZoomNote": "Zooming: hold Ctrl (Cmd on macOS) and scroll over the plot to zoom; plain scrolling moves the panel. Drag with the right mouse button to pan.",
+  "Analysis.Chart.ZoomHint": "Ctrl+scroll to zoom (Cmd on macOS) · right-drag to pan · scroll to move the panel",
   "TransientHelp.ReadingTitle": "How to read the plot",
   "TransientHelp.SourcesTitle": "The three light sources",
   "TransientHelp.Title": "What does Transient mode do?",
