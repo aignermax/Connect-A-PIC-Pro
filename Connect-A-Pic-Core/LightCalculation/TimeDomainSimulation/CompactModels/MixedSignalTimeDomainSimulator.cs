@@ -22,13 +22,23 @@ namespace CAP_Core.LightCalculation.TimeDomainSimulation.CompactModels;
 public class MixedSignalTimeDomainSimulator
 {
     private readonly ImpulseResponseBuilder _irBuilder;
+    private readonly TransitiveClosureContext? _circuitContext;
 
     /// <summary>Initializes a new instance of <see cref="MixedSignalTimeDomainSimulator"/>.</summary>
     /// <param name="matrixBuilder">System S-matrix builder for the passive network.</param>
-    public MixedSignalTimeDomainSimulator(ISystemMatrixBuilder matrixBuilder)
+    /// <param name="circuitContext">
+    /// Optional circuit knowledge (pin owner names, externally observable pins), same
+    /// contract as <see cref="TimeDomainSimulator"/>: closure failures name the culprit
+    /// component/loop and the energy guard is scoped to real circuit ports so legitimate
+    /// cavity buildup inside a resonator is not rejected (round 4 review, finding [4]).
+    /// Null guards every pin pair (safe default without circuit knowledge).
+    /// </param>
+    public MixedSignalTimeDomainSimulator(
+        ISystemMatrixBuilder matrixBuilder, TransitiveClosureContext? circuitContext = null)
     {
         if (matrixBuilder == null) throw new ArgumentNullException(nameof(matrixBuilder));
         _irBuilder = new ImpulseResponseBuilder(matrixBuilder);
+        _circuitContext = circuitContext;
     }
 
     /// <summary>
@@ -112,7 +122,7 @@ public class MixedSignalTimeDomainSimulator
         int nFreqPoints)
     {
         var impulseResponses = _irBuilder.Build(
-            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys);
+            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys, _circuitContext);
         var fields = new Dictionary<Guid, Complex[]>();
 
         foreach (var ir in impulseResponses)

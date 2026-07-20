@@ -139,6 +139,81 @@ public class MixedSignalTimeDomainSimulatorTests
         result.OpticalTraces[outPin][20].ShouldBe(expectedPeak, expectedPeak * 0.01);
     }
 
+    /// <summary>
+    /// Ring-like network for the closure-context tests: the internal loop (g = 0.98)
+    /// builds up a circulating field of 1/(1 − 0.98) = 50 — legitimate cavity physics —
+    /// while the externally visible in → out transfer stays at 0.45.
+    /// </summary>
+    private static Mock<ISystemMatrixBuilder> CreateCavityNetwork(
+        Guid inPin, Guid ring1, Guid ring2, Guid outPin)
+    {
+        var mockBuilder = new Mock<ISystemMatrixBuilder>();
+        mockBuilder.Setup(b => b.GetSystemSMatrix(It.IsAny<int>()))
+            .Returns((int _) =>
+            {
+                var matrix = new SMatrix(new List<Guid> { inPin, ring1, ring2, outPin }, new());
+                matrix.SetValues(new Dictionary<(Guid, Guid), Complex>
+                {
+                    { (inPin, ring1), new Complex(0.9, 0) },
+                    { (ring1, ring2), Complex.One },
+                    { (ring2, ring1), new Complex(0.98, 0) },
+                    { (ring2, outPin), new Complex(0.01, 0) },
+                });
+                return matrix;
+            });
+        return mockBuilder;
+    }
+
+    [Fact]
+    public void Run_RingWithCavityBuildup_WithCircuitContext_Succeeds()
+    {
+        // Review finding [4]: the mixed-signal path must accept the same closure
+        // context as TimeDomainSimulator — otherwise the cavity-buildup exemption
+        // never applies here and a ring that simulates fine in the transient panel
+        // is rejected on the mixed-signal path.
+        var (inPin, ring1, ring2, outPin) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var network = CreateCavityNetwork(inPin, ring1, ring2, outPin);
+        var context = new TransitiveClosureContext
+        {
+            ExternallyObservablePinIds = new[] { inPin, outPin },
+        };
+
+        var timeDef = new TimeSignalDefinition(SampleRateHz, 256);
+        var pulse = timeDef.CreateGaussianPulse(
+            20 * timeDef.TimeStepSeconds, 3 * timeDef.TimeStepSeconds);
+        var simulator = new MixedSignalTimeDomainSimulator(network.Object, context);
+
+        var result = simulator.Run(
+            new Dictionary<Guid, double[]> { [inPin] = pulse },
+            new Dictionary<Guid, ActiveSource>(),
+            new Dictionary<Guid, ICompactModel>(),
+            timeDef);
+
+        // in → out: 0.9 · 1/(1 − 0.98) · 0.01 = 0.45 amplitude → 0.2025 peak intensity.
+        double expectedPeak = 0.45 * 0.45 * pulse[20] * pulse[20];
+        result.OpticalTraces[outPin][20].ShouldBe(expectedPeak, expectedPeak * 0.01);
+    }
+
+    [Fact]
+    public void Run_RingWithCavityBuildup_WithoutContext_KeepsTheSafeAllPinGuard()
+    {
+        // Without circuit knowledge every pin pair stays guarded (safe default): the
+        // internal buildup of 50 is indistinguishable from fabricated energy.
+        var (inPin, ring1, ring2, outPin) = (Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid());
+        var network = CreateCavityNetwork(inPin, ring1, ring2, outPin);
+
+        var timeDef = new TimeSignalDefinition(SampleRateHz, 256);
+        var pulse = timeDef.CreateGaussianPulse(
+            20 * timeDef.TimeStepSeconds, 3 * timeDef.TimeStepSeconds);
+        var simulator = new MixedSignalTimeDomainSimulator(network.Object);
+
+        Should.Throw<NonConvergentCircuitException>(() => simulator.Run(
+            new Dictionary<Guid, double[]> { [inPin] = pulse },
+            new Dictionary<Guid, ActiveSource>(),
+            new Dictionary<Guid, ICompactModel>(),
+            timeDef));
+    }
+
     [Fact]
     public void Run_NullArguments_Throw()
     {
