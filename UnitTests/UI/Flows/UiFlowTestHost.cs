@@ -41,9 +41,16 @@ internal sealed class UiFlowTestHost : IDisposable
 
     private readonly string _prefsPath;
     private readonly IServiceProvider? _previousServices;
+    private readonly string _previousLanguageCode;
 
     public UiFlowTestHost()
     {
+        // Flow tests look up buttons/tooltips by their English literals; the process-global
+        // localization singleton follows the OS display language, so pin English for the
+        // test (restored in Dispose) to keep the suite green on non-English machines.
+        _previousLanguageCode = CAP.Avalonia.Services.Localization.LocalizationService.Instance.ActiveLanguageCode;
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage("en");
+
         var id = Guid.NewGuid().ToString("N");
         UserPdkRoot = Path.Combine(Path.GetTempPath(), $"lunima-uiflow-pdks-{id}");
         _prefsPath = Path.Combine(Path.GetTempPath(), $"lunima-uiflow-prefs-{id}.json");
@@ -131,6 +138,7 @@ internal sealed class UiFlowTestHost : IDisposable
         // App.Services is process-global static state — restore it so later suites in the same
         // test process never resolve this host's (deleted) temp store.
         App.OverrideServicesForTesting(_previousServices!);
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage(_previousLanguageCode);
 
         try { File.Delete(_prefsPath); } catch (Exception e) when (e is IOException or UnauthorizedAccessException) { }
         if (Directory.Exists(UserPdkRoot))

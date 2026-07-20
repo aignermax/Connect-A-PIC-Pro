@@ -8,7 +8,8 @@ using CAP.Avalonia.ViewModels.Panels;
 namespace CAP.Avalonia.Gestures;
 
 /// <summary>
-/// Handles one-click placement in PlaceComponent, PlaceGroupTemplate, Delete, and Probe interaction modes.
+/// Handles one-click placement in PlaceComponent, PlaceGroupTemplate, Delete, Probe, and
+/// PickAnalysisOutput interaction modes.
 /// Also updates placement preview overlays during pointer movement.
 /// </summary>
 public class PlacementGestureRecognizer : IGestureRecognizer
@@ -37,7 +38,11 @@ public class PlacementGestureRecognizer : IGestureRecognizer
             return true;
         }
 
-        if (mode == InteractionMode.Delete || mode == InteractionMode.Probe)
+        // One-click modes without placement preview. PickAnalysisOutput (#754) must be
+        // routed here too: no other recognizer accepts left-clicks outside Select mode,
+        // so without this route the eyedropper click would silently do nothing.
+        if (mode == InteractionMode.Delete || mode == InteractionMode.Probe
+            || mode == InteractionMode.PickAnalysisOutput)
         {
             mainVm!.CanvasClicked(canvasPoint.X, canvasPoint.Y);
             _invalidate();
