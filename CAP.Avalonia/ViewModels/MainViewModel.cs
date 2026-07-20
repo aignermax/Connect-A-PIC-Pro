@@ -39,6 +39,14 @@ public partial class MainViewModel : ObservableObject
     private string _statusText = LocalizationService.Instance.Translate("Status.Ready");
 
     /// <summary>
+    /// The last status set from a string-table key, with the text it produced — lets a live
+    /// language switch re-translate the status bar when (and only when) it still shows that
+    /// text, so transient messages (e.g. migration warnings) are never clobbered.
+    /// </summary>
+    private (string Key, object[] Args, string Formatted)? _lastLocalizedStatus =
+        ("Status.Ready", [], LocalizationService.Instance.Translate("Status.Ready"));
+
+    /// <summary>
     /// Human-readable label for the design's active fabrication process (issue #570),
     /// e.g. "Process: Generic SOI 220 nm" or "Playground — not manufacturable". Kept in
     /// sync with <see cref="FileOperationsViewModel.ActiveProcess"/> by
@@ -307,6 +315,9 @@ public partial class MainViewModel : ObservableObject
         FileOperations.UpdateStatus = UpdateStatusText;
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
+        // Key-preserving sink: lets a live UI language switch re-translate the startup
+        // "Loaded N component types" status while it is still showing.
+        LeftPanel.UpdateLocalizedStatus = SetLocalizedStatus;
 
         // A saved component definition takes effect type-wide: push the new PDK S-matrices
         // into already-placed instances; explicit overrides keep winning.
@@ -565,11 +576,14 @@ public partial class MainViewModel : ObservableObject
             if (e.PropertyName == nameof(FileOperations.ActiveProcess)) RefreshProcessIndicator();
         };
 
-        // Re-read the localized active-process badge when the UI language switches (#570 i18n).
-        // Only the label is recomputed — the PDK process lock is left untouched on a mere
-        // language change.
-        LocalizationService.Instance.PropertyChanged += (_, _) =>
-            UpdateActiveProcessLabel(FileOperations.ActiveProcess);
+        // Re-read the VM-side one-time translations when the UI language switches (field bug
+        // round 5). Filtered to ActiveLanguageCode because SetLanguage raises several
+        // notifications ("Item"/"Item[]" for the AXAML indexer bindings) per switch.
+        LocalizationService.Instance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LocalizationService.ActiveLanguageCode))
+                OnUiLanguageChanged();
+        };
 
         FileOperations.ZoomToFitAfterLoad = (w, h) =>
         {
@@ -604,6 +618,31 @@ public partial class MainViewModel : ObservableObject
         var p = FileOperations.ActiveProcess;
         UpdateActiveProcessLabel(p);
         LeftPanel.ApplyActiveProcess(p);
+    }
+
+    /// <summary>
+    /// Re-reads the VM-side one-time translations after a live language switch: the
+    /// active-process badge (recomputed, PDK process lock untouched) and — only while the
+    /// status bar shows the idle "Ready" text — the status bar itself.
+    /// </summary>
+    private void OnUiLanguageChanged()
+    {
+        UpdateActiveProcessLabel(FileOperations.ActiveProcess);
+        if (_lastLocalizedStatus is { } status && StatusText == status.Formatted)
+            SetLocalizedStatus(status.Key, status.Args);
+    }
+
+    /// <summary>
+    /// Sets the status bar from a string-table key (formatted invariantly with
+    /// <paramref name="args"/>) and remembers the key, so a live UI language switch can
+    /// re-translate the message while it is still showing.
+    /// </summary>
+    internal void SetLocalizedStatus(string key, params object[] args)
+    {
+        var formatted = string.Format(
+            CultureInfo.InvariantCulture, LocalizationService.Instance.Translate(key), args);
+        _lastLocalizedStatus = (key, args, formatted);
+        StatusText = formatted;
     }
 
     /// <summary>

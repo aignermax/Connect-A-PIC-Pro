@@ -65,6 +65,13 @@ public partial class LeftPanelViewModel : ObservableObject
 
     public Action<string>? UpdateStatus { get; set; }
 
+    /// <summary>
+    /// Optional status sink that keeps the string-table key: (key, format args). Preferred
+    /// over <see cref="UpdateStatus"/> for localized messages so the host can re-translate
+    /// them on a live UI language switch (field bug round 5).
+    /// </summary>
+    public Action<string, object[]>? UpdateLocalizedStatus { get; set; }
+
     public IFileDialogService? FileDialogService { get; set; }
 
     public Action<GroupTemplate>? OnGroupTemplateSelected { get; set; }
@@ -139,10 +146,15 @@ public partial class LeftPanelViewModel : ObservableObject
             Categories.Add(category);
         }
 
-        UpdateStatus?.Invoke(string.Format(
-            CultureInfo.InvariantCulture,
-            LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
-            AllTemplates.Count));
+        // Keep the key: this is the status visible right after startup, so it must
+        // re-translate when the user switches the UI language in Settings.
+        if (UpdateLocalizedStatus != null)
+            UpdateLocalizedStatus("Status.LoadedComponentTypes", [AllTemplates.Count]);
+        else
+            UpdateStatus?.Invoke(string.Format(
+                CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
+                AllTemplates.Count));
         FilterComponents();
     }
 
