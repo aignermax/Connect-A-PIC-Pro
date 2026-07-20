@@ -575,24 +575,33 @@ def _render_siepic_via_klayout(module_name, function_name, stub_length, paramete
     pin_layer = ly.layer(1, 10)
     paths = []   # (cx, cy, angle_deg)
     texts = []   # (x, y, name)
-    for shape in cell.shapes(pin_layer).each():
+    # RECURSIVELY, for exactly the same reason as the polygon loop above: SiEPIC
+    # fixed cells may keep their PinRec shapes inside the instantiated sub-cell
+    # (the very hierarchy pattern the polygon fix addresses) — the flat
+    # cell.shapes() iteration returned zero pins there, so Evaluate reported
+    # "rendered GDS exposes no pins" and Auto-Calibrate refused to run although
+    # the pins sit right next to the rendered geometry. it.trans() maps each
+    # shape into top-cell space (incl. sub-cell rotation/mirror), so both pin
+    # positions and exit directions stay correct.
+    it = cell.begin_shapes_rec(pin_layer)
+    while not it.at_end():
+        shape = it.shape()
         if shape.is_text():
-            t = shape.text
+            t = shape.text.transformed(it.trans())
             texts.append((t.x * dbu, t.y * dbu, t.string))
-            continue
-        if shape.is_path():
-            p = shape.path
+        elif shape.is_path():
+            p = shape.path.transformed(it.trans())
             pts = list(p.each_point())
-            if len(pts) < 2:
-                continue
-            # SiEPIC convention: path goes FROM the pin position OUTWARD,
-            # so the direction from pts[0] to pts[-1] is the exit direction.
-            x0, y0 = pts[0].x * dbu, pts[0].y * dbu
-            x1, y1 = pts[-1].x * dbu, pts[-1].y * dbu
-            angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
-            if angle < 0:
-                angle += 360
-            paths.append((x0, y0, angle))
+            if len(pts) >= 2:
+                # SiEPIC convention: path goes FROM the pin position OUTWARD,
+                # so the direction from pts[0] to pts[-1] is the exit direction.
+                x0, y0 = pts[0].x * dbu, pts[0].y * dbu
+                x1, y1 = pts[-1].x * dbu, pts[-1].y * dbu
+                angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
+                if angle < 0:
+                    angle += 360
+                paths.append((x0, y0, angle))
+        it.next()
 
     pins = []
     for tx, ty, tname in texts:

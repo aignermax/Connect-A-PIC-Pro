@@ -355,9 +355,18 @@
                                         <TextBlock Grid.Column="3"
                                                    Text="{Binding WorstDeltaMicrometers, StringFormat='{}{0:F2} µm'}"
                                                    Foreground="LightGray"/>
-                                        <TextBlock Grid.Column="4"
-                                                   Text="{Binding Status, Converter={x:Static conv:ComponentCheckStatusToTextConverter.Instance}}"
-                                                   Foreground="LightYellow"/>
+                                        <!-- MultiBinding: the second input binds the LocalizationService
+                                             indexer, so a live language switch ("Item" notification)
+                                             re-translates the Status column; its value is ignored. -->
+                                        <TextBlock Grid.Column="4" Foreground="LightYellow">
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{x:Static conv:ComponentCheckStatusToTextConverter.Instance}">
+                                                    <Binding Path="Status"/>
+                                                    <Binding Source="{x:Static loc:LocalizationService.Instance}"
+                                                             Path="[PdkOffset.Status]"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

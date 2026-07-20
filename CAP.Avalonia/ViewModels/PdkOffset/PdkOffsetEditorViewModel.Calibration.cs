@@ -181,10 +181,14 @@ public partial class PdkOffsetEditorViewModel
             for (int i = 0; i < Components.Count && i < BatchCheckResults.Count; i++)
             {
                 if (token.IsCancellationRequested) break;
-                // CheckAlignment (0.1–0.5 µm) is auto-fixable exactly like Misaligned —
-                // the band only exists so the report stops calling visible offsets "Aligned".
-                if (BatchCheckResults[i].Status is not
-                    (ComponentCheckStatus.Misaligned or ComponentCheckStatus.CheckAlignment)) continue;
+                // Deliberately Misaligned ONLY (round-5 review [8]): the CheckAlignment
+                // band (0.1–0.5 µm) means "human should check" — deltas there can come
+                // from preview-render quantization, and bulk-rewriting calibrations that
+                // earlier releases certified as aligned would silently shift the pins of
+                // every future placement (and, via fork-on-save, the whole PDK) without
+                // per-component consent. The single-component Auto-Calibrate stays
+                // available for check-band rows after visual inspection.
+                if (BatchCheckResults[i].Status != ComponentCheckStatus.Misaligned) continue;
                 var item = Components[i];
                 BatchProgress = string.Format(
                     LocalizationService.Instance.Translate("PdkOffset.Batch.Fixing"), item.Draft.Name);
