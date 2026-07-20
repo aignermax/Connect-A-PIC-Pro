@@ -124,7 +124,9 @@ public class ImpulseResponseBuilderClosureTests
         var firstPin = pins[0];
         var lastPin = pins[pins.Count - 1];
         responses.ShouldContain(r => r.InputPinId == firstPin && r.OutputPinId == lastPin);
-        stopwatch.ElapsedMilliseconds.ShouldBeLessThan(5000,
+        // ~1 s standalone; the generous bound absorbs parallel-suite CPU contention while
+        // still failing loudly on the minutes-long O(hops·n³)-per-wavelength regression.
+        stopwatch.ElapsedMilliseconds.ShouldBeLessThan(15_000,
             $"150-pin chain took {stopwatch.ElapsedMilliseconds} ms");
     }
 }
