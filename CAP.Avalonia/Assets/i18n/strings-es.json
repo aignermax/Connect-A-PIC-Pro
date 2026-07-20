@@ -373,6 +373,7 @@
   "LeftPanel.TrashTip": "Papelera — restaurar PDKs / componentes eliminados",
   "Library.NoGroupsLoaded": "No hay grupos cargados",
   "Library.NoSavedGroups": "No hay grupos guardados",
+  "Load.PinCalibrationChanged": "La calibración de pines de '{0}' cambió desde que se guardó este diseño; sus rutas se recalcularon.",
   "Lock.ComponentsInfix": " componentes, ",
   "Lock.ConnectionsSuffix": " conexiones",
   "Lock.Description": "Bloquee componentes para impedir moverlos, rotarlos o eliminarlos.",

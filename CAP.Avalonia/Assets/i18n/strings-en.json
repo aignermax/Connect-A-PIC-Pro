@@ -373,6 +373,7 @@
   "LeftPanel.TrashTip": "Trash — restore deleted PDKs / components",
   "Library.NoGroupsLoaded": "No groups loaded",
   "Library.NoSavedGroups": "No saved groups",
+  "Load.PinCalibrationChanged": "Pin calibration of '{0}' changed since this design was saved — its routes were recalculated.",
   "Lock.ComponentsInfix": " components, ",
   "Lock.ConnectionsSuffix": " connections",
   "Lock.Description": "Lock components to prevent moving, rotating, or deleting.",

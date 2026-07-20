@@ -373,6 +373,7 @@
   "LeftPanel.TrashTip": "ゴミ箱 — 削除した PDK / コンポーネントを復元",
   "Library.NoGroupsLoaded": "グループが読み込まれていません",
   "Library.NoSavedGroups": "保存されたグループがありません",
+  "Load.PinCalibrationChanged": "このデザインの保存後に「{0}」のピン較正が変更されました——該当する配線を再計算しました。",
   "Lock.ComponentsInfix": " 個のコンポーネント、",
   "Lock.ConnectionsSuffix": " 個の接続",
   "Lock.Description": "コンポーネントをロックして移動、回転、削除を防ぎます。",

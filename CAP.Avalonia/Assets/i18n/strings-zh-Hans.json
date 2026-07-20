@@ -373,6 +373,7 @@
   "LeftPanel.TrashTip": "回收站 — 恢复已删除的 PDK / 元件",
   "Library.NoGroupsLoaded": "未加载任何分组",
   "Library.NoSavedGroups": "没有已保存的分组",
+  "Load.PinCalibrationChanged": "自保存此设计以来，“{0}”的引脚校准已更改——其布线已重新计算。",
   "Lock.ComponentsInfix": " 个元件，",
   "Lock.ConnectionsSuffix": " 个连接",
   "Lock.Description": "锁定元件以防止移动、旋转或删除。",

@@ -373,6 +373,7 @@
   "LeftPanel.TrashTip": "Papierkorb — gelöschte PDKs / Komponenten wiederherstellen",
   "Library.NoGroupsLoaded": "Keine Gruppen geladen",
   "Library.NoSavedGroups": "Keine gespeicherten Gruppen",
+  "Load.PinCalibrationChanged": "Die Pin-Kalibrierung von '{0}' hat sich seit dem Speichern dieses Designs geändert — die betroffenen Routen wurden neu berechnet.",
   "Lock.ComponentsInfix": " Komponenten, ",
   "Lock.ConnectionsSuffix": " Verbindungen",
   "Lock.Description": "Komponenten sperren, um Verschieben, Drehen oder Löschen zu verhindern.",
