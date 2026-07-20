@@ -146,6 +146,11 @@
                 </TextBlock>
             </StackPanel>
 
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray" Margin="0,4,0,0">
+                Zooming: hold Ctrl (Cmd on macOS) and scroll over the plot to zoom;
+                plain scrolling moves the panel. Drag with the right mouse button to pan.
+            </TextBlock>
+
         </StackPanel>
     </ScrollViewer>
 
