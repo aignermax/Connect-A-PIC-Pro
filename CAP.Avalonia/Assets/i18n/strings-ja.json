@@ -59,7 +59,7 @@
   "Analysis.Output.DesignatedLaserOff": "'{0}' が解析出力になりました — レーザーはオフに切り替えられました",
   "Analysis.Output.DesignatedLaserOn": "出力 '{0}' のレーザーが再びオンになっています — オフにするか、別の出力を選択してください",
   "Analysis.Output.DesignatedMissing": "指定された出力カプラは存在しません — キャンバスで新しい出力を選択してください",
-  "Analysis.Output.MultipleCandidatesWarning": "複数のカプラが出力の候補です — 最も強いトレースを使用しました。キャンバスで出力を選択してください。",
+  "Analysis.Output.MultipleCandidatesWarning": "出力が指定されていません — レーザーがオフのカプラはすべて出力として扱われ、最も強いトレースを使用しました。スポイトで解析を 1 つのカプラに限定できます。",
   "Analysis.Output.NoSignal": "オンになっている入力からの光が出力 '{0}' に届いていません — 入力カプラからの接続経路を確認してください。",
   "Analysis.Output.NoSignalDesignated": "オンになっている入力からの光が指定された出力カプラに届いていません — 入力カプラからそこまでの接続経路を確認してください。",
   "Analysis.Output.None": "（自動）",

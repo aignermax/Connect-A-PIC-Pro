@@ -59,7 +59,7 @@
   "Analysis.Output.DesignatedLaserOff": "'{0}' ist jetzt der Analyse-Ausgang — sein Laser wurde ausgeschaltet",
   "Analysis.Output.DesignatedLaserOn": "Der Laser von Ausgang '{0}' ist wieder an — schalte ihn aus oder wähle einen anderen Ausgang",
   "Analysis.Output.DesignatedMissing": "Der festgelegte Ausgangs-Coupler existiert nicht mehr — wähle einen neuen Ausgang auf dem Canvas",
-  "Analysis.Output.MultipleCandidatesWarning": "Mehrere Coupler kommen als Ausgang in Frage — die stärkste Spur wurde verwendet. Wähle den Ausgang auf dem Canvas.",
+  "Analysis.Output.MultipleCandidatesWarning": "Kein Ausgang designiert — jeder Coupler mit ausgeschaltetem Laser gilt als Ausgang; die stärkste Spur wurde verwendet. Mit der Pipette lässt sich die Analyse auf einen Coupler einschränken.",
   "Analysis.Output.NoSignal": "Am gewählten Ausgang '{0}' kommt kein Licht vom eingeschalteten Eingang an — prüfe die Verbindung von deinem Eingangs-Coupler.",
   "Analysis.Output.NoSignalDesignated": "Am festgelegten Ausgangs-Coupler kommt kein Licht von den eingeschalteten Eingängen an — prüfe den Verbindungspfad von deinem Eingangs-Coupler dorthin.",
   "Analysis.Output.None": "(automatisch)",

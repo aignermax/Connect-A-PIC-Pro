@@ -59,7 +59,7 @@
   "Analysis.Output.DesignatedLaserOff": "'{0}' 现在是分析输出 — 其激光器已被关闭",
   "Analysis.Output.DesignatedLaserOn": "输出 '{0}' 的激光器再次开启 — 请将其关闭或选取其他输出",
   "Analysis.Output.DesignatedMissing": "指定的输出耦合器已不存在 — 请在画布上选取新的输出",
-  "Analysis.Output.MultipleCandidatesWarning": "多个耦合器都可能是输出 — 已使用最强的迹线。请在画布上选取输出。",
+  "Analysis.Output.MultipleCandidatesWarning": "未指定输出 — 所有关闭激光的耦合器都视为输出；已使用最强的迹线。可用取色器将分析限制到某一个耦合器。",
   "Analysis.Output.NoSignal": "已开启的输入没有光到达输出 '{0}' — 请检查从输入耦合器出发的连接路径。",
   "Analysis.Output.NoSignalDesignated": "已开启的输入没有光到达指定的输出耦合器 — 请检查从输入耦合器到它的连接路径。",
   "Analysis.Output.None": "（自动）",

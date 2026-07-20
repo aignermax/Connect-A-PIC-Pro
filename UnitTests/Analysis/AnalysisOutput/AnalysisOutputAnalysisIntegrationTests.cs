@@ -69,8 +69,11 @@ public class AnalysisOutputAnalysisIntegrationTests
     }
 
     [Fact]
-    public async Task MultipleCandidatesWithoutDesignation_EyeRun_ActivatesThePicker()
+    public async Task MultipleCandidatesWithoutDesignation_EyeRun_RunsWithoutForcingThePicker()
     {
+        // Field wish (round 4 final): without an explicit designation every coupler
+        // with its laser off IS an output (pre-#757 behaviour) — the eyedropper only
+        // RESTRICTS. The run must not push the canvas into picker mode.
         var (canvas, eye, _) = CreateTabs();
         AnalysisOutputTestBed.AddCoupler(canvas);                             // input, laser on
         AnalysisOutputTestBed.AddCoupler(canvas, x: 100).LaserConfig!.IsEnabled = false;
@@ -80,11 +83,11 @@ public class AnalysisOutputAnalysisIntegrationTests
 
         await eye.RunEyeAnalysisCommand.ExecuteAsync(null);
 
-        pickerRequested.ShouldBeTrue("an ambiguous run must offer the picker instead of a modal dialog");
+        pickerRequested.ShouldBeFalse("without a designation all off couplers are outputs — no forced picker");
     }
 
     [Fact]
-    public async Task MultipleCandidatesWithoutDesignation_TransientRun_ActivatesThePicker()
+    public async Task MultipleCandidatesWithoutDesignation_TransientRun_RunsWithoutForcingThePicker()
     {
         var (canvas, _, transient) = CreateTabs();
         AnalysisOutputTestBed.AddCoupler(canvas);                             // input, laser on
@@ -95,7 +98,7 @@ public class AnalysisOutputAnalysisIntegrationTests
 
         await transient.RunTransientCommand.ExecuteAsync(null);
 
-        pickerRequested.ShouldBeTrue("an ambiguous run must offer the picker instead of a modal dialog");
+        pickerRequested.ShouldBeFalse("without a designation all off couplers are outputs — no forced picker");
     }
 
     [Fact]

@@ -59,7 +59,7 @@
   "Analysis.Output.DesignatedLaserOff": "'{0}' es ahora la salida del análisis — su láser se ha apagado",
   "Analysis.Output.DesignatedLaserOn": "El láser de la salida '{0}' está encendido de nuevo — apágalo o elige otra salida",
   "Analysis.Output.DesignatedMissing": "El acoplador de salida designado ya no existe — elige una nueva salida en el lienzo",
-  "Analysis.Output.MultipleCandidatesWarning": "Varios acopladores podrían ser la salida — se usó la traza más fuerte. Elige la salida en el lienzo.",
+  "Analysis.Output.MultipleCandidatesWarning": "Ninguna salida designada — cada acoplador con el láser apagado cuenta como salida; se usó la traza más fuerte. Usa el cuentagotas para restringir el análisis a un acoplador.",
   "Analysis.Output.NoSignal": "No llega luz desde la(s) entrada(s) encendida(s) a la salida '{0}' — revisa la conexión desde tu acoplador de entrada.",
   "Analysis.Output.NoSignalDesignated": "No llega luz desde la(s) entrada(s) encendida(s) al acoplador de salida designado — revisa la conexión desde tu acoplador de entrada hasta él.",
   "Analysis.Output.None": "(automático)",

@@ -59,7 +59,7 @@
   "Analysis.Output.DesignatedLaserOff": "'{0}' is now the analysis output — its laser was switched off",
   "Analysis.Output.DesignatedLaserOn": "The laser of output '{0}' is on again — switch it off or pick another output",
   "Analysis.Output.DesignatedMissing": "The designated output coupler no longer exists — pick a new output on the canvas",
-  "Analysis.Output.MultipleCandidatesWarning": "Several couplers could be the output — the strongest trace was used. Pick the output on the canvas.",
+  "Analysis.Output.MultipleCandidatesWarning": "No output designated — every coupler with its laser off counts as an output; the strongest trace was used. Use the eyedropper to restrict the analysis to one coupler.",
   "Analysis.Output.NoSignal": "No light from the switched-on input(s) arrives at output '{0}' — check the connection path from your input coupler.",
   "Analysis.Output.NoSignalDesignated": "No light from the switched-on input(s) arrives at the designated output coupler — check the connection path from your input coupler to it.",
   "Analysis.Output.None": "(automatic)",

@@ -123,12 +123,11 @@ public partial class TimeDomainViewModel : ObservableObject
         if (IsRunning) return;
 
         // Resolve the analysis output BEFORE simulating (#754): an invalid designation
-        // aborts with a clear warning instead of silently guessing; an ambiguous design
-        // (several off couplers, none designated) activates the canvas picker.
+        // aborts with a clear warning instead of silently guessing. Without a
+        // designation every off-laser coupler counts as an output (field wish, round 4
+        // final) — the eyedropper only restricts, so no picker mode is forced here.
         var resolution = AnalysisOutputResolver.Resolve(_canvas!);
         if (ReportInvalidDesignation(resolution)) return;
-        if (resolution.State == AnalysisOutputState.MultipleCandidates)
-            RequestOutputPicker?.Invoke();
 
         IsRunning = true;
         StatusText = LocalizationService.Instance.Translate("Analysis.TimeDomain.BuildingImpulseResponses");
