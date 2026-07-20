@@ -8,6 +8,17 @@
              x:DataType="vm:MainViewModel">
 
     <UserControl.Styles>
+        <!-- Dark hover-tracker so it reads on the dark theme instead of OxyPlot's default
+             light/yellow popup (round 5 finding 2): clicking the eye/BER heat map showed a
+             yellow-background/white-text tracker box. Same values as TimeDomainPanel's
+             tracker for cross-chart consistency. -->
+        <Style Selector="oxy|TrackerControl">
+            <Setter Property="Background" Value="#2a2a2a"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="LineStroke" Value="#A0A0A0"/>
+        </Style>
         <!-- CompactControlHeights.axaml drives input height/padding app-wide; only the
              layout-specific VerticalContentAlignment and label FontSize stay local. -->
         <Style Selector="NumericUpDown">
