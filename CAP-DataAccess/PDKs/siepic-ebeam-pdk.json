@@ -9833,7 +9833,7 @@
       "widthMicrometers": 195.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.0,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
@@ -9971,7 +9971,7 @@
       "widthMicrometers": 217.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.0,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
