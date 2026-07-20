@@ -58,8 +58,11 @@ public class TimeDomainSimulator : ILightCalculator
         if (inputSignals == null) throw new ArgumentNullException(nameof(inputSignals));
         if (timeDef == null) throw new ArgumentNullException(nameof(timeDef));
 
-        // Build impulse responses (also validates: no nonlinear connections)
-        var impulseResponses = _irBuilder.Build(centerWavelengthNm, spanNm, nFreqPoints);
+        // Build impulse responses (also validates: no nonlinear connections). The active
+        // inputs restrict the multi-hop closure to the reachable subgraph — exactly the
+        // (source → output) pairs convolved below.
+        var impulseResponses = _irBuilder.Build(
+            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys);
 
         var outputPinIds = impulseResponses
             .Select(ir => ir.OutputPinId)

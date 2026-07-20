@@ -54,7 +54,7 @@ public class SampleModeTransientDriver
         if (inputSignals == null) throw new ArgumentNullException(nameof(inputSignals));
         if (timeDef == null) throw new ArgumentNullException(nameof(timeDef));
 
-        var activeLinks = _irBuilder.Build(centerWavelengthNm, spanNm, nFreqPoints)
+        var activeLinks = _irBuilder.Build(centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys)
             .Where(ir => inputSignals.ContainsKey(ir.InputPinId))
             .ToList();
 

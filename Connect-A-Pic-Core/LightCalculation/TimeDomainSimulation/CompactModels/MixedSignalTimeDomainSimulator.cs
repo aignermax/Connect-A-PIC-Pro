@@ -111,7 +111,8 @@ public class MixedSignalTimeDomainSimulator
         double spanNm,
         int nFreqPoints)
     {
-        var impulseResponses = _irBuilder.Build(centerWavelengthNm, spanNm, nFreqPoints);
+        var impulseResponses = _irBuilder.Build(
+            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys);
         var fields = new Dictionary<Guid, Complex[]>();
 
         foreach (var ir in impulseResponses)
