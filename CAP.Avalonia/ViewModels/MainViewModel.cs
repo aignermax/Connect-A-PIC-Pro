@@ -327,6 +327,10 @@ public partial class MainViewModel : ObservableObject
         // user-pdks; the library must swap to (shadow with) that fork, same as the
         // component editor's fork flow.
         PdkOffsetEditor.BundledPdkForkSaved = LeftPanel.RegisterSavedPdkFork;
+        // Direct (non-fork) offset-editor saves target the retargeted fork file or a
+        // registered custom PDK — refresh the library's in-memory templates so exports
+        // and new placements pick up the saved values without a restart.
+        PdkOffsetEditor.UserPdkSaved = LeftPanel.RefreshRegisteredPdkAfterExternalSave;
 
         // Single-process enforcement (issues #570/#653): every placement surface — manual
         // placement/paste, saved group templates, and the AI assistant — consults the

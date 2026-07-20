@@ -208,21 +208,13 @@ public partial class LeftPanelViewModel : ObservableObject
         }
     }
 
-    internal static string? ResolveBundledPdkDirectory(string baseDir)
-    {
-        var bundled = Path.Combine(baseDir, "PDKs");
-
-        var dir = new DirectoryInfo(baseDir);
-        for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, "CAP-DataAccess", "PDKs");
-            if (Directory.Exists(candidate) &&
-                Directory.GetFiles(candidate, "*.json").Length > 0)
-                return candidate;
-        }
-
-        return Directory.Exists(bundled) ? bundled : null;
-    }
+    /// <summary>
+    /// Resolution moved to <see cref="CAP_DataAccess.Components.ComponentDraftMapper.BundledPdkPaths"/>
+    /// so the data-access layer (PdkJsonSaver write guard) shares the same notion of
+    /// "bundled directory" as the library load path. Facade kept for existing callers/tests.
+    /// </summary>
+    internal static string? ResolveBundledPdkDirectory(string baseDir) =>
+        CAP_DataAccess.Components.ComponentDraftMapper.BundledPdkPaths.ResolveBundledPdkDirectory(baseDir);
 
     private void FilterComponents()
     {

@@ -3,6 +3,7 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
+using Moq;
 using Shouldly;
 
 namespace UnitTests.PdkOffset;
@@ -143,6 +144,71 @@ public class PdkOffsetEditorBundledSaveTests : IDisposable
         forkEvents.ShouldBeEmpty();
         vm.HasUnsavedChanges.ShouldBeTrue();
         vm.StatusText.ShouldContain("read-only");
+    }
+
+    [Fact]
+    public async Task BundledSave_WhenBundledRowAlreadyShadowed_StillForksByPath()
+    {
+        // Round-5 review [1]: once a fork shadows the bundled PDK, the IsBundled row is
+        // deregistered — the registry check alone then falls through to a DIRECT write of
+        // the shipped JSON. The path-based probe must still route the save into the fork.
+        var bundledPath = WriteBundledJson();
+        var bundledBytesBefore = File.ReadAllBytes(bundledPath);
+        var manager = new PdkManagerViewModel();
+        // Simulate the post-shadow registry: only the (older) fork row is registered.
+        var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());
+        var earlierForkPath = store.ForkBundledPdk(bundledPath, "Shipped PDK");
+        manager.RegisterPdk("Shipped PDK", earlierForkPath, isBundled: false, componentCount: 1);
+
+        var vm = new PdkOffsetEditorViewModel(
+            new PdkLoader(), new PdkJsonSaver(), manager, userPdkStore: store)
+        {
+            IsBundledPdkFilePath = path => Path.GetDirectoryName(Path.GetFullPath(path))!
+                .Equals(Path.GetFullPath(_bundledDir), StringComparison.OrdinalIgnoreCase),
+        };
+        var forkEvents = new List<(string, string)>();
+        vm.BundledPdkForkSaved = (name, path) => forkEvents.Add((name, path));
+
+        // Load the BUNDLED file (e.g. via the file dialog) although its row is gone.
+        var dialog = new Mock<CAP.Avalonia.Services.IFileDialogService>();
+        dialog.Setup(d => d.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(bundledPath);
+        vm.FileDialogService = dialog.Object;
+        await vm.LoadPdkFileCommand.ExecuteAsync(null);
+
+        vm.SelectedComponent = vm.Components[0];
+        vm.OffsetY = 4.5;
+        vm.ApplyOffsetCommand.Execute(null);
+        vm.SavePdkCommand.Execute(null);
+
+        // The shipped JSON stays byte-identical; the edit landed in the fork.
+        File.ReadAllBytes(bundledPath).ShouldBe(bundledBytesBefore);
+        var fork = new PdkLoader().LoadFromFileForEditing(store.ResolveNamedPath("Shipped PDK"));
+        fork.Components[0].NazcaOriginOffsetY.ShouldBe(4.5);
+        forkEvents.ShouldBe(new[] { ("Shipped PDK", store.ResolveNamedPath("Shipped PDK")) });
+    }
+
+    [Fact]
+    public void SecondBundledSave_RaisesUserPdkSaved_SoTheLibraryRefreshesTemplates()
+    {
+        // Round-5 review [1b]: after the first fork save the editor writes the fork
+        // directly. The library must be told about those later saves too, otherwise its
+        // in-memory templates (and every export) keep the first save's values.
+        var (vm, store, _, forkEvents) = BuildBundledVm();
+        var userSavedEvents = new List<(string Name, string Path)>();
+        vm.UserPdkSaved = (name, path) => userSavedEvents.Add((name, path));
+
+        EditWaveguideOffset(vm);
+        vm.SavePdkCommand.Execute(null);
+        userSavedEvents.ShouldBeEmpty("the first save is a fork save and uses the fork hook");
+
+        vm.OffsetY = 3.5;
+        vm.ApplyOffsetCommand.Execute(null);
+        vm.SavePdkCommand.Execute(null);
+
+        forkEvents.Count.ShouldBe(1);
+        var forkPath = store.ResolveNamedPath("Shipped PDK");
+        userSavedEvents.ShouldBe(new[] { ("Shipped PDK", forkPath) });
     }
 
     [Fact]

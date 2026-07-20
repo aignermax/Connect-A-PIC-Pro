@@ -443,6 +443,41 @@ public class BundledPdkForkSemanticsTests : IDisposable
             "the layer-renumbered custom PDK must fall out against the (forked) foundry reference");
     }
 
+    // ------------------------------------------------------------------ (e) re-save refreshes the fork
+
+    [Fact]
+    public async Task RegisterSavedPdkFork_whenForkAlreadyShadows_reloadsTheForkTemplates()
+    {
+        // Round-5 review [1b]: the offset editor's LATER saves hit a fork that already
+        // shadows the bundled entry. RegisterSavedPdkFork must treat that as a refresh —
+        // reload the fork's templates — instead of logging "no loaded bundled PDK".
+        WriteBundledPdk();
+        var (leftPanel, store) = CreateLeftPanel();
+        leftPanel.LoadBundledPdksFrom(_bundledDir);
+        var forkPath = store.SaveToNamedPdk(BundledPdkName, new ProcessDefinition { Name = "Foundry Process" },
+            RawCodeComponent("Bundled Coupler", BundledCouplerCode + "\n# forked"), "gdsfactory", null);
+        await leftPanel.ReloadUserPdksAtStartupAsync(_userPdkRoot);
+
+        // Simulate the offset editor writing new values into the SAME fork file.
+        var draft = new PdkLoader().LoadFromFileForEditing(forkPath);
+        draft.Components.Single(c => c.Name == "Bundled Coupler").RawCode += "\n# resaved";
+        new PdkJsonSaver().SaveToFile(draft, forkPath);
+
+        leftPanel.RegisterSavedPdkFork(BundledPdkName, forkPath);
+
+        var rows = leftPanel.PdkManager.LoadedPdks.Where(p => p.Name == BundledPdkName).ToList();
+        rows.Count.ShouldBe(1, "the refresh must not duplicate the registration");
+        rows[0].IsBundled.ShouldBeFalse();
+        rows[0].ShadowsBundledPdk.ShouldBeTrue();
+
+        leftPanel.AllTemplates.Single(t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler")
+            .RawCode.ShouldContain("# resaved", customMessage:
+                "the library must serve the re-saved fork values, not the first save's");
+        _errorConsole.Entries.ShouldNotContain(e => e.Message.Contains("was saved to"),
+            "a refresh of an already-shadowing fork is the expected flow, not an error");
+        _errorConsole.Entries.ShouldNotContain(e => e.Message.Contains("no loaded bundled PDK"));
+    }
+
     [Fact]
     public async Task StartupReload_collisionWithANonBundledPdk_isStillSkippedWithAWarning()
     {

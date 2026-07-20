@@ -52,16 +52,76 @@ public partial class LeftPanelViewModel
 
     /// <summary>
     /// Entry point for whole-PDK fork saves (PDK offset editor): the fork file
-    /// already contains the complete edited PDK, so the library only needs the
-    /// shadow swap. Logs when the name doesn't match a loaded bundled PDK —
-    /// the fork was saved but the library keeps its current registration.
+    /// already contains the complete edited PDK. When the fork ALREADY shadows
+    /// the bundled entry (an earlier fork save in this session, or a startup
+    /// shadow) the save is a refresh of the registered fork; otherwise the
+    /// library swaps from the bundled entry to the fork. Logs when neither
+    /// applies — the fork was saved but the library keeps its registration.
     /// </summary>
     public void RegisterSavedPdkFork(string pdkName, string forkFilePath)
     {
-        if (!TryShadowBundledPdkWithSavedFork(pdkName, forkFilePath))
+        if (TryRefreshRegisteredUserPdk(forkFilePath))
+            return;
+        if (TryShadowBundledPdkWithSavedFork(pdkName, forkFilePath))
+            return;
+        _errorConsole?.LogError(
+            $"A fork of '{pdkName}' was saved to '{forkFilePath}', but no loaded bundled PDK " +
+            "matches that name — the library was not switched to the fork.");
+    }
+
+    /// <summary>
+    /// Refreshes the library after an external editor (PDK offset editor) saved a PDK
+    /// file DIRECTLY — i.e. without the fork flow. Needed because the offset editor is
+    /// retargeted at the fork after its first save: every later save writes the fork file
+    /// directly, and without this reload the in-memory templates (and thus new placements
+    /// and GDS exports) would keep the first save's values until restart. A file that is
+    /// not registered in the library (loaded via file dialog) is a silent no-op.
+    /// </summary>
+    public void RefreshRegisteredPdkAfterExternalSave(string pdkName, string filePath) =>
+        TryRefreshRegisteredUserPdk(filePath);
+
+    /// <summary>
+    /// Reloads the in-memory templates of an already-registered NON-bundled PDK from its
+    /// file. All-or-nothing: the file is parsed BEFORE the current registration is
+    /// dropped, so an unreadable file leaves the library unchanged (and logs). Returns
+    /// false when no registered non-bundled row points at <paramref name="filePath"/>.
+    /// </summary>
+    internal bool TryRefreshRegisteredUserPdk(string filePath)
+    {
+        var normalized = Path.GetFullPath(filePath);
+        var row = PdkManager.LoadedPdks.FirstOrDefault(p =>
+            !p.IsBundled && p.FilePath != null &&
+            string.Equals(Path.GetFullPath(p.FilePath), normalized, StringComparison.OrdinalIgnoreCase));
+        if (row is null)
+            return false;
+
+        try
+        {
+            _pdkLoader.LoadFromFileForEditing(filePath);
+        }
+        catch (Exception ex)
+        {
             _errorConsole?.LogError(
-                $"A fork of '{pdkName}' was saved to '{forkFilePath}', but no loaded bundled PDK " +
-                "matches that name — the library was not switched to the fork.");
+                $"'{row.Name}' was saved to '{filePath}', but the file could not be reloaded " +
+                $"into the library — the previous in-memory state stays active: {ex.Message}", ex);
+            return true;
+        }
+
+        RemoveTemplatesForPdk(row.Name);
+        _loadedPdkDrafts.RemoveAll(d =>
+            d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized);
+        PdkManager.LoadedPdks.Remove(row);
+
+        if (!TryReloadUserPdk(filePath))
+        {
+            _errorConsole?.LogError(
+                $"'{row.Name}' was saved to '{filePath}', but re-registering it in the library failed.");
+            return true;
+        }
+
+        ReapplyActiveProcessAfterPdkChange();
+        FilterComponents();
+        return true;
     }
 
     /// <summary>
