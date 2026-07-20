@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CAP_Core;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
@@ -44,6 +45,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private readonly ComponentLibraryViewModel? _libraryViewModel;
     private readonly GroupPreviewGenerator? _previewGenerator;
     private IInputDialogService? _inputDialogService;
+    private readonly ErrorConsoleService? _errorConsole;
 
     [ObservableProperty]
     private InteractionMode _currentMode = InteractionMode.Select;
@@ -159,13 +161,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
         CommandManager commandManager,
         ComponentLibraryViewModel? libraryViewModel = null,
         GroupPreviewGenerator? previewGenerator = null,
-        IInputDialogService? inputDialogService = null)
+        IInputDialogService? inputDialogService = null,
+        ErrorConsoleService? errorConsole = null)
     {
         _canvas = canvas;
         _commandManager = commandManager;
         _libraryViewModel = libraryViewModel;
         _previewGenerator = previewGenerator;
         _inputDialogService = inputDialogService;
+        _errorConsole = errorConsole;
 
         // Hierarchy → right panel: when canvas.SelectedComponent changes externally
         // (e.g. from the hierarchy panel), mirror it so the right-panel property editor updates.
@@ -458,7 +462,20 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         var libraryManager = _libraryViewModel.GetLibraryManager();
-        var cmd = PlaceGroupTemplateCommand.TryCreate(_canvas, libraryManager, SelectedGroupTemplate, x, y);
+        var cmd = PlaceGroupTemplateCommand.TryCreate(
+            _canvas, libraryManager, SelectedGroupTemplate, x, y, out var physicsRejection);
+
+        if (physicsRejection != null)
+        {
+            // Physics guard (round-4 hotfix): the template's frozen S-matrix data would
+            // fabricate energy. Abort the placement cleanly — localized guard message to
+            // the Error Console and the status bar, never an app-killing exception.
+            var message = Analysis.NonConvergentCircuitMessageFormatter.Format(physicsRejection);
+            _errorConsole?.LogError(
+                $"Group '{SelectedGroupTemplate.Name}' was not placed: {message}");
+            UpdateStatus?.Invoke(message);
+            return;
+        }
 
         if (cmd == null)
         {
