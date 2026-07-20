@@ -64,6 +64,15 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     [ObservableProperty] private bool _isNazcaRendering;
     [ObservableProperty] private string _nazcaOverlayStatus = "";
 
+    /// <summary>
+    /// Prominent per-component render problem shown directly at the overlay
+    /// canvas: set when the GDS preview fails outright OR succeeds but returns
+    /// zero polygons (the dashed box would otherwise silently pretend to be a
+    /// render — field bug: adiabatic couplers showed an empty box with no
+    /// error at all). Empty when the last render produced real geometry.
+    /// </summary>
+    [ObservableProperty] private string _overlayErrorText = "";
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AutoCalibrateCommand))]
     private bool _hasNazcaOverlay;
@@ -361,6 +370,7 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         NazcaPolygons.Clear();
         NazcaPinStubs.Clear();
         NazcaOverlayStatus = "";
+        OverlayErrorText = "";
         PinAlignmentSummary = "";
         PinAlignmentResults.Clear();
         _nazcaCanvasRight = 0;

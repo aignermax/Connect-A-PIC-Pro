@@ -252,6 +252,14 @@
                         </Grid>
                         <TextBlock Text="{loc:Localize PdkOffset.OverlayLegend}"
                                    Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+                        <!-- Render problem banner: failed render OR empty geometry.
+                             Shown AT the component so the dashed box never poses
+                             as a successful preview again (field report). -->
+                        <Border Background="#4a1f1f" CornerRadius="4" Padding="8,6"
+                                IsVisible="{Binding OverlayErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding OverlayErrorText}"
+                                       Foreground="#ff9898" FontSize="11" TextWrapping="Wrap"/>
+                        </Border>
                         <ScrollViewer x:Name="OverlayScrollViewer"
                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                                       Height="450"
