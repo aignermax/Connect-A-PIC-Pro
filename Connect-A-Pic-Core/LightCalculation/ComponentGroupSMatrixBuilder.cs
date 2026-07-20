@@ -88,7 +88,8 @@ public class ComponentGroupSMatrixBuilder
         if (group == null)
             throw new ArgumentNullException(nameof(group));
 
-        return BuildFullTransitiveMatrix(group, wavelengthNm);
+        // Internal fields are read per pin, so every closure column is needed here.
+        return BuildFullTransitiveMatrix(group, wavelengthNm, restrictSolveToExternalPins: false);
     }
 
     /// <summary>
@@ -183,7 +184,8 @@ public class ComponentGroupSMatrixBuilder
     /// This is the common implementation used by both the external-pin-projection path
     /// and the full-internal-matrix path.
     /// </summary>
-    private SMatrix? BuildFullTransitiveMatrix(ComponentGroup group, int wavelengthNm)
+    private SMatrix? BuildFullTransitiveMatrix(
+        ComponentGroup group, int wavelengthNm, bool restrictSolveToExternalPins)
     {
         var allChildPinIds = CollectAllChildPinIds(group);
 
@@ -206,19 +208,38 @@ public class ComponentGroupSMatrixBuilder
         var mergedMatrix = SMatrix.CreateSystemSMatrix(childMatrices);
 
         // Compute transitive closure so light propagates through multi-hop chains.
-        return ComputeTransitiveMatrix(mergedMatrix, BuildClosureContext(group, wavelengthNm));
+        return ComputeTransitiveMatrix(
+            mergedMatrix, BuildClosureContext(group, wavelengthNm, restrictSolveToExternalPins));
     }
 
     /// <summary>
     /// Circuit knowledge for the closure solve: pin owner names (passivity pre-check +
     /// feedback-loop naming), the group's external pins (energy-guard scope — field
     /// enhancement INSIDE a ring is legitimate physics), and the wavelength (messages).
+    /// With <paramref name="restrictSolveToExternalPins"/> the solve computes only the
+    /// external source columns (review finding [7]): the projection path discards every
+    /// internal column anyway, so one O(n²) substitution per external pin replaces the
+    /// full-inverse solve without changing a single projected value.
     /// </summary>
-    private static TransitiveClosureContext BuildClosureContext(ComponentGroup group, int wavelengthNm)
+    private static TransitiveClosureContext BuildClosureContext(
+        ComponentGroup group, int wavelengthNm, bool restrictSolveToExternalPins)
     {
         var owners = new Dictionary<Guid, string>();
         CollectPinOwnerNames(group, owners);
 
+        var externalPinIds = CollectExternalPinFlowIds(group);
+        return new TransitiveClosureContext
+        {
+            PinOwnerNames = owners,
+            ExternallyObservablePinIds = externalPinIds,
+            SourcePinIds = restrictSolveToExternalPins ? externalPinIds : null,
+            WavelengthNm = wavelengthNm,
+        };
+    }
+
+    /// <summary>Both flow ids of every external group pin backed by a logical pin.</summary>
+    private static HashSet<Guid> CollectExternalPinFlowIds(ComponentGroup group)
+    {
         var externalPinIds = new HashSet<Guid>();
         foreach (var extPin in group.ExternalPins)
         {
@@ -226,13 +247,7 @@ public class ComponentGroupSMatrixBuilder
             externalPinIds.Add(extPin.InternalPin.LogicalPin.IDInFlow);
             externalPinIds.Add(extPin.InternalPin.LogicalPin.IDOutFlow);
         }
-
-        return new TransitiveClosureContext
-        {
-            PinOwnerNames = owners,
-            ExternallyObservablePinIds = externalPinIds,
-            WavelengthNm = wavelengthNm,
-        };
+        return externalPinIds;
     }
 
     /// <summary>
@@ -269,23 +284,13 @@ public class ComponentGroupSMatrixBuilder
     /// </summary>
     private SMatrix? BuildSMatrixForWavelength(ComponentGroup group, int wavelengthNm)
     {
-        var fullMatrix = BuildFullTransitiveMatrix(group, wavelengthNm);
+        // Only the external columns are kept below, so the solve is restricted to them.
+        var fullMatrix = BuildFullTransitiveMatrix(group, wavelengthNm, restrictSolveToExternalPins: true);
         if (fullMatrix == null)
             return null;
 
-        // Create the external pin mapping
-        var externalPinIds = new List<Guid>();
-        foreach (var extPin in group.ExternalPins)
-        {
-            if (extPin.InternalPin?.LogicalPin != null)
-            {
-                externalPinIds.Add(extPin.InternalPin.LogicalPin.IDInFlow);
-                externalPinIds.Add(extPin.InternalPin.LogicalPin.IDOutFlow);
-            }
-        }
-
         // Extract the sub-matrix for external pins only
-        return ExtractExternalPinMatrix(fullMatrix, externalPinIds);
+        return ExtractExternalPinMatrix(fullMatrix, CollectExternalPinFlowIds(group).ToList());
     }
 
     /// <summary>
