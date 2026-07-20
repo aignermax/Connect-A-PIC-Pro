@@ -567,6 +567,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 StartPin = newStartPin,
                 EndPin = newEndPin
             };
+            // Carry the per-connection routing settings into the copy so template
+            // instantiation and copy/paste keep the configured styles.
+            clonedPath.CopySettingsFrom(frozenPath);
 
             newGroup.AddInternalPath(clonedPath);
         }

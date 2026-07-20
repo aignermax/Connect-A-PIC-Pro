@@ -158,9 +158,12 @@ public class CreateGroupCommand : IUndoableCommand
             {
                 Path = conn.RoutedPath != null ? ClonePath(conn.RoutedPath) : new RoutedPath(),
                 StartPin = conn.StartPin,
-                EndPin = conn.EndPin,
-                PropagationLossDbPerCm = conn.PropagationLossDbPerCm
+                EndPin = conn.EndPin
             };
+            // Preserve the per-connection routing settings (style, radius, width,
+            // freeze flag, bend overrides, loss) so group edit mode, ungroup and
+            // saved templates restore them instead of "Auto" defaults.
+            frozenPath.CaptureSettingsFrom(conn);
             _createdGroup.AddInternalPath(frozenPath);
         }
 

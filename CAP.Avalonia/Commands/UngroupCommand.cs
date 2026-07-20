@@ -68,10 +68,30 @@ public class UngroupCommand : IUndoableCommand
             _restoredConnectionViewModels.Clear();
             foreach (var frozenPath in _group.InternalPaths)
             {
-                var connection = _canvas.ConnectionManager.AddConnectionDeferred(
-                    frozenPath.StartPin,
-                    frozenPath.EndPin
-                );
+                var connection = new WaveguideConnection
+                {
+                    StartPin = frozenPath.StartPin,
+                    EndPin = frozenPath.EndPin,
+                    PropagationLossDbPerCm = _canvas.ConnectionManager.DefaultPropagationLossDbPerCm,
+                    BendLossDbPer90Deg = _canvas.ConnectionManager.DefaultBendLossDbPer90Deg
+                };
+
+                // Restore the per-connection routing settings (style, radius, width,
+                // freeze flag, bend overrides, loss) captured when the group was
+                // created; without this the restored connection reverts to "Auto".
+                frozenPath.ApplySettingsTo(connection);
+
+                // Re-attach the frozen geometry so a frozen route (and its manual
+                // bend edits) survives the re-route triggered below: RecalculateRoutes
+                // only keeps frozen/hand-edited paths whose endpoints still match.
+                // Both steps happen BEFORE the manager add so a concurrently running
+                // routing pass never sees a half-initialized connection.
+                if (frozenPath.Path != null && frozenPath.Path.Segments.Count > 0)
+                {
+                    connection.RestoreCachedPath(frozenPath.Path);
+                }
+
+                _canvas.ConnectionManager.AddExistingConnection(connection);
 
                 var connVm = new WaveguideConnectionViewModel(connection);
                 _canvas.Connections.Add(connVm);

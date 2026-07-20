@@ -1,4 +1,5 @@
 using System.Numerics;
+using CAP_Core.Components.Connections;
 using CAP_Core.Routing;
 
 namespace CAP_Core.Components.Core;
@@ -36,6 +37,85 @@ public class FrozenWaveguidePath : ICloneable
     /// Default: 0.5 dB/cm (high-quality strip waveguide)
     /// </summary>
     public double PropagationLossDbPerCm { get; set; } = 0.5;
+
+    /// <summary>
+    /// Routing style of the original connection (Auto/Bend/SBend/Cobra).
+    /// Preserved so re-expanding the group (edit mode, ungroup, template
+    /// instantiation) restores the user's chosen style instead of "Auto".
+    /// </summary>
+    public WaveguideType ConnectionType { get; set; } = WaveguideType.Auto;
+
+    /// <summary>
+    /// Bend radius of the original connection in micrometers.
+    /// </summary>
+    public double BendRadiusMicrometers { get; set; } = WaveguideConnection.DefaultBendRadiusMicrometers;
+
+    /// <summary>
+    /// Waveguide width of the original connection in micrometers.
+    /// </summary>
+    public double WidthMicrometers { get; set; } = WaveguideConnection.DefaultWidthMicrometers;
+
+    /// <summary>
+    /// Whether the original connection's route was frozen (manually pinned geometry).
+    /// </summary>
+    public bool IsRouteFrozen { get; set; }
+
+    /// <summary>
+    /// Manual per-bend radius overrides of the original connection, keyed by bend index.
+    /// </summary>
+    public Dictionary<int, double> BendRadiusOverrides { get; } = new();
+
+    /// <summary>
+    /// Captures the per-connection routing settings (style, radius, width, freeze
+    /// flag, bend overrides, propagation loss) from a live connection so they
+    /// survive while the connection only exists as a frozen path inside a group.
+    /// </summary>
+    /// <param name="connection">The live connection to capture settings from.</param>
+    public void CaptureSettingsFrom(WaveguideConnection connection)
+    {
+        ConnectionType = connection.Type;
+        BendRadiusMicrometers = connection.BendRadiusMicrometers;
+        WidthMicrometers = connection.WidthMicrometers;
+        IsRouteFrozen = connection.IsRouteFrozen;
+        PropagationLossDbPerCm = connection.PropagationLossDbPerCm;
+        BendRadiusOverrides.Clear();
+        foreach (var (bendIndex, radius) in connection.BendRadiusOverrides)
+            BendRadiusOverrides[bendIndex] = radius;
+    }
+
+    /// <summary>
+    /// Applies the stored routing settings back onto a live connection, used when
+    /// the group is expanded again (group edit mode or ungroup).
+    /// </summary>
+    /// <param name="connection">The live connection to restore settings onto.</param>
+    public void ApplySettingsTo(WaveguideConnection connection)
+    {
+        connection.Type = ConnectionType;
+        connection.BendRadiusMicrometers = BendRadiusMicrometers;
+        connection.WidthMicrometers = WidthMicrometers;
+        connection.IsRouteFrozen = IsRouteFrozen;
+        connection.PropagationLossDbPerCm = PropagationLossDbPerCm;
+        connection.BendRadiusOverrides.Clear();
+        foreach (var (bendIndex, radius) in BendRadiusOverrides)
+            connection.BendRadiusOverrides[bendIndex] = radius;
+    }
+
+    /// <summary>
+    /// Copies the stored routing settings from another frozen path (deep-copy and
+    /// clone support).
+    /// </summary>
+    /// <param name="source">The frozen path to copy settings from.</param>
+    public void CopySettingsFrom(FrozenWaveguidePath source)
+    {
+        ConnectionType = source.ConnectionType;
+        BendRadiusMicrometers = source.BendRadiusMicrometers;
+        WidthMicrometers = source.WidthMicrometers;
+        IsRouteFrozen = source.IsRouteFrozen;
+        PropagationLossDbPerCm = source.PropagationLossDbPerCm;
+        BendRadiusOverrides.Clear();
+        foreach (var (bendIndex, radius) in source.BendRadiusOverrides)
+            BendRadiusOverrides[bendIndex] = radius;
+    }
 
     /// <summary>
     /// Amplitude transmission coefficient accounting for propagation loss.
@@ -125,11 +205,13 @@ public class FrozenWaveguidePath : ICloneable
             }
         }
 
-        return new FrozenWaveguidePath
+        var clone = new FrozenWaveguidePath
         {
             Path = clonedPath,
             PathId = Guid.NewGuid(),
             // StartPin and EndPin references must be updated after cloning by the ComponentGroup
         };
+        clone.CopySettingsFrom(this);
+        return clone;
     }
 }

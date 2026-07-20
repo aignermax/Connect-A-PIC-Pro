@@ -286,6 +286,10 @@ public class GroupEditService
             {
                 var connection = _connectionManager.AddConnectionWithCachedRoute(
                     frozenPath.StartPin, frozenPath.EndPin, frozenPath.Path);
+                // The cached route restores only the geometry; without this the editor
+                // shows a fresh default connection ("Auto") although the curve renders
+                // correctly (field report round 5, finding a).
+                frozenPath.ApplySettingsTo(connection);
                 var connVm = new WaveguideConnectionViewModel(connection);
                 _connections.Add(connVm);
             }
@@ -315,12 +319,16 @@ public class GroupEditService
             var conn = connVm.Connection;
             if (conn.RoutedPath != null)
             {
-                group.AddInternalPath(new FrozenWaveguidePath
+                var frozenPath = new FrozenWaveguidePath
                 {
                     StartPin = conn.StartPin,
                     EndPin = conn.EndPin,
                     Path = conn.RoutedPath
-                });
+                };
+                // Keep the per-connection routing settings across the exit, otherwise
+                // they reset to "Auto" defaults on the next expand.
+                frozenPath.CaptureSettingsFrom(conn);
+                group.AddInternalPath(frozenPath);
             }
         }
 
