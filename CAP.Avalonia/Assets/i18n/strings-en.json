@@ -56,7 +56,7 @@
   "Analysis.Output.DesignatedLaserOn": "The laser of output '{0}' is on again — switch it off or pick another output",
   "Analysis.Output.DesignatedMissing": "The designated output coupler no longer exists — pick a new output on the canvas",
   "Analysis.Output.MultipleCandidatesWarning": "Several couplers could be the output — the strongest trace was used. Pick the output on the canvas.",
-  "Analysis.Output.NoSignal": "No light arrives at output '{0}' — check the path from your input coupler.",
+  "Analysis.Output.NoSignal": "No light from the switched-on input(s) arrives at output '{0}' — check the connection path from your input coupler.",
   "Analysis.Output.None": "(automatic)",
   "Analysis.Output.PickNotACoupler": "That is not a coupler — click a grating/edge coupler, or press Esc to cancel",
   "Analysis.Output.PickPrompt": "Pick output: click a coupler on the canvas to designate it as the analysis output — Esc cancels",

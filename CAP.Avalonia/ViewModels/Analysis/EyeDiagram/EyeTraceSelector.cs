@@ -16,9 +16,13 @@ internal static class EyeTraceSelector
     public const string AllLasersOnWarning =
         "All couplers are emitting — turn the laser off on your output coupler(s) for a meaningful eye.";
 
-    /// <summary>Error shown when the designated output coupler(s) receive no light.</summary>
+    /// <summary>Error shown when the coupler(s) with the laser off receive no light.</summary>
     public const string NoSignalAtOutputError =
-        "No light arrives at the coupler(s) with the laser switched off — check the path from your input coupler.";
+        "No light from the switched-on input(s) arrives at the coupler(s) with the laser switched off — check the connection path from your input coupler.";
+
+    /// <summary>Error shown when the user-designated output coupler receives no light (#754).</summary>
+    public const string NoSignalAtDesignatedOutputError =
+        "No light from the switched-on input(s) arrives at the designated output coupler — check the connection path from your input coupler to it.";
 
     /// <summary>
     /// Warning shown when several off couplers compete and none is designated (#754):
@@ -59,7 +63,7 @@ internal static class EyeTraceSelector
         {
             var designated = TracesFor(result, designatedPinIds);
             return designated.Count == 0
-                ? new Selection(null, null, NoSignalAtOutputError)
+                ? new Selection(null, null, NoSignalAtDesignatedOutputError)
                 : new Selection(SelectStrongest(designated), null, null);
         }
 

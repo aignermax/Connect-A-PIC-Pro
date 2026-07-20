@@ -317,50 +317,14 @@ public class ComponentGroupSMatrixBuilder
     /// <summary>
     /// Computes the transitive S-Matrix via the Neumann series (M + M² + … + Mⁿ).
     /// This is required because CreateSystemSMatrix only stores single-hop transfers.
-    /// Light traversing a chain of k components needs k matrix steps; summing the series
-    /// gives the complete multi-hop transfer in a single combined matrix.
-    /// Iteration stops early when the matrix power falls below numerical noise.
+    /// Delegates to the shared <see cref="TransitiveSMatrixCalculator"/> (also used by
+    /// the transient impulse-response extraction) so group and flat circuits share one
+    /// multi-hop physics implementation.
     /// </summary>
     /// <param name="singleHopMatrix">Merged single-hop S-Matrix for the group.</param>
     /// <param name="maxSteps">Maximum number of steps (upper bound = total pin count).</param>
-    private SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix, int maxSteps)
-    {
-        var pinIds = singleHopMatrix.PinReference.Keys.ToList();
-        int n = pinIds.Count;
-
-        if (n == 0 || maxSteps <= 0)
-            return singleHopMatrix;
-
-        var M = singleHopMatrix.SMat;
-        var transitiveS = M.Clone();
-        var Mk = M.Clone();
-
-        for (int k = 1; k < maxSteps; k++)
-        {
-            Mk = Mk.Multiply(M);
-            if (Mk.InfinityNorm() < 1e-15)
-                break;
-            transitiveS = transitiveS.Add(Mk);
-        }
-
-        // Rebuild an SMatrix from the accumulated values
-        var reversePinRef = singleHopMatrix.PinReference.ToDictionary(kv => kv.Value, kv => kv.Key);
-        var transfers = new Dictionary<(Guid, Guid), Complex>();
-
-        for (int iOut = 0; iOut < n; iOut++)
-        {
-            for (int iIn = 0; iIn < n; iIn++)
-            {
-                var val = transitiveS[iOut, iIn];
-                if (val != Complex.Zero)
-                    transfers[(reversePinRef[iIn], reversePinRef[iOut])] = val;
-            }
-        }
-
-        var result = new SMatrix(pinIds, new());
-        result.SetValues(transfers);
-        return result;
-    }
+    private static SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix, int maxSteps)
+        => TransitiveSMatrixCalculator.Compute(singleHopMatrix, maxSteps);
 
     /// <summary>
     /// Extracts a sub-matrix containing only the specified external pins.

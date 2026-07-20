@@ -68,8 +68,14 @@ public class ImpulseResponseBuilder
             int wavelengthNm = FreqToWavelengthNmInt(freqGrid[k]);
             if (!matrixCache.TryGetValue(wavelengthNm, out var values))
             {
+                // The system matrix only carries SINGLE-hop transfers (component
+                // matrices + connection transfers); the frequency response of a pin
+                // pair must include the transitive multi-hop closure, otherwise light
+                // never crosses a component boundary in the transient simulation.
                 var sMatrix = _matrixBuilder.GetSystemSMatrix(wavelengthNm);
-                values = sMatrix.GetNonNullValues();
+                var transitive = TransitiveSMatrixCalculator.Compute(
+                    sMatrix, sMatrix.PinReference.Count);
+                values = transitive.GetNonNullValues();
                 matrixCache[wavelengthNm] = values;
             }
 

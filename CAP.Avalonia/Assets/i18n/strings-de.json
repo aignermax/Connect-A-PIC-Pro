@@ -56,7 +56,7 @@
   "Analysis.Output.DesignatedLaserOn": "Der Laser von Ausgang '{0}' ist wieder an — schalte ihn aus oder wähle einen anderen Ausgang",
   "Analysis.Output.DesignatedMissing": "Der festgelegte Ausgangs-Coupler existiert nicht mehr — wähle einen neuen Ausgang auf dem Canvas",
   "Analysis.Output.MultipleCandidatesWarning": "Mehrere Coupler kommen als Ausgang in Frage — die stärkste Spur wurde verwendet. Wähle den Ausgang auf dem Canvas.",
-  "Analysis.Output.NoSignal": "Am Ausgang '{0}' kommt kein Licht an — prüfe den Pfad von deinem Eingangs-Coupler.",
+  "Analysis.Output.NoSignal": "Am gewählten Ausgang '{0}' kommt kein Licht vom eingeschalteten Eingang an — prüfe die Verbindung von deinem Eingangs-Coupler.",
   "Analysis.Output.None": "(automatisch)",
   "Analysis.Output.PickNotACoupler": "Das ist kein Coupler — klicke einen Grating-/Edge-Coupler oder drücke Esc zum Abbrechen",
   "Analysis.Output.PickPrompt": "Ausgang wählen: Klicke einen Coupler auf dem Canvas, um ihn als Analyse-Ausgang festzulegen — Esc bricht ab",

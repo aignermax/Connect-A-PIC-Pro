@@ -56,7 +56,7 @@
   "Analysis.Output.DesignatedLaserOn": "出力 '{0}' のレーザーが再びオンになっています — オフにするか、別の出力を選択してください",
   "Analysis.Output.DesignatedMissing": "指定された出力カプラは存在しません — キャンバスで新しい出力を選択してください",
   "Analysis.Output.MultipleCandidatesWarning": "複数のカプラが出力の候補です — 最も強いトレースを使用しました。キャンバスで出力を選択してください。",
-  "Analysis.Output.NoSignal": "出力 '{0}' に光が届いていません — 入力カプラからの経路を確認してください。",
+  "Analysis.Output.NoSignal": "オンになっている入力からの光が出力 '{0}' に届いていません — 入力カプラからの接続経路を確認してください。",
   "Analysis.Output.None": "（自動）",
   "Analysis.Output.PickNotACoupler": "これはカプラではありません — グレーティング/エッジカプラをクリックするか、Esc でキャンセルしてください",
   "Analysis.Output.PickPrompt": "出力を選択: キャンバス上のカプラをクリックして解析出力に指定します — Esc でキャンセル",

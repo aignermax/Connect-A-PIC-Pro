@@ -56,7 +56,7 @@
   "Analysis.Output.DesignatedLaserOn": "输出 '{0}' 的激光器再次开启 — 请将其关闭或选取其他输出",
   "Analysis.Output.DesignatedMissing": "指定的输出耦合器已不存在 — 请在画布上选取新的输出",
   "Analysis.Output.MultipleCandidatesWarning": "多个耦合器都可能是输出 — 已使用最强的迹线。请在画布上选取输出。",
-  "Analysis.Output.NoSignal": "输出 '{0}' 未收到任何光 — 请检查从输入耦合器出发的路径。",
+  "Analysis.Output.NoSignal": "已开启的输入没有光到达输出 '{0}' — 请检查从输入耦合器出发的连接路径。",
   "Analysis.Output.None": "（自动）",
   "Analysis.Output.PickNotACoupler": "这不是耦合器 — 请点击光栅/边缘耦合器，或按 Esc 取消",
   "Analysis.Output.PickPrompt": "选取输出：点击画布上的耦合器将其指定为分析输出 — 按 Esc 取消",

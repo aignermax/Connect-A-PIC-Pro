@@ -112,7 +112,7 @@ public class EyeTraceSelectorTests
             designatedPinIds: new[] { designatedPin });
 
         selection.Trace.ShouldBeNull();
-        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtOutputError);
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtDesignatedOutputError);
     }
 
     [Fact]
