@@ -261,7 +261,10 @@ public partial class TimeDomainViewModel : ObservableObject
 
     private TimeDomainResult RunSimulationCore()
     {
-        var (simulator, portManager) = TransientCircuitFactory.Create(_canvas!);
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, portManager) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
 
         var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 

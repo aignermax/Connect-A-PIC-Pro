@@ -25,8 +25,14 @@ internal static class TransientCircuitFactory
     /// input; couplers with the laser off are listen-only outputs (#690).
     /// </summary>
     /// <param name="canvas">Canvas providing components and connections.</param>
+    /// <param name="onPassivityWarning">
+    /// Receives at most ONE warning per component per created simulator when a shipped
+    /// measured dataset exceeds passivity within the tolerated noise band (the closure
+    /// sweeps many wavelengths — without deduplication the console would repeat the
+    /// same component hundreds of times).
+    /// </param>
     public static (TimeDomainSimulator Simulator, PhysicalExternalPortManager Ports) Create(
-        DesignCanvasViewModel canvas)
+        DesignCanvasViewModel canvas, Action<PassivityWarning>? onPassivityWarning = null)
     {
         var tileManager = new ComponentListTileManager();
         foreach (var compVm in canvas.Components)
@@ -39,7 +45,24 @@ internal static class TransientCircuitFactory
             tileManager, canvas.ConnectionManager, portManager);
 
         var builder = new SystemMatrixBuilder(gridManager);
-        return (new TimeDomainSimulator(builder, BuildClosureContext(canvas)), portManager);
+        var context = BuildClosureContext(canvas) with
+        {
+            PassivityWarningSink = DedupePerComponent(onPassivityWarning),
+        };
+        return (new TimeDomainSimulator(builder, context), portManager);
+    }
+
+    /// <summary>Forwards only the FIRST warning per component name to <paramref name="sink"/>.</summary>
+    internal static Action<PassivityWarning>? DedupePerComponent(Action<PassivityWarning>? sink)
+    {
+        if (sink == null)
+            return null;
+        var warnedComponents = new HashSet<string>();
+        return warning =>
+        {
+            if (warnedComponents.Add(warning.ComponentName))
+                sink(warning);
+        };
     }
 
     /// <summary>

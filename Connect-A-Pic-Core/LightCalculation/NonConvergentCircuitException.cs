@@ -20,6 +20,15 @@ public enum NonConvergentCircuitKind
     /// value &gt; 1): its S-parameter data or interpolation fabricates energy.
     /// </summary>
     NonPassiveComponent,
+
+    /// <summary>
+    /// A single-hop transfer BETWEEN components (connection weight, or an entry touching
+    /// an unowned pin) has magnitude &gt; 1 — e.g. a negative effective loss from a bad
+    /// PDK value or instance override. Neither the per-component block check nor the
+    /// externally scoped energy guard covers these entries, so they are checked one by
+    /// one (field round 4 final review, finding [2]).
+    /// </summary>
+    ConnectionGain,
 }
 
 /// <summary>

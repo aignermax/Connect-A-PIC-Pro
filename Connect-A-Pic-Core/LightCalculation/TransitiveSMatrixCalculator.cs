@@ -134,6 +134,14 @@ public static class TransitiveSMatrixCalculator
     /// <see cref="ResidualTolerance"/>, or whose condition estimate exceeds
     /// <see cref="SingularityConditionLimit"/> — all three signatures of a lossless
     /// feedback loop exactly on resonance. The thrown message names the loop.
+    /// A loop with round-trip gain MAGNITUDE &gt; 1 would leave (I − M) well
+    /// conditioned and yield a finite, non-causal result this check cannot see —
+    /// that case is excluded up front by <see cref="SingleHopPassivityChecker"/>
+    /// (finding [3]): every single-hop entry is bounded by 1 + tolerance (blocks by
+    /// σ_max, connection/unowned entries individually), so no round-trip product can
+    /// materially exceed unity; the sliver a tolerated measurement-noise block could
+    /// add (≤ +0.5 %) blows the closure up to ~1/(|g|−1) ≥ 200, which the energy
+    /// guard rejects at any externally observable port.
     /// </summary>
     private static void ThrowIfSingular(
         Matrix<Complex> a, Matrix<Complex> b, Matrix<Complex> x,

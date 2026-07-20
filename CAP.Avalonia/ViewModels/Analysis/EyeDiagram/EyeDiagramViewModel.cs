@@ -213,7 +213,10 @@ public partial class EyeDiagramViewModel : ObservableObject
 
     private EyeRunOutcome RunAnalysisCore(AnalysisOutputResolution resolution)
     {
-        var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, ports) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
         var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas!);
         var designatedPinIds = resolution.State == AnalysisOutputState.DesignatedValid
             ? AnalysisOutputResolver.CollectLightPinIds(resolution.Output!)

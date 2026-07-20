@@ -32,4 +32,12 @@ public sealed record TransitiveClosureContext
 
     /// <summary>Wavelength the closure is computed for, named in error messages.</summary>
     public int? WavelengthNm { get; init; }
+
+    /// <summary>
+    /// Receives a <see cref="PassivityWarning"/> when a component block exceeds
+    /// passivity WITHIN the measurement-noise band
+    /// (<see cref="SingleHopPassivityChecker.MeasuredDataNoiseBand"/>) — the run
+    /// continues. Null drops the warning (e.g. group building without a console).
+    /// </summary>
+    public Action<PassivityWarning>? PassivityWarningSink { get; init; }
 }
