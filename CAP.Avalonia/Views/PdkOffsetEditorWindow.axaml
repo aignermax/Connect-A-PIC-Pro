@@ -116,7 +116,7 @@
                 <Border Background="#252525" CornerRadius="4" Padding="10,8"
                         IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="NazcaOriginOffset (µm)" FontWeight="Bold" Foreground="LightGray"/>
+                        <TextBlock Text="{loc:Localize PdkOffset.OriginOffset}" FontWeight="Bold" Foreground="LightGray"/>
                         <Grid ColumnDefinitions="Auto,120,20,Auto,120,*,Auto">
                             <TextBlock Grid.Column="0" Text="X:" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
                             <NumericUpDown Grid.Column="1"

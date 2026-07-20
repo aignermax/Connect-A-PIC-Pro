@@ -99,7 +99,7 @@ public partial class PdkOffsetEditorViewModel
         var draftAtStart = draft;
 
         IsNazcaRendering = true;
-        NazcaOverlayStatus = "Rendering Nazca GDS preview…";
+        NazcaOverlayStatus = "Rendering GDS preview…";
 
         try
         {

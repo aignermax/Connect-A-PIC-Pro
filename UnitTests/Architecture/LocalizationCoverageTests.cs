@@ -38,7 +38,7 @@ public class LocalizationCoverageTests
         "Python:", "Nazca:", "Playground",
         // Proper noun, technical notation, symbol+unit labels, and a key-format placeholder —
         // language-neutral, deliberately not translated.
-        "Lunima", "S-matrix", "n_eff:", "n_eff", "MFD:", "NazcaOriginOffset (µm)", "λ (nm):", "sk-ant-...",
+        "Lunima", "S-matrix", "n_eff:", "n_eff", "MFD:", "λ (nm):", "sk-ant-...",
     };
 
     /// <summary>Read-only code snippets shown as examples are source, not UI copy — never localized.</summary>
