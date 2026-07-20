@@ -73,8 +73,7 @@ public class ImpulseResponseBuilder
                 // pair must include the transitive multi-hop closure, otherwise light
                 // never crosses a component boundary in the transient simulation.
                 var sMatrix = _matrixBuilder.GetSystemSMatrix(wavelengthNm);
-                var transitive = TransitiveSMatrixCalculator.Compute(
-                    sMatrix, sMatrix.PinReference.Count);
+                var transitive = TransitiveSMatrixCalculator.Compute(sMatrix);
                 values = transitive.GetNonNullValues();
                 matrixCache[wavelengthNm] = values;
             }

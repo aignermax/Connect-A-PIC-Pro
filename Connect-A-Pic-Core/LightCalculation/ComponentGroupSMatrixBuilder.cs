@@ -206,7 +206,7 @@ public class ComponentGroupSMatrixBuilder
         var mergedMatrix = SMatrix.CreateSystemSMatrix(childMatrices);
 
         // Compute transitive closure so light propagates through multi-hop chains.
-        return ComputeTransitiveMatrix(mergedMatrix, allChildPinIds.Count);
+        return ComputeTransitiveMatrix(mergedMatrix);
     }
 
     /// <summary>
@@ -315,16 +315,18 @@ public class ComponentGroupSMatrixBuilder
     }
 
     /// <summary>
-    /// Computes the transitive S-Matrix via the Neumann series (M + M² + … + Mⁿ).
+    /// Computes the transitive S-Matrix via the Neumann series (M + M² + … + Mᵏ).
     /// This is required because CreateSystemSMatrix only stores single-hop transfers.
     /// Delegates to the shared <see cref="TransitiveSMatrixCalculator"/> (also used by
     /// the transient impulse-response extraction) so group and flat circuits share one
-    /// multi-hop physics implementation.
+    /// multi-hop physics implementation. The series iterates to residual-based
+    /// convergence; a resonant group topology (or non-physical member matrix) aborts
+    /// with <see cref="NonConvergentCircuitException"/> instead of silently returning a
+    /// truncated partial sum — the pre-round-4 pin-count cutoff hid exactly that error.
     /// </summary>
     /// <param name="singleHopMatrix">Merged single-hop S-Matrix for the group.</param>
-    /// <param name="maxSteps">Maximum number of steps (upper bound = total pin count).</param>
-    private static SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix, int maxSteps)
-        => TransitiveSMatrixCalculator.Compute(singleHopMatrix, maxSteps);
+    private static SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix)
+        => TransitiveSMatrixCalculator.Compute(singleHopMatrix);
 
     /// <summary>
     /// Extracts a sub-matrix containing only the specified external pins.
