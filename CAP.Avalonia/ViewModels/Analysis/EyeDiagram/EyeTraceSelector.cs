@@ -1,3 +1,4 @@
+using System.Globalization;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.Services.Localization;
 
@@ -20,9 +21,30 @@ internal static class EyeTraceSelector
     public const string NoSignalAtOutputError =
         "No light from the switched-on input(s) arrives at the coupler(s) with the laser switched off — check the connection path from your input coupler.";
 
+    /// <summary>
+    /// Minimum output power relative to the injected peak power (−60 dB) for an output to
+    /// count as receiving signal. The multi-hop closure produces numerically tiny traces at
+    /// every reachable pin (spurious reflection/crosstalk terms of component S-matrices);
+    /// evaluating an eye on such residue yields garbage Q/BER (#762 review, field round 4).
+    /// </summary>
+    public const double MinimumRelativeOutputPower = 1e-6;
+
+    /// <summary>The power threshold in dB ("-60"), named in the gate message.</summary>
+    private static string MinimumRelativeOutputPowerDb =>
+        (10 * Math.Log10(MinimumRelativeOutputPower)).ToString("0", CultureInfo.InvariantCulture);
+
     /// <summary>Error shown when the user-designated output coupler receives no light (#754).</summary>
-    public const string NoSignalAtDesignatedOutputError =
-        "No light from the switched-on input(s) arrives at the designated output coupler — check the connection path from your input coupler to it.";
+    public static string NoSignalAtDesignatedOutputError =>
+        LocalizationService.Instance.Translate("Analysis.Output.NoSignalDesignated");
+
+    /// <summary>
+    /// Error shown when the designated output receives only sub-threshold light — likely a
+    /// spurious reflection, not a signal path (#762 review). Names the −60 dB threshold.
+    /// </summary>
+    public static string BelowNoiseFloorError =>
+        string.Format(
+            LocalizationService.Instance.Translate("Analysis.Output.BelowNoiseFloor"),
+            MinimumRelativeOutputPowerDb);
 
     /// <summary>
     /// Warning shown when several off couplers compete and none is designated (#754):
@@ -53,18 +75,31 @@ internal static class EyeTraceSelector
     /// True when several off couplers compete without a designation, so the fallback
     /// choice gets an explicit warning instead of guessing silently (#754).
     /// </param>
+    /// <param name="injectedPeakPower">
+    /// Peak power injected at the strongest active input. When positive, an output only
+    /// counts as receiving signal when its peak intensity reaches
+    /// <see cref="MinimumRelativeOutputPower"/> (−60 dB) of this value — sub-threshold
+    /// residue from the multi-hop closure is treated as "no signal" (#762 review). Zero
+    /// (the default) disables the power gate.
+    /// </param>
     public static Selection Select(
         TimeDomainResult result,
         IReadOnlyCollection<Guid> outputCouplerPinIds,
         IReadOnlyCollection<Guid>? designatedPinIds = null,
-        bool hasMultipleCandidates = false)
+        bool hasMultipleCandidates = false,
+        double injectedPeakPower = 0)
     {
+        double threshold = injectedPeakPower * MinimumRelativeOutputPower;
+
         if (designatedPinIds != null)
         {
             var designated = TracesFor(result, designatedPinIds);
-            return designated.Count == 0
-                ? new Selection(null, null, NoSignalAtDesignatedOutputError)
-                : new Selection(SelectStrongest(designated), null, null);
+            if (designated.Count == 0)
+                return new Selection(null, null, NoSignalAtDesignatedOutputError);
+            var strongest = SelectStrongest(designated);
+            return Peak(strongest) < threshold
+                ? new Selection(null, null, BelowNoiseFloorError)
+                : new Selection(strongest, null, null);
         }
 
         if (outputCouplerPinIds.Count == 0)
@@ -73,9 +108,12 @@ internal static class EyeTraceSelector
         var candidates = TracesFor(result, outputCouplerPinIds);
         if (candidates.Count == 0)
             return new Selection(null, null, NoSignalAtOutputError);
+        var strongestCandidate = SelectStrongest(candidates);
+        if (Peak(strongestCandidate) < threshold)
+            return new Selection(null, null, NoSignalAtOutputError);
 
         var warning = hasMultipleCandidates ? MultipleOutputsWarning : null;
-        return new Selection(SelectStrongest(candidates), warning, null);
+        return new Selection(strongestCandidate, warning, null);
     }
 
     /// <summary>Traces of the result whose pin id is in the given set.</summary>
@@ -87,5 +125,8 @@ internal static class EyeTraceSelector
 
     /// <summary>Picks the highest-peak trace. The caller guarantees at least one exists.</summary>
     private static double[] SelectStrongest(IEnumerable<double[]> traces) =>
-        traces.OrderByDescending(t => t.Length == 0 ? 0 : t.Max()).First();
+        traces.OrderByDescending(Peak).First();
+
+    /// <summary>Peak intensity of a trace (0 for an empty trace).</summary>
+    private static double Peak(double[] trace) => trace.Length == 0 ? 0 : trace.Max();
 }

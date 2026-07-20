@@ -135,6 +135,57 @@ public class EyeTraceSelectorTests
     }
 
     [Fact]
+    public void Select_DesignatedOutputBelowNoiseFloor_ReturnsThresholdError()
+    {
+        // Field round 4 review, finding [1]: the multi-hop closure creates numerically tiny
+        // traces at every reachable pin (spurious reflections/crosstalk). A designated
+        // output at −100 dB of the injected power is NOT a signal path — the gate must say
+        // so instead of computing garbage Q/BER on numerical residue.
+        var designatedPin = Guid.NewGuid();
+        var result = BuildResult((designatedPin, new[] { 1e-10, 5e-11 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            Array.Empty<Guid>(),
+            designatedPinIds: new[] { designatedPin },
+            injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.BelowNoiseFloorError);
+        selection.Error.ShouldContain("-60");
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputAtMinus8dB_PassesTheGate()
+    {
+        // The real field case (−8.4 dB output) must keep working.
+        var designatedPin = Guid.NewGuid();
+        var result = BuildResult((designatedPin, new[] { 0.10, 0.145 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            Array.Empty<Guid>(),
+            designatedPinIds: new[] { designatedPin },
+            injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBe(result.PinTraces[designatedPin]);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_OffCouplersAllBelowNoiseFloor_ReturnsNoSignalError()
+    {
+        var outputPin = Guid.NewGuid();
+        var result = BuildResult((outputPin, new[] { 1e-9, 1e-10 }));
+
+        var selection = EyeTraceSelector.Select(
+            result, new[] { outputPin }, injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtOutputError);
+    }
+
+    [Fact]
     public void Select_HandlesEmptyTraceArrays()
     {
         var outputPin = Guid.NewGuid();

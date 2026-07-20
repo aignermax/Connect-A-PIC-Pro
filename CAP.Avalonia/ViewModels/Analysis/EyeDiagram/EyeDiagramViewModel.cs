@@ -222,9 +222,13 @@ public partial class EyeDiagramViewModel : ObservableObject
         var timeDef = new TimeSignalDefinition(sweepDef.SampleRateHz, plan.TotalSamples);
 
         var signals = new Dictionary<Guid, double[]>();
+        double injectedPeakPower = 0;
         foreach (var used in ports.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(used.Input.InFlowPower.Magnitude);
+            // Peak intensity of the strongest input — the reference for the −60 dB
+            // no-signal gate in EyeTraceSelector (#762 review).
+            injectedPeakPower = Math.Max(injectedPeakPower, amplitude * amplitude);
             signals[used.AttachedComponentPinId] = PrbsGenerator.ToNrzSamples(bits, plan.SamplesPerBit, amplitude);
         }
         if (signals.Count == 0)
@@ -241,7 +245,8 @@ public partial class EyeDiagramViewModel : ObservableObject
         // designation, at a coupler whose laser is off (a true output, #690); fall
         // back to the strongest trace (with a warning) for all-lasers-on designs.
         var selection = EyeTraceSelector.Select(result, outputPinIds, designatedPinIds,
-            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates);
+            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates,
+            injectedPeakPower: injectedPeakPower);
         if (selection.Trace == null)
             return new EyeRunOutcome(null, null, selection.Error);
         var trace = selection.Trace;
