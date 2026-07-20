@@ -186,6 +186,7 @@
                                    IsVisible="{Binding PinAlignmentSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         <Expander Header="{loc:Localize PdkOffset.PerPinDeltas}"
                                   Foreground="LightGray" FontSize="11"
+                                  HorizontalAlignment="Stretch"
                                   IsExpanded="False"
                                   IsVisible="{Binding PinAlignmentResults.Count}">
                             <ItemsControl ItemsSource="{Binding PinAlignmentResults}">
@@ -209,6 +210,7 @@
                         </Expander>
                         <Expander Header="{loc:Localize PdkOffset.PreviewSource}"
                                   Foreground="LightGray" FontSize="11"
+                                  HorizontalAlignment="Stretch"
                                   IsExpanded="False"
                                   IsVisible="{Binding PreviewSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                             <TextBox Text="{Binding PreviewSource}"
