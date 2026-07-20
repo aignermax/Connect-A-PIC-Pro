@@ -277,6 +277,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 break;
             case InteractionMode.Select:
                 SelectAt(canvasX, canvasY);
+                // Keep the multi-selection set in sync with the click result — an
+                // empty-canvas click must clear it, otherwise the hierarchy panel
+                // re-mirrors the stale set and keeps its multi-highlight while the
+                // canvas looks deselected (field bug, round 4 final).
+                if (SelectedComponent != null)
+                    _canvas.Selection.SelectSingle(SelectedComponent);
+                else
+                    _canvas.Selection.ClearSelection();
                 break;
             case InteractionMode.Connect:
                 var pin = _canvas.HighlightedPin?.Pin ?? _canvas.GetPinAt(canvasX, canvasY);
