@@ -181,7 +181,10 @@ public partial class PdkOffsetEditorViewModel
             for (int i = 0; i < Components.Count && i < BatchCheckResults.Count; i++)
             {
                 if (token.IsCancellationRequested) break;
-                if (BatchCheckResults[i].Status != ComponentCheckStatus.Misaligned) continue;
+                // CheckAlignment (0.1–0.5 µm) is auto-fixable exactly like Misaligned —
+                // the band only exists so the report stops calling visible offsets "Aligned".
+                if (BatchCheckResults[i].Status is not
+                    (ComponentCheckStatus.Misaligned or ComponentCheckStatus.CheckAlignment)) continue;
                 var item = Components[i];
                 BatchProgress = string.Format(
                     LocalizationService.Instance.Translate("PdkOffset.Batch.Fixing"), item.Draft.Name);
@@ -202,7 +205,8 @@ public partial class PdkOffsetEditorViewModel
                     // row keeps the report and the underlying state coherent
                     // without paying for a full second Check-All pass.
                     BatchCheckResults[idx] = PdkOffsetCalibration.Evaluate(
-                        item.Draft, result, PinAlignmentToleranceMicrometers);
+                        item.Draft, result,
+                        PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
                 });
             }
 
@@ -323,7 +327,7 @@ public partial class PdkOffsetEditorViewModel
             if (token.IsCancellationRequested) return;
             var check = PdkOffsetCalibration.Evaluate(
                 item.Draft, result ?? NazcaPreviewResult.Fail("render returned null"),
-                PinAlignmentToleranceMicrometers);
+                PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
             await UiThreadMarshaller(() => BatchCheckResults.Add(check));
         }
     }

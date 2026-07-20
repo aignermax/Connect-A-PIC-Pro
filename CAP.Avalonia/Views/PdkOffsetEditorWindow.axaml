@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.PdkOffset"
         xmlns:libvm="using:CAP.Avalonia.ViewModels.Library"
+        xmlns:conv="using:CAP.Avalonia.Converters"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.PdkOffsetEditorWindow"
         x:DataType="vm:PdkOffsetEditorViewModel"
@@ -354,7 +355,9 @@
                                         <TextBlock Grid.Column="3"
                                                    Text="{Binding WorstDeltaMicrometers, StringFormat='{}{0:F2} µm'}"
                                                    Foreground="LightGray"/>
-                                        <TextBlock Grid.Column="4" Text="{Binding Status}" Foreground="LightYellow"/>
+                                        <TextBlock Grid.Column="4"
+                                                   Text="{Binding Status, Converter={x:Static conv:ComponentCheckStatusToTextConverter.Instance}}"
+                                                   Foreground="LightYellow"/>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

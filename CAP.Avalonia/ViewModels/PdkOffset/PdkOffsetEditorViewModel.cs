@@ -91,11 +91,19 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     [ObservableProperty] private string _pinAlignmentSummary = "";
 
     /// <summary>
-    /// Tolerance in micrometres below which a Lunima pin is considered to be
-    /// aligned with its nearest Nazca pin. 0.5 µm is generous enough to ignore
-    /// sub-grid rounding noise without masking real offset errors.
+    /// Strict tolerance in micrometres below which a Lunima pin is considered
+    /// aligned with its nearest Nazca pin. Waveguides are ~0.5 µm wide, so the
+    /// former 0.5 µm value declared visibly-off pins (field report: 0.3 µm on
+    /// the adiabatic couplers) as "Aligned". Deltas between this and
+    /// <see cref="PinAlignmentCheckToleranceMicrometers"/> now report as
+    /// "Check recommended". Values mirror <see cref="PdkOffsetCalibration"/>.
     /// </summary>
-    public const double PinAlignmentToleranceMicrometers = 0.5;
+    public const double PinAlignmentToleranceMicrometers =
+        PdkOffsetCalibration.AlignedToleranceMicrometers;
+
+    /// <summary>Upper edge of the "check" band; above it a component is Misaligned.</summary>
+    public const double PinAlignmentCheckToleranceMicrometers =
+        PdkOffsetCalibration.CheckToleranceMicrometers;
 
     /// <summary>Per-pin alignment detail. Populated by <see cref="ComputePinAlignment"/>.</summary>
     public ObservableCollection<PinAlignmentInfo> PinAlignmentResults { get; } = new();
