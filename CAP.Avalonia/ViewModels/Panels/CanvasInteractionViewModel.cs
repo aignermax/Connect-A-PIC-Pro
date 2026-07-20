@@ -319,10 +319,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         bool laserWasOn = component.LaserConfig!.IsEnabled;
-        if (laserWasOn)
-            _commandManager.ExecuteCommand(new ToggleLaserCommand(component));
-
-        _canvas.AnalysisOutput.Designate(component.Component.Id);
+        // ONE composite undoable command: designation + laser-off together, so a single
+        // Ctrl+Z reverts the whole pick (#762 review, finding [2]).
+        _commandManager.ExecuteCommand(new PickAnalysisOutputCommand(component, _canvas.AnalysisOutput));
         var messageKey = laserWasOn ? "Analysis.Output.DesignatedLaserOff" : "Analysis.Output.Designated";
         UpdateStatus?.Invoke(string.Format(loc.Translate(messageKey), component.Name));
         CurrentMode = InteractionMode.Select;
