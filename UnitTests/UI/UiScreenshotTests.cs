@@ -4,8 +4,12 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using CAP.Avalonia.Services;
 using CAP.Avalonia.Views;
 using CAP.Avalonia.Views.Panels;
+using CAP.Avalonia.ViewModels.Library;
+using CAP.Avalonia.ViewModels.PdkOffset;
+using CAP_DataAccess.Components.ComponentDraftMapper;
 using Shouldly;
 using UnitTests.Helpers;
 using Xunit;
@@ -57,6 +61,12 @@ public class UiScreenshotTests
         TryCapture(() => new RoutingDiagnosticsPanel(), vm, 600, 700, outputDir, "RoutingDiagnosticsPanel.png", captured, skipped);
         TryCapture(() => new SelectedComponentPropertiesPanel(), vm, 450, 600, outputDir, "SelectedComponentPropertiesPanel.png", captured, skipped);
 
+        // Transient / eye-diagram charts (round 5 findings 1+2): empty-state renders still catch
+        // AXAML/style regressions (e.g. a bad Expander/TrackerControl resource key) even though the
+        // in-plot-legend removal and dark tracker only become visible with a populated PlotModel.
+        TryCapture(() => new TimeDomainPanel(), vm, 500, 420, outputDir, "TimeDomainPanel.png", captured, skipped);
+        TryCapture(() => new EyeDiagramPanel(), vm, 500, 420, outputDir, "EyeDiagramPanel.png", captured, skipped);
+
         // Settings content: the environment manager moved from the Properties sidebar to a
         // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).
         // Seed one active, healthy managed environment so the unified list renders a real row
@@ -96,6 +106,14 @@ public class UiScreenshotTests
         // renders real recoverable rows (Restore / permanently-delete) instead of the empty state.
         TryCapture(() => new PdkTrashPanel(), SeedPdkTrashViewModel(), 360, 400, outputDir,
             "PdkTrashPanel.png", captured, skipped);
+
+        // PDK Offset Editor (round 5 findings 3a/3b): a selected component with per-pin deltas
+        // and preview source populated renders both fold-outs expanded-capable, so the compact
+        // Expander header height/width and the backend-neutral "Origin offset (µm)" label are
+        // visible in the same shot. It's its own Window (not a UserControl), so it is captured
+        // directly rather than through TryCapture's host-window wrapping.
+        TryCaptureWindow(BuildPdkOffsetEditorWindowForScreenshot, outputDir,
+            "PdkOffsetEditorWindow.png", captured, skipped);
 
         foreach (var (name, reason) in skipped)
             Console.WriteLine($"[SKIPPED] {name}: {reason}");
@@ -147,6 +165,62 @@ public class UiScreenshotTests
         return vm;
     }
 
+    /// <summary>
+    /// Builds a <see cref="PdkOffsetEditorWindow"/> with one component pre-selected and both
+    /// fold-outs populated (per-pin deltas + preview source), so the round-5 compact-Expander
+    /// and backend-neutral-label fixes are visible in the screenshot without a real GDS render.
+    /// </summary>
+    private static PdkOffsetEditorWindow BuildPdkOffsetEditorWindowForScreenshot()
+    {
+        const string pdkJson = """
+        {
+            "fileFormatVersion": 1,
+            "name": "Screenshot Demo",
+            "components": [
+                {
+                    "name": "Demo MMI",
+                    "category": "Splitters",
+                    "nazcaFunction": "demo.mmi2x2_dp",
+                    "widthMicrometers": 40,
+                    "heightMicrometers": 20,
+                    "nazcaOriginOffsetX": 5.0,
+                    "nazcaOriginOffsetY": 10.0,
+                    "pins": [
+                        { "name": "a0", "offsetXMicrometers": 0,  "offsetYMicrometers": 5 },
+                        { "name": "b0", "offsetXMicrometers": 40, "offsetYMicrometers": 5 }
+                    ]
+                }
+            ]
+        }
+        """;
+
+        var tempFile = Path.Combine(Path.GetTempPath(), $"lunima-ui-shot-pdk-{Guid.NewGuid():N}.json");
+        File.WriteAllText(tempFile, pdkJson);
+
+        var vm = new PdkOffsetEditorViewModel(new PdkLoader(), new PdkJsonSaver(), new PdkManagerViewModel())
+        {
+            FileDialogService = new StubFileDialogService(tempFile),
+        };
+        vm.LoadPdkFileCommand.ExecuteAsync(null).GetAwaiter().GetResult();
+        vm.SelectedComponent = vm.Components[0];
+        // ComputePinAlignment normally needs a real GDS render; seed the result directly so the
+        // "per-pin deltas" fold-out has rows without spinning up the Python preview pipeline.
+        vm.PinAlignmentResults.Add(new PinAlignmentInfo("a0", "a0", 0.02, -0.01, 0.022, true));
+        vm.PinAlignmentResults.Add(new PinAlignmentInfo("b0", "b0", -0.15, 0.30, 0.335, false));
+
+        return new PdkOffsetEditorWindow { DataContext = vm };
+    }
+
+    /// <summary>Minimal <see cref="IFileDialogService"/> stub that returns a fixed path (or none).</summary>
+    private sealed class StubFileDialogService(string? pathToReturn) : IFileDialogService
+    {
+        public Task<string?> ShowOpenFileDialogAsync(string title, string filters) =>
+            Task.FromResult(pathToReturn);
+
+        public Task<string?> ShowSaveFileDialogAsync(string title, string defaultExtension, string filters) =>
+            throw new NotSupportedException("Not used by the screenshot harness.");
+    }
+
     private static void TryCapture(
         Func<Control> createView,
         object dataContext,
@@ -168,6 +242,51 @@ public class UiScreenshotTests
                 Height = height,
                 Content = view
             };
+
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var bitmap = window.CaptureRenderedFrame();
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+
+            if (bitmap == null)
+            {
+                skipped.Add((filename, "CaptureRenderedFrame returned null — likely a render miss"));
+                return;
+            }
+
+            var path = Path.Combine(outputDir, filename);
+            int distinctColors;
+            using (bitmap)
+            {
+                distinctColors = CountDistinctSampledColors(bitmap);
+                ScreenshotArtifacts.SavePng(bitmap, path);
+            }
+
+            captured.Add((path, distinctColors));
+        }
+        catch (Exception ex)
+        {
+            skipped.Add((filename, $"{ex.GetType().Name}: {ex.Message}"));
+        }
+    }
+
+    /// <summary>
+    /// Same capture flow as <see cref="TryCapture"/>, but for a <see cref="Window"/> view
+    /// (e.g. <c>PdkOffsetEditorWindow</c>) that must be shown directly rather than nested as
+    /// another window's Content — a Window is a TopLevel, not an embeddable Control.
+    /// </summary>
+    private static void TryCaptureWindow(
+        Func<Window> createWindow,
+        string outputDir,
+        string filename,
+        List<(string Path, int DistinctColors)> captured,
+        List<(string Name, string Reason)> skipped)
+    {
+        try
+        {
+            var window = createWindow();
 
             window.Show();
             Dispatcher.UIThread.RunJobs();
