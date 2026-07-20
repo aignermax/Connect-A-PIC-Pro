@@ -306,6 +306,80 @@ public class GdsFactoryExporterTests
     }
 
     [Fact]
+    public void Export_MixedTwoGdsFactoryModules_ActivatesEachPdkBeforeItsPlacement()
+    {
+        // Field decision (round 4): a mixed-process design still exports — for inspection
+        // only. Each cell must be instantiated under ITS OWN PDK (activation emitted right
+        // before the placement), so no cell is silently drawn with a foreign process' layers.
+        var canvas = new DesignCanvasViewModel();
+        foreach (var (id, func) in new[] { ("A", "cspdk.sin300.mmi1x2"), ("B", "cspdk.si220.mmi1x2") })
+        {
+            var c = TestComponentFactory.CreateBasicComponent();
+            c.Identifier = id;
+            c.NazcaFunctionName = "";
+            c.GdsFactoryFunction = func;
+            canvas.AddComponent(c, id);
+        }
+
+        var script = ExportUbcPdk(canvas);
+
+        // Loud inspection-only warning in the script header.
+        script.ShouldContain("NOT manufacturable");
+        // Per-placement activation: each activate line sits between "c = gf.Component" and
+        // the component it guards, in canvas order.
+        var designStart = script.IndexOf("c = gf.Component", StringComparison.Ordinal);
+        var activateSin = script.IndexOf("cspdk.sin300.PDK.activate()", StringComparison.Ordinal);
+        var placeA = script.IndexOf("# A", StringComparison.Ordinal);
+        var activateSi = script.IndexOf("cspdk.si220.PDK.activate()", StringComparison.Ordinal);
+        var placeB = script.IndexOf("# B", StringComparison.Ordinal);
+        activateSin.ShouldBeGreaterThan(designStart);
+        placeA.ShouldBeGreaterThan(activateSin);
+        activateSi.ShouldBeGreaterThan(placeA);
+        placeB.ShouldBeGreaterThan(activateSi);
+    }
+
+    [Fact]
+    public void Export_MixedModulePlusUbcCell_ActivatesUbcpdkForItsCell()
+    {
+        // gdsfactory-native (cspdk) + SiEPIC (ubcpdk-mapped) on one canvas: the ubcpdk cell
+        // must resolve under an activated ubcpdk, not crash under the cspdk PDK.
+        var canvas = new DesignCanvasViewModel();
+        var sin = TestComponentFactory.CreateBasicComponent();
+        sin.Identifier = "SIN1";
+        sin.NazcaFunctionName = "";
+        sin.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(sin, "SiN");
+        var siepic = TestComponentFactory.CreateBasicComponent();
+        siepic.Identifier = "EB1";
+        siepic.NazcaFunctionName = "ebeam_y_1550";   // maps to a ubcpdk cell
+        canvas.AddComponent(siepic, "Y-Branch");
+
+        var script = ExportUbcPdk(canvas);
+
+        script.ShouldContain("NOT manufacturable");
+        script.ShouldContain("import ubcpdk");
+        var activateSin = script.IndexOf("cspdk.sin300.PDK.activate()", StringComparison.Ordinal);
+        var placeSin = script.IndexOf("# SIN1", StringComparison.Ordinal);
+        var activateUbc = script.IndexOf("ubcpdk.PDK.activate()", StringComparison.Ordinal);
+        var placeUbc = script.IndexOf("gf.get_component('ebeam_y_1550')", StringComparison.Ordinal);
+        activateSin.ShouldBeGreaterThan(0);
+        placeSin.ShouldBeGreaterThan(activateSin);
+        activateUbc.ShouldBeGreaterThan(placeSin);
+        placeUbc.ShouldBeGreaterThan(activateUbc);
+    }
+
+    [Fact]
+    public void Export_SingleBackend_HasNoMixedProcessWarning()
+    {
+        // Single-process designs keep the proven script shape — no warning, no
+        // per-placement activation churn.
+        var script = ExportUbcPdk(CreateCanvasWithComponent("ebeam_y_1550"));
+
+        script.ShouldNotContain("NOT manufacturable");
+        script.ShouldContain("from ubcpdk import PDK");   // unchanged single-backend header
+    }
+
+    [Fact]
     public void BareGdsFactoryFunction_FallsToStubAndIsReportedUnmapped()
     {
         // A dotless gdsFactoryFunction has no importable module → it must fall through to a

@@ -292,6 +292,7 @@
   "Export.GdsFactory.ExportedOpened": "{0} exportiert und {1} geöffnet.",
   "Export.GdsFactory.Installing": "gdsfactory nicht gefunden – wird in einer verwalteten Umgebung installiert...",
   "Export.GdsFactory.MissingGdsFactory": "{0} exportiert, aber gdsfactory ist in der aktiven Umgebung nicht installiert. Installieren Sie es unter Einstellungen → Python-Umgebungen → gdsfactory installieren und exportieren Sie erneut.",
+  "Export.GdsFactory.MixedProcessWarning": "Warnung: Dieses Design mischt Fertigungsprozesse ({0}) — das exportierte GDS dient nur zur Ansicht und ist NICHT fertigbar. Für einen fab-tauglichen Export nur einen Prozess pro Design verwenden.",
   "Export.GdsFactory.NotAvailable": "Export nicht verfügbar (kein Dateidialog-Dienst).",
   "Export.GdsFactory.NothingToExport": "Nichts zu exportieren – zuerst Komponenten hinzufügen.",
   "Export.GdsFactory.Retrying": "GDS-Erzeugung wird erneut versucht...",
