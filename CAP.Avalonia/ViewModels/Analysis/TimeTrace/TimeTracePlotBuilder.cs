@@ -135,10 +135,15 @@ internal static class TimeTracePlotBuilder
             TitleColor = PlotForeground,
             PlotAreaBorderColor = PlotAxisline,
         };
+        // The per-pin checkbox list below the chart (TimeDomainPanel.axaml) is the only
+        // series-visibility control; an in-plot legend duplicated it as clickable buttons
+        // cluttering the chart (field feedback, round 5 finding 1). Kept (not removed) so a
+        // future need for the in-plot legend is a one-line flip, not a re-derivation.
         model.Legends.Add(new Legend
         {
             LegendPosition = LegendPosition.RightTop,
             LegendTextColor = PlotForeground,
+            IsLegendVisible = false,
         });
         model.Axes.Add(CreateAxis(AxisPosition.Bottom,
             string.Format(LocalizationService.Instance.Translate("Analysis.TimeDomain.TimeAxis"), "ps")));
