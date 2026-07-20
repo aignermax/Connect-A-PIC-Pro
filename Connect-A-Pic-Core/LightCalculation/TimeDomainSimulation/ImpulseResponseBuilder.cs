@@ -46,17 +46,24 @@ public class ImpulseResponseBuilder
     /// of the full pin matrix (all pairs).
     /// </param>
     /// <returns>One <see cref="ImpulseResponse"/> per non-zero (input, output) pin pair.</returns>
+    /// <param name="circuitContext">
+    /// Optional circuit knowledge (pin owner names, externally observable pins) so the
+    /// closure solve can name a non-passive component or a resonant feedback loop and
+    /// scope the energy guard to real circuit ports. Wavelength and sources are filled
+    /// in per closure call.
+    /// </param>
     /// <exception cref="InvalidOperationException">
     /// Thrown when any nonlinear connection is found (Phase 1 gate) or the closure's
     /// pair count exceeds the memory gate.
     /// </exception>
     /// <exception cref="NonConvergentCircuitException">
-    /// The circuit topology is resonant — the multi-hop series does not converge (or
-    /// fabricates energy), so no transient result can be shown for it.
+    /// A component's S-matrix data is non-passive, a lossless feedback loop sits exactly
+    /// on resonance (no steady state), or the closure fabricates energy at circuit ports.
     /// </exception>
     public IReadOnlyList<ImpulseResponse> Build(
         double centerWavelengthNm, double spanNm, int nPoints,
-        IReadOnlyCollection<Guid>? activeInputPinIds = null)
+        IReadOnlyCollection<Guid>? activeInputPinIds = null,
+        TransitiveClosureContext? circuitContext = null)
     {
         if (nPoints < 2) throw new ArgumentOutOfRangeException(nameof(nPoints), "Need at least 2 frequency points.");
         if (spanNm <= 0) throw new ArgumentOutOfRangeException(nameof(spanNm));
@@ -79,14 +86,14 @@ public class ImpulseResponseBuilder
         // Seeding with the reference wavelength keeps its matrix from being built twice.
         var matrixCache = new Dictionary<int, Dictionary<(Guid, Guid), Complex>>
         {
-            [referenceNm] = ComputeTransitiveValues(referenceMatrix, activeInputPinIds),
+            [referenceNm] = ComputeTransitiveValues(referenceMatrix, activeInputPinIds, circuitContext, referenceNm),
         };
 
         // Memory gate against the REAL pair count of the closure (finding [3]) — fail
         // fast with the actionable message instead of running into an OOM allocation.
         ThrowIfMemoryLimitExceeded(matrixCache[referenceNm].Count, nPoints);
 
-        var hFreq = CollectFrequencyResponses(freqGrid, nPoints, matrixCache, activeInputPinIds);
+        var hFreq = CollectFrequencyResponses(freqGrid, nPoints, matrixCache, activeInputPinIds, circuitContext);
         return InverseTransform(hFreq, nPoints, dt);
     }
 
@@ -94,7 +101,8 @@ public class ImpulseResponseBuilder
     private Dictionary<(Guid, Guid), Complex[]> CollectFrequencyResponses(
         double[] freqGrid, int nPoints,
         Dictionary<int, Dictionary<(Guid, Guid), Complex>> matrixCache,
-        IReadOnlyCollection<Guid>? activeInputPinIds)
+        IReadOnlyCollection<Guid>? activeInputPinIds,
+        TransitiveClosureContext? circuitContext)
     {
         var hFreq = new Dictionary<(Guid, Guid), Complex[]>();
         for (int k = 0; k < nPoints; k++)
@@ -107,7 +115,7 @@ public class ImpulseResponseBuilder
                 // pair must include the transitive multi-hop closure, otherwise light
                 // never crosses a component boundary in the transient simulation.
                 var sMatrix = _matrixBuilder.GetSystemSMatrix(wavelengthNm);
-                values = ComputeTransitiveValues(sMatrix, activeInputPinIds);
+                values = ComputeTransitiveValues(sMatrix, activeInputPinIds, circuitContext, wavelengthNm);
                 matrixCache[wavelengthNm] = values;
             }
 
@@ -127,17 +135,23 @@ public class ImpulseResponseBuilder
 
     /// <summary>
     /// Multi-hop transfer values for one wavelength. With active sources given, the
-    /// closure runs on the reachable subgraph only and returns just the pairs whose
-    /// input pin is an active source — the only pairs the simulators convolve
-    /// (finding [4]: no dense full-matrix closure per wavelength).
+    /// closure runs on the reachable subgraph only and solves just the source columns
+    /// of (I − M)·X = B — exactly the pairs the simulators convolve (finding [4]: no
+    /// dense full-matrix closure per wavelength).
     /// </summary>
     private static Dictionary<(Guid, Guid), Complex> ComputeTransitiveValues(
-        SMatrix sMatrix, IReadOnlyCollection<Guid>? activeInputPinIds)
+        SMatrix sMatrix, IReadOnlyCollection<Guid>? activeInputPinIds,
+        TransitiveClosureContext? circuitContext, int wavelengthNm)
     {
         var scoped = activeInputPinIds == null
             ? sMatrix
             : ReachableSubMatrixExtractor.ExtractReachable(sMatrix, activeInputPinIds);
-        var values = TransitiveSMatrixCalculator.Compute(scoped).GetNonNullValues();
+        var context = (circuitContext ?? new TransitiveClosureContext()) with
+        {
+            SourcePinIds = activeInputPinIds,
+            WavelengthNm = wavelengthNm,
+        };
+        var values = TransitiveSMatrixCalculator.Compute(scoped, context).GetNonNullValues();
         if (activeInputPinIds == null)
             return values;
 

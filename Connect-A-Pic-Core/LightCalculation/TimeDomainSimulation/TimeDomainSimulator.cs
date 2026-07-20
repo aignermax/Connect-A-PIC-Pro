@@ -21,13 +21,21 @@ public class TimeDomainSimulator : ILightCalculator
     public const int DefaultNPoints = 256;
 
     private readonly ImpulseResponseBuilder _irBuilder;
+    private readonly TransitiveClosureContext? _circuitContext;
 
     /// <summary>Initializes a new instance of <see cref="TimeDomainSimulator"/>.</summary>
     /// <param name="matrixBuilder">System S-matrix builder.</param>
-    public TimeDomainSimulator(ISystemMatrixBuilder matrixBuilder)
+    /// <param name="circuitContext">
+    /// Optional circuit knowledge (pin owner names, externally observable pins) so
+    /// closure failures name the culprit component/loop and the energy guard is scoped
+    /// to real circuit ports (field round 4, final batch).
+    /// </param>
+    public TimeDomainSimulator(
+        ISystemMatrixBuilder matrixBuilder, TransitiveClosureContext? circuitContext = null)
     {
         if (matrixBuilder == null) throw new ArgumentNullException(nameof(matrixBuilder));
         _irBuilder = new ImpulseResponseBuilder(matrixBuilder);
+        _circuitContext = circuitContext;
     }
 
     /// <summary>
@@ -62,7 +70,7 @@ public class TimeDomainSimulator : ILightCalculator
         // inputs restrict the multi-hop closure to the reachable subgraph — exactly the
         // (source → output) pairs convolved below.
         var impulseResponses = _irBuilder.Build(
-            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys);
+            centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys, _circuitContext);
 
         var outputPinIds = impulseResponses
             .Select(ir => ir.OutputPinId)

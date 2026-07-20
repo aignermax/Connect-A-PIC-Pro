@@ -153,6 +153,13 @@ public partial class TimeDomainViewModel : ObservableObject
             StatusText = statusOverride ?? string.Format(
                 LocalizationService.Instance.Translate("Analysis.TimeDomain.DonePins"), displayed.PinTraces.Count);
         }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Time-domain simulation blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
+        }
         catch (InvalidOperationException ex)
         {
             StatusText = string.Format(

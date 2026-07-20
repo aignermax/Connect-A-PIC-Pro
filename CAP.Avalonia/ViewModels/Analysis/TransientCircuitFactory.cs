@@ -39,7 +39,41 @@ internal static class TransientCircuitFactory
             tileManager, canvas.ConnectionManager, portManager);
 
         var builder = new SystemMatrixBuilder(gridManager);
-        return (new TimeDomainSimulator(builder), portManager);
+        return (new TimeDomainSimulator(builder, BuildClosureContext(canvas)), portManager);
+    }
+
+    /// <summary>
+    /// Circuit knowledge for the multi-hop closure solve (field round 4, final batch):
+    /// pin owner names let a failure name the non-passive component or the feedback
+    /// loop; the coupler light pins are the circuit's external ports, so the |H| ≤ 1
+    /// energy guard applies there and NOT to pins inside a ring (cavity buildup is
+    /// legitimate physics).
+    /// </summary>
+    /// <param name="canvas">Canvas providing components.</param>
+    private static TransitiveClosureContext BuildClosureContext(DesignCanvasViewModel canvas)
+    {
+        var owners = new Dictionary<Guid, string>();
+        var couplerPinIds = new HashSet<Guid>();
+        foreach (var compVm in canvas.Components)
+        {
+            bool isCoupler = compVm.IsLightSource;
+            foreach (var pin in compVm.Component.PhysicalPins)
+            {
+                if (pin.LogicalPin == null) continue;
+                owners[pin.LogicalPin.IDInFlow] = compVm.Name;
+                owners[pin.LogicalPin.IDOutFlow] = compVm.Name;
+                if (isCoupler && pin.LogicalPin.MatterType == MatterType.Light)
+                {
+                    couplerPinIds.Add(pin.LogicalPin.IDInFlow);
+                    couplerPinIds.Add(pin.LogicalPin.IDOutFlow);
+                }
+            }
+        }
+        return new TransitiveClosureContext
+        {
+            PinOwnerNames = owners,
+            ExternallyObservablePinIds = couplerPinIds.Count > 0 ? couplerPinIds : null,
+        };
     }
 
     /// <summary>

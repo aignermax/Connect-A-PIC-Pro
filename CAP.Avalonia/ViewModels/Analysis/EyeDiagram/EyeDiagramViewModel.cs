@@ -133,6 +133,13 @@ public partial class EyeDiagramViewModel : ObservableObject
             OnPropertyChanged(nameof(HasResult));
             StatusText = outcome.Warning ?? "Done";
         }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Eye-diagram analysis blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Eye-diagram analysis failed: {ex.Message}", ex);
