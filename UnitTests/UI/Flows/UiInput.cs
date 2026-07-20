@@ -46,11 +46,15 @@ internal static class UiInput
     public static void Click(Window window, Visual control, double relX = 0.5, double relY = 0.5) =>
         ClickAt(window, PointIn(window, control, relX, relY));
 
-    public static void ClickAt(Window window, Point point)
+    public static void ClickAt(Window window, Point point) =>
+        ClickAt(window, point, RawInputModifiers.None);
+
+    /// <summary>Left-clicks with extra key modifiers held (e.g. Ctrl+click multi-select).</summary>
+    public static void ClickAt(Window window, Point point, RawInputModifiers modifiers)
     {
         window.MouseMove(point);
-        window.MouseDown(point, MouseButton.Left, RawInputModifiers.LeftMouseButton);
-        window.MouseUp(point, MouseButton.Left);
+        window.MouseDown(point, MouseButton.Left, RawInputModifiers.LeftMouseButton | modifiers);
+        window.MouseUp(point, MouseButton.Left, modifiers);
         RunJobs();
     }
 

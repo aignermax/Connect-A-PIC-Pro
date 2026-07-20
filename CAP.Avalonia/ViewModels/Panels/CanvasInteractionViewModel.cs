@@ -277,14 +277,6 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 break;
             case InteractionMode.Select:
                 SelectAt(canvasX, canvasY);
-                // Keep the multi-selection set in sync with the click result — an
-                // empty-canvas click must clear it, otherwise the hierarchy panel
-                // re-mirrors the stale set and keeps its multi-highlight while the
-                // canvas looks deselected (field bug, round 4 final).
-                if (SelectedComponent != null)
-                    _canvas.Selection.SelectSingle(SelectedComponent);
-                else
-                    _canvas.Selection.ClearSelection();
                 break;
             case InteractionMode.Connect:
                 var pin = _canvas.HighlightedPin?.Pin ?? _canvas.GetPinAt(canvasX, canvasY);
@@ -512,10 +504,6 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         SelectAt(canvasX, canvasY);
-        if (SelectedComponent != null)
-            _canvas.Selection.SelectSingle(SelectedComponent);
-        else
-            _canvas.Selection.ClearSelection();
     }
 
     /// <summary>Returns the topmost component whose bounds contain the point, or null.</summary>
@@ -565,6 +553,37 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 SelectedWaveguideConnection = null;
             }
         }
+
+        SyncSelectionSetToClickResult();
+    }
+
+    /// <summary>
+    /// Mirrors the click result into the <see cref="DesignCanvasViewModel.Selection"/>
+    /// set — the single sync point for every <see cref="SelectAt"/> caller (round 4
+    /// review findings [0], [8]). An empty-canvas or connection click clears the set,
+    /// otherwise the hierarchy panel re-mirrors the stale set and keeps its
+    /// multi-highlight while the canvas looks deselected (field bug, round 4 final).
+    /// Clicking a component OUTSIDE the set selects it alone; clicking a MEMBER keeps
+    /// the whole set — the drag recognizer clicks through before deciding between
+    /// group and single move, and a Ctrl+click release routes through here too, so
+    /// collapsing would break group drag and Ctrl+click accumulation.
+    /// </summary>
+    private void SyncSelectionSetToClickResult()
+    {
+        var selection = _canvas.Selection;
+        if (SelectedComponent == null)
+        {
+            selection.ClearSelection();
+            return;
+        }
+        if (!selection.SelectedComponents.Contains(SelectedComponent))
+        {
+            selection.SelectSingle(SelectedComponent);
+            return;
+        }
+        // Keep the set: SelectAt's deselect-all pass cleared the members' visual flag.
+        foreach (var member in selection.SelectedComponents)
+            member.IsSelected = true;
     }
 
     private void DeleteAt(double x, double y)
