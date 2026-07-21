@@ -39,8 +39,18 @@ internal static class ShowcaseCircuit
     /// (diagonal pathfinding on, two connections manually styled). Returns the MZI's
     /// bottom-arm DBR→combiner link — the waveguide-editing motif's subject.
     /// </summary>
-    public static async Task<WaveguideConnectionViewModel> BuildChipAsync(MainViewModel vm)
+    /// <param name="vm">The main view model whose canvas is staged.</param>
+    /// <param name="afterStep">Optional hook awaited after every visual build step
+    /// (all placements done, each routed connection, the manual restyles) — the
+    /// hero-loop motif captures one animation frame per step.</param>
+    public static async Task<WaveguideConnectionViewModel> BuildChipAsync(
+        MainViewModel vm, Func<Task>? afterStep = null)
     {
+        async Task StepAsync()
+        {
+            if (afterStep != null) await afterStep();
+        }
+
         var canvas = vm.Canvas;
         canvas.UseDiagonalRouting = true;
 
@@ -59,25 +69,41 @@ internal static class ShowcaseCircuit
         // also makes it the transient analysis output.
         gcOut.LaserEnabled = false;
 
+        await StepAsync();
         await Connect(canvas, gcIn, "waveguide", splitter, "in");
+        await StepAsync();
         await Connect(canvas, splitter, "out1", shifter, "in");
+        await StepAsync();
         await Connect(canvas, shifter, "out", combiner, "in1");
+        await StepAsync();
         var intoDbr = await Connect(canvas, splitter, "out2", strt, "a0");
+        await StepAsync();
         await Connect(canvas, strt, "b0", dbr, "in");
+        await StepAsync();
         var bottomArm = await Connect(canvas, dbr, "out", combiner, "in2");
+        await StepAsync();
         await Connect(canvas, combiner, "out1", detector, "in");
+        await StepAsync();
         var toOutput = await Connect(canvas, combiner, "out2", gcOut, "waveguide");
+        await StepAsync();
 
         // The DC electrical block: probe pads drive the phase-shifter heater contacts,
         // bond pads contact the photodetector diode — all as thick metal traces.
+        // Placed AFTER the optical routing on purpose: placement order feeds the A*
+        // obstacle grid, and moving it would silently re-route the committed motifs.
         var probe1 = Place(vm, "Probe Pad", 460, 25, DiscreteRotation.R180);
         var probe2 = Place(vm, "Probe Pad", 640, 25, DiscreteRotation.R180);
         var bond1 = Place(vm, "Bond Pad", 1120, 25, DiscreteRotation.R180, SiepicPdkName);
         var bond2 = Place(vm, "Bond Pad", 1430, 25, DiscreteRotation.R180, SiepicPdkName);
+        await StepAsync();
         await Connect(canvas, probe1, "pad", shifter, "elec1");
+        await StepAsync();
         await Connect(canvas, probe2, "pad", shifter, "elec2");
+        await StepAsync();
         await Connect(canvas, bond1, "elec", detector, "anode");
+        await StepAsync();
         await Connect(canvas, bond2, "elec", detector, "cathode");
+        await StepAsync();
 
         // Two hand-styled waveguides (#755): the splitter→DBR drop as a sine S-curve and
         // the combiner→output link as a single arc with a custom 25 µm bend radius.
@@ -85,6 +111,7 @@ internal static class ShowcaseCircuit
         await StyleConnection(canvas, toOutput, WaveguideType.Bend, bendRadiusMicrometers: 25);
 
         await WaitForRoutingIdleAsync(canvas);
+        await StepAsync();
         return bottomArm;
     }
 
@@ -96,12 +123,31 @@ internal static class ShowcaseCircuit
     public static async Task<(MainViewModel Vm, MainWindow Window, WaveguideConnectionViewModel BottomArm)>
         BootStagedMainWindowAsync()
     {
+        var vm = CreateStagedViewModel();
+        var bottomArm = await BuildChipAsync(vm);
+        var window = BootMainWindow(vm);
+        FitView(window, vm);
+        await WaitForRoutingIdleAsync(vm.Canvas);
+        vm.StatusText = "Ready";
+        return (vm, window, bottomArm);
+    }
+
+    /// <summary>A fresh MainViewModel with an isolated group library and the Playground
+    /// process active — the staging target of <see cref="BuildChipAsync"/>.</summary>
+    public static MainViewModel CreateStagedViewModel()
+    {
         var groupLibrary = new CAP_Core.Components.Creation.GroupLibraryManager(
             Path.Combine(Path.GetTempPath(), $"lunima-showcase-groups-{Guid.NewGuid():N}"));
         var vm = UnitTests.Helpers.MainViewModelTestHelper.CreateMainViewModel(libraryManager: groupLibrary);
         vm.FileOperations.SetActiveProcess(ActiveProcessSelection.Playground(), markDirty: false);
-        var bottomArm = await BuildChipAsync(vm);
+        return vm;
+    }
 
+    /// <summary>Boots the real MainWindow around <paramref name="vm"/> (DataContext after
+    /// Show, so Loaded's DI wiring no-ops) with a compact properties column. The canvas
+    /// may still be empty — the hero-loop motif builds the chip live afterwards.</summary>
+    public static MainWindow BootMainWindow(MainViewModel vm)
+    {
         var window = new MainWindow { Width = 1920, Height = 950 };
         window.Show();
         Dispatcher.UIThread.RunJobs();
@@ -113,11 +159,7 @@ internal static class ShowcaseCircuit
         window.GetVisualDescendants().OfType<global::Avalonia.Controls.Border>()
             .First(b => b.Name == "RightPanelBorder").Width = 420;
         Dispatcher.UIThread.RunJobs();
-
-        FitView(window, vm);
-        await WaitForRoutingIdleAsync(vm.Canvas);
-        vm.StatusText = "Ready";
-        return (vm, window, bottomArm);
+        return window;
     }
 
     /// <summary>Fits the whole staged chip into the design canvas (zoom + pan), keeping

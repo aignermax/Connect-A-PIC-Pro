@@ -2,9 +2,9 @@
 
 **Design, simulate, and lay out photonic integrated circuits — visually, on your own PDK, with open formats at every step.**
 
-![The Lunima main window: a live CW simulation on a mixed photonic/electric Mach-Zehnder chip, with power flow rendered on the waveguides, golden DC metal traces, and diagonal routing](docs/media/v0.12/hero-canvas.png)
+[![A Mach-Zehnder chip building itself on the Lunima canvas: components placed, the router wiring connection after connection, golden DC metal traces — then a live CW simulation lights up the power flow](docs/media/v0.12/hero-loop.gif)](docs/media/v0.12/hero-canvas.png)
 
-*A live CW simulation on a staged Mach-Zehnder chip: simulated power flow rendered directly on the waveguides (color + dB/percent labels), DC probe and bond pads wired with metal traces, diagonal routing, and hand-styled bends — built from the bundled Demo and SiEPIC PDKs.*
+*The staged Mach-Zehnder chip wiring itself up: the production router connects component after component (diagonal routing, hand-styled bends), DC probe and bond pads get golden metal traces — then a live CW simulation lights up the power flow on every waveguide. Built from the bundled Demo and SiEPIC PDKs; click for the [full-resolution still](docs/media/v0.12/hero-canvas.png).*
 
 [**Download v0.12.0**](https://github.com/aignermax/Lunima/releases/tag/v0.12.0) · [Landing page](https://aignermax.github.io/Lunima/) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 

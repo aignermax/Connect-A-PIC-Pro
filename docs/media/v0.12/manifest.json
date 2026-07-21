@@ -4,6 +4,10 @@
     "caption": "The Lunima main window with a live CW simulation running on a staged mixed photonic/electric chip: a Mach-Zehnder interferometer (grating coupler in, 1x2 MMI splitter, electro-optic phase shifter arm, DBR-filter arm, 2x2 MMI combiner, photodetector and output coupler) whose waveguides show the simulated power flow as color plus dB/percent labels, DC probe pads and bond pads wired to the modulator and detector contacts as thick golden metal traces, diagonal (45°) autorouting and two hand-styled connections (SBend, Bend with custom radius) — all built from the bundled Demo and SiEPIC PDKs and routed by the production router."
   },
   {
+    "file": "hero-loop.gif",
+    "caption": "The README hero loop (16 frames, ~3.9 s, 960 px): the staged Mach-Zehnder chip building itself live in the real MainWindow — all photonic components placed, the production router wiring connection after connection with diagonal pathfinding, the DC probe/bond pads and golden metal traces, the two hand-styled bends (SBend, custom-radius Bend), and as the payoff the real CW simulation lighting up the power-flow overlay. Frames from ShowcaseHeroLoopScreenshotTests (UI_SHOT_DIR/v0.12/hero-loop-frames/), assembled with scripts/assemble_hero_loop.py (Pillow)."
+  },
+  {
     "file": "component-editor.png",
     "caption": "The unified component editor in edit mode: fork-on-save banner, PDK and fabrication-process context, syntax-highlighted gdsfactory Python definition, a rendered geometry preview of the 1x2 MMI, and one-click S-matrix computation via Meep FDTD."
   },
