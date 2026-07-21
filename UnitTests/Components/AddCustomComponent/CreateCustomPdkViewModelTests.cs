@@ -17,6 +17,13 @@ public class CreateCustomPdkViewModelTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-createpdk-" + Guid.NewGuid().ToString("N"));
 
+    /// <summary>StatusText assertions expect English substrings ("built-in"); pin the language
+    /// so the tests don't depend on the machine locale or on which test class ran first
+    /// (same pattern as the PdkOffset test classes, issue #749).</summary>
+    public CreateCustomPdkViewModelTests() =>
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage(
+            CAP.Avalonia.Services.Localization.SupportedLanguage.English.Code);
+
     private UserPdkStore CreateStore() => new(_root, new PdkJsonSaver(), new PdkLoader());
 
     private static ProcessDefinition ExistingProcess() => new()

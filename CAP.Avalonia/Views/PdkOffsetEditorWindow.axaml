@@ -2,6 +2,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.PdkOffset"
         xmlns:libvm="using:CAP.Avalonia.ViewModels.Library"
+        xmlns:conv="using:CAP.Avalonia.Converters"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.PdkOffsetEditorWindow"
         x:DataType="vm:PdkOffsetEditorViewModel"
@@ -116,7 +117,7 @@
                 <Border Background="#252525" CornerRadius="4" Padding="10,8"
                         IsVisible="{Binding SelectedComponent, Converter={x:Static ObjectConverters.IsNotNull}}">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="NazcaOriginOffset (µm)" FontWeight="Bold" Foreground="LightGray"/>
+                        <TextBlock Text="{loc:Localize PdkOffset.OriginOffset}" FontWeight="Bold" Foreground="LightGray"/>
                         <Grid ColumnDefinitions="Auto,120,20,Auto,120,*,Auto">
                             <TextBlock Grid.Column="0" Text="X:" VerticalAlignment="Center" Foreground="LightGray" Margin="0,0,6,0"/>
                             <NumericUpDown Grid.Column="1"
@@ -186,6 +187,7 @@
                                    IsVisible="{Binding PinAlignmentSummary, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         <Expander Header="{loc:Localize PdkOffset.PerPinDeltas}"
                                   Foreground="LightGray" FontSize="11"
+                                  HorizontalAlignment="Stretch"
                                   IsExpanded="False"
                                   IsVisible="{Binding PinAlignmentResults.Count}">
                             <ItemsControl ItemsSource="{Binding PinAlignmentResults}">
@@ -209,6 +211,7 @@
                         </Expander>
                         <Expander Header="{loc:Localize PdkOffset.PreviewSource}"
                                   Foreground="LightGray" FontSize="11"
+                                  HorizontalAlignment="Stretch"
                                   IsExpanded="False"
                                   IsVisible="{Binding PreviewSource, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                             <TextBox Text="{Binding PreviewSource}"
@@ -250,6 +253,14 @@
                         </Grid>
                         <TextBlock Text="{loc:Localize PdkOffset.OverlayLegend}"
                                    Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+                        <!-- Render problem banner: failed render OR empty geometry.
+                             Shown AT the component so the dashed box never poses
+                             as a successful preview again (field report). -->
+                        <Border Background="#4a1f1f" CornerRadius="4" Padding="8,6"
+                                IsVisible="{Binding OverlayErrorText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <TextBlock Text="{Binding OverlayErrorText}"
+                                       Foreground="#ff9898" FontSize="11" TextWrapping="Wrap"/>
+                        </Border>
                         <ScrollViewer x:Name="OverlayScrollViewer"
                                       HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto"
                                       Height="450"
@@ -344,7 +355,18 @@
                                         <TextBlock Grid.Column="3"
                                                    Text="{Binding WorstDeltaMicrometers, StringFormat='{}{0:F2} µm'}"
                                                    Foreground="LightGray"/>
-                                        <TextBlock Grid.Column="4" Text="{Binding Status}" Foreground="LightYellow"/>
+                                        <!-- MultiBinding: the second input binds the LocalizationService
+                                             indexer, so a live language switch ("Item" notification)
+                                             re-translates the Status column; its value is ignored. -->
+                                        <TextBlock Grid.Column="4" Foreground="LightYellow">
+                                            <TextBlock.Text>
+                                                <MultiBinding Converter="{x:Static conv:ComponentCheckStatusToTextConverter.Instance}">
+                                                    <Binding Path="Status"/>
+                                                    <Binding Source="{x:Static loc:LocalizationService.Instance}"
+                                                             Path="[PdkOffset.Status]"/>
+                                                </MultiBinding>
+                                            </TextBlock.Text>
+                                        </TextBlock>
                                     </Grid>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>

@@ -56,6 +56,49 @@ public class RoutedPath
         .Sum(b => b.Equivalent90DegreeBends);
 
     /// <summary>
+    /// Creates an independent deep copy (segments cloned, flags copied). Use whenever
+    /// stored geometry (e.g. a group's frozen internal paths kept for Undo) is handed
+    /// to a live connection: sharing the segment objects would let canvas edits
+    /// (bend-radius handles mutate segments in place) silently corrupt the stored
+    /// original. <c>DebugGridPath</c> is not copied — it is diagnostic-only.
+    /// </summary>
+    public RoutedPath DeepCopy()
+    {
+        var copy = new RoutedPath
+        {
+            IsBlockedFallback = IsBlockedFallback,
+            IsInvalidGeometry = IsInvalidGeometry,
+            ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
+            PassesThroughComponent = PassesThroughComponent
+        };
+
+        foreach (var segment in Segments)
+        {
+            switch (segment)
+            {
+                case BendSegment bend:
+                    copy.Segments.Add(new BendSegment(
+                        bend.Center.X,
+                        bend.Center.Y,
+                        bend.RadiusMicrometers,
+                        bend.StartAngleDegrees,
+                        bend.SweepAngleDegrees));
+                    break;
+                case StraightSegment straight:
+                    copy.Segments.Add(new StraightSegment(
+                        straight.StartPoint.X,
+                        straight.StartPoint.Y,
+                        straight.EndPoint.X,
+                        straight.EndPoint.Y,
+                        straight.StartAngleDegrees));
+                    break;
+            }
+        }
+
+        return copy;
+    }
+
+    /// <summary>
     /// Checks if the path is valid (segments connect properly).
     /// </summary>
     public bool IsValid

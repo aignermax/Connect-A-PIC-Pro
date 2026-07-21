@@ -53,6 +53,39 @@ public class UserPdkStoreTests : IDisposable
     }
 
     [Fact]
+    public void SaveDraftAsFork_writes_draft_into_user_root_without_touching_source()
+    {
+        var store = CreateStore();
+        var draft = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("A") } };
+
+        var forkPath = store.SaveDraftAsFork(draft, "Shipped Lib");
+
+        forkPath.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue();
+        Path.GetFileName(forkPath).ShouldBe("shipped-lib.json");
+        new PdkLoader().LoadFromFileForEditing(forkPath).Components.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void SaveDraftAsFork_backs_up_existing_fork_to_trash_before_replacing()
+    {
+        var store = CreateStore();
+        var first = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("Old") } };
+        var forkPath = store.SaveDraftAsFork(first, "Shipped Lib");
+
+        var second = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("New") } };
+        store.SaveDraftAsFork(second, "Shipped Lib").ShouldBe(forkPath);
+
+        new PdkLoader().LoadFromFileForEditing(forkPath)
+            .Components.Select(c => c.Name).ShouldBe(new[] { "New" });
+        // The pre-existing fork state must survive in .trash — no silent data loss.
+        var trashDir = Path.Combine(_root, ".trash");
+        Directory.Exists(trashDir).ShouldBeTrue();
+        var backup = Directory.GetFiles(trashDir, "shipped-lib-*.json").ShouldHaveSingleItem();
+        new PdkLoader().LoadFromFileForEditing(backup)
+            .Components.Select(c => c.Name).ShouldBe(new[] { "Old" });
+    }
+
+    [Fact]
     public void ResolvePath_is_under_user_root_and_slugified()
     {
         var store = CreateStore();

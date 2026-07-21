@@ -18,8 +18,10 @@ namespace CAP.Avalonia.ViewModels.PdkOffset;
 /// Allows browsing all PDK components, inspecting NazcaOriginOffset status,
 /// editing offset values with a live pin-position preview, and saving back to JSON.
 /// Optionally displays a Nazca GDS overlay when a preview service is provided.
-/// Split across three partial files to stay within the file-size limits:
-/// this file owns state + load/save/select; <see cref="PdkOffsetEditorViewModel.Calibration"/>
+/// Split across four partial files to stay within the file-size limits:
+/// this file owns state + load/select; <c>PdkOffsetEditorViewModel.ForkSave</c>
+/// owns the save flow incl. fork-on-save for bundled PDKs;
+/// <see cref="PdkOffsetEditorViewModel.Calibration"/>
 /// owns the pin-alignment + Auto-Calibrate + Check-All / Try-Fix-All commands;
 /// <see cref="PdkOffsetEditorViewModel.Overlay"/> owns the Nazca render + canvas math.
 /// </summary>
@@ -29,6 +31,14 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     private readonly PdkJsonSaver _pdkSaver;
     private readonly PdkManagerViewModel _pdkManager;
     private readonly NazcaComponentPreviewService? _previewService;
+
+    /// <summary>
+    /// Store for the fork-on-save path: saving a BUNDLED PDK must never write
+    /// the bundled JSON (runtime invariant) — it writes the user's copy into
+    /// the managed user-pdks root instead, exactly like the component editor's
+    /// fork flow. Null (tests / legacy wiring) makes bundled saves refuse.
+    /// </summary>
+    private readonly CAP_DataAccess.Components.AddCustomComponent.UserPdkStore? _userPdkStore;
 
     /// <summary>gdsfactory preview back-end for gdsfactory-native components (#570); null → no preview.
     /// Typed as the base so it can be mocked in tests; DI injects the
@@ -64,6 +74,15 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     [ObservableProperty] private bool _isNazcaRendering;
     [ObservableProperty] private string _nazcaOverlayStatus = "";
 
+    /// <summary>
+    /// Prominent per-component render problem shown directly at the overlay
+    /// canvas: set when the GDS preview fails outright OR succeeds but returns
+    /// zero polygons (the dashed box would otherwise silently pretend to be a
+    /// render — field bug: adiabatic couplers showed an empty box with no
+    /// error at all). Empty when the last render produced real geometry.
+    /// </summary>
+    [ObservableProperty] private string _overlayErrorText = "";
+
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(AutoCalibrateCommand))]
     private bool _hasNazcaOverlay;
@@ -82,11 +101,19 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
     [ObservableProperty] private string _pinAlignmentSummary = "";
 
     /// <summary>
-    /// Tolerance in micrometres below which a Lunima pin is considered to be
-    /// aligned with its nearest Nazca pin. 0.5 µm is generous enough to ignore
-    /// sub-grid rounding noise without masking real offset errors.
+    /// Strict tolerance in micrometres below which a Lunima pin is considered
+    /// aligned with its nearest Nazca pin. Waveguides are ~0.5 µm wide, so the
+    /// former 0.5 µm value declared visibly-off pins (field report: 0.3 µm on
+    /// the adiabatic couplers) as "Aligned". Deltas between this and
+    /// <see cref="PinAlignmentCheckToleranceMicrometers"/> now report as
+    /// "Check recommended". Values mirror <see cref="PdkOffsetCalibration"/>.
     /// </summary>
-    public const double PinAlignmentToleranceMicrometers = 0.5;
+    public const double PinAlignmentToleranceMicrometers =
+        PdkOffsetCalibration.AlignedToleranceMicrometers;
+
+    /// <summary>Upper edge of the "check" band; above it a component is Misaligned.</summary>
+    public const double PinAlignmentCheckToleranceMicrometers =
+        PdkOffsetCalibration.CheckToleranceMicrometers;
 
     /// <summary>Per-pin alignment detail. Populated by <see cref="ComputePinAlignment"/>.</summary>
     public ObservableCollection<PinAlignmentInfo> PinAlignmentResults { get; } = new();
@@ -217,13 +244,15 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         PdkJsonSaver pdkSaver,
         PdkManagerViewModel pdkManager,
         NazcaComponentPreviewService? previewService = null,
-        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null,
+        CAP_DataAccess.Components.AddCustomComponent.UserPdkStore? userPdkStore = null)
     {
         _pdkLoader = pdkLoader;
         _pdkSaver = pdkSaver;
         _pdkManager = pdkManager;
         _previewService = previewService;
         _gdsFactoryPreviewService = gdsFactoryPreviewService;
+        _userPdkStore = userPdkStore;
     }
 
     /// <summary>Opens a file dialog and loads the selected PDK JSON file.</summary>
@@ -286,30 +315,6 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
             LocalizationService.Instance.Translate("PdkOffset.Status.OffsetUpdated"), SelectedComponent.ComponentName);
     }
 
-    /// <summary>Saves the current PDK draft back to its source JSON file.</summary>
-    [RelayCommand]
-    private void SavePdk()
-    {
-        if (_loadedPdk == null || string.IsNullOrEmpty(_loadedFilePath))
-        {
-            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.NothingToSave");
-            return;
-        }
-
-        try
-        {
-            _pdkSaver.SaveToFile(_loadedPdk, _loadedFilePath);
-            HasUnsavedChanges = false;
-            StatusText = string.Format(
-                LocalizationService.Instance.Translate("PdkOffset.Status.SavedTo"), Path.GetFileName(_loadedFilePath));
-        }
-        catch (Exception ex)
-        {
-            StatusText = string.Format(
-                LocalizationService.Instance.Translate("PdkOffset.Status.SaveFailed"), ex.Message);
-        }
-    }
-
     partial void OnSelectedInstalledPdkChanged(PdkInfoViewModel? value)
     {
         if (value == null) return;
@@ -361,6 +366,7 @@ public partial class PdkOffsetEditorViewModel : ObservableObject
         NazcaPolygons.Clear();
         NazcaPinStubs.Clear();
         NazcaOverlayStatus = "";
+        OverlayErrorText = "";
         PinAlignmentSummary = "";
         PinAlignmentResults.Clear();
         _nazcaCanvasRight = 0;

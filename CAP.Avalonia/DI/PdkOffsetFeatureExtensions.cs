@@ -57,7 +57,9 @@ internal static class PdkOffsetFeatureExtensions
             sp.GetRequiredService<PdkJsonSaver>(),
             sp.GetRequiredService<PdkManagerViewModel>(),
             sp.GetRequiredService<NazcaComponentPreviewService>(),
-            sp.GetRequiredService<GdsFactoryComponentPreviewService>()));
+            sp.GetRequiredService<GdsFactoryComponentPreviewService>(),
+            // Fork-on-save for bundled PDKs — same store the component editor forks with.
+            sp.GetRequiredService<CAP_DataAccess.Components.AddCustomComponent.UserPdkStore>()));
 
         return services;
     }

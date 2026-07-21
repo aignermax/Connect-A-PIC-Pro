@@ -6,7 +6,8 @@ namespace CAP.Avalonia.Services.Localization;
 /// <summary>
 /// Holds the active UI language and translates string keys. Views bind through
 /// <see cref="LocalizeExtension"/> to the indexer; switching the language raises
-/// <c>Item[]</c> so every bound string re-reads live (no restart needed).
+/// <c>Item</c> (the CLR indexer property name Avalonia listens for) so every bound
+/// string re-reads live (no restart needed).
 /// Lookup order: active language → English → the key itself (last resort, covered
 /// by a completeness test so it never shows in practice).
 /// </summary>
@@ -63,11 +64,16 @@ public sealed class LocalizationService : INotifyPropertyChanged
 
         ActiveLanguageCode = code;
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(ActiveLanguageCode)));
+        // Avalonia re-reads a CLR "[Key]" indexer binding ONLY when the notification names the
+        // indexer property itself: ReflectionIndexerNode.ShouldUpdate resolves e.PropertyName via
+        // GetDeclaredProperty and requires index parameters, so neither the WPF-style "Item[]"
+        // nor the empty "all properties changed" name qualifies (verified against the Avalonia
+        // 11.2.1 and 11.3.13 sources; field bug round 5 — open windows stayed in the old
+        // language). The CLR name of this[string] is "Item" — this event is what makes every
+        // {loc:Localize} binding switch live. Covered by LocalizeExtensionLiveSwitchTests.
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item"));
+        // WPF-convention indexer notification, kept for tooling that expects "Item[]".
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs("Item[]"));
-        // Also an empty name ("all properties changed"): Avalonia re-evaluates every binding on
-        // this source — including the [Key] indexer bindings — so every {loc:Localize} string
-        // updates live on a language switch. "Item[]" alone does not refresh them in Avalonia.
-        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(string.Empty));
     }
 
     /// <summary>Translates a key: active table → English table → the key itself.</summary>

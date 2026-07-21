@@ -12,11 +12,17 @@ namespace CAP_Core.Components.Connections
     /// </summary>
     public class WaveguideConnection
     {
+        /// <summary>Default waveguide width in micrometers (standard: 500 nm strip).</summary>
+        public const double DefaultWidthMicrometers = 0.5;
+
+        /// <summary>Default bend radius in micrometers.</summary>
+        public const double DefaultBendRadiusMicrometers = 10.0;
+
         public Guid Id { get; set; } = Guid.NewGuid();
         public PhysicalPin StartPin { get; set; }
         public PhysicalPin EndPin { get; set; }
-        public double WidthMicrometers { get; set; } = 0.5; // Standard: 500nm
-        public double BendRadiusMicrometers { get; set; } = 10.0;
+        public double WidthMicrometers { get; set; } = DefaultWidthMicrometers;
+        public double BendRadiusMicrometers { get; set; } = DefaultBendRadiusMicrometers;
         public WaveguideType Type { get; set; } = WaveguideType.Auto;
 
         /// <summary>

@@ -181,6 +181,13 @@ public partial class PdkOffsetEditorViewModel
             for (int i = 0; i < Components.Count && i < BatchCheckResults.Count; i++)
             {
                 if (token.IsCancellationRequested) break;
+                // Deliberately Misaligned ONLY (round-5 review [8]): the CheckAlignment
+                // band (0.1–0.5 µm) means "human should check" — deltas there can come
+                // from preview-render quantization, and bulk-rewriting calibrations that
+                // earlier releases certified as aligned would silently shift the pins of
+                // every future placement (and, via fork-on-save, the whole PDK) without
+                // per-component consent. The single-component Auto-Calibrate stays
+                // available for check-band rows after visual inspection.
                 if (BatchCheckResults[i].Status != ComponentCheckStatus.Misaligned) continue;
                 var item = Components[i];
                 BatchProgress = string.Format(
@@ -202,7 +209,8 @@ public partial class PdkOffsetEditorViewModel
                     // row keeps the report and the underlying state coherent
                     // without paying for a full second Check-All pass.
                     BatchCheckResults[idx] = PdkOffsetCalibration.Evaluate(
-                        item.Draft, result, PinAlignmentToleranceMicrometers);
+                        item.Draft, result,
+                        PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
                 });
             }
 
@@ -323,7 +331,7 @@ public partial class PdkOffsetEditorViewModel
             if (token.IsCancellationRequested) return;
             var check = PdkOffsetCalibration.Evaluate(
                 item.Draft, result ?? NazcaPreviewResult.Fail("render returned null"),
-                PinAlignmentToleranceMicrometers);
+                PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
             await UiThreadMarshaller(() => BatchCheckResults.Add(check));
         }
     }

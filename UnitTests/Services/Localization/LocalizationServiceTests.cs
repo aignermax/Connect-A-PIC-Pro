@@ -33,7 +33,7 @@ public class LocalizationServiceTests
     }
 
     [Fact]
-    public void SetLanguage_RaisesAllPropertiesChanged_soLocBindingsRefreshLive()
+    public void SetLanguage_RaisesItemChanged_soLocBindingsRefreshLive()
     {
         var service = CreateService();
         var names = new List<string?>();
@@ -41,9 +41,10 @@ public class LocalizationServiceTests
 
         service.SetLanguage("de");
 
-        // An empty/null name tells Avalonia to re-evaluate every binding on the source,
-        // including the [Key] indexer bindings — this is what makes a language switch live.
-        names.ShouldContain(n => string.IsNullOrEmpty(n));
+        // Avalonia's ReflectionIndexerNode re-reads a [Key] binding only for an event that
+        // names the CLR indexer property itself ("Item") — this is what makes a language
+        // switch live; "Item[]" and the empty name are ignored by indexer bindings.
+        names.ShouldContain("Item");
     }
 
     [Fact]
@@ -122,6 +123,7 @@ public class LocalizationServiceTests
         service.SetLanguage("es");
 
         raised.ShouldContain(nameof(LocalizationService.ActiveLanguageCode));
+        raised.ShouldContain("Item");
         raised.ShouldContain("Item[]");
     }
 

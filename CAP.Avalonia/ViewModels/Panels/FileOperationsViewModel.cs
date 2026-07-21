@@ -7,6 +7,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Process;
+using CAP_Core.Routing;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -48,6 +49,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// and other user-set fields survive a save-over-reload cycle.
     /// </summary>
     private DesignMetadata? _loadedMetadata;
+
+    /// <summary>
+    /// Names of components whose pin calibration changed since the loaded design was
+    /// saved (a cached route docked against the pin's current angle and was discarded).
+    /// Collected during connection load, reported once per component afterwards
+    /// (round-5 review [2] — e.g. the DC-Halfring port-angle correction).
+    /// </summary>
+    private readonly HashSet<string> _pinCalibrationMigratedComponents = new(StringComparer.Ordinal);
 
     /// <summary>
     /// Per-component S-matrix overrides loaded from the PIR section of the .lun file,
@@ -760,6 +769,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.AllPins.Clear();
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
+                _pinCalibrationMigratedComponents.Clear();
 
                 // Load standalone components
                 foreach (var compData in designData.Components)
@@ -779,6 +789,9 @@ public partial class FileOperationsViewModel : ObservableObject
                 {
                     LoadConnectionFromData(connData);
                 }
+
+                // Pin-calibration migration: report discarded stale routes and re-route them.
+                ReportPinCalibrationMigrations();
 
                 // Notify all connections about their paths for UI rendering
                 foreach (var conn in _canvas.Connections)
@@ -1282,6 +1295,21 @@ public partial class FileOperationsViewModel : ObservableObject
         var cachedPath = PathSegmentConverter.ToRoutedPath(
             connData.CachedSegments, connData.IsBlockedFallback ?? false);
 
+        // Pin-calibration migration (round-5 review [2]): when a PDK release corrected a
+        // component's pin ANGLES (positions unchanged), the saved geometry still touches
+        // the pins, so the incremental router would keep it — visibly docking against the
+        // port direction and kinking into the component on GDS export. Discard the stale
+        // geometry (the post-load pass re-routes) and drop the frozen state with it.
+        bool pinCalibrationChanged = false;
+        if (cachedPath != null && cachedPath.IsValid)
+        {
+            var (startOk, endOk) = CachedRouteValidator.CheckPinDirections(startPin, endPin, cachedPath);
+            if (!startOk) _pinCalibrationMigratedComponents.Add(startComp.Component.Name);
+            if (!endOk) _pinCalibrationMigratedComponents.Add(endComp.Component.Name);
+            pinCalibrationChanged = !startOk || !endOk;
+            if (pinCalibrationChanged) cachedPath = null;
+        }
+
         WaveguideConnectionViewModel? connVm;
 
         if (cachedPath != null && cachedPath.IsValid)
@@ -1301,13 +1329,37 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // Restore routing style / interconnect settings / freeze state (issue #574)
         if (connVm != null)
-            RestoreRoutingSettings(connVm.Connection, connData);
+            RestoreRoutingSettings(connVm.Connection, connData, keepFrozenGeometry: !pinCalibrationChanged);
+    }
+
+    /// <summary>
+    /// Logs one localized hint per component whose pin calibration changed since the
+    /// design was saved and re-routes the affected — now path-less — connections.
+    /// </summary>
+    private void ReportPinCalibrationMigrations()
+    {
+        if (_pinCalibrationMigratedComponents.Count == 0)
+            return;
+
+        foreach (var name in _pinCalibrationMigratedComponents.OrderBy(n => n, StringComparer.Ordinal))
+        {
+            _errorConsole?.LogWarning(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                Services.Localization.LocalizationService.Instance.Translate("Load.PinCalibrationChanged"),
+                name));
+        }
+        _pinCalibrationMigratedComponents.Clear();
+        _ = _canvas.RecalculateRoutesAsync();
     }
 
     /// <summary>
     /// Restores per-connection routing style, width/radius and freeze state from saved data.
+    /// <paramref name="keepFrozenGeometry"/> is false when the cached geometry was
+    /// discarded by the pin-calibration migration — the freeze flag and the per-bend
+    /// overrides describe exactly that stale geometry and must not survive it.
     /// </summary>
-    private static void RestoreRoutingSettings(WaveguideConnection connection, ConnectionData connData)
+    private static void RestoreRoutingSettings(
+        WaveguideConnection connection, ConnectionData connData, bool keepFrozenGeometry = true)
     {
         // Legacy styles removed from WaveguideType: "Euler" was drawn as the same generous
         // arc as Bend (migrate to Bend); "Straight" (and any other unknown name) falls back
@@ -1322,9 +1374,9 @@ public partial class FileOperationsViewModel : ObservableObject
             connection.WidthMicrometers = connData.WidthMicrometers.Value;
         if (connData.BendRadiusMicrometers.HasValue)
             connection.BendRadiusMicrometers = connData.BendRadiusMicrometers.Value;
-        if (connData.IsRouteFrozen == true)
+        if (keepFrozenGeometry && connData.IsRouteFrozen == true)
             connection.IsRouteFrozen = true;
-        if (connData.BendRadiusOverrides != null)
+        if (keepFrozenGeometry && connData.BendRadiusOverrides != null)
         {
             foreach (var (bendIndex, radius) in connData.BendRadiusOverrides)
                 connection.BendRadiusOverrides[bendIndex] = radius;

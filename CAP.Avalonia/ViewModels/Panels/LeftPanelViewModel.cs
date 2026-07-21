@@ -65,6 +65,13 @@ public partial class LeftPanelViewModel : ObservableObject
 
     public Action<string>? UpdateStatus { get; set; }
 
+    /// <summary>
+    /// Optional status sink that keeps the string-table key: (key, format args). Preferred
+    /// over <see cref="UpdateStatus"/> for localized messages so the host can re-translate
+    /// them on a live UI language switch (field bug round 5).
+    /// </summary>
+    public Action<string, object[]>? UpdateLocalizedStatus { get; set; }
+
     public IFileDialogService? FileDialogService { get; set; }
 
     public Action<GroupTemplate>? OnGroupTemplateSelected { get; set; }
@@ -139,10 +146,15 @@ public partial class LeftPanelViewModel : ObservableObject
             Categories.Add(category);
         }
 
-        UpdateStatus?.Invoke(string.Format(
-            CultureInfo.InvariantCulture,
-            LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
-            AllTemplates.Count));
+        // Keep the key: this is the status visible right after startup, so it must
+        // re-translate when the user switches the UI language in Settings.
+        if (UpdateLocalizedStatus != null)
+            UpdateLocalizedStatus("Status.LoadedComponentTypes", [AllTemplates.Count]);
+        else
+            UpdateStatus?.Invoke(string.Format(
+                CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("Status.LoadedComponentTypes"),
+                AllTemplates.Count));
         FilterComponents();
     }
 
@@ -196,21 +208,13 @@ public partial class LeftPanelViewModel : ObservableObject
         }
     }
 
-    internal static string? ResolveBundledPdkDirectory(string baseDir)
-    {
-        var bundled = Path.Combine(baseDir, "PDKs");
-
-        var dir = new DirectoryInfo(baseDir);
-        for (int i = 0; i < 6 && dir != null; i++, dir = dir.Parent)
-        {
-            var candidate = Path.Combine(dir.FullName, "CAP-DataAccess", "PDKs");
-            if (Directory.Exists(candidate) &&
-                Directory.GetFiles(candidate, "*.json").Length > 0)
-                return candidate;
-        }
-
-        return Directory.Exists(bundled) ? bundled : null;
-    }
+    /// <summary>
+    /// Resolution moved to <see cref="CAP_DataAccess.Components.ComponentDraftMapper.BundledPdkPaths"/>
+    /// so the data-access layer (PdkJsonSaver write guard) shares the same notion of
+    /// "bundled directory" as the library load path. Facade kept for existing callers/tests.
+    /// </summary>
+    internal static string? ResolveBundledPdkDirectory(string baseDir) =>
+        CAP_DataAccess.Components.ComponentDraftMapper.BundledPdkPaths.ResolveBundledPdkDirectory(baseDir);
 
     private void FilterComponents()
     {

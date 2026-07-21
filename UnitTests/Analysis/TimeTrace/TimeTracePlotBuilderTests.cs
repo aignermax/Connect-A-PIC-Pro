@@ -190,6 +190,31 @@ public class TimeTracePlotBuilderTests
         model.Axes.Any(a => a.Title.Contains("Power")).ShouldBeTrue();
     }
 
+    /// <summary>
+    /// The per-pin checkbox list below the chart (<c>TimeTraceSeriesViewModel.IsVisible</c>)
+    /// is the only series-visibility control; an in-plot OxyPlot legend would duplicate it as
+    /// clickable buttons cluttering the chart (field feedback, round 5 finding 1).
+    /// </summary>
+    [Fact]
+    public void CreateEmptyPlotModel_HasNoVisibleInPlotLegend()
+    {
+        var model = TimeTracePlotBuilder.CreateEmptyPlotModel();
+
+        model.Legends.ShouldAllBe(legend => !legend.IsLegendVisible);
+    }
+
+    [Fact]
+    public void BuildPlotModel_HasNoVisibleInPlotLegend()
+    {
+        var pin = Guid.NewGuid();
+        var result = MakeResult(new[] { 0.0, 1e-12 }, (pin, new[] { 0.0, 0.5 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Legends.ShouldAllBe(legend => !legend.IsLegendVisible);
+    }
+
     [Fact]
     public void DistinctPalette_AssignedToSeparatePins()
     {

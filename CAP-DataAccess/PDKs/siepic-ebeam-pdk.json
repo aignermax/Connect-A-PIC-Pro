@@ -4596,7 +4596,7 @@
       "widthMicrometers": 21.52,
       "heightMicrometers": 11.46,
       "nazcaOriginOffsetX": 10.76,
-      "nazcaOriginOffsetY": 0.75,
+      "nazcaOriginOffsetY": 10.71,
       "pins": [
         {
           "name": "port 1",
@@ -4608,7 +4608,7 @@
           "name": "port 2",
           "offsetXMicrometers": 0.7599999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 90
+          "angleDegrees": 270
         },
         {
           "name": "port 3",
@@ -4620,7 +4620,7 @@
           "name": "port 4",
           "offsetXMicrometers": 20.759999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 90
+          "angleDegrees": 270
         }
       ],
       "sMatrix": {
@@ -5846,7 +5846,7 @@
       "widthMicrometers": 344.178,
       "heightMicrometers": 5.5,
       "nazcaOriginOffsetX": 14.01,
-      "nazcaOriginOffsetY": 3.73,
+      "nazcaOriginOffsetY": 1.77,
       "pins": [
         {
           "name": "port 1",
@@ -9833,7 +9833,7 @@
       "widthMicrometers": 195.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.3000000000000003,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
@@ -9971,7 +9971,7 @@
       "widthMicrometers": 217.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.3000000000000003,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
