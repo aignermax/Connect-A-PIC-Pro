@@ -233,6 +233,23 @@
   .foot-note { color: var(--dim); font-size: 0.85rem; margin-top: 22px; max-width: 70ch; }
   .foot-note a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
   .foot-note a:hover { color: var(--amber); }
+  .foot-credit {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 20px; color: var(--dim);
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em;
+  }
+  .foot-credit:hover { color: var(--amber); text-decoration: none; }
+  .foot-credit img { height: 22px; width: auto; opacity: 0.92; }
+
+  /* ---------- privacy note ---------- */
+  .privacy { border-top: 1px solid var(--line); padding: 30px 0 56px; }
+  .privacy-label {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  .privacy-text { color: var(--dim); font-size: 0.85rem; max-width: 70ch; margin-top: 10px; }
+  .privacy-text a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+  .privacy-text a:hover { color: var(--amber); }
 
   /* ---------- responsive ---------- */
   @media (max-width: 920px) {
@@ -604,6 +621,8 @@
         <a href="https://github.com/aignermax/Lunima/releases/tag/v0.12.0">Release notes</a>
         <a href="https://github.com/aignermax/Lunima/blob/main/docs/PDK_JSON_FORMAT.md">PDK format</a>
         <a href="https://www.akhetonics.com/">Akhetonics</a>
+        <a href="https://akhetonics.com/impressum">Imprint</a>
+        <a href="#privacy">Privacy</a>
       </nav>
     </div>
     <p class="foot-note">
@@ -612,8 +631,22 @@
       through limited work-time contributions. Lunima originated from
       <a href="https://github.com/Akhetonics/Connect-A-PIC">Connect-A-PIC</a>.
     </p>
+    <a class="foot-credit" href="https://akhetonics.com/">
+      <img src="media/akhetonics-logo.png" width="214" height="31" alt="Akhetonics logo" loading="lazy">
+      <span>Supported by Akhetonics</span>
+    </a>
   </div>
 </footer>
+
+<section id="privacy" class="wrap privacy">
+  <p class="privacy-label">Privacy</p>
+  <p class="privacy-text">
+    This is a static page: no tracking, cookies, analytics, or forms are run by us, and nothing
+    on it reads or stores anything about you. It's hosted on GitHub Pages, so GitHub — as the
+    hosting provider — technically processes visitor IP addresses in its server logs to serve
+    the page; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement">GitHub Privacy Statement</a> for details.
+  </p>
+</section>
 
 </body>
 </html>
