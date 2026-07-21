@@ -168,7 +168,15 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         string labelText;
         IBrush labelBrush;
 
-        if (vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null)
+        // Metal traces carry no optical power, so neither the power-flow figures nor an
+        // optical loss make sense on them — label them with their length only, in the
+        // electrical copper/gold tint (#682).
+        if (IsElectricalTrace(conn))
+        {
+            labelText = $"{conn.PathLength:F0}µm";
+            labelBrush = new SolidColorBrush(ElectricalTraceColor);
+        }
+        else if (vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null)
         {
             var flow = vm.PowerFlowVisualizer.GetFlowForConnection(conn.Connection.Id);
             if (flow != null && flow.AveragePower > 0)

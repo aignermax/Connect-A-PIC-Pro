@@ -1,0 +1,38 @@
+[
+  {
+    "file": "hero-canvas.png",
+    "caption": "The Lunima main window with a live CW simulation running on a staged mixed photonic/electric chip: a Mach-Zehnder interferometer (grating coupler in, 1x2 MMI splitter, electro-optic phase shifter arm, DBR-filter arm, 2x2 MMI combiner, photodetector and output coupler) whose waveguides show the simulated power flow as color plus dB/percent labels, DC probe pads and bond pads wired to the modulator and detector contacts as thick golden metal traces, diagonal (45°) autorouting and two hand-styled connections (SBend, Bend with custom radius) — all built from the bundled Demo and SiEPIC PDKs and routed by the production router."
+  },
+  {
+    "file": "component-editor.png",
+    "caption": "The unified component editor in edit mode: fork-on-save banner, PDK and fabrication-process context, syntax-highlighted gdsfactory Python definition, a rendered geometry preview of the 1x2 MMI, and one-click S-matrix computation via Meep FDTD."
+  },
+  {
+    "file": "pdk-management.png",
+    "caption": "The PDK lifecycle in one view: the component library with per-component edit (fork-on-save) and restore-original quick actions on hover, the PDK Mgmt section listing a forked user copy that shadows its bundled original next to an own user library, and the trash panel restoring deleted PDKs or single components."
+  },
+  {
+    "file": "eye-analysis.png",
+    "caption": "Eye/BER analysis: a PRBS-7-modulated transient folded into an eye-persistence heat map at 25 Gbps, with bit rate, PRBS pattern and decision-threshold controls plus CSV export."
+  },
+  {
+    "file": "transient-analysis.png",
+    "caption": "Transient analysis: IFFT of the circuit S-parameters convolved with a Gaussian pulse source, plotting the time-domain power of several output pins (MZI bar/cross ports and the photodetector input) as separate toggleable traces."
+  },
+  {
+    "file": "waveguide-editing.png",
+    "caption": "Figma-style waveguide editing on the MZI's DBR arm: selecting a routed connection reveals draggable in-canvas bend-radius handles (screen-constant, with live radius labels) and the per-connection Routing panel, here switched to the Bend style with per-segment length/loss annotations."
+  },
+  {
+    "file": "multilanguage.png",
+    "caption": "The same main window live-switched between English and Japanese: every toolbar, panel and canvas HUD string re-reads instantly from the localization service — five languages ship (English, German, Simplified Chinese, Spanish, Japanese)."
+  },
+  {
+    "file": "process-editor.png",
+    "caption": "The fabrication-process editor on a Cornerstone-like SiN 300 nm process: GDS layer stack, optical and metal routing cross-sections with per-cross-section minimum and recommended bend radii, and the process materials with user-supplied refractive indices."
+  },
+  {
+    "file": "netlist-export.png",
+    "caption": "Netlist export for the gdsfactory/SAX ecosystem: the right-panel Netlist section derives a YAML circuit netlist from the canvas — instances with settings (including the electrical probe/bond pads), informational placements, logical port-to-port connections with metal traces marked '# electrical', and exposed ports — ready to copy or save as .yml."
+  }
+]

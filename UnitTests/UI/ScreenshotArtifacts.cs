@@ -35,6 +35,22 @@ internal static class ScreenshotArtifacts
         }
     }
 
+    /// <summary>Writes raw <paramref name="bytes"/> (e.g. a composed PNG) to <paramref name="path"/> atomically.</summary>
+    public static void WriteBytes(string path, byte[] bytes)
+    {
+        var tmp = TempPathFor(path);
+        try
+        {
+            File.WriteAllBytes(tmp, bytes);
+            File.Move(tmp, path, overwrite: true);
+        }
+        finally
+        {
+            if (File.Exists(tmp))
+                File.Delete(tmp);
+        }
+    }
+
     /// <summary>Writes <paramref name="content"/> to <paramref name="path"/> atomically.</summary>
     public static void WriteText(string path, string content)
     {
