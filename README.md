@@ -2,9 +2,9 @@
 
 **Design, simulate, and lay out photonic integrated circuits — visually, on your own PDK, with open formats at every step.**
 
-![The Lunima main window: a live CW simulation on a mixed photonic/electric Mach-Zehnder chip, with power flow rendered on the waveguides, golden DC metal traces, and diagonal routing](docs/media/v0.12/hero-canvas.png)
+[![A Mach-Zehnder chip building itself on the Lunima canvas: components placed, the router wiring connection after connection, golden DC metal traces — then a live CW simulation lights up the power flow](docs/media/v0.12/hero-loop.gif)](docs/media/v0.12/hero-canvas.png)
 
-*A live CW simulation on a staged Mach-Zehnder chip: simulated power flow rendered directly on the waveguides (color + dB/percent labels), DC probe and bond pads wired with metal traces, diagonal routing, and hand-styled bends — built from the bundled Demo and SiEPIC PDKs.*
+*The staged Mach-Zehnder chip wiring itself up: the production router connects component after component (diagonal routing, hand-styled bends), DC probe and bond pads get golden metal traces — then a live CW simulation lights up the power flow on every waveguide. Built from the bundled Demo and SiEPIC PDKs; click for the [full-resolution still](docs/media/v0.12/hero-canvas.png).*
 
 [**Download v0.12.0**](https://github.com/aignermax/Lunima/releases/tag/v0.12.0) · [Landing page](https://aignermax.github.io/Lunima/) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
@@ -42,11 +42,11 @@ Simulation is not a separate app — it runs on the canvas while you design, and
 
 ## Your PDK, your components
 
-Custom PDKs are a first-class flow, not an expert backdoor. Lunima ships with a Demo PDK and a SiEPIC EBeam subset, and everything they can do, your own libraries can do too.
+Custom PDKs are a first-class flow, not an expert backdoor. Lunima ships with a Demo PDK, a CornerStone SiN library, and a SiEPIC EBeam PDK, and everything they can do, your own libraries can do too.
 
 ![The unified component editor: PDK and process context, syntax-highlighted gdsfactory Python, rendered geometry preview, and one-click Meep S-matrix computation](docs/media/v0.12/component-editor.png)
 
-- **Define components in Python** — write or paste a gdsfactory (or nazca) definition, preview the rendered geometry, and compute its S-matrix with Meep — all in one editor.
+- **Define components in Python** — write or paste a component definition in **gdsfactory or nazca** (both backends are supported end to end, from geometry preview to GDS export), preview the rendered geometry, and compute its S-matrix with Meep — all in one editor.
 - **Fork-on-save** — editing a bundled component forks it into your own user PDK, which shadows the original; a per-component quick action restores the original at any time.
 - **Trash, not dread** — deleted PDKs and single components go to a trash panel and can be restored for 30 days.
 
@@ -57,6 +57,21 @@ Custom PDKs are a first-class flow, not an expert backdoor. Lunima ships with a 
 
 ![The fabrication-process editor on a SiN 300 nm process: layer stack, cross-sections with per-cross-section bend radii, and user-supplied material indices](docs/media/v0.12/process-editor.png)
 
+## From canvas to fab
+
+Designs are laid out against real foundry processes, not abstract schematics — so what leaves the tool is a GDS a fab can actually make.
+
+![What you draw is what you tape out: the MZI core of the staged chip on the Lunima canvas next to the rendered polygons of the GDS actually exported through gdsfactory](docs/media/v0.12/canvas-vs-gds.png)
+
+*What you draw is what you tape out: the chip's MZI core on the canvas (left) and the geometry of the real exported GDS (right) — the generated gdsfactory script was executed and the resulting `design.gds` rendered back at the same scale and position. Every waveguide, bend, and golden DC metal trace lands in the same place.*
+
+![The manufacturing story in one frame: the unified Export flyout over the chip with gdsfactory and nazca GDS back-ends, the PDK calibration editor showing the SiEPIC grating coupler's rendered GDS geometry with its pin sitting exactly on the cell origin, and an all-green Check-All calibration report](docs/media/v0.12/gds-export.png)
+
+- **Real foundry PDKs, bundled** — a [CornerStone](https://www.cornerstone.sotonfab.co.uk/) SiN 300 nm library and the open [SiEPIC EBeam](https://github.com/SiEPIC/SiEPIC_EBeam_PDK) SOI 220 nm PDK ship with the app, next to the Demo PDK. Bundled SiEPIC cells are pin-calibrated against their actual GDS geometry: the calibration editor renders the real polygons, reports per-pin deltas, and a Check-All pass verifies the whole library — with the shipped calibrations locked by end-to-end tests.
+- **One design, one process** — every design is locked to a single fabrication process; components from incompatible PDKs can't land on the same chip. Free mixing lives in an explicit Playground mode that the status bar (and the exporter) honestly labels *not manufacturable*. Design checks enforce the rest: bend-radius floors in the router and the drag handles, layer-divergence warnings, calibrated pin positions.
+- **GDS through gdsfactory *or* nazca** — one Export menu, two GDS back-ends: a runnable gdsfactory Python script (standalone geometry stubs or real ubcpdk/SiEPIC cells) or a nazca script, each generating the GDS layout alongside the code. Your own components can be defined in either backend, so the export path matches however you write geometry.
+- **Honest scope** — Lunima gets you to a fab-ready GDS against your process design kit. Booking the MPW run and clearing the foundry's own sign-off DRC remains between you and your foundry — as it should be.
+
 ## Open by design
 
 Every pipeline stage has an escape hatch. Nothing you build in Lunima is locked in.
@@ -65,7 +80,7 @@ Every pipeline stage has an escape hatch. Nothing you build in Lunima is locked 
 
 - **gdsfactory YAML netlist export** — derive a circuit netlist straight from the canvas: instances with settings, informational placements, logical port-to-port connections (metal traces marked `# electrical`), and exposed ports. Copy it or save as `.yml` and feed it to SAX or any gdsfactory-based flow.
 - **Open, diff-able PDKs** — component libraries are plain JSON ([format documentation](docs/PDK_JSON_FORMAT.md)); processes and S-matrices live in inspectable files, not a proprietary database.
-- **GDS export** — export designs through nazca to GDS for fabrication pipelines.
+- **GDS export** — export designs through gdsfactory or nazca to GDS for fabrication pipelines (see [From canvas to fab](#from-canvas-to-fab)).
 - **Autorouting is optional** — routing can be styled, frozen, or replaced per connection; the router suggests, you decide.
 - **AI design assistant** — describe a circuit in natural language (bring your own Claude API key).
 

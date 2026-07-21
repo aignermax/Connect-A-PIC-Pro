@@ -5,6 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Lunima — draw the chip, watch the light</title>
 <meta name="description" content="Lunima is a free, open-source design tool for photonic integrated circuits: Figma-style waveguide editing, live on-canvas simulation, your own PDKs, and open formats end to end.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://aignermax.github.io/Lunima/">
+<meta property="og:title" content="Lunima — draw the chip, watch the light">
+<meta property="og:description" content="Free, open-source photonic IC design: Figma-style waveguide editing, live on-canvas simulation, your own PDKs — and a fab-ready GDS at the end.">
+<meta property="og:image" content="https://aignermax.github.io/Lunima/media/v0.12/social-card.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta property="og:image:alt" content="Lunima — Draw the chip. Watch the light. A photonic chip with simulated power flow and golden DC metal traces on the design canvas.">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Lunima — draw the chip, watch the light">
+<meta name="twitter:description" content="Free, open-source photonic IC design: Figma-style waveguide editing, live on-canvas simulation, your own PDKs — and a fab-ready GDS at the end.">
+<meta name="twitter:image" content="https://aignermax.github.io/Lunima/media/v0.12/social-card.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cpath d='M2 24 C 12 24 12 8 22 8' fill='none' stroke='%23F2A83B' stroke-width='3' stroke-linecap='round'/%3E%3Ccircle cx='2' cy='24' r='3' fill='%2343DE85'/%3E%3Ccircle cx='22' cy='8' r='3' fill='%2343DE85'/%3E%3C/svg%3E">
 <style>
   :root {
@@ -221,6 +233,23 @@
   .foot-note { color: var(--dim); font-size: 0.85rem; margin-top: 22px; max-width: 70ch; }
   .foot-note a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
   .foot-note a:hover { color: var(--amber); }
+  .foot-credit {
+    display: inline-flex; align-items: center; gap: 8px;
+    margin-top: 20px; color: var(--dim);
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.03em;
+  }
+  .foot-credit:hover { color: var(--amber); text-decoration: none; }
+  .foot-credit img { height: 22px; width: auto; opacity: 0.92; }
+
+  /* ---------- privacy note ---------- */
+  .privacy { border-top: 1px solid var(--line); padding: 30px 0 56px; }
+  .privacy-label {
+    font-family: var(--mono); font-size: 11.5px; letter-spacing: 0.12em;
+    text-transform: uppercase; color: var(--dim);
+  }
+  .privacy-text { color: var(--dim); font-size: 0.85rem; max-width: 70ch; margin-top: 10px; }
+  .privacy-text a { color: var(--dim); text-decoration: underline; text-underline-offset: 3px; }
+  .privacy-text a:hover { color: var(--amber); }
 
   /* ---------- responsive ---------- */
   @media (max-width: 920px) {
@@ -434,6 +463,53 @@
 
   <div class="connector" aria-hidden="true">
     <svg viewBox="0 0 420 70">
+      <path class="wg" d="M 10 14 C 140 14 140 56 210 56 C 280 56 280 14 410 14" />
+      <circle class="port" cx="10" cy="14" r="4" />
+      <circle class="port" cx="410" cy="14" r="4" />
+      <text class="lbl" x="210" y="40" text-anchor="middle">ebeam_gc_te1550 — pin Δ 0.00 µm</text>
+    </svg>
+  </div>
+
+  <!-- ================= FROM CANVAS TO FAB (Priya / Peter) ================= -->
+  <section class="wrap feature" id="fab">
+    <div class="feat-text">
+      <p class="eyebrow">If you tape out</p>
+      <h2>Built to tape out</h2>
+      <p>
+        Layouts target real foundry processes from the first component you place —
+        so what leaves the Export menu is a GDS a fab can actually make, not a
+        pretty schematic.
+      </p>
+      <ul>
+        <li><strong>Real foundry PDKs, bundled</strong> — CornerStone SiN 300 nm and the open SiEPIC EBeam SOI 220 nm ship with the app, next to the Demo PDK.</li>
+        <li><strong>Calibrated against the cells</strong> — the offset editor renders the PDK's actual GDS polygons and verifies every pin position; Check-All audits the whole library.</li>
+        <li><strong>One design, one process</strong> — incompatible PDKs can't mix on a chip; free mixing lives in a Playground the status bar labels <em>not manufacturable</em>.</li>
+        <li><strong>Design checks</strong> — bend-radius floors in router and handles, layer-divergence warnings, process-bound cross-sections.</li>
+        <li><strong>GDS via gdsfactory or nazca</strong> — one Export menu, two GDS back-ends; your own components can be written in either. The MPW run stays between you and your foundry.</li>
+      </ul>
+    </div>
+    <div class="feat-media">
+      <figure class="frame">
+        <div class="frame-bar">
+          <span><span class="ok">⇄ 1:1</span>&nbsp; canvas ↔ exported GDS (gdsfactory)</span>
+          <span class="hud">same circuit · same scale · same position</span>
+        </div>
+        <img src="media/v0.12/canvas-vs-gds.png" width="2642" height="752" loading="lazy"
+             alt="What you draw is what you tape out: the MZI core drawn on the Lunima canvas next to the rendered polygons of the GDS actually exported through gdsfactory — every waveguide, bend and metal trace in the same place.">
+      </figure>
+      <figure class="frame">
+        <div class="frame-bar">
+          <span><span class="ok">📤 Export</span>&nbsp; GDS via gdsfactory · nazca</span>
+          <span class="hud">Check-All: 8/8 aligned | Δ 0.00 µm</span>
+        </div>
+        <img src="media/v0.12/gds-export.png" width="2708" height="900" loading="lazy"
+             alt="The manufacturing story: the unified Export flyout over the chip listing gdsfactory and nazca GDS back-ends, the PDK calibration editor rendering the SiEPIC grating coupler's actual GDS geometry with its pin sitting exactly on the cell origin, and an all-green Check-All calibration report.">
+      </figure>
+    </div>
+  </section>
+
+  <div class="connector" aria-hidden="true">
+    <svg viewBox="0 0 420 70">
       <path class="wg" d="M 10 56 C 140 56 140 14 210 14 C 280 14 280 56 410 56" />
       <circle class="port" cx="10" cy="56" r="4" />
       <circle class="port" cx="410" cy="56" r="4" />
@@ -454,7 +530,7 @@
       <ul>
         <li><strong>gdsfactory YAML netlists</strong> — instances with settings, placements, logical connections (metal traces marked <code style="font-family: var(--mono); font-size: 0.85em; color: var(--gold);"># electrical</code>) and exposed ports — ready for SAX and any gdsfactory flow.</li>
         <li><strong>Open JSON PDKs</strong> — documented, human-readable, version-controllable.</li>
-        <li><strong>GDS export</strong> — through nazca, into your fabrication pipeline.</li>
+        <li><strong>GDS export</strong> — through gdsfactory or nazca, into your fabrication pipeline.</li>
         <li><strong>Autorouting is optional</strong> — style it, freeze it, or route yourself; your edits are never overwritten.</li>
         <li><strong>AI design assistant</strong> — describe a circuit in natural language, with your own Claude API key.</li>
       </ul>
@@ -545,6 +621,8 @@
         <a href="https://github.com/aignermax/Lunima/releases/tag/v0.12.0">Release notes</a>
         <a href="https://github.com/aignermax/Lunima/blob/main/docs/PDK_JSON_FORMAT.md">PDK format</a>
         <a href="https://www.akhetonics.com/">Akhetonics</a>
+        <a href="https://akhetonics.com/impressum">Imprint</a>
+        <a href="#privacy">Privacy</a>
       </nav>
     </div>
     <p class="foot-note">
@@ -553,8 +631,22 @@
       through limited work-time contributions. Lunima originated from
       <a href="https://github.com/Akhetonics/Connect-A-PIC">Connect-A-PIC</a>.
     </p>
+    <a class="foot-credit" href="https://akhetonics.com/">
+      <img src="media/akhetonics-logo.png" width="214" height="31" alt="Akhetonics logo" loading="lazy">
+      <span>Supported by Akhetonics</span>
+    </a>
   </div>
 </footer>
+
+<section id="privacy" class="wrap privacy">
+  <p class="privacy-label">Privacy</p>
+  <p class="privacy-text">
+    This is a static page: no tracking, cookies, analytics, or forms are run by us, and nothing
+    on it reads or stores anything about you. It's hosted on GitHub Pages, so GitHub — as the
+    hosting provider — technically processes visitor IP addresses in its server logs to serve
+    the page; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement">GitHub Privacy Statement</a> for details.
+  </p>
+</section>
 
 </body>
 </html>
