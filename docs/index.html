@@ -434,6 +434,45 @@
 
   <div class="connector" aria-hidden="true">
     <svg viewBox="0 0 420 70">
+      <path class="wg" d="M 10 14 C 140 14 140 56 210 56 C 280 56 280 14 410 14" />
+      <circle class="port" cx="10" cy="14" r="4" />
+      <circle class="port" cx="410" cy="14" r="4" />
+      <text class="lbl" x="210" y="40" text-anchor="middle">ebeam_gc_te1550 — pin Δ 0.00 µm</text>
+    </svg>
+  </div>
+
+  <!-- ================= FROM CANVAS TO FAB (Priya / Peter) ================= -->
+  <section class="wrap feature" id="fab">
+    <div class="feat-text">
+      <p class="eyebrow">If you tape out</p>
+      <h2>Built to tape out</h2>
+      <p>
+        Layouts target real foundry processes from the first component you place —
+        so what leaves the Export menu is a GDS a fab can actually make, not a
+        pretty schematic.
+      </p>
+      <ul>
+        <li><strong>Real foundry PDKs, bundled</strong> — CornerStone SiN 300 nm and the open SiEPIC EBeam SOI 220 nm ship with the app, next to the Demo PDK.</li>
+        <li><strong>Calibrated against the cells</strong> — the offset editor renders the PDK's actual GDS polygons and verifies every pin position; Check-All audits the whole library.</li>
+        <li><strong>One design, one process</strong> — incompatible PDKs can't mix on a chip; free mixing lives in a Playground the status bar labels <em>not manufacturable</em>.</li>
+        <li><strong>Design checks</strong> — bend-radius floors in router and handles, layer-divergence warnings, process-bound cross-sections.</li>
+        <li><strong>GDS via gdsfactory or nazca</strong> — one Export menu, two GDS back-ends; your own components can be written in either. The MPW run stays between you and your foundry.</li>
+      </ul>
+    </div>
+    <div class="feat-media">
+      <figure class="frame">
+        <div class="frame-bar">
+          <span><span class="ok">📤 Export</span>&nbsp; GDS via gdsfactory · nazca</span>
+          <span class="hud">Check-All: 8/8 aligned | Δ 0.00 µm</span>
+        </div>
+        <img src="media/v0.12/gds-export.png" width="2708" height="900" loading="lazy"
+             alt="The manufacturing story: the unified Export flyout over the chip listing gdsfactory and nazca GDS back-ends, the PDK calibration editor rendering the SiEPIC grating coupler's actual GDS geometry with its pin sitting exactly on the cell origin, and an all-green Check-All calibration report.">
+      </figure>
+    </div>
+  </section>
+
+  <div class="connector" aria-hidden="true">
+    <svg viewBox="0 0 420 70">
       <path class="wg" d="M 10 56 C 140 56 140 14 210 14 C 280 14 280 56 410 56" />
       <circle class="port" cx="10" cy="56" r="4" />
       <circle class="port" cx="410" cy="56" r="4" />
@@ -454,7 +493,7 @@
       <ul>
         <li><strong>gdsfactory YAML netlists</strong> — instances with settings, placements, logical connections (metal traces marked <code style="font-family: var(--mono); font-size: 0.85em; color: var(--gold);"># electrical</code>) and exposed ports — ready for SAX and any gdsfactory flow.</li>
         <li><strong>Open JSON PDKs</strong> — documented, human-readable, version-controllable.</li>
-        <li><strong>GDS export</strong> — through nazca, into your fabrication pipeline.</li>
+        <li><strong>GDS export</strong> — through gdsfactory or nazca, into your fabrication pipeline.</li>
         <li><strong>Autorouting is optional</strong> — style it, freeze it, or route yourself; your edits are never overwritten.</li>
         <li><strong>AI design assistant</strong> — describe a circuit in natural language, with your own Claude API key.</li>
       </ul>

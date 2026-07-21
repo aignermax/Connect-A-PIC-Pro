@@ -32,6 +32,10 @@
     "caption": "The fabrication-process editor on a Cornerstone-like SiN 300 nm process: GDS layer stack, optical and metal routing cross-sections with per-cross-section minimum and recommended bend radii, and the process materials with user-supplied refractive indices."
   },
   {
+    "file": "gds-export.png",
+    "caption": "The manufacturing story in one frame: the unified Export flyout over the staged chip (GDS via gdsfactory or Nazca, plus SAX, PhotonTorch, Verilog-A and YAML netlist), the PDK offset/calibration editor on the bundled SiEPIC EBeam PDK showing the grating coupler's rendered GDS geometry with its pin sitting exactly on the cell origin (1/1 aligned within 0.1 µm), and the Check-All calibration report with every checked SiEPIC cell green at Δ 0.00 µm."
+  },
+  {
     "file": "netlist-export.png",
     "caption": "Netlist export for the gdsfactory/SAX ecosystem: the right-panel Netlist section derives a YAML circuit netlist from the canvas — instances with settings (including the electrical probe/bond pads), informational placements, logical port-to-port connections with metal traces marked '# electrical', and exposed ports — ready to copy or save as .yml."
   }
