@@ -151,6 +151,50 @@ public class ComponentGroupSMatrixBuilderTests
     }
 
     [Fact]
+    public void BuildGroupSMatrix_ExternalProjection_MatchesTheFullInternalClosure()
+    {
+        // Review finding [7]: the projection path restricts the closure solve to the
+        // group's external source columns (one substitution per external pin instead
+        // of a full inverse whose internal columns are discarded anyway). The
+        // projected values must stay EXACTLY those of the full closure.
+        var group = new ComponentGroup("Parity");
+        var child1 = TestComponentFactory.CreateSimpleTwoPortComponent();
+        var child2 = TestComponentFactory.CreateSimpleTwoPortComponent();
+        group.AddChild(child1);
+        group.AddChild(child2);
+
+        var routedPath = new RoutedPath();
+        routedPath.Segments.Add(new StraightSegment(10, 0, 20, 0, 0));
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            StartPin = child1.PhysicalPins[1],
+            EndPin = child2.PhysicalPins[0],
+            Path = routedPath,
+        });
+        group.AddExternalPin(new GroupPin { Name = "In", InternalPin = child1.PhysicalPins[0] });
+        group.AddExternalPin(new GroupPin { Name = "Out", InternalPin = child2.PhysicalPins[1] });
+
+        int wavelength = _builder.GetSupportedWavelengths(group).First();
+        var projected = _builder.BuildGroupSMatrix(group, wavelength)![wavelength];
+        var full = _builder.BuildFullInternalMatrix(group, wavelength)!;
+
+        // Every projected external entry equals the full closure's entry.
+        foreach (var (pinIn, idxIn) in projected.PinReference)
+        {
+            foreach (var (pinOut, idxOut) in projected.PinReference)
+            {
+                var projectedValue = projected.SMat[idxOut, idxIn];
+                var fullValue = full.SMat[full.PinReference[pinOut], full.PinReference[pinIn]];
+                (projectedValue - fullValue).Magnitude.ShouldBeLessThan(1e-12,
+                    "the restricted solve must reproduce the full closure exactly");
+            }
+        }
+
+        // The full-internal path must keep ALL child pins (boundary-condition use case).
+        full.PinReference.Count.ShouldBeGreaterThan(projected.PinReference.Count);
+    }
+
+    [Fact]
     public void BuildGroupSMatrix_SupportsMultipleWavelengths()
     {
         // Arrange

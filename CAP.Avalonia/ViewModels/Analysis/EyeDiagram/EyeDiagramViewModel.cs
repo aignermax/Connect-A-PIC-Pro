@@ -105,12 +105,11 @@ public partial class EyeDiagramViewModel : ObservableObject
         if (IsRunning) return;
 
         // Resolve the analysis output BEFORE simulating (#754): an invalid designation
-        // aborts with a clear warning instead of silently guessing; an ambiguous design
-        // (several off couplers, none designated) activates the canvas picker.
+        // aborts with a clear warning instead of silently guessing. Without a
+        // designation every off-laser coupler counts as an output (field wish, round 4
+        // final) — the eyedropper only restricts, so no picker mode is forced here.
         var resolution = AnalysisOutputResolver.Resolve(_canvas!);
         if (ReportInvalidDesignation(resolution)) return;
-        if (resolution.State == AnalysisOutputState.MultipleCandidates)
-            RequestOutputPicker?.Invoke();
 
         IsRunning = true;
         StatusText = LocalizationService.Instance.Translate("Analysis.Eye.RunningPrbs");
@@ -132,6 +131,13 @@ public partial class EyeDiagramViewModel : ObservableObject
             MetricsText = FormatMetrics(outcome.Metrics!);   // non-null when Histogram != null
             OnPropertyChanged(nameof(HasResult));
             StatusText = outcome.Warning ?? "Done";
+        }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Eye-diagram analysis blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
@@ -207,7 +213,10 @@ public partial class EyeDiagramViewModel : ObservableObject
 
     private EyeRunOutcome RunAnalysisCore(AnalysisOutputResolution resolution)
     {
-        var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, ports) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
         var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas!);
         var designatedPinIds = resolution.State == AnalysisOutputState.DesignatedValid
             ? AnalysisOutputResolver.CollectLightPinIds(resolution.Output!)
@@ -222,9 +231,13 @@ public partial class EyeDiagramViewModel : ObservableObject
         var timeDef = new TimeSignalDefinition(sweepDef.SampleRateHz, plan.TotalSamples);
 
         var signals = new Dictionary<Guid, double[]>();
+        double injectedPeakPower = 0;
         foreach (var used in ports.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(used.Input.InFlowPower.Magnitude);
+            // Peak intensity of the strongest input — the reference for the −60 dB
+            // no-signal gate in EyeTraceSelector (#762 review).
+            injectedPeakPower = Math.Max(injectedPeakPower, amplitude * amplitude);
             signals[used.AttachedComponentPinId] = PrbsGenerator.ToNrzSamples(bits, plan.SamplesPerBit, amplitude);
         }
         if (signals.Count == 0)
@@ -241,7 +254,8 @@ public partial class EyeDiagramViewModel : ObservableObject
         // designation, at a coupler whose laser is off (a true output, #690); fall
         // back to the strongest trace (with a warning) for all-lasers-on designs.
         var selection = EyeTraceSelector.Select(result, outputPinIds, designatedPinIds,
-            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates);
+            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates,
+            injectedPeakPower: injectedPeakPower);
         if (selection.Trace == null)
             return new EyeRunOutcome(null, null, selection.Error);
         var trace = selection.Trace;

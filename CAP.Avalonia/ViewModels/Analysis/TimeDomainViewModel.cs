@@ -123,12 +123,11 @@ public partial class TimeDomainViewModel : ObservableObject
         if (IsRunning) return;
 
         // Resolve the analysis output BEFORE simulating (#754): an invalid designation
-        // aborts with a clear warning instead of silently guessing; an ambiguous design
-        // (several off couplers, none designated) activates the canvas picker.
+        // aborts with a clear warning instead of silently guessing. Without a
+        // designation every off-laser coupler counts as an output (field wish, round 4
+        // final) — the eyedropper only restricts, so no picker mode is forced here.
         var resolution = AnalysisOutputResolver.Resolve(_canvas!);
         if (ReportInvalidDesignation(resolution)) return;
-        if (resolution.State == AnalysisOutputState.MultipleCandidates)
-            RequestOutputPicker?.Invoke();
 
         IsRunning = true;
         StatusText = LocalizationService.Instance.Translate("Analysis.TimeDomain.BuildingImpulseResponses");
@@ -152,6 +151,13 @@ public partial class TimeDomainViewModel : ObservableObject
             OnPropertyChanged(nameof(HasResult));
             StatusText = statusOverride ?? string.Format(
                 LocalizationService.Instance.Translate("Analysis.TimeDomain.DonePins"), displayed.PinTraces.Count);
+        }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Time-domain simulation blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
         }
         catch (InvalidOperationException ex)
         {
@@ -255,7 +261,10 @@ public partial class TimeDomainViewModel : ObservableObject
 
     private TimeDomainResult RunSimulationCore()
     {
-        var (simulator, portManager) = TransientCircuitFactory.Create(_canvas!);
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, portManager) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
 
         var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 

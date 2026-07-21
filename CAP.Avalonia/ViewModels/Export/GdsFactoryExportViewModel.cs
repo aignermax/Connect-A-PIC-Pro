@@ -92,24 +92,23 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        // A GDS is one fabrication process. Playground lets you place components from different
-        // processes (e.g. CornerStone SiN + SiEPIC SOI) together, but they cannot be exported into
-        // one gdsfactory GDS — the script activates a single PDK and the foreign cells fail to
-        // resolve. Detect this up front and refuse with a clear message instead of a raw Python
-        // crash at runtime (#570).
+        // A GDS is one fabrication process — but the Playground deliberately lets you place
+        // components from different processes (e.g. CornerStone SiN + SiEPIC SOI) together.
+        // Field decision (round 4): such a design still exports, so the user can look at the
+        // result, with an unmissable warning (dialog + Error Console) that the GDS is
+        // inspection-only and NOT manufacturable. The generated script activates each cell's
+        // own PDK right before instantiating it (see GdsFactoryPdkContext), so no cell is
+        // silently drawn with a foreign process' layers (#570 integrity preserved).
+        string? mixedProcessWarning = null;
         var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
             _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
         if (backendConflicts.Count > 0)
         {
-            var message =
-                "Cannot export: this design mixes incompatible fabrication processes ("
-                + string.Join(" + ", backendConflicts)
-                + "). A single GDS is one process — keep one PDK's components per design and export "
-                + "each separately. (Playground lets you place mixed components for experimentation, "
-                + "but they can't be exported together.)";
-            StatusText = message;
-            _errorConsole?.LogError(message);
-            return;
+            mixedProcessWarning = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.MixedProcessWarning"),
+                string.Join(" + ", backendConflicts));
+            StatusText = mixedProcessWarning;
+            _errorConsole?.LogWarning(mixedProcessWarning);
         }
 
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
@@ -126,10 +125,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        await RunExportAsync(filePath);
+        await RunExportAsync(filePath, mixedProcessWarning);
     }
 
-    private async Task RunExportAsync(string filePath)
+    private async Task RunExportAsync(string filePath, string? mixedProcessWarning = null)
     {
         IsExporting = true;
         try
@@ -155,7 +154,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 }
             }
 
-            StatusText = DescribeResult(filePath, result);
+            // Keep the mixed-process warning visible next to the final result — it must not
+            // be scrolled away by the success line (field round 4).
+            var status = DescribeResult(filePath, result);
+            StatusText = mixedProcessWarning == null
+                ? status
+                : mixedProcessWarning + Environment.NewLine + status;
             if (result.Success && result.GdsPath != null)
                 TryOpenGds(result.GdsPath);
         }

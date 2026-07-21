@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using CAP_Core;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
@@ -44,6 +45,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private readonly ComponentLibraryViewModel? _libraryViewModel;
     private readonly GroupPreviewGenerator? _previewGenerator;
     private IInputDialogService? _inputDialogService;
+    private readonly ErrorConsoleService? _errorConsole;
 
     [ObservableProperty]
     private InteractionMode _currentMode = InteractionMode.Select;
@@ -159,13 +161,15 @@ public partial class CanvasInteractionViewModel : ObservableObject
         CommandManager commandManager,
         ComponentLibraryViewModel? libraryViewModel = null,
         GroupPreviewGenerator? previewGenerator = null,
-        IInputDialogService? inputDialogService = null)
+        IInputDialogService? inputDialogService = null,
+        ErrorConsoleService? errorConsole = null)
     {
         _canvas = canvas;
         _commandManager = commandManager;
         _libraryViewModel = libraryViewModel;
         _previewGenerator = previewGenerator;
         _inputDialogService = inputDialogService;
+        _errorConsole = errorConsole;
 
         // Hierarchy → right panel: when canvas.SelectedComponent changes externally
         // (e.g. from the hierarchy panel), mirror it so the right-panel property editor updates.
@@ -319,10 +323,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         bool laserWasOn = component.LaserConfig!.IsEnabled;
-        if (laserWasOn)
-            _commandManager.ExecuteCommand(new ToggleLaserCommand(component));
-
-        _canvas.AnalysisOutput.Designate(component.Component.Id);
+        // ONE composite undoable command: designation + laser-off together, so a single
+        // Ctrl+Z reverts the whole pick (#762 review, finding [2]).
+        _commandManager.ExecuteCommand(new PickAnalysisOutputCommand(component, _canvas.AnalysisOutput));
         var messageKey = laserWasOn ? "Analysis.Output.DesignatedLaserOff" : "Analysis.Output.Designated";
         UpdateStatus?.Invoke(string.Format(loc.Translate(messageKey), component.Name));
         CurrentMode = InteractionMode.Select;
@@ -459,7 +462,20 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         var libraryManager = _libraryViewModel.GetLibraryManager();
-        var cmd = PlaceGroupTemplateCommand.TryCreate(_canvas, libraryManager, SelectedGroupTemplate, x, y);
+        var cmd = PlaceGroupTemplateCommand.TryCreate(
+            _canvas, libraryManager, SelectedGroupTemplate, x, y, out var physicsRejection);
+
+        if (physicsRejection != null)
+        {
+            // Physics guard (round-4 hotfix): the template's frozen S-matrix data would
+            // fabricate energy. Abort the placement cleanly — localized guard message to
+            // the Error Console and the status bar, never an app-killing exception.
+            var message = Analysis.NonConvergentCircuitMessageFormatter.Format(physicsRejection);
+            _errorConsole?.LogError(
+                $"Group '{SelectedGroupTemplate.Name}' was not placed: {message}");
+            UpdateStatus?.Invoke(message);
+            return;
+        }
 
         if (cmd == null)
         {
@@ -505,10 +521,6 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
 
         SelectAt(canvasX, canvasY);
-        if (SelectedComponent != null)
-            _canvas.Selection.SelectSingle(SelectedComponent);
-        else
-            _canvas.Selection.ClearSelection();
     }
 
     /// <summary>Returns the topmost component whose bounds contain the point, or null.</summary>
@@ -558,6 +570,37 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 SelectedWaveguideConnection = null;
             }
         }
+
+        SyncSelectionSetToClickResult();
+    }
+
+    /// <summary>
+    /// Mirrors the click result into the <see cref="DesignCanvasViewModel.Selection"/>
+    /// set — the single sync point for every <see cref="SelectAt"/> caller (round 4
+    /// review findings [0], [8]). An empty-canvas or connection click clears the set,
+    /// otherwise the hierarchy panel re-mirrors the stale set and keeps its
+    /// multi-highlight while the canvas looks deselected (field bug, round 4 final).
+    /// Clicking a component OUTSIDE the set selects it alone; clicking a MEMBER keeps
+    /// the whole set — the drag recognizer clicks through before deciding between
+    /// group and single move, and a Ctrl+click release routes through here too, so
+    /// collapsing would break group drag and Ctrl+click accumulation.
+    /// </summary>
+    private void SyncSelectionSetToClickResult()
+    {
+        var selection = _canvas.Selection;
+        if (SelectedComponent == null)
+        {
+            selection.ClearSelection();
+            return;
+        }
+        if (!selection.SelectedComponents.Contains(SelectedComponent))
+        {
+            selection.SelectSingle(SelectedComponent);
+            return;
+        }
+        // Keep the set: SelectAt's deselect-all pass cleared the members' visual flag.
+        foreach (var member in selection.SelectedComponents)
+            member.IsSelected = true;
     }
 
     private void DeleteAt(double x, double y)

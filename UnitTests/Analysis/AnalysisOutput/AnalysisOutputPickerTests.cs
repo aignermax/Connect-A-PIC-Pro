@@ -76,6 +76,56 @@ public class AnalysisOutputPickerTests
     }
 
     [Fact]
+    public void Undo_AfterPick_RestoresLaserAndRemovesDesignation()
+    {
+        // Field round 4 review, finding [2]: the pick must be ONE undoable command —
+        // undoing only the laser toggle left an orphaned designation that no number of
+        // undos could remove, blocking the next Eye/Transient run.
+        var (canvas, interaction, commands) = CreateInteraction();
+        var coupler = AnalysisOutputTestBed.AddCoupler(canvas, x: 10, y: 10);
+        interaction.SetPickAnalysisOutputModeCommand.Execute(null);
+        interaction.CanvasClicked(15, 15);
+
+        commands.Undo();
+
+        coupler.LaserConfig!.IsEnabled.ShouldBeTrue("undo must restore the laser");
+        canvas.AnalysisOutput.CouplerId.ShouldBeNull("undo must remove the designation too");
+    }
+
+    [Fact]
+    public void Undo_AfterRepick_RestoresThePreviousDesignation()
+    {
+        var (canvas, interaction, commands) = CreateInteraction();
+        var first = AnalysisOutputTestBed.AddCoupler(canvas, x: 10, y: 10);
+        var second = AnalysisOutputTestBed.AddCoupler(canvas, x: 100, y: 10);
+        interaction.SetPickAnalysisOutputModeCommand.Execute(null);
+        interaction.CanvasClicked(15, 15);
+        interaction.SetPickAnalysisOutputModeCommand.Execute(null);
+        interaction.CanvasClicked(105, 15);
+
+        commands.Undo();
+
+        canvas.AnalysisOutput.CouplerId.ShouldBe(first.Component.Id,
+            "undoing the second pick must restore the first designation");
+        second.LaserConfig!.IsEnabled.ShouldBeTrue("the second coupler's laser is restored");
+    }
+
+    [Fact]
+    public void Redo_AfterUndo_ReappliesLaserOffAndDesignation()
+    {
+        var (canvas, interaction, commands) = CreateInteraction();
+        var coupler = AnalysisOutputTestBed.AddCoupler(canvas, x: 10, y: 10);
+        interaction.SetPickAnalysisOutputModeCommand.Execute(null);
+        interaction.CanvasClicked(15, 15);
+        commands.Undo();
+
+        commands.Redo();
+
+        coupler.LaserConfig!.IsEnabled.ShouldBeFalse();
+        canvas.AnalysisOutput.CouplerId.ShouldBe(coupler.Component.Id);
+    }
+
+    [Fact]
     public void ClickOnNonCoupler_KeepsPickerMode_AndShowsHint()
     {
         var (canvas, interaction, _) = CreateInteraction();

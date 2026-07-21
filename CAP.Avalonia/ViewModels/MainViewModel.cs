@@ -249,7 +249,7 @@ public partial class MainViewModel : ObservableObject
         RightPanel = rightPanel;
         BottomPanel = bottomPanel;
 
-        CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService);
+        CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
         FileOperations = new FileOperationsViewModel(_canvas, commandManager, nazcaExporter, saxExporter, LeftPanel.AllTemplates, gdsExportViewModel, photonTorchExport, verilogAExport, errorConsoleService, userSMatrixOverrideStore);
         ViewportControl = viewportControl;
@@ -911,6 +911,14 @@ public partial class MainViewModel : ObservableObject
             {
                 StatusText = result.ErrorMessage ?? "Simulation failed";
             }
+        }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics guard (round-4): non-passive data / resonant loop — surface the
+            // already-localized guard message instead of a raw exception string.
+            var message = Analysis.NonConvergentCircuitMessageFormatter.Format(ex);
+            StatusText = message;
+            BottomPanel.ErrorConsole.Log($"Simulation blocked: {message}", CAP_Contracts.Logger.LogLevel.Error, ex);
         }
         catch (Exception ex)
         {

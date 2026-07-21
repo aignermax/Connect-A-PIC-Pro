@@ -24,6 +24,15 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
     private GridManager? _grid;
 
+    private readonly CAP_Core.ErrorConsoleService? _errorConsole;
+
+    /// <summary>Initializes the group S-matrix diagnostics ViewModel.</summary>
+    /// <param name="errorConsole">Error console receiving physics-guard reports (optional).</param>
+    public GroupSMatrixViewModel(CAP_Core.ErrorConsoleService? errorConsole = null)
+    {
+        _errorConsole = errorConsole;
+    }
+
     /// <summary>
     /// Updates the diagnostics display based on the current grid state.
     /// </summary>
@@ -72,7 +81,10 @@ public partial class GroupSMatrixViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Computes S-Matrices for all groups in the current design.
+    /// Computes S-Matrices for all groups in the current design. A group whose data trips
+    /// the physics guard (<see cref="CAP_Core.LightCalculation.NonConvergentCircuitException"/>)
+    /// is reported to the Error Console and skipped — a diagnostics button must never
+    /// crash the app (round-4 hotfix); the remaining groups still get computed.
     /// </summary>
     [RelayCommand]
     private void ComputeAllGroupMatrices()
@@ -85,9 +97,18 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
         foreach (var group in groups)
         {
-            if (group.ExternalPins.Count > 0)
+            if (group.ExternalPins.Count == 0)
+                continue;
+
+            try
             {
                 group.ComputeSMatrix();
+            }
+            catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+            {
+                _errorConsole?.LogError(
+                    $"Group '{group.GroupName}' S-matrix not computed: " +
+                    Analysis.NonConvergentCircuitMessageFormatter.Format(ex));
             }
         }
 

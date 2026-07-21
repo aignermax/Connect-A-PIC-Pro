@@ -54,6 +54,21 @@ public partial class LocalizationCompletenessTests
         empty.ShouldBeEmpty($"empty values in {code}: {string.Join(", ", empty)}");
     }
 
+    /// <summary>
+    /// Field-round-4 finding D: the German Eye/BER strings must use the proper technical
+    /// term "Augendiagramm" (not the bare "Auge"/"Augenanalyse"), consistently between
+    /// the tab, the run button, and the help title that quotes the button.
+    /// </summary>
+    [Fact]
+    public void German_EyeBerFeature_UsesTheTermAugendiagramm()
+    {
+        var de = LocalizationResourceLoader.Load("de");
+
+        de["AnalysisDock.TabEyeBer"].ShouldBe("Augendiagramm / BER");
+        de["EyeDiagram.RunButton"].ShouldBe("Augendiagramm-Analyse ausführen");
+        de["EyeHelp.RunTitle"].ShouldContain("Augendiagramm-Analyse ausführen");
+    }
+
     [Fact]
     public void EveryLocalizeKeyUsedInAxaml_ExistsInEnglish()
     {
