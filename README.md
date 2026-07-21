@@ -61,6 +61,10 @@ Custom PDKs are a first-class flow, not an expert backdoor. Lunima ships with a 
 
 Designs are laid out against real foundry processes, not abstract schematics — so what leaves the tool is a GDS a fab can actually make.
 
+![What you draw is what you tape out: the MZI core of the staged chip on the Lunima canvas next to the rendered polygons of the GDS actually exported through gdsfactory](docs/media/v0.12/canvas-vs-gds.png)
+
+*What you draw is what you tape out: the chip's MZI core on the canvas (left) and the geometry of the real exported GDS (right) — the generated gdsfactory script was executed and the resulting `design.gds` rendered back at the same scale and position. Every waveguide, bend, and golden DC metal trace lands in the same place.*
+
 ![The manufacturing story in one frame: the unified Export flyout over the chip with gdsfactory and nazca GDS back-ends, the PDK calibration editor showing the SiEPIC grating coupler's rendered GDS geometry with its pin sitting exactly on the cell origin, and an all-green Check-All calibration report](docs/media/v0.12/gds-export.png)
 
 - **Real foundry PDKs, bundled** — a [CornerStone](https://www.cornerstone.sotonfab.co.uk/) SiN 300 nm library and the open [SiEPIC EBeam](https://github.com/SiEPIC/SiEPIC_EBeam_PDK) SOI 220 nm PDK ship with the app, next to the Demo PDK. Bundled SiEPIC cells are pin-calibrated against their actual GDS geometry: the calibration editor renders the real polygons, reports per-pin deltas, and a Check-All pass verifies the whole library — with the shipped calibrations locked by end-to-end tests.
