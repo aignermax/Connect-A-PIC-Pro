@@ -1,7 +1,7 @@
 [
   {
     "file": "hero-canvas.png",
-    "caption": "The Lunima main window with a staged photonic chip built from bundled Demo-PDK components: a Mach-Zehnder interferometer (grating coupler, 1x2 MMI splitter, thermo-optic phase shifter, 2x2 MMI combiner, photodetector, output coupler) plus DBR-filter and directional-coupler test structures, all wired through the production waveguide router with live length/loss annotations on every connection."
+    "caption": "The Lunima main window with a live CW simulation running on a staged mixed photonic/electric chip: a Mach-Zehnder interferometer (grating coupler in, 1x2 MMI splitter, electro-optic phase shifter arm, DBR-filter arm, 2x2 MMI combiner, photodetector and output coupler) whose waveguides show the simulated power flow as color plus dB/percent labels, DC probe pads and bond pads wired to the modulator and detector contacts as thick golden metal traces, diagonal (45°) autorouting and two hand-styled connections (SBend, Bend with custom radius) — all built from the bundled Demo and SiEPIC PDKs and routed by the production router."
   },
   {
     "file": "component-editor.png",
@@ -21,7 +21,7 @@
   },
   {
     "file": "waveguide-editing.png",
-    "caption": "Figma-style waveguide editing: selecting a routed connection reveals draggable in-canvas bend-radius handles (screen-constant, with live radius labels) and the per-connection Routing panel for switching between Auto, Bend, SBend and Cobra styles."
+    "caption": "Figma-style waveguide editing on the MZI's DBR arm: selecting a routed connection reveals draggable in-canvas bend-radius handles (screen-constant, with live radius labels) and the per-connection Routing panel, here switched to the Bend style with per-segment length/loss annotations."
   },
   {
     "file": "multilanguage.png",
@@ -33,6 +33,6 @@
   },
   {
     "file": "netlist-export.png",
-    "caption": "Netlist export for the gdsfactory/SAX ecosystem: the right-panel Netlist section derives a YAML circuit netlist from the canvas — instances with settings, informational placements, logical port-to-port connections and exposed ports — ready to copy or save as .yml."
+    "caption": "Netlist export for the gdsfactory/SAX ecosystem: the right-panel Netlist section derives a YAML circuit netlist from the canvas — instances with settings (including the electrical probe/bond pads), informational placements, logical port-to-port connections with metal traces marked '# electrical', and exposed ports — ready to copy or save as .yml."
   }
 ]

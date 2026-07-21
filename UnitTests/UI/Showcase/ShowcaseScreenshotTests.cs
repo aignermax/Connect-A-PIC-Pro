@@ -30,7 +30,15 @@ public class ShowcaseScreenshotTests
         await ShowcaseCapture.WithEnglishUiAsync(async () =>
         {
             var (vm, window, _) = await ShowcaseCircuit.BootStagedMainWindowAsync();
-            vm.Canvas.Connections.Count.ShouldBe(11);
+            vm.Canvas.Connections.Count.ShouldBe(12);
+
+            // Run the real CW S-matrix simulation (the input coupler's laser drives the
+            // chip) so the hero shows the live power-flow overlay on every waveguide.
+            await vm.RunSimulationCommand.ExecuteAsync(null);
+            Dispatcher.UIThread.RunJobs();
+            vm.Canvas.ShowPowerFlow.ShouldBeTrue("the CW run must enable the power-flow overlay");
+            vm.Canvas.PowerFlowVisualizer.CurrentResult.ShouldNotBeNull();
+
             ShowcaseCapture.CaptureWindow(
                 window, Path.Combine(ShowcaseCapture.OutputDirectory(), "hero-canvas.png"));
             window.Close();
@@ -46,7 +54,7 @@ public class ShowcaseScreenshotTests
         {
             var (vm, window, bottomArm) = await ShowcaseCircuit.BootStagedMainWindowAsync();
 
-            // Select the long compensating arm like a user clicking it: the canvas draws the
+            // Select the DBR→combiner arm like a user clicking it: the canvas draws the
             // blue bend-radius handles and the Routing style section opens.
             vm.CanvasInteraction.SelectedWaveguideConnection = bottomArm;
             Dispatcher.UIThread.RunJobs();
@@ -55,7 +63,7 @@ public class ShowcaseScreenshotTests
             bottomArm.Connection.Type.ShouldBe(WaveguideType.Bend);
 
             // Zoom onto the edited arm so the screen-constant handles read clearly.
-            ShowcaseCircuit.SetView(window, vm, (240, 220, 1100, 330));
+            ShowcaseCircuit.SetView(window, vm, (610, 300, 660, 340));
             vm.StatusText = "Ready";
             ShowcaseCapture.CaptureWindow(
                 window, Path.Combine(ShowcaseCapture.OutputDirectory(), "waveguide-editing.png"));
