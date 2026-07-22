@@ -383,6 +383,51 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public void LoadForEdit_siepicComponentWithoutRawCode_synthesizesUbcPdkRegistryCode_notSiepicAttributeCall()
+    {
+        // Field bug round 6: "Edit Component" on the SiEPIC "Adiabatic Coupler TE 1550"
+        // synthesized "import siepic_ebeam_pdk ... siepic_ebeam_pdk.ebeam_adiabatic_te1550()",
+        // failing with "module 'siepic_ebeam_pdk' has no attribute 'ebeam_adiabatic_te1550'".
+        // SiEPIC bundled components carry no GdsFactoryFunction (the round-4 fix never applied);
+        // their cells resolve via the ubcpdk gdsfactory registry.
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = new ComponentTemplate
+        {
+            Name = "Adiabatic Coupler TE 1550", PdkSource = "Lib",
+            NazcaModuleName = "siepic_ebeam_pdk", NazcaFunctionName = "ebeam_adiabatic_te1550",
+            RawCode = null,
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
+        vm.Code.ShouldContain("import ubcpdk");
+        vm.Code.ShouldContain("ubcpdk.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('ebeam_adiabatic_te1550')");
+        vm.Code.ShouldNotContain("siepic_ebeam_pdk");
+    }
+
+    [Fact]
+    public void LoadForEdit_siepicKlayoutOnlyCell_opensWithEmptyCode_insteadOfBrokenAttributeCode()
+    {
+        // The few SiEPIC cells without a ubcpdk registry equivalent are KLayout fixed cells —
+        // there is no runnable editor code for them. An empty editor with the "no stored code"
+        // status is honest; synthesized attribute code would only reproduce the AttributeError.
+        var (vm, _, _) = BuildWithSeededPdk();
+        var template = new ComponentTemplate
+        {
+            Name = "Contra-Directional Coupler", PdkSource = "Lib",
+            NazcaModuleName = "siepic_ebeam_pdk", NazcaFunctionName = "contra_directional_coupler",
+            RawCode = null,
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.Code.ShouldBe(string.Empty);
+        vm.StatusText.ShouldNotBeNullOrWhiteSpace();
+    }
+
+    [Fact]
     public void LoadForEdit_foundryComponentWithBareCellName_resolvesViaGetComponent()
     {
         // A bare (dotless) gdsfactory cell has no PDK module to import/activate —

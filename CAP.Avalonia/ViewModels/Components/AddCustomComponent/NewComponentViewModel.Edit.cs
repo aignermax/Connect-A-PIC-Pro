@@ -1,7 +1,6 @@
 using System.Linq;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Localization;
-using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -177,29 +176,13 @@ public partial class NewComponentViewModel
 
     /// <summary>
     /// Turns a foundry component's function reference into equivalent editable code, so a
-    /// bundled component opens with a runnable definition instead of a blank editor.
-    /// gdsfactory-native PDKs register their cells in the PDK registry, NOT as module
-    /// attributes ("cspdk.sin300.coupler_straight()" raises AttributeError), so the code uses
-    /// the same import + PDK.activate() + gf.get_component() pattern as the canvas preview.
+    /// bundled component opens with a runnable definition instead of a blank editor. The
+    /// per-PDK-family rules (gdsfactory registry for cspdk, ubcpdk registry for SiEPIC,
+    /// Nazca call for demo) live in <see cref="FoundryEditCodeSynthesis"/> — field rounds
+    /// 4 (cspdk attribute call) and 6 (siepic attribute call) both came from synthesizing
+    /// module-attribute code for registry-based PDKs.
     /// </summary>
-    private static (string Code, GeometryBackend Backend)? SynthesizeCodeFromReference(ComponentTemplate t)
-    {
-        if (!string.IsNullOrWhiteSpace(t.GdsFactoryFunction))
-        {
-            // Bare (dotless) cell names have no PDK module to activate — resolve them
-            // against whatever PDK the render script activates by default.
-            var code = GdsFactoryPreviewCode.For(t.GdsFactoryFunction)
-                ?? $"import gdsfactory as gf\ncomponent = gf.get_component('{t.GdsFactoryFunction}')\n";
-            return (code, GeometryBackend.GdsFactory);
-        }
-        if (!string.IsNullOrWhiteSpace(t.NazcaFunctionName))
-        {
-            // NazcaCodeTemplateBuilder mirrors the preview script's contract: a def component()
-            // returning the PDK cell, with the demo PDK mapped onto nazca.demofab.
-            return (CAP.Avalonia.Services.NazcaCodeTemplateBuilder.Build(
-                        t.NazcaModuleName, t.NazcaFunctionName, t.NazcaParameters),
-                    GeometryBackend.Nazca);
-        }
-        return null;
-    }
+    private static (string Code, GeometryBackend Backend)? SynthesizeCodeFromReference(ComponentTemplate t) =>
+        FoundryEditCodeSynthesis.For(
+            t.GdsFactoryFunction, t.NazcaModuleName, t.NazcaFunctionName, t.NazcaParameters);
 }
