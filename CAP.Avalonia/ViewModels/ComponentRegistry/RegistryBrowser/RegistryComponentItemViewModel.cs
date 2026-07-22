@@ -18,6 +18,9 @@ public partial class RegistryComponentItemViewModel : ObservableObject
         _entry = entry;
     }
 
+    /// <summary>The wrapped index entry (e.g. for preview fetches via the client).</summary>
+    public RegistryIndexEntry Entry => _entry;
+
     /// <summary>Registry-wide component identifier.</summary>
     public string Id => _entry.Id;
 
@@ -64,6 +67,14 @@ public partial class RegistryComponentItemViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _isProcessMismatch;
+
+    /// <summary>
+    /// Parseable preview SVG text once the async preview fetch succeeded;
+    /// empty while loading, when the entry declares no preview, or when the
+    /// download/parse failed — the tile then keeps its placeholder pictogram.
+    /// </summary>
+    [ObservableProperty]
+    private string _previewSvg = "";
 
     /// <summary>
     /// Recomputes <see cref="IsProcessMismatch"/> against the active process id.

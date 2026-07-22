@@ -35,15 +35,15 @@ public class RegistryBrowserViewModelTests : IDisposable
         vm.Components.Count.ShouldBe(5);
         vm.ErrorMessage.ShouldBeEmpty();
         vm.IsLoading.ShouldBeFalse();
-        // Fixture demo components: simulated ✓, geometry ✗, measured ✗, status demo.
+        // Fixture demo components: geometry ✓, simulated ✓, measured ✗, status demo.
         foreach (var item in vm.Components)
         {
             item.HasSimulated.ShouldBeTrue(item.Id);
-            item.HasGeometry.ShouldBeFalse(item.Id);
+            item.HasGeometry.ShouldBeTrue(item.Id);
             item.HasMeasured.ShouldBeFalse(item.Id);
             item.Status.ShouldBe("demo");
             item.ProcessId.ShouldBe("generic-si220");
-            item.TiersText.ShouldBe("geometry \u2717 \u00b7 simulated \u2713 \u00b7 measured \u2717");
+            item.TiersText.ShouldBe("geometry \u2713 \u00b7 simulated \u2713 \u00b7 measured \u2717");
         }
         // Ordered by name for stable browsing.
         vm.Components.Select(c => c.Name).ShouldBe(vm.Components.Select(c => c.Name).OrderBy(n => n));
@@ -145,10 +145,24 @@ public class RegistryBrowserViewModelTests : IDisposable
         vm.Details.Description.ShouldNotBeEmpty();
         vm.Details.PortsText.ShouldContain("optical ports");
         vm.Details.HasArtifacts.ShouldBeTrue();
-        var artifact = vm.Details.Artifacts.First();
-        artifact.Tier.ShouldBe("simulated");
+        var artifact = vm.Details.Artifacts.Single(a => a.Tier == "simulated");
         artifact.Status.ShouldBe("demo");
         artifact.Provenance.ShouldNotBeEmpty();
+    }
+
+    [Fact]
+    public async Task SelectingComponent_ListsGeometryArtifact_WithProvenanceLine()
+    {
+        var vm = CreateViewModel();
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        vm.SelectedComponent = vm.Components.Single(c => c.Id == "y-branch-1x2");
+        await vm.DetailsLoadTask;
+
+        var geometry = vm.Details.Artifacts.Single(a => a.Tier == "geometry");
+        geometry.File.ShouldBe("geometry/cell.gds");
+        geometry.Status.ShouldBe("demo");
+        geometry.Provenance.ShouldContain("generic-layout");
     }
 
     [Fact]
@@ -254,6 +268,71 @@ public class RegistryBrowserViewModelTests : IDisposable
 
         vm.SelectedProcessFilter.ShouldNotBeNull();
         vm.SelectedProcessFilter!.Value.ShouldBe("generic-si220");
+    }
+
+    [Fact]
+    public async Task Load_FetchesTilePreviews_AsyncAfterTheGridIsListed()
+    {
+        var vm = CreateViewModel();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+        await vm.PreviewsLoadTask;
+
+        // Every fixture entry declares a preview and the harness serves its SVG.
+        foreach (var item in vm.Components)
+        {
+            item.PreviewSvg.ShouldNotBeEmpty(item.Id);
+            item.PreviewSvg.ShouldContain("<svg");
+        }
+    }
+
+    [Fact]
+    public async Task Load_EntryWithoutPreviewField_KeepsPlaceholder_WithoutError()
+    {
+        // Legacy index (today's registry main): no "preview" fields at all.
+        var legacyIndex = RegistryTestHarness.ReadFixture("index.json")
+            .Replace("\"preview\":", "\"preview_unpublished\":");
+        _harness.Handler.AddResponse($"{RegistryTestHarness.BaseUrl}/index.json", legacyIndex);
+        var vm = CreateViewModel();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+        await vm.PreviewsLoadTask;
+
+        vm.Components.Count.ShouldBe(5);
+        vm.Components.ShouldAllBe(c => c.PreviewSvg == "");
+        vm.ErrorMessage.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Load_UnparseablePreviewSvg_KeepsPlaceholder_WithoutError()
+    {
+        _harness.Handler.AddResponse(
+            $"{RegistryTestHarness.BaseUrl}/processes/generic-si220/components/y-branch-1x2/geometry/preview.svg",
+            "<html>rate limited</html>");
+        var vm = CreateViewModel();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+        await vm.PreviewsLoadTask;
+
+        vm.Components.Single(c => c.Id == "y-branch-1x2").PreviewSvg.ShouldBeEmpty();
+        // The other tiles still get their previews — one bad SVG never spoils the grid.
+        vm.Components.Single(c => c.Id == "ring-resonator-r10").PreviewSvg.ShouldNotBeEmpty();
+        vm.ErrorMessage.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task Load_PreviewDownloadFailure_KeepsPlaceholder_WithoutError()
+    {
+        var vm = CreateViewModel();
+        // Index download succeeds, then the network dies before previews load.
+        _harness.Handler.AfterRequests(1, () => _harness.Handler.SimulateNetworkFailure = true);
+
+        await vm.LoadCommand.ExecuteAsync(null);
+        await vm.PreviewsLoadTask;
+
+        vm.Components.Count.ShouldBe(5);
+        vm.Components.ShouldAllBe(c => c.PreviewSvg == "");
+        vm.ErrorMessage.ShouldBeEmpty();
     }
 
     [Fact]

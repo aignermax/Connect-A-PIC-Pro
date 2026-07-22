@@ -39,8 +39,58 @@ public class RegistryDeserializationTests : IDisposable
         yBranch.Path.ShouldBe(RegistryTestHarness.ManifestPath);
         yBranch.PortCount.ShouldBe(3);
         yBranch.Tiers.Simulated.ShouldBeTrue();
-        yBranch.Tiers.Geometry.ShouldBeFalse();
+        yBranch.Tiers.Geometry.ShouldBeTrue();
         yBranch.Tiers.Measured.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task GetIndexAsync_ParsesRepoRelativePreviewPaths()
+    {
+        var result = await _harness.CreateClient().GetIndexAsync();
+
+        result.Value!.Components.ShouldAllBe(c => !string.IsNullOrEmpty(c.Preview));
+        result.Value!.Components.Single(c => c.Id == "y-branch-1x2").Preview
+            .ShouldBe("processes/generic-si220/components/y-branch-1x2/geometry/preview.svg");
+    }
+
+    [Fact]
+    public async Task GetComponentAsync_ParsesGeometryArtifactWithFormatAndPreview()
+    {
+        var result = await _harness.CreateClient()
+            .GetComponentAsync(RegistryTestHarness.ManifestPath);
+
+        var geometry = result.Value!.Artifacts.Geometry.ShouldHaveSingleItem();
+        geometry.File.ShouldBe("geometry/cell.gds");
+        geometry.Format.ShouldBe("gds");
+        geometry.Preview.ShouldBe("geometry/preview.svg");
+        geometry.Status.ShouldBe("demo");
+        geometry.Provenance.Method.ShouldBe("generic-layout");
+        geometry.Provenance.Tool.ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public void IndexEntry_WithoutPreviewAndGeometryFields_DeserializesTolerantly()
+    {
+        // Today's registry main has neither "preview" on index entries nor
+        // "geometry" under artifacts — both are additive (photonic-registry#1).
+        var entry = System.Text.Json.JsonSerializer.Deserialize<RegistryIndexEntry>(
+            """{ "id": "legacy", "tiers": { "simulated": true } }""")!;
+        var artifacts = System.Text.Json.JsonSerializer.Deserialize<ComponentArtifacts>(
+            """{ "simulated": [], "measured": [] }""")!;
+
+        entry.Preview.ShouldBeNull();
+        artifacts.Geometry.ShouldNotBeNull();
+        artifacts.Geometry.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ArtifactRef_WithoutFormatAndPreview_DeserializesTolerantly()
+    {
+        var artifact = System.Text.Json.JsonSerializer.Deserialize<ArtifactRef>(
+            """{ "file": "simulated/analytic-demo.json", "status": "demo" }""")!;
+
+        artifact.Format.ShouldBeNull();
+        artifact.Preview.ShouldBeNull();
     }
 
     [Fact]

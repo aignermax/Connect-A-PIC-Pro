@@ -9,6 +9,8 @@ namespace UnitTests.ComponentRegistry.RegistryClient;
 public class StubHttpMessageHandler : HttpMessageHandler
 {
     private readonly Dictionary<string, string> _responses = new();
+    private int _afterRequestCount;
+    private Action? _afterRequestsAction;
 
     /// <summary>Total number of requests received.</summary>
     public int RequestCount { get; private set; }
@@ -19,6 +21,16 @@ public class StubHttpMessageHandler : HttpMessageHandler
     /// <summary>Registers a canned response body for an absolute URL.</summary>
     public void AddResponse(string url, string body) => _responses[url] = body;
 
+    /// <summary>
+    /// Runs <paramref name="action"/> once, after <paramref name="requestCount"/>
+    /// further requests were served — e.g. to kill the network mid-flow.
+    /// </summary>
+    public void AfterRequests(int requestCount, Action action)
+    {
+        _afterRequestCount = RequestCount + requestCount;
+        _afterRequestsAction = action;
+    }
+
     protected override Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
@@ -27,12 +39,16 @@ public class StubHttpMessageHandler : HttpMessageHandler
             throw new HttpRequestException("Simulated network failure");
 
         var url = request.RequestUri!.ToString();
-        if (!_responses.TryGetValue(url, out var body))
-            return Task.FromResult(new HttpResponseMessage(HttpStatusCode.NotFound));
+        var response = _responses.TryGetValue(url, out var body)
+            ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) }
+            : new HttpResponseMessage(HttpStatusCode.NotFound);
 
-        return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK)
+        if (_afterRequestsAction is not null && RequestCount >= _afterRequestCount)
         {
-            Content = new StringContent(body),
-        });
+            var action = _afterRequestsAction;
+            _afterRequestsAction = null;
+            action();
+        }
+        return Task.FromResult(response);
     }
 }

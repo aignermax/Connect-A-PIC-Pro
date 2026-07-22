@@ -76,6 +76,9 @@ public class UiScreenshotTests
         var registry = vm.Registry;
         registry.EnsureLoaded();
         PumpUntilComplete(registry.IndexLoadTask);
+        // Tile previews load async after the grid (#771) — wait so the capture
+        // shows the fixture SVGs rendered in the tiles instead of placeholders.
+        PumpUntilComplete(registry.PreviewsLoadTask);
         registry.ActiveProcessId = "my-inhouse-fab";
         // y-branch-1x2 is the only component with a committed manifest fixture,
         // so selecting it renders a fully populated detail column.
