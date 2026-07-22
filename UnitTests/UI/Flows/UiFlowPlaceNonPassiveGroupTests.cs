@@ -21,7 +21,7 @@ namespace UnitTests.UI.Flows;
 /// escapes, and the user sees the guard's message.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class UiFlowPlaceNonPassiveGroupTests
 {
     /// <summary>Wavelength (nm) of the poisoned matrix — matches the field stacktrace.</summary>

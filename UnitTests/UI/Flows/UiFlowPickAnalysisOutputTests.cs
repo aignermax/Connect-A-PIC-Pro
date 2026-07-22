@@ -16,7 +16,7 @@ namespace UnitTests.UI.Flows;
 /// so the click silently did nothing.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class UiFlowPickAnalysisOutputTests
 {
     [AvaloniaFact]

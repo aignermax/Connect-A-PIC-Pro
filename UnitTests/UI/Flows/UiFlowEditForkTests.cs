@@ -15,7 +15,7 @@ namespace UnitTests.UI.Flows;
 /// JSON stays byte-identical.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 [Trait("Category", "Slow")]
 public class UiFlowEditForkTests
 {
