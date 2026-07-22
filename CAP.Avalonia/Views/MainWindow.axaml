@@ -47,7 +47,7 @@
                 <!-- Home -->
                 <Button Command="{Binding ShowHomeCommand}"
                         Width="36" Margin="10,2,2,2" Background="#3d3d3d"
-                        ToolTip.Tip="Home — recent projects, new/open project">
+                        ToolTip.Tip="{loc:Localize Home.ToolbarTip}">
                     <PathIcon Data="M8,1.5 L15,7.5 L13.5,7.5 L13.5,14 L9.5,14 L9.5,10 L6.5,10 L6.5,14 L2.5,14 L2.5,7.5 L1,7.5 Z"
                               Width="16" Height="16" Foreground="LightBlue"/>
                 </Button>
