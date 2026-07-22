@@ -13,6 +13,16 @@ public class RegistryBrowserViewModelTests : IDisposable
 {
     private readonly RegistryTestHarness _harness = new();
 
+    /// <summary>
+    /// The browser's status strings are localized via LocalizationService.Instance,
+    /// so pin English to keep the exact-string assertions culture-independent.
+    /// </summary>
+    public RegistryBrowserViewModelTests()
+    {
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage(
+            CAP.Avalonia.Services.Localization.SupportedLanguage.English.Code);
+    }
+
     private RegistryBrowserViewModel CreateViewModel() => new(_harness.CreateClient());
 
     [Fact]

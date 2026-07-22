@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.ComponentRegistry.RegistryClient;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -57,7 +58,8 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
         if (result.IsSuccess)
             Populate(result.Value!);
         else
-            ErrorMessage = $"Could not load component details: {result.ErrorMessage}";
+            ErrorMessage = string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("Registry.DetailsLoadFailed"), result.ErrorMessage);
         IsLoading = false;
     }
 
@@ -79,7 +81,8 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
         Description = manifest.Description;
         PortsText = manifest.Ports.Count == 0
             ? ""
-            : string.Format(CultureInfo.InvariantCulture, "{0} optical ports: {1}",
+            : string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("Registry.PortsSummary"),
                 manifest.Ports.Count, string.Join(", ", manifest.Ports.Select(p => p.Name)));
         License = manifest.License;
 

@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.ComponentRegistry.RegistryClient;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -88,7 +90,8 @@ public partial class RegistryBrowserViewModel : ObservableObject
         if (!result.IsSuccess)
         {
             // Non-blocking: keep whatever is already listed and surface the reason.
-            ErrorMessage = $"Could not load the registry: {result.ErrorMessage}";
+            ErrorMessage = string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("Registry.LoadFailed"), result.ErrorMessage);
             return;
         }
 
@@ -102,9 +105,8 @@ public partial class RegistryBrowserViewModel : ObservableObject
         }
 
         if (result.Source == RegistrySource.Cache)
-            SourceNote = forceRefresh
-                ? "Offline \u2014 showing cached registry data."
-                : "Loaded from local cache.";
+            SourceNote = LocalizationService.Instance.Translate(
+                forceRefresh ? "Registry.OfflineCache" : "Registry.LoadedFromCache");
     }
 
     partial void OnActiveProcessIdChanged(string? value)
