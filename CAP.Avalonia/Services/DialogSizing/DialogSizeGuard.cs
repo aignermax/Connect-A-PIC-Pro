@@ -12,11 +12,12 @@ namespace CAP.Avalonia.Services.DialogSizing;
 /// to <see cref="SizeToContent.Manual"/> (see AvaloniaUI/Avalonia#12581).
 ///
 /// The guard is installed once via <see cref="Initialize"/> and then watches every
-/// <see cref="Window"/> being shown: it captures the size requested at show time, adds a
-/// minimum-size fallback for non-resizable dialogs, and shortly after <see cref="Window.Opened"/>
-/// re-applies the requested size / <see cref="Window.SizeToContent"/> if the platform collapsed
-/// the window. Windows/macOS are unaffected in practice because the enforcement only acts when
-/// the actual size ended up *smaller* than the size requested at show time.
+/// <see cref="Window"/> that receives an owner: it captures the size requested at show time,
+/// adds a minimum-size fallback for non-resizable dialogs, and shortly after
+/// <see cref="Window.Opened"/> re-applies the requested size / <see cref="Window.SizeToContent"/>
+/// if the platform collapsed the window. Windows/macOS are unaffected in practice because the
+/// enforcement only acts when the actual size ended up *smaller* than the size requested at
+/// show time.
 /// </summary>
 public static class DialogSizeGuard
 {
@@ -29,7 +30,7 @@ public static class DialogSizeGuard
     /// <summary>Nudge used to force a platform resize when the property value is already correct.</summary>
     private const double NudgePx = 1.0;
 
-    private static bool _initialized;
+    private static IDisposable? _classHandler;
 
     /// <summary>
     /// Installs the guard for the whole application. Call once during application start-up;
@@ -37,25 +38,45 @@ public static class DialogSizeGuard
     /// </summary>
     public static void Initialize()
     {
-        if (_initialized)
+        if (_classHandler != null)
             return;
-        _initialized = true;
-        Window.IsVisibleProperty.Changed.AddClassHandler<Window>(OnIsVisibleChanged);
+
+        // The trigger must be the Owner assignment, not IsVisible: Avalonia 11.2.1 sets
+        // IsVisible = true before Owner = owner in Window.ShowCore/ShowDialog (Window.cs
+        // lines 719/739 and 800/822 on the release/11.2.1 tag), so an IsVisible class
+        // handler always sees Owner == null and would never attach. Owner is still assigned
+        // before OnOpened, so the Opened subscription in Attach fires as intended.
+        _classHandler = WindowBase.OwnerProperty.Changed.AddClassHandler<Window>(OnOwnerChanged);
     }
 
-    private static void OnIsVisibleChanged(Window window, AvaloniaPropertyChangedEventArgs e)
+    /// <summary>
+    /// Uninstalls the class handler. Test seam (InternalsVisibleTo UnitTests) so wiring
+    /// tests stay order-independent and the guard does not leak into unrelated tests.
+    /// </summary>
+    internal static void ResetForTesting()
     {
-        // Only owned windows (dialogs and tool windows opened via Show(owner)/ShowDialog(owner))
-        // are guarded. The unowned main window may legitimately be clamped below its requested
+        _classHandler?.Dispose();
+        _classHandler = null;
+    }
+
+    private static void OnOwnerChanged(Window window, AvaloniaPropertyChangedEventArgs e)
+    {
+        // Only windows that just received an owner (dialogs and tool windows opened via
+        // Show(owner)/ShowDialog(owner)) are guarded; the Owner = null assignments on close
+        // are ignored. The unowned main window may legitimately be clamped below its requested
         // 1800x900 by the window manager on small screens and must not be re-enlarged.
-        if (e.NewValue is true && window.Owner != null)
+        if (e.NewValue is WindowBase)
             Attach(window);
     }
 
     /// <summary>
-    /// Guards a single window that is about to be (or was just) shown: captures the size it
-    /// requested and re-enforces it shortly after <see cref="Window.Opened"/>. Exposed for tests;
-    /// production code relies on <see cref="Initialize"/> instead of calling this per dialog.
+    /// Guards a single window that is about to be shown: captures the size it requested and
+    /// re-enforces it shortly after <see cref="Window.Opened"/>. Runs once per show — the
+    /// protected <see cref="WindowBase.Owner"/> setter is only assigned a non-null value
+    /// inside Avalonia's show path, always before <c>OnOpened</c> — and the Opened handler
+    /// unsubscribes itself, so hiding and re-showing a window simply re-attaches with a
+    /// freshly captured size. Exposed for tests; production code relies on
+    /// <see cref="Initialize"/> instead of calling this per dialog.
     /// </summary>
     public static void Attach(Window window)
     {
@@ -90,15 +111,19 @@ public static class DialogSizeGuard
         if (window.CanResize)
             return;
 
+        // Never demand more than the owner screen's work area: on very small screens the
+        // window manager must stay able to clamp the dialog below its requested size.
+        var workArea = GetOwnerWorkArea(window);
+
         if (window.MinWidth <= 0 && !AffectsWidth(requestedSizeToContent) && IsFixed(requestedWidth))
-            window.MinWidth = requestedWidth;
+            window.MinWidth = CapAtWorkArea(requestedWidth, workArea?.Width);
 
         if (window.MinHeight <= 0)
         {
             if (!AffectsHeight(requestedSizeToContent) && IsFixed(requestedHeight))
-                window.MinHeight = requestedHeight;
+                window.MinHeight = CapAtWorkArea(requestedHeight, workArea?.Height);
             else if (AffectsHeight(requestedSizeToContent))
-                window.MinHeight = FallbackMinHeightPx;
+                window.MinHeight = CapAtWorkArea(FallbackMinHeightPx, workArea?.Height);
         }
     }
 
@@ -106,6 +131,9 @@ public static class DialogSizeGuard
     /// Re-applies the size the window requested at show time if the platform collapsed it.
     /// Deliberately one-directional: a window that ended up larger (e.g. user- or WM-grown)
     /// is left alone, which keeps this safe on macOS/Windows where the bug does not occur.
+    /// Runs only in the two passes right after <see cref="Window.Opened"/> — a resizable
+    /// window legitimately shrunk by the user or a tiling WM within that first frame is
+    /// nudged back once, intentionally; enforcement then stops and never fights later resizes.
     /// </summary>
     internal static void EnforceRequestedSize(
         Window window, double requestedWidth, double requestedHeight, SizeToContent requestedSizeToContent)
@@ -124,6 +152,27 @@ public static class DialogSizeGuard
     /// <summary>Whether the actual size fell more than the tolerance below the requested size.</summary>
     internal static bool IsCollapsed(double requested, double actual)
         => IsFixed(requested) && actual < requested - CollapseTolerancePx;
+
+    /// <summary>The owner screen's work area in DIPs; null when no screen is available (headless).</summary>
+    private static (double Width, double Height)? GetOwnerWorkArea(Window window)
+    {
+        // TopLevel.Screens (nullable) rather than WindowBase.Screens, which throws when the
+        // backend reports no screen implementation.
+        var screens = ((TopLevel)window).Screens;
+        if (screens == null)
+            return null;
+
+        var screen = window.Owner is { } owner
+            ? screens.ScreenFromWindow(owner)
+            : screens.Primary;
+        if (screen == null)
+            return null;
+
+        return (screen.WorkingArea.Width / screen.Scaling, screen.WorkingArea.Height / screen.Scaling);
+    }
+
+    private static double CapAtWorkArea(double value, double? workArea)
+        => workArea.HasValue ? Math.Min(value, workArea.Value) : value;
 
     /// <summary>
     /// Sets <paramref name="property"/> to <paramref name="requested"/>. If the property already
