@@ -25,6 +25,13 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("version")]
         public string? Version { get; set; }
 
+        /// <summary>
+        /// Defining waveguide-core thickness in nm (e.g. 220 for 220 nm SOI). The key
+        /// physical axis for process compatibility (issue #570); optional so old PDKs parse.
+        /// </summary>
+        [JsonPropertyName("coreThicknessNm")]
+        public double? CoreThicknessNm { get; set; }
+
         /// <summary>GDS layer stack.</summary>
         [JsonPropertyName("layers")]
         public List<ProcessLayer> Layers { get; set; } = new();
@@ -40,6 +47,16 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// <summary>Allowed placement/connection angles in degrees (e.g. 0/90/180/270).</summary>
         [JsonPropertyName("allowedAngles")]
         public List<int> AllowedAngles { get; set; } = new();
+
+        /// <summary>
+        /// Waveguide-crossing policy for metal routing (issue #682): true when this
+        /// process requires a bridge element (e.g. air bridge) wherever a metal trace
+        /// crosses an optical waveguide; false/absent (default) when metal runs on a
+        /// higher layer and may cross waveguides directly. Nullable so PDKs written
+        /// before this field existed round-trip through the saver byte-identically.
+        /// </summary>
+        [JsonPropertyName("electricalBridgeRequired")]
+        public bool? ElectricalBridgeRequired { get; set; }
     }
 
     /// <summary>A single GDS layer in the process stack.</summary>
@@ -85,8 +102,9 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("name")]
         public string Name { get; set; } = string.Empty;
 
-        /// <summary>Whether this carries light or electrical current.</summary>
+        /// <summary>Whether this carries light or electrical current. Serialized as a string ("Optical"/"Metal").</summary>
         [JsonPropertyName("kind")]
+        [JsonConverter(typeof(JsonStringEnumConverter<XsectionKind>))]
         public XsectionKind Kind { get; set; } = XsectionKind.Optical;
 
         /// <summary>Waveguide / line width in µm.</summary>

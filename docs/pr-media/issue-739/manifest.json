@@ -1,0 +1,5 @@
+[
+  {"file": "01-pdk-mgmt-header.png", "caption": "The PDK Mgmt header now packs enable-all (☑) / disable-all (☐) icon actions next to trash and +, replacing the old bottom button row and process label, while app-wide buttons and combo boxes render flatter."},
+  {"file": "02-edit-component-window.png", "caption": "The unified component editor — now also opened by canvas right-click 'Edit Component…' — is taller (800px), keeps its scrollbar always visible, shows the edit banner, and titles itself 'Edit Component: Ring Resonator'."},
+  {"file": "03-trash-per-component.png", "caption": "Trash lists each removed component by its own name (PDK shown as detail), so Restore recovers exactly the clicked component instead of the whole backup diff."}
+]

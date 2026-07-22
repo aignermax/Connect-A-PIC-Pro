@@ -3,8 +3,11 @@ using System.Net.Http;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -38,7 +41,8 @@ public static class MainViewModelTestHelper
         CommandManager? commandManager = null,
         UserPreferencesService? preferencesService = null,
         GroupLibraryManager? libraryManager = null,
-        DesignCanvasViewModel? canvas = null)
+        DesignCanvasViewModel? canvas = null,
+        LeftPanelViewModel? leftPanel = null)
     {
         canvas ??= new DesignCanvasViewModel();
         commandManager ??= new CommandManager();
@@ -50,7 +54,8 @@ public static class MainViewModelTestHelper
         simulationService ??= new SimulationService();
 
         var pdkLoader = new PdkLoader();
-        var leftPanel = CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager);
+        // A caller-supplied LeftPanel (UI-flow tests) must share canvas/prefs with the rest of the VM.
+        leftPanel ??= CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager);
         var rightPanel = CreateRightPanelViewModel(canvas, preferencesService);
         var bottomPanel = CreateBottomPanelViewModel(canvas, commandManager);
 
@@ -60,7 +65,8 @@ public static class MainViewModelTestHelper
             new UpdateChecker(new HttpClient(), "aignermax", "Connect-A-PIC-Pro"),
             new UpdateDownloader(new HttpClient()),
             preferencesService,
-            Mock.Of<IUrlLauncher>());
+            Mock.Of<IUrlLauncher>(),
+            Mock.Of<IInstaller>());
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
         var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
@@ -145,11 +151,11 @@ public static class MainViewModelTestHelper
             new PdkConsistencyViewModel(),
             new AiAssistantViewModel(Mock.Of<IAiService>(), preferencesService),
             new OnaSweepViewModel(),
+            new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
                 new GenericComponentEditorProvider()
-            }),
-            new TimeDomainViewModel());
+            }));
     }
 
     /// <summary>
@@ -166,8 +172,12 @@ public static class MainViewModelTestHelper
         return new BottomPanelViewModel(
             canvas,
             commandManager,
-            new WaveguideLengthViewModel(),
+            new ConnectionRoutingViewModel(canvas),
             new ElementLockViewModel(),
-            new ErrorConsoleViewModel(errorConsoleService));
+            new ErrorConsoleViewModel(errorConsoleService),
+            new AnalysisDockViewModel(
+                new TimeDomainViewModel(),
+                new EyeDiagramViewModel(),
+                new AnalysisOutputPanelViewModel()));
     }
 }

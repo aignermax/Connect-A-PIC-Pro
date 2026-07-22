@@ -15,13 +15,15 @@ internal static class SettingsFeatureExtensions
     /// </summary>
     public static IServiceCollection AddSettingsFeature(this IServiceCollection services)
     {
-        services.AddTransient<ISettingsPage, GeneralSettingsPage>();
         services.AddTransient<ISettingsPage, GridSnapSettingsPage>();
+        services.AddTransient<ISettingsPage, RoutingSettingsPage>();
         services.AddTransient<ISettingsPage, UpdateSettingsPage>();
         services.AddTransient<ISettingsPage, GdsExportSettingsPage>();
         services.AddTransient<ISettingsPage, PythonEnvironmentsSettingsPage>();
         services.AddTransient<ISettingsPage, ChipSizeSettingsPage>();
+        services.AddTransient<ISettingsPage, InterconnectSettingsPage>();
         services.AddTransient<ISettingsPage, AiAssistantSettingsPage>();
+        services.AddTransient<InterconnectSettingsViewModel>();
         services.AddTransient<SettingsWindowViewModel>();
 
         return services;

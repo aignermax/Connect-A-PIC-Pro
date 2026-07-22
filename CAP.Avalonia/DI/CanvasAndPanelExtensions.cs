@@ -1,5 +1,7 @@
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -28,9 +30,12 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<ViewportControlViewModel>();
 
         // GDS preview render service — shared by the canvas overlay and the
-        // component-library thumbnails (depends on the Nazca preview backend).
+        // component-library thumbnails. Uses the Nazca backend for Nazca components and the
+        // gdsfactory backend for gdsfactory-native components (CornerStone SiN etc., #570).
         services.AddSingleton(sp =>
-            new GdsPreviewRenderService(sp.GetRequiredService<NazcaComponentPreviewService>()));
+            new GdsPreviewRenderService(
+                sp.GetRequiredService<NazcaComponentPreviewService>(),
+                sp.GetRequiredService<GdsFactoryComponentPreviewService>()));
 
         // Left panel sub-ViewModels
         services.AddTransient<HierarchyPanelViewModel>();
@@ -52,6 +57,8 @@ internal static class CanvasAndPanelExtensions
         services.AddTransient<ArchitectureReportViewModel>();
         services.AddTransient<PdkConsistencyViewModel>();
         services.AddTransient<TimeDomainViewModel>();
+        services.AddTransient<EyeDiagramViewModel>();
+        services.AddTransient<AnalysisOutputPanelViewModel>();
 
         // Selection-driven component property editors (right panel). Order matters:
         // most specific first, generic fallback last. ComponentEditorFactory walks them
@@ -65,13 +72,14 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<ComponentEditorFactory>();
 
         // Bottom panel sub-ViewModels
-        services.AddTransient<WaveguideLengthViewModel>();
+        services.AddTransient<ConnectionRoutingViewModel>();
         services.AddTransient<ElementLockViewModel>();
         services.AddTransient<ErrorConsoleViewModel>();
 
         // Panel host singletons
         services.AddSingleton<LeftPanelViewModel>();
         services.AddSingleton<RightPanelViewModel>();
+        services.AddSingleton<AnalysisDockViewModel>();
         services.AddSingleton<BottomPanelViewModel>();
 
         return services;

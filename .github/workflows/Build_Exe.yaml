@@ -250,6 +250,21 @@ jobs:
           name: Lunima-${{ matrix.rid }}-dmg
           path: Lunima-*-${{ matrix.rid }}.dmg
 
+      # Zipped .app for the in-place auto-updater (issue #614). ditto preserves the bundle's
+      # symlinks / extended attributes / signature seal so the on-disk bytes stay valid; the
+      # .dmg above remains the artifact for first-time manual installs.
+      - name: Package .app zip (for in-place auto-update)
+        run: |
+          ZIP="Lunima-${{ steps.version.outputs.version }}-${{ matrix.rid }}.zip"
+          ditto -c -k --sequesterRsrc --keepParent dist/Lunima.app "$ZIP"
+          echo "Created $ZIP"
+
+      - name: Upload .zip artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Lunima-${{ matrix.rid }}-zip
+          path: Lunima-*-${{ matrix.rid }}.zip
+
   release:
     name: Create Release
     needs: [build, build-msi, build-macos]
@@ -313,6 +328,13 @@ jobs:
         with:
           pattern: Lunima-*-dmg
           path: dmg
+          merge-multiple: true
+
+      - name: Download macOS .zip builds
+        uses: actions/download-artifact@v4
+        with:
+          pattern: Lunima-*-zip
+          path: zip
           merge-multiple: true
 
       - name: Create archives
@@ -429,3 +451,5 @@ jobs:
             Lunima-${{ steps.info.outputs.version }}-linux-x64.tar.gz
             dmg/Lunima-${{ steps.info.outputs.version }}-osx-arm64.dmg
             dmg/Lunima-${{ steps.info.outputs.version }}-osx-x64.dmg
+            zip/Lunima-${{ steps.info.outputs.version }}-osx-arm64.zip
+            zip/Lunima-${{ steps.info.outputs.version }}-osx-x64.zip

@@ -71,6 +71,9 @@ internal static class ExportFeatureExtensions
 
         services.AddSingleton<SaxExporter>();
 
+        // Netlist view/export (gdsfactory YAML, issue #687)
+        services.AddSingleton<CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel>();
+
         return services;
     }
 }

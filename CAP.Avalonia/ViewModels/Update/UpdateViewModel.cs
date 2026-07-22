@@ -1,5 +1,7 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
+using CAP.Avalonia.Services.Update;
 using CAP_Core.Update;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -18,6 +20,7 @@ public partial class UpdateViewModel : ObservableObject
     private readonly UpdateDownloader _downloader;
     private readonly UserPreferencesService _preferences;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly IInstaller _installer;
     private readonly SemanticVersion _currentVersion;
 
     private GitHubReleaseInfo? _availableRelease;
@@ -56,12 +59,14 @@ public partial class UpdateViewModel : ObservableObject
         UpdateChecker updateChecker,
         UpdateDownloader downloader,
         UserPreferencesService preferences,
-        IUrlLauncher urlLauncher)
+        IUrlLauncher urlLauncher,
+        IInstaller installer)
     {
         _updateChecker = updateChecker;
         _downloader = downloader;
         _preferences = preferences;
         _urlLauncher = urlLauncher;
+        _installer = installer;
         _currentVersion = ResolveCurrentVersion();
     }
 
@@ -76,14 +81,14 @@ public partial class UpdateViewModel : ObservableObject
 
         IsChecking = true;
         UpdateAvailable = false;
-        StatusText = "Checking for updates...";
+        StatusText = LocalizationService.Instance.Translate("Update.Checking");
 
         try
         {
             var release = await _updateChecker.GetLatestReleaseAsync();
             if (release == null)
             {
-                StatusText = "Could not reach update server. Check your internet connection.";
+                StatusText = LocalizationService.Instance.Translate("Update.NoServer");
                 return;
             }
 
@@ -91,7 +96,8 @@ public partial class UpdateViewModel : ObservableObject
 
             if (!UpdateChecker.IsNewerThan(release, _currentVersion))
             {
-                StatusText = $"You are up to date! (v{releaseVersion ?? _currentVersion})";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Update.UpToDate"), releaseVersion ?? _currentVersion);
                 return;
             }
 
@@ -107,7 +113,8 @@ public partial class UpdateViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Update check failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.CheckFailed"), ex.Message);
         }
         finally
         {
@@ -116,51 +123,56 @@ public partial class UpdateViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Downloads the platform-appropriate installer from the available release and opens it,
-    /// then shuts down the application on Windows (where msiexec replaces the running binary).
-    /// On macOS and Linux the app stays open so the user can complete the manual install step.
+    /// Downloads the update and applies it. When the app can update in place (installed from a
+    /// writable location and the release ships an auto-update archive) it downloads that archive,
+    /// launches a detached updater that swaps the installation and relaunches the new version, then
+    /// quits. Otherwise it falls back to the manual installer / releases page so the user is never
+    /// left without a path forward.
     /// </summary>
     [RelayCommand]
     private async Task InstallUpdate()
     {
         if (_availableRelease == null || IsDownloading) return;
 
-        var platformAsset = UpdateChecker.FindPlatformAsset(_availableRelease);
-        if (platformAsset == null)
+        var canSelfUpdate = _installer.CanInstallInPlace(out _);
+        var autoUpdateAsset = canSelfUpdate ? UpdateChecker.FindAutoUpdateAsset(_availableRelease) : null;
+
+        // Fall back to the manual installer (macOS .dmg, Windows .msi, …) when in-place update
+        // isn't possible or the release carries no auto-update archive.
+        var asset = autoUpdateAsset ?? UpdateChecker.FindPlatformAsset(_availableRelease);
+        var selfUpdate = autoUpdateAsset != null;
+
+        if (asset == null)
         {
-            // No platform installer found — open GitHub releases page in browser
-            StatusText = "Opening GitHub releases page in browser...";
-            try
-            {
-                _urlLauncher.Open(BuildReleaseUrl(_availableRelease.TagName));
-            }
-            catch (Exception ex)
-            {
-                StatusText = $"Could not open browser: {ex.Message}";
-            }
+            OpenReleasesPageInBrowser();
             return;
         }
 
         IsDownloading = true;
         DownloadProgress = 0;
-        StatusText = "Downloading update...";
+        StatusText = selfUpdate ? "Downloading update..." : "Downloading installer...";
 
-        string installerPath;
+        string downloadedPath;
         try
         {
             var progress = new Progress<double>(p =>
             {
                 DownloadProgress = p;
-                StatusText = $"Downloading... {p:P0}";
+                // Progress callbacks run off the UI thread; guard on IsDownloading so a late one
+                // can't clobber the terminal status set after the download finishes.
+                if (IsDownloading)
+                    StatusText = string.Format(
+                        LocalizationService.Instance.Translate("Update.Downloading"), p.ToString("P0"));
             });
 
-            installerPath = await _downloader.DownloadInstallerAsync(
-                platformAsset.BrowserDownloadUrl, platformAsset.Size, progress);
+            downloadedPath = await _downloader.DownloadInstallerAsync(
+                asset.BrowserDownloadUrl, asset.Size, progress);
         }
         catch (Exception ex)
         {
             // A failed download has no side effects — the user can simply click Install again.
-            StatusText = $"Download failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.DownloadFailed"), ex.Message);
             return;
         }
         finally
@@ -168,8 +180,35 @@ public partial class UpdateViewModel : ObservableObject
             IsDownloading = false;
         }
 
-        StatusText = "Download complete. Opening installer...";
-        OpenDownloadedInstaller(installerPath);
+        if (selfUpdate)
+        {
+            ApplySelfUpdate(downloadedPath);
+            return;
+        }
+
+        StatusText = LocalizationService.Instance.Translate("Update.DownloadComplete");
+        OpenDownloadedInstaller(downloadedPath);
+    }
+
+    /// <summary>
+    /// Swaps the installation in place and relaunches: the detached updater waits for this
+    /// process to exit before replacing files, so the app shuts down right after launching it.
+    /// When the updater cannot be launched the app keeps running — never quit into a broken swap.
+    /// </summary>
+    private void ApplySelfUpdate(string archivePath)
+    {
+        StatusText = LocalizationService.Instance.Translate("Update.Installing");
+        try
+        {
+            _installer.LaunchUpdater(archivePath);
+        }
+        catch (Exception ex)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.UpdateFailed"), ex.Message);
+            return;
+        }
+        ShutdownApplication();
     }
 
     /// <summary>
@@ -185,8 +224,8 @@ public partial class UpdateViewModel : ObservableObject
         }
         catch (Exception)
         {
-            StatusText = $"The update was downloaded to {installerPath} but could not be opened "
-                + "automatically. Run it from there to finish updating.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.OpenFailed"), installerPath);
             TryRevealInstaller(installerPath);
             return;
         }
@@ -205,6 +244,21 @@ public partial class UpdateViewModel : ObservableObject
         }
     }
 
+    /// <summary>Opens the GitHub releases page for the available release in the default browser.</summary>
+    private void OpenReleasesPageInBrowser()
+    {
+        StatusText = LocalizationService.Instance.Translate("Update.OpeningReleases");
+        try
+        {
+            _urlLauncher.Open(BuildReleaseUrl(_availableRelease!.TagName));
+        }
+        catch (Exception ex)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Status.CouldNotOpenBrowser"), ex.Message);
+        }
+    }
+
     /// <summary>
     /// Persists this version as skipped so the user is not prompted again.
     /// </summary>
@@ -215,7 +269,8 @@ public partial class UpdateViewModel : ObservableObject
 
         _preferences.SetSkippedUpdateVersion(_availableRelease.ParsedVersion);
         UpdateAvailable = false;
-        StatusText = $"Version {_availableRelease.ParsedVersion} will not be shown again.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Update.VersionSkipped"), _availableRelease.ParsedVersion);
         _availableRelease = null;
     }
 
@@ -226,7 +281,7 @@ public partial class UpdateViewModel : ObservableObject
     private void RemindLater()
     {
         UpdateAvailable = false;
-        StatusText = "Update available — will remind again next check.";
+        StatusText = LocalizationService.Instance.Translate("Update.RemindAgain");
     }
 
     /// <summary>
@@ -237,7 +292,7 @@ public partial class UpdateViewModel : ObservableObject
     {
         _preferences.SkipToday();
         UpdateAvailable = false;
-        StatusText = "Update notification suppressed until tomorrow.";
+        StatusText = LocalizationService.Instance.Translate("Update.SuppressedToday");
         _availableRelease = null;
     }
 
@@ -328,10 +383,20 @@ public partial class UpdateViewModel : ObservableObject
 
     private static void ShutdownApplication()
     {
-        if (global::Avalonia.Application.Current?.ApplicationLifetime
-            is IClassicDesktopStyleApplicationLifetime desktop)
+        var app = global::Avalonia.Application.Current;
+        if (app?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {
             desktop.Shutdown();
+            return;
         }
+
+        // A running app with a non-desktop lifetime (e.g. a single-view host): the detached updater
+        // is already waiting for this process to exit, so exit hard rather than leaving it to time
+        // out. Gate on the LIFETIME, not on Application.Current: headless unit-test sessions
+        // (Avalonia.Headless.XUnit) set Application.Current process-wide but never assign a
+        // lifetime, so exiting on a mere non-null Application intermittently killed the xUnit
+        // test host ("Test host process crashed") whenever this ran after any [AvaloniaFact].
+        if (app?.ApplicationLifetime is not null)
+            Environment.Exit(0);
     }
 }

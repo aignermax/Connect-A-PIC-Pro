@@ -14,6 +14,10 @@ public class RenderRawCodeAsyncTests
     /// <summary>Resolves a working Python 3 path, or null when none can execute a script.</summary>
     private static string? FindWorkingPython3()
     {
+        // Opt-in gate (see NazcaComponentPreviewServiceTests): real-python tests only run when the
+        // workflow points at a python via LUNIMA_TEST_PYTHON3 (CI); a plain local run skips them.
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LUNIMA_TEST_PYTHON3")))
+            return null;
         var envOverride = Environment.GetEnvironmentVariable("LUNIMA_TEST_PYTHON3");
         var candidates = !string.IsNullOrWhiteSpace(envOverride)
             ? new[] { envOverride, "/usr/bin/python3", "/usr/local/bin/python3", "python3" }

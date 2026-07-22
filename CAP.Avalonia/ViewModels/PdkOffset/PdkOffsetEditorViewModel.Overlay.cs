@@ -1,3 +1,5 @@
+using CAP.Avalonia.Services.GdsFactoryExport;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -85,8 +87,12 @@ public partial class PdkOffsetEditorViewModel
             RefreshCanvasMarkers(SelectedComponent.Draft);
     }
 
-    /// <summary>Triggers an async Nazca render for the given component draft.</summary>
-    private async Task TriggerNazcaRenderAsync(PdkComponentDraft draft)
+    /// <summary>
+    /// Triggers an async Nazca render for the given component draft.
+    /// Internal so unit tests can await the full pipeline deterministically
+    /// (selection change fires it fire-and-forget).
+    /// </summary>
+    internal async Task TriggerNazcaRenderAsync(PdkComponentDraft draft)
     {
         _renderCts?.Cancel();
         _renderCts = new CancellationTokenSource();
@@ -98,16 +104,11 @@ public partial class PdkOffsetEditorViewModel
         var draftAtStart = draft;
 
         IsNazcaRendering = true;
-        NazcaOverlayStatus = "Rendering Nazca GDS preview…";
+        NazcaOverlayStatus = "Rendering GDS preview…";
 
         try
         {
-            var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
-            var result = await _previewService!.RenderAsync(
-                module,
-                function,
-                draft.NazcaParameters,
-                token);
+            var result = await RenderDraftAsync(draft, token);
 
             if (token.IsCancellationRequested) return;
             // SelectedComponent has moved on while we were waiting — drop result.
@@ -128,6 +129,15 @@ public partial class PdkOffsetEditorViewModel
                     if (!string.IsNullOrEmpty(result.PolygonWarning))
                         status += "  " + result.PolygonWarning;
                     NazcaOverlayStatus = status;
+                    // A "successful" render with zero polygons leaves the canvas
+                    // showing only the dashed Lunima box — without this banner the
+                    // user cannot tell an empty render from a working one (field
+                    // bug: adiabatic couplers rendered nothing, no error shown).
+                    OverlayErrorText = result.Polygons.Count == 0
+                        ? string.Format(
+                            LocalizationService.Instance.Translate("PdkOffset.Overlay.NoGeometry"),
+                            draftAtStart.Name, result.PolygonWarning ?? "").TrimEnd()
+                        : "";
                     // Replace the synthetic Lunima-side snippet with the actual
                     // PDK function source pulled live by the helper script.
                     if (!string.IsNullOrEmpty(result.Source))
@@ -139,6 +149,9 @@ public partial class PdkOffsetEditorViewModel
                     _lastNazcaResult = null;
                     HasNazcaOverlay = false;
                     NazcaOverlayStatus = $"Preview unavailable: {result.Error}";
+                    OverlayErrorText = string.Format(
+                        LocalizationService.Instance.Translate("PdkOffset.Overlay.RenderFailed"),
+                        draftAtStart.Name, result.Error ?? "unknown error");
                 }
             });
         }
@@ -152,6 +165,9 @@ public partial class PdkOffsetEditorViewModel
             {
                 HasNazcaOverlay = false;
                 NazcaOverlayStatus = $"Preview error: {ex.Message}";
+                OverlayErrorText = string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Overlay.RenderFailed"),
+                    draftAtStart.Name, ex.Message);
             });
         }
         finally
@@ -162,12 +178,39 @@ public partial class PdkOffsetEditorViewModel
     }
 
     /// <summary>
+    /// Renders the selected component: gdsfactory-native components (no Nazca function, a
+    /// gdsfactory factory) go through the gdsfactory preview back-end; everything else uses the
+    /// Nazca path. Without this branch a gdsfactory component resolves to <c>demo.()</c> and the
+    /// Nazca script fails (#570).
+    /// </summary>
+    private Task<NazcaPreviewResult> RenderDraftAsync(PdkComponentDraft draft, System.Threading.CancellationToken token)
+    {
+        if (string.IsNullOrWhiteSpace(draft.NazcaFunction)
+            && !string.IsNullOrWhiteSpace(draft.GdsFactoryFunction))
+        {
+            var code = GdsFactoryPreviewCode.For(draft.GdsFactoryFunction);
+            if (code != null && _gdsFactoryPreviewService != null)
+                return _gdsFactoryPreviewService.RenderRawCodeAsync(code, token);
+            return Task.FromResult(
+                NazcaPreviewResult.Fail("No gdsfactory preview available for this component."));
+        }
+
+        var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
+        return _previewService!.RenderAsync(module, function, draft.NazcaParameters, token);
+    }
+
+    /// <summary>
     /// Renders the same Python the preview helper would execute, as a string
     /// the user can read and copy. Different shape per render path:
-    /// SiEPIC → klayout GDS load; demofab → Nazca cell call.
+    /// gdsfactory → PDK factory call; SiEPIC → klayout GDS load; demofab → Nazca cell call.
     /// </summary>
-    private static string BuildPreviewSource(PdkComponentDraft draft)
+    internal static string BuildPreviewSource(PdkComponentDraft draft)
     {
+        if (string.IsNullOrWhiteSpace(draft.NazcaFunction)
+            && !string.IsNullOrWhiteSpace(draft.GdsFactoryFunction))
+            return GdsFactoryPreviewCode.For(draft.GdsFactoryFunction)
+                   ?? "# No gdsfactory preview available for this component.";
+
         var (module, function) = ResolveModuleAndFunction(draft.NazcaFunction);
         var paramsBlock = string.IsNullOrWhiteSpace(draft.NazcaParameters)
             ? "" : draft.NazcaParameters;

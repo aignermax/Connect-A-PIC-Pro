@@ -567,6 +567,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 StartPin = newStartPin,
                 EndPin = newEndPin
             };
+            // Carry the per-connection routing settings into the copy so template
+            // instantiation and copy/paste keep the configured styles.
+            clonedPath.CopySettingsFrom(frozenPath);
 
             newGroup.AddInternalPath(clonedPath);
         }
@@ -656,6 +659,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             NazcaOriginOffsetX = source.NazcaOriginOffsetX,
             NazcaOriginOffsetY = source.NazcaOriginOffsetY,
             NazcaModuleName = source.NazcaModuleName,
+            // gdsfactory-backend marker must survive group copy/paste, else the clone
+            // exports as a stub and loses its PDK/process attribution (#570/#661 review).
+            GdsFactoryFunction = source.GdsFactoryFunction,
             HumanReadableName = source.HumanReadableName, // Preserve human-readable name
             IsLocked = false // Don't copy lock state
         };

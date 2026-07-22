@@ -1,5 +1,6 @@
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.Controls.Plotting;
+using CAP.Avalonia.Services.Localization;
 using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Legends;
@@ -17,6 +18,15 @@ internal static class TimeTracePlotBuilder
 {
     /// <summary>Seconds-to-picoseconds factor for the time axis.</summary>
     private const double SecondsToPicoseconds = 1e12;
+
+    /// <summary>Seconds-to-nanoseconds factor for the time axis.</summary>
+    private const double SecondsToNanoseconds = 1e9;
+
+    /// <summary>
+    /// Windows of at least this many picoseconds are plotted in ns instead of
+    /// ps, so a PRBS run reads "1.6 ns" rather than an easily-misread "1600".
+    /// </summary>
+    private const double NanosecondThresholdPs = 1000;
 
     /// <summary>Power below this (field-units²) is treated as "no signal" and the pin is skipped.</summary>
     private const double SignalFloor = 1e-12;
@@ -76,7 +86,18 @@ internal static class TimeTracePlotBuilder
         TimeDomainResult result, IReadOnlyList<TimeTraceSeriesViewModel> seriesItems)
     {
         var model = CreateEmptyPlotModel();
-        var timePs = result.TimeAxis.Select(t => t * SecondsToPicoseconds).ToArray();
+
+        // Pick the unit from the window length so long (data) runs read in ns.
+        double windowPs = result.TimeAxis.Length > 0
+            ? result.TimeAxis[^1] * SecondsToPicoseconds
+            : 0;
+        bool useNs = windowPs >= NanosecondThresholdPs;
+        double scale = useNs ? SecondsToNanoseconds : SecondsToPicoseconds;
+        string unit = useNs ? "ns" : "ps";
+        model.Axes.First(a => a.Position == AxisPosition.Bottom).Title =
+            string.Format(LocalizationService.Instance.Translate("Analysis.TimeDomain.TimeAxis"), unit);
+
+        var scaledTime = result.TimeAxis.Select(t => t * scale).ToArray();
 
         foreach (var item in seriesItems)
         {
@@ -89,12 +110,12 @@ internal static class TimeTracePlotBuilder
                 Color = item.Color,
                 StrokeThickness = SeriesStrokeThickness,
                 CanTrackerInterpolatePoints = true,
-                TrackerTextProvider = dp => $"{item.Label}\nt = {dp.X:0.000} ps\nP = {dp.Y:0.000e0}",
+                TrackerTextProvider = dp => $"{item.Label}\nt = {dp.X:0.000} {unit}\nP = {dp.Y:0.000e0}",
             };
 
-            int count = Math.Min(timePs.Length, trace.Length);
+            int count = Math.Min(scaledTime.Length, trace.Length);
             for (int n = 0; n < count; n++)
-                series.Points.Add(new DataPoint(timePs[n], trace[n]));
+                series.Points.Add(new DataPoint(scaledTime[n], trace[n]));
 
             model.Series.Add(series);
         }
@@ -108,18 +129,24 @@ internal static class TimeTracePlotBuilder
     {
         var model = new PlotModel
         {
-            Title = "Transient — Power vs Time",
+            Title = LocalizationService.Instance.Translate("Analysis.TimeDomain.ChartTitle"),
             Background = OxyColors.Transparent,
             TextColor = PlotForeground,
             TitleColor = PlotForeground,
             PlotAreaBorderColor = PlotAxisline,
         };
+        // The per-pin checkbox list below the chart (TimeDomainPanel.axaml) is the only
+        // series-visibility control; an in-plot legend duplicated it as clickable buttons
+        // cluttering the chart (field feedback, round 5 finding 1). Kept (not removed) so a
+        // future need for the in-plot legend is a one-line flip, not a re-derivation.
         model.Legends.Add(new Legend
         {
             LegendPosition = LegendPosition.RightTop,
             LegendTextColor = PlotForeground,
+            IsLegendVisible = false,
         });
-        model.Axes.Add(CreateAxis(AxisPosition.Bottom, "Time (ps)"));
+        model.Axes.Add(CreateAxis(AxisPosition.Bottom,
+            string.Format(LocalizationService.Instance.Translate("Analysis.TimeDomain.TimeAxis"), "ps")));
         model.Axes.Add(CreateAxis(AxisPosition.Left, "Power |E(t)|²"));
         return model;
     }

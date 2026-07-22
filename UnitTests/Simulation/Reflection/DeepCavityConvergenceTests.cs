@@ -20,6 +20,7 @@ namespace UnitTests.Simulation.Reflection;
 /// 100 iterations to converge to 1e-9 — far beyond the old pinCount×2 ≈ 24-step limit.
 /// Issue #555.
 /// </summary>
+[Trait("Category", "Slow")]
 public class DeepCavityConvergenceTests
 {
     private const double HighReflectivity = 0.9;

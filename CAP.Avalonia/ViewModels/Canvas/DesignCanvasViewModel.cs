@@ -35,6 +35,14 @@ public partial class DesignCanvasViewModel : ObservableObject
 
     // ── UI services (pre-existing) ────────────────────────────────────────
     public SelectionManager Selection { get; } = new();
+
+    /// <summary>
+    /// Design-wide designation of THE output coupler evaluated by the Eye/BER and
+    /// Transient analyses (issue #754). Single source of truth for both tabs;
+    /// persisted with the design file.
+    /// </summary>
+    public AnalysisOutputDesignation AnalysisOutput { get; } = new();
+
     public ComponentClipboard Clipboard { get; } = new();
     public PowerFlowVisualizer PowerFlowVisualizer { get; } = new();
     public AlignmentGuideViewModel AlignmentGuide { get; } = new();
@@ -42,10 +50,44 @@ public partial class DesignCanvasViewModel : ObservableObject
 
     // ── Observable properties (for AXAML bindings) ────────────────────────
     [ObservableProperty] private bool _showPowerFlow;
+
+    /// <summary>
+    /// True while the Transient simulation mode is selected (#690). Transient mode
+    /// clears the CW <see cref="ShowPowerFlow"/> overlay, so the canvas needs this
+    /// separate flag to keep laser on/off icons visible and clickable during the
+    /// transient/eye workflow. Set by MainViewModel when the mode selector changes.
+    /// </summary>
+    [ObservableProperty] private bool _isTransientModeActive;
+
+    /// <summary>
+    /// True when any simulation mode is active on the canvas (CW power-flow overlay
+    /// or Transient mode). Used as the visibility condition for laser on/off icons.
+    /// </summary>
+    public bool IsSimulationModeActive => ShowPowerFlow || IsTransientModeActive;
     [ObservableProperty] private bool _useAStarRouting = true;
+    [ObservableProperty] private bool _useDiagonalRouting;
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
     [ObservableProperty] private ComponentViewModel? _selectedComponent;
+
+    /// <summary>
+    /// Keeps the <see cref="Selection"/> set consistent with the primary selection. Selecting a
+    /// component that is already part of the current multi-selection (e.g. right-clicking one of
+    /// several box-selected components) keeps the set intact.
+    /// </summary>
+    partial void OnSelectedComponentChanged(ComponentViewModel? value)
+    {
+        if (value == null)
+        {
+            // Deselecting the primary must also clear the multi-selection set — otherwise DEL
+            // acts on a stale selection and deletes components that appear deselected.
+            Selection.ClearSelection();
+            return;
+        }
+        if (!Selection.SelectedComponents.Contains(value))
+            Selection.SelectSingle(value);
+    }
+
     [ObservableProperty] private double _panX;
     [ObservableProperty] private double _panY;
     [ObservableProperty] private bool _isRouting;
@@ -132,6 +174,10 @@ public partial class DesignCanvasViewModel : ObservableObject
                 ShowPowerFlow = value;
         };
 
+        // Product default: diagonal routing is opt-in (Settings → Routing);
+        // the library-level router default is true, so sync it explicitly.
+        Router.UseDiagonalRouting = UseDiagonalRouting;
+
         Routing.InitializeAStarRouting();
     }
 
@@ -144,6 +190,16 @@ public partial class DesignCanvasViewModel : ObservableObject
     }
 
     partial void OnUseAStarRoutingChanged(bool value) => _ = RecalculateRoutesAsync();
+
+    partial void OnShowPowerFlowChanged(bool value) => OnPropertyChanged(nameof(IsSimulationModeActive));
+
+    partial void OnIsTransientModeActiveChanged(bool value) => OnPropertyChanged(nameof(IsSimulationModeActive));
+
+    partial void OnUseDiagonalRoutingChanged(bool value)
+    {
+        Router.UseDiagonalRouting = value;
+        _ = RecalculateRoutesAsync();
+    }
 
     // ── Simulation delegation ─────────────────────────────────────────────
 
@@ -211,6 +267,20 @@ public partial class DesignCanvasViewModel : ObservableObject
     {
         var vm = new ComponentViewModel(component, templateName, templatePdkSource);
         vm.OnSliderChanged = () => RequestResimulation();
+        if (vm.LaserConfig != null)
+        {
+            // Laser changes (on/off #690, wavelength, power) re-simulate the live
+            // overlay and repaint the canvas laser icon.
+            vm.LaserConfig.PropertyChanged += (_, e) =>
+            {
+                // InputPower streams continuously from the panel slider while the CW
+                // overlay ignores it — only role/wavelength changes need work here.
+                if (e.PropertyName == nameof(ViewModels.Simulation.LaserConfig.InputPower))
+                    return;
+                RequestResimulation();
+                RepaintRequested?.Invoke();
+            };
+        }
         Components.Add(vm);
         Router.AddComponentObstacle(component);
 

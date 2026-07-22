@@ -61,6 +61,15 @@ public class Component : ICloneable
     public bool IsLocked { get; set; }
 
     /// <summary>
+    /// Whether this component's laser emits light (issue #690): true = input coupler,
+    /// false = listen-only output coupler. Lives on the core component (like
+    /// <see cref="IsLocked"/>) so the state survives grouping, ungrouping and
+    /// delete/undo, where the owning ViewModel is recreated. Only meaningful for
+    /// light-injecting couplers; defaults to true.
+    /// </summary>
+    public bool LaserEnabled { get; set; } = true;
+
+    /// <summary>
     /// Reference to the parent ComponentGroup if this component is part of a group.
     /// Null if this is a top-level component.
     /// </summary>
@@ -75,6 +84,23 @@ public class Component : ICloneable
     public string NazcaFunctionName { get; set; }
     public string NazcaFunctionParameters { get; set; }
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend PDK components (e.g.
+    /// "cspdk.sin300.mmi1x2"); null for Nazca components. When set, the gdsfactory export
+    /// calls this factory directly (and activates its PDK module) instead of a Nazca-mapped
+    /// or stub cell. Flows from the component template on placement and on load (#570).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
+    /// <summary>
+    /// gdsfactory cross-section name used to route waveguides between this design's components
+    /// (e.g. "xs_nc" — CornerStone SiN C-band, 1.2 µm). Null for Nazca designs, which route with
+    /// an explicit width. Set for gdsfactory-native PDKs so routed straights/bends resolve a
+    /// cross-section that exists under the activated PDK — the generic "strip" default does not
+    /// (#570 field-test fix). Uniform per PDK; flows from the template on placement and on load.
+    /// </summary>
+    public string? GdsFactoryRoutingCrossSection { get; set; }
 
     /// <summary>
     /// Sentinel value used in <see cref="NazcaFunctionName"/> for virtual analysis
@@ -389,7 +415,10 @@ public class Component : ICloneable
         // without it a copy renders against the wrong module and its geometry-scoped S-matrix
         // override no longer matches the original.
         clonedComponent.NazcaModuleName = NazcaModuleName;
+        clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
+        clonedComponent.GdsFactoryRoutingCrossSection = GdsFactoryRoutingCrossSection;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
+        clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
 
         return clonedComponent;

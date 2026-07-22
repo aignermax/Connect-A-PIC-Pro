@@ -1,0 +1,110 @@
+using CAP_Core.Components.Process;
+using CAP_DataAccess.Components.ComponentDraftMapper;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
+
+namespace CAP.Avalonia.ViewModels.Panels;
+
+public partial class LeftPanelViewModel
+{
+    public IReadOnlyList<PdkProcessEntry> GetLoadedPdkProcessEntries() =>
+        _loadedPdkDrafts.Where(d => !d.ProcessAgnostic)
+            .Select(d => new PdkProcessEntry(d.Name, ProcessFingerprintFactory.From(d))).ToList();
+
+    public IReadOnlyList<PdkDraft> GetLoadedPdkDrafts() => _loadedPdkDrafts;
+
+    public IReadOnlyList<string> GetProcessAgnosticPdkNames() =>
+        _loadedPdkDrafts.Where(d => d.ProcessAgnostic).Select(d => d.Name).ToList();
+
+    public void ApplyActiveProcess(ActiveProcessSelection? active, bool preserveMemberToggles = false)
+    {
+        _lastAppliedProcess = active;
+        if (active is { IsPlayground: false })
+        {
+            // ManualTogglesEnabled must be set BEFORE ApplyProcessLock, whose FilterComponents → SavePdkFilterState guard reads it.
+            PdkManager.ManualTogglesEnabled = false;
+            PdkManager.ApplyProcessLock(
+                ResolveLiveMemberPdkNames(active).Concat(GetProcessAgnosticPdkNames()),
+                preserveMemberToggles);
+            FilterComponents();
+        }
+        else
+        {
+            PdkManager.ManualTogglesEnabled = true;
+            PdkManager.ClearProcessLock();
+            RestorePdkFilterState();
+            FilterComponents();
+        }
+    }
+
+    internal IReadOnlyList<string> ResolveLiveMemberPdkNames(ActiveProcessSelection active)
+    {
+        if (active.Fingerprint is not { IsSpecified: true } fingerprint)
+            return active.MemberPdkNames;
+
+        var loadedDrafts = GetLoadedPdkDrafts();
+        var snapshotMembersWithProcess = loadedDrafts
+            .Where(d => active.MemberPdkNames.Contains(d.Name, StringComparer.OrdinalIgnoreCase)
+                        && d.Process != null)
+            .ToList();
+        var referenceProcess = (
+            snapshotMembersWithProcess.FirstOrDefault(d => IsBundledPdkName(d.Name))
+            ?? snapshotMembersWithProcess.FirstOrDefault()
+        )?.Process;
+
+        var candidates = GetLoadedPdkProcessEntries()
+            .Where(e => e.Fingerprint.IsSpecified && ProcessCompatibility.AreCompatible(e.Fingerprint, fingerprint))
+            .OrderByDescending(e => IsBundledPdkName(e.PdkName))
+            .ThenByDescending(e => active.MemberPdkNames.Contains(e.PdkName, StringComparer.OrdinalIgnoreCase));
+
+        var accepted = new List<(string Name, ProcessDefinition? Process)>();
+        foreach (var candidate in candidates)
+        {
+            var candidateProcess = loadedDrafts.FirstOrDefault(d =>
+                string.Equals(d.Name, candidate.PdkName, StringComparison.OrdinalIgnoreCase))?.Process;
+            if (!ProcessLayerConsistency.LayersConsistent(referenceProcess, candidateProcess))
+                continue;
+            if (accepted.Any(a => !ProcessLayerConsistency.LayersConsistent(a.Process, candidateProcess)))
+                continue;
+            accepted.Add((candidate.PdkName, candidateProcess));
+        }
+
+        return accepted.Select(a => a.Name).ToList();
+    }
+
+    /// <summary>
+    /// True when <paramref name="name"/> carries foundry authority for the #570 layer-consistency
+    /// reference: a bundled PDK itself, or a user fork shadowing one. The fork inherits that
+    /// authority ONLY while its process is layer-consistent with the bundled original — a
+    /// hand-edited fork with renumbered layers must never become the layer reference and lock
+    /// genuine foundry PDKs out; it falls through the normal layer check instead.
+    /// </summary>
+    private bool IsBundledPdkName(string name)
+    {
+        var row = PdkManager.LoadedPdks.FirstOrDefault(p =>
+            string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (row is { IsBundled: true })
+            return true;
+        if (row is not { ShadowsBundledPdk: true })
+            return false;
+
+        var originalProcess = GetBundledOriginDraft(row.Name)?.Process;
+        if (originalProcess is null)
+            return false; // cannot validate against the foundry truth → no reference authority
+
+        var forkProcess = _loadedPdkDrafts.FirstOrDefault(d =>
+            string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process;
+        return ProcessLayerConsistency.LayersConsistent(originalProcess, forkProcess);
+    }
+
+    private ActiveProcessSelection? _lastAppliedProcess;
+
+    internal void ReapplyActiveProcessAfterPdkChange()
+    {
+        // Every library mutation funnels through this hook, so the ✕-visibility flags are
+        // recomputed once per change — never per hover/binding.
+        RefreshTemplateDeletableFlags();
+
+        if (_lastAppliedProcess is { IsPlayground: false })
+            ApplyActiveProcess(_lastAppliedProcess, preserveMemberToggles: true);
+    }
+}

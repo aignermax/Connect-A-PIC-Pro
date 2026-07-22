@@ -3,6 +3,7 @@ using global::Avalonia.Controls;
 using global::Avalonia.Controls.ApplicationLifetimes;
 using global::Avalonia.Layout;
 using global::Avalonia.Media;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.Services;
 
@@ -59,7 +60,7 @@ public class MessageBoxService : IMessageBoxService
 
         var saveButton = new Button
         {
-            Content = "Save",
+            Content = LocalizationService.Instance.Translate("Common.Save"),
             Width = 90,
             Height = 32,
             Background = new SolidColorBrush(Color.Parse("#0d6efd")),
@@ -68,7 +69,7 @@ public class MessageBoxService : IMessageBoxService
 
         var dontSaveButton = new Button
         {
-            Content = "Don't Save",
+            Content = LocalizationService.Instance.Translate("Dialog.DontSave"),
             Width = 90,
             Height = 32,
             Background = new SolidColorBrush(Color.Parse("#6c757d")),
@@ -77,7 +78,7 @@ public class MessageBoxService : IMessageBoxService
 
         var cancelButton = new Button
         {
-            Content = "Cancel",
+            Content = LocalizationService.Instance.Translate("Common.Cancel"),
             Width = 90,
             Height = 32,
             Background = new SolidColorBrush(Color.Parse("#3d3d3d")),
@@ -161,8 +162,10 @@ public class MessageBoxService : IMessageBoxService
             var button = new Button
             {
                 Content = buttonLabels[i],
-                Height = 32,
-                Padding = new Thickness(12, 0),
+                MinHeight = 32,
+                Padding = new Thickness(12, 6),
+                VerticalContentAlignment = VerticalAlignment.Center,
+                HorizontalContentAlignment = HorizontalAlignment.Center,
                 Background = new SolidColorBrush(Color.Parse(i == 0 ? "#0d6efd" : "#3d3d3d")),
                 Foreground = Brushes.White
             };

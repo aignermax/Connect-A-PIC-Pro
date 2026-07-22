@@ -15,6 +15,7 @@ namespace UnitTests.Routing;
 /// Tests close pins, all direction pairs, path quality (no loops/diagonals),
 /// and validates that A* produces professional-quality routes.
 /// </summary>
+[Trait("Category", "Slow")]
 public class RoutingEdgeCaseTests
 {
     private readonly ITestOutputHelper _output;

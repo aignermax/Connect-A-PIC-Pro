@@ -19,6 +19,7 @@ namespace UnitTests.Simulation;
 /// Groups are purely organizational — ungrouping must not affect simulation results.
 /// Any discrepancy indicates a "light swallowing" bug in group S-Matrix computation.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GroupFlattenSimulationTests
 {
     private const int WavelengthNm = 1550; // matches StandardWaveLengths.RedNM

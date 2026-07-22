@@ -14,8 +14,11 @@ public class DeleteComponentCommand : IUndoableCommand
     private ComponentViewModel _componentViewModel;
     private readonly Component _component;
     private readonly string? _templateName;
+    private readonly string? _templatePdkSource;
     private readonly double _x;
     private readonly double _y;
+    private readonly int? _laserWavelengthNm;
+    private readonly double? _laserInputPower;
     private readonly List<(WaveguideConnection connection, WaveguideConnectionViewModel vm)> _deletedConnections = new();
 
     public DeleteComponentCommand(
@@ -26,8 +29,14 @@ public class DeleteComponentCommand : IUndoableCommand
         _componentViewModel = componentViewModel;
         _component = componentViewModel.Component;
         _templateName = componentViewModel.TemplateName;
+        _templatePdkSource = componentViewModel.TemplatePdkSource;
         _x = componentViewModel.X;
         _y = componentViewModel.Y;
+        // Wavelength/power live only on the ViewModel's LaserConfig — snapshot them so
+        // undo does not silently reset the laser (#690; IsEnabled itself survives on
+        // the core component, which is reused by Undo).
+        _laserWavelengthNm = componentViewModel.LaserConfig?.WavelengthNm;
+        _laserInputPower = componentViewModel.LaserConfig?.InputPower;
     }
 
     public string Description => $"Delete {_component.Identifier}";
@@ -57,10 +66,19 @@ public class DeleteComponentCommand : IUndoableCommand
 
     public void Undo()
     {
-        // Re-add the component (creates a new VM - update our reference for redo)
+        // Re-add the component (creates a new VM - update our reference for redo).
+        // Keep the PDK source: a VM recreated without it would read as "built-in"
+        // and slip through single-process enforcement on later copy/paste (#570).
         _component.PhysicalX = _x;
         _component.PhysicalY = _y;
-        _componentViewModel = _canvas.AddComponent(_component, _templateName);
+        _componentViewModel = _canvas.AddComponent(_component, _templateName, _templatePdkSource);
+        if (_componentViewModel.LaserConfig != null)
+        {
+            if (_laserWavelengthNm.HasValue)
+                _componentViewModel.LaserConfig.WavelengthNm = _laserWavelengthNm.Value;
+            if (_laserInputPower.HasValue)
+                _componentViewModel.LaserConfig.InputPower = _laserInputPower.Value;
+        }
 
         // Re-add connections
         foreach (var (connection, _) in _deletedConnections)

@@ -1,0 +1,108 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.Solvers.DockerSetup"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
+        x:Class="CAP.Avalonia.Views.Dialogs.DockerSetupDialog"
+        x:DataType="vm:DockerSetupViewModel"
+        Title="{loc:Localize DockerSetup.WindowTitle}"
+        Width="560" SizeToContent="Height"
+        MinWidth="460"
+        CanResize="False"
+        Background="#1e1e1e"
+        WindowStartupLocation="CenterOwner">
+
+    <StackPanel Margin="16" Spacing="10">
+
+        <TextBlock Text="{loc:Localize DockerSetup.Heading}"
+                   FontWeight="SemiBold" FontSize="15" Foreground="LightBlue"/>
+
+        <!-- Current availability status -->
+        <Border Background="#3a2f1f" CornerRadius="4" Padding="10,8">
+            <TextBlock Text="{Binding StatusMessage}"
+                       Foreground="#ffcc88" FontSize="12" TextWrapping="Wrap"/>
+        </Border>
+
+        <!-- Linux: not installed — copyable install commands -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxInstall}">
+            <TextBlock Text="{loc:Localize DockerSetup.LinuxInstallHint}"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxInstallCommandsText, Mode=OneWay}"
+                         IsReadOnly="True" AcceptsReturn="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="{loc:Localize Context.Copy}" VerticalAlignment="Top"
+                        Command="{Binding CopyInstallCommandsCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+            <TextBlock Text="{loc:Localize DockerSetup.LinuxRelogNote}"
+                       Foreground="#888888" FontSize="11" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Windows / macOS: not installed — download button -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowDesktopInstall}">
+            <TextBlock Text="{loc:Localize DockerSetup.DesktopInstallHint}"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Button Content="{loc:Localize DockerSetup.DownloadDockerDesktop}"
+                    Command="{Binding OpenDownloadPageCommand}"
+                    Background="#0d6efd" Foreground="White"/>
+        </StackPanel>
+
+        <!-- Linux: engine stopped — copyable start command -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxStart}">
+            <TextBlock Text="{loc:Localize DockerSetup.LinuxStartHint}"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxStartCommandText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="{loc:Localize Context.Copy}" VerticalAlignment="Top"
+                        Command="{Binding CopyStartCommandCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+        </StackPanel>
+
+        <!-- Linux: engine running but socket access denied — group / re-login guidance -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowLinuxPermission}">
+            <TextBlock Text="{loc:Localize DockerSetup.LinuxPermissionHint}"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+            <Grid ColumnDefinitions="*,8,Auto">
+                <TextBox Grid.Column="0"
+                         Text="{Binding LinuxPermissionCommandText, Mode=OneWay}"
+                         IsReadOnly="True"
+                         FontFamily="Consolas, Courier New, monospace" FontSize="12"
+                         Background="#252526" Foreground="White"/>
+                <Button Grid.Column="2" Content="{loc:Localize Context.Copy}" VerticalAlignment="Top"
+                        Command="{Binding CopyPermissionCommandCommand}"
+                        Background="#3d3d3d" Foreground="White"/>
+            </Grid>
+            <TextBlock Text="{loc:Localize DockerSetup.LinuxPermissionWarning}"
+                       Foreground="#e5c07b" FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Windows / macOS: engine stopped — start hint -->
+        <StackPanel Spacing="6" IsVisible="{Binding ShowDesktopStart}">
+            <TextBlock Text="{loc:Localize DockerSetup.DesktopStartHint}"
+                       Foreground="#bbbbbb" FontSize="12" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <!-- Copy feedback -->
+        <TextBlock Text="{Binding CopyFeedback}"
+                   Foreground="#7fce7f" FontSize="11"
+                   IsVisible="{Binding CopyFeedback, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- Actions -->
+        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="{loc:Localize Common.Cancel}" Click="OnCancelClick" Width="90"
+                    Background="#3d3d3d" Foreground="White"/>
+            <Button Content="{loc:Localize DockerSetup.CheckAgain}" Width="120"
+                    Command="{Binding CheckAgainCommand}"
+                    IsEnabled="{Binding !IsChecking}"
+                    Background="#0d6efd" Foreground="White" IsDefault="True"/>
+        </StackPanel>
+
+    </StackPanel>
+</Window>

@@ -1,5 +1,4 @@
 using System.Diagnostics;
-using System.Text;
 using System.Text.Json;
 using CAP_Core.Solvers.ModeSolver;
 
@@ -16,19 +15,39 @@ public class PythonModeSolverService : IModeSolverService
     /// <summary>Default subprocess timeout (120 s — FDE can be slow on coarse grids).</summary>
     public static readonly TimeSpan DefaultTimeout = TimeSpan.FromSeconds(120);
 
-    private readonly string _pythonExecutable;
+    private readonly Func<string> _pythonExecutableResolver;
     private readonly string _scriptPath;
     private readonly TimeSpan _timeout;
 
-    /// <summary>Initializes the service.</summary>
+    /// <summary>
+    /// Initializes the service with a lazily-resolved interpreter. The resolver is
+    /// invoked on every <see cref="SolveAsync"/> call, so a newly activated or
+    /// freshly auto-installed managed environment is picked up without an app
+    /// restart (#691 review).
+    /// </summary>
+    /// <param name="pythonExecutableResolver">Returns the Python 3 executable to use for the next solve.</param>
+    /// <param name="scriptPath">Absolute path to <c>mode_solve.py</c>.</param>
+    /// <param name="timeout">Optional subprocess timeout.</param>
+    public PythonModeSolverService(Func<string> pythonExecutableResolver, string scriptPath, TimeSpan? timeout = null)
+    {
+        _pythonExecutableResolver = pythonExecutableResolver ?? throw new ArgumentNullException(nameof(pythonExecutableResolver));
+        _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
+        _timeout = timeout ?? DefaultTimeout;
+    }
+
+    /// <summary>Initializes the service with a fixed interpreter path.</summary>
     /// <param name="pythonExecutable">Path to the Python 3 executable.</param>
     /// <param name="scriptPath">Absolute path to <c>mode_solve.py</c>.</param>
     /// <param name="timeout">Optional subprocess timeout.</param>
     public PythonModeSolverService(string pythonExecutable, string scriptPath, TimeSpan? timeout = null)
+        : this(Constant(pythonExecutable), scriptPath, timeout)
     {
-        _pythonExecutable = pythonExecutable ?? throw new ArgumentNullException(nameof(pythonExecutable));
-        _scriptPath = scriptPath ?? throw new ArgumentNullException(nameof(scriptPath));
-        _timeout = timeout ?? DefaultTimeout;
+    }
+
+    private static Func<string> Constant(string value)
+    {
+        ArgumentNullException.ThrowIfNull(value);
+        return () => value;
     }
 
     /// <inheritdoc/>
@@ -38,13 +57,14 @@ public class PythonModeSolverService : IModeSolverService
             return ModeSolverResult.Fail($"Mode-solver script not found: {_scriptPath}");
 
         var jsonInput = SerialiseRequest(request);
+        var pythonExecutable = _pythonExecutableResolver();
 
         try
         {
             using var process = new Process();
             var si = new ProcessStartInfo
             {
-                FileName = _pythonExecutable,
+                FileName = pythonExecutable,
                 RedirectStandardInput  = true,
                 RedirectStandardOutput = true,
                 RedirectStandardError  = true,
@@ -81,7 +101,7 @@ public class PythonModeSolverService : IModeSolverService
         }
         catch (System.ComponentModel.Win32Exception ex)
         {
-            return ModeSolverResult.Fail($"Could not start Python '{_pythonExecutable}': {ex.Message}");
+            return ModeSolverResult.Fail($"Could not start Python '{pythonExecutable}': {ex.Message}");
         }
         catch (Exception ex)
         {

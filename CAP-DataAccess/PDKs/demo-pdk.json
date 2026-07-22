@@ -5,6 +5,52 @@
   "foundry": "Demo Foundry",
   "version": "2.0.0",
   "defaultWavelengthNm": 1550,
+  "process": {
+    "name": "Demo SOI 220nm",
+    "foundry": "Demo Foundry",
+    "coreThicknessNm": 220,
+    "layers": [
+      {
+        "name": "WAVEGUIDE",
+        "layer": 1,
+        "datatype": 0,
+        "description": "Waveguide core layer"
+      },
+      {
+        "name": "METAL1",
+        "layer": 11,
+        "datatype": 0,
+        "description": "DC metal routing layer (ElecRec)"
+      }
+    ],
+    "xsections": [
+      {
+        "name": "MetalDC",
+        "kind": "Metal",
+        "widthUm": 10,
+        "minRadiusUm": 0,
+        "recommendedRadiusUm": 0,
+        "layers": [
+          "METAL1"
+        ],
+        "description": "DC metal line for electrical routing (heaters, detectors, probe pads)"
+      }
+    ],
+    "materials": [
+      {
+        "name": "Si",
+        "nByWavelengthNm": {},
+        "role": "core"
+      },
+      {
+        "name": "SiO2",
+        "nByWavelengthNm": {},
+        "role": "cladding"
+      }
+    ],
+    "allowedAngles": [],
+    "electricalBridgeRequired": false
+  },
   "components": [
     {
       "name": "1x2 MMI Splitter",
@@ -212,6 +258,20 @@
           "offsetXMicrometers": 500,
           "offsetYMicrometers": 30,
           "angleDegrees": 0
+        },
+        {
+          "name": "elec1",
+          "offsetXMicrometers": 200,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "elec2",
+          "offsetXMicrometers": 300,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
@@ -303,6 +363,20 @@
           "offsetXMicrometers": 0,
           "offsetYMicrometers": 27.5,
           "angleDegrees": 180
+        },
+        {
+          "name": "anode",
+          "offsetXMicrometers": 45,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        },
+        {
+          "name": "cathode",
+          "offsetXMicrometers": 45,
+          "offsetYMicrometers": 55,
+          "angleDegrees": 90,
+          "pinKind": "Electrical"
         }
       ],
       "sMatrix": {
@@ -512,6 +586,25 @@
           }
         ]
       }
+    },
+    {
+      "name": "Probe Pad",
+      "category": "Electrical",
+      "nazcaFunction": "demo.pad_dc",
+      "nazcaParameters": "length=100, width=100",
+      "widthMicrometers": 100,
+      "heightMicrometers": 100,
+      "nazcaOriginOffsetX": 0,
+      "nazcaOriginOffsetY": 50,
+      "pins": [
+        {
+          "name": "pad",
+          "offsetXMicrometers": 50,
+          "offsetYMicrometers": 0,
+          "angleDegrees": 270,
+          "pinKind": "Electrical"
+        }
+      ]
     }
   ]
 }

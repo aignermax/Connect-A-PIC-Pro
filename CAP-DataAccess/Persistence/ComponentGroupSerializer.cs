@@ -1,3 +1,4 @@
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Routing;
 using CAP_DataAccess.Persistence.DTOs;
@@ -195,7 +196,13 @@ public static class ComponentGroupSerializer
             EndComponentGuid = frozenPath.EndPin.ParentComponent.Id.ToString(),
             EndPinName = frozenPath.EndPin.Name,
             IsBlockedFallback = frozenPath.Path.IsBlockedFallback,
-            IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry
+            IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry,
+            ConnectionType = frozenPath.ConnectionType.ToString(),
+            BendRadiusMicrometers = frozenPath.BendRadiusMicrometers,
+            WidthMicrometers = frozenPath.WidthMicrometers,
+            IsRouteFrozen = frozenPath.IsRouteFrozen,
+            PropagationLossDbPerCm = frozenPath.PropagationLossDbPerCm,
+            BendRadiusOverrides = new Dictionary<int, double>(frozenPath.BendRadiusOverrides)
         };
 
         // Serialize path segments
@@ -253,13 +260,41 @@ public static class ComponentGroupSerializer
             path.Segments.Add(FromPathSegmentDto(segmentDto));
         }
 
-        return new FrozenWaveguidePath
+        var frozenPath = new FrozenWaveguidePath
         {
             PathId = Guid.Parse(dto.PathId),
             Path = path,
             StartPin = startPin,
             EndPin = endPin
         };
+        ApplyConnectionSettings(dto, frozenPath);
+        return frozenPath;
+    }
+
+    /// <summary>
+    /// Restores the per-connection routing settings from the DTO. Design files written
+    /// before these fields existed leave them null/absent and keep the model defaults
+    /// ("Auto" style); unknown style names also fall back to Auto.
+    /// </summary>
+    private static void ApplyConnectionSettings(FrozenPathDto dto, FrozenWaveguidePath frozenPath)
+    {
+        if (Enum.TryParse<WaveguideType>(dto.ConnectionType, out var connectionType)
+            && Enum.IsDefined(connectionType))
+        {
+            frozenPath.ConnectionType = connectionType;
+        }
+        if (dto.BendRadiusMicrometers is double bendRadius)
+            frozenPath.BendRadiusMicrometers = bendRadius;
+        if (dto.WidthMicrometers is double width)
+            frozenPath.WidthMicrometers = width;
+        frozenPath.IsRouteFrozen = dto.IsRouteFrozen;
+        if (dto.PropagationLossDbPerCm is double loss)
+            frozenPath.PropagationLossDbPerCm = loss;
+        if (dto.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in dto.BendRadiusOverrides)
+                frozenPath.BendRadiusOverrides[bendIndex] = radius;
+        }
     }
 
     /// <summary>

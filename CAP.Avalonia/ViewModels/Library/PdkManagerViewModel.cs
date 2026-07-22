@@ -1,43 +1,31 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Library;
 
-/// <summary>
-/// ViewModel for managing loaded PDKs with filtering capabilities.
-/// Displays loaded PDKs and allows toggling visibility of their components.
-/// </summary>
 public partial class PdkManagerViewModel : ObservableObject
 {
     [ObservableProperty]
     private string _statusText = "";
 
-    /// <summary>
-    /// Collection of all loaded PDK information.
-    /// Each item tracks name, path, component count, and enabled state.
-    /// </summary>
+    [ObservableProperty]
+    private bool _manualTogglesEnabled = true;
+
+    private bool _suppressFilterNotifications;
+
     public ObservableCollection<PdkInfoViewModel> LoadedPdks { get; } = new();
 
-    /// <summary>
-    /// Callback invoked when PDK filter state changes.
-    /// Set by MainViewModel to trigger component library filtering.
-    /// </summary>
     public Action? OnFilterChanged { get; set; }
 
-    /// <summary>
-    /// Registers a new PDK with the manager.
-    /// </summary>
-    /// <param name="name">PDK name.</param>
-    /// <param name="filePath">Path to PDK file (null for built-in).</param>
-    /// <param name="isBundled">True if bundled with application.</param>
-    /// <param name="componentCount">Number of components in PDK.</param>
     public void RegisterPdk(string name, string? filePath, bool isBundled, int componentCount)
     {
         var pdkVm = new PdkInfoViewModel(name, filePath, isBundled, componentCount);
         pdkVm.PropertyChanged += (s, e) =>
         {
-            if (e.PropertyName == nameof(PdkInfoViewModel.IsEnabled))
+            if (e.PropertyName == nameof(PdkInfoViewModel.IsEnabled) && !_suppressFilterNotifications)
             {
                 OnFilterChanged?.Invoke();
                 UpdateStatusText();
@@ -47,9 +35,6 @@ public partial class PdkManagerViewModel : ObservableObject
         UpdateStatusText();
     }
 
-    /// <summary>
-    /// Checks if a PDK file is already loaded (duplicate detection).
-    /// </summary>
     public bool IsPdkLoaded(string filePath)
     {
         var normalizedPath = Path.GetFullPath(filePath);
@@ -57,47 +42,43 @@ public partial class PdkManagerViewModel : ObservableObject
                                    Path.GetFullPath(p.FilePath) == normalizedPath);
     }
 
-    /// <summary>
-    /// Checks if a PDK with the given name and source type exists.
-    /// </summary>
     public bool IsPdkNameLoaded(string name, string? pdkSource)
     {
         return LoadedPdks.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
                                    (pdkSource == null || p.SourceType.Equals(pdkSource, StringComparison.OrdinalIgnoreCase)));
     }
 
-    /// <summary>
-    /// Enables all PDKs and refreshes the component library.
-    /// </summary>
     [RelayCommand]
     private void EnableAll()
     {
-        foreach (var pdk in LoadedPdks)
-        {
-            pdk.IsEnabled = true;
-        }
-        OnFilterChanged?.Invoke();
-        StatusText = "All PDKs enabled";
+        var changed = SetAllEnabled(true);
+        StatusText = $"Enabled {changed} allowed PDK(s)";
     }
 
-    /// <summary>
-    /// Disables all PDKs and refreshes the component library.
-    /// </summary>
     [RelayCommand]
     private void DisableAll()
     {
-        foreach (var pdk in LoadedPdks)
-        {
-            pdk.IsEnabled = false;
-        }
-        OnFilterChanged?.Invoke();
-        StatusText = "All PDKs disabled";
+        var changed = SetAllEnabled(false);
+        StatusText = $"Disabled {changed} PDK(s)";
     }
 
-    /// <summary>
-    /// Removes a user-loaded PDK from the manager.
-    /// Bundled PDKs cannot be unloaded.
-    /// </summary>
+    private int SetAllEnabled(bool enabled)
+    {
+        var toggleable = LoadedPdks.Where(p => !p.IsLockedByProcess).ToList();
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in toggleable)
+                pdk.IsEnabled = enabled;
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+        OnFilterChanged?.Invoke();
+        return toggleable.Count;
+    }
+
     [RelayCommand]
     private void UnloadPdk(PdkInfoViewModel? pdk)
     {
@@ -114,9 +95,6 @@ public partial class PdkManagerViewModel : ObservableObject
         StatusText = $"{enabledCount}/{LoadedPdks.Count} PDKs active";
     }
 
-    /// <summary>
-    /// Returns a list of enabled PDK names for filtering.
-    /// </summary>
     public HashSet<string> GetEnabledPdkNames()
     {
         return LoadedPdks
@@ -124,21 +102,96 @@ public partial class PdkManagerViewModel : ObservableObject
             .Select(p => p.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
+
+    public HashSet<string> GetProcessCompatiblePdkNames()
+    {
+        return LoadedPdks
+            .Where(p => !p.IsLockedByProcess)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
+    public void SetEnabledPdks(IEnumerable<string> names)
+    {
+        var nameSet = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in LoadedPdks)
+            {
+                pdk.IsEnabled = nameSet.Contains(pdk.Name);
+            }
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+
+        UpdateStatusText();
+        OnFilterChanged?.Invoke();
+    }
+
+    public void ApplyProcessLock(IEnumerable<string> allowedNames, bool preserveMemberToggles = false)
+    {
+        var allowed = allowedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        _suppressFilterNotifications = true;
+        try
+        {
+            foreach (var pdk in LoadedPdks)
+            {
+                var isAllowed = allowed.Contains(pdk.Name);
+                if (isAllowed)
+                {
+                    if (!preserveMemberToggles || pdk.IsLockedByProcess)
+                        pdk.IsEnabled = true;
+                }
+                else
+                {
+                    pdk.IsEnabled = false;
+                }
+                pdk.IsLockedByProcess = !isAllowed;
+            }
+        }
+        finally
+        {
+            _suppressFilterNotifications = false;
+        }
+
+        UpdateStatusText();
+        OnFilterChanged?.Invoke();
+    }
+
+    public void ClearProcessLock()
+    {
+        foreach (var pdk in LoadedPdks)
+            pdk.IsLockedByProcess = false;
+    }
 }
 
-/// <summary>
-/// ViewModel wrapper for PdkInfo that supports UI binding.
-/// </summary>
 public partial class PdkInfoViewModel : ObservableObject
 {
     [ObservableProperty]
     private bool _isEnabled = true;
 
+    [ObservableProperty]
+    private bool _isLockedByProcess;
+
+    /// <summary>
+    /// True when this non-bundled PDK is the user's editable fork of a same-named bundled PDK
+    /// and "shadows" the read-only built-in original. Deleting such a fork reverts to the
+    /// foundry truth: the copy goes to the trash and the bundled original is re-registered.
+    /// </summary>
+    [ObservableProperty]
+    private bool _shadowsBundledPdk;
+
     public string Name { get; }
     public string? FilePath { get; }
     public bool IsBundled { get; }
     public int ComponentCount { get; }
-    public string SourceType => IsBundled ? "Bundled" : "User";
+
+    /// <summary>Localized source label ("Bundled"/"User"), re-read on language switch.</summary>
+    public string SourceType =>
+        LocalizationService.Instance.Translate(IsBundled ? "Pdk.Bundled" : "Pdk.User");
 
     public PdkInfoViewModel(string name, string? filePath, bool isBundled, int componentCount)
     {
@@ -146,8 +199,38 @@ public partial class PdkInfoViewModel : ObservableObject
         FilePath = filePath;
         IsBundled = isBundled;
         ComponentCount = componentCount;
+        SubscribeToLanguageChanges();
     }
 
     public string DisplayText => $"{Name} ({ComponentCount} components)";
-    public string SourceBadge => IsBundled ? "📦 Bundled" : "📂 User";
+
+    /// <summary>Localized source badge with an emoji prefix; re-read on language switch.</summary>
+    public string SourceBadge => IsBundled
+        ? $"📦 {LocalizationService.Instance.Translate("Pdk.Bundled")}"
+        : $"📂 {LocalizationService.Instance.Translate("Pdk.User")}";
+
+    /// <summary>
+    /// Re-raises the localized badge properties when the UI language switches. The subscription
+    /// is weak: the handler holds only a <see cref="WeakReference{T}"/> to this VM and detaches
+    /// itself once the VM is collected, so unloading a PDK never leaks it into the process-wide
+    /// <see cref="LocalizationService.Instance"/> (PdkInfoViewModel has no Dispose lifecycle).
+    /// </summary>
+    private void SubscribeToLanguageChanges()
+    {
+        var weakSelf = new WeakReference<PdkInfoViewModel>(this);
+        PropertyChangedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            if (weakSelf.TryGetTarget(out var self))
+            {
+                self.OnPropertyChanged(nameof(SourceType));
+                self.OnPropertyChanged(nameof(SourceBadge));
+            }
+            else
+            {
+                LocalizationService.Instance.PropertyChanged -= handler;
+            }
+        };
+        LocalizationService.Instance.PropertyChanged += handler;
+    }
 }

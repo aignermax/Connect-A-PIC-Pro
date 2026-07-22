@@ -8,7 +8,7 @@ namespace CAP_Core.Routing.AStarPathfinder;
 /// Handles coordinate conversion between physical micrometers and grid cells,
 /// and tracks which cells are blocked by component obstacles.
 /// </summary>
-public class PathfindingGrid
+public partial class PathfindingGrid
 {
     /// <summary>
     /// Grid resolution in micrometers per cell.
@@ -209,23 +209,9 @@ public class PathfindingGrid
             }
             else if (segment is BendSegment bend)
             {
-                // Mark cells along arc - sample points along the arc
-                double startRad = bend.StartAngleDegrees * Math.PI / 180;
-                double sweepRad = bend.SweepAngleDegrees * Math.PI / 180;
-                int numSamples = Math.Max(10, (int)(Math.Abs(bend.SweepAngleDegrees) / 5));
-
-                for (int i = 0; i <= numSamples; i++)
+                // Mark cells along the arc, sampled by arc length so large radii stay solid
+                foreach (var (px, py) in ArcSampling.SamplePoints(bend, CellSizeMicrometers))
                 {
-                    double t = (double)i / numSamples;
-                    double angle = startRad + sweepRad * t;
-
-                    // Point on arc
-                    double sign = Math.Sign(bend.SweepAngleDegrees);
-                    if (sign == 0) sign = 1;
-
-                    double px = bend.Center.X + bend.RadiusMicrometers * Math.Cos(angle - Math.PI / 2 * sign);
-                    double py = bend.Center.Y + bend.RadiusMicrometers * Math.Sin(angle - Math.PI / 2 * sign);
-
                     MarkCircleAsCells(px, py, halfWidth, cells);
                 }
             }
@@ -499,6 +485,18 @@ public class PathfindingGrid
     }
 
     /// <summary>
+    /// Checks if a cell is blocked by a component or a frozen group path (cell states 1 and 3),
+    /// ignoring waveguide obstacles. Used to judge whether an existing route collides with
+    /// component geometry independently of which sibling routes are currently registered.
+    /// </summary>
+    public bool IsBlockedByComponent(int gridX, int gridY)
+    {
+        if (!IsInBounds(gridX, gridY)) return true;
+        byte state = _cells[gridX, gridY];
+        return state == 1 || state == 3;
+    }
+
+    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>
@@ -540,6 +538,7 @@ public class PathfindingGrid
         lock (_waveguideCellsLock)
         {
             _waveguideCells.Clear();
+            _waveguideEndpoints.Clear();
         }
         lock (_pinZoneLock)
         {
@@ -601,23 +600,9 @@ public class PathfindingGrid
             }
             else if (segment is BendSegment bend)
             {
-                // Mark cells along arc - sample points along the arc
-                double startRad = bend.StartAngleDegrees * Math.PI / 180;
-                double sweepRad = bend.SweepAngleDegrees * Math.PI / 180;
-                int numSamples = Math.Max(10, (int)(Math.Abs(bend.SweepAngleDegrees) / 5));
-
-                for (int i = 0; i <= numSamples; i++)
+                // Mark cells along the arc, sampled by arc length so large radii stay solid
+                foreach (var (px, py) in ArcSampling.SamplePoints(bend, CellSizeMicrometers))
                 {
-                    double t = (double)i / numSamples;
-                    double angle = startRad + sweepRad * t;
-
-                    // Point on arc (perpendicular to tangent direction)
-                    double sign = Math.Sign(bend.SweepAngleDegrees);
-                    if (sign == 0) sign = 1;
-
-                    double px = bend.Center.X + bend.RadiusMicrometers * Math.Cos(angle - Math.PI / 2 * sign);
-                    double py = bend.Center.Y + bend.RadiusMicrometers * Math.Sin(angle - Math.PI / 2 * sign);
-
                     MarkCircleAsCells(px, py, halfWidth, cells);
                 }
             }
@@ -635,6 +620,9 @@ public class PathfindingGrid
         lock (_waveguideCellsLock)
         {
             _waveguideCells[connectionId] = cells;
+            _waveguideEndpoints[connectionId] = (
+                (segmentList[0].StartPoint.X, segmentList[0].StartPoint.Y),
+                (segmentList[^1].EndPoint.X, segmentList[^1].EndPoint.Y));
         }
         OnWaveguideCellsAdded?.Invoke(cells);
     }
@@ -650,6 +638,7 @@ public class PathfindingGrid
             if (!_waveguideCells.TryGetValue(connectionId, out cells))
                 return;
             _waveguideCells.Remove(connectionId);
+            _waveguideEndpoints.Remove(connectionId);
         }
 
         foreach (var (gx, gy) in cells)
@@ -677,6 +666,46 @@ public class PathfindingGrid
             RemoveWaveguideObstacle(connectionId);
         }
         OnAllWaveguidesCleared?.Invoke();
+    }
+
+    /// <summary>
+    /// Checks whether a physical bounding box (micrometers) is free for placing a
+    /// crossing component: no component or frozen-path cells inside, and any
+    /// waveguide cells must belong exclusively to the allowed connections (the two
+    /// nets being crossed). Used by adaptive crossing insertion.
+    /// </summary>
+    /// <param name="minX">Left edge of the box in micrometers.</param>
+    /// <param name="minY">Top edge of the box in micrometers.</param>
+    /// <param name="maxX">Right edge of the box in micrometers.</param>
+    /// <param name="maxY">Bottom edge of the box in micrometers.</param>
+    /// <param name="allowedConnectionIds">Connection IDs whose waveguide cells may occupy the box.</param>
+    public bool IsAreaClearForCrossing(
+        double minX, double minY, double maxX, double maxY, ISet<Guid> allowedConnectionIds)
+    {
+        var (gx1, gy1) = PhysicalToGrid(minX, minY);
+        var (gx2, gy2) = PhysicalToGrid(maxX, maxY);
+
+        HashSet<(int, int)> allowedCells = new();
+        lock (_waveguideCellsLock)
+        {
+            foreach (var id in allowedConnectionIds)
+            {
+                if (_waveguideCells.TryGetValue(id, out var cells))
+                    allowedCells.UnionWith(cells);
+            }
+        }
+
+        for (int gx = gx1; gx <= gx2; gx++)
+        {
+            for (int gy = gy1; gy <= gy2; gy++)
+            {
+                byte state = GetCellState(gx, gy);
+                if (state == 0) continue;
+                if (state != 2) return false; // component or frozen path
+                if (!allowedCells.Contains((gx, gy))) return false; // third-party waveguide
+            }
+        }
+        return true;
     }
 
     /// <summary>

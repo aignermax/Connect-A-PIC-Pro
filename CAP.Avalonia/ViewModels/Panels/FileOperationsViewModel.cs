@@ -4,7 +4,10 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Process;
+using CAP_Core.Routing;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -48,21 +51,59 @@ public partial class FileOperationsViewModel : ObservableObject
     private DesignMetadata? _loadedMetadata;
 
     /// <summary>
+    /// Names of components whose pin calibration changed since the loaded design was
+    /// saved (a cached route docked against the pin's current angle and was discarded).
+    /// Collected during connection load, reported once per component afterwards
+    /// (round-5 review [2] — e.g. the DC-Halfring port-angle correction).
+    /// </summary>
+    private readonly HashSet<string> _pinCalibrationMigratedComponents = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Per-component S-matrix overrides loaded from the PIR section of the .lun file,
     /// or added via the S-parameter import feature. Survives save-over-reload cycles.
     /// Keyed by component identifier string; values are the stored S-matrices.
     /// </summary>
     public Dictionary<string, ComponentSMatrixData> StoredSMatrices { get; } = new();
 
-    /// <summary>
-    /// Per-instance Nazca function parameter overrides. Keyed by component Identifier;
-    /// values hold the override and the original template values for reset.
-    /// Serialised to/from the .lun file's <c>NazcaOverrides</c> section.
-    /// </summary>
-    public Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride> StoredNazcaOverrides { get; } = new();
-
     [ObservableProperty]
     private bool _hasUnsavedChanges;
+
+    /// <summary>
+    /// The fabrication process this design is currently locked to (issue #570).
+    /// Null means no components have been placed yet. Set via <see cref="SetActiveProcess"/>
+    /// (from the New-Design dialog or the process picker), restored on load, or migrated
+    /// from a legacy file's placed-component PDK sources.
+    /// </summary>
+    [ObservableProperty]
+    private ActiveProcessSelection? _activeProcess;
+
+    /// <summary>
+    /// Supplies the current set of installable/loaded process groups. Wired by DI/MainViewModel
+    /// to the live PDK catalog; used to migrate legacy files that predate single-process support.
+    /// </summary>
+    public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the process-derived metal routing parameters (trace width, GDS layer,
+    /// crossing policy) for electrical connections at export time (issue #682). Wired by
+    /// MainViewModel to the active process' PDK definitions; null falls back to
+    /// <see cref="CAP_Core.Routing.MetalRouting.MetalRoutingSpec.Default"/>.
+    /// </summary>
+    public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? MetalRoutingSpecProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
+    /// Wired by DI/MainViewModel; passed to <see cref="ActiveProcessResolver.Migrate"/> so
+    /// analyzer-only tool PDKs never count toward a legacy design's process attribution
+    /// (issue #570 final review).
+    /// </summary>
+    public Func<IReadOnlyCollection<string>>? ProcessAgnosticPdkNamesProvider { get; set; }
+
+    /// <summary>
+    /// Callback invoked when loading a legacy file requires falling back to Playground
+    /// because its components could not be attributed to a single installed process.
+    /// </summary>
+    public Action<string>? OnProcessMigrationWarning { get; set; }
 
     /// <summary>
     /// ViewModel for GDS export functionality.
@@ -118,6 +159,13 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Func<Type?, Task>? ShowSettingsWindow { get; set; }
 
+    /// <summary>
+    /// Launches the gdsfactory export flow. Wired by <see cref="MainViewModel"/>; invoked when
+    /// the user, prompted about gdsfactory-native components in a Nazca export, chooses to use
+    /// the gdsfactory export instead. Null in headless contexts.
+    /// </summary>
+    public Func<Task>? RequestGdsFactoryExport { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -147,6 +195,8 @@ public partial class FileOperationsViewModel : ObservableObject
         // Track changes to mark project as unsaved
         _canvas.Components.CollectionChanged += (s, e) => HasUnsavedChanges = true;
         _canvas.Connections.CollectionChanged += (s, e) => HasUnsavedChanges = true;
+        // The analysis-output designation (#754) is part of the design file too.
+        _canvas.AnalysisOutput.PropertyChanged += (s, e) => HasUnsavedChanges = true;
 
         // Apply any stored S-matrix override the moment a component lands
         // on the canvas. Without this, the override only takes effect after
@@ -169,9 +219,10 @@ public partial class FileOperationsViewModel : ObservableObject
             .ToList();
         if (addedComponents.Count == 0) return;
 
-        // Reuse ApplyAll with a single-component view so the identifier /
-        // template-key lookup logic stays in one place. Re-applying the
-        // same matrix to an already-up-to-date component is a no-op.
+        // Precedence per-instance > user-global > template: user-global first, project-local
+        // per-instance LAST so they win the last-write-per-wavelength application.
+        ApplyUserGlobalOverrides(addedComponents);
+
         if (StoredSMatrices.Count > 0)
         {
             Services.SMatrixOverrideApplicator.ApplyAll(
@@ -182,16 +233,12 @@ public partial class FileOperationsViewModel : ObservableObject
                 errorConsole: _errorConsole,
                 keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate);
         }
-
-        ApplyUserGlobalOverrides(addedComponents);
-        ApplyAllNazcaOverrides(addedComponents);
     }
 
     /// <summary>
-    /// Applies the user-global PDK template S-matrix overrides to a set of
-    /// components. Project-local instance overrides (in <see cref="StoredSMatrices"/>)
-    /// take precedence and are intentionally applied first; this fills the
-    /// gap for components that don't have a project-local override.
+    /// Applies the user-global PDK template S-matrix overrides. Project-local instance
+    /// overrides take precedence and are intentionally applied AFTER these — application is
+    /// last-write-wins per wavelength.
     /// </summary>
     private void ApplyUserGlobalOverrides(IEnumerable<Component> components)
     {
@@ -216,6 +263,23 @@ public partial class FileOperationsViewModel : ObservableObject
     public void ReapplyTemplateOverrides()
     {
         ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
+    }
+
+    /// <summary>
+    /// Sets the active process this design is locked to (issue #570), e.g. from the
+    /// New-Design dialog or a process-picker action.
+    /// </summary>
+    /// <param name="selection">The process to lock the design to (or Playground).</param>
+    /// <param name="markDirty">
+    /// False for the startup / New-Design picker: choosing the baseline process of a
+    /// pristine empty design is not an unsaved change, and marking it dirty made every
+    /// fresh launch answer a spurious "Save changes?" prompt.
+    /// </param>
+    public void SetActiveProcess(ActiveProcessSelection? selection, bool markDirty = true)
+    {
+        ActiveProcess = selection;
+        if (markDirty)
+            HasUnsavedChanges = true;
     }
 
     [RelayCommand]
@@ -298,9 +362,13 @@ public partial class FileOperationsViewModel : ObservableObject
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
                         IsLocked = c.Connection.IsLocked ? true : null,
-                        TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
-                        IsTargetLengthEnabled = c.Connection.IsTargetLengthEnabled ? true : null,
-                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null
+                        RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
+                        WidthMicrometers = c.Connection.WidthMicrometers,
+                        BendRadiusMicrometers = c.Connection.BendRadiusMicrometers,
+                        IsRouteFrozen = c.Connection.IsRouteFrozen ? true : null,
+                        BendRadiusOverrides = c.Connection.BendRadiusOverrides.Count > 0
+                            ? new Dictionary<int, double>(c.Connection.BendRadiusOverrides)
+                            : null
                     };
                 }).ToList()
             };
@@ -329,10 +397,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (swept.Count > 0)
                     designData.SMatrices = swept;
             }
-            if (StoredNazcaOverrides.Count > 0)
-                designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
+            designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
+            // Persist the designated analysis-output coupler (#754) by its Identifier —
+            // the runtime Component.Id is regenerated on every load.
+            designData.AnalysisOutputCoupler = _canvas.AnalysisOutput.CouplerId is Guid outputId
+                ? componentsList.FirstOrDefault(c => c.Component.Id == outputId)?.Component.Identifier
+                : null;
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -369,6 +441,7 @@ public partial class FileOperationsViewModel : ObservableObject
             SliderValue = c.HasSliders ? c.SliderValue : null,
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
+            LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
             IsLocked = c.Component.IsLocked ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
@@ -388,7 +461,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// fallback lookup in <see cref="Services.SMatrixOverrideApplicator.ApplyAll"/> so PDK-template
     /// overrides reach every instance of the template.
     /// </summary>
-    private string? ResolveTemplateKey(Component component)
+    public string? ResolveTemplateKey(Component component)
     {
         var pdkSource = FindTemplatePdkSource(component);
         if (pdkSource == null) return null;
@@ -403,9 +476,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// raw-code override (if any) through <see cref="Services.ComponentGeometryKey.For"/>.
     /// </summary>
     private string ResolveGeometryKey(Component component) =>
-        CAP.Avalonia.Services.ComponentGeometryKey.For(
-            component,
-            c => StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null);
+        CAP.Avalonia.Services.ComponentGeometryKey.For(component);
 
     /// <summary>
     /// Returns true when the given override-store key (shape
@@ -431,20 +502,8 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Finds the PDK source for a component by matching its NazcaFunctionName against the library.
     /// Returns null if no match is found.
     /// </summary>
-    private string? FindTemplatePdkSource(Component component)
-    {
-        var nazcaFunc = component.NazcaFunctionName;
-        if (string.IsNullOrEmpty(nazcaFunc))
-            return null;
-
-        var match = _componentLibrary.FirstOrDefault(t =>
-        {
-            var templateFunc = t.NazcaFunctionName
-                ?? $"nazca_{t.Name.ToLower().Replace(" ", "_")}";
-            return templateFunc == nazcaFunc;
-        });
-        return match?.PdkSource;
-    }
+    private string? FindTemplatePdkSource(Component component) =>
+        ComponentPdkSourceResolver.Resolve(component, _componentLibrary);
 
     /// <summary>
     /// Recursively serializes a ComponentGroup and all its nested child groups.
@@ -710,6 +769,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.AllPins.Clear();
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
+                _pinCalibrationMigratedComponents.Clear();
 
                 // Load standalone components
                 foreach (var compData in designData.Components)
@@ -729,6 +789,9 @@ public partial class FileOperationsViewModel : ObservableObject
                 {
                     LoadConnectionFromData(connData);
                 }
+
+                // Pin-calibration migration: report discarded stale routes and re-route them.
+                ReportPinCalibrationMigrations();
 
                 // Notify all connections about their paths for UI rendering
                 foreach (var conn in _canvas.Connections)
@@ -754,8 +817,37 @@ public partial class FileOperationsViewModel : ObservableObject
                         $"(width: {hasWidth}, height: {hasHeight}). Falling back to current canvas size.");
                 }
 
+                // Restore the designated analysis-output coupler (#754); files without
+                // the field (older versions) simply load with no designation.
+                RestoreAnalysisOutput(designData);
+
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
+
+                // Restore the active process (issue #570), or infer one for legacy files
+                // that predate single-process support from the placed components' PDKs.
+                var storedProcess = ActiveProcessResolver.FromData(designData.ActiveProcess);
+                if (storedProcess != null)
+                {
+                    // Re-anchor the stored snapshot to the installed catalog: compatible
+                    // PDKs installed since the save join the process, and a design whose
+                    // PDKs are missing warns instead of silently bricking the library.
+                    var installedCatalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    ActiveProcess = ActiveProcessResolver.Revalidate(
+                        storedProcess, installedCatalog, out var revalidationWarning);
+                    if (revalidationWarning != null)
+                        OnProcessMigrationWarning?.Invoke(revalidationWarning);
+                }
+                else
+                {
+                    var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    var pdkSources = designData.Components.Select(c => c.PdkSource)
+                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                                ?? Enumerable.Empty<string?>());
+                    ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
+                        ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
+                    if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
+                }
 
                 // Restore imported S-matrices from PIR section
                 StoredSMatrices.Clear();
@@ -788,11 +880,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         HasUnsavedChanges = true;
                     }
 
-                    // Apply per-instance overrides to live components so the
-                    // next simulation run picks up the stored S-matrices.
-                    // Falls back to "{pdkSource}::{templateName}" so PDK-template-scoped
-                    // overrides reach every instance of the template, not just renamed instances.
+                    // Precedence per-instance > user-global > template: user-global first,
+                    // project-local per-instance LAST (last-write-wins per wavelength).
                     var allComponents = _canvas.Components.Select(vm => vm.Component).ToList();
+                    ApplyUserGlobalOverrides(allComponents);
                     // Project load is the one place we hold the COMPLETE component set,
                     // so it is also the only place an orphan check is meaningful — let
                     // it surface genuinely unmatched overrides (renamed/removed).
@@ -804,7 +895,6 @@ public partial class FileOperationsViewModel : ObservableObject
                         errorConsole: _errorConsole,
                         keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate,
                         reportOrphans: true);
-                    ApplyUserGlobalOverrides(allComponents);
                 }
                 else
                 {
@@ -812,16 +902,6 @@ public partial class FileOperationsViewModel : ObservableObject
                     // user's PDK template edits show up in projects that never
                     // had any project-scoped overrides of their own.
                     ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
-                }
-
-                // Restore per-instance Nazca overrides and apply them to live components
-                StoredNazcaOverrides.Clear();
-                if (designData.NazcaOverrides != null)
-                {
-                    foreach (var kv in designData.NazcaOverrides)
-                        StoredNazcaOverrides[kv.Key] = kv.Value;
-
-                    ApplyAllNazcaOverrides(_canvas.Components.Select(vm => vm.Component));
                 }
 
                 _currentFilePath = filePath;
@@ -848,7 +928,16 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Exits group edit mode if active before clearing the canvas.
     /// </summary>
     [RelayCommand]
-    private async Task NewProject()
+    private async Task NewProject() => await TryNewProjectAsync();
+
+    /// <summary>
+    /// Command body of File → New, returning whether the new project was actually
+    /// created. False means the user cancelled (save prompt or save dialog) and the
+    /// current design is untouched — callers such as the process picker must NOT
+    /// proceed in that case. An empty canvas is no substitute for this signal: the
+    /// canvas can be empty while the operation was still cancelled.
+    /// </summary>
+    public async Task<bool> TryNewProjectAsync()
     {
         // Check if there are unsaved changes
         if (HasUnsavedChanges && MessageBoxService != null)
@@ -865,13 +954,13 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (HasUnsavedChanges)
                 {
                     // User cancelled the save dialog, so cancel new project
-                    return;
+                    return false;
                 }
             }
             else if (result == SavePromptResult.Cancel)
             {
                 // User cancelled, do nothing
-                return;
+                return false;
             }
             // DontSave: continue to clear
         }
@@ -892,6 +981,7 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+        return true;
     }
 
     /// <summary>
@@ -909,59 +999,36 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.Connections.Clear();
         _canvas.AllPins.Clear();
         _canvas.ConnectionManager.Clear();
+        _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
         StoredSMatrices.Clear();
-        StoredNazcaOverrides.Clear();
     }
 
     /// <summary>
-    /// Applies any stored per-instance Nazca overrides to the given components.
-    /// Called on project load and when a new component is added to the canvas.
+    /// Restores the analysis-output designation (#754) from a loaded design file,
+    /// re-anchoring the stored component Identifier to the freshly created component's
+    /// runtime id. A stale reference (component renamed/removed outside the app) is
+    /// cleared with a warning instead of silently pinning a wrong output.
     /// </summary>
-    private void ApplyAllNazcaOverrides(IEnumerable<Component> components)
+    private void RestoreAnalysisOutput(DesignFileData designData)
     {
-        if (StoredNazcaOverrides.Count == 0)
+        if (designData.AnalysisOutputCoupler == null)
+        {
+            _canvas.AnalysisOutput.Clear();
             return;
-
-        var pinChangedComponents = new List<Component>();
-        foreach (var component in components)
-        {
-            if (StoredNazcaOverrides.TryGetValue(component.Identifier, out var nazcaOverride))
-            {
-                component.NazcaFunctionName = nazcaOverride.FunctionName ?? component.NazcaFunctionName;
-                component.NazcaFunctionParameters = nazcaOverride.FunctionParameters ?? component.NazcaFunctionParameters;
-                if (nazcaOverride.ModuleName != null)
-                    component.NazcaModuleName = nazcaOverride.ModuleName;
-
-                // Issue #556: a raw-code override recomputes the component's size.
-                // Restore the persisted bbox-derived dimensions so the canvas thumbnail
-                // and layout reflect the edited geometry on load.
-                if (nazcaOverride.OverrideWidthMicrometers is { } w)
-                    component.WidthMicrometers = w;
-                if (nazcaOverride.OverrideHeightMicrometers is { } h)
-                    component.HeightMicrometers = h;
-
-                // Issue #561: a raw-code override may also redefine the component's ports.
-                // Restore the persisted override pins so in-app connections and export use
-                // the correct port layout after project load.
-                if (nazcaOverride.OverridePins?.Count > 0)
-                {
-                    OverridePinMapper.ApplyPinsToComponent(component, nazcaOverride.OverridePins);
-                    pinChangedComponents.Add(component);
-                }
-            }
         }
 
-        // Connections (and the canvas pin view-models) were created against the
-        // template pins BEFORE the override replaced them, so they hold stale pin
-        // objects — the GDS export would then reference pins the override cell does
-        // not define. Re-anchor them onto the same-named new pins, drop the rest.
-        foreach (var component in pinChangedComponents)
+        var coupler = _canvas.Components
+            .FirstOrDefault(c => c.Component.Identifier == designData.AnalysisOutputCoupler);
+        if (coupler != null)
         {
-            var warnings = _canvas.OnComponentPinsChanged(component);
-            foreach (var warning in warnings)
-                _errorConsole?.LogWarning(warning);
+            _canvas.AnalysisOutput.Designate(coupler.Component.Id);
+            return;
         }
+
+        _canvas.AnalysisOutput.Clear();
+        _errorConsole?.LogWarning(
+            $"Designated analysis output '{designData.AnalysisOutputCoupler}' was not found in the design — designation cleared.");
     }
 
     /// <summary>
@@ -1021,6 +1088,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.WavelengthNm = compData.LaserWavelengthNm.Value;
             if (compData.LaserPower.HasValue)
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
+            if (compData.LaserEnabled.HasValue)
+                vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
         }
 
         // Restore lock state
@@ -1226,6 +1295,21 @@ public partial class FileOperationsViewModel : ObservableObject
         var cachedPath = PathSegmentConverter.ToRoutedPath(
             connData.CachedSegments, connData.IsBlockedFallback ?? false);
 
+        // Pin-calibration migration (round-5 review [2]): when a PDK release corrected a
+        // component's pin ANGLES (positions unchanged), the saved geometry still touches
+        // the pins, so the incremental router would keep it — visibly docking against the
+        // port direction and kinking into the component on GDS export. Discard the stale
+        // geometry (the post-load pass re-routes) and drop the frozen state with it.
+        bool pinCalibrationChanged = false;
+        if (cachedPath != null && cachedPath.IsValid)
+        {
+            var (startOk, endOk) = CachedRouteValidator.CheckPinDirections(startPin, endPin, cachedPath);
+            if (!startOk) _pinCalibrationMigratedComponents.Add(startComp.Component.Name);
+            if (!endOk) _pinCalibrationMigratedComponents.Add(endComp.Component.Name);
+            pinCalibrationChanged = !startOk || !endOk;
+            if (pinCalibrationChanged) cachedPath = null;
+        }
+
         WaveguideConnectionViewModel? connVm;
 
         if (cachedPath != null && cachedPath.IsValid)
@@ -1243,16 +1327,95 @@ public partial class FileOperationsViewModel : ObservableObject
             connVm.Connection.IsLocked = true;
         }
 
-        // Restore target length configuration
+        // Restore routing style / interconnect settings / freeze state (issue #574)
         if (connVm != null)
+            RestoreRoutingSettings(connVm.Connection, connData, keepFrozenGeometry: !pinCalibrationChanged);
+    }
+
+    /// <summary>
+    /// Logs one localized hint per component whose pin calibration changed since the
+    /// design was saved and re-routes the affected — now path-less — connections.
+    /// </summary>
+    private void ReportPinCalibrationMigrations()
+    {
+        if (_pinCalibrationMigratedComponents.Count == 0)
+            return;
+
+        foreach (var name in _pinCalibrationMigratedComponents.OrderBy(n => n, StringComparer.Ordinal))
         {
-            if (connData.TargetLengthMicrometers.HasValue)
-                connVm.Connection.TargetLengthMicrometers = connData.TargetLengthMicrometers.Value;
-            if (connData.IsTargetLengthEnabled == true)
-                connVm.Connection.IsTargetLengthEnabled = true;
-            if (connData.LengthToleranceMicrometers.HasValue)
-                connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers.Value;
+            _errorConsole?.LogWarning(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                Services.Localization.LocalizationService.Instance.Translate("Load.PinCalibrationChanged"),
+                name));
         }
+        _pinCalibrationMigratedComponents.Clear();
+        _ = _canvas.RecalculateRoutesAsync();
+    }
+
+    /// <summary>
+    /// Restores per-connection routing style, width/radius and freeze state from saved data.
+    /// <paramref name="keepFrozenGeometry"/> is false when the cached geometry was
+    /// discarded by the pin-calibration migration — the freeze flag and the per-bend
+    /// overrides describe exactly that stale geometry and must not survive it.
+    /// </summary>
+    private static void RestoreRoutingSettings(
+        WaveguideConnection connection, ConnectionData connData, bool keepFrozenGeometry = true)
+    {
+        // Legacy styles removed from WaveguideType: "Euler" was drawn as the same generous
+        // arc as Bend (migrate to Bend); "Straight" (and any other unknown name) falls back
+        // to Auto by simply not parsing — the connection keeps its default Type.
+        if (connData.RoutingStyle == "Euler")
+            connection.Type = WaveguideType.Bend;
+        else if (connData.RoutingStyle != null &&
+            Enum.TryParse<WaveguideType>(connData.RoutingStyle, ignoreCase: false, out var style) &&
+            Enum.IsDefined(style))
+            connection.Type = style;
+        if (connData.WidthMicrometers.HasValue)
+            connection.WidthMicrometers = connData.WidthMicrometers.Value;
+        if (connData.BendRadiusMicrometers.HasValue)
+            connection.BendRadiusMicrometers = connData.BendRadiusMicrometers.Value;
+        if (keepFrozenGeometry && connData.IsRouteFrozen == true)
+            connection.IsRouteFrozen = true;
+        if (keepFrozenGeometry && connData.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in connData.BendRadiusOverrides)
+                connection.BendRadiusOverrides[bendIndex] = radius;
+        }
+    }
+
+    /// <summary>
+    /// When the design contains gdsfactory-native components (a Nazca script can't express
+    /// them), asks the user whether to export to Nazca anyway (omitting them) or switch to the
+    /// gdsfactory export. Returns true to proceed with the Nazca export, false to cancel.
+    /// A pure Nazca design (or a headless run with no message box) proceeds without prompting.
+    /// </summary>
+    private async Task<bool> ConfirmNazcaExportDropsGdsFactoryComponentsAsync()
+    {
+        var gdsFactory = CAP.Avalonia.Services.GdsFactoryExport.NazcaExportGuard
+            .CollectGdsFactoryNativeComponents(_canvas);
+        if (gdsFactory.Count == 0 || MessageBoxService == null)
+            return true;
+
+        var message =
+            $"{gdsFactory.Count} component(s) in this design are gdsfactory-native (e.g. CornerStone "
+            + "SiN) and cannot be written to a Nazca script — they would be omitted from the export. "
+            + "Use the gdsfactory export to include them.\n\nExport to Nazca anyway?";
+        const int switchToGdsFactoryIndex = 0;
+        const int exportAnywayIndex = 1;
+        var choice = await MessageBoxService.ShowChoicePromptAsync(
+            message, "gdsfactory components will be omitted",
+            new[] { "Use gdsfactory export instead", "Export to Nazca anyway" });
+
+        if (choice == exportAnywayIndex)
+            return true;
+
+        // "Use gdsfactory export instead" — cancel this Nazca export and open the gdsfactory
+        // export flow so the user isn't left with nothing happening. A dismissed dialog just cancels.
+        if (choice == switchToGdsFactoryIndex && RequestGdsFactoryExport != null)
+            await RequestGdsFactoryExport();
+        else
+            UpdateStatus?.Invoke("Nazca export cancelled — use the gdsfactory export for this design.");
+        return false;
     }
 
     [RelayCommand]
@@ -1269,6 +1432,12 @@ public partial class FileOperationsViewModel : ObservableObject
             UpdateStatus?.Invoke("Nothing to export - add some components first");
             return;
         }
+
+        // A gdsfactory-native design (e.g. CornerStone SiN) cannot be expressed in a Nazca
+        // script — those components would be silently omitted. Make the user choose consciously:
+        // continue anyway, or switch to the gdsfactory export that can include them (#570).
+        if (!await ConfirmNazcaExportDropsGdsFactoryComponentsAsync())
+            return;
 
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to Nazca Python",
@@ -1293,21 +1462,10 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script
-                var nazcaCode = _nazcaExporter.Export(_canvas, overrides: StoredNazcaOverrides);
+                // Export Python script (metal spec: process-derived electrical routing, #682)
+                var nazcaCode = _nazcaExporter.Export(
+                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
-
-                // Warn if any instance has a gdsfactory-backend override: the Nazca export
-                // can't run gdsfactory code, so those instances use their PDK cell here.
-                var gfOverrides = StoredNazcaOverrides
-                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.RawCode)
-                                 && kv.Value.Backend == CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory)
-                    .Select(kv => kv.Key).ToList();
-                if (gfOverrides.Count > 0)
-                    _errorConsole?.LogWarning(
-                        $"Nazca export: {gfOverrides.Count} instance(s) have a gdsfactory override "
-                        + $"not applied here (PDK geometry used instead): {string.Join(", ", gfOverrides)}. "
-                        + "Use the gdsfactory export to honour them.");
 
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.

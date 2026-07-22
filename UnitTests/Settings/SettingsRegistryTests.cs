@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Settings;
 using Shouldly;
@@ -82,7 +83,7 @@ public class SettingsRegistryTests
     public void GridSnapSettingsPage_ContractIsSatisfied()
     {
         var canvas = new DesignCanvasViewModel();
-        ISettingsPage page = new GridSnapSettingsPage(canvas);
+        ISettingsPage page = new GridSnapSettingsPage(canvas, LocalizationService.Instance);
 
         page.Title.ShouldNotBeNullOrEmpty();
         page.Icon.ShouldNotBeNullOrEmpty();
@@ -97,7 +98,7 @@ public class SettingsRegistryTests
         canvas.GridSnap.IsEnabled = true;
         canvas.GridSnap.GridSizeMicrometers = 25.0;
 
-        var page = new GridSnapSettingsPage(canvas);
+        var page = new GridSnapSettingsPage(canvas, LocalizationService.Instance);
         var vm = (GridSnapSettingsViewModel)page.ViewModel;
 
         vm.GridSnap.IsEnabled.ShouldBeTrue();
@@ -108,7 +109,7 @@ public class SettingsRegistryTests
     public void GridSnapSettingsPage_ViewModelChange_AffectsCanvas()
     {
         var canvas = new DesignCanvasViewModel();
-        var page = new GridSnapSettingsPage(canvas);
+        var page = new GridSnapSettingsPage(canvas, LocalizationService.Instance);
         var vm = (GridSnapSettingsViewModel)page.ViewModel;
 
         // Act: change via settings ViewModel
@@ -127,7 +128,7 @@ public class SettingsRegistryTests
         // regression in the AlignmentGuide wiring (e.g. a local copy instead
         // of the canvas reference) would otherwise slip through.
         var canvas = new DesignCanvasViewModel();
-        var page = new GridSnapSettingsPage(canvas);
+        var page = new GridSnapSettingsPage(canvas, LocalizationService.Instance);
         var vm = (GridSnapSettingsViewModel)page.ViewModel;
 
         vm.AlignmentGuide.IsEnabled = true;
@@ -140,14 +141,29 @@ public class SettingsRegistryTests
     // -----------------------------------------------------------------------
 
     [Fact]
-    public void GeneralSettingsPage_StableContract()
+    public void RoutingSettingsPage_StableContract()
     {
-        ISettingsPage page = new GeneralSettingsPage();
+        ISettingsPage page = new RoutingSettingsPage(new DesignCanvasViewModel(), LocalizationService.Instance);
 
-        page.Title.ShouldBe("General");
-        page.Icon.ShouldBe("⚙");
-        page.Category.ShouldBeNull();
-        page.ViewModel.ShouldBeOfType<GeneralSettingsViewModel>();
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.Routing"));
+        page.Icon.ShouldBe("⤢");
+        page.Category.ShouldBe("Canvas");
+        page.ViewModel.ShouldBeOfType<RoutingSettingsViewModel>();
+    }
+
+    [Fact]
+    public void RoutingSettingsPage_DiagonalToggle_AffectsCanvasAndRouter()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var page = new RoutingSettingsPage(canvas, LocalizationService.Instance);
+        var vm = (RoutingSettingsViewModel)page.ViewModel;
+
+        canvas.UseDiagonalRouting.ShouldBeFalse("diagonal routing is opt-in");
+        canvas.Router.UseDiagonalRouting.ShouldBeFalse();
+
+        vm.Canvas.UseDiagonalRouting = true;
+
+        canvas.Router.UseDiagonalRouting.ShouldBeTrue();
     }
 
     [Fact]
@@ -155,9 +171,9 @@ public class SettingsRegistryTests
     {
         // Guards the display string — a refactor silently turning
         // "Grid & Alignment" into "Grid" would otherwise ship.
-        ISettingsPage page = new GridSnapSettingsPage(new DesignCanvasViewModel());
+        ISettingsPage page = new GridSnapSettingsPage(new DesignCanvasViewModel(), LocalizationService.Instance);
 
-        page.Title.ShouldBe("Grid & Alignment");
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.GridAlignment"));
         page.Icon.ShouldBe("⊞");
         page.Category.ShouldBe("Canvas");
     }
@@ -168,9 +184,9 @@ public class SettingsRegistryTests
         // The page reads only its own Title/Icon/Category — the VM is passed
         // through untouched — so a null VM is fine for verifying the contract
         // and avoids pulling HttpClient / UpdateChecker into the test rig.
-        ISettingsPage page = new UpdateSettingsPage(null!);
+        ISettingsPage page = new UpdateSettingsPage(null!, LocalizationService.Instance);
 
-        page.Title.ShouldBe("Software Updates");
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.SoftwareUpdates"));
         page.Icon.ShouldBe("🔄");
         page.Category.ShouldBeNull();
     }
@@ -180,9 +196,9 @@ public class SettingsRegistryTests
     {
         // Renamed from "Python Environment" — the page now also hosts the
         // GenerateGdsEnabled toggle, so the broader "GDS Export" title fits.
-        ISettingsPage page = new GdsExportSettingsPage(null!);
+        ISettingsPage page = new GdsExportSettingsPage(null!, LocalizationService.Instance);
 
-        page.Title.ShouldBe("GDS Export");
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.GdsExport"));
         page.Icon.ShouldBe("🐍");
         page.Category.ShouldBe("Export");
     }
@@ -190,9 +206,9 @@ public class SettingsRegistryTests
     [Fact]
     public void PythonEnvironmentsSettingsPage_StableContract()
     {
-        ISettingsPage page = new PythonEnvironmentsSettingsPage(null!);
+        ISettingsPage page = new PythonEnvironmentsSettingsPage(null!, LocalizationService.Instance);
 
-        page.Title.ShouldBe("Python Environments");
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.PythonEnvironments"));
         page.Icon.ShouldBe("📦");
         page.Category.ShouldBe("Export");
     }
@@ -200,9 +216,9 @@ public class SettingsRegistryTests
     [Fact]
     public void AiAssistantSettingsPage_StableContract()
     {
-        ISettingsPage page = new AiAssistantSettingsPage(null!);
+        ISettingsPage page = new AiAssistantSettingsPage(null!, LocalizationService.Instance);
 
-        page.Title.ShouldBe("AI Assistant");
+        page.Title.ShouldBe(LocalizationService.Instance.Translate("Settings.Section.AiAssistant"));
         page.Icon.ShouldBe("🤖");
         page.Category.ShouldBeNull();
     }

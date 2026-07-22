@@ -1,0 +1,157 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.EyeHelpFlyout"
+             MaxWidth="420">
+
+    <!-- Plain-language explainer for the Eye/BER tab (companion to
+         TransientHelpFlyout, same "?"-button pattern): a looping animation
+         shows how bit-length slices of the waveform are stacked into an eye,
+         plus non-physicist descriptions of Q factor, BER and the threshold. -->
+
+    <UserControl.Styles>
+        <!-- The four eye trajectories fade in one after another (stacking),
+             then the "eye opening" marker pulses, then the loop restarts. -->
+        <Style Selector="Path.eyeTrace1">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="10%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace2">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="18%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="28%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace3">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="36%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="46%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Path.eyeTrace4">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="54%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="64%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="0.9"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Ellipse.eyeOpening">
+            <Style.Animations>
+                <Animation Duration="0:0:4" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="70%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                    <KeyFrame Cue="80%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                    <KeyFrame Cue="92%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                    <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer MaxHeight="440">
+        <StackPanel Margin="12" Spacing="8">
+
+            <TextBlock Text="{loc:Localize EyeHelp.Title}"
+                       FontWeight="Bold" FontSize="13" Foreground="White"/>
+
+            <!-- Looping animation: waveform slices stack up into an eye. -->
+            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                    CornerRadius="4" Padding="4">
+                <Canvas Width="380" Height="90">
+                    <!-- Left: the data waveform, cut into bit-length slices. -->
+                    <Polyline Points="10,25 40,25 44,65 74,65 78,25 108,25 112,65 142,65"
+                              Stroke="#81C784" StrokeThickness="2"/>
+                    <Line StartPoint="42,15" EndPoint="42,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <Line StartPoint="76,15" EndPoint="76,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <Line StartPoint="110,15" EndPoint="110,75" Stroke="#666666"
+                          StrokeThickness="1" StrokeDashArray="2,2"/>
+                    <TextBlock Canvas.Left="14" Canvas.Top="76" Text="{loc:Localize EyeHelp.DiagramSignal}"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Arrow: slices get stacked -->
+                    <Line StartPoint="152,45" EndPoint="200,45" Stroke="#909090" StrokeThickness="2"/>
+                    <Polyline Points="192,39 202,45 192,51" Stroke="#909090" StrokeThickness="2"/>
+                    <TextBlock Canvas.Left="148" Canvas.Top="24" Text="{loc:Localize EyeHelp.DiagramStack}" FontSize="9" Foreground="Gray"/>
+                    <!-- Right: the eye forms from overlaid slices. -->
+                    <Path Classes="eyeTrace1" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,25 L 355,25"/>
+                    <Path Classes="eyeTrace2" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,65 L 355,65"/>
+                    <Path Classes="eyeTrace3" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,25 C 265,25 305,65 355,65"/>
+                    <Path Classes="eyeTrace4" Stroke="#4FC3F7" StrokeThickness="2" Opacity="0"
+                          Data="M 215,65 C 265,65 305,25 355,25"/>
+                    <Ellipse Classes="eyeOpening" Canvas.Left="265" Canvas.Top="33"
+                             Width="40" Height="24" Opacity="0"
+                             Stroke="#FFD54F" StrokeThickness="2" StrokeDashArray="3,2"/>
+                    <TextBlock Canvas.Left="248" Canvas.Top="76" Text="{loc:Localize EyeHelp.DiagramEye}"
+                               FontSize="9" Foreground="Gray"/>
+                </Canvas>
+            </Border>
+
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.Intro}"/>
+
+            <TextBlock Text="{loc:Localize EyeHelp.WhyTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.WhyBody}"/>
+
+            <TextBlock Text="{loc:Localize EyeHelp.RunTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.RunBody1}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize EyeHelp.RunBody2}"/>
+
+            <TextBlock Text="{loc:Localize EyeHelp.ReadingTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <StackPanel Spacing="5">
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#4FC3F7" Text="{loc:Localize EyeHelp.QLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.QBody}"/>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FF8A65">BER</Run>
+                    <Run Text="{loc:Localize EyeHelp.BerBody}"/>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FFD54F" Text="{loc:Localize EyeHelp.ThresholdLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.ThresholdBody}"/>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#81C784" Text="{loc:Localize EyeHelp.EyeMetricsLabel}"/>
+                    <Run Text="{loc:Localize EyeHelp.EyeMetricsBody}"/>
+                </TextBlock>
+            </StackPanel>
+
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray" Margin="0,4,0,0">
+                Zooming: hold Ctrl (Cmd on macOS) and scroll over the plot to zoom;
+                plain scrolling moves the panel. Drag with the right mouse button to pan.
+            </TextBlock>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

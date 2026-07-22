@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
@@ -158,7 +159,9 @@ public static class GroupTemplateSerializer
             OffsetY = p.OffsetYMicrometers,
             AngleDegrees = p.AngleDegrees,
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
-            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty
+            LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
+            MatterType = p.MatterType,
+            Polarization = p.LogicalPin?.Polarization.ToString()
         }).ToList();
 
         // Serialize S-Matrices so child components keep their simulation data after reload.
@@ -192,6 +195,7 @@ public static class GroupTemplateSerializer
             NazcaFunctionName = comp.NazcaFunctionName,
             NazcaFunctionParameters = comp.NazcaFunctionParameters,
             NazcaModuleName = comp.NazcaModuleName,
+            GdsFactoryFunction = comp.GdsFactoryFunction,
             TypeNumber = comp.TypeNumber,
             PhysicalX = comp.PhysicalX,
             PhysicalY = comp.PhysicalY,
@@ -215,8 +219,12 @@ public static class GroupTemplateSerializer
             Pin? logicalPin = null;
             if (p.LogicalPinIdInFlow != Guid.Empty)
             {
-                logicalPin = new Pin(p.Name, 0, MatterType.Light, RectSide.Left,
-                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow);
+                PolarizationRules.TryParse(p.Polarization, out var polarization);
+                logicalPin = new Pin(p.Name, 0, p.MatterType, RectSide.Left,
+                    p.LogicalPinIdInFlow, p.LogicalPinIdOutFlow)
+                {
+                    Polarization = polarization
+                };
             }
 
             return new PhysicalPin
@@ -257,6 +265,7 @@ public static class GroupTemplateSerializer
             WidthMicrometers = dto.WidthMicrometers,
             HeightMicrometers = dto.HeightMicrometers,
             NazcaModuleName = dto.NazcaModuleName,
+            GdsFactoryFunction = dto.GdsFactoryFunction,
             HumanReadableName = dto.HumanReadableName
         };
     }
@@ -309,7 +318,13 @@ public static class GroupTemplateSerializer
             EndPinName = path.EndPin.Name,
             IsBlockedFallback = path.Path.IsBlockedFallback,
             IsInvalidGeometry = path.Path.IsInvalidGeometry,
-            Segments = segments
+            Segments = segments,
+            ConnectionType = path.ConnectionType.ToString(),
+            BendRadiusMicrometers = path.BendRadiusMicrometers,
+            WidthMicrometers = path.WidthMicrometers,
+            IsRouteFrozen = path.IsRouteFrozen,
+            PropagationLossDbPerCm = path.PropagationLossDbPerCm,
+            BendRadiusOverrides = new Dictionary<int, double>(path.BendRadiusOverrides)
         };
     }
 
@@ -359,13 +374,41 @@ public static class GroupTemplateSerializer
             }
         }
 
-        return new FrozenWaveguidePath
+        var frozenPath = new FrozenWaveguidePath
         {
             PathId = Guid.NewGuid(),
             Path = routedPath,
             StartPin = startPin,
             EndPin = endPin
         };
+        ApplyConnectionSettings(dto, frozenPath);
+        return frozenPath;
+    }
+
+    /// <summary>
+    /// Restores the per-connection routing settings from the DTO. Templates written
+    /// before these fields existed leave them null/absent and keep the model defaults
+    /// ("Auto" style); unknown style names also fall back to Auto.
+    /// </summary>
+    private static void ApplyConnectionSettings(FrozenPathDto dto, FrozenWaveguidePath frozenPath)
+    {
+        if (Enum.TryParse<WaveguideType>(dto.ConnectionType, out var connectionType)
+            && Enum.IsDefined(connectionType))
+        {
+            frozenPath.ConnectionType = connectionType;
+        }
+        if (dto.BendRadiusMicrometers is double bendRadius)
+            frozenPath.BendRadiusMicrometers = bendRadius;
+        if (dto.WidthMicrometers is double width)
+            frozenPath.WidthMicrometers = width;
+        frozenPath.IsRouteFrozen = dto.IsRouteFrozen;
+        if (dto.PropagationLossDbPerCm is double loss)
+            frozenPath.PropagationLossDbPerCm = loss;
+        if (dto.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in dto.BendRadiusOverrides)
+                frozenPath.BendRadiusOverrides[bendIndex] = radius;
+        }
     }
 
     /// <summary>
@@ -454,6 +497,13 @@ public class ChildComponentDto
     public string? NazcaFunctionName { get; set; }
     public string? NazcaFunctionParameters { get; set; }
     public string? NazcaModuleName { get; set; }
+
+    /// <summary>
+    /// gdsfactory factory name for gdsfactory-backend components (e.g. "cspdk.sin300.mmi1x2").
+    /// Persisted so a saved group template keeps its backend across reloads (#570/#661 review).
+    /// </summary>
+    public string? GdsFactoryFunction { get; set; }
+
     public int TypeNumber { get; set; }
     public double PhysicalX { get; set; }
     public double PhysicalY { get; set; }
@@ -482,6 +532,20 @@ public class PinDto
     public double AngleDegrees { get; set; }
     public Guid LogicalPinIdInFlow { get; set; }
     public Guid LogicalPinIdOutFlow { get; set; }
+
+    /// <summary>
+    /// Signal domain of the pin (optical vs. electrical). Persisted so a saved group template
+    /// keeps its electrical pins electrical on reload — without it every pin reverted to optical
+    /// and cross-kind connection guards were defeated (#519). Defaults to Light for older
+    /// templates that predate the field.
+    /// </summary>
+    public MatterType MatterType { get; set; } = MatterType.Light;
+
+    /// <summary>
+    /// Polarization kind of the logical pin ("TE", "TM", "Both").
+    /// Null in old prefab files — deserializes to the TE default.
+    /// </summary>
+    public string? Polarization { get; set; }
 }
 
 /// <summary>
@@ -523,6 +587,41 @@ public class FrozenPathDto
     public bool IsBlockedFallback { get; set; }
     public bool IsInvalidGeometry { get; set; }
     public List<SegmentDto> Segments { get; set; } = new();
+
+    /// <summary>
+    /// Routing style name of the original connection ("Auto", "Bend", "SBend", "Cobra").
+    /// Null in templates that predate settings persistence — loads as Auto.
+    /// </summary>
+    public string? ConnectionType { get; set; }
+
+    /// <summary>
+    /// Bend radius of the original connection in micrometers.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? BendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Waveguide width of the original connection in micrometers.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? WidthMicrometers { get; set; }
+
+    /// <summary>
+    /// Whether the original connection's route was frozen. Missing in old templates — false.
+    /// </summary>
+    public bool IsRouteFrozen { get; set; }
+
+    /// <summary>
+    /// Propagation loss of the original connection in dB/cm.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? PropagationLossDbPerCm { get; set; }
+
+    /// <summary>
+    /// Manual per-bend radius overrides keyed by bend index.
+    /// Null in old templates — loads empty.
+    /// </summary>
+    public Dictionary<int, double>? BendRadiusOverrides { get; set; }
 }
 
 /// <summary>

@@ -59,8 +59,16 @@ public class NazcaPackageInstaller
     }
 
     /// <summary>
-    /// Installs gdsfactory + ubcpdk (both on PyPI) into the given venv — the packages
-    /// needed to run the gdsfactory export (#581). Surfaces pip stderr on failure.
+    /// PyPI packages for the gdsfactory export environment: gdsfactory itself, ubcpdk
+    /// (SiEPIC cell mapping), and cspdk (CornerStone SiN — a gdsfactory-native bundled
+    /// PDK whose components import `cspdk.sin300` at export time, #570). The env exists
+    /// FOR the gdsfactory export, so everything that export can reference belongs in it.
+    /// </summary>
+    internal static readonly string[] GdsFactoryPackages = { "gdsfactory", "ubcpdk", "cspdk" };
+
+    /// <summary>
+    /// Installs the gdsfactory-export package set into the given venv — see
+    /// <see cref="GdsFactoryPackages"/>. Surfaces pip stderr on failure.
     /// </summary>
     /// <param name="uvPath">Absolute path to the uv binary.</param>
     /// <param name="venvPath">Root directory of the target virtual environment.</param>
@@ -72,10 +80,35 @@ public class NazcaPackageInstaller
         IProgress<string>? progress,
         CancellationToken ct = default)
     {
-        progress?.Report("Installing gdsfactory + ubcpdk (this can take a few minutes)...");
-        await RunUvPipInstall(uvPath, venvPath, "gdsfactory", progress, ct);
-        await RunUvPipInstall(uvPath, venvPath, "ubcpdk", progress, ct);
+        progress?.Report("Installing gdsfactory + PDKs (this can take a few minutes)...");
+        foreach (var package in GdsFactoryPackages)
+        {
+            progress?.Report($"Installing {package}...");
+            await RunUvPipInstall(uvPath, venvPath, package, progress, ct);
+        }
         progress?.Report("gdsfactory installed successfully.");
+    }
+
+    /// <summary>
+    /// Installs a single pip package spec into the given venv — used to auto-provision
+    /// a mode-solver backend on first use (e.g. "gdsfactory[femwell]", "EMpy", "tidy3d").
+    /// Surfaces pip/uv stderr on failure — no silent fallback.
+    /// </summary>
+    /// <param name="uvPath">Absolute path to the uv binary.</param>
+    /// <param name="venvPath">Root directory of the target virtual environment.</param>
+    /// <param name="packageSpec">A pip-installable package spec (may carry extras, e.g. "pkg[extra]").</param>
+    /// <param name="progress">Receives human-readable status updates.</param>
+    /// <param name="ct">Cancellation token.</param>
+    public async Task InstallPackageAsync(
+        string uvPath,
+        string venvPath,
+        string packageSpec,
+        IProgress<string>? progress,
+        CancellationToken ct = default)
+    {
+        progress?.Report($"Installing {packageSpec}...");
+        await RunUvPipInstall(uvPath, venvPath, packageSpec, progress, ct);
+        progress?.Report($"{packageSpec} installed successfully.");
     }
 
     // ── Private helpers ────────────────────────────────────────────────────

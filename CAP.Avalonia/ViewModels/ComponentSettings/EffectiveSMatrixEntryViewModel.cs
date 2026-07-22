@@ -21,9 +21,10 @@ public class EffectiveSMatrixEntryViewModel
 
     /// <summary>
     /// Source-of-truth tag — "PDK Default" when no override is in play for this
-    /// wavelength, "Override active" otherwise. The dialog wraps the row in a
-    /// faintly tinted background based on this tag so the visual difference is
-    /// obvious at a glance.
+    /// wavelength, "Override active" otherwise (with the override's provenance,
+    /// e.g. "Override active — FDTD Meep 2D", when known). The dialog wraps the
+    /// row in a faintly tinted background based on this tag so the visual
+    /// difference is obvious at a glance.
     /// </summary>
     public string SourceTag { get; }
 
@@ -44,17 +45,35 @@ public class EffectiveSMatrixEntryViewModel
     /// preview falls back to the empty string rather than throwing — the
     /// dialog should never crash because of an unusual S-matrix shape.
     /// </summary>
+    /// <param name="wavelengthNm">Wavelength of this row in nanometres.</param>
+    /// <param name="sMatrix">The S-matrix effective at this wavelength.</param>
+    /// <param name="pins">The component's logical pins, in display order.</param>
+    /// <param name="isOverridden">True when an override supplies this wavelength.</param>
+    /// <param name="overrideSourceNote">
+    /// Provenance of the active override (e.g. "FDTD Meep 2D"); shown in the tag
+    /// so the user can tell FDTD-computed rows from imported ones (#582).
+    /// </param>
     public EffectiveSMatrixEntryViewModel(
         int wavelengthNm,
         SMatrix sMatrix,
         IReadOnlyList<Pin> pins,
-        bool isOverridden)
+        bool isOverridden,
+        string? overrideSourceNote = null)
     {
         WavelengthLabel = $"{wavelengthNm} nm";
         Dimensions = $"{pins.Count} × {pins.Count}";
         IsOverridden = isOverridden;
-        SourceTag = isOverridden ? "Override active" : "PDK Default";
+        SourceTag = BuildSourceTag(isOverridden, overrideSourceNote);
         MagnitudePreview = BuildMagnitudePreview(sMatrix, pins);
+    }
+
+    private static string BuildSourceTag(bool isOverridden, string? overrideSourceNote)
+    {
+        if (!isOverridden)
+            return "PDK Default";
+        return string.IsNullOrWhiteSpace(overrideSourceNote)
+            ? "Override active"
+            : $"Override active — {overrideSourceNote}";
     }
 
     private static string BuildMagnitudePreview(SMatrix sMatrix, IReadOnlyList<Pin> pins)

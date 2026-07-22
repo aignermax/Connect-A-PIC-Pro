@@ -1,6 +1,7 @@
 using System.IO;
 using System.Linq;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using Moq;
@@ -15,6 +16,13 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class ProcessManagementViewModelTests
 {
+    /// <summary>Status messages are localized (issue #749); pin English so substring
+    /// assertions stay culture-independent regardless of the CI/dev OS language.</summary>
+    public ProcessManagementViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void Load_PopulatesCollectionsAndSetsHasProcess()
     {
@@ -99,5 +107,43 @@ public class ProcessManagementViewModelTests
         await vm.ImportFromPdkCommand.ExecuteAsync(null);
 
         vm.HasProcess.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void SetAvailablePresets_OnlyListsPdksWithAProcessBlock()
+    {
+        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>());
+        var withProcess = new PdkDraft { Name = "SiEPIC EBeam PDK", Process = new ProcessDefinition { Name = "SOI-220" } };
+        var withoutProcess = new PdkDraft { Name = "Analysis Tools", Process = null };
+
+        vm.SetAvailablePresets(new[] { withProcess, withoutProcess });
+
+        vm.AvailablePresets.ShouldContain(withProcess);
+        vm.AvailablePresets.ShouldNotContain(withoutProcess);
+    }
+
+    [Fact]
+    public void SelectingAPreset_LoadsItsProcessIntoTheEditor()
+    {
+        var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>());
+        var preset = new PdkDraft
+        {
+            Name = "CornerStone SiN 300nm",
+            Process = new ProcessDefinition
+            {
+                Name = "CornerStone SiN 300nm",
+                Layers = { new ProcessLayer { Name = "NITRIDE", Layer = 203 } },
+                Xsections = { new ProcessXsection { Name = "xs_nc", Kind = XsectionKind.Optical, WidthUm = 1.2 } },
+            },
+        };
+        vm.SetAvailablePresets(new[] { preset });
+
+        vm.SelectedPreset = preset;
+
+        vm.HasProcess.ShouldBeTrue();
+        vm.ProcessName.ShouldBe("CornerStone SiN 300nm");
+        vm.Layers.ShouldContain(l => l.Name == "NITRIDE");
+        vm.Xsections.ShouldContain(x => x.Name == "xs_nc");
+        vm.StatusText.ShouldContain("CornerStone SiN 300nm");
     }
 }

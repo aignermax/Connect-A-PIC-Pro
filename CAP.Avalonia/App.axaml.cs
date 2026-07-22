@@ -12,6 +12,13 @@ public partial class App : Application
 {
     public static IServiceProvider Services { get; private set; } = null!;
 
+    /// <summary>
+    /// Test seam (InternalsVisibleTo UnitTests): headless UI-flow tests run without
+    /// <see cref="OnFrameworkInitializationCompleted"/>, so they install their own provider here —
+    /// MainWindow's code-behind resolves optional collaborators via <see cref="Services"/>.
+    /// </summary>
+    internal static void OverrideServicesForTesting(IServiceProvider services) => Services = services;
+
     public override void Initialize()
     {
         AvaloniaXamlLoader.Load(this);
@@ -31,11 +38,15 @@ public partial class App : Application
         services.AddPythonEnvFeature();
         services.AddCoreServices();
         services.AddCanvasAndPanels();
+        services.AddCrossingInsertionFeature();
         services.AddSettingsFeature();
         services.AddPdkOffsetFeature();
+        services.AddPdkResolutionFeature();
         services.AddFdtdFeature();
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
+        services.AddAddCustomComponentFeature();
+        services.AddLocalizationFeature();
 
         services.AddSingleton<MainViewModel>();
     }
@@ -45,6 +56,16 @@ public partial class App : Application
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
+
+        // Error-console entries are bound to the UI, but simulations/renders log from
+        // worker threads — marshal every append through the UI dispatcher.
+        Services.GetRequiredService<CAP_Core.ErrorConsoleService>().PostToUiThread =
+            action => global::Avalonia.Threading.Dispatcher.UIThread.Post(action);
+
+        // Apply the persisted UI language (or auto-detect the OS display language when
+        // set to "system") before any window binds its localized strings (issue #744).
+        Services.GetRequiredService<Services.Localization.LocalizationService>()
+            .SetLanguage(Services.GetRequiredService<Services.UserPreferencesService>().GetUiLanguage());
 
         if (ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
         {

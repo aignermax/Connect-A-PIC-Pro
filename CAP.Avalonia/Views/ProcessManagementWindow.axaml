@@ -1,9 +1,11 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels"
+        xmlns:controls="using:CAP.Avalonia.Controls"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.ProcessManagementWindow"
         x:CompileBindings="False"
-        Title="Fabrication Process"
+        Title="{loc:Localize ProcessManagement.Title}"
         Width="820" Height="680"
         MinWidth="500" MinHeight="400"
         Background="#1e1e1e"
@@ -13,17 +15,146 @@
 
         <!-- Header -->
         <StackPanel DockPanel.Dock="Top" Spacing="6" Margin="0,0,0,10">
-            <TextBlock Text="Fabrication Process" FontWeight="SemiBold" FontSize="16" Foreground="LightBlue"/>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <TextBlock Text="{loc:Localize ProcessManagement.Header}" FontWeight="SemiBold" FontSize="16" Foreground="LightBlue"/>
+                <!-- Plain-language explainer for non-physicists (#682 / #570): what a process,
+                     layers, cross-sections and materials are, and why electrical routing needs
+                     its own metal cross-section. -->
+                <controls:HelpFlyoutButton Title="{loc:Localize ProcessManagement.HelpTitle}" VerticalAlignment="Center">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8">
+                            <StackPanel.Styles>
+                                <!-- Looping fabrication animation: the chip is built by stacking
+                                     patterned material layers one after another (substrate → core →
+                                     cladding → metal). Each layer fades + rises into place in
+                                     sequence, giving a real-world sense of how fabrication works. -->
+                                <Style Selector="Rectangle.fabLayer">
+                                    <Setter Property="Opacity" Value="0"/>
+                                </Style>
+                                <Style Selector="Rectangle.fab0">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:5" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="96"/></KeyFrame>
+                                            <KeyFrame Cue="12%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="88"/></KeyFrame>
+                                            <KeyFrame Cue="94%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="88"/></KeyFrame>
+                                            <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="88"/></KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                                <Style Selector="Rectangle.fab1">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:5" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="82"/></KeyFrame>
+                                            <KeyFrame Cue="22%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="82"/></KeyFrame>
+                                            <KeyFrame Cue="34%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="74"/></KeyFrame>
+                                            <KeyFrame Cue="94%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="74"/></KeyFrame>
+                                            <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="74"/></KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                                <Style Selector="Rectangle.fab2">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:5" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="68"/></KeyFrame>
+                                            <KeyFrame Cue="44%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="68"/></KeyFrame>
+                                            <KeyFrame Cue="56%"><Setter Property="Opacity" Value="0.55"/><Setter Property="Canvas.Top" Value="60"/></KeyFrame>
+                                            <KeyFrame Cue="94%"><Setter Property="Opacity" Value="0.55"/><Setter Property="Canvas.Top" Value="60"/></KeyFrame>
+                                            <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="60"/></KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                                <Style Selector="Rectangle.fab3">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:5" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="54"/></KeyFrame>
+                                            <KeyFrame Cue="66%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="54"/></KeyFrame>
+                                            <KeyFrame Cue="78%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="46"/></KeyFrame>
+                                            <KeyFrame Cue="94%"><Setter Property="Opacity" Value="1"/><Setter Property="Canvas.Top" Value="46"/></KeyFrame>
+                                            <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Top" Value="46"/></KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </StackPanel.Styles>
+
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff">
+                                Here you review this PDK's layer stack and add a metal cross-section
+                                for electrical routing. Below is what each of those settings means and
+                                why it matters.
+                            </TextBlock>
+
+                            <!-- Fabrication layer-stack animation (cross-section, builds bottom→top). -->
+                            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                    CornerRadius="4" Padding="4">
+                                <Canvas Width="360" Height="112">
+                                    <TextBlock Canvas.Left="2" Canvas.Top="2" Text="{loc:Localize ProcessManagement.ChipBuiltLayers}"
+                                               FontSize="9" Foreground="Gray"/>
+                                    <Rectangle Classes="fabLayer fab0" Canvas.Left="30" Width="270" Height="14" Fill="#666666"/>
+                                    <Rectangle Classes="fabLayer fab1" Canvas.Left="30" Width="270" Height="12" Fill="#4CAF50"/>
+                                    <Rectangle Classes="fabLayer fab2" Canvas.Left="30" Width="270" Height="14" Fill="#3F51B5"/>
+                                    <Rectangle Classes="fabLayer fab3" Canvas.Left="110" Width="110" Height="12" Fill="#DAA520"/>
+                                    <TextBlock Canvas.Left="306" Canvas.Top="84" Text="{loc:Localize ProcessManagement.LayerSubstrate}" FontSize="8" Foreground="#888"/>
+                                    <TextBlock Canvas.Left="306" Canvas.Top="70" Text="{loc:Localize ProcessManagement.LayerCore}" FontSize="8" Foreground="#7CCB7C"/>
+                                    <TextBlock Canvas.Left="306" Canvas.Top="56" Text="{loc:Localize ProcessManagement.LayerCladding}" FontSize="8" Foreground="#8890D0"/>
+                                    <TextBlock Canvas.Left="306" Canvas.Top="42" Text="{loc:Localize ProcessManagement.LayerMetal}" FontSize="8" Foreground="#DAA520"/>
+                                </Canvas>
+                            </Border>
+
+                            <TextBlock Text="{loc:Localize ProcessManagement.WhatIsProcess}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                It is the foundry's recipe: which material layers get deposited or
+                                etched, in what order, and with what shapes. Your whole chip -
+                                every waveguide and every wire - is built in ONE process. That is
+                                why picking a process up front matters: a design only makes sense,
+                                and can only be manufactured, within the process it was built for.
+                            </TextBlock>
+
+                            <TextBlock Text="{loc:Localize ProcessManagement.LayersHeading}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                A layer is one physical sheet of material in the chip, for example
+                                the waveguide core that guides light, or a metal layer used for
+                                electrical wiring. The "Layer stack" table lists every sheet the
+                                foundry can pattern, each with its own GDS layer/datatype number.
+                            </TextBlock>
+
+                            <TextBlock Text="{loc:Localize ProcessManagement.CrossSectionsHeading}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                A cross-section is the width and shape a routed connection gets on
+                                a given layer. An optical waveguide is typically very narrow
+                                (around 0.5 µm) so it only carries one mode of light cleanly; a
+                                metal trace is usually much wider (around 10 µm) so it can carry
+                                current without excessive resistance. The same "wire" behaves very
+                                differently depending on which cross-section routes it.
+                            </TextBlock>
+
+                            <TextBlock Text="{loc:Localize ProcessManagement.Materials}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                Materials describe what each layer is actually made of: silicon or
+                                silicon nitride for waveguides, metal for electrical wiring, and so
+                                on. The material sets how light bends and travels (its refractive
+                                index) or how easily current flows, so getting it right is what
+                                makes the simulation physically meaningful.
+                            </TextBlock>
+
+                            <TextBlock Text="{loc:Localize ProcessManagement.ElectricalRoutingHeading}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                                Electrical connections (for example to a heater or a modulator)
+                                cannot travel on an optical waveguide - they need a conductive metal
+                                layer instead, routed at a much wider metal cross-section. Use
+                                "+ Metal (electrical)" below to add one; it also adds the METAL
+                                layer that carries it in the GDS export.
+                            </TextBlock>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </StackPanel>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#9999bb"
-                       Text="A chip is built in one fabrication process — one layer stack, one material system, one set of design rules. Import it from a foundry PDK (CSV tables) and adjust as needed."/>
+                       Text="{loc:Localize ProcessManagement.Intro}"/>
+
             <StackPanel Orientation="Horizontal" Spacing="10" Margin="0,4,0,0">
-                <Button Content="Import from PDK…" Command="{Binding ImportFromPdkCommand}"
-                        Padding="12,6" Background="#3d4d6d"
-                        ToolTip.Tip="openEPDA uPDK (*.yaml) or a Nazca table_*.csv in the PDK folder"/>
-                <Button Content="New" Command="{Binding NewProcessCommand}"
-                        Padding="12,6" Background="#3d3d3d"
-                        ToolTip.Tip="Start a blank process (seeded with public SOI material defaults)"/>
-                <TextBlock Text="Process:" VerticalAlignment="Center" Foreground="#aaa"/>
+                <Button Content="{loc:Localize ProcessManagement.SaveToPdk}" Command="{Binding SaveProcessCommand}" IsVisible="{Binding HasProcess}"
+                        Padding="12,6" Background="#2a4a2a"
+                        ToolTip.Tip="{loc:Localize ProcessManagement.SaveTip}"/>
+                <TextBlock Text="{loc:Localize ProcessManagement.ProcessLabel}" VerticalAlignment="Center" Foreground="#aaa"/>
                 <TextBox Text="{Binding ProcessName}" Width="220" VerticalAlignment="Center"/>
             </StackPanel>
             <TextBlock Text="{Binding StatusText}" FontSize="11" Foreground="#aaccaa" TextWrapping="Wrap"/>
@@ -34,15 +165,15 @@
 
                 <!-- Layers -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Layer stack" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
-                    <Button Content="+ Layer" Command="{Binding AddLayerCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                    <TextBlock Text="{loc:Localize ProcessManagement.LayerStack}" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                    <Button Content="{loc:Localize ProcessManagement.AddLayer}" Command="{Binding AddLayerCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
                 </StackPanel>
                 <Grid ColumnDefinitions="2*,1*,1*,1*,3*">
-                    <TextBlock Grid.Column="0" Text="Name" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="1" Text="Layer" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="2" Text="Datatype" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="3" Text="Field" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="4" Text="Description" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Localize ProcessManagement.ColName}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="1" Text="{loc:Localize ProcessManagement.ColLayer}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="2" Text="{loc:Localize ProcessManagement.ColDatatype}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="3" Text="{loc:Localize ProcessManagement.ColField}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="4" Text="{loc:Localize ProcessManagement.ColDescription}" Foreground="#888" FontSize="10"/>
                 </Grid>
                 <ItemsControl ItemsSource="{Binding Layers}">
                     <ItemsControl.ItemTemplate>
@@ -60,23 +191,28 @@
 
                 <!-- Cross-sections -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Cross-sections (waveguide / metal)" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
-                    <Button Content="+ Cross-section" Command="{Binding AddXsectionCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                    <TextBlock Text="{loc:Localize ProcessManagement.CrossSectionsTitle}" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                    <Button Content="{loc:Localize ProcessManagement.AddXsection}" Command="{Binding AddXsectionCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                    <Button Content="{loc:Localize ProcessManagement.AddMetal}" Command="{Binding AddMetalXsectionCommand}" FontSize="10" Padding="6,1" Background="#4a3a2a"
+                            ToolTip.Tip="{loc:Localize ProcessManagement.AddMetalTip}"/>
                 </StackPanel>
                 <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*">
-                    <TextBlock Grid.Column="0" Text="Name" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="1" Text="Kind" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="2" Text="Width µm" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="3" Text="Min R µm" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="4" Text="Rec. R µm" Foreground="#888" FontSize="10"/>
-                    <TextBlock Grid.Column="5" Text="Description" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="0" Text="{loc:Localize ProcessManagement.ColName}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="1" Text="{loc:Localize ProcessManagement.ColKind}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="2" Text="{loc:Localize ProcessManagement.ColWidth}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="3" Text="{loc:Localize ProcessManagement.ColMinR}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="4" Text="{loc:Localize ProcessManagement.ColRecR}" Foreground="#888" FontSize="10"/>
+                    <TextBlock Grid.Column="5" Text="{loc:Localize ProcessManagement.ColDescription}" Foreground="#888" FontSize="10"/>
                 </Grid>
                 <ItemsControl ItemsSource="{Binding Xsections}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <Grid ColumnDefinitions="2*,1*,1*,1.2*,1.4*,2*" Margin="0,1">
                                 <TextBox Grid.Column="0" Text="{Binding Name}" FontSize="11" Margin="0,0,2,0"/>
-                                <TextBlock Grid.Column="1" Text="{Binding Kind}" FontSize="11" VerticalAlignment="Center" Foreground="#ccc"/>
+                                <ComboBox Grid.Column="1" FontSize="11" Margin="0,0,2,0" HorizontalAlignment="Stretch"
+                                          ItemsSource="{x:Static vm:ProcessManagementViewModel.XsectionKinds}"
+                                          SelectedItem="{Binding Kind}"
+                                          ToolTip.Tip="{loc:Localize ProcessManagement.KindTip}"/>
                                 <TextBox Grid.Column="2" Text="{Binding WidthUm}" FontSize="11" Margin="0,0,2,0"/>
                                 <TextBox Grid.Column="3" Text="{Binding MinRadiusUm}" FontSize="11" Margin="0,0,2,0"/>
                                 <TextBox Grid.Column="4" Text="{Binding RecommendedRadiusUm}" FontSize="11" Margin="0,0,2,0"/>
@@ -88,8 +224,8 @@
 
                 <!-- Materials -->
                 <StackPanel Orientation="Horizontal" Spacing="8">
-                    <TextBlock Text="Materials" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
-                    <Button Content="+ Material" Command="{Binding AddMaterialCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
+                    <TextBlock Text="{loc:Localize ProcessManagement.Materials}" FontWeight="SemiBold" Foreground="#aaaacc" FontSize="13" VerticalAlignment="Center"/>
+                    <Button Content="{loc:Localize ProcessManagement.AddMaterial}" Command="{Binding AddMaterialCommand}" FontSize="10" Padding="6,1" Background="#2a4a2a"/>
                 </StackPanel>
                 <ItemsControl ItemsSource="{Binding Materials}">
                     <ItemsControl.ItemTemplate>
@@ -101,7 +237,7 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
-                <TextBlock Text="Material refractive indices are entered per process (foundry values are proprietary and not shipped)."
+                <TextBlock Text="{loc:Localize ProcessManagement.MaterialsNote}"
                            FontSize="10" Foreground="#777799" TextWrapping="Wrap"/>
             </StackPanel>
         </ScrollViewer>

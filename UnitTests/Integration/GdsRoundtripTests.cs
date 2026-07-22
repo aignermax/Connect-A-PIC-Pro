@@ -24,6 +24,7 @@ namespace UnitTests.Integration;
 ///   Phase 2 - Nazca script validation: positions/rotations verified via ExportValidator
 ///   Phase 3 - GDS binary validation: conditional on Python+Nazca availability
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsRoundtripTests
 {
     private readonly ObservableCollection<ComponentTemplate> _library;
@@ -36,9 +37,11 @@ public class GdsRoundtripTests
     {
         // Filter out analysis tools (e.g. ONA Analyzer) — they are intentionally
         // skipped during GDS export and have no physical pin layout to validate.
+        // Skip analysis tools and gdsfactory-backend components (no Nazca function; they
+        // export via the gdsfactory path, not Nazca — issue #570).
         _library = new ObservableCollection<ComponentTemplate>(
             TestPdkLoader.LoadAllTemplates()
-                .Where(t => t.NazcaFunctionName != "__analyzer__"));
+                .Where(t => !string.IsNullOrEmpty(t.NazcaFunctionName) && t.NazcaFunctionName != "__analyzer__"));
     }
 
     /// <summary>

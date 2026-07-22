@@ -8,6 +8,7 @@ namespace UnitTests.Export;
 /// Unit tests for GdsExportService.
 /// Tests Python detection, Nazca detection, and GDS export logic.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsExportServiceTests
 {
     private readonly GdsExportService _service;

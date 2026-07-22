@@ -1,14 +1,10 @@
-using System.Numerics;
-using CAP_Core.Components;
-using CAP_Core.Components.Core;
-using CAP_Core.Components.ComponentHelpers;
-using CAP_Core.ExternalPorts;
 using CAP_Core.Grid;
-using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.TimeTrace;
 using CAP.Avalonia.ViewModels.Canvas;
 using OxyPlot;
@@ -39,15 +35,14 @@ public partial class TimeDomainViewModel : ObservableObject
     [ObservableProperty]
     private double _pulseSigmaPs = 0.5;
 
+    /// <summary>
+    /// Signal-source selection + parameters (issue #600): Gaussian pulse
+    /// (default, back-compat), CW, or PRBS-NRZ on a signal-driven time grid.
+    /// </summary>
+    public TransientSourceSettingsViewModel Source { get; } = new();
+
     [ObservableProperty]
     private bool _isRunning;
-
-    /// <summary>
-    /// True = Time Domain (Transient) mode active; False = Frequency Domain (CW) mode active.
-    /// Controls which simulation mode is visible in the panel.
-    /// </summary>
-    [ObservableProperty]
-    private bool _isTimeDomainMode = true;
 
     [ObservableProperty]
     private string _statusText = "";
@@ -88,6 +83,14 @@ public partial class TimeDomainViewModel : ObservableObject
     /// <summary>File dialog service for CSV export. Set by MainViewModel.</summary>
     public Services.IFileDialogService? FileDialogService { get; set; }
 
+    /// <summary>
+    /// Callback that activates the canvas analysis-output picker (#754). Invoked when a
+    /// run is ambiguous (several possible outputs, none designated) or the designation
+    /// became invalid, so the user can pick instead of facing a modal dialog. Wired by
+    /// <c>MainViewModel</c>.
+    /// </summary>
+    public Action? RequestOutputPicker { get; set; }
+
     /// <summary>Configures the panel with the current canvas context.</summary>
     public void Configure(DesignCanvasViewModel? canvas)
     {
@@ -104,13 +107,30 @@ public partial class TimeDomainViewModel : ObservableObject
     {
         if (_canvas == null || _canvas.Components.Count == 0)
         {
-            StatusText = "No circuit loaded.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoCircuit");
+            return;
+        }
+
+        // All lasers off means there is no input signal at all — say so instead of
+        // rendering an empty plot with status "Done" (#690, mirrors the eye analysis).
+        if (_canvas.Components.Where(c => c.IsLightSource).All(c => c.IsLaserOff)
+            && _canvas.Components.Any(c => c.IsLightSource))
+        {
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoLaserOn");
             return;
         }
 
         if (IsRunning) return;
+
+        // Resolve the analysis output BEFORE simulating (#754): an invalid designation
+        // aborts with a clear warning instead of silently guessing. Without a
+        // designation every off-laser coupler counts as an output (field wish, round 4
+        // final) — the eyedropper only restricts, so no picker mode is forced here.
+        var resolution = AnalysisOutputResolver.Resolve(_canvas!);
+        if (ReportInvalidDesignation(resolution)) return;
+
         IsRunning = true;
-        StatusText = "Building impulse responses…";
+        StatusText = LocalizationService.Instance.Translate("Analysis.TimeDomain.BuildingImpulseResponses");
         ResultText = "";
         _lastResult = null;
         ClearPlot();
@@ -119,21 +139,37 @@ public partial class TimeDomainViewModel : ObservableObject
         {
             _pinNameMap = BuildPinNameMap();
             var result = await Task.Run(() => RunSimulationCore());
-            _lastResult = result;
-            ResultText = TimeDomainResultFormatter.FormatResult(result);
-            BuildPlot(result);
+            var (displayed, statusOverride) = ApplyOutputSelection(result, resolution);
+            if (displayed == null)
+            {
+                StatusText = statusOverride!;
+                return;
+            }
+            _lastResult = displayed;
+            ResultText = TimeDomainResultFormatter.FormatResult(displayed);
+            BuildPlot(displayed);
             OnPropertyChanged(nameof(HasResult));
-            StatusText = $"Done — {result.PinTraces.Count} output pin(s)";
+            StatusText = statusOverride ?? string.Format(
+                LocalizationService.Instance.Translate("Analysis.TimeDomain.DonePins"), displayed.PinTraces.Count);
+        }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Time-domain simulation blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
         }
         catch (InvalidOperationException ex)
         {
-            StatusText = $"Cannot run: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.TimeDomain.CannotRun"), ex.Message);
             _errorConsole?.LogError($"Time-domain simulation blocked: {ex.Message}", ex);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Time-domain simulation failed: {ex.Message}", ex);
-            StatusText = $"Failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.Failed"), ex.Message);
         }
         finally
         {
@@ -160,74 +196,85 @@ public partial class TimeDomainViewModel : ObservableObject
 
             if (path == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled");
                 return;
             }
 
             var csv = TimeDomainResultFormatter.BuildCsvContent(_lastResult);
             await File.WriteAllTextAsync(path, csv);
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"CSV export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
+    }
+
+    /// <summary>
+    /// Surfaces an invalid designation (#754) as a status warning and activates the
+    /// picker. Returns true when the run must not proceed.
+    /// </summary>
+    private bool ReportInvalidDesignation(AnalysisOutputResolution resolution)
+    {
+        if (resolution.State == AnalysisOutputState.DesignatedMissing)
+        {
+            StatusText = LocalizationService.Instance.Translate("Analysis.Output.DesignatedMissing");
+            RequestOutputPicker?.Invoke();
+            return true;
+        }
+        if (resolution.State == AnalysisOutputState.DesignatedLaserOn)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Output.DesignatedLaserOn"),
+                resolution.Output!.Name);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Applies the output designation to a completed result (#754): with a valid
+    /// designation only THAT coupler's light-pin traces are displayed (null result +
+    /// error status when no light reaches it); an ambiguous design keeps all traces
+    /// but carries an explicit warning instead of a silent "Done".
+    /// </summary>
+    private static (TimeDomainResult? Displayed, string? StatusOverride) ApplyOutputSelection(
+        TimeDomainResult result, AnalysisOutputResolution resolution)
+    {
+        if (resolution.State == AnalysisOutputState.MultipleCandidates)
+            return (result, LocalizationService.Instance.Translate("Analysis.Output.MultipleCandidatesWarning"));
+        if (resolution.State != AnalysisOutputState.DesignatedValid)
+            return (result, null);
+
+        var pinIds = AnalysisOutputResolver.CollectLightPinIds(resolution.Output!);
+        var traces = result.PinTraces
+            .Where(kv => pinIds.Contains(kv.Key))
+            .ToDictionary(kv => kv.Key, kv => kv.Value);
+        if (traces.Count == 0)
+            return (null, string.Format(
+                LocalizationService.Instance.Translate("Analysis.Output.NoSignal"), resolution.Output!.Name));
+        return (new TimeDomainResult(result.TimeAxis, traces), null);
     }
 
     private TimeDomainResult RunSimulationCore()
     {
-        var tileManager = new ComponentListTileManager();
-        foreach (var compVm in _canvas!.Components)
-            tileManager.AddComponent(compVm.Component);
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, portManager) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
 
-        var portManager = new PhysicalExternalPortManager();
-        ConfigureLightSources(portManager);
-
-        var gridManager = GridManager.CreateForSimulation(
-            tileManager, _canvas.ConnectionManager, portManager);
-
-        var builder = new SystemMatrixBuilder(gridManager);
-        var simulator = new TimeDomainSimulator(builder);
-
-        var timeDef = TimeSignalDefinition.FromWavelengthSweep(
-            CenterWavelengthNm, SpanNm, FreqPoints);
+        var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 
         var inputSignals = BuildInputSignals(portManager, timeDef);
         return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
     }
 
-    private void ConfigureLightSources(PhysicalExternalPortManager portManager)
-    {
-        foreach (var compVm in _canvas!.Components)
-        {
-            if (compVm.TemplateName == null) continue;
-            if (!compVm.TemplateName.Contains("Coupler", StringComparison.OrdinalIgnoreCase)) continue;
-            if (compVm.TemplateName.Contains("Directional", StringComparison.OrdinalIgnoreCase)) continue;
-
-            var laserConfig = compVm.LaserConfig;
-            double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
-
-            foreach (var pin in compVm.Component.PhysicalPins)
-            {
-                if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
-                var input = new ExternalInput(
-                    $"src_{compVm.Component.Identifier}_{pin.Name}",
-                    laserType, 0, new Complex(power, 0));
-                portManager.AddLightSource(input, pin.LogicalPin.IDInFlow);
-            }
-        }
-    }
-
     private Dictionary<Guid, double[]> BuildInputSignals(
         PhysicalExternalPortManager portManager, TimeSignalDefinition timeDef)
     {
-        double centerSeconds = timeDef.DurationSeconds * 0.3;
         double sigmaSeconds = PulseSigmaPs * 1e-12;
         double centerInput = PulseCenterPs * 1e-12;
         double pulseCenter = Math.Max(centerInput, 3 * sigmaSeconds);
@@ -236,8 +283,8 @@ public partial class TimeDomainViewModel : ObservableObject
         foreach (var usedInput in portManager.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(usedInput.Input.InFlowPower.Magnitude);
-            var pulse = timeDef.CreateGaussianPulse(pulseCenter, sigmaSeconds, amplitude);
-            signals[usedInput.AttachedComponentPinId] = pulse;
+            var source = Source.CreateSource(amplitude, pulseCenter, sigmaSeconds);
+            signals[usedInput.AttachedComponentPinId] = source.Generate(timeDef);
         }
         return signals;
     }

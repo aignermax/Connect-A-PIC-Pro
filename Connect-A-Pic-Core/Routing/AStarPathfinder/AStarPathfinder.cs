@@ -22,6 +22,24 @@ public class AStarPathfinder
     /// </summary>
     public int GoalTolerance { get; set; } = 3;
 
+    /// <summary>
+    /// When true, the goal also accepts arrivals laterally offset from the
+    /// pin's entry axis (within GoalTolerance); the path smoother then snaps
+    /// the final approach onto the axis. Off by default because an exact
+    /// on-axis arrival smooths more reliably. Enabled as a retry when the
+    /// strict search fails, e.g. because another waveguide crosses the entry
+    /// axis — without the retry such pins are unreachable and burn the whole
+    /// node budget before falling back to a blocked route.
+    /// </summary>
+    public bool AllowLateralGoalTolerance { get; set; }
+
+    /// <summary>
+    /// When true (default), the search expands all 8 directions including 45°
+    /// diagonals (octile routing). When false, only the 4 cardinal directions
+    /// are expanded — a much smaller search space for faster everyday routing.
+    /// </summary>
+    public bool UseDiagonals { get; set; } = true;
+
     public AStarPathfinder(PathfindingGrid grid, RoutingCostCalculator costCalculator)
     {
         _grid = grid;
@@ -33,6 +51,12 @@ public class AStarPathfinder
     /// Lower values = more responsive cancellation, slight overhead per check.
     /// </summary>
     private const int CancellationCheckInterval = 500;
+
+    /// <summary>
+    /// Maximum allowed direction change per step in degrees.
+    /// Turns sharper than 90° cannot be built as a single fabricable bend.
+    /// </summary>
+    private const double MaxTurnAngleDegrees = 90.0;
 
     /// <summary>
     /// Finds a path from start to end, respecting pin directions.
@@ -50,8 +74,8 @@ public class AStarPathfinder
                                       CancellationToken cancellationToken = default)
     {
         var openSet = new PriorityQueue<AStarNode, double>();
-        var visited = new Dictionary<(int, int, GridDirection), AStarNode>();
-        var distanceFromStart = new Dictionary<(int, int, GridDirection), int>();
+        var visited = new Dictionary<(int, int, GridDirection, int), AStarNode>();
+        var distanceFromStart = new Dictionary<(int, int, GridDirection, int), int>();
 
         // Create start node
         // StraightRunLength = 0 forces the path to go straight first before turning
@@ -65,8 +89,8 @@ public class AStarPathfinder
             startX, startY, startDirection, endX, endY, endDirection);
 
         openSet.Enqueue(startNode, startNode.FCost);
-        visited[startNode.GetKey()] = startNode;
-        distanceFromStart[startNode.GetKey()] = 0;
+        visited[StateKey(startNode)] = startNode;
+        distanceFromStart[StateKey(startNode)] = 0;
 
         int nodesExpanded = 0;
 
@@ -86,9 +110,10 @@ public class AStarPathfinder
             }
 
             // Expand neighbors
-            foreach (var neighbor in GetNeighbors(current, endX, endY, endDirection, distanceFromStart))
+            foreach (var neighbor in GetNeighbors(current, endX, endY, endDirection,
+                                                   distanceFromStart))
             {
-                var key = neighbor.GetKey();
+                var key = StateKey(neighbor);
 
                 if (visited.TryGetValue(key, out var existingNode))
                 {
@@ -107,40 +132,49 @@ public class AStarPathfinder
     }
 
     /// <summary>
+    /// State identity of a node in the octile search. The straight-run length
+    /// is part of the state: a cheap arrival with a short run must not shadow
+    /// a costlier arrival with a long run, because only the latter may be
+    /// allowed to turn (IsTurnValid). Runs are capped at the largest value
+    /// IsTurnValid ever requires.
+    /// </summary>
+    private (int X, int Y, GridDirection Dir, int Run) StateKey(AStarNode n) =>
+        (n.X, n.Y, n.Direction, Math.Min(n.StraightRunLength, _costCalculator.MinStraightRunCells));
+
+    /// <summary>
     /// Checks if the current node has reached the goal.
+    /// By default the node must be ON the pin's entry axis (zero perpendicular
+    /// offset) — tolerance applies only along the approach direction, because
+    /// an off-axis landing so close to the terminal smooths unreliably. With
+    /// <see cref="AllowLateralGoalTolerance"/> small lateral offsets are also
+    /// accepted and the path smoother snaps the approach onto the axis.
     /// </summary>
     private bool IsGoalReached(AStarNode node, int endX, int endY, GridDirection endDirection)
     {
-        int distX = Math.Abs(node.X - endX);
-        int distY = Math.Abs(node.Y - endY);
-
-        // Must be within tolerance of goal
-        if (distX > GoalTolerance || distY > GoalTolerance)
+        if (node.Direction != endDirection)
             return false;
 
-        // At exact position, check direction
-        if (distX == 0 && distY == 0)
-        {
-            return node.Direction == endDirection;
-        }
+        int dx = endX - node.X;
+        int dy = endY - node.Y;
+        if (dx == 0 && dy == 0)
+            return true;
 
-        // Within tolerance - check if we're approaching from correct direction
-        // and have enough straight run to reach the goal
-        if (node.Direction == endDirection)
-        {
-            // Check if moving in our current direction gets us closer to goal
-            var (dx, dy) = node.Direction.GetDelta();
-            int newDistX = Math.Abs(node.X + dx - endX);
-            int newDistY = Math.Abs(node.Y + dy - endY);
+        var (ux, uy) = endDirection.GetDelta();
 
-            // We're heading toward the goal in the right direction
-            if (newDistX <= distX && newDistY <= distY)
-            {
-                return true;
-            }
-        }
+        // Perpendicular offset from the entry axis: exactly zero in strict
+        // mode, within GoalTolerance in the lateral-tolerance retry.
+        int cross = dx * uy - dy * ux;
+        int maxCross = AllowLateralGoalTolerance ? GoalTolerance : 0;
+        if (Math.Abs(cross) > maxCross)
+            return false;
 
-        return false;
+        // Goal must lie ahead along the entry direction, within tolerance
+        int along = dx * ux + dy * uy;
+        if (along <= 0)
+            return false;
+
+        int cellsAhead = Math.Max(Math.Abs(dx), Math.Abs(dy));
+        return cellsAhead <= GoalTolerance;
     }
 
     /// <summary>
@@ -148,12 +182,16 @@ public class AStarPathfinder
     /// </summary>
     private IEnumerable<AStarNode> GetNeighbors(AStarNode current,
                                                   int goalX, int goalY, GridDirection goalDir,
-                                                  Dictionary<(int, int, GridDirection), int> distFromStart)
+                                                  Dictionary<(int, int, GridDirection, int), int> distFromStart)
     {
         // Get distance from start for pin escape enforcement
-        int distanceFromStart = distFromStart.GetValueOrDefault(current.GetKey(), 0);
+        int distanceFromStart = distFromStart.GetValueOrDefault(StateKey(current), 0);
 
-        foreach (var dir in GridDirectionExtensions.GetAllDirections())
+        var directions = UseDiagonals
+            ? GridDirectionExtensions.GetAllDirections()
+            : GridDirectionExtensions.GetCardinalDirections();
+
+        foreach (var dir in directions)
         {
             var (dx, dy) = dir.GetDelta();
             int newX = current.X + dx;
@@ -161,6 +199,14 @@ public class AStarPathfinder
 
             // Check bounds and obstacles
             if (_grid.IsBlocked(newX, newY))
+                continue;
+
+            // Diagonal block check: a diagonal step is only allowed when BOTH
+            // orthogonal neighbor cells are free, so the waveguide cannot
+            // cut through a component corner.
+            if (dir.IsDiagonal() &&
+                (_grid.IsBlocked(current.X + dx, current.Y) ||
+                 _grid.IsBlocked(current.X, current.Y + dy)))
                 continue;
 
             // CRITICAL: Force pin escape - must travel minimum distance in start direction
@@ -186,8 +232,10 @@ public class AStarPathfinder
             if (!_costCalculator.IsTurnValid(current, dir))
                 continue;
 
-            // Don't allow 180-degree turns (going backward)
-            if (current.Direction != GridDirection.None && dir == current.Direction.GetOpposite())
+            // Don't allow sharp turns: only ±45° and ±90° direction changes are
+            // physically realizable bends. This also excludes 180° reversals.
+            if (current.Direction != GridDirection.None &&
+                Math.Abs(GridDirectionExtensions.GetTurnAngle(current.Direction, dir)) > MaxTurnAngleDegrees)
                 continue;
 
             // Calculate costs (including proximity penalty for being near other waveguides
@@ -210,7 +258,7 @@ public class AStarPathfinder
             };
 
             // Track distance from start for this neighbor
-            distFromStart[neighbor.GetKey()] = distanceFromStart + 1;
+            distFromStart[StateKey(neighbor)] = distanceFromStart + 1;
 
             yield return neighbor;
         }

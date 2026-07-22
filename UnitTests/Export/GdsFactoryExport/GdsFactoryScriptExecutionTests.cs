@@ -2,6 +2,7 @@ using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport;
 
@@ -12,6 +13,7 @@ namespace UnitTests.Export.GdsFactoryExport;
 /// <c>%LOCALAPPDATA%\Lunima\tools\uv.exe venv %TEMP%\gf-groundtruth --python 3.12</c>
 /// + <c>uv pip install gdsfactory ubcpdk</c>.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsFactoryScriptExecutionTests
 {
     private static string? FindGdsFactoryPython()
@@ -22,6 +24,84 @@ public class GdsFactoryScriptExecutionTests
             Path.Combine(Path.GetTempPath(), "gf-groundtruth", "bin", "python"),
         };
         return candidates.FirstOrDefault(File.Exists);
+    }
+
+    /// <summary>
+    /// Locates a Python venv that can <c>import cspdk.sin300</c> — a Lunima managed env
+    /// (%LOCALAPPDATA%\Lunima\envs\*) or the %TEMP%\gf-groundtruth env with cspdk installed.
+    /// Returns null when none is present (CI), so the CornerStone integration test skips.
+    /// </summary>
+    private static string? FindCspdkPython()
+    {
+        var roots = new List<string>();
+        var envs = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "envs");
+        if (Directory.Exists(envs))
+            roots.AddRange(Directory.GetDirectories(envs));
+        roots.Add(Path.Combine(Path.GetTempPath(), "gf-groundtruth"));
+
+        foreach (var root in roots)
+        {
+            if (!HasCspdk(root)) continue;
+            foreach (var rel in new[]
+                     {
+                         Path.Combine("Scripts", "python.exe"),
+                         Path.Combine("bin", "python"),
+                     })
+            {
+                var py = Path.Combine(root, rel);
+                if (File.Exists(py)) return py;
+            }
+        }
+        return null;
+    }
+
+    private static bool HasCspdk(string envRoot)
+    {
+        if (Directory.Exists(Path.Combine(envRoot, "Lib", "site-packages", "cspdk")))
+            return true;   // Windows venv layout
+        var lib = Path.Combine(envRoot, "lib");
+        return Directory.Exists(lib)
+            && Directory.GetDirectories(lib)
+                .Any(d => Directory.Exists(Path.Combine(d, "site-packages", "cspdk")));
+    }
+
+    private static DesignCanvasViewModel CreateConnectedCornerStoneSinCanvas()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var a = CreateSinComponent("A", "cspdk.sin300.mmi1x2", 0, 0);
+        var b = CreateSinComponent("B", "cspdk.sin300.straight", 60, 0);
+        canvas.AddComponent(a, "SiN A");
+        canvas.AddComponent(b, "SiN B");
+        canvas.Connections.Add(new CAP.Avalonia.ViewModels.Canvas.WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
+        return canvas;
+    }
+
+    private static CAP_Core.Components.Core.Component CreateSinComponent(
+        string id, string gdsFactoryFunction, double x, double y)
+    {
+        var c = TestComponentFactory.CreateBasicComponent();
+        c.Identifier = id;
+        c.NazcaFunctionName = "";
+        c.GdsFactoryFunction = gdsFactoryFunction;
+        c.GdsFactoryRoutingCrossSection = "xs_nc";
+        c.PhysicalX = x;
+        c.PhysicalY = y;
+        c.RotationDegrees = 0;
+        c.PhysicalPins.Add(new CAP_Core.Components.Core.PhysicalPin
+        {
+            Name = "o1",
+            ParentComponent = c,
+            OffsetXMicrometers = 0,
+            OffsetYMicrometers = 5,
+            AngleDegrees = 180,
+        });
+        return c;
     }
 
     private static DesignCanvasViewModel CreateSingleComponentCanvas(out CAP_Core.Components.Core.Component component)
@@ -104,6 +184,35 @@ public class GdsFactoryScriptExecutionTests
                 foreach (var f in Directory.GetFiles(dir))
                     File.Copy(f, Path.Combine(debugDir, Path.GetFileName(f)), overwrite: true);
             }
+            Directory.Delete(dir, recursive: true);
+        }
+    }
+
+    [Fact]
+    public async Task CornerStoneSinDesign_WithWaveguideConnection_RunsAndProducesGds()
+    {
+        var python = FindCspdkPython();
+        if (python == null) return;   // no cspdk env — covered locally
+
+        var canvas = CreateConnectedCornerStoneSinCanvas();
+        var script = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs));
+
+        var dir = Path.Combine(Path.GetTempPath(), $"gf-e2e-sin-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(dir);
+        var scriptPath = Path.Combine(dir, "design.py");
+        var gdsPath = Path.Combine(dir, "design.gds");
+        try
+        {
+            await File.WriteAllTextAsync(scriptPath, script);
+            var (exitCode, _, stderr) = await RunPythonAsync(python, scriptPath);
+            exitCode.ShouldBe(0,
+                $"CornerStone SiN export with a routed waveguide must run cleanly.\nstderr:\n{stderr}");
+            File.Exists(gdsPath).ShouldBeTrue();
+            new FileInfo(gdsPath).Length.ShouldBeGreaterThan(0);
+        }
+        finally
+        {
             Directory.Delete(dir, recursive: true);
         }
     }

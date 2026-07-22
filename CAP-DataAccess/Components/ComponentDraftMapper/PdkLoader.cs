@@ -1,11 +1,9 @@
 using System.Text.Json;
+using CAP_Core.LightCalculation.TimeDomainSimulation.CompactModels;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP_DataAccess.Components.ComponentDraftMapper
 {
-    /// <summary>
-    /// Loads PDK (Process Design Kit) JSON files containing component libraries.
-    /// </summary>
     public class PdkLoader
     {
         private static readonly JsonSerializerOptions JsonOptions = new()
@@ -15,20 +13,9 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             AllowTrailingCommas = true
         };
 
-        /// <summary>
-        /// Loads a PDK from a JSON file. Validates that every component has a
-        /// NazcaOriginOffset — use this for simulation and export paths.
-        /// </summary>
         public PdkDraft LoadFromFile(string filePath)
             => LoadFromFileInternal(filePath, requireNazcaOffset: true);
 
-        /// <summary>
-        /// Loads a PDK from a JSON file for editing, tolerating components
-        /// whose NazcaOriginOffset is still null. Used by the PDK Offset
-        /// Editor — the tool that fixes missing offsets cannot itself reject
-        /// PDKs with missing offsets. Structural validation (names, pins,
-        /// dimensions) still applies.
-        /// </summary>
         public PdkDraft LoadFromFileForEditing(string filePath)
             => LoadFromFileInternal(filePath, requireNazcaOffset: false);
 
@@ -40,13 +27,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             }
 
             var json = File.ReadAllText(filePath);
-            return LoadFromJson(json, requireNazcaOffset);
+            var pdk = LoadFromJson(json, requireNazcaOffset);
+            pdk.FilePath = filePath;
+            return pdk;
         }
 
-        /// <summary>
-        /// Loads a PDK from a JSON string. Validates that every component has
-        /// a NazcaOriginOffset.
-        /// </summary>
         public PdkDraft LoadFromJson(string json)
             => LoadFromJson(json, requireNazcaOffset: true);
 
@@ -62,9 +47,6 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             return pdk;
         }
 
-        /// <summary>
-        /// Loads all PDK files from a directory.
-        /// </summary>
         public List<PdkDraft> LoadFromDirectory(string directoryPath)
         {
             if (!Directory.Exists(directoryPath))
@@ -84,7 +66,6 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 }
                 catch (Exception ex)
                 {
-                    // Log warning but continue loading other PDKs
                     Console.WriteLine($"Warning: Failed to load PDK from {file}: {ex.Message}");
                 }
             }
@@ -102,7 +83,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             var errors = new List<string>();
             foreach (var comp in pdk.Components)
             {
-                ValidateComponent(comp, pdk.Name, errors, requireNazcaOffset);
+                ValidateComponent(comp, pdk.Name, errors, requireNazcaOffset, pdk.IsGdsFactoryBackend);
             }
 
             if (errors.Count > 0)
@@ -111,14 +92,21 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             }
         }
 
-        private static void ValidateComponent(PdkComponentDraft comp, string pdkName, List<string> errors, bool requireNazcaOffset)
+        private static void ValidateComponent(PdkComponentDraft comp, string pdkName, List<string> errors, bool requireNazcaOffset, bool pdkIsGdsFactory)
         {
             var compLabel = !string.IsNullOrWhiteSpace(comp.Name) ? comp.Name : "(unnamed)";
 
-            // Virtual analysis tools (ONA Analyzer, future Power Monitor, etc.)
-            // are not exported to GDS, so the GDS-only validations below do not
-            // apply to them. Detected via the sentinel nazcaFunction value.
             bool isAnalysisTool = comp.NazcaFunction == "__analyzer__";
+
+            bool isGdsFactoryComponent = !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction);
+
+            bool hasRawCode = !string.IsNullOrWhiteSpace(comp.RawCode);
+
+            if (pdkIsGdsFactory && !isAnalysisTool && !isGdsFactoryComponent && !hasRawCode
+                && string.IsNullOrWhiteSpace(comp.NazcaFunction))
+            {
+                errors.Add($"[{pdkName}/{compLabel}] gdsfactory-backend component must declare a gdsFactoryFunction (or a nazcaFunction)");
+            }
 
             if (string.IsNullOrWhiteSpace(comp.Name))
             {
@@ -140,12 +128,7 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 errors.Add($"[{pdkName}/{compLabel}] Must have at least one pin");
             }
 
-            // NazcaOriginOffset is required on the main load path — no silent
-            // fallback allowed. Without it, GDS export produces misaligned
-            // waveguides. The Offset Editor bypasses this check (it exists
-            // precisely to fix PDKs in this state). Analysis tools are also
-            // exempt because they are never exported.
-            if (requireNazcaOffset && !isAnalysisTool)
+            if (requireNazcaOffset && !isAnalysisTool && !isGdsFactoryComponent && !hasRawCode)
             {
                 if (comp.NazcaOriginOffsetX == null)
                 {
@@ -166,6 +149,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                         errors.Add($"[{pdkName}/{compLabel}] Pin must have a name");
                     }
 
+                    if (!CAP_Core.Components.PinKinds.PinKindHelper.TryParse(pin.PinKind, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid pinKind '{pin.PinKind}' (expected 'Optical' or 'Electrical')");
+                    }
+
                     const double tolerance = 1.0;
                     if (pin.OffsetXMicrometers < -tolerance || pin.OffsetXMicrometers > comp.WidthMicrometers + tolerance)
                     {
@@ -175,13 +163,22 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                     {
                         errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' Y={pin.OffsetYMicrometers} outside bounds [0, {comp.HeightMicrometers}]");
                     }
+
+                    if (!CAP_Core.Components.Core.PolarizationRules.TryParse(pin.Polarization, out _))
+                    {
+                        errors.Add($"[{pdkName}/{compLabel}] Pin '{pin.Name}' has invalid polarization '{pin.Polarization}' (expected TE, TM or Both)");
+                    }
                 }
             }
 
-            // Validate parametric S-Matrix if present. Pass the component's
-            // slider count so slider-binding indices in parameter definitions
-            // are bounds-checked at load time instead of silently dropped
-            // downstream.
+            if (!string.IsNullOrWhiteSpace(comp.CompactModel) &&
+                !CompactModelRegistry.IsRegistered(comp.CompactModel))
+            {
+                errors.Add(
+                    $"[{pdkName}/{compLabel}] Unknown compactModel '{comp.CompactModel}'. " +
+                    $"Known models: {string.Join(", ", CompactModelRegistry.RegisteredNames)}");
+            }
+
             if (comp.SMatrix != null && ParametricSMatrixMapper.IsParametric(comp.SMatrix))
             {
                 ParametricSMatrixMapper.Validate(comp.SMatrix, comp.Name, comp.Pins, comp.Sliders?.Count ?? 0);

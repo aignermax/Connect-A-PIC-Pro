@@ -11,7 +11,6 @@ namespace UnitTests.Components
         [Fact]
         public void LoadFromJson_ValidPdk_ReturnsCorrectPdkData()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""fileFormatVersion"": 1,
@@ -37,10 +36,8 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act
             var pdk = loader.LoadFromJson(json);
 
-            // Assert
             pdk.Name.ShouldBe("Test PDK");
             pdk.Description.ShouldBe("Test description");
             pdk.Foundry.ShouldBe("Test Foundry");
@@ -53,7 +50,6 @@ namespace UnitTests.Components
         [Fact]
         public void LoadFromJson_ValidComponent_ParsesPinsCorrectly()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""name"": ""Test PDK"",
@@ -74,11 +70,9 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act
             var pdk = loader.LoadFromJson(json);
             var comp = pdk.Components[0];
 
-            // Assert
             comp.Name.ShouldBe("Test Component");
             comp.Category.ShouldBe("Test");
             comp.NazcaFunction.ShouldBe("test.comp");
@@ -99,7 +93,6 @@ namespace UnitTests.Components
         [Fact]
         public void LoadFromJson_WithSMatrix_ParsesSMatrixCorrectly()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""name"": ""Test PDK"",
@@ -124,11 +117,9 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act
             var pdk = loader.LoadFromJson(json);
             var comp = pdk.Components[0];
 
-            // Assert
             comp.SMatrix.ShouldNotBeNull();
             comp.SMatrix.WavelengthNm.ShouldBe(1550);
             comp.SMatrix.Connections.Count.ShouldBe(1);
@@ -141,20 +132,17 @@ namespace UnitTests.Components
         [Fact]
         public void LoadFromJson_MissingName_ThrowsException()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""components"": []
             }";
 
-            // Act & Assert
             Should.Throw<InvalidOperationException>(() => loader.LoadFromJson(json));
         }
 
         [Fact]
         public void LoadFromJson_ComponentWithoutPins_ThrowsException()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""name"": ""Test PDK"",
@@ -170,14 +158,12 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act & Assert
             Should.Throw<PdkValidationException>(() => loader.LoadFromJson(json));
         }
 
         [Fact]
         public void LoadFromJson_ComponentWithInvalidDimensions_ThrowsException()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""name"": ""Test PDK"",
@@ -195,34 +181,28 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act & Assert
             Should.Throw<PdkValidationException>(() => loader.LoadFromJson(json));
         }
 
         [Fact]
         public void LoadFromFile_DemoPdk_LoadsSuccessfully()
         {
-            // Arrange
             var loader = new PdkLoader();
             var demoPdkPath = Path.Combine(
                 Directory.GetCurrentDirectory(),
                 "..", "..", "..", "..",
                 "CAP-DataAccess", "PDKs", "demo-pdk.json");
 
-            // Skip if file doesn't exist (CI environment might not have it)
             if (!File.Exists(demoPdkPath))
             {
-                return; // Skip test
+                return;
             }
 
-            // Act
             var pdk = loader.LoadFromFile(demoPdkPath);
 
-            // Assert
             pdk.Name.ShouldBe("Demo PDK");
             pdk.Components.Count.ShouldBeGreaterThan(0);
 
-            // Verify all components have valid pins
             foreach (var comp in pdk.Components)
             {
                 comp.Pins.Count.ShouldBeGreaterThan(0);
@@ -232,9 +212,30 @@ namespace UnitTests.Components
         }
 
         [Fact]
+        public void LoadFromFile_SetsFilePathOnTheReturnedDraft()
+        {
+            var dir = Path.Combine(Path.GetTempPath(), "lunima-pdkloader-filepath-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(dir);
+            var path = Path.Combine(dir, "fab.json");
+            File.WriteAllText(path, @"{ ""name"": ""FilePathTest"", ""components"": [] }");
+
+            try
+            {
+                var loader = new PdkLoader();
+
+                loader.LoadFromFile(path).FilePath.ShouldBe(path);
+                loader.LoadFromFileForEditing(path).FilePath.ShouldBe(path);
+                loader.LoadFromJson(File.ReadAllText(path)).FilePath.ShouldBeNull();
+            }
+            finally
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+
+        [Fact]
         public void LoadFromJson_MultipleComponents_LoadsAll()
         {
-            // Arrange
             var loader = new PdkLoader();
             var json = @"{
                 ""name"": ""Multi Component PDK"",
@@ -269,10 +270,8 @@ namespace UnitTests.Components
                 ]
             }";
 
-            // Act
             var pdk = loader.LoadFromJson(json);
 
-            // Assert
             pdk.Components.Count.ShouldBe(3);
             pdk.Components[0].Name.ShouldBe("Component A");
             pdk.Components[1].Name.ShouldBe("Component B");
@@ -282,32 +281,26 @@ namespace UnitTests.Components
         [Fact]
         public void LoadFromFile_SiEPICEBeamPdk_LoadsAllComponents()
         {
-            // Arrange
             var loader = new PdkLoader();
             var siepicPdkPath = Path.Combine(
                 Directory.GetCurrentDirectory(),
                 "..", "..", "..", "..",
                 "CAP-DataAccess", "PDKs", "siepic-ebeam-pdk.json");
 
-            // Skip if file doesn't exist (CI environment might not have it)
             if (!File.Exists(siepicPdkPath))
             {
-                return; // Skip test
+                return;
             }
 
-            // Act
             var pdk = loader.LoadFromFile(siepicPdkPath);
 
-            // Assert
             pdk.Name.ShouldBe("SiEPIC EBeam PDK");
             pdk.Foundry.ShouldBe("UBC / SiEPIC");
             pdk.DefaultWavelengthNm.ShouldBe(1550);
             pdk.NazcaModuleName.ShouldBe("siepic_ebeam_pdk");
 
-            // Verify we have expanded from 12 to 44 components (issue #92)
             pdk.Components.Count.ShouldBe(44);
 
-            // Verify all components have valid structure
             foreach (var comp in pdk.Components)
             {
                 comp.Name.ShouldNotBeNullOrWhiteSpace();
@@ -318,14 +311,68 @@ namespace UnitTests.Components
                 comp.HeightMicrometers.ShouldBeGreaterThan(0);
             }
 
-            // Verify some new components are present
             var componentNames = pdk.Components.Select(c => c.Name).ToList();
-            componentNames.ShouldContain("Y-Branch 1550"); // Original
-            componentNames.ShouldContain("Y-Branch 895"); // New
-            componentNames.ShouldContain("GC SiN TE 1310 8deg"); // New
-            componentNames.ShouldContain("Crossing Horizontal"); // New
-            componentNames.ShouldContain("Adiabatic Coupler TE 1550"); // New
-            componentNames.ShouldContain("Bond Pad"); // New
+            componentNames.ShouldContain("Y-Branch 1550");
+            componentNames.ShouldContain("Y-Branch 895");
+            componentNames.ShouldContain("GC SiN TE 1310 8deg");
+            componentNames.ShouldContain("Crossing Horizontal");
+            componentNames.ShouldContain("Adiabatic Coupler TE 1550");
+            componentNames.ShouldContain("Bond Pad");
+        }
+
+        [Fact]
+        public void LoadFromJson_GdsFactoryBackendComponent_LoadsWithoutNazcaFunctionOrOffset()
+        {
+            var loader = new PdkLoader();
+            var json = @"{
+                ""fileFormatVersion"": 1,
+                ""name"": ""SiN PDK"",
+                ""backend"": ""gdsfactory"",
+                ""defaultWavelengthNm"": 1550,
+                ""components"": [
+                    {
+                        ""name"": ""Straight"",
+                        ""category"": ""Waveguides"",
+                        ""gdsFactoryFunction"": ""cspdk.sin300.straight"",
+                        ""widthMicrometers"": 10,
+                        ""heightMicrometers"": 1.2,
+                        ""pins"": [
+                            { ""name"": ""o1"", ""offsetXMicrometers"": 0, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 180 },
+                            { ""name"": ""o2"", ""offsetXMicrometers"": 10, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 0 }
+                        ]
+                    }
+                ]
+            }";
+
+            var pdk = loader.LoadFromJson(json);
+
+            pdk.IsGdsFactoryBackend.ShouldBeTrue();
+            pdk.Components.Single().GdsFactoryFunction.ShouldBe("cspdk.sin300.straight");
+        }
+
+        [Fact]
+        public void LoadFromJson_GdsFactoryBackendComponentMissingFactory_Throws()
+        {
+            var loader = new PdkLoader();
+            var json = @"{
+                ""fileFormatVersion"": 1,
+                ""name"": ""Broken SiN PDK"",
+                ""backend"": ""gdsfactory"",
+                ""defaultWavelengthNm"": 1550,
+                ""components"": [
+                    {
+                        ""name"": ""Nameless"",
+                        ""category"": ""Waveguides"",
+                        ""widthMicrometers"": 10,
+                        ""heightMicrometers"": 1.2,
+                        ""pins"": [
+                            { ""name"": ""o1"", ""offsetXMicrometers"": 0, ""offsetYMicrometers"": 0.6, ""angleDegrees"": 180 }
+                        ]
+                    }
+                ]
+            }";
+
+            Should.Throw<PdkValidationException>(() => loader.LoadFromJson(json));
         }
     }
 }

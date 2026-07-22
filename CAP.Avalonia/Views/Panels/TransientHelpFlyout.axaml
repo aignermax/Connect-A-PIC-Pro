@@ -1,0 +1,172 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.TransientHelpFlyout"
+             MaxWidth="420">
+
+    <!-- Plain-language explainer for Transient mode (#600 user feedback):
+         a looping animation (light travels through the chip and splits to the
+         outputs) plus non-physicist descriptions of the mode, the three
+         sources, and how to read the plot. Shown from the panel's "?" button. -->
+
+    <UserControl.Styles>
+        <!-- Pulse entering from the laser to the chip centre, fading out there. -->
+        <Style Selector="Ellipse.pulseIn">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="34"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <!-- Split pulses: appear at the chip centre and travel to one output each. -->
+        <Style Selector="Ellipse.pulseTop">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="96%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="16"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="16"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+        <Style Selector="Ellipse.pulseBottom">
+            <Style.Animations>
+                <Animation Duration="0:0:3" IterationCount="INFINITE">
+                    <KeyFrame Cue="0%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="50%">
+                        <Setter Property="Canvas.Left" Value="188"/>
+                        <Setter Property="Canvas.Top" Value="34"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="52%">
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="96%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="52"/>
+                        <Setter Property="Opacity" Value="1"/>
+                    </KeyFrame>
+                    <KeyFrame Cue="100%">
+                        <Setter Property="Canvas.Left" Value="330"/>
+                        <Setter Property="Canvas.Top" Value="52"/>
+                        <Setter Property="Opacity" Value="0"/>
+                    </KeyFrame>
+                </Animation>
+            </Style.Animations>
+        </Style>
+    </UserControl.Styles>
+
+    <ScrollViewer MaxHeight="440">
+        <StackPanel Margin="12" Spacing="8">
+
+            <TextBlock Text="{loc:Localize TransientHelp.Title}"
+                       FontWeight="Bold" FontSize="13" Foreground="White"/>
+
+            <!-- Looping animation: laser → chip → split to two outputs. -->
+            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                    CornerRadius="4" Padding="4">
+                <Canvas Width="380" Height="80">
+                    <!-- Laser source -->
+                    <Ellipse Canvas.Left="10" Canvas.Top="30" Width="20" Height="20" Fill="#FFD54F"/>
+                    <TextBlock Canvas.Left="2" Canvas.Top="54" Text="{loc:Localize TransientHelp.DiagramLightSource}"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Waveguides -->
+                    <Line StartPoint="34,40" EndPoint="150,40" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <Line StartPoint="240,30" EndPoint="336,22" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <Line StartPoint="240,50" EndPoint="336,58" Stroke="#4d4d4d" StrokeThickness="2"/>
+                    <!-- The user's circuit -->
+                    <Border Canvas.Left="150" Canvas.Top="18" Width="90" Height="44"
+                            Background="#2a2a3d" BorderBrush="#5d5d8d" BorderThickness="1" CornerRadius="4">
+                        <TextBlock Text="{loc:Localize TransientHelp.DiagramCircuit}" FontSize="9" Foreground="LightGray"
+                                   HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </Border>
+                    <!-- Outputs -->
+                    <Ellipse Canvas.Left="338" Canvas.Top="16" Width="12" Height="12"
+                             Fill="Transparent" Stroke="#4FC3F7" StrokeThickness="2"/>
+                    <Ellipse Canvas.Left="338" Canvas.Top="52" Width="12" Height="12"
+                             Fill="Transparent" Stroke="#FF8A65" StrokeThickness="2"/>
+                    <TextBlock Canvas.Left="330" Canvas.Top="0" Text="{loc:Localize TransientHelp.DiagramOutputs}"
+                               FontSize="9" Foreground="Gray"/>
+                    <!-- Animated light pulses -->
+                    <Ellipse Classes="pulseIn" Canvas.Top="34" Width="12" Height="12" Fill="#FFF176"/>
+                    <Ellipse Classes="pulseTop" Width="10" Height="10" Fill="#4FC3F7"/>
+                    <Ellipse Classes="pulseBottom" Width="10" Height="10" Fill="#FF8A65"/>
+                </Canvas>
+            </Border>
+
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.Intro1}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.Intro2}"/>
+
+            <TextBlock Text="{loc:Localize TransientHelp.WhyTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.WhyBody}"/>
+
+            <TextBlock Text="{loc:Localize TransientHelp.SourcesTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <StackPanel Spacing="5">
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#FFD54F" Text="{loc:Localize TransientHelp.GaussianLabel}"/>
+                    <Run Text="{loc:Localize TransientHelp.GaussianBody}"/>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#81C784" Text="{loc:Localize TransientHelp.CwLabel}"/>
+                    <Run Text="{loc:Localize TransientHelp.CwBody}"/>
+                </TextBlock>
+                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
+                    <Run FontWeight="Bold" Foreground="#4FC3F7">PRBS-NRZ</Run>
+                    <Run Text="{loc:Localize TransientHelp.PrbsBody}"/>
+                </TextBlock>
+            </StackPanel>
+
+            <TextBlock Text="{loc:Localize TransientHelp.ReadingTitle}" FontWeight="Bold" FontSize="12"
+                       Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.ReadingBody}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.ZoomNote}"/>
+
+        </StackPanel>
+    </ScrollViewer>
+
+</UserControl>

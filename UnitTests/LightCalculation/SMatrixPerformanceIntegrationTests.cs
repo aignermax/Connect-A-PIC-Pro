@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP_Core.LightCalculation;
 using Shouldly;
@@ -11,6 +12,16 @@ namespace UnitTests.LightCalculation;
 /// </summary>
 public class SMatrixPerformanceIntegrationTests
 {
+    /// <summary>
+    /// The ViewModel's StatusText/StorageType/MemorySavings strings are localized via
+    /// LocalizationService.Instance, so pin English to keep these assertions culture-independent
+    /// regardless of the CI/dev OS language.
+    /// </summary>
+    public SMatrixPerformanceIntegrationTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void ViewModel_DisplaysStatisticsFromAnalyzer()
     {

@@ -19,4 +19,13 @@ public class NazcaPackageInstallerTests
     {
         NazcaPackageInstaller.AdditionalPackages.ShouldContain(package);
     }
+
+    [Theory]
+    [InlineData("gdsfactory")]
+    [InlineData("ubcpdk")]
+    [InlineData("cspdk")]   // CornerStone SiN — components import cspdk.sin300 (#570, field bug)
+    public void GdsFactoryPackages_ContainTheFoundryPdksTheExportAndPreviewImport(string package)
+    {
+        NazcaPackageInstaller.GdsFactoryPackages.ShouldContain(package);
+    }
 }

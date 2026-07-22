@@ -1,8 +1,11 @@
 using System.Diagnostics;
+using System.Globalization;
 using Avalonia.Threading;
 using CAP_Core.Components.Core;
 using CAP_Core.Solvers.Fdtd;
+using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -19,6 +22,7 @@ public partial class ComponentSettingsDialogViewModel
 {
     private readonly IFdtdSMatrixService? _fdtdService;
     private readonly Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? _fdtdRequestFactory;
+    private readonly IDockerSetupDialogService? _dockerSetupDialog;
     private CancellationTokenSource? _recalcCts;
 
     /// <summary>True while an FDTD recompute is running.</summary>
@@ -57,7 +61,11 @@ public partial class ComponentSettingsDialogViewModel
     private async Task RecalculateSMatrix()
     {
         if (_fdtdService == null || _fdtdRequestFactory == null || _liveComponent == null || _storedSMatrices == null)
+        {
+            // Trips only when the dialog was never Configure()d — never fail silently.
+            SolverStatus = LocalizationService.Instance.Translate("CompSettings.FdtdNotAvailable");
             return;
+        }
 
         IsComputing = true;
         _recalcCts = new CancellationTokenSource();
@@ -66,19 +74,41 @@ public partial class ComponentSettingsDialogViewModel
         {
             // Fail fast with an actionable message if Docker isn't ready, before
             // exporting geometry / building images.
-            SolverStatus = "Checking the FDTD solver (Docker)…";
+            SolverStatus = LocalizationService.Instance.Translate("CompSettings.CheckingFdtd");
             var availability = await _fdtdService.CheckAvailabilityAsync(_recalcCts.Token);
             if (!availability.IsAvailable)
             {
                 SolverStatus = availability.Message;
-                return;
+                // Guided setup (issue #649): open the "Set up FDTD" dialog with
+                // platform-specific install/start guidance and a re-check button.
+                // Headless/test consumers without the dialog service keep the
+                // plain error-string behaviour above.
+                if (_dockerSetupDialog == null)
+                    return;
+                var ready = await _dockerSetupDialog.ShowAsync(
+                    availability, ct => _fdtdService.CheckAvailabilityAsync(ct));
+                if (!ready)
+                    return;
+                SolverStatus = LocalizationService.Instance.Translate("CompSettings.DockerReady");
             }
 
-            SolverStatus = "Preparing component geometry…";
-            var request = await _fdtdRequestFactory(_liveComponent, _recalcCts.Token);
+            SolverStatus = LocalizationService.Instance.Translate("CompSettings.PreparingGeometry");
+            FdtdSMatrixRequest? request;
+            try
+            {
+                request = await _fdtdRequestFactory(_liveComponent, _recalcCts.Token);
+            }
+            catch (InvalidOperationException ex)
+            {
+                // The factory already built an actionable message — show it, not a generic status.
+                SolverStatus = ex.Message;
+                _errorConsole?.LogError(
+                    $"FDTD geometry export failed for '{_displayName}': {ex.Message}");
+                return;
+            }
             if (request == null)
             {
-                SolverStatus = "Could not export this component's geometry for FDTD.";
+                SolverStatus = LocalizationService.Instance.Translate("CompSettings.CouldNotExportGeometry");
                 return;
             }
 
@@ -91,14 +121,16 @@ public partial class ComponentSettingsDialogViewModel
                 // intentional, not an error, so stay quiet — don't open the error console.
                 if (_recalcCts?.IsCancellationRequested == true)
                 {
-                    SolverStatus = "FDTD recompute cancelled.";
+                    SolverStatus = LocalizationService.Instance.Translate("CompSettings.RecomputeCancelled");
                     NotifyCancelled();
                     return;
                 }
 
                 SolverStatus = result.MissingDependency != null
-                    ? $"FDTD unavailable — '{result.MissingDependency}' is required. {result.Error}"
-                    : $"FDTD failed: {result.Error}";
+                    ? string.Format(
+                        LocalizationService.Instance.Translate("CompSettings.FdtdUnavailableDependency"),
+                        result.MissingDependency, result.Error)
+                    : string.Format(LocalizationService.Instance.Translate("CompSettings.FdtdFailed"), result.Error);
                 _errorConsole?.LogError($"FDTD recompute failed for '{_displayName}': {result.Error}\n{result.RawStderr}");
                 return;
             }
@@ -108,19 +140,36 @@ public partial class ComponentSettingsDialogViewModel
             _storedSMatrices[_smatrixKey] = data;
 
             var applyResult = SMatrixOverrideApplicator.Apply(_liveComponent, data, _errorConsole);
-            SolverStatus = BuildSolverStatus(result, applyResult);
-            StatusText = $"Recomputed S-matrix via FDTD ({note}).";
-            _notificationService?.ShowSuccess(
-                $"S-matrix for '{_displayName}' recomputed via {note} and applied.");
+            var staleNm = FindStaleWavelengths(_liveComponent, data);
+            if (staleNm.Count > 0)
+            {
+                _errorConsole?.LogWarning(
+                    $"FDTD recompute for '{_displayName}' did not cover {staleNm.Count} previously defined " +
+                    $"wavelength(s): {FormatNm(staleNm)} — those entries keep their old (PDK-default) values.");
+            }
+
+            // Issue #580 E: when the instance geometry matches the template draft,
+            // the caller-provided sink promotes the result to the template-scoped
+            // (user-global) override so every instance of the type inherits it.
+            var propagated = _propagateToTemplate?.Invoke(data) == true;
+            SolverStatus = BuildSolverStatus(result, applyResult, propagated, staleNm);
+            StatusText = propagated
+                ? string.Format(LocalizationService.Instance.Translate("CompSettings.RecomputedPropagated"), note)
+                : string.Format(LocalizationService.Instance.Translate("CompSettings.Recomputed"), note);
+            _notificationService?.ShowSuccess(propagated
+                ? string.Format(
+                    LocalizationService.Instance.Translate("CompSettings.NotifyRecomputedPropagated"), _displayName, note)
+                : string.Format(
+                    LocalizationService.Instance.Translate("CompSettings.NotifyRecomputed"), _displayName, note));
         }
         catch (OperationCanceledException)
         {
-            SolverStatus = "FDTD recompute cancelled.";
+            SolverStatus = LocalizationService.Instance.Translate("CompSettings.RecomputeCancelled");
             NotifyCancelled();
         }
         catch (Exception ex)
         {
-            SolverStatus = $"FDTD error: {ex.Message}";
+            SolverStatus = string.Format(LocalizationService.Instance.Translate("CompSettings.FdtdError"), ex.Message);
             _errorConsole?.LogError($"FDTD recompute crashed for '{_displayName}'", ex);
         }
         finally
@@ -141,13 +190,17 @@ public partial class ComponentSettingsDialogViewModel
     {
         var stopwatch = Stopwatch.StartNew();
         string? lastLine = null;
-        const string baseMsg = "Running FDTD (Meep in Docker). First run builds the solver image (several minutes)";
+        var baseMsg = LocalizationService.Instance.Translate("CompSettings.FdtdRunBaseMessage");
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) =>
             SolverStatus = lastLine == null
-                ? $"{baseMsg} — {stopwatch.Elapsed:m\\:ss} elapsed…"
-                : $"FDTD running ({stopwatch.Elapsed:m\\:ss}): {lastLine}";
+                ? string.Format(
+                    LocalizationService.Instance.Translate("CompSettings.FdtdElapsed"),
+                    baseMsg, stopwatch.Elapsed.ToString(@"m\:ss"))
+                : string.Format(
+                    LocalizationService.Instance.Translate("CompSettings.FdtdRunning"),
+                    stopwatch.Elapsed.ToString(@"m\:ss"), lastLine);
         SolverStatus = $"{baseMsg}…";
         timer.Start();
 
@@ -168,15 +221,43 @@ public partial class ComponentSettingsDialogViewModel
     /// already be gone and the error console would be far too heavy (#586).
     /// </summary>
     private void NotifyCancelled() =>
-        _notificationService?.ShowInfo($"FDTD recompute for '{_displayName}' cancelled.");
+        _notificationService?.ShowInfo(string.Format(
+            LocalizationService.Instance.Translate("CompSettings.NotifyRecomputeCancelled"), _displayName));
 
     private static string Shorten(string s) => s.Length <= 80 ? s : s[..80] + "…";
 
-    private static string BuildSolverStatus(FdtdSMatrixResult result, ApplyResult? apply)
+    /// <summary>
+    /// Wavelengths (nm) still in the component's effective S-matrix map that this
+    /// FDTD run did NOT recompute — they keep their old (typically PDK-default)
+    /// values, so the user must be told about them (#582).
+    /// </summary>
+    private static IReadOnlyList<int> FindStaleWavelengths(Component component, ComponentSMatrixData data) =>
+        component.WaveLengthToSMatrixMap.Keys
+            .Where(nm => !data.Wavelengths.ContainsKey(nm.ToString(CultureInfo.InvariantCulture)))
+            .OrderBy(nm => nm)
+            .ToList();
+
+    private static string FormatNm(IReadOnlyList<int> wavelengthsNm) =>
+        string.Join(", ", wavelengthsNm.Select(nm => nm.ToString(CultureInfo.InvariantCulture))) + " nm";
+
+    private static string BuildSolverStatus(
+        FdtdSMatrixResult result, ApplyResult? apply, bool propagatedToTemplate, IReadOnlyList<int> staleNm)
     {
         var worst = result.EnergySumPerInput.Count > 0 ? result.EnergySumPerInput.Values.Max() : 0.0;
-        var energy = result.EnergySumPerInput.Count > 0 ? $" Energy Σ|S|² ≤ {worst:F3} per input." : "";
-        var applied = apply == null ? "" : $" Applied {apply.Applied} wavelength(s).";
-        return $"FDTD done: {result.Wavelengths.Count} wavelength(s).{energy}{applied}";
+        var energy = result.EnergySumPerInput.Count > 0
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.EnergySummary"), worst)
+            : "";
+        var applied = apply == null
+            ? ""
+            : string.Format(LocalizationService.Instance.Translate("CompSettings.AppliedWavelengths"), apply.Applied);
+        var scope = propagatedToTemplate
+            ? LocalizationService.Instance.Translate("CompSettings.AppliedAllInstances")
+            : "";
+        var stale = staleNm.Count == 0
+            ? ""
+            : string.Format(LocalizationService.Instance.Translate("CompSettings.StaleNotCovered"), FormatNm(staleNm));
+        return string.Format(
+            LocalizationService.Instance.Translate("CompSettings.FdtdDone"),
+            result.Wavelengths.Count, energy, applied, scope, stale);
     }
 }

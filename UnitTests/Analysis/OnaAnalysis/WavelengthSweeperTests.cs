@@ -164,4 +164,26 @@ public class WavelengthSweeperTests
         await Should.ThrowAsync<OperationCanceledException>(
             () => sweeper.RunSweepAsync(config, grid, cts.Token));
     }
+
+    [Fact]
+    public async Task RunSweepAsync_GdsFactoryComponent_WarningNamesTheGdsFactoryFunction()
+    {
+        // gdsfactory-backend components carry a synthesized "nazca_<name>" placeholder as
+        // NazcaFunctionName; coverage warnings used it as the label, reporting e.g.
+        // 'nazca_coupler_straight' for a cspdk.sin300.coupler_straight (#712). The
+        // warning must name the real gdsfactory factory instead.
+        var grid = CreateMinimalGridManager();
+        var component = TestComponentFactory.CreateStraightWaveGuide(); // map: 980/1310/1550
+        component.GdsFactoryFunction = "cspdk.sin300.coupler_straight";
+        component.NazcaFunctionName = "nazca_coupler_straight"; // the synthesized placeholder #712 mislabeled with
+        grid.ComponentMover.PlaceComponent(0, 0, component);
+
+        var sweeper = new WavelengthSweeper(CreateMockBuilder().Object, CreateMockPortManager().Object);
+        var config = new WavelengthSweepConfiguration(1500, 1600, 3); // extrapolates above 1550
+
+        var result = await sweeper.RunSweepAsync(config, grid);
+
+        result.Warnings.ShouldContain(w => w.Contains("cspdk.sin300.coupler_straight"));
+        result.Warnings.ShouldAllBe(w => !w.Contains(component.NazcaFunctionName));
+    }
 }

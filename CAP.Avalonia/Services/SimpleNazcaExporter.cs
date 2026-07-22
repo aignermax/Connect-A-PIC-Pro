@@ -1,12 +1,16 @@
 using System.Globalization;
 using System.Text;
+using CAP.Avalonia.Services.MetalRouting;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
+using CAP_Core.Export.InterconnectRouting;
 using CAP_Core.Routing;
-using CAP_DataAccess.Persistence.PIR;
+using CAP_Core.Routing.InterconnectRouting;
+using CAP_Core.Routing.MetalRouting;
 
 namespace CAP.Avalonia.Services;
 
@@ -17,38 +21,42 @@ namespace CAP.Avalonia.Services;
 public class SimpleNazcaExporter
 {
     /// <summary>
+    /// Optional source of global interconnect settings (waveguide width/bend radius/GDS layer,
+    /// issue #574). When null, the historical export defaults (<see cref="InterconnectSettings"/>)
+    /// are used.
+    /// </summary>
+    public Func<InterconnectSettings>? SettingsSource { get; set; }
+
+    /// <summary>
     /// Exports the full design to a Python/Nazca script.
     /// </summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="pdkModuleName">Optional PDK module name (e.g., "siepic_ebeam_pdk") for import.</param>
-    /// <param name="overrides">
-    /// Optional per-instance Nazca overrides keyed by component identifier (issue #559).
-    /// For entries whose <see cref="NazcaCodeOverride.RawCode"/> is non-null, the export emits
-    /// a self-contained factory cell and places the instance via that factory instead of the
-    /// PDK template — org-anchored on the persisted bbox corner so the geometry lands on the
-    /// component's grid rectangle. Connections to such instances export normally (issue #561).
-    /// </param>
     /// <param name="emitVerification">
     /// When true, appends a machine-readable verification epilog (issue #565) that dumps
     /// every placed instance's ACTUAL world pin positions — reported by the same nazca
     /// engine that writes the GDS — to '&lt;script&gt;.pins.json' next to the script.
     /// </param>
+    /// <param name="metalSpec">
+    /// Process-derived metal routing parameters for electrical connections (issue #682):
+    /// trace width, GDS layer/datatype, and waveguide-crossing policy. Electrical
+    /// connections are emitted as metal on that layer instead of as optical waveguides.
+    /// Null uses <see cref="MetalRoutingSpec.Default"/>.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides = null,
-        bool emitVerification = false)
+        bool emitVerification = false,
+        MetalRoutingSpec? metalSpec = null)
     {
         var sb = new StringBuilder();
+        var metal = metalSpec ?? MetalRoutingSpec.Default;
+        var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
 
-        // Build a flat map of overridden identifier -> RawCode (only non-null RawCode entries).
-        var rawOverrides = BuildRawOverrides(overrides);
-
-        AppendHeader(sb);
-        NazcaOverrideFactory.AppendFactories(sb, rawOverrides);
-        AppendPdkComponentStubs(sb, canvas, rawOverrides);
-        var componentNames = AppendComponents(sb, canvas, rawOverrides, overrides, emitVerification);
-        AppendConnections(sb, canvas, componentNames, rawOverrides);
+        AppendHeader(sb, interconnectSettings, metal);
+        AppendPdkComponentStubs(sb, canvas);
+        var componentNames = AppendComponents(sb, canvas, emitVerification);
+        AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer);
         AppendFooter(sb);
         if (emitVerification)
             AppendVerificationEpilog(sb);
@@ -56,41 +64,24 @@ public class SimpleNazcaExporter
         return sb.ToString();
     }
 
-    /// <summary>
-    /// Reduces the full override map to a dictionary of identifier -> RawCode,
-    /// keeping only entries whose RawCode is non-null and non-empty AND whose backend is
-    /// Nazca. A gdsfactory-backend override must NOT be emitted into the Nazca script (its
-    /// gdsfactory Python would crash the Nazca run) — such an instance falls back to its
-    /// PDK cell here; the gdsfactory export honours it instead.
-    /// </summary>
-    private static Dictionary<string, string> BuildRawOverrides(
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+    private static void AppendHeader(StringBuilder sb, InterconnectSettings settings, MetalRoutingSpec metal)
     {
-        var result = new Dictionary<string, string>(StringComparer.Ordinal);
-        if (overrides == null)
-            return result;
-
-        foreach (var kv in overrides)
-        {
-            if (!string.IsNullOrWhiteSpace(kv.Value?.RawCode)
-                && kv.Value!.Backend == OverrideBackend.Nazca)
-                result[kv.Key] = kv.Value.RawCode!;
-        }
-        return result;
-    }
-
-    private static void AppendHeader(StringBuilder sb)
-    {
+        var ci = CultureInfo.InvariantCulture;
         sb.AppendLine("import nazca as nd");
         sb.AppendLine("import nazca.demofab as demo");
         sb.AppendLine("from nazca.interconnects import Interconnect");
         sb.AppendLine();
         sb.AppendLine("# PDK Configuration");
-        sb.AppendLine("WG_WIDTH = 0.45  # Waveguide width in µm");
-        sb.AppendLine("BEND_RADIUS = 50  # Minimum bend radius in µm");
+        sb.AppendLine($"WG_WIDTH = {settings.WidthMicrometers.ToString("0.0###", ci)}  # Waveguide width in µm");
+        sb.AppendLine($"BEND_RADIUS = {settings.BendRadiusMicrometers.ToString("0.###", ci)}  # Minimum bend radius in µm");
+        if (settings.GdsLayer.HasValue)
+            sb.AppendLine($"WG_LAYER = {settings.GdsLayer.Value}  # Waveguide GDS layer");
         sb.AppendLine();
+        NazcaMetalTraceWriter.AppendHeaderConstants(sb, metal);
         sb.AppendLine("# Create interconnect for waveguide routing");
-        sb.AppendLine("ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
+        sb.AppendLine(settings.GdsLayer.HasValue
+            ? "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS, layer=WG_LAYER)"
+            : "ic = Interconnect(width=WG_WIDTH, radius=BEND_RADIUS)");
         sb.AppendLine();
     }
 
@@ -101,7 +92,7 @@ public class SimpleNazcaExporter
     /// ComponentGroups are flattened — stubs are generated for all child components.
     /// </summary>
     private static void AppendPdkComponentStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, IReadOnlyDictionary<string, string> rawOverrides)
+        StringBuilder sb, DesignCanvasViewModel canvas)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
@@ -115,15 +106,11 @@ public class SimpleNazcaExporter
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
-                    // Overridden instances are self-defined by their factory; a PDK stub
-                    // would be unused / could conflict, so skip it (issue #559).
-                    if (rawOverrides.ContainsKey(child.Identifier)) continue;
                     AppendComponentStub(sb, child, generated, ci);
                 }
             }
             else
             {
-                if (rawOverrides.ContainsKey(comp.Identifier)) continue;
                 AppendComponentStub(sb, comp, generated, ci);
             }
         }
@@ -193,6 +180,10 @@ public class SimpleNazcaExporter
         // a straight's pins share the centre line, so their local Y is oy - OffsetY = 0.
         foreach (var pin in comp.PhysicalPins)
         {
+            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
+            // must not be emitted as waveguide stubs (#519). Metal routing is a separate feature.
+            if (pin.MatterType != MatterType.Light) continue;
+
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -241,12 +232,21 @@ public class SimpleNazcaExporter
         var px1 = NazcaCoordinateMapper.NormalizeZero(w - offsetX).ToString("F2", ci);
         var py1 = NazcaCoordinateMapper.NormalizeZero(offsetY).ToString("F2", ci);
 
-        sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer=1).put(0, 0)");
+        // Purely electrical components (probe/bond pads, #682) are metal structures —
+        // draw their body on the metal layer instead of the waveguide layer.
+        var isMetalComponent = comp.PhysicalPins.Count > 0
+            && comp.PhysicalPins.All(p => p.MatterType == MatterType.Electricity);
+        var bodyLayer = isMetalComponent ? "METAL_LAYER" : "1";
+
+        sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer={bodyLayer}).put(0, 0)");
 
         // Pins relative to org: local = (OffsetX-ox, oy-OffsetY), the plain Y negation
         // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
         foreach (var pin in comp.PhysicalPins)
         {
+            // Optical ports only — see the straight-stub loop above (#519).
+            if (pin.MatterType != MatterType.Light) continue;
+
             var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - offsetX).ToString("F2", ci);
             var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
@@ -260,8 +260,7 @@ public class SimpleNazcaExporter
     }
 
     private static Dictionary<Component, string> AppendComponents(
-        StringBuilder sb, DesignCanvasViewModel canvas, IReadOnlyDictionary<string, string> rawOverrides,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides, bool emitVerification = false)
+        StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false)
     {
         sb.AppendLine("def create_design():");
         sb.AppendLine("    with nd.Cell(name='ConnectAPIC_Design') as design:");
@@ -275,18 +274,23 @@ public class SimpleNazcaExporter
         {
             var comp = compVm.Component;
             if (comp.IsAnalysisTool) continue;
+            // gdsfactory-native components (e.g. CornerStone SiN) have no Nazca representation —
+            // skip them rather than emit a meaningless demofab stub (#570). They export via the
+            // gdsfactory export instead.
+            if (!string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
             if (comp is ComponentGroup group)
             {
                 // Flatten group: export all child components at their absolute positions
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
-                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, rawOverrides, overrides);
+                    if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
+                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
                 }
             }
             else
             {
-                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci, rawOverrides, overrides);
+                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci);
             }
         }
 
@@ -340,26 +344,11 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendSingleComponent(
         StringBuilder sb, Component comp, Dictionary<Component, string> componentNames,
-        ref int compIndex, CultureInfo ci, IReadOnlyDictionary<string, string> rawOverrides,
-        IReadOnlyDictionary<string, NazcaCodeOverride>? overrides)
+        ref int compIndex, CultureInfo ci)
     {
         var varName = $"comp_{compIndex}";
 
-        bool isRawOverride = rawOverrides.ContainsKey(comp.Identifier);
-
-        // A raw-code override persists the cell-internal bbox anchor (XMin, YMax) so
-        // the mapper can land the rendered geometry on the component's grid rectangle.
-        // Overrides saved before the anchor fields existed leave the anchor null.
-        (double XMin, double YMax)? overrideAnchor = null;
-        if (isRawOverride && overrides != null
-            && overrides.TryGetValue(comp.Identifier, out var overrideRecord)
-            && overrideRecord.OverrideBboxXMinMicrometers is { } anchorXMin
-            && overrideRecord.OverrideBboxYMaxMicrometers is { } anchorYMax)
-        {
-            overrideAnchor = (anchorXMin, anchorYMax);
-        }
-
-        var placement = NazcaCoordinateMapper.GetCellPlacement(comp, overrideAnchor);
+        var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
         var nazcaX = placement.X.ToString("F2", ci);
         var nazcaY = placement.Y.ToString("F2", ci);
         var rot = placement.RotationDegrees.ToString("F0", ci);
@@ -397,21 +386,7 @@ public class SimpleNazcaExporter
         // on 'org' explicitly makes .put() place the cell origin at the
         // computed (x, y) — which IS the contract Lunima's calibration
         // and export math both assume.
-        if (isRawOverride)
-        {
-            var factory = NazcaOverrideFactory.FactoryName(comp.Identifier);
-            // With a persisted bbox anchor the cell is org-anchored so its geometry
-            // lands exactly on the grid rectangle (issue #561). Every nd.Cell() has
-            // an 'org' pin. Overrides saved before the anchor existed fall back to
-            // the old default-anchor placement.
-            sb.AppendLine(overrideAnchor != null
-                ? $"        {varName} = {factory}().put('org', {nazcaX}, {nazcaY}, {rot})  # {comp.Identifier} (raw-code override, bbox-anchored)"
-                : $"        {varName} = {factory}().put({nazcaX}, {nazcaY}, {rot})  # {comp.Identifier} (raw-code override)");
-        }
-        else
-        {
-            sb.AppendLine($"        {varName} = {nazcaFunc}.put('org', {nazcaX}, {nazcaY}, {rot})  # {comp.Identifier}");
-        }
+        sb.AppendLine($"        {varName} = {nazcaFunc}.put('org', {nazcaX}, {nazcaY}, {rot})  # {comp.Identifier}");
 
         // Record the variable only after its put-line was emitted: a half-failed append
         // must not leave a name pointing at a component that was never placed.
@@ -423,7 +398,8 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        MetalRoutingSpec metalSpec,
+        int? gdsLayer = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -431,6 +407,8 @@ public class SimpleNazcaExporter
 
         sb.AppendLine("        # Waveguide Connections");
 
+        var metalStyle = metalSpec.ToTraceStyle();
+        var metalConnections = new List<WaveguideConnection>();
         foreach (var connVm in canvas.Connections)
         {
             var conn = connVm.Connection;
@@ -439,44 +417,153 @@ public class SimpleNazcaExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
-            // Issue #561: connections touching raw-code–overridden instances export
-            // their REAL routed segments like any other connection — the override
-            // cell is bbox-anchored, so app-space segment coordinates line up with
-            // its geometry and the GDS shows the same bends/radii as the canvas.
-            // Only routeless connections fall back to a p2p interconnect.
+            // Electrical connections are metal traces, not optical waveguides — emit them on
+            // the process metal layer/width instead of the waveguide layer (issue #682). A
+            // connection is metal only when BOTH pins are electrical; a mixed optical+electrical
+            // or all-optical connection stays a waveguide (issue #686 review — the earlier
+            // "either pin" predicate would draw a mixed connection wholly on the metal layer,
+            // silently dropping the optical waveguide). Metal connections are remembered so
+            // bridge markers can be placed where they cross optical paths (below).
+            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
+            if (metal != null)
+                metalConnections.Add(conn);
+
+            // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
+            // point-to-point styles export a single Nazca primitive (strt/sinebend/cobra)
+            // on the waveguide layer instead of the routed segments; Bend and Euler return
+            // null here and fall through to AppendSegmentExport below, which writes their
+            // exact canvas stub–arc–stub segments (a lone nd.bend/nd.euler cannot land on
+            // an arbitrary end pin). An electrical connection must stay a metal trace
+            // (issue #682) — never emit it as an optical primitive even if a style was
+            // set, so styled export is gated on metal == null.
+            if (metal == null)
+            {
+                var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer);
+                if (styledLine != null)
+                {
+                    sb.AppendLine(styledLine);
+                    continue;
+                }
+            }
+
+            // Routed connections export their real segments; only routeless
+            // connections fall back to a p2p interconnect.
             var segments = conn.GetPathSegments();
 
             if (segments.Count > 0)
-                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin);
+                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin, metal);
             else
-                AppendFallbackExport(sb, conn, componentNames, rawOverrides);
+                AppendFallbackExport(sb, conn, componentNames, metal);
         }
 
         // Export frozen waveguide paths from ComponentGroups
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group);
+                AppendGroupFrozenPaths(sb, group, metalStyle);
         }
+
+        AppendBridgeMarkers(sb, canvas, metalConnections, metalSpec);
 
         sb.AppendLine();
     }
 
     /// <summary>
-    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca segments.
+    /// Emits bridge markers for electrical metal traces (issue #682): when the active
+    /// process requires bridges, a marker is placed wherever a metal trace crosses an
+    /// optical waveguide path. The trace geometry itself is emitted inline by the
+    /// connection loop above (on the process metal layer).
     /// </summary>
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group)
+    private static void AppendBridgeMarkers(
+        StringBuilder sb,
+        DesignCanvasViewModel canvas,
+        IReadOnlyList<WaveguideConnection> metalConnections,
+        MetalRoutingSpec metalSpec)
+    {
+        if (metalSpec.CrossingPolicy != ElectricalCrossingPolicy.BridgeRequired
+            || metalConnections.Count == 0)
+            return;
+
+        sb.AppendLine();
+        sb.AppendLine("        # Electrical bridge markers (metal over waveguide)");
+
+        var opticalPaths = CollectOpticalPaths(canvas);
+        foreach (var conn in metalConnections)
+        {
+            var segments = conn.GetPathSegments();
+            if (segments.Count == 0)
+                continue;
+
+            var crossings = WaveguideCrossingDetector.FindCrossings(segments, opticalPaths);
+            NazcaMetalTraceWriter.AppendBridges(sb, crossings, metalSpec);
+        }
+    }
+
+    /// <summary>
+    /// Collects the routed segment lists of all optical connections and frozen group
+    /// paths — the geometry a metal trace can cross and that bridges must span.
+    /// </summary>
+    private static List<IReadOnlyList<PathSegment>> CollectOpticalPaths(DesignCanvasViewModel canvas)
+    {
+        var paths = new List<IReadOnlyList<PathSegment>>();
+        foreach (var connVm in canvas.Connections)
+        {
+            var conn = connVm.Connection;
+            // Both-pins-electrical connections render as metal; everything else
+            // (including mixed pairs, which stay waveguides) is crossable geometry.
+            if (IsMetalConnection(conn.StartPin, conn.EndPin)) continue;
+            if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
+            if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
+            var segments = conn.GetPathSegments();
+            if (segments.Count > 0)
+                paths.Add(segments);
+        }
+
+        foreach (var compVm in canvas.Components)
+        {
+            if (compVm.Component is ComponentGroup group)
+                CollectGroupFrozenPaths(group, paths);
+        }
+        return paths;
+    }
+
+    /// <summary>Adds all frozen waveguide paths of a group (and nested groups) to the list.</summary>
+    private static void CollectGroupFrozenPaths(ComponentGroup group, List<IReadOnlyList<PathSegment>> paths)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
-                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin);
+                paths.Add(frozenPath.Path.Segments);
+        }
+        foreach (var child in group.ChildComponents)
+        {
+            if (child is ComponentGroup nested)
+                CollectGroupFrozenPaths(nested, paths);
+        }
+    }
+
+    /// <summary>
+    /// Exports all frozen waveguide paths from a ComponentGroup (and nested groups) as Nazca
+    /// segments. A frozen path between two electrical pins is a metal trace, not an optical
+    /// waveguide — the same classification the live connection loop above applies (issue #686
+    /// review: this frozen-group path used to call <see cref="AppendSegmentExport"/> without the
+    /// metal style at all, so a frozen electrical route always rendered as a waveguide).
+    /// </summary>
+    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle)
+    {
+        foreach (var frozenPath in group.InternalPaths)
+        {
+            if (frozenPath?.Path?.Segments?.Count > 0)
+            {
+                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, metal);
+            }
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
-                AppendGroupFrozenPaths(sb, nestedGroup);
+                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle);
         }
     }
 
@@ -495,13 +582,14 @@ public class SimpleNazcaExporter
     /// <param name="endPin">End pin, used for single-straight pin-to-pin geometry.</param>
     internal static void AppendSegmentExport(
         StringBuilder sb, IReadOnlyList<PathSegment> segments,
-        PhysicalPin? startPin = null, PhysicalPin? endPin = null)
+        PhysicalPin? startPin = null, PhysicalPin? endPin = null,
+        MetalTraceStyle? metal = null)
     {
         // Single straight segment: compute geometry directly from both pin positions
         // so the waveguide hits both pins exactly even if the stored segment drifts.
         if (segments.Count == 1 && segments[0] is StraightSegment && startPin != null && endPin != null)
         {
-            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin));
+            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal));
             return;
         }
 
@@ -510,9 +598,24 @@ public class SimpleNazcaExporter
             var (nStartX, nStartY) = NazcaCoordinateMapper.ToNazca(segment.StartPoint.X, segment.StartPoint.Y);
             var (nEndX, nEndY) = NazcaCoordinateMapper.ToNazca(segment.EndPoint.X, segment.EndPoint.Y);
 
-            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY));
+            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY, metal));
         }
     }
+
+    /// <summary>
+    /// The trailing <c>width=…, layer=(…, …)</c> kwargs that place a segment on the metal
+    /// routing layer; empty for optical segments (which use the Nazca default layer).
+    /// </summary>
+    private static string MetalKwargs(MetalTraceStyle? metal) =>
+        metal is null ? string.Empty : $", width={metal.WidthLiteral}, layer={metal.LayerTuple}";
+
+    /// <summary>
+    /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
+    /// must be electrical (<see cref="PinKindHelper.IsElectrical(PhysicalPin?)"/>); a mixed
+    /// optical+electrical or all-optical connection stays an optical waveguide (issue #686 review).
+    /// </summary>
+    private static bool IsMetalConnection(PhysicalPin? first, PhysicalPin? second) =>
+        PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
     /// Formats a path segment (straight or bend) with absolute Nazca positions.
@@ -522,14 +625,14 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatSegmentAbsolute(
         PathSegment segment, double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY)
+        double nazcaEndX, double nazcaEndY, MetalTraceStyle? metal = null)
     {
         var ci = CultureInfo.InvariantCulture;
         return segment switch
         {
             StraightSegment => FormatStraightAbsolute(
-                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci),
-            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci),
+                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci, metal),
+            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci, metal),
             _ => $"        # Unknown segment type: {segment.GetType().Name}"
         };
     }
@@ -541,7 +644,7 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatStraightAbsolute(
         double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY, CultureInfo ci)
+        double nazcaEndX, double nazcaEndY, CultureInfo ci, MetalTraceStyle? metal = null)
     {
         double dx = nazcaEndX - nazcaStartX;
         double dy = nazcaEndY - nazcaStartY;
@@ -552,7 +655,7 @@ public class SimpleNazcaExporter
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaStartX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaStartY).ToString("F2", ci);
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
-        return $"        nd.strt(length={l}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -560,14 +663,14 @@ public class SimpleNazcaExporter
     /// The radius is invariant under Y-flip; the sweep angle and start angle are negated.
     /// </summary>
     private static string FormatBendAbsolute(
-        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci)
+        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci, MetalTraceStyle? metal = null)
     {
         var radius = bend.RadiusMicrometers.ToString("F2", ci);
         var sweepAngle = NazcaCoordinateMapper.NormalizeZero(-bend.SweepAngleDegrees).ToString("F2", ci);
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaY).ToString("F2", ci);
         var angle = NazcaCoordinateMapper.NormalizeZero(-bend.StartAngleDegrees).ToString("F2", ci);
-        return $"        nd.bend(radius={radius}, angle={sweepAngle}).put({x}, {y}, {angle})";
+        return $"        nd.bend(radius={radius}, angle={sweepAngle}{MetalKwargs(metal)}).put({x}, {y}, {angle})";
     }
 
     /// <summary>
@@ -575,7 +678,8 @@ public class SimpleNazcaExporter
     /// Computes length and angle from start pin to end pin in Nazca coordinates,
     /// ensuring the waveguide reaches both pins exactly.
     /// </summary>
-    private static string FormatStraightSegmentFromPins(PhysicalPin startPin, PhysicalPin endPin)
+    private static string FormatStraightSegmentFromPins(
+        PhysicalPin startPin, PhysicalPin endPin, MetalTraceStyle? metal = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var (sx, sy) = NazcaCoordinateMapper.GetPinNazcaPosition(startPin);
@@ -591,7 +695,7 @@ public class SimpleNazcaExporter
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
         var l = length.ToString("F2", ci);
 
-        return $"        nd.strt(length={l}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -697,10 +801,18 @@ public class SimpleNazcaExporter
         StringBuilder sb,
         WaveguideConnection conn,
         Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        MetalTraceStyle? metal = null)
     {
-        var startRef = BuildEndpointReference(conn.StartPin, componentNames, rawOverrides);
-        var endRef = BuildEndpointReference(conn.EndPin, componentNames, rawOverrides);
+        // A routeless electrical connection is a direct metal straight between both pins on the
+        // metal layer — the optical sbend interconnect (ic) would draw it as a waveguide (#682).
+        if (metal != null && conn.StartPin != null && conn.EndPin != null)
+        {
+            sb.AppendLine(FormatStraightSegmentFromPins(conn.StartPin, conn.EndPin, metal));
+            return;
+        }
+
+        var startRef = BuildEndpointReference(conn.StartPin, componentNames);
+        var endRef = BuildEndpointReference(conn.EndPin, componentNames);
 
         if (startRef != null && endRef != null)
             sb.AppendLine($"        ic.sbend_p2p({startRef}, {endRef}).put()");
@@ -708,24 +820,17 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Builds the Nazca expression anchoring one connection endpoint for the p2p fallback.
-    /// A raw-code–overridden instance exposes the in-app pin names on its cell, so a pin
-    /// reference (<c>comp_N.pin['name']</c>) is exact. A regular PDK cell defines its own
-    /// pin names which generally do NOT match the in-app names (KeyError at script run
-    /// time), so its endpoint is anchored by absolute Nazca position and direction instead.
+    /// A PDK cell defines its own pin names which generally do NOT match the in-app names
+    /// (KeyError at script run time), so its endpoint is anchored by absolute Nazca position
+    /// and direction.
     /// </summary>
     private static string? BuildEndpointReference(
         PhysicalPin pin,
-        Dictionary<Component, string> componentNames,
-        IReadOnlyDictionary<string, string> rawOverrides)
+        Dictionary<Component, string> componentNames)
     {
         var component = pin.ParentComponent;
-        if (component == null || !componentNames.TryGetValue(component, out var name))
+        if (component == null || !componentNames.TryGetValue(component, out _))
             return null;
-
-        bool isOverridden = component.Identifier != null
-            && rawOverrides.ContainsKey(component.Identifier);
-        if (isOverridden)
-            return $"{name}.pin['{pin.Name}']";
 
         var ci = CultureInfo.InvariantCulture;
         var (x, y) = NazcaCoordinateMapper.GetPinNazcaPosition(pin);

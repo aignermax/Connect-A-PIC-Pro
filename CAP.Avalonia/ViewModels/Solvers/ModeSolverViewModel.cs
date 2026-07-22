@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Solvers.ModeSolver;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -81,12 +82,28 @@ public partial class ModeSolverViewModel : ObservableObject
     // ── dependencies ────────────────────────────────────────────────────────
 
     private readonly IModeSolverService _service;
+    private readonly CAP_Core.Solvers.ModeProbe.CrossSectionDefaultsStore? _defaultsStore;
     private CancellationTokenSource? _cts;
 
-    /// <summary>Initialises the ViewModel with its solver service.</summary>
-    public ModeSolverViewModel(IModeSolverService service)
+    /// <summary>
+    /// Optional hook to auto-install a missing mode-solver backend into a managed
+    /// Python environment and activate it; wired by DI. Args: pip package spec,
+    /// progress, cancellation token. Returns true when the backend became available,
+    /// so the solve can be retried. When unset, a missing backend only shows a hint.
+    /// </summary>
+    public Func<string, IProgress<string>, CancellationToken, Task<bool>>? EnsureBackendAsync { get; set; }
+
+    /// <summary>
+    /// Initialises the ViewModel with its solver service. The optional
+    /// <paramref name="defaultsStore"/> records each manually entered cross-section
+    /// so the canvas mode probe (issue #691) can fall back to it.
+    /// </summary>
+    public ModeSolverViewModel(
+        IModeSolverService service,
+        CAP_Core.Solvers.ModeProbe.CrossSectionDefaultsStore? defaultsStore = null)
     {
         _service = service ?? throw new ArgumentNullException(nameof(service));
+        _defaultsStore = defaultsStore;
     }
 
     // ── commands ─────────────────────────────────────────────────────────────
@@ -102,24 +119,37 @@ public partial class ModeSolverViewModel : ObservableObject
         HasResult   = false;
         HasStderr   = false;
         RawStderr   = "";
-        StatusText  = "Solving…";
+        StatusText  = LocalizationService.Instance.Translate("Solver.Solving");
 
         try
         {
             var request = BuildRequest();
+            // Remember the manual entry so the canvas mode probe can fall back to it
+            // when the active PDK carries no geometry/material data (issue #691).
+            _defaultsStore?.RecordManualEntry(Width, Height, SlabHeight, CoreIndex, CladIndex);
             var result  = await _service.SolveAsync(request, _cts.Token);
+
+            if (!result.Success && EnsureBackendAsync != null
+                && !string.IsNullOrWhiteSpace(result.MissingBackend))
+            {
+                var retried = await InstallBackendAndRetry(result, request, _cts.Token);
+                if (retried == null) return; // install handled the status itself; don't overwrite
+                result = retried;
+            }
 
             if (result.Success)
             {
                 Modes      = result.Modes;
                 OnPropertyChanged(nameof(Modes));
                 HasResult  = true;
-                StatusText = $"Done — {result.Modes.Count} mode(s) using {result.BackendUsed}.";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Solver.Done"),
+                    result.Modes.Count, result.BackendUsed);
             }
             else
             {
                 HasResult  = false;
-                StatusText = result.Error ?? "Solve failed.";
+                StatusText = result.Error ?? LocalizationService.Instance.Translate("Solver.SolveFailed");
 
                 if (!string.IsNullOrWhiteSpace(result.RawStderr))
                 {
@@ -133,12 +163,44 @@ public partial class ModeSolverViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Cancelled.";
+            StatusText = LocalizationService.Instance.Translate("Solver.Cancelled");
         }
         finally
         {
             IsSolving = false;
         }
+    }
+
+    /// <summary>
+    /// Auto-installs the missing backend into a managed environment and, on success,
+    /// re-runs the solve once against the freshly-activated interpreter. Returns the
+    /// retry result to display, or <c>null</c> when it has already set an explanatory
+    /// <see cref="StatusText"/> (install failed/declined, or the backend is still
+    /// unusable after install) and the caller should not overwrite it.
+    /// </summary>
+    private async Task<ModeSolverResult?> InstallBackendAndRetry(
+        ModeSolverResult failure, ModeSolverRequest request, CancellationToken ct)
+    {
+        var progress = new Progress<string>(m => StatusText = m);
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Solver.Installing"), failure.MissingBackend);
+        var installed = await EnsureBackendAsync!(failure.MissingBackend!, progress, ct);
+        if (!installed)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Solver.AutoInstallIncomplete"), failure.MissingBackend);
+            return null;
+        }
+
+        StatusText = LocalizationService.Instance.Translate("Solver.BackendInstalledRetrying");
+        var retry = await _service.SolveAsync(request, ct);
+        if (!retry.Success && retry.MissingBackend == failure.MissingBackend)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Solver.BackendStillUnavailable"), failure.MissingBackend);
+            return null;
+        }
+        return retry;
     }
 
     /// <summary>Cancels a running solve.</summary>

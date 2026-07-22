@@ -1,5 +1,6 @@
 using System.Collections.Concurrent;
 using Avalonia.Threading;
+using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Export;
 
@@ -17,13 +18,6 @@ namespace CAP.Avalonia.Controls.Canvas.ComponentPreview;
 /// is fired on the UI thread so the canvas can call <c>InvalidateVisual()</c>.
 /// </para>
 /// <para>
-/// When a per-instance raw-code Nazca override is active (<see cref="RawCodeLookup"/>
-/// returns a non-null string for the component's identifier), the fetch is routed to
-/// <see cref="NazcaComponentPreviewService.RenderRawCodeAsync"/> instead of the
-/// template path, and the raw-code hash is included in the cache key so a change in
-/// the override code invalidates the cached thumbnail automatically.
-/// </para>
-/// <para>
 /// Failures (Python unavailable, script timeout, 0 polygons) are cached as <c>null</c>
 /// so no further retries are attempted during the session — the component simply stays
 /// as a legacy rectangle.
@@ -35,6 +29,12 @@ public sealed class GdsPreviewRenderService
     internal const int MinBitmapPixels = 16;
 
     private readonly NazcaComponentPreviewService _previewService;
+
+    /// <summary>Renders gdsfactory-native components (cspdk etc.); null falls back to no preview.
+    /// Typed as the base so it can be mocked in tests; DI injects the
+    /// <see cref="GdsFactoryComponentPreviewService"/> instance.</summary>
+    private readonly NazcaComponentPreviewService? _gdsFactoryPreviewService;
+
     private readonly GdsPreviewCache _cache = new();
 
     /// <summary>Persistent on-disk cache for resolution-independent geometry.</summary>
@@ -61,46 +61,39 @@ public sealed class GdsPreviewRenderService
     public event Action? OnPreviewLoaded;
 
     /// <summary>
-    /// Optional delegate that returns the stored raw-code Nazca override for a
-    /// component identifier, or <c>null</c> when no raw-code override is active.
-    /// Wire this to <c>FileOperationsViewModel.StoredNazcaOverrides</c> after DI setup.
-    /// When set, components with a raw-code override have their thumbnail rendered via
-    /// <see cref="NazcaComponentPreviewService.RenderRawCodeAsync"/> instead of the
-    /// PDK template path, and the cache key includes a hash of the raw code.
-    /// </summary>
-    public Func<string, string?>? RawCodeLookup { get; set; }
-
-    /// <summary>
     /// Initializes the service with the shared Nazca preview back-end and a
     /// default disk cache.
     /// </summary>
-    public GdsPreviewRenderService(NazcaComponentPreviewService previewService)
-        : this(previewService, new GdsPreviewDiskCache())
+    public GdsPreviewRenderService(
+        NazcaComponentPreviewService previewService,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
+        : this(previewService, new GdsPreviewDiskCache(), gdsFactoryPreviewService)
     {
     }
 
     /// <summary>
-    /// Initializes the service with the shared Nazca preview back-end and an
-    /// explicit disk cache (used by tests to redirect cache files).
+    /// Initializes the service with the shared Nazca preview back-end, an explicit disk cache
+    /// (used by tests to redirect cache files), and an optional gdsfactory preview back-end
+    /// for gdsfactory-native components (#570).
     /// </summary>
-    public GdsPreviewRenderService(NazcaComponentPreviewService previewService, GdsPreviewDiskCache diskCache)
+    public GdsPreviewRenderService(
+        NazcaComponentPreviewService previewService, GdsPreviewDiskCache diskCache,
+        NazcaComponentPreviewService? gdsFactoryPreviewService = null)
     {
         _previewService = previewService ?? throw new ArgumentNullException(nameof(previewService));
         _diskCache = diskCache ?? throw new ArgumentNullException(nameof(diskCache));
+        _gdsFactoryPreviewService = gdsFactoryPreviewService;
     }
 
     /// <summary>
     /// Returns cached <see cref="GdsPreviewData"/> for the given component template,
     /// or <c>null</c> while a background fetch is pending or when no preview is
     /// available (unknown Nazca function, Python unavailable, empty polygon list).
-    /// When <see cref="RawCodeLookup"/> is set and returns a non-null value for this
-    /// component, the raw-code render path is used instead of the template path.
     /// </summary>
     /// <param name="comp">The component for which to fetch/retrieve the preview.</param>
     public GdsPreviewData? TryGetPreview(ComponentViewModel comp)
     {
-        var rawCode = RawCodeLookup?.Invoke(comp.Component.Identifier);
-        var cacheKey = BuildCacheKey(comp, rawCode);
+        var cacheKey = BuildCacheKey(comp);
         if (cacheKey == null)
             return null;
 
@@ -109,46 +102,69 @@ public sealed class GdsPreviewRenderService
 
         // Enqueue a background fetch only once per key
         if (_pendingFetches.TryAdd(cacheKey, 0))
-            _ = FetchAndCacheAsync(cacheKey, comp, rawCode);
+            _ = FetchAndCacheAsync(cacheKey, comp);
 
         return null;
     }
 
     /// <summary>
     /// Builds the cache key for a component.
-    /// When <paramref name="rawCode"/> is non-null the key is prefixed with
-    /// <c>"rawcode|"</c> and includes a SHA-256 hash of the code so that any
-    /// change in the override automatically invalidates the cached thumbnail.
-    /// Returns <c>null</c> when neither a raw-code override nor a Nazca function
-    /// name is available (built-in or external-port components).
+    /// Returns <c>null</c> when no Nazca function name is available (built-in or
+    /// external-port components).
     /// </summary>
-    internal static string? BuildCacheKey(ComponentViewModel comp, string? rawCode = null)
+    internal static string? BuildCacheKey(ComponentViewModel comp)
     {
-        if (rawCode != null)
-            return $"rawcode|{ComputeRawCodeHash(rawCode)}|{comp.Width:F2}|{comp.Height:F2}";
+        // Key on the UNROTATED dimensions: the cached bitmap holds unrotated geometry, so
+        // keying on the live (rotation-swapped) dims would re-run the Python render on every
+        // rotation and rasterise with a distorted aspect ratio.
+        var (width, height) = GetUnrotatedDimensions(comp);
+
+        // gdsfactory-native components take precedence over the Nazca function: placement gives
+        // them a synthesized nazcaFunction ("nazca_<name>") no Nazca script can render, so the
+        // module-qualified GdsFactoryFunction is the real render identity.
+        if (IsGdsFactoryNative(comp.Component))
+            return $"gdsfactory|{comp.Component.GdsFactoryFunction}|{width:F2}|{height:F2}";
 
         var fn = comp.Component.NazcaFunctionName;
-        if (string.IsNullOrWhiteSpace(fn))
-            return null;
+        if (!string.IsNullOrWhiteSpace(fn))
+            return $"{fn}|{width:F2}|{height:F2}";
 
-        return $"{fn}|{comp.Width:F2}|{comp.Height:F2}";
+        return null;
     }
 
-    private static string ComputeRawCodeHash(string code)
+    private static (double Width, double Height) GetUnrotatedDimensions(ComponentViewModel comp) =>
+        GdsPolygonRenderer.GetUnrotatedSize(comp.Component.RotationDegrees, comp.Width, comp.Height);
+
+    /// <summary>
+    /// True when the component is gdsfactory-native: it carries a module-qualified
+    /// <see cref="Component.GdsFactoryFunction"/> (e.g. "cspdk.sin300.mmi1x2"). Such components
+    /// render via the gdsfactory back-end, never Nazca — even if they also carry a synthesized
+    /// nazcaFunction fallback from placement.
+    /// </summary>
+    private static bool IsGdsFactoryNative(CAP_Core.Components.Core.Component comp) =>
+        !string.IsNullOrWhiteSpace(comp.GdsFactoryFunction) && comp.GdsFactoryFunction!.Contains('.');
+
+    /// <summary>
+    /// Renders a gdsfactory-native component's geometry via the gdsfactory preview back-end,
+    /// or a failure result when no service is wired / the function is not module-qualified (#570).
+    /// </summary>
+    private async Task<NazcaPreviewResult> RenderGdsFactoryAsync(string? gdsFactoryFunction)
     {
-        var bytes = System.Security.Cryptography.SHA256.HashData(
-            System.Text.Encoding.UTF8.GetBytes(code));
-        return Convert.ToHexString(bytes);
+        var code = GdsFactoryPreviewCode.For(gdsFactoryFunction);
+        if (code == null || _gdsFactoryPreviewService == null)
+            return NazcaPreviewResult.Fail("No gdsfactory preview available for this component.");
+        return await _gdsFactoryPreviewService.RenderRawCodeAsync(code);
     }
 
-    private async Task FetchAndCacheAsync(string cacheKey, ComponentViewModel comp, string? rawCode)
+    private async Task FetchAndCacheAsync(string cacheKey, ComponentViewModel comp)
     {
         NazcaPreviewResult result;
         try
         {
-            if (rawCode != null)
+            if (IsGdsFactoryNative(comp.Component))
             {
-                result = await _previewService.RenderRawCodeAsync(rawCode);
+                // Precedence over the (possibly synthesized) nazcaFunction — see BuildCacheKey.
+                result = await RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);
             }
             else
             {
@@ -163,8 +179,10 @@ public sealed class GdsPreviewRenderService
             result = NazcaPreviewResult.Fail("Unexpected error during GDS preview fetch.");
         }
 
+        // Rasterise in the unrotated frame — the canvas applies the rotation at draw time.
+        var (unrotatedW, unrotatedH) = GetUnrotatedDimensions(comp);
         var data = result.Success && result.Polygons.Count > 0
-            ? new GdsPreviewData(result, comp.Width, comp.Height)
+            ? new GdsPreviewData(result, unrotatedW, unrotatedH)
             : null;
 
         // Cache before removing the pending-fetch marker so a concurrent caller
@@ -175,8 +193,8 @@ public sealed class GdsPreviewRenderService
 
         if (data != null)
         {
-            int bitmapW = Math.Max(GdsPreviewRenderService.MinBitmapPixels, (int)Math.Ceiling(comp.Width));
-            int bitmapH = Math.Max(GdsPreviewRenderService.MinBitmapPixels, (int)Math.Ceiling(comp.Height));
+            int bitmapW = Math.Max(GdsPreviewRenderService.MinBitmapPixels, (int)Math.Ceiling(unrotatedW));
+            int bitmapH = Math.Max(GdsPreviewRenderService.MinBitmapPixels, (int)Math.Ceiling(unrotatedH));
             await Dispatcher.UIThread.InvokeAsync(() =>
             {
                 var bitmap = GdsPolygonRenderer.RasterizeToBitmap(data.Result, bitmapW, bitmapH);
@@ -220,7 +238,12 @@ public sealed class GdsPreviewRenderService
             }
             await _renderGate.WaitAsync();
             NazcaPreviewResult result;
-            try { result = await _previewService.RenderAsync(key.Module, key.Function!, key.Parameters); }
+            try
+            {
+                result = string.IsNullOrWhiteSpace(key.Function)
+                    ? await RenderGdsFactoryAsync(key.GdsFactoryFunction)
+                    : await _previewService.RenderAsync(key.Module, key.Function!, key.Parameters);
+            }
             finally { _renderGate.Release(); }
 
             if (result.Success && result.Polygons.Count > 0)
@@ -228,9 +251,20 @@ public sealed class GdsPreviewRenderService
                 _diskCache.Write(key, result);
                 _memGeometry.Set(cacheKey, result);
             }
+            else if (result.Success)
+            {
+                // A genuinely empty render (0 polygons) — persist the empty marker so we don't
+                // keep re-rendering a component that has no geometry.
+                _diskCache.WriteEmpty(key);
+                _memGeometry.Set(cacheKey, null);
+            }
             else
             {
-                _diskCache.WriteEmpty(key);
+                // The render FAILED (Python/env/script error — e.g. cspdk not yet installed, a
+                // broken or half-provisioned interpreter). Do NOT persist: a transient env failure
+                // must not poison the disk cache permanently, or the component stays blank forever
+                // even after the env is fixed. Remember null for this session only (like the catch
+                // block below), so the next launch retries. (#570 field test.)
                 _memGeometry.Set(cacheKey, null);
             }
             RaisePreviewLoaded();

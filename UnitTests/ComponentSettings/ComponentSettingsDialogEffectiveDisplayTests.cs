@@ -124,7 +124,8 @@ public class ComponentSettingsDialogEffectiveDisplayTests
 
         var byWavelength = vm.EffectiveEntries.ToDictionary(e => e.WavelengthLabel);
         byWavelength["1550 nm"].IsOverridden.ShouldBeTrue();
-        byWavelength["1550 nm"].SourceTag.ShouldBe("Override active");
+        // #582: the tag carries the override's provenance (the store's SourceNote).
+        byWavelength["1550 nm"].SourceTag.ShouldBe("Override active — imported");
         byWavelength["1310 nm"].IsOverridden.ShouldBeFalse();
         byWavelength["1310 nm"].SourceTag.ShouldBe("PDK Default");
     }

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Analysis.TimeTrace;
 using OxyPlot.Series;
 using Shouldly;
@@ -15,6 +16,16 @@ namespace UnitTests.Analysis.TimeTrace;
 /// </summary>
 public class TimeTracePlotBuilderTests
 {
+    /// <summary>
+    /// Pins the UI language to English so the axis-title assertions ("Time (ps)" /
+    /// "Time (ns)") are locale-independent — the axis title is now localized (#749)
+    /// and would otherwise vary with the runner's OS culture.
+    /// </summary>
+    public TimeTracePlotBuilderTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private static TimeDomainResult MakeResult(
         double[] timeAxis, params (Guid pin, double[] trace)[] traces)
     {
@@ -109,6 +120,35 @@ public class TimeTracePlotBuilderTests
     }
 
     [Fact]
+    public void BuildPlotModel_ShortWindow_LabelsAxisInPicoseconds()
+    {
+        var pin = Guid.NewGuid();
+        var result = MakeResult(new[] { 0.0, 1e-12, 2e-12 }, (pin, new[] { 0.0, 0.5, 0.2 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Axes.Single(a => a.Title.Contains("Time")).Title.ShouldBe("Time (ps)");
+    }
+
+    [Fact]
+    public void BuildPlotModel_LongWindow_SwitchesAxisToNanoseconds()
+    {
+        // A PRBS run spans ~1600 ps — the axis must read in ns, not "1600"
+        // in an easily-missed ps unit (user feedback on #600).
+        var pin = Guid.NewGuid();
+        var timeAxis = Enumerable.Range(0, 5).Select(n => n * 0.4e-9).ToArray(); // 0…1.6 ns
+        var result = MakeResult(timeAxis, (pin, new[] { 0.0, 0.5, 0.2, 0.7, 0.1 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Axes.Single(a => a.Title.Contains("Time")).Title.ShouldBe("Time (ns)");
+        var series = model.Series.OfType<LineSeries>().Single();
+        series.Points[4].X.ShouldBe(1.6, 1e-9, "X values must be rescaled to ns");
+    }
+
+    [Fact]
     public void BuildPlotModel_OmitsHiddenSeries()
     {
         var a = Guid.NewGuid();
@@ -148,6 +188,31 @@ public class TimeTracePlotBuilderTests
         model.Series.Count.ShouldBe(0);
         model.Axes.Any(a => a.Title.Contains("Time")).ShouldBeTrue();
         model.Axes.Any(a => a.Title.Contains("Power")).ShouldBeTrue();
+    }
+
+    /// <summary>
+    /// The per-pin checkbox list below the chart (<c>TimeTraceSeriesViewModel.IsVisible</c>)
+    /// is the only series-visibility control; an in-plot OxyPlot legend would duplicate it as
+    /// clickable buttons cluttering the chart (field feedback, round 5 finding 1).
+    /// </summary>
+    [Fact]
+    public void CreateEmptyPlotModel_HasNoVisibleInPlotLegend()
+    {
+        var model = TimeTracePlotBuilder.CreateEmptyPlotModel();
+
+        model.Legends.ShouldAllBe(legend => !legend.IsLegendVisible);
+    }
+
+    [Fact]
+    public void BuildPlotModel_HasNoVisibleInPlotLegend()
+    {
+        var pin = Guid.NewGuid();
+        var result = MakeResult(new[] { 0.0, 1e-12 }, (pin, new[] { 0.0, 0.5 }));
+        var items = TimeTracePlotBuilder.BuildSeriesItems(result, _ => null);
+
+        var model = TimeTracePlotBuilder.BuildPlotModel(result, items);
+
+        model.Legends.ShouldAllBe(legend => !legend.IsLegendVisible);
     }
 
     [Fact]
