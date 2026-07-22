@@ -471,6 +471,59 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public async Task RunPreview_recognisedFoundryError_consoleCarriesTheWindowMessagePlusRawDetail()
+    {
+        // Field wish (round 6): window status and Error Console must tell ONE story.
+        // The window shows the actionable hint; the console carries the SAME message
+        // plus the raw Python detail — not a different, raw-only text.
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        var nazca = new Mock<IComponentPreviewRenderer>();
+        var gds = new Mock<IComponentPreviewRenderer>();
+        gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+           .ReturnsAsync(NazcaPreviewResult.Fail(
+               "module 'siepic_ebeam_pdk' has no attribute 'ebeam_adiabatic_te1550'"));
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var vm = new NewComponentViewModel(
+            new ComponentGeometryExtractor(nazca.Object, gds.Object), fdtd: null, store,
+            new List<ProcessDefinition> { process }, errorConsole);
+        vm.Code = "component = gf.get_component('ebeam_adiabatic_te1550')";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        var entry = errorConsole.Entries.ShouldHaveSingleItem();
+        entry.Message.ShouldContain(vm.StatusText);   // same message as the window...
+        entry.Message.ShouldContain(
+            "module 'siepic_ebeam_pdk' has no attribute 'ebeam_adiabatic_te1550'"); // ...plus raw detail
+    }
+
+    [Fact]
+    public async Task RunPreview_unrecognisedError_logsTheSameMessageToWindowAndConsole()
+    {
+        // Unrecognised errors previously reached only the status bar; the console stayed
+        // silent, so window and console diverged. One source: both carry the same text.
+        var store = Store();
+        var process = new ProcessDefinition { Name = "SiN 300" };
+        store.CreateNamedPdkWithProcess("Lib", process, "gdsfactory", null);
+        var nazca = new Mock<IComponentPreviewRenderer>();
+        var gds = new Mock<IComponentPreviewRenderer>();
+        gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
+           .ReturnsAsync(NazcaPreviewResult.Fail("SyntaxError: invalid syntax (line 3)"));
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var vm = new NewComponentViewModel(
+            new ComponentGeometryExtractor(nazca.Object, gds.Object), fdtd: null, store,
+            new List<ProcessDefinition> { process }, errorConsole);
+        vm.Code = "def component(:";
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldBe("SyntaxError: invalid syntax (line 3)");
+        var entry = errorConsole.Entries.ShouldHaveSingleItem();
+        entry.Message.ShouldContain("SyntaxError: invalid syntax (line 3)");
+    }
+
+    [Fact]
     public void LoadForEdit_withNoStoredCode_setsCodeEmpty_andReportsStatus()
     {
         var (vm, _, _) = BuildWithSeededPdk();
