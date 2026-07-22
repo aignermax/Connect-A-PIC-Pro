@@ -89,6 +89,8 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
         foreach (var (key, value) in manifest.Parameters)
             Parameters.Add($"{key} = {value}");
 
+        foreach (var artifact in manifest.Artifacts.Geometry)
+            Artifacts.Add(RegistryArtifactDisplay.From("geometry", artifact));
         foreach (var artifact in manifest.Artifacts.Simulated)
             Artifacts.Add(RegistryArtifactDisplay.From("simulated", artifact));
         foreach (var artifact in manifest.Artifacts.Measured)

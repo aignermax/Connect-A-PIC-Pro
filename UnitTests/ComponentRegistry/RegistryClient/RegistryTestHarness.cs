@@ -18,13 +18,20 @@ public sealed class RegistryTestHarness : IDisposable
     /// <summary>Component-relative path of the fixture spectrum artifact.</summary>
     public const string SpectrumFile = "simulated/analytic-demo.json";
 
+    /// <summary>Component ids that have a committed preview SVG fixture (all demo components).</summary>
+    public static readonly string[] PreviewComponentIds =
+    {
+        "directional-coupler-2x2", "mzi-unbalanced-dl40", "ring-resonator-r10",
+        "straight-waveguide-100um", "y-branch-1x2",
+    };
+
     private readonly string _cacheDirectory = Path.Combine(
         Path.GetTempPath(), "lunima-registry-tests", Guid.NewGuid().ToString("N"));
 
     /// <summary>The stub HTTP layer (request counting, canned responses, failure mode).</summary>
     public StubHttpMessageHandler Handler { get; } = new();
 
-    /// <summary>Creates a harness whose handler serves all three fixture documents.</summary>
+    /// <summary>Creates a harness whose handler serves all committed fixture documents.</summary>
     public RegistryTestHarness()
     {
         Handler.AddResponse($"{BaseUrl}/index.json", ReadFixture("index.json"));
@@ -32,6 +39,10 @@ public sealed class RegistryTestHarness : IDisposable
         var spectrumPath = CAP_Core.ComponentRegistry.RegistryClient.RegistryClient
             .ResolveArtifactPath(ManifestPath, SpectrumFile);
         Handler.AddResponse($"{BaseUrl}/{spectrumPath}", ReadFixture("spectrum.json"));
+        foreach (var componentId in PreviewComponentIds)
+            Handler.AddResponse(
+                $"{BaseUrl}/processes/generic-si220/components/{componentId}/geometry/preview.svg",
+                ReadFixture($"preview-{componentId}.svg"));
     }
 
     /// <summary>Creates a client wired to the stub handler and the temp cache.</summary>

@@ -71,6 +71,13 @@ public class RegistryIndexEntry
     /// <summary>Best (most trustworthy) artifact status across all tiers.</summary>
     [JsonPropertyName("bestStatus")]
     public string BestStatus { get; set; } = "";
+
+    /// <summary>
+    /// Repo-relative path to the geometry preview SVG, or null when the
+    /// registry has not published one (additive field, photonic-registry#1).
+    /// </summary>
+    [JsonPropertyName("preview")]
+    public string? Preview { get; set; }
 }
 
 /// <summary>Availability flags for the three registry artifact tiers.</summary>

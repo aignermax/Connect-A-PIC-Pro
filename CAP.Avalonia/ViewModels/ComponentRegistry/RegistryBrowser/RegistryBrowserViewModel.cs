@@ -81,6 +81,13 @@ public partial class RegistryBrowserViewModel : ObservableObject
     /// <summary>In-flight detail load; awaited by tests and the screenshot harness.</summary>
     public Task DetailsLoadTask { get; private set; } = Task.CompletedTask;
 
+    /// <summary>
+    /// In-flight tile preview loads (issue #771). Deliberately separate from
+    /// <see cref="IndexLoadTask"/> so the grid lists instantly and previews
+    /// pop in as their SVGs arrive; awaited by tests and the screenshot harness.
+    /// </summary>
+    public Task PreviewsLoadTask { get; private set; } = Task.CompletedTask;
+
     /// <summary>Creates the browser on top of a configured registry client.</summary>
     public RegistryBrowserViewModel(RegistryClient client)
     {
@@ -140,10 +147,28 @@ public partial class RegistryBrowserViewModel : ObservableObject
 
         RebuildFilterOptions();
         ApplyFilters();
+        PreviewsLoadTask = LoadPreviewsAsync(Components.ToList());
 
         if (result.Source == RegistrySource.Cache)
             SourceNote = LocalizationService.Instance.Translate(
                 forceRefresh ? "Registry.OfflineCache" : "Registry.LoadedFromCache");
+    }
+
+    /// <summary>
+    /// Fetches the tile preview SVGs after the grid is listed (cache-first, so
+    /// this is disk-only once populated). Every failure — no preview declared,
+    /// download error, unparseable SVG — silently keeps the placeholder.
+    /// </summary>
+    private async Task LoadPreviewsAsync(IReadOnlyList<RegistryComponentItemViewModel> items)
+    {
+        foreach (var item in items)
+        {
+            if (string.IsNullOrWhiteSpace(item.Entry.Preview))
+                continue;
+            var result = await _client.GetPreviewAsync(item.Entry);
+            if (result.IsSuccess && RegistryPreviewSvgParser.TryParse(result.Value) is not null)
+                item.PreviewSvg = result.Value!;
+        }
     }
 
     /// <summary>

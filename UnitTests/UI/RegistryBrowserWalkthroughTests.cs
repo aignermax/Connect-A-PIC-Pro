@@ -63,6 +63,9 @@ public class RegistryBrowserWalkthroughTests
         };
         window.Show(); // Opened hook triggers the lazy index load (stubbed client, committed fixtures).
         PumpUntilComplete(registry.IndexLoadTask);
+        // Tile previews load async after the grid (#771) — wait so every step
+        // shows the fixture SVGs rendered in the tiles instead of placeholders.
+        PumpUntilComplete(registry.PreviewsLoadTask);
 
         // Step 1: opened window — tile grid with all components, filter bar on top.
         Capture(window, outputDir, "01-loaded-grid.png");

@@ -97,6 +97,13 @@ public class GeometryInfo
 /// <summary>Artifact references of a component, grouped by tier.</summary>
 public class ComponentArtifacts
 {
+    /// <summary>
+    /// Geometry artifacts (GDS layouts with optional SVG previews). Empty when
+    /// the registry predates the additive geometry tier (photonic-registry#1).
+    /// </summary>
+    [JsonPropertyName("geometry")]
+    public List<ArtifactRef> Geometry { get; set; } = new();
+
     /// <summary>Simulated S-matrix artifacts.</summary>
     [JsonPropertyName("simulated")]
     public List<ArtifactRef> Simulated { get; set; } = new();
@@ -112,6 +119,14 @@ public class ArtifactRef
     /// <summary>Path relative to the component directory.</summary>
     [JsonPropertyName("file")]
     public string File { get; set; } = "";
+
+    /// <summary>Geometry artifacts only: file format, currently <c>gds</c>.</summary>
+    [JsonPropertyName("format")]
+    public string? Format { get; set; }
+
+    /// <summary>Geometry artifacts only: component-relative path to the rendered preview SVG.</summary>
+    [JsonPropertyName("preview")]
+    public string? Preview { get; set; }
 
     /// <summary>Trust status: <c>demo</c>, <c>unverified</c>, <c>verified</c>, <c>disputed</c> or <c>withdrawn</c>.</summary>
     [JsonPropertyName("status")]

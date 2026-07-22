@@ -29,9 +29,26 @@
     "excessLoss_dB": 0.2
   },
   "geometry": {
-    "format": "none"
+    "format": "gds",
+    "source": "geometry/cell.gds",
+    "cellName": "y_branch_1x2"
   },
   "artifacts": {
+    "geometry": [
+      {
+        "file": "geometry/cell.gds",
+        "format": "gds",
+        "preview": "geometry/preview.svg",
+        "status": "demo",
+        "provenance": {
+          "method": "generic-layout",
+          "tool": "gdsfactory 9.44.0 (generic PDK)",
+          "settings": "gf.components.mmi1x2()  # MMI as representative generic 1x2 splitter geometry",
+          "createdBy": "scripts/generate_demo_geometry.py",
+          "date": "2026-07-22"
+        }
+      }
+    ],
     "simulated": [
       {
         "file": "simulated/analytic-demo.json",

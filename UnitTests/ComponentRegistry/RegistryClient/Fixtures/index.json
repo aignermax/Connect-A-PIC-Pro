@@ -16,11 +16,12 @@
       "portCount": 4,
       "path": "processes/generic-si220/components/directional-coupler-2x2/component.json",
       "tiers": {
-        "geometry": false,
+        "geometry": true,
         "simulated": true,
         "measured": false
       },
-      "bestStatus": "demo"
+      "bestStatus": "demo",
+      "preview": "processes/generic-si220/components/directional-coupler-2x2/geometry/preview.svg"
     },
     {
       "id": "mzi-unbalanced-dl40",
@@ -30,11 +31,12 @@
       "portCount": 4,
       "path": "processes/generic-si220/components/mzi-unbalanced-dl40/component.json",
       "tiers": {
-        "geometry": false,
+        "geometry": true,
         "simulated": true,
         "measured": false
       },
-      "bestStatus": "demo"
+      "bestStatus": "demo",
+      "preview": "processes/generic-si220/components/mzi-unbalanced-dl40/geometry/preview.svg"
     },
     {
       "id": "ring-resonator-r10",
@@ -44,11 +46,12 @@
       "portCount": 2,
       "path": "processes/generic-si220/components/ring-resonator-r10/component.json",
       "tiers": {
-        "geometry": false,
+        "geometry": true,
         "simulated": true,
         "measured": false
       },
-      "bestStatus": "demo"
+      "bestStatus": "demo",
+      "preview": "processes/generic-si220/components/ring-resonator-r10/geometry/preview.svg"
     },
     {
       "id": "straight-waveguide-100um",
@@ -58,11 +61,12 @@
       "portCount": 2,
       "path": "processes/generic-si220/components/straight-waveguide-100um/component.json",
       "tiers": {
-        "geometry": false,
+        "geometry": true,
         "simulated": true,
         "measured": false
       },
-      "bestStatus": "demo"
+      "bestStatus": "demo",
+      "preview": "processes/generic-si220/components/straight-waveguide-100um/geometry/preview.svg"
     },
     {
       "id": "y-branch-1x2",
@@ -72,11 +76,12 @@
       "portCount": 3,
       "path": "processes/generic-si220/components/y-branch-1x2/component.json",
       "tiers": {
-        "geometry": false,
+        "geometry": true,
         "simulated": true,
         "measured": false
       },
-      "bestStatus": "demo"
+      "bestStatus": "demo",
+      "preview": "processes/generic-si220/components/y-branch-1x2/geometry/preview.svg"
     }
   ]
 }

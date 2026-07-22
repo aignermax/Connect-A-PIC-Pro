@@ -68,6 +68,7 @@
 
   <ItemGroup>
     <None Include="ComponentRegistry\RegistryClient\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="ComponentRegistry\RegistryClient\Fixtures\*.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

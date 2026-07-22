@@ -81,6 +81,49 @@ public class RegistryClient
             ResolveArtifactPath(manifestPath, artifact.File), forceRefresh, cancellationToken);
 
     /// <summary>
+    /// Fetches the geometry preview SVG declared by an index entry as raw text,
+    /// cache-first like the JSON documents (the cache is path-agnostic — an SVG
+    /// is just another registry document). Never throws: entries without a
+    /// preview or failed downloads yield an inspectable failure result.
+    /// </summary>
+    /// <param name="entry">Index entry whose <see cref="RegistryIndexEntry.Preview"/> is fetched.</param>
+    /// <param name="forceRefresh">True to bypass the cache and re-download.</param>
+    /// <param name="cancellationToken">Cancels the download.</param>
+    public Task<RegistryResult<string>> GetPreviewAsync(
+        RegistryIndexEntry entry, bool forceRefresh = false, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(entry.Preview))
+            return Task.FromResult(RegistryResult<string>.Failure(
+                $"Registry component '{entry.Id}' declares no preview."));
+        return FetchRawAsync(entry.Preview, forceRefresh, cancellationToken);
+    }
+
+    private async Task<RegistryResult<string>> FetchRawAsync(
+        string registryPath, bool forceRefresh, CancellationToken cancellationToken)
+    {
+        if (!forceRefresh && _cache.TryRead(registryPath) is { } cached)
+            return RegistryResult<string>.Success(cached, RegistrySource.Cache);
+
+        var (content, networkError) = await DownloadAsync(registryPath, cancellationToken);
+        if (content is null)
+            return FallBackToRawCache(registryPath, networkError!);
+
+        _cache.Write(registryPath, content);
+        return RegistryResult<string>.Success(content, RegistrySource.Network);
+    }
+
+    private RegistryResult<string> FallBackToRawCache(string registryPath, string networkError)
+    {
+        if (_cache.TryRead(registryPath) is { } cached)
+        {
+            _logger?.Print($"Registry: serving '{registryPath}' from cache ({networkError})");
+            return RegistryResult<string>.Success(cached, RegistrySource.Cache);
+        }
+        _logger?.Print($"Registry: no preview for '{registryPath}': {networkError}");
+        return RegistryResult<string>.Failure(networkError);
+    }
+
+    /// <summary>
     /// Resolves an artifact file path (relative to the component directory)
     /// against the repo-relative manifest path.
     /// </summary>

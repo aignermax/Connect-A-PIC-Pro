@@ -1,5 +1,6 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ctrl="using:CAP.Avalonia.Controls"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         xmlns:reg="using:CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser"
         x:Class="CAP.Avalonia.Views.RegistryBrowserWindow"
@@ -71,21 +72,28 @@
                         <Border Width="220" Background="#252530" CornerRadius="6"
                                 BorderBrush="#34344a" BorderThickness="1" Padding="10">
                             <StackPanel Spacing="6">
-                                <!-- Preview placeholder: a stylized chip icon. Real GDS renders
-                                     follow once the registry publishes geometry artifacts — the
-                                     demo entries all have tier geometry ✗, so nothing is faked. -->
-                                <Border Height="64" CornerRadius="4" Background="#1b1b24">
-                                    <Canvas Width="56" Height="40" HorizontalAlignment="Center"
-                                            VerticalAlignment="Center">
-                                        <Rectangle Canvas.Left="8" Canvas.Top="4" Width="40" Height="32"
-                                                   RadiusX="3" RadiusY="3"
-                                                   Stroke="#5d7a9d" StrokeThickness="1.5"/>
-                                        <Rectangle Canvas.Left="0" Canvas.Top="12" Width="8" Height="2" Fill="#5d7a9d"/>
-                                        <Rectangle Canvas.Left="0" Canvas.Top="26" Width="8" Height="2" Fill="#5d7a9d"/>
-                                        <Rectangle Canvas.Left="48" Canvas.Top="19" Width="8" Height="2" Fill="#5d7a9d"/>
-                                        <Ellipse Canvas.Left="24" Canvas.Top="16" Width="8" Height="8"
-                                                 Stroke="#8fbf8f" StrokeThickness="1.5"/>
-                                    </Canvas>
+                                <!-- Geometry preview (#771): the registry's SVG rendered as native
+                                     geometry. The stylized chip icon stays as placeholder while the
+                                     preview loads, for entries without a published preview, and
+                                     whenever the download or parse fails. -->
+                                <Border Height="64" CornerRadius="4" Background="#1b1b24"
+                                        ClipToBounds="True">
+                                    <Panel>
+                                        <Canvas Width="56" Height="40" HorizontalAlignment="Center"
+                                                VerticalAlignment="Center"
+                                                IsVisible="{Binding PreviewSvg, Converter={x:Static StringConverters.IsNullOrEmpty}}">
+                                            <Rectangle Canvas.Left="8" Canvas.Top="4" Width="40" Height="32"
+                                                       RadiusX="3" RadiusY="3"
+                                                       Stroke="#5d7a9d" StrokeThickness="1.5"/>
+                                            <Rectangle Canvas.Left="0" Canvas.Top="12" Width="8" Height="2" Fill="#5d7a9d"/>
+                                            <Rectangle Canvas.Left="0" Canvas.Top="26" Width="8" Height="2" Fill="#5d7a9d"/>
+                                            <Rectangle Canvas.Left="48" Canvas.Top="19" Width="8" Height="2" Fill="#5d7a9d"/>
+                                            <Ellipse Canvas.Left="24" Canvas.Top="16" Width="8" Height="8"
+                                                     Stroke="#8fbf8f" StrokeThickness="1.5"/>
+                                        </Canvas>
+                                        <ctrl:RegistryPreviewControl Svg="{Binding PreviewSvg}"
+                                            IsVisible="{Binding PreviewSvg, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    </Panel>
                                 </Border>
                                 <TextBlock Text="{Binding Name}" Foreground="White" FontWeight="SemiBold"
                                            FontSize="12" TextWrapping="Wrap" MaxLines="2"
@@ -128,6 +136,13 @@
                             <TextBlock Text="{Binding SelectedComponent.Name, FallbackValue=''}"
                                        Foreground="DeepSkyBlue" FontSize="13" FontWeight="SemiBold"
                                        TextWrapping="Wrap"/>
+                            <!-- Larger geometry preview of the selected component (#771). -->
+                            <Border Height="130" CornerRadius="4" Background="#1b1b24"
+                                    ClipToBounds="True" Margin="0,2,0,4"
+                                    IsVisible="{Binding SelectedComponent.PreviewSvg, FallbackValue='', Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                <ctrl:RegistryPreviewControl
+                                    Svg="{Binding SelectedComponent.PreviewSvg, FallbackValue=''}"/>
+                            </Border>
                             <TextBlock Text="{loc:Localize Registry.LoadingDetails}" Foreground="Gray" FontSize="10"
                                        IsVisible="{Binding Details.IsLoading}"/>
                             <TextBlock Text="{Binding Details.ErrorMessage}"
