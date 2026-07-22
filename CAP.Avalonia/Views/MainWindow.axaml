@@ -269,6 +269,22 @@
                                                    Foreground="White" FontSize="12"/>
                                     </StackPanel>
                                 </Button>
+
+                                <!-- Unlock All (components & connections) — replaces the former
+                                     "Lock Elements" properties-panel section (issue: drop that
+                                     section, keep the unlock-all function reachable here). -->
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,3"
+                                        Background="#3d3d5d"
+                                        Command="{Binding BottomPanel.ElementLock.UnlockAllCommand}"
+                                        ToolTip.Tip="{loc:Localize Toolbar.UnlockAllTip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🔓" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Localize Toolbar.UnlockAll}"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -867,51 +883,6 @@
 
                     <!-- Netlist Panel (gdsfactory YAML view/export, #687) -->
                     <panels:NetlistPanel/>
-
-                    <!-- Element Lock Panel -->
-                    <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-                    <TextBlock Text="{loc:Localize Lock.Title}" Foreground="Gold" Margin="0,0,0,5" FontWeight="SemiBold"/>
-                    <TextBlock Text="{loc:Localize Lock.Description}"
-                               Foreground="Gray" FontSize="10" Margin="0,0,0,10" TextWrapping="Wrap"/>
-
-                    <!-- Selection-based lock controls -->
-                    <StackPanel IsVisible="{Binding BottomPanel.ElementLock.HasSelection}">
-                        <TextBlock Text="{loc:Localize Lock.SelectedComponents}" Foreground="Gray" Margin="0,0,0,5"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
-                            <Button Content="{loc:Localize Lock.Lock}"
-                                    Command="{Binding BottomPanel.ElementLock.LockSelectedComponentsCommand}"
-                                    Width="80" Margin="0,0,5,0" Background="#5d3d3d"/>
-                            <Button Content="{loc:Localize Lock.Unlock}"
-                                    Command="{Binding BottomPanel.ElementLock.UnlockSelectedComponentsCommand}"
-                                    Width="80" Margin="5,0,0,0" Background="#3d5d3d"/>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Global unlock controls -->
-                    <Button Content="{loc:Localize Lock.UnlockAllComponents}"
-                            Command="{Binding BottomPanel.ElementLock.UnlockAllComponentsCommand}"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Margin="0,5,0,5"
-                            Background="#3d4d5d"/>
-
-                    <Button Content="{loc:Localize Lock.UnlockAllConnections}"
-                            Command="{Binding BottomPanel.ElementLock.UnlockAllConnectionsCommand}"
-                            HorizontalAlignment="Stretch" HorizontalContentAlignment="Center"
-                            Margin="0,0,0,5"
-                            Background="#3d4d5d"/>
-
-                    <!-- Status display -->
-                    <StackPanel Orientation="Horizontal" Margin="0,10,0,5">
-                        <TextBlock Text="{loc:Localize Lock.LockedPrefix}" Foreground="Gray"/>
-                        <TextBlock Text="{Binding BottomPanel.ElementLock.LockedComponentCount}" Foreground="Orange"/>
-                        <TextBlock Text="{loc:Localize Lock.ComponentsInfix}" Foreground="Gray"/>
-                        <TextBlock Text="{Binding BottomPanel.ElementLock.LockedConnectionCount}" Foreground="Orange"/>
-                        <TextBlock Text="{loc:Localize Lock.ConnectionsSuffix}" Foreground="Gray"/>
-                    </StackPanel>
-
-                    <TextBlock Text="{Binding BottomPanel.ElementLock.StatusText}"
-                               Foreground="LightGreen" FontSize="10" Margin="0,0,0,5"
-                               IsVisible="{Binding BottomPanel.ElementLock.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
                 </StackPanel>
                 </ScrollViewer>
