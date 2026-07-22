@@ -978,7 +978,7 @@ public partial class FileOperationsViewModel : ObservableObject
                     ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
                 }
 
-                _currentFilePath = filePath;
+                CurrentFilePath = filePath;
                 HasUnsavedChanges = false;
                 if (recordRecent)
                 {
