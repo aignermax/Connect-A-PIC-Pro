@@ -165,16 +165,19 @@ public partial class NewComponentViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Shows the actionable foundry-package hint in the status bar and keeps the raw Python
-    /// error in the Error Console; unrecognised errors stay verbatim.
+    /// Single source for the preview-failure message (field round 6): the window status shows
+    /// the actionable message (the foundry-package hint when recognised, otherwise the raw
+    /// error) and the Error Console receives the SAME message plus the raw Python detail —
+    /// never two different stories for one failure.
     /// </summary>
     private string DescribeRenderError(string? rawError)
     {
         var hint = CAP_Core.Export.FoundryEnvironmentErrorHint.Describe(rawError);
-        if (hint is null)
-            return rawError ?? "Preview render failed.";
-
-        _errorConsole?.LogError($"Component preview render failed: {rawError}");
-        return hint;
+        var display = hint ?? rawError ?? "Preview render failed.";
+        var detail = hint is not null && !string.IsNullOrWhiteSpace(rawError)
+            ? $"{display}\nPython error detail: {rawError}"
+            : display;
+        _errorConsole?.LogError($"Component preview render failed: {detail}");
+        return display;
     }
 }
