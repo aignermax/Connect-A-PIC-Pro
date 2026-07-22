@@ -96,7 +96,10 @@ public static class MainViewModelTestHelper
             // tests don't contaminate each other or the developer's real file.
             new CAP.Avalonia.Services.UserSMatrixOverrideStore(
                 Path.Combine(Path.GetTempPath(), $"sparam-overrides-test-{Guid.NewGuid()}.json")),
-            new GdsPreviewRenderService(new NazcaComponentPreviewService("python3", "/nonexistent/script.py")));
+            new GdsPreviewRenderService(new NazcaComponentPreviewService("python3", "/nonexistent/script.py")),
+            // Registry browser backed by the committed fixtures — no network access.
+            new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
+                new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()));
     }
 
     /// <summary>

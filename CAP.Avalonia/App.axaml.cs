@@ -46,6 +46,7 @@ public partial class App : Application
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
         services.AddHomeFeature();
+        services.AddComponentRegistryFeature();
         services.AddAddCustomComponentFeature();
         services.AddLocalizationFeature();
 

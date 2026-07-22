@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-loaded-grid.png",
+    "caption": "Opening the Component Registry window loads the index and shows all components as tiles with status chips and simulation tiers, under a search/process/status filter bar."
+  },
+  {
+    "file": "02-search-filter.png",
+    "caption": "Typing in the search box filters the tiles by name and description."
+  },
+  {
+    "file": "03-process-mismatch.png",
+    "caption": "Components targeting a process other than the design\u0027s active one are flagged with a \u0027different process\u0027 chip."
+  },
+  {
+    "file": "04-details.png",
+    "caption": "Selecting a component shows its description, ports, parameters, artifact provenance, and license in the detail column."
+  }
+]
