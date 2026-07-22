@@ -24,6 +24,7 @@ namespace UnitTests.UI;
 /// restore rows. Writes PNGs + manifest.json to <c>artifacts/ui-screenshots/issue-739/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue742PdkUxPolishScreenshotTests
 {
     [AvaloniaFact]

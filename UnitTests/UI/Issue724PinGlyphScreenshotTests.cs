@@ -25,6 +25,7 @@ namespace UnitTests.UI;
 /// Writes a PNG + manifest.json to <c>artifacts/ui-screenshots/issue-724/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue724PinGlyphScreenshotTests
 {
     private const double Scale = 4.0;
