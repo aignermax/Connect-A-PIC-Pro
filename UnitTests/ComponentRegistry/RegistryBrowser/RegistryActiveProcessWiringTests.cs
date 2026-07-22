@@ -21,7 +21,7 @@ public sealed class RegistryActiveProcessWiringTests
             "generic-si220", Fingerprint: null,
             MemberPdkNames: new List<string>(), IsPlayground: false));
 
-        vm.RightPanel.Registry.ActiveProcessId.ShouldBe("generic-si220");
+        vm.Registry.ActiveProcessId.ShouldBe("generic-si220");
     }
 
     [Fact]
@@ -34,7 +34,7 @@ public sealed class RegistryActiveProcessWiringTests
 
         vm.FileOperations.SetActiveProcess(ActiveProcessSelection.Playground());
 
-        vm.RightPanel.Registry.ActiveProcessId.ShouldBeNull();
+        vm.Registry.ActiveProcessId.ShouldBeNull();
     }
 
     [Fact]
@@ -42,6 +42,6 @@ public sealed class RegistryActiveProcessWiringTests
     {
         var vm = MainViewModelTestHelper.CreateMainViewModel();
 
-        vm.RightPanel.Registry.ActiveProcessId.ShouldBeNull();
+        vm.Registry.ActiveProcessId.ShouldBeNull();
     }
 }

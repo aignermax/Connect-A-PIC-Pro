@@ -3,7 +3,6 @@ using Avalonia.Controls;
 using CAP.Avalonia.ViewModels.AI;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
-using CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Converters;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -114,11 +113,6 @@ public partial class RightPanelViewModel : ObservableObject
     /// </summary>
     public Export.Netlist.NetlistViewModel Netlist { get; }
 
-    /// <summary>
-    /// ViewModel for the read-only photonic registry browser panel (issue #656).
-    /// </summary>
-    public RegistryBrowserViewModel Registry { get; }
-
     private readonly ComponentEditorFactory _editorFactory;
     private readonly DesignCanvasViewModel _canvas;
 
@@ -155,8 +149,7 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistantViewModel aiAssistant,
         OnaSweepViewModel onaAnalysis,
         Export.Netlist.NetlistViewModel netlist,
-        ComponentEditorFactory editorFactory,
-        RegistryBrowserViewModel registry)
+        ComponentEditorFactory editorFactory)
     {
         _preferencesService = preferencesService;
         _editorFactory = editorFactory;
@@ -175,7 +168,6 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistant = aiAssistant;
         OnaAnalysis = onaAnalysis;
         Netlist = netlist;
-        Registry = registry;
 
         // Configure ViewModels that need canvas reference
         RoutingDiagnostics.Configure(canvas);

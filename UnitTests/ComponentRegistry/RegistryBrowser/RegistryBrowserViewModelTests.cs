@@ -166,14 +166,94 @@ public class RegistryBrowserViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task ExpandingPanel_TriggersInitialLoad()
+    public async Task EnsureLoaded_TriggersInitialLoad_AndIsIdempotent()
     {
         var vm = CreateViewModel();
 
-        vm.IsExpanded = true;
+        vm.EnsureLoaded();
         await vm.IndexLoadTask;
-
         vm.Components.Count.ShouldBe(5);
+
+        var requestsAfterLoad = _harness.Handler.RequestCount;
+        vm.EnsureLoaded(); // Already loaded — must not hit the network again.
+        await vm.IndexLoadTask;
+        _harness.Handler.RequestCount.ShouldBe(requestsAfterLoad);
+    }
+
+    [Fact]
+    public async Task Load_PopulatesFilterDropdowns_WithAllEntryFirstAndSelected()
+    {
+        var vm = CreateViewModel();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        // Fixtures: one process (generic-si220), one status (demo) → "All …" + 1 entry each.
+        vm.ProcessFilters.Select(o => o.Value).ShouldBe(new string?[] { null, "generic-si220" });
+        vm.StatusFilters.Select(o => o.Value).ShouldBe(new string?[] { null, "demo" });
+        vm.SelectedProcessFilter.ShouldBe(vm.ProcessFilters[0]);
+        vm.SelectedStatusFilter.ShouldBe(vm.StatusFilters[0]);
+        vm.FilteredComponents.Count.ShouldBe(5); // No filter active — everything is shown.
+    }
+
+    [Fact]
+    public async Task SearchText_FiltersByNameAndDescription_CaseInsensitive()
+    {
+        var vm = CreateViewModel();
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        vm.SearchText = "RESONATOR"; // Matches only the all-pass ring resonator, by name.
+        vm.FilteredComponents.ShouldHaveSingleItem().Id.ShouldBe("ring-resonator-r10");
+        vm.HasNoResults.ShouldBeFalse();
+
+        vm.SearchText = "coupled-mode"; // Matches only via the description text.
+        vm.FilteredComponents.ShouldHaveSingleItem().Id.ShouldBe("directional-coupler-2x2");
+
+        vm.SearchText = "";
+        vm.FilteredComponents.Count.ShouldBe(5);
+    }
+
+    [Fact]
+    public async Task Filters_WithNoMatches_SetHasNoResults_AndClearFilteredOutSelection()
+    {
+        var vm = CreateViewModel();
+        await vm.LoadCommand.ExecuteAsync(null);
+        vm.SelectedComponent = vm.Components.Single(c => c.Id == "y-branch-1x2");
+
+        vm.SearchText = "no-such-component";
+
+        vm.FilteredComponents.ShouldBeEmpty();
+        vm.HasNoResults.ShouldBeTrue();
+        // The selected tile is no longer visible, so the detail pane must not linger.
+        vm.SelectedComponent.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task ProcessAndStatusFilters_ExcludeNonMatchingComponents()
+    {
+        var vm = CreateViewModel();
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        // The single fixture process/status matches everything…
+        vm.SelectedProcessFilter = vm.ProcessFilters.Single(o => o.Value == "generic-si220");
+        vm.SelectedStatusFilter = vm.StatusFilters.Single(o => o.Value == "demo");
+        vm.FilteredComponents.Count.ShouldBe(5);
+
+        // …and combining it with a non-matching search empties the grid.
+        vm.SearchText = "y-branch";
+        vm.FilteredComponents.ShouldHaveSingleItem().Id.ShouldBe("y-branch-1x2");
+    }
+
+    [Fact]
+    public async Task Refresh_KeepsSelectedFilterValues()
+    {
+        var vm = CreateViewModel();
+        await vm.LoadCommand.ExecuteAsync(null);
+        vm.SelectedProcessFilter = vm.ProcessFilters.Single(o => o.Value == "generic-si220");
+
+        await vm.RefreshCommand.ExecuteAsync(null);
+
+        vm.SelectedProcessFilter.ShouldNotBeNull();
+        vm.SelectedProcessFilter!.Value.ShouldBe("generic-si220");
     }
 
     [Fact]

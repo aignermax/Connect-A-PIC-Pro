@@ -3,7 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
-using CAP.Avalonia.Views.Panels;
+using CAP.Avalonia.Views;
 using Shouldly;
 using UnitTests.Helpers;
 using Xunit;
@@ -11,22 +11,37 @@ using Xunit;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Renders the step-ordered visual walkthrough for the Photonic Registry browser
-/// panel (issue #656) as headless PNGs plus a <c>manifest.json</c> of captions,
-/// written to <c>artifacts/ui-screenshots/issue-656/</c> for PR review embedding.
+/// Renders the step-ordered visual walkthrough for the "Component Registry"
+/// browser window (issue #656) as headless PNGs plus a <c>manifest.json</c> of
+/// captions, written to <c>artifacts/ui-screenshots/issue-656/</c> for PR
+/// review embedding.
 /// </summary>
 /// <remarks>
 /// Run with: <c>dotnet test UnitTests/UnitTests.csproj --filter Category=UiWalkthrough</c>
 /// </remarks>
 [Trait("Category", "UiWalkthrough")]
+[Collection("LocalizationSingleton")]
 public class RegistryBrowserWalkthroughTests
 {
-    private const int PanelWidth = 450;
+    private const int WindowWidth = 1100;
+    private const int WindowHeight = 720;
 
     /// <summary>
-    /// Walks the registry browser flow — collapsed panel, loaded component list,
-    /// process-mismatch flagging, and the selected-component detail pane —
-    /// capturing one screenshot per step.
+    /// Pins English so the captured UI text is locale-independent (the
+    /// walkthrough renders live <c>{loc:Localize}</c> bindings, which would
+    /// otherwise follow the machine's OS language).
+    /// </summary>
+    public RegistryBrowserWalkthroughTests()
+    {
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage(
+            CAP.Avalonia.Services.Localization.SupportedLanguage.English.Code);
+    }
+
+    /// <summary>
+    /// Walks the registry browser flow — the freshly opened window with its
+    /// loaded tile grid and filter bar, free-text filtering, process-mismatch
+    /// flagging, and the selected-component detail column — capturing one
+    /// screenshot per step.
     /// </summary>
     [AvaloniaFact]
     public void CaptureRegistryBrowserWalkthrough()
@@ -37,45 +52,60 @@ public class RegistryBrowserWalkthroughTests
             File.Delete(stale);
 
         var vm = MainViewModelTestHelper.CreateMainViewModel();
-        var registry = vm.RightPanel.Registry;
+        var registry = vm.Registry;
         var manifest = new List<object>();
 
-        // Step 1: initial state — the panel sits collapsed in the right sidebar.
-        Capture(vm, outputDir, "01-collapsed.png", 200);
+        var window = new RegistryBrowserWindow
+        {
+            Width = WindowWidth,
+            Height = WindowHeight,
+            DataContext = registry,
+        };
+        window.Show(); // Opened hook triggers the lazy index load (stubbed client, committed fixtures).
+        PumpUntilComplete(registry.IndexLoadTask);
+
+        // Step 1: opened window — tile grid with all components, filter bar on top.
+        Capture(window, outputDir, "01-loaded-grid.png");
         manifest.Add(new
         {
-            file = "01-collapsed.png",
-            caption = "The read-only Photonic Registry panel starts collapsed in the right sidebar."
+            file = "01-loaded-grid.png",
+            caption = "Opening the Component Registry window loads the index and shows all components "
+                + "as tiles with status chips and simulation tiers, under a search/process/status filter bar."
         });
 
-        // Step 2: expanding triggers the lazy index load (stubbed client, committed fixtures).
-        registry.IsExpanded = true;
-        PumpUntilComplete(registry.IndexLoadTask);
-        Capture(vm, outputDir, "02-loaded-list.png", 620);
+        // Step 2: free-text search narrows the grid.
+        registry.SearchText = "resonator";
+        Capture(window, outputDir, "02-search-filter.png");
         manifest.Add(new
         {
-            file = "02-loaded-list.png",
-            caption = "Expanding the panel loads the registry index and lists components with status chips and simulation tiers."
+            file = "02-search-filter.png",
+            caption = "Typing in the search box filters the tiles by name and description."
         });
 
         // Step 3: a divergent active process flags foreign components.
+        registry.SearchText = "";
         registry.ActiveProcessId = "my-inhouse-fab";
-        Capture(vm, outputDir, "03-process-mismatch.png", 620);
+        Capture(window, outputDir, "03-process-mismatch.png");
         manifest.Add(new
         {
             file = "03-process-mismatch.png",
-            caption = "Components targeting a process other than the design's active one are flagged with a 'different process' badge."
+            caption = "Components targeting a process other than the design's active one are flagged "
+                + "with a 'different process' chip."
         });
 
-        // Step 4: selecting a component loads its manifest into the detail pane.
+        // Step 4: selecting a tile loads its manifest into the detail column.
         registry.SelectedComponent = registry.Components.First(c => c.Id == "y-branch-1x2");
         PumpUntilComplete(registry.DetailsLoadTask);
-        Capture(vm, outputDir, "04-details.png", 950);
+        Capture(window, outputDir, "04-details.png");
         manifest.Add(new
         {
             file = "04-details.png",
-            caption = "Selecting a component shows its description, ports, parameters, artifact provenance, and license."
+            caption = "Selecting a component shows its description, ports, parameters, artifact "
+                + "provenance, and license in the detail column."
         });
+
+        window.Close();
+        Dispatcher.UIThread.RunJobs();
 
         File.WriteAllText(
             Path.Combine(outputDir, "manifest.json"),
@@ -86,23 +116,11 @@ public class RegistryBrowserWalkthroughTests
         Directory.GetFiles(outputDir, "*.png").Length.ShouldBe(4);
     }
 
-    /// <summary>Renders the registry panel at the given height and saves it as a PNG.</summary>
-    private static void Capture(object dataContext, string outputDir, string filename, int height)
+    /// <summary>Renders the current state of the shown window and saves it as a PNG.</summary>
+    private static void Capture(Window window, string outputDir, string filename)
     {
-        var window = new Window
-        {
-            Width = PanelWidth,
-            Height = height,
-            Content = new RegistryBrowserPanel { DataContext = dataContext }
-        };
-
-        window.Show();
         Dispatcher.UIThread.RunJobs();
-
         using var bitmap = window.CaptureRenderedFrame();
-        window.Close();
-        Dispatcher.UIThread.RunJobs();
-
         bitmap.ShouldNotBeNull($"CaptureRenderedFrame returned null for {filename}");
         bitmap.Save(Path.Combine(outputDir, filename));
     }

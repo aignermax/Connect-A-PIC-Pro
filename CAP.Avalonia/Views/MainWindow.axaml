@@ -255,6 +255,20 @@
                                                    Foreground="White" FontSize="12"/>
                                     </StackPanel>
                                 </Button>
+                                <!-- Component Registry browser window (#656): same window as the
+                                     🌐 button in the Component Library header. -->
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,3"
+                                        Background="#3d3d5d"
+                                        Click="OpenRegistryBrowser_Click"
+                                        ToolTip.Tip="{loc:Localize Registry.OpenTip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🌐" FontSize="15" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{loc:Localize Toolbar.ComponentRegistry}"
+                                                   Foreground="White" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -576,10 +590,15 @@
 
                 <!-- Component Library -->
                 <DockPanel Grid.Row="4">
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto" Margin="10,6,10,4">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="10,6,10,4">
                         <TextBlock Grid.Column="0" Text="{loc:Localize LeftPanel.ComponentLibrary}"
                                    FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
-                        <Button Grid.Column="1" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
+                        <!-- Opens the Component Registry browser window (#656) — the online,
+                             community-shared counterpart to this local library. -->
+                        <Button Grid.Column="1" Content="🌐" Click="OpenRegistryBrowser_Click"
+                                Padding="6,0" Margin="0,0,4,0" Background="#2a3a4a"
+                                ToolTip.Tip="{loc:Localize Registry.OpenTip}"/>
+                        <Button Grid.Column="2" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
                                 Padding="8,0" FontWeight="Bold" Background="#2a4a2a"
                                 ToolTip.Tip="{loc:Localize LeftPanel.NewComponentTip}"/>
                     </Grid>
@@ -848,9 +867,6 @@
 
                     <!-- Netlist Panel (gdsfactory YAML view/export, #687) -->
                     <panels:NetlistPanel/>
-
-                    <!-- Photonic Registry browser (read-only, issue #656) -->
-                    <panels:RegistryBrowserPanel/>
 
                     <!-- Element Lock Panel -->
                     <Separator Margin="0,20,0,10" Background="#3d3d3d"/>

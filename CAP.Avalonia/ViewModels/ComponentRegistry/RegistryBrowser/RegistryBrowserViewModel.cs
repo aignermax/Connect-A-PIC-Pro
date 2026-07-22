@@ -8,18 +8,29 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser;
 
 /// <summary>
-/// Read-only browser for the open photonic component registry (issue #656).
-/// Loads the index via <see cref="RegistryClient"/> (cache-first, offline
-/// tolerant), lists components with tier badges and status chips, flags
-/// components whose process differs from the active one, and shows manifest
-/// details (parameters, artifact provenance) for the selected component.
+/// Read-only browser for the open photonic component registry (issue #656),
+/// hosted in the "Component Registry" tool window. Loads the index via
+/// <see cref="RegistryClient"/> (cache-first, offline tolerant), lists
+/// components as tiles with tier badges and status chips, filters by free
+/// text / process / trust status, flags components whose process differs
+/// from the active one, and shows manifest details (parameters, artifact
+/// provenance) for the selected component.
 /// </summary>
 public partial class RegistryBrowserViewModel : ObservableObject
 {
     private readonly RegistryClient _client;
 
-    /// <summary>Registry components, ordered by name.</summary>
+    /// <summary>All registry components, ordered by name (unfiltered).</summary>
     public ObservableCollection<RegistryComponentItemViewModel> Components { get; } = new();
+
+    /// <summary>Components matching the current search / process / status filters.</summary>
+    public ObservableCollection<RegistryComponentItemViewModel> FilteredComponents { get; } = new();
+
+    /// <summary>Process dropdown options: an "All processes" entry plus the distinct processes in the index.</summary>
+    public ObservableCollection<RegistryFilterOption> ProcessFilters { get; } = new();
+
+    /// <summary>Status dropdown options: an "All statuses" entry plus the distinct trust statuses in the index.</summary>
+    public ObservableCollection<RegistryFilterOption> StatusFilters { get; } = new();
 
     /// <summary>Detail pane for the selected component.</summary>
     public RegistryComponentDetailsViewModel Details { get; } = new();
@@ -48,9 +59,21 @@ public partial class RegistryBrowserViewModel : ObservableObject
     [ObservableProperty]
     private string? _activeProcessId;
 
-    /// <summary>Panel expansion state; the first expansion triggers an initial load.</summary>
+    /// <summary>Free-text filter matched against component name and description.</summary>
     [ObservableProperty]
-    private bool _isExpanded;
+    private string _searchText = "";
+
+    /// <summary>Selected process dropdown entry; a null <see cref="RegistryFilterOption.Value"/> shows all.</summary>
+    [ObservableProperty]
+    private RegistryFilterOption? _selectedProcessFilter;
+
+    /// <summary>Selected status dropdown entry; a null <see cref="RegistryFilterOption.Value"/> shows all.</summary>
+    [ObservableProperty]
+    private RegistryFilterOption? _selectedStatusFilter;
+
+    /// <summary>True when the index has components but none match the current filters.</summary>
+    [ObservableProperty]
+    private bool _hasNoResults;
 
     /// <summary>In-flight index load; awaited by tests and the screenshot harness.</summary>
     public Task IndexLoadTask { get; private set; } = Task.CompletedTask;
@@ -62,6 +85,17 @@ public partial class RegistryBrowserViewModel : ObservableObject
     public RegistryBrowserViewModel(RegistryClient client)
     {
         _client = client;
+    }
+
+    /// <summary>
+    /// Loads the index on first use (called when the registry window opens);
+    /// no-op when components are already listed or a load is in flight. Keeps
+    /// application startup free of network/disk work for this feature.
+    /// </summary>
+    public void EnsureLoaded()
+    {
+        if (Components.Count == 0 && !IsLoading)
+            IndexLoadTask = LoadCoreAsync(forceRefresh: false);
     }
 
     /// <summary>Loads the registry index (cache-first).</summary>
@@ -104,10 +138,76 @@ public partial class RegistryBrowserViewModel : ObservableObject
             Components.Add(item);
         }
 
+        RebuildFilterOptions();
+        ApplyFilters();
+
         if (result.Source == RegistrySource.Cache)
             SourceNote = LocalizationService.Instance.Translate(
                 forceRefresh ? "Registry.OfflineCache" : "Registry.LoadedFromCache");
     }
+
+    /// <summary>
+    /// Rebuilds both filter dropdowns from the loaded index, keeping the current
+    /// selection when its value still exists (e.g. after a refresh).
+    /// </summary>
+    private void RebuildFilterOptions()
+    {
+        RebuildOptions(ProcessFilters, "Registry.AllProcesses",
+            Components.Select(c => c.ProcessId), SelectedProcessFilter,
+            option => SelectedProcessFilter = option);
+        RebuildOptions(StatusFilters, "Registry.AllStatuses",
+            Components.Select(c => c.Status), SelectedStatusFilter,
+            option => SelectedStatusFilter = option);
+    }
+
+    private static void RebuildOptions(
+        ObservableCollection<RegistryFilterOption> options,
+        string allEntryKey,
+        IEnumerable<string> values,
+        RegistryFilterOption? previousSelection,
+        Action<RegistryFilterOption> select)
+    {
+        options.Clear();
+        options.Add(new RegistryFilterOption(null, LocalizationService.Instance.Translate(allEntryKey)));
+        foreach (var value in values.Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(v => v))
+            options.Add(new RegistryFilterOption(value, value));
+
+        select(options.FirstOrDefault(o =>
+            string.Equals(o.Value, previousSelection?.Value, StringComparison.OrdinalIgnoreCase)) ?? options[0]);
+    }
+
+    /// <summary>Recomputes <see cref="FilteredComponents"/> from the current filters.</summary>
+    private void ApplyFilters()
+    {
+        FilteredComponents.Clear();
+        foreach (var item in Components.Where(MatchesFilters))
+            FilteredComponents.Add(item);
+
+        HasNoResults = FilteredComponents.Count == 0 && Components.Count > 0;
+        if (SelectedComponent is not null && !FilteredComponents.Contains(SelectedComponent))
+            SelectedComponent = null;
+    }
+
+    private bool MatchesFilters(RegistryComponentItemViewModel item)
+    {
+        if (SelectedProcessFilter?.Value is { } process
+            && !string.Equals(item.ProcessId, process, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (SelectedStatusFilter?.Value is { } status
+            && !string.Equals(item.Status, status, StringComparison.OrdinalIgnoreCase))
+            return false;
+        if (string.IsNullOrWhiteSpace(SearchText))
+            return true;
+
+        return item.Name.Contains(SearchText, StringComparison.OrdinalIgnoreCase)
+            || item.Description.Contains(SearchText, StringComparison.OrdinalIgnoreCase);
+    }
+
+    partial void OnSearchTextChanged(string value) => ApplyFilters();
+
+    partial void OnSelectedProcessFilterChanged(RegistryFilterOption? value) => ApplyFilters();
+
+    partial void OnSelectedStatusFilterChanged(RegistryFilterOption? value) => ApplyFilters();
 
     partial void OnActiveProcessIdChanged(string? value)
     {
@@ -121,13 +221,5 @@ public partial class RegistryBrowserViewModel : ObservableObject
             Details.Clear();
         else
             DetailsLoadTask = Details.LoadAsync(_client, value.ManifestPath);
-    }
-
-    partial void OnIsExpandedChanged(bool value)
-    {
-        // Lazy first load: fetching only when the user opens the section keeps
-        // application startup free of network/disk work for this panel.
-        if (value && Components.Count == 0 && !IsLoading)
-            IndexLoadTask = LoadCoreAsync(forceRefresh: false);
     }
 }

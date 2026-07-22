@@ -7,7 +7,7 @@ namespace CAP.Avalonia.DI;
 /// <summary>
 /// Registers the photonic component registry feature (issues #655/#656):
 /// the read-only <see cref="RegistryClient"/> against the public registry and
-/// the registry browser ViewModel shown in the right panel.
+/// the browser ViewModel hosted in the "Component Registry" tool window.
 /// </summary>
 internal static class ComponentRegistryFeatureExtensions
 {

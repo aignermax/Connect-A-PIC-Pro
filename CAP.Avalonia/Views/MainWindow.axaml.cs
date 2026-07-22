@@ -54,6 +54,14 @@ public partial class MainWindow : Window
     /// <summary>Open Component Settings dialogs keyed by entity, so a repeat open activates the existing one.</summary>
     private readonly System.Collections.Generic.Dictionary<string, ComponentSettingsDialog> _openComponentSettingsDialogs = new();
 
+    /// <summary>
+    /// The open Component Registry browser window (issue #656). Both entry points
+    /// (Component Library header 🌐 and the Tools flyout) share it: a second open
+    /// activates the existing window instead of spawning a duplicate — same
+    /// pattern as <see cref="_openPdkEditWindows"/>. Cleared when it closes.
+    /// </summary>
+    private RegistryBrowserWindow? _registryBrowserWindow;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -585,6 +593,38 @@ public partial class MainWindow : Window
         if (vm == null) return;
         var dialog = new ModeSolverDialog { DataContext = vm };
         dialog.Show(this);
+    }
+
+    /// <summary>
+    /// Opens the non-modal "Component Registry" browser window (issue #656) from
+    /// either entry point (Component Library header 🌐 / Tools flyout). A second
+    /// click activates the already-open window; the lazy index load happens in
+    /// the window's own Opened hook.
+    /// </summary>
+    private void OpenRegistryBrowser_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_registryBrowserWindow is { IsVisible: true } existing)
+        {
+            // Un-minimize first: Activate() alone leaves a minimized window
+            // minimized, which looks like the button silently did nothing.
+            existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var window = new RegistryBrowserWindow { DataContext = vm.Registry };
+        _registryBrowserWindow = window;
+        // Only clear the field if it still points at THIS window (defensive,
+        // mirrors the keyed-dictionary windows above).
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_registryBrowserWindow, window))
+                _registryBrowserWindow = null;
+        };
+        window.Show(this);
     }
 
     /// <summary>

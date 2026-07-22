@@ -68,19 +68,21 @@ public class UiScreenshotTests
         TryCapture(() => new TimeDomainPanel(), vm, 500, 420, outputDir, "TimeDomainPanel.png", captured, skipped);
         TryCapture(() => new EyeDiagramPanel(), vm, 500, 420, outputDir, "EyeDiagramPanel.png", captured, skipped);
 
-        // Photonic Registry panel (#656): the helper wires a stubbed client fed by the
-        // committed fixtures (no network). Expand to trigger the lazy load, set a divergent
-        // active process so the "different process" indicator renders, and select a
-        // component so the detail pane (parameters + artifact provenance) is visible.
-        var registry = vm.RightPanel.Registry;
-        registry.IsExpanded = true;
+        // Component Registry window (#656): the helper wires a stubbed client fed by the
+        // committed fixtures (no network). Load the index, set a divergent active process
+        // so the "different process" chip renders on the tiles, and select a component so
+        // the detail column (parameters + artifact provenance) is visible. It's its own
+        // Window, so it is captured directly rather than through TryCapture's host wrapping.
+        var registry = vm.Registry;
+        registry.EnsureLoaded();
         PumpUntilComplete(registry.IndexLoadTask);
         registry.ActiveProcessId = "my-inhouse-fab";
         // y-branch-1x2 is the only component with a committed manifest fixture,
-        // so selecting it renders a fully populated detail pane.
+        // so selecting it renders a fully populated detail column.
         registry.SelectedComponent = registry.Components.FirstOrDefault(c => c.Id == "y-branch-1x2");
         PumpUntilComplete(registry.DetailsLoadTask);
-        TryCapture(() => new RegistryBrowserPanel(), vm, 450, 950, outputDir, "RegistryBrowserPanel.png", captured, skipped);
+        TryCaptureWindow(() => new RegistryBrowserWindow { DataContext = registry }, outputDir,
+            "RegistryBrowserWindow.png", captured, skipped);
 
         // Settings content: the environment manager moved from the Properties sidebar to a
         // Settings page — captured standalone with its own ViewModel (not part of MainViewModel).

@@ -159,6 +159,13 @@ public partial class MainViewModel : ObservableObject
     public BottomPanelViewModel BottomPanel { get; }
 
     /// <summary>
+    /// Browser for the open photonic component registry (issue #656), hosted in
+    /// its own "Component Registry" tool window (opened from the Component
+    /// Library header and the Tools flyout; see <c>MainWindow</c>).
+    /// </summary>
+    public ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel Registry { get; }
+
+    /// <summary>
     /// ViewModel for software update checking. Shared with the Settings window.
     /// The update banner in the main window binds to this property.
     /// </summary>
@@ -264,6 +271,7 @@ public partial class MainViewModel : ObservableObject
         ViewModels.Canvas.ChipSizeViewModel chipSize,
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
+        ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel registryBrowser,
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
         Services.RecentProjectsService? recentProjectsService = null,
@@ -289,6 +297,7 @@ public partial class MainViewModel : ObservableObject
         LeftPanel = leftPanel;
         RightPanel = rightPanel;
         BottomPanel = bottomPanel;
+        Registry = registryBrowser;
 
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
@@ -412,11 +421,11 @@ public partial class MainViewModel : ObservableObject
         // Feed the design's active process (#570) into the registry browser so
         // components from a different fabrication process are flagged (#656).
         // Playground accepts everything, so it clears the filter.
-        RightPanel.Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
+        Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
         FileOperations.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(FileOperationsViewModel.ActiveProcess))
-                RightPanel.Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
+                Registry.ActiveProcessId = RegistryProcessIdFor(FileOperations.ActiveProcess);
         };
 
         // Let the export guard open the Settings window (e.g. on the Python-Environments
