@@ -36,13 +36,22 @@ public partial class FileOperationsViewModel : ObservableObject
     private readonly ErrorConsoleService? _errorConsole;
     private readonly UserSMatrixOverrideStore? _userSMatrixOverrideStore;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly RecentProjectsService? _recentProjects;
 
     /// <summary>
     /// Current .lun format version this build reads and writes. Files with any other value are rejected at load time.
     /// </summary>
     private const string CurrentFormatVersion = "2.0";
 
+    /// <summary>
+    /// Absolute path of the currently open .lun file, or null for an unsaved
+    /// new project. Observable so the Home screen and window title can react.
+    /// </summary>
+    [ObservableProperty]
     private string? _currentFilePath;
+
+    /// <summary>Prompt shown before discarding unsaved changes to load another design.</summary>
+    private const string LoadPromptMessage = "Do you want to save your changes before loading another design?";
 
     /// <summary>
     /// Persists metadata loaded from the last opened file so that Created date
@@ -128,6 +137,12 @@ public partial class FileOperationsViewModel : ObservableObject
     public Action<string>? UpdateStatus { get; set; }
 
     /// <summary>
+    /// Callback invoked after a project is successfully opened or created
+    /// (load from file or File → New). The Home screen uses this to dismiss itself.
+    /// </summary>
+    public Action? ProjectOpened { get; set; }
+
+    /// <summary>
     /// Callback to rebuild hierarchy tree after loading.
     /// </summary>
     public Action? RebuildHierarchy { get; set; }
@@ -178,7 +193,8 @@ public partial class FileOperationsViewModel : ObservableObject
         VerilogAExportViewModel verilogAExport,
         ErrorConsoleService? errorConsole = null,
         UserSMatrixOverrideStore? userSMatrixOverrideStore = null,
-        IUrlLauncher? urlLauncher = null)
+        IUrlLauncher? urlLauncher = null,
+        RecentProjectsService? recentProjects = null)
     {
         _canvas = canvas;
         _commandManager = commandManager;
@@ -191,6 +207,7 @@ public partial class FileOperationsViewModel : ObservableObject
         _errorConsole = errorConsole;
         _userSMatrixOverrideStore = userSMatrixOverrideStore;
         _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
+        _recentProjects = recentProjects;
 
         // Track changes to mark project as unsaved
         _canvas.Components.CollectionChanged += (s, e) => HasUnsavedChanges = true;
@@ -291,7 +308,7 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
         }
 
-        var filePath = _currentFilePath ?? await FileDialogService.ShowSaveFileDialogAsync(
+        var filePath = CurrentFilePath ?? await FileDialogService.ShowSaveFileDialogAsync(
             "Save Design",
             "lun",
             "Lunima Files|*.lun|All Files|*.*");
@@ -412,8 +429,9 @@ public partial class FileOperationsViewModel : ObservableObject
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             });
             await File.WriteAllTextAsync(filePath, json);
-            _currentFilePath = filePath;
+            CurrentFilePath = filePath;
             HasUnsavedChanges = false;
+            _recentProjects?.RecordProject(filePath);
             UpdateStatus?.Invoke($"Saved to {Path.GetFileName(filePath)}");
         }
         catch (Exception ex)
@@ -739,11 +757,67 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
         }
 
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return;
+
         var filePath = await FileDialogService.ShowOpenFileDialogAsync(
             "Load Design",
             "Lunima Files|*.lun|All Files|*.*");
 
         if (filePath != null)
+        {
+            await LoadDesignFromFileAsync(filePath);
+        }
+    }
+
+    /// <summary>
+    /// Loads a design directly from a file path (no file picker), prompting to save
+    /// unsaved changes first. Used by the Home screen's recent-projects list and
+    /// command-line file arguments.
+    /// </summary>
+    /// <param name="filePath">Absolute path to the .lun file to open.</param>
+    /// <returns>True when the design was loaded; false when cancelled, missing, or failed.</returns>
+    public async Task<bool> LoadDesignFromPathAsync(string filePath)
+    {
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return false;
+
+        return await LoadDesignFromFileAsync(filePath);
+    }
+
+    /// <summary>
+    /// Opens a design as an untitled copy, detached from its source file — used
+    /// for the Home screen's shipped examples. The design loads, but the file
+    /// path stays null (Save prompts for a new location, so the source can't be
+    /// overwritten), the design is marked unsaved, and the source is not
+    /// recorded in the recent-projects list.
+    /// </summary>
+    /// <param name="filePath">Absolute path to the template/example .lun file.</param>
+    /// <returns>True when the design was opened; false when cancelled, missing, or failed.</returns>
+    public async Task<bool> OpenDesignAsCopyAsync(string filePath)
+    {
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return false;
+
+        if (!await LoadDesignFromFileAsync(filePath, recordRecent: false))
+            return false;
+
+        CurrentFilePath = null;
+        // A copy must not inherit the source's metadata (Created date, author);
+        // BuildMetadataForSave then stamps fresh values on the first save.
+        _loadedMetadata = null;
+        HasUnsavedChanges = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Core load step shared by the file-picker command and path-based loading:
+    /// reads a .lun file and replaces the current canvas contents with it.
+    /// Does NOT prompt about unsaved changes — callers do that first.
+    /// </summary>
+    private async Task<bool> LoadDesignFromFileAsync(string filePath, bool recordRecent = true)
+    {
+        if (File.Exists(filePath))
         {
             try
             {
@@ -753,7 +827,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (designData == null)
                 {
                     UpdateStatus?.Invoke("Invalid design file");
-                    return;
+                    return false;
                 }
 
                 if (designData.FormatVersion != CurrentFormatVersion)
@@ -904,8 +978,12 @@ public partial class FileOperationsViewModel : ObservableObject
                     ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
                 }
 
-                _currentFilePath = filePath;
+                CurrentFilePath = filePath;
                 HasUnsavedChanges = false;
+                if (recordRecent)
+                {
+                    _recentProjects?.RecordProject(filePath);
+                }
                 UpdateStatus?.Invoke($"Loaded {Path.GetFileName(filePath)} ({_canvas.Components.Count} components, {_canvas.Connections.Count} connections, {groupCount} groups)");
                 _commandManager.NotifyStateChanged();
 
@@ -914,13 +992,53 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 // Auto zoom-to-fit after loading
                 ZoomToFitAfterLoad?.Invoke(900, 800);
+
+                ProjectOpened?.Invoke();
+                return true;
             }
             catch (Exception ex)
             {
                 _errorConsole?.LogError($"Failed to load design: {ex.Message}", ex);
                 UpdateStatus?.Invoke($"Load failed: {ex.Message}");
+                return false;
             }
         }
+
+        UpdateStatus?.Invoke($"File not found: {filePath}");
+        return false;
+    }
+
+    /// <summary>
+    /// Prompts to save unsaved changes (Save / Don't Save / Cancel) before a
+    /// destructive action. Returns true when it is safe to proceed: nothing was
+    /// unsaved, the user saved successfully, or chose Don't Save. Returns false
+    /// on Cancel or when the user aborted the save dialog.
+    /// </summary>
+    private async Task<bool> ConfirmUnsavedChangesAsync(string message)
+    {
+        if (!HasUnsavedChanges || MessageBoxService == null)
+            return true;
+
+        var result = await MessageBoxService.ShowSavePromptAsync(message, "Save Changes?");
+        if (result == SavePromptResult.Save)
+        {
+            await SaveDesign();
+
+            // Still dirty means the user cancelled the save dialog — abort the action.
+            return !HasUnsavedChanges;
+        }
+
+        return result == SavePromptResult.DontSave;
+    }
+
+    /// <summary>
+    /// Asks whether the application may close, prompting to save unsaved changes
+    /// first. Wired to the main window's Closing event.
+    /// </summary>
+    /// <returns>True when closing may proceed; false when the user cancelled.</returns>
+    public async Task<bool> ConfirmCloseAsync()
+    {
+        return await ConfirmUnsavedChangesAsync("Do you want to save your changes before closing?");
     }
 
     /// <summary>
@@ -939,31 +1057,9 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public async Task<bool> TryNewProjectAsync()
     {
-        // Check if there are unsaved changes
-        if (HasUnsavedChanges && MessageBoxService != null)
-        {
-            var result = await MessageBoxService.ShowSavePromptAsync(
-                "Do you want to save your changes before creating a new project?",
-                "Save Changes?");
-
-            if (result == SavePromptResult.Save)
-            {
-                await SaveDesign();
-
-                // Check if save was actually performed (user might have cancelled)
-                if (HasUnsavedChanges)
-                {
-                    // User cancelled the save dialog, so cancel new project
-                    return false;
-                }
-            }
-            else if (result == SavePromptResult.Cancel)
-            {
-                // User cancelled, do nothing
-                return false;
-            }
-            // DontSave: continue to clear
-        }
+        if (!await ConfirmUnsavedChangesAsync(
+                "Do you want to save your changes before creating a new project?"))
+            return false;
 
         // Exit group edit mode if active
         if (_canvas.IsInGroupEditMode)
@@ -974,13 +1070,15 @@ public partial class FileOperationsViewModel : ObservableObject
         // Clear the canvas
         ClearCanvas();
 
-        _currentFilePath = null;
+        CurrentFilePath = null;
         _loadedMetadata = null;
         HasUnsavedChanges = false;
         UpdateStatus?.Invoke("New project created");
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+
+        ProjectOpened?.Invoke();
         return true;
     }
 

@@ -20,7 +20,7 @@ namespace UnitTests.UI.Showcase;
 /// panel into one PNG. Opt-in via <c>UI_SHOT_DIR</c>.
 /// </summary>
 [Trait("Category", "Showcase")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class ShowcasePdkScreenshotTests
 {
     [AvaloniaFact]

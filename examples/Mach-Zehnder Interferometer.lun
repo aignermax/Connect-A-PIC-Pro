@@ -1,0 +1,119 @@
+{
+  "FormatVersion": "2.0",
+  "Components": [
+    {
+      "TemplateName": "1x2 MMI Splitter",
+      "PdkSource": "Demo PDK",
+      "X": 200,
+      "Y": 500,
+      "Identifier": "mzi_splitter",
+      "Rotation": 0,
+      "HumanReadableName": "1x2 MMI Splitter"
+    },
+    {
+      "TemplateName": "Phase Shifter",
+      "PdkSource": "Demo PDK",
+      "X": 1200,
+      "Y": 300,
+      "Identifier": "mzi_phase_shifter",
+      "Rotation": 0,
+      "SliderValue": 180,
+      "HumanReadableName": "Phase Shifter"
+    },
+    {
+      "TemplateName": "Straight Waveguide 100\u00B5m",
+      "PdkSource": "Demo PDK",
+      "X": 1200,
+      "Y": 750,
+      "Identifier": "mzi_reference_arm",
+      "Rotation": 0,
+      "HumanReadableName": "Straight Waveguide 100\u00B5m"
+    },
+    {
+      "TemplateName": "2x2 MMI Coupler",
+      "PdkSource": "Demo PDK",
+      "X": 2200,
+      "Y": 500,
+      "Identifier": "mzi_combiner",
+      "Rotation": 0,
+      "HumanReadableName": "2x2 MMI Coupler"
+    },
+    {
+      "TemplateName": "Photodetector",
+      "PdkSource": "Demo PDK",
+      "X": 3200,
+      "Y": 400,
+      "Identifier": "mzi_detector_bar",
+      "Rotation": 0,
+      "HumanReadableName": "Photodetector"
+    },
+    {
+      "TemplateName": "Photodetector",
+      "PdkSource": "Demo PDK",
+      "X": 3200,
+      "Y": 750,
+      "Identifier": "mzi_detector_cross",
+      "Rotation": 0,
+      "HumanReadableName": "Photodetector"
+    }
+  ],
+  "Connections": [
+    {
+      "StartComponentIndex": 0,
+      "StartPinName": "out1",
+      "EndComponentIndex": 1,
+      "EndPinName": "in",
+      "StartComponentId": "mzi_splitter",
+      "EndComponentId": "mzi_phase_shifter"
+    },
+    {
+      "StartComponentIndex": 0,
+      "StartPinName": "out2",
+      "EndComponentIndex": 2,
+      "EndPinName": "a0",
+      "StartComponentId": "mzi_splitter",
+      "EndComponentId": "mzi_reference_arm"
+    },
+    {
+      "StartComponentIndex": 1,
+      "StartPinName": "out",
+      "EndComponentIndex": 3,
+      "EndPinName": "in1",
+      "StartComponentId": "mzi_phase_shifter",
+      "EndComponentId": "mzi_combiner"
+    },
+    {
+      "StartComponentIndex": 2,
+      "StartPinName": "b0",
+      "EndComponentIndex": 3,
+      "EndPinName": "in2",
+      "StartComponentId": "mzi_reference_arm",
+      "EndComponentId": "mzi_combiner"
+    },
+    {
+      "StartComponentIndex": 3,
+      "StartPinName": "out1",
+      "EndComponentIndex": 4,
+      "EndPinName": "in",
+      "StartComponentId": "mzi_combiner",
+      "EndComponentId": "mzi_detector_bar"
+    },
+    {
+      "StartComponentIndex": 3,
+      "StartPinName": "out2",
+      "EndComponentIndex": 5,
+      "EndPinName": "in",
+      "StartComponentId": "mzi_combiner",
+      "EndComponentId": "mzi_detector_cross"
+    }
+  ],
+  "Metadata": {
+    "PdkVersions": {},
+    "Authorship": {
+      "Created": "2026-07-08",
+      "Modified": "2026-07-08T17:01:37.1767270Z"
+    }
+  },
+  "ChipWidthMicrometers": 5000,
+  "ChipHeightMicrometers": 5000
+}

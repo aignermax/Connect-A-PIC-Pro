@@ -112,7 +112,9 @@ public static class MainViewModelTestHelper
         canvas ??= new DesignCanvasViewModel();
         libraryManager ??= new GroupLibraryManager();
         pdkLoader ??= new PdkLoader();
-        preferencesService ??= new UserPreferencesService();
+        // Isolated temp-file prefs — the real file must never be touched by tests.
+        preferencesService ??= new UserPreferencesService(
+            Path.Combine(Path.GetTempPath(), $"cap-test-prefs-{Guid.NewGuid()}.json"));
 
         return new LeftPanelViewModel(
             canvas,

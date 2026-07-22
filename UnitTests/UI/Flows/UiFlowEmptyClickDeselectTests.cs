@@ -15,7 +15,7 @@ namespace UnitTests.UI.Flows;
 /// <c>SelectionManager</c> set the hierarchy mirrors. The click must empty BOTH.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class UiFlowEmptyClickDeselectTests
 {
     private const string PdkName = "Demo PDK";

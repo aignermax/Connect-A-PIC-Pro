@@ -94,6 +94,11 @@ internal sealed class UiFlowTestHost : IDisposable
         Window = new MainWindow { DataContext = Vm };
         Window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // The Home overlay (#694) covers the canvas at startup and would swallow the
+        // flow tests' clicks — dismiss it the same way an opened project does.
+        Vm.Home.OnProjectOpened();
+        Dispatcher.UIThread.RunJobs();
     }
 
     /// <summary>The library ListBox bound to <c>LeftPanel.FilteredTemplates</c>.</summary>
