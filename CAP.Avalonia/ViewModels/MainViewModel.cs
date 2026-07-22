@@ -17,6 +17,7 @@ using CAP.Avalonia.ViewModels.Panels;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Export.Formats;
+using CAP.Avalonia.ViewModels.Home;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Export;
 using CAP.Avalonia.ViewModels.PdkOffset;
@@ -45,6 +46,22 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     private (string Key, object[] Args, string Formatted)? _lastLocalizedStatus =
         ("Status.Ready", [], LocalizationService.Instance.Translate("Status.Ready"));
+
+    /// <summary>Application name shown in the window title.</summary>
+    private const string AppTitle = "Lunima";
+
+    /// <summary>Display name for a dirty design that has never been saved.</summary>
+    private const string UntitledProjectName = "Untitled";
+
+    /// <summary>Dirty-state marker appended to the file name in the window title.</summary>
+    private const string DirtyMarker = "*";
+
+    /// <summary>
+    /// Window title derived from the open file and unsaved-changes state:
+    /// "Lunima", "Untitled* — Lunima", "name.lun — Lunima", or "name.lun* — Lunima".
+    /// </summary>
+    [ObservableProperty]
+    private string _windowTitle = AppTitle;
 
     /// <summary>
     /// Human-readable label for the design's active fabrication process (issue #570),
@@ -100,6 +117,20 @@ public partial class MainViewModel : ObservableObject
     /// ViewModel for file operations (save, load, export).
     /// </summary>
     public FileOperationsViewModel FileOperations { get; }
+
+    /// <summary>
+    /// ViewModel for the Home screen (recent projects, new/open project)
+    /// shown as the main window's startup state.
+    /// </summary>
+    public HomeViewModel Home { get; }
+
+    /// <summary>
+    /// Design file passed on the command line, resolved by
+    /// <see cref="Services.DesignFileArguments.FindDesignFile"/> in App startup.
+    /// Consumed once by the main window's Loaded handler; takes precedence
+    /// over the reopen-last-project preference. Null when no file was passed.
+    /// </summary>
+    public string? StartupDesignFile { get; set; }
 
     /// <summary>
     /// ViewModel for viewport control (zoom, pan, navigation).
@@ -235,6 +266,8 @@ public partial class MainViewModel : ObservableObject
         GdsPreviewRenderService gdsPreviewRenderService,
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
+        Services.RecentProjectsService? recentProjectsService = null,
+        HomeViewModel? homeViewModel = null,
         ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
         ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null)
     {
@@ -259,8 +292,28 @@ public partial class MainViewModel : ObservableObject
 
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
-        FileOperations = new FileOperationsViewModel(_canvas, commandManager, nazcaExporter, saxExporter, LeftPanel.AllTemplates, gdsExportViewModel, photonTorchExport, verilogAExport, errorConsoleService, userSMatrixOverrideStore);
+        var recentProjects = recentProjectsService ?? new Services.RecentProjectsService(preferencesService);
+        FileOperations = new FileOperationsViewModel(_canvas, commandManager, nazcaExporter, saxExporter, LeftPanel.AllTemplates, gdsExportViewModel, photonTorchExport, verilogAExport, errorConsoleService, userSMatrixOverrideStore, recentProjects: recentProjects);
         ViewportControl = viewportControl;
+
+        // Home screen: shown at startup; delegates project I/O to FileOperations
+        // and dismisses itself once a project is opened or created.
+        Home = homeViewModel ?? new HomeViewModel(recentProjects, preferencesService);
+        Home.NewProjectRequested = async () => await FileOperations.NewProjectCommand.ExecuteAsync(null);
+        Home.OpenProjectRequested = async () => await FileOperations.LoadDesignCommand.ExecuteAsync(null);
+        Home.OpenProjectFromPathRequested = FileOperations.LoadDesignFromPathAsync;
+        Home.OpenExampleRequested = FileOperations.OpenDesignAsCopyAsync;
+        FileOperations.ProjectOpened = Home.OnProjectOpened;
+
+        // Keep the window title in sync with the open file and dirty state
+        FileOperations.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FileOperationsViewModel.CurrentFilePath)
+                or nameof(FileOperationsViewModel.HasUnsavedChanges))
+            {
+                UpdateWindowTitle();
+            }
+        };
 
         // Build the unified Export menu (add new IExportFormat here for new formats)
         PhotonTorchExportFormat = new PhotonTorchExportFormat();
@@ -729,6 +782,23 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private async Task SaveDesign() => await FileOperations.SaveDesignCommand.ExecuteAsync(null);
+
+    /// <summary>
+    /// Recomputes <see cref="WindowTitle"/> from the current file path and dirty state.
+    /// </summary>
+    private void UpdateWindowTitle()
+    {
+        var marker = FileOperations.HasUnsavedChanges ? DirtyMarker : "";
+        WindowTitle = FileOperations.CurrentFilePath is { } path
+            ? $"{System.IO.Path.GetFileName(path)}{marker} — {AppTitle}"
+            : FileOperations.HasUnsavedChanges
+                ? $"{UntitledProjectName}{marker} — {AppTitle}"
+                : AppTitle;
+    }
+
+    /// <summary>Shows the Home screen (recent projects, new/open) over the editor.</summary>
+    [RelayCommand]
+    private void ShowHome() => Home.Show();
 
     [RelayCommand]
     private async Task SaveDesignAs() => await FileOperations.SaveDesignAsCommand.ExecuteAsync(null);

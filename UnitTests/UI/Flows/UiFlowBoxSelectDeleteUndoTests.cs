@@ -16,7 +16,7 @@ namespace UnitTests.UI.Flows;
 /// pipeline. The hierarchy panel must mirror the selection and the undo must restore both.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class UiFlowBoxSelectDeleteUndoTests
 {
     private const string PdkName = "Demo PDK";

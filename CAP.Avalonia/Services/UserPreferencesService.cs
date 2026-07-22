@@ -8,8 +8,10 @@ namespace CAP.Avalonia.Services;
 /// <summary>
 /// Manages user preferences with JSON file persistence.
 /// Stores PDK filter states and other user settings.
+/// Recent-projects preference access lives in the
+/// <c>UserPreferencesService.RecentProjects.cs</c> partial (file-size split).
 /// </summary>
-public class UserPreferencesService
+public partial class UserPreferencesService
 {
     private readonly string _preferencesFilePath;
     private readonly ErrorConsoleService? _errorConsole;
@@ -440,6 +442,18 @@ public class UserPreferences
     public double DefaultChipHeightMm { get; set; } = 5.0;
 
     /// <summary>
+    /// Recently opened project files, most recently opened first.
+    /// Maintained by <see cref="RecentProjectsService"/>.
+    /// </summary>
+    public List<RecentProjectEntry> RecentProjects { get; set; } = new();
+
+    /// <summary>
+    /// When true, the app reopens the most recent project at startup
+    /// instead of showing the Home screen (default false).
+    /// </summary>
+    public bool ReopenLastProjectOnStartup { get; set; }
+
+    /// <summary>
     /// Global interconnect waveguide width in µm. Null = export default (0.45).
     /// </summary>
     public double? InterconnectWidthMicrometers { get; set; }
@@ -459,4 +473,5 @@ public class UserPreferences
     /// "system" (default) to auto-detect the OS display language at startup.
     /// </summary>
     public string UiLanguage { get; set; } = "system";
+
 }

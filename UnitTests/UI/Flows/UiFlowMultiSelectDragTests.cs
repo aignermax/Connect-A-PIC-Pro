@@ -15,7 +15,7 @@ namespace UnitTests.UI.Flows;
 /// both broke when the click sync unconditionally re-selected the clicked component.
 /// </summary>
 [Trait("Category", "UiFlows")]
-[Collection("UiFlows")]
+[Collection("LocalizationSingleton")]
 public class UiFlowMultiSelectDragTests
 {
     private const string PdkName = "Demo PDK";

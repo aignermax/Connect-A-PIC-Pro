@@ -1,0 +1,177 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:home="using:CAP.Avalonia.ViewModels.Home"
+             xmlns:services="using:CAP.Avalonia.Services"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.HomeView"
+             x:DataType="home:HomeViewModel">
+
+    <!-- Compact centered card over the dimmed editor.
+         Disabled while the startup project (CLI arg / reopen preference) loads
+         so a click can't interleave with the in-flight load. -->
+    <Border Width="560"
+            HorizontalAlignment="Center" VerticalAlignment="Center"
+            IsEnabled="{Binding !IsStartupLoadInProgress}"
+            Background="#252526" BorderBrush="#3d3d3d" BorderThickness="1"
+            CornerRadius="10" Padding="28,24"
+            BoxShadow="0 8 32 0 #80000000">
+        <StackPanel>
+
+            <!-- Title -->
+            <TextBlock Text="Lunima"
+                       FontSize="24" FontWeight="Bold" Foreground="White"
+                       HorizontalAlignment="Center"/>
+            <TextBlock Text="{loc:Localize Home.Subtitle}"
+                       FontSize="12" Foreground="Gray"
+                       HorizontalAlignment="Center" Margin="0,2,0,18"/>
+
+            <!-- Primary actions -->
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"
+                        Spacing="10" Margin="0,0,0,18">
+                <Button Command="{Binding NewProjectCommand}"
+                        Background="#0d6efd" Foreground="White" Padding="14,7"
+                        ToolTip.Tip="{loc:Localize Home.NewProjectTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="📄" FontSize="13"/>
+                        <TextBlock Text="{loc:Localize Home.NewProject}" FontWeight="SemiBold" FontSize="13"/>
+                    </StackPanel>
+                </Button>
+                <Button Command="{Binding OpenProjectCommand}"
+                        Background="#3d3d3d" Foreground="White" Padding="14,7"
+                        ToolTip.Tip="{loc:Localize Home.OpenProjectTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="📂" FontSize="13"/>
+                        <TextBlock Text="{loc:Localize Home.OpenProject}" FontWeight="SemiBold" FontSize="13"/>
+                    </StackPanel>
+                </Button>
+            </StackPanel>
+
+            <!-- Shipped example designs -->
+            <StackPanel IsVisible="{Binding HasExamples}" Margin="0,0,0,14">
+                <TextBlock Text="{loc:Localize Home.Examples}"
+                           FontSize="13" FontWeight="SemiBold" Foreground="White"
+                           Margin="0,0,0,4"/>
+                <ItemsControl ItemsSource="{Binding Examples}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:ExampleDesign">
+                            <Button Command="{Binding $parent[ItemsControl].DataContext.OpenExampleCommand}"
+                                    CommandParameter="{Binding}"
+                                    Background="#2d3d4d" Foreground="White"
+                                    Padding="10,5" Margin="0,0,6,4" FontSize="11"
+                                    ToolTip.Tip="{loc:Localize Home.ExampleTip}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="🧪" FontSize="11"/>
+                                    <TextBlock Text="{Binding Name}"/>
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+
+            <!-- Recent projects header -->
+            <DockPanel Margin="0,0,0,4">
+                <Button DockPanel.Dock="Right" Content="{loc:Localize Home.ClearAll}"
+                        Command="{Binding ClearRecentProjectsCommand}"
+                        Background="Transparent" Foreground="Gray" FontSize="11" Padding="6,2"
+                        IsVisible="{Binding HasAnyRecentProjects}"
+                        ToolTip.Tip="{loc:Localize Home.ClearAllTip}"/>
+                <TextBlock Text="{loc:Localize Home.RecentProjects}"
+                           FontSize="13" FontWeight="SemiBold" Foreground="White"
+                           VerticalAlignment="Center"/>
+            </DockPanel>
+
+            <!-- Search over recents -->
+            <TextBox Watermark="{loc:Localize Home.SearchWatermark}"
+                     Text="{Binding SearchText}"
+                     FontSize="11" Padding="8,5" Margin="0,0,0,6"
+                     Background="#1e1e1e" Foreground="White" BorderBrush="#3e3e3e"
+                     IsVisible="{Binding HasAnyRecentProjects}"/>
+
+            <!-- Empty state -->
+            <TextBlock Text="{loc:Localize Home.EmptyState}"
+                       Foreground="Gray" FontSize="11" Margin="0,6,0,0"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding !HasAnyRecentProjects}"/>
+
+            <!-- Recent projects list (scrolls when long) -->
+            <ScrollViewer MaxHeight="260" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding RecentProjects}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="home:RecentProjectItemViewModel">
+                            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,2">
+                                <Button Grid.Column="0"
+                                        Command="{Binding $parent[ItemsControl].DataContext.OpenRecentProjectCommand}"
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Background="#2d2d2d" Padding="10,5"
+                                        ToolTip.Tip="{Binding FullPath}">
+                                    <Grid ColumnDefinitions="*,Auto">
+                                        <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8"
+                                                    VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding FileName}"
+                                                       Foreground="White" FontWeight="SemiBold" FontSize="12"/>
+                                            <TextBlock Text="{Binding FullPath}"
+                                                       Foreground="#7a7a7a" FontSize="10"
+                                                       VerticalAlignment="Center"
+                                                       TextTrimming="CharacterEllipsis" MaxWidth="270"/>
+                                            <Border Background="#5d2020" CornerRadius="8" Padding="6,1"
+                                                    VerticalAlignment="Center"
+                                                    IsVisible="{Binding IsMissing}">
+                                                <TextBlock Text="{loc:Localize Home.MissingBadge}" Foreground="#FF6B6B" FontSize="9"/>
+                                            </Border>
+                                        </StackPanel>
+                                        <TextBlock Grid.Column="1" Text="{Binding LastOpenedDisplay}"
+                                                   Foreground="#6a6a6a" FontSize="10"
+                                                   VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                    </Grid>
+                                </Button>
+                                <Button Grid.Column="1"
+                                        Command="{Binding $parent[ItemsControl].DataContext.TogglePinCommand}"
+                                        CommandParameter="{Binding}"
+                                        Width="26" Margin="4,0,0,0"
+                                        VerticalAlignment="Stretch"
+                                        Background="#2d2d2d"
+                                        ToolTip.Tip="{loc:Localize Home.PinTip}">
+                                    <Panel>
+                                        <TextBlock Text="📌" FontSize="11" IsVisible="{Binding IsPinned}"/>
+                                        <TextBlock Text="📌" FontSize="11" Opacity="0.3"
+                                                   IsVisible="{Binding !IsPinned}"/>
+                                    </Panel>
+                                </Button>
+                                <Button Grid.Column="2" Content="✕"
+                                        Command="{Binding $parent[ItemsControl].DataContext.RemoveRecentProjectCommand}"
+                                        CommandParameter="{Binding}"
+                                        Width="26" Margin="4,0,0,0"
+                                        VerticalAlignment="Stretch"
+                                        Background="#2d2d2d" Foreground="Gray" FontSize="10"
+                                        ToolTip.Tip="{loc:Localize Home.RemoveTip}"/>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Footer -->
+            <Grid ColumnDefinitions="Auto,*,Auto" Margin="0,14,0,0">
+                <CheckBox Grid.Column="0"
+                          IsChecked="{Binding ReopenLastProjectOnStartup}"
+                          FontSize="11" Foreground="Gray"
+                          ToolTip.Tip="{loc:Localize Home.ReopenOnStartupTip}">
+                    <TextBlock Text="{loc:Localize Home.ReopenOnStartup}" FontSize="11" Foreground="Gray"/>
+                </CheckBox>
+                <Button Grid.Column="2" Content="{loc:Localize Home.ContinueWithoutProject}"
+                        Command="{Binding ContinueWithoutProjectCommand}"
+                        Background="Transparent" Foreground="#6d9dc5" FontSize="11"
+                        Padding="8,4" VerticalAlignment="Center"
+                        ToolTip.Tip="{loc:Localize Home.ContinueTip}"/>
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>
