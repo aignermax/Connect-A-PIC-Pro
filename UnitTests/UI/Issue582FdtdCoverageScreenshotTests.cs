@@ -20,6 +20,7 @@ namespace UnitTests.UI;
 /// Writes PNGs + manifest.json to <c>artifacts/ui-screenshots/issue-582/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue582FdtdCoverageScreenshotTests
 {
     [AvaloniaFact]

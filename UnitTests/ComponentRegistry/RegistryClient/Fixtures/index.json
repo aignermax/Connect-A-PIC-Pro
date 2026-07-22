@@ -1,0 +1,82 @@
+{
+  "schemaVersion": 1,
+  "processes": [
+    {
+      "id": "generic-si220",
+      "name": "Generic Silicon-on-Insulator 220 nm",
+      "status": "demo"
+    }
+  ],
+  "components": [
+    {
+      "id": "directional-coupler-2x2",
+      "name": "Directional coupler 2x2 (~50/50 at 1550 nm)",
+      "description": "Coupled-mode-theory model, 9 um coupling length, wavelength-dependent coupling, 0.1 dB excess loss.",
+      "process": "generic-si220",
+      "portCount": 4,
+      "path": "processes/generic-si220/components/directional-coupler-2x2/component.json",
+      "tiers": {
+        "geometry": false,
+        "simulated": true,
+        "measured": false
+      },
+      "bestStatus": "demo"
+    },
+    {
+      "id": "mzi-unbalanced-dl40",
+      "name": "Unbalanced Mach-Zehnder interferometer (dL = 40 um)",
+      "description": "Two ideal 50/50 couplers, arm lengths 50/90 um, 0.3 dB total excess loss. Spectral fringes across the C-band.",
+      "process": "generic-si220",
+      "portCount": 4,
+      "path": "processes/generic-si220/components/mzi-unbalanced-dl40/component.json",
+      "tiers": {
+        "geometry": false,
+        "simulated": true,
+        "measured": false
+      },
+      "bestStatus": "demo"
+    },
+    {
+      "id": "ring-resonator-r10",
+      "name": "All-pass ring resonator (R = 10 um)",
+      "description": "All-pass microring, radius 10 um, self-coupling t=0.98, transfer function T=(t-a*e^-iphi)/(1-t*a*e^-iphi).",
+      "process": "generic-si220",
+      "portCount": 2,
+      "path": "processes/generic-si220/components/ring-resonator-r10/component.json",
+      "tiers": {
+        "geometry": false,
+        "simulated": true,
+        "measured": false
+      },
+      "bestStatus": "demo"
+    },
+    {
+      "id": "straight-waveguide-100um",
+      "name": "Straight waveguide (100 um)",
+      "description": "Single-mode strip waveguide, 500 x 220 nm, 100 um long. Lossy transmission-line model with linear dispersion.",
+      "process": "generic-si220",
+      "portCount": 2,
+      "path": "processes/generic-si220/components/straight-waveguide-100um/component.json",
+      "tiers": {
+        "geometry": false,
+        "simulated": true,
+        "measured": false
+      },
+      "bestStatus": "demo"
+    },
+    {
+      "id": "y-branch-1x2",
+      "name": "Y-branch splitter 1x2",
+      "description": "Ideal 50/50 power splitter with 0.2 dB excess loss and 5 um effective path length.",
+      "process": "generic-si220",
+      "portCount": 3,
+      "path": "processes/generic-si220/components/y-branch-1x2/component.json",
+      "tiers": {
+        "geometry": false,
+        "simulated": true,
+        "measured": false
+      },
+      "bestStatus": "demo"
+    }
+  ]
+}

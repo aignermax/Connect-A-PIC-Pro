@@ -30,6 +30,7 @@ namespace UnitTests.UI;
 /// <c>artifacts/ui-screenshots/issue-574/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue574RoutingWalkthroughTests
 {
     private const int MinDistinctSampledColors = 10;

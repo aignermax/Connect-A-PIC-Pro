@@ -30,6 +30,7 @@ namespace UnitTests.UI;
 /// writes step-ordered PNGs + <c>manifest.json</c> to <c>artifacts/ui-screenshots/issue-693/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue693WalkthroughScreenshotTests
 {
     private const int MinDistinctSampledColors = 10;

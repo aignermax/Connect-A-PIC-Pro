@@ -23,6 +23,7 @@ namespace UnitTests.UI;
 /// <c>UI_SHOT_DIR/analysis-output/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class Issue754AnalysisOutputScreenshotTests
 {
     private const int WindowWidth = 1000;

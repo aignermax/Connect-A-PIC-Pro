@@ -25,6 +25,7 @@ namespace UnitTests.UI;
 /// Output directory override: set env var <c>UI_SHOT_DIR</c> to an absolute path.
 /// </remarks>
 [Trait("Category", "UiScreenshots")]
+[Collection("LocalizationSingleton")]
 public class UiScreenshotTests
 {
     // A solid-color blank frame samples to 1 distinct color; anti-aliased edges may add a
