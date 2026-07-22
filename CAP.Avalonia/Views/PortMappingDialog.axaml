@@ -1,6 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.ComponentSettings"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.PortMappingDialog"
         x:Name="DialogRoot"
         x:DataType="vm:PortMappingDialogViewModel"
@@ -34,12 +35,12 @@
                     HorizontalAlignment="Right"
                     Margin="0,12,0,0"
                     Spacing="8">
-            <Button Content="Cancel"
+            <Button Content="{loc:Localize Common.Cancel}"
                     Click="OnCancelClick"
                     Width="80"
                     Background="#3d3d3d"
                     Foreground="White"/>
-            <Button Content="OK"
+            <Button Content="{loc:Localize Common.Ok}"
                     Click="OnOkClick"
                     Width="80"
                     Background="#0d6efd"
@@ -64,9 +65,9 @@
         <Grid DockPanel.Dock="Top"
               ColumnDefinitions="*,16,*"
               Margin="4,0,4,4">
-            <TextBlock Grid.Column="0" Text="Imported port"
+            <TextBlock Grid.Column="0" Text="{loc:Localize PortMapping.ImportedPort}"
                        Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
-            <TextBlock Grid.Column="2" Text="Map to component pin"
+            <TextBlock Grid.Column="2" Text="{loc:Localize PortMapping.MapToPin}"
                        Foreground="#888888" FontSize="10" FontWeight="SemiBold"/>
         </Grid>
 

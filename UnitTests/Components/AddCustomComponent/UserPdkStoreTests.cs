@@ -9,11 +9,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies <see cref="UserPdkStore"/>: user-authored components are persisted into a
-/// per-process, per-user file under a writable root — never into the bundled foundry
-/// PDK JSONs — with save-then-reload roundtripping and replace-not-duplicate semantics.
-/// </summary>
 public class UserPdkStoreTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-userpdk-" + Guid.NewGuid().ToString("N"));
@@ -22,10 +17,6 @@ public class UserPdkStoreTests : IDisposable
 
     private static ProcessDefinition Process(string name) => new() { Name = name };
 
-    // Width/height and two pins are required: PdkLoader.LoadFromFileForEditing still
-    // structurally validates components (name/dimensions/pins) even though it tolerates
-    // a missing NazcaOriginOffset. GdsFactoryFunction marks this as a gdsfactory-backend
-    // component, exempt from the Nazca-only origin-offset requirement.
     private static PdkComponentDraft Comp(string name) => new()
     {
         Name = name,
@@ -38,6 +29,61 @@ public class UserPdkStoreTests : IDisposable
             new() { Name = "out0", OffsetXMicrometers = 10, OffsetYMicrometers = 2.5, AngleDegrees = 0 }
         }
     };
+
+    [Fact]
+    public void ForkBundledPdk_copies_into_user_root_leaves_original_and_is_idempotent()
+    {
+        var bundledDir = Path.Combine(Path.GetTempPath(), "lunima-bundled-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(bundledDir);
+        var bundledPath = new UserPdkStore(bundledDir, new PdkJsonSaver(), new PdkLoader())
+            .SaveToNamedPdk("Shipped Lib", Process("P"), Comp("A"), "gdsfactory", null);
+
+        var store = CreateStore();
+        var forked = store.ForkBundledPdk(bundledPath, "Shipped Lib");
+
+        forked.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue();
+        File.Exists(bundledPath).ShouldBeTrue();
+        new PdkLoader().LoadFromFileForEditing(forked).Components.Count.ShouldBe(1);
+
+        store.AppendToExistingPdk(forked, Comp("Edited"));
+        store.ForkBundledPdk(bundledPath, "Shipped Lib").ShouldBe(forked);
+        new PdkLoader().LoadFromFileForEditing(forked).Components.Select(c => c.Name).ShouldContain("Edited");
+
+        Directory.Delete(bundledDir, true);
+    }
+
+    [Fact]
+    public void SaveDraftAsFork_writes_draft_into_user_root_without_touching_source()
+    {
+        var store = CreateStore();
+        var draft = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("A") } };
+
+        var forkPath = store.SaveDraftAsFork(draft, "Shipped Lib");
+
+        forkPath.StartsWith(_root, StringComparison.Ordinal).ShouldBeTrue();
+        Path.GetFileName(forkPath).ShouldBe("shipped-lib.json");
+        new PdkLoader().LoadFromFileForEditing(forkPath).Components.Count.ShouldBe(1);
+    }
+
+    [Fact]
+    public void SaveDraftAsFork_backs_up_existing_fork_to_trash_before_replacing()
+    {
+        var store = CreateStore();
+        var first = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("Old") } };
+        var forkPath = store.SaveDraftAsFork(first, "Shipped Lib");
+
+        var second = new PdkDraft { Name = "Shipped Lib", Components = new() { Comp("New") } };
+        store.SaveDraftAsFork(second, "Shipped Lib").ShouldBe(forkPath);
+
+        new PdkLoader().LoadFromFileForEditing(forkPath)
+            .Components.Select(c => c.Name).ShouldBe(new[] { "New" });
+        // The pre-existing fork state must survive in .trash — no silent data loss.
+        var trashDir = Path.Combine(_root, ".trash");
+        Directory.Exists(trashDir).ShouldBeTrue();
+        var backup = Directory.GetFiles(trashDir, "shipped-lib-*.json").ShouldHaveSingleItem();
+        new PdkLoader().LoadFromFileForEditing(backup)
+            .Components.Select(c => c.Name).ShouldBe(new[] { "Old" });
+    }
 
     [Fact]
     public void ResolvePath_is_under_user_root_and_slugified()

@@ -3,9 +3,6 @@ using Shouldly;
 
 namespace UnitTests.ViewModels;
 
-/// <summary>
-/// Unit tests for PdkManagerViewModel.
-/// </summary>
 public class PdkManagerViewModelTests
 {
     [Fact]
@@ -113,7 +110,7 @@ public class PdkManagerViewModelTests
 
         vm.LoadedPdks[0].IsEnabled.ShouldBeFalse();
         vm.LoadedPdks[1].IsEnabled.ShouldBeFalse();
-        vm.StatusText.ShouldBe("All PDKs disabled");
+        vm.StatusText.ShouldBe("Disabled 2 PDK(s)");
     }
 
     [Fact]
@@ -123,7 +120,7 @@ public class PdkManagerViewModelTests
         vm.RegisterPdk("PDK1", null, true, 5);
         vm.RegisterPdk("PDK2", null, true, 10);
         vm.RegisterPdk("PDK3", null, true, 15);
-        vm.LoadedPdks[1].IsEnabled = false; // Disable PDK2
+        vm.LoadedPdks[1].IsEnabled = false;
 
         var enabled = vm.GetEnabledPdkNames();
 

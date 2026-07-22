@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Export;
 
 namespace CAP.Avalonia.ViewModels.Settings;
@@ -10,24 +11,22 @@ namespace CAP.Avalonia.ViewModels.Settings;
 /// Replaces the former "Python Environment" page plus the right-panel
 /// GdsExportPanel; those duplicated the same bindings.
 /// </summary>
-public class GdsExportSettingsPage : ISettingsPage
+public class GdsExportSettingsPage : LocalizedSettingsPage
 {
     /// <inheritdoc/>
-    public string Title => "GDS Export";
+    public override string Icon => "🐍";
 
     /// <inheritdoc/>
-    public string Icon => "🐍";
+    public override string? Category => "Export";
 
     /// <inheritdoc/>
-    public string? Category => "Export";
-
-    /// <inheritdoc/>
-    public object ViewModel { get; }
+    public override object ViewModel { get; }
 
     /// <summary>
     /// Initializes a new instance of <see cref="GdsExportSettingsPage"/>.
     /// </summary>
-    public GdsExportSettingsPage(GdsExportViewModel gdsExportViewModel)
+    public GdsExportSettingsPage(GdsExportViewModel gdsExportViewModel, LocalizationService localization)
+        : base("Settings.Section.GdsExport", localization)
     {
         ViewModel = gdsExportViewModel;
     }
@@ -36,6 +35,6 @@ public class GdsExportSettingsPage : ISettingsPage
     /// Navigating to this page refreshes the interpreter list automatically —
     /// no manual "check environment" click needed.
     /// </summary>
-    public void OnSelected() =>
+    public override void OnSelected() =>
         ((GdsExportViewModel)ViewModel).RefreshInterpretersCommand.Execute(null);
 }

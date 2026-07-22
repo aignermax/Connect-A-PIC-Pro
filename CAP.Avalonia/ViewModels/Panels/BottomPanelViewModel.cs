@@ -4,21 +4,22 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
 /// <summary>
 /// ViewModel for the bottom panel.
-/// Contains waveguide length configuration, element locking, status text, and error console.
+/// Contains connection routing, element locking, status text, and error console.
 /// Max 250 lines per CLAUDE.md guideline.
 /// </summary>
 public partial class BottomPanelViewModel : ObservableObject
 {
     /// <summary>
-    /// ViewModel for parameterized waveguide length configuration (phase matching).
+    /// ViewModel for per-connection routing options (style, width/radius, freeze — issue #574).
     /// </summary>
-    public WaveguideLengthViewModel WaveguideLength { get; }
+    public ConnectionRoutingViewModel ConnectionRouting { get; }
 
     /// <summary>
     /// ViewModel for locking/unlocking components and connections.
@@ -36,7 +37,7 @@ public partial class BottomPanelViewModel : ObservableObject
     public AnalysisDockViewModel Analysis { get; }
 
     [ObservableProperty]
-    private string _statusText = "Ready";
+    private string _statusText = LocalizationService.Instance.Translate("Status.Ready");
 
     /// <summary>
     /// Initializes the bottom panel with injected sub-ViewModels.
@@ -44,12 +45,12 @@ public partial class BottomPanelViewModel : ObservableObject
     public BottomPanelViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
-        WaveguideLengthViewModel waveguideLength,
+        ConnectionRoutingViewModel connectionRouting,
         ElementLockViewModel elementLock,
         ErrorConsoleViewModel errorConsole,
         AnalysisDockViewModel analysis)
     {
-        WaveguideLength = waveguideLength;
+        ConnectionRouting = connectionRouting;
         ElementLock = elementLock;
         ErrorConsole = errorConsole;
         Analysis = analysis;

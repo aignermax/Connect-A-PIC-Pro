@@ -27,7 +27,29 @@ public enum DesignIssueType
     /// A component is placed outside the configured chip boundary.
     /// The component must be moved back into bounds before fabrication.
     /// </summary>
-    OutOfBounds
+    OutOfBounds,
+
+    /// <summary>
+    /// A placed component's PDK no longer matches the design's active fabrication process
+    /// (e.g. its process was edited and diverged from the locked process after the component
+    /// was placed — issue #570 follow-up). New placements from that PDK are blocked, but the
+    /// component itself is kept; this flags it for manual review.
+    /// </summary>
+    PdkProcessMismatch,
+
+    /// <summary>
+    /// The route could only be found with a bend radius below the active fabrication
+    /// process' minimum bend radius (the router's controlled degradation). The geometry
+    /// is clean, but fabrication rules are violated — free up space or reroute manually.
+    /// </summary>
+    BendRadiusBelowProcessMinimum,
+
+    /// <summary>
+    /// A styled (forced-shape) route passes through a component. Styled routes ignore
+    /// obstacles by design and are never auto-rerouted, so the collision must be resolved
+    /// manually — move the component or pick a different routing style.
+    /// </summary>
+    StyledRouteThroughComponent
 }
 
 /// <summary>

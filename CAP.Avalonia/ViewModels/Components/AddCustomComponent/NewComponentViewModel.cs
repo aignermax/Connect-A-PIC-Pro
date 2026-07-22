@@ -1,6 +1,8 @@
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
+using Avalonia.Media.Imaging;
+using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Solvers;
 using CAP_Core.Solvers.Fdtd;
@@ -12,143 +14,112 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
-/// <summary>
-/// Orchestrates adding a user-authored component to a PDK-first target: either an existing
-/// named custom PDK (<see cref="SelectedCustomPdk"/>, process inherited) or a brand-new one
-/// (<see cref="IsNewPdk"/>, name + process chosen). Renders the component's own Python code
-/// (nazca or gdsfactory), optionally recomputes its S-matrix via the FDTD solver, and saves the
-/// result as a <see cref="PdkComponentDraft"/>. Never invents physics — a missing solver, an
-/// unavailable backend, or a failed solve always saves the component as a black box (no
-/// S-matrix), never a fabricated one. The save/FDTD-compute path lives in the
-/// <c>NewComponentViewModel.Save.cs</c> partial (kept a separate file for size).
-/// </summary>
 public partial class NewComponentViewModel : ObservableObject
 {
+    private const int PreviewBitmapPixels = 512;
+
     private static readonly IReadOnlyList<GeometryBackend> _availableBackends =
         new[] { GeometryBackend.GdsFactory, GeometryBackend.Nazca };
 
     private readonly ComponentGeometryExtractor _extractor;
     private readonly IFdtdSMatrixService? _fdtd;
     private readonly UserPdkStore _store;
+    private readonly CAP_Core.ErrorConsoleService? _errorConsole;
 
     private GeometryExtractResult? _lastPreview;
 
     [ObservableProperty] private string _componentName = string.Empty;
     [ObservableProperty] private GeometryBackend _selectedBackend = GeometryBackend.GdsFactory;
-    [ObservableProperty] private ProcessDefinition? _selectedProcess;
-    [ObservableProperty] private UserPdkInfo? _selectedCustomPdk;
-    [ObservableProperty] private bool _isNewPdk;
-    [ObservableProperty] private string _newPdkName = string.Empty;
+    [ObservableProperty] private PdkChoice? _selectedPdkChoice;
     [ObservableProperty] private string _statusText = string.Empty;
     [ObservableProperty] private bool _isBusy;
     [ObservableProperty] private bool _hasPreview;
     [ObservableProperty] private string _code = string.Empty;
 
-    /// <summary>Fabrication processes available for a new PDK's process selection.</summary>
+    [ObservableProperty] private bool _isEditMode;
+
+    [ObservableProperty] private Bitmap? _previewBitmap;
+
     public IReadOnlyList<ProcessDefinition> Processes { get; }
 
-    /// <summary>Named custom PDKs already on disk, offered as an alternative to creating a new one.</summary>
-    public IReadOnlyList<UserPdkInfo> AvailableCustomPdks { get; }
-
-    /// <summary>Geometry backends selectable for the rendered code: always both, since saving is always own-code.</summary>
     public IReadOnlyList<GeometryBackend> AvailableBackends => _availableBackends;
 
-    /// <summary>
-    /// The process the component will be saved under: <see cref="SelectedProcess"/> for a new
-    /// PDK, or the selected existing custom PDK's (inherited, read-only) process otherwise.
-    /// </summary>
-    private ProcessDefinition? EffectiveProcess => IsNewPdk ? SelectedProcess : SelectedCustomPdk?.Process;
+    public string WindowTitle => IsEditMode ? $"Edit Component: {ComponentName}" : "New Component";
 
-    /// <summary>
-    /// File-picker hook for <see cref="LoadCodeFromFile"/>: returns a ".py" file's already-read
-    /// contents, or null if cancelled. Null keeps the command a no-op — no direct file dialog.
-    /// </summary>
+    public string SaveButtonLabel => IsEditMode ? "Save changes" : "Save";
+
     public Func<Task<string?>>? PickPyFile { get; set; }
 
-    /// <summary>
-    /// Hook invoked by <see cref="OpenProcessEditorCmd"/> to open a fabrication-process editor
-    /// (e.g. from the "New PDK" section). A no-op when null.
-    /// </summary>
-    public Func<Task>? OpenProcessEditor { get; set; }
-
-    /// <summary>The draft last written by <c>Save</c>, or null before a successful save.</summary>
     public PdkComponentDraft? SavedDraft { get; private set; }
 
-    /// <summary>
-    /// The user-PDK file path <c>Save</c> actually wrote to (named custom PDK, new or
-    /// existing) — never derived from <see cref="SelectedProcess"/>, since a process's default
-    /// per-process file is no longer where a PDK-first save lands. Null before a successful save.
-    /// </summary>
     public string? SavedFilePath { get; private set; }
 
-    /// <summary>Raised after a successful save, so a listener (e.g. the left panel) can refresh.</summary>
+    /// <summary>
+    /// True when the last save executed the deferred bundled fork: only then may the library
+    /// shadow the bundled PDK with the saved file — a mere name match must not.
+    /// </summary>
+    public bool SavedViaPendingBundledFork { get; private set; }
+
     public event EventHandler? Saved;
 
-    /// <summary>
-    /// Optional confirmation hook invoked with (componentName, pdkName) when a save would
-    /// overwrite an existing component or PDK file; returning true proceeds with the overwrite.
-    /// When null, a collision is reported via <see cref="StatusText"/> and the save is aborted.
-    /// </summary>
     public Func<string, string, Task<bool>>? ConfirmOverwrite { get; set; }
 
-    /// <summary>
-    /// Initializes the view model with its collaborators, the available processes (for a new
-    /// PDK), and the already-existing named custom PDKs read from <paramref name="store"/>.
-    /// Defaults to "new PDK" mode when no custom PDK exists yet.
-    /// </summary>
     public NewComponentViewModel(
         ComponentGeometryExtractor extractor,
         IFdtdSMatrixService? fdtd,
         UserPdkStore store,
-        IReadOnlyList<ProcessDefinition> processes)
+        IReadOnlyList<ProcessDefinition> processes,
+        CAP_Core.ErrorConsoleService? errorConsole = null)
     {
         _extractor = extractor;
         _fdtd = fdtd;
         _store = store;
+        _errorConsole = errorConsole;
         Processes = processes;
-        AvailableCustomPdks = store.ListCustomPdks();
 
-        // Pre-select the first existing custom PDK rather than leaving the transient
-        // "one exists but none chosen" state (SelectedCustomPdk null, IsNewPdk false)
-        // hanging around; falls back to "new PDK" only when none exist yet.
+        RefreshPdkChoices();
         if (AvailableCustomPdks.Count > 0)
         {
-            SelectedCustomPdk = AvailableCustomPdks[0];
+            SelectedPdkChoice = PdkChoices[0];
         }
-        else
+
+        if (string.IsNullOrWhiteSpace(Code))
         {
-            IsNewPdk = true;
+            Code = BackendCodeExamples.For(SelectedBackend);
         }
     }
 
-    // A change to any input the preview was rendered from invalidates the preview — otherwise
-    // a saved draft could be built from a rendered preview that no longer matches the current
-    // inputs. Clearing _lastPreview is the load-bearing part: Save gates on that field, so a
-    // stale preview cannot be saved; HasPreview (Save button's enablement) tracks it.
-    partial void OnSelectedBackendChanged(GeometryBackend value) => InvalidatePreview();
+    partial void OnSelectedBackendChanged(GeometryBackend value)
+    {
+        var otherBackend = value == GeometryBackend.GdsFactory ? GeometryBackend.Nazca : GeometryBackend.GdsFactory;
+        if (string.IsNullOrWhiteSpace(Code) || Code == BackendCodeExamples.For(otherBackend))
+        {
+            Code = BackendCodeExamples.For(value);
+        }
+        InvalidatePreview();
+    }
     partial void OnCodeChanged(string value) => InvalidatePreview();
 
-    /// <summary>Switching the custom-PDK selection re-derives <see cref="IsNewPdk"/> and inherits its process.</summary>
-    partial void OnSelectedCustomPdkChanged(UserPdkInfo? value)
-    {
-        IsNewPdk = value is null;
-        SelectedProcess = value?.Process;
-        InvalidatePreview();
-        SaveCommand.NotifyCanExecuteChanged();
-    }
+    // The edit-mode title includes the component name, so a rename must refresh the title binding.
+    partial void OnComponentNameChanged(string value) => OnPropertyChanged(nameof(WindowTitle));
 
-    partial void OnIsNewPdkChanged(bool value) => InvalidatePreview();
+    partial void OnIsEditModeChanged(bool value)
+    {
+        OnPropertyChanged(nameof(WindowTitle));
+        OnPropertyChanged(nameof(SaveButtonLabel));
+    }
 
     private void InvalidatePreview()
     {
         _lastPreview = null;
         HasPreview = false;
+        PreviewBitmap = null;
+        _computedModel = null;
+        RefreshSMatrixEntries();
     }
 
-    /// <summary>The rendered geometry reference: always the user's own code, verbatim.</summary>
     private GeometryReference BuildReference() => GeometryReference.RawCode(SelectedBackend, Code);
 
-    /// <summary>Loads Python source into <see cref="Code"/> via the injected <see cref="PickPyFile"/> hook.</summary>
     [RelayCommand]
     private async Task LoadCodeFromFile()
     {
@@ -157,14 +128,6 @@ public partial class NewComponentViewModel : ObservableObject
         if (content is not null) Code = content;
     }
 
-    /// <summary>Invokes <see cref="OpenProcessEditor"/> if set; a no-op otherwise.</summary>
-    [RelayCommand]
-    private async Task OpenProcessEditorCmd()
-    {
-        if (OpenProcessEditor is not null) await OpenProcessEditor();
-    }
-
-    /// <summary>Renders the configured geometry reference and extracts its size and pins.</summary>
     [RelayCommand]
     private async Task RunPreview()
     {
@@ -172,17 +135,46 @@ public partial class NewComponentViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var reference = BuildReference();
-            var result = await _extractor.ExtractAsync(reference);
-            _lastPreview = result;
-            HasPreview = result.Success;
-            StatusText = result.Success
-                ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
-                : result.Error ?? "Preview render failed.";
+            InvalidatePreview();
+            await EnsurePreviewAsync();
         }
         finally
         {
             IsBusy = false;
         }
+    }
+
+    private async Task<bool> EnsurePreviewAsync()
+    {
+        if (_lastPreview is { Success: true })
+        {
+            return true;
+        }
+
+        var reference = BuildReference();
+        var result = await _extractor.ExtractAsync(reference);
+        _lastPreview = result;
+        HasPreview = result.Success;
+        PreviewBitmap = result.Success
+            ? PreviewBitmapFactory.FromResult(result.Raw, PreviewBitmapPixels)
+            : null;
+        StatusText = result.Success
+            ? $"Preview rendered: {result.WidthUm:0.###} x {result.HeightUm:0.###} um, {result.Pins.Count} pins."
+            : DescribeRenderError(result.Error);
+        return result.Success;
+    }
+
+    /// <summary>
+    /// Shows the actionable foundry-package hint in the status bar and keeps the raw Python
+    /// error in the Error Console; unrecognised errors stay verbatim.
+    /// </summary>
+    private string DescribeRenderError(string? rawError)
+    {
+        var hint = CAP_Core.Export.FoundryEnvironmentErrorHint.Describe(rawError);
+        if (hint is null)
+            return rawError ?? "Preview render failed.";
+
+        _errorConsole?.LogError($"Component preview render failed: {rawError}");
+        return hint;
     }
 }

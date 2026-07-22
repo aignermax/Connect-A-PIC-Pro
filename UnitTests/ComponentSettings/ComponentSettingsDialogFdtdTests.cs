@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
@@ -17,6 +18,10 @@ namespace UnitTests.ComponentSettings;
 /// </summary>
 public class ComponentSettingsDialogFdtdTests
 {
+    // Status strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+    public ComponentSettingsDialogFdtdTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private static Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>> FakeFactory() =>
         (_, _) => Task.FromResult<FdtdSMatrixRequest?>(new FdtdSMatrixRequest
         {
@@ -71,6 +76,78 @@ public class ComponentSettingsDialogFdtdTests
         store["comp"].Wavelengths.ShouldContainKey("1550");
         vm.SolverStatus.ShouldContain("FDTD done");
         vm.IsComputing.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WarnsAboutWavelengthsTheRunDidNotCover()
+    {
+        // #582: the test component is defined at 980/1310/1550 nm but the (fake)
+        // FDTD run only returns 1550 → 980/1310 keep their old values and the
+        // status must say so instead of leaving a silently mixed effective matrix.
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new FdtdSMatrixResult
+               {
+                   Success = true,
+                   Ports = new[] { "in", "out" }, // match the component's pin names → applies cleanly
+                   Wavelengths = new[] { 1.55 },
+                   Entries = new[]
+                   {
+                       new FdtdSEntry { Key = "out@0,in@0", Values = new[] { new Complex(0.95, 0.0) } },
+                       new FdtdSEntry { Key = "in@0,out@0", Values = new[] { new Complex(0.95, 0.0) } },
+                   },
+                   EnergySumPerInput = new Dictionary<string, double>(),
+               });
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("FDTD done");
+        vm.SolverStatus.ShouldContain("Not covered");
+        vm.SolverStatus.ShouldContain("980");
+        vm.SolverStatus.ShouldContain("1310");
+        vm.SolverStatus.ShouldNotContain("1550 nm"); // the covered wavelength is not stale
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_NoStaleWarning_WhenRunCoversAllWavelengths()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .ReturnsAsync(new FdtdSMatrixResult
+               {
+                   Success = true,
+                   Ports = new[] { "in", "out" },
+                   Wavelengths = new[] { 0.98, 1.31, 1.55 }, // covers every defined wavelength
+                   Entries = new[]
+                   {
+                       new FdtdSEntry { Key = "out@0,in@0", Values = new[] { new Complex(0.9, 0.0), new Complex(0.9, 0.0), new Complex(0.9, 0.0) } },
+                       new FdtdSEntry { Key = "in@0,out@0", Values = new[] { new Complex(0.9, 0.0), new Complex(0.9, 0.0), new Complex(0.9, 0.0) } },
+                   },
+                   EnergySumPerInput = new Dictionary<string, double>(),
+               });
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: FakeFactory());
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("FDTD done");
+        vm.SolverStatus.ShouldNotContain("Not covered");
     }
 
     [Fact]
@@ -169,6 +246,54 @@ public class ComponentSettingsDialogFdtdTests
         await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
 
         propagateCalled.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenGeometryExportThrows_ShowsTheActionableMessage_AndStoresNothing()
+    {
+        // The request factory throws with a user-actionable message (e.g. missing cspdk).
+        // The dialog must show that message — not a generic dead-end — and must not solve.
+        const string factoryMessage =
+            "The foundry package 'cspdk' is not installed in the active Python environment — " +
+            "open Settings → Python Environments and re-run Install to add it.";
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+        var store = new Dictionary<string, ComponentSMatrixData>();
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: (_, _) => throw new InvalidOperationException(factoryMessage));
+        vm.Configure("comp", "comp", "Comp", store,
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldBe(factoryMessage);
+        store.ShouldBeEmpty();
+        vm.IsComputing.ShouldBeFalse();
+        service.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
+    }
+
+    [Fact]
+    public async Task RecalculateSMatrix_WhenFactoryReturnsNull_ShowsActionableStatus_NotAGenericDeadEnd()
+    {
+        var service = new Mock<IFdtdSMatrixService>();
+        service.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Available("ready"));
+
+        var vm = new ComponentSettingsDialogViewModel(
+            Mock.Of<IFileDialogService>(),
+            fdtdService: service.Object,
+            fdtdRequestFactory: (_, _) => Task.FromResult<FdtdSMatrixRequest?>(null));
+        vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
+            liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.SolverStatus.ShouldContain("Could not export this component's geometry");
+        vm.SolverStatus.ShouldContain("Settings → Python Environments"); // where to go next
     }
 
     [Fact]

@@ -4,6 +4,7 @@ using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -15,20 +16,24 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="NewComponentViewModel"/>'s own-code mode: pasting/loading raw Python
-/// source instead of a module/function reference, previewing it via
-/// <see cref="GeometryReference.RawCode"/>, and saving it as a raw-code draft (never a
-/// fabricated module/function reference).
-/// </summary>
 public class NewComponentViewModelRawCodeTests : IDisposable
 {
+    static NewComponentViewModelRawCodeTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-raw-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()
     {
         Success = true, XMin = 0, YMin = 0, XMax = 8, YMax = 1.5,
         Pins = new List<NazcaPreviewPin> { new() { Name = "o1", X = 0, Y = 0.75, Angle = 180 }, new() { Name = "o2", X = 8, Y = 0.75, Angle = 0 } }
+    };
+
+    private static PdkComponentDraft SeedComponent(string n) => new()
+    {
+        Name = n, WidthMicrometers = 5, HeightMicrometers = 1,
+        RawCode = "import gdsfactory as gf\ncomponent = gf.components.straight()", RawCodeBackend = "gdsfactory",
+        Pins = new() { new PhysicalPinDraft { Name = "o1" }, new PhysicalPinDraft { Name = "o2" } }
     };
 
     private NewComponentViewModel Build()
@@ -38,11 +43,11 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         gds.Setup(g => g.RenderRawCodeAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).ReturnsAsync(Ok());
         var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
+        var process = new ProcessDefinition { Name = "P" };
+        store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, fdtd: null, store,
-            new List<ProcessDefinition> { new() { Name = "P" } });
+            new List<ProcessDefinition> { process });
         vm.ComponentName = "My Raw Comp";
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return vm;
     }
 
@@ -85,6 +90,66 @@ public class NewComponentViewModelRawCodeTests : IDisposable
         await vm.LoadCodeFromFileCommand.ExecuteAsync(null);
 
         vm.Code.ShouldBe("unchanged");
+    }
+
+    [Fact]
+    public async Task LoadSMatrixFromFile_imports_and_shows_entries_then_saves_them()
+    {
+        var vm = Build();
+        double freqGHz = 299_792_458.0 / 1550e-9 / 1e9;
+        var s2p = "# GHz S MA R 50\n"
+                  + freqGHz.ToString("R", System.Globalization.CultureInfo.InvariantCulture)
+                  + " 0.05 10 0.95 80 0.95 80 0.05 10\n";
+        var path = Path.Combine(_root, "coupler.s2p");
+        await File.WriteAllTextAsync(path, s2p);
+        vm.PickSMatrixFile = () => Task.FromResult<string?>(path);
+
+        await vm.LoadSMatrixFromFileCommand.ExecuteAsync(null);
+
+        vm.HasSMatrix.ShouldBeTrue();
+        vm.SMatrixEntries.ShouldContain(e => e.WavelengthKey == "1550");
+
+        await vm.SaveCommand.ExecuteAsync(null);
+        vm.SavedDraft!.SMatrix.ShouldNotBeNull();
+    }
+
+    [Fact]
+    public void LoadForEdit_functionReferenceComponent_synthesizesEditableCode()
+    {
+        var vm = Build();
+        var template = new CAP.Avalonia.ViewModels.Library.ComponentTemplate
+        {
+            Name = "Coupler", PdkSource = "My PDK",
+            GdsFactoryFunction = "cspdk.sin300.coupler", RawCode = null, IsCustom = true
+        };
+
+        vm.LoadForEdit(template);
+
+        vm.IsEditMode.ShouldBeTrue();
+        // cspdk cells live in the PDK registry, not as module attributes —
+        // "cspdk.sin300.coupler()" raises AttributeError (field bug). The synthesized
+        // code must use the import + activate + gf.get_component pattern instead.
+        vm.Code.ShouldContain("import cspdk.sin300");
+        vm.Code.ShouldContain("cspdk.sin300.PDK.activate()");
+        vm.Code.ShouldContain("gf.get_component('coupler')");
+        vm.SelectedBackend.ShouldBe(GeometryBackend.GdsFactory);
+    }
+
+    [Fact]
+    public async Task LoadSMatrixFromFile_portCountMismatch_doesNotProduceASMatrix()
+    {
+        var vm = Build(); // component has 2 pins (o1, o2)
+        double freqGHz = 299_792_458.0 / 1550e-9 / 1e9;
+        var s1p = "# GHz S MA R 50\n"
+                  + freqGHz.ToString("R", System.Globalization.CultureInfo.InvariantCulture) + " 0.5 0\n";
+        var path = Path.Combine(_root, "oneport.s1p");
+        await File.WriteAllTextAsync(path, s1p);
+        vm.PickSMatrixFile = () => Task.FromResult<string?>(path);
+
+        await vm.LoadSMatrixFromFileCommand.ExecuteAsync(null);
+
+        vm.HasSMatrix.ShouldBeFalse();
+        vm.StatusText.ShouldContain("Cannot import");
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

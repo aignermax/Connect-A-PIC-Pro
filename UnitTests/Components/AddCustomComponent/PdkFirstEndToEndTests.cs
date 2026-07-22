@@ -10,13 +10,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// End-to-end test for the PDK-first "New Component" wizard flow (issue #700/#701
-/// follow-up): saving a raw-code component into a newly named custom PDK, listing
-/// it back with its inherited process, appending a second component to the same
-/// PDK file, and converting a re-loaded raw-code component into a placeable
-/// <see cref="ComponentTemplate"/>.
-/// </summary>
 public class PdkFirstEndToEndTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-pdkfirst-e2e-" + Guid.NewGuid().ToString("N"));

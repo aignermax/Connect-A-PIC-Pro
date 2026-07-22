@@ -50,6 +50,12 @@ public class CanvasInteractionState
     public WaveguideConnectionViewModel? HoveredConnection { get; set; }
     public Point LastCanvasPosition { get; set; }
 
+    // In-canvas bend-radius handle state (issue #574): index of the bend whose handle is being
+    // dragged (-1 when none) and whether the last requested radius was rejected (clamped), so the
+    // renderer can highlight the active handle and paint it red when the drag hits a limit.
+    public int ActiveBendIndex { get; set; } = -1;
+    public bool ActiveBendClamped { get; set; }
+
     // ComponentGroup hover state
     public ComponentGroup? HoveredGroup { get; set; }
 

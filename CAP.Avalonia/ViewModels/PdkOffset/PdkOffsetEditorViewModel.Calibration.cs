@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -27,17 +28,17 @@ public partial class PdkOffsetEditorViewModel
         PinAlignmentResults.Clear();
         if (result.Pins.Count == 0 || draft.Pins.Count == 0)
         {
-            PinAlignmentSummary = result.Pins.Count == 0
-                ? "Nazca cell exposes no pins — Lunima pin positions cannot be cross-checked."
-                : "Lunima component has no pins defined.";
+            PinAlignmentSummary = LocalizationService.Instance.Translate(result.Pins.Count == 0
+                ? "PdkOffset.PinAlign.NoNazcaPins"
+                : "PdkOffset.PinAlign.NoLunimaPins");
             return;
         }
 
         if (result.Pins.Count != draft.Pins.Count)
         {
-            PinAlignmentSummary =
-                $"⚠ Pin count mismatch — Lunima declares {draft.Pins.Count} pins, " +
-                $"Nazca exposes {result.Pins.Count}. Auto-Calibrate cannot run.";
+            PinAlignmentSummary = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.PinAlign.CountMismatch"),
+                draft.Pins.Count, result.Pins.Count);
             return;
         }
 
@@ -61,9 +62,12 @@ public partial class PdkOffsetEditorViewModel
         }
 
         PinAlignmentSummary = aligned == draft.Pins.Count
-            ? $"✓ All {aligned}/{draft.Pins.Count} Lunima pins align with Nazca pins (≤{PinAlignmentToleranceMicrometers:F1} µm)."
-            : $"⚠ {aligned}/{draft.Pins.Count} pins aligned. Worst delta: " +
-              $"{PinAlignmentResults.Max(p => p.DistanceMicrometers):F2} µm — adjust NazcaOriginOffset.";
+            ? string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.PinAlign.AllAligned"),
+                aligned, draft.Pins.Count, PinAlignmentToleranceMicrometers)
+            : string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.PinAlign.SomeAligned"),
+                aligned, draft.Pins.Count, PinAlignmentResults.Max(p => p.DistanceMicrometers));
     }
 
     /// <summary>
@@ -84,7 +88,7 @@ public partial class PdkOffsetEditorViewModel
     {
         if (_lastNazcaResult is not { Success: true } r || SelectedComponent == null)
         {
-            StatusText = "Auto-calibrate needs a successful Nazca preview.";
+            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.AutoCalibNeedsPreview");
             return;
         }
 
@@ -94,14 +98,13 @@ public partial class PdkOffsetEditorViewModel
         {
             StatusText = outcome switch
             {
-                AutoCalibrateOutcome.DegenerateBbox =>
-                    $"Auto-calibrate aborted: Nazca bbox is degenerate " +
-                    $"(XMin={r.XMin}, XMax={r.XMax}, YMin={r.YMin}, YMax={r.YMax}).",
-                AutoCalibrateOutcome.PinCountMismatch =>
-                    $"Auto-calibrate aborted: Lunima component '{SelectedComponent.ComponentName}' " +
-                    $"declares {draft.Pins.Count} pins but the Nazca cell exposes {r.Pins.Count} — " +
-                    "pin counts must match for unambiguous alignment.",
-                _ => "Auto-calibrate failed for an unknown reason.",
+                AutoCalibrateOutcome.DegenerateBbox => string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Status.AutoCalibDegenerate"),
+                    r.XMin, r.XMax, r.YMin, r.YMax),
+                AutoCalibrateOutcome.PinCountMismatch => string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Status.AutoCalibPinMismatch"),
+                    SelectedComponent.ComponentName, draft.Pins.Count, r.Pins.Count),
+                _ => LocalizationService.Instance.Translate("PdkOffset.Status.AutoCalibUnknown"),
             };
             return;
         }
@@ -118,10 +121,10 @@ public partial class PdkOffsetEditorViewModel
         RefreshCanvasMarkers(draft);
         ComputePinAlignment(r, draft);
         HasUnsavedChanges = true;
-        StatusText = $"Auto-calibrated '{SelectedComponent.ComponentName}' from GDS bbox " +
-                     $"({draft.WidthMicrometers:F2} × {draft.HeightMicrometers:F2} µm, " +
-                     $"origin {draft.NazcaOriginOffsetX:F2}/{draft.NazcaOriginOffsetY:F2}). " +
-                     "Click Save to persist.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.AutoCalibrated"),
+            SelectedComponent.ComponentName, draft.WidthMicrometers, draft.HeightMicrometers,
+            draft.NazcaOriginOffsetX, draft.NazcaOriginOffsetY);
     }
 
     private bool CanAutoCalibrate() =>
@@ -178,9 +181,17 @@ public partial class PdkOffsetEditorViewModel
             for (int i = 0; i < Components.Count && i < BatchCheckResults.Count; i++)
             {
                 if (token.IsCancellationRequested) break;
+                // Deliberately Misaligned ONLY (round-5 review [8]): the CheckAlignment
+                // band (0.1–0.5 µm) means "human should check" — deltas there can come
+                // from preview-render quantization, and bulk-rewriting calibrations that
+                // earlier releases certified as aligned would silently shift the pins of
+                // every future placement (and, via fork-on-save, the whole PDK) without
+                // per-component consent. The single-component Auto-Calibrate stays
+                // available for check-band rows after visual inspection.
                 if (BatchCheckResults[i].Status != ComponentCheckStatus.Misaligned) continue;
                 var item = Components[i];
-                BatchProgress = $"Fixing {item.Draft.Name}…";
+                BatchProgress = string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Batch.Fixing"), item.Draft.Name);
                 var result = await RenderForBatch(item.Draft, token);
                 if (result?.Success != true) continue;
                 var outcome = PdkOffsetCalibration.ApplyAutoCalibrate(item.Draft, result);
@@ -198,7 +209,8 @@ public partial class PdkOffsetEditorViewModel
                     // row keeps the report and the underlying state coherent
                     // without paying for a full second Check-All pass.
                     BatchCheckResults[idx] = PdkOffsetCalibration.Evaluate(
-                        item.Draft, result, PinAlignmentToleranceMicrometers);
+                        item.Draft, result,
+                        PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
                 });
             }
 
@@ -206,9 +218,11 @@ public partial class PdkOffsetEditorViewModel
             int aligned = BatchCheckResults.Count(r => r.Status == ComponentCheckStatus.Aligned);
             int remaining = total - aligned;
             BatchSummary = remaining == 0
-                ? $"✓ Try-Fix-All: fixed {fixedCount}, all {total} components aligned. Click Save PDK to persist."
-                : $"⚠ Try-Fix-All: fixed {fixedCount}, {aligned}/{total} aligned, " +
-                  $"{remaining} need manual edits (see report below).";
+                ? string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Batch.TryFixAllDone"), fixedCount, total)
+                : string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Batch.TryFixAllPartial"),
+                    fixedCount, aligned, total, remaining);
             // Refresh the currently-selected component's overlay so the user
             // sees their fix without having to re-click the row.
             if (SelectedComponent != null)
@@ -227,7 +241,8 @@ public partial class PdkOffsetEditorViewModel
     {
         if (CopyToClipboard == null || BatchCheckResults.Count == 0) return;
         await CopyToClipboard(FormatBatchReport(BatchCheckResults, errorsOnly: false));
-        StatusText = $"Copied report ({BatchCheckResults.Count} rows) to clipboard.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.CopiedReport"), BatchCheckResults.Count);
     }
 
     /// <summary>Copies only the rows that aren't fully aligned — the bits a human still has to investigate.</summary>
@@ -240,11 +255,12 @@ public partial class PdkOffsetEditorViewModel
             .ToList();
         if (errors.Count == 0)
         {
-            StatusText = "All components aligned — no errors to copy.";
+            StatusText = LocalizationService.Instance.Translate("PdkOffset.Status.NoErrorsToCopy");
             return;
         }
         await CopyToClipboard(FormatBatchReport(errors, errorsOnly: true));
-        StatusText = $"Copied {errors.Count} error row(s) to clipboard.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("PdkOffset.Status.CopiedErrors"), errors.Count);
     }
 
     /// <summary>
@@ -287,10 +303,12 @@ public partial class PdkOffsetEditorViewModel
             int aligned = BatchCheckResults.Count(r => r.Status == ComponentCheckStatus.Aligned);
             int total = BatchCheckResults.Count;
             BatchSummary = aligned == total
-                ? $"✓ Check-All: all {total} components aligned."
-                : $"⚠ Check-All: {aligned}/{total} aligned. " +
-                  $"{BatchCheckResults.Count(r => r.IsAutoFixable && r.Status != ComponentCheckStatus.Aligned)} " +
-                  "fixable via Try-Fix-All.";
+                ? string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Batch.CheckAllDone"), total)
+                : string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Batch.CheckAllPartial"),
+                    aligned, total,
+                    BatchCheckResults.Count(r => r.IsAutoFixable && r.Status != ComponentCheckStatus.Aligned));
         }
         finally
         {
@@ -306,12 +324,14 @@ public partial class PdkOffsetEditorViewModel
         {
             if (token.IsCancellationRequested) return;
             var item = Components[i];
-            BatchProgress = $"[{i + 1}/{Components.Count}] {item.Draft.Name}…";
+            BatchProgress = string.Format(
+                LocalizationService.Instance.Translate("PdkOffset.Batch.Progress"),
+                i + 1, Components.Count, item.Draft.Name);
             var result = await RenderForBatch(item.Draft, token);
             if (token.IsCancellationRequested) return;
             var check = PdkOffsetCalibration.Evaluate(
                 item.Draft, result ?? NazcaPreviewResult.Fail("render returned null"),
-                PinAlignmentToleranceMicrometers);
+                PinAlignmentToleranceMicrometers, PinAlignmentCheckToleranceMicrometers);
             await UiThreadMarshaller(() => BatchCheckResults.Add(check));
         }
     }

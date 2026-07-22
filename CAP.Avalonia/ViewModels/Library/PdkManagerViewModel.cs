@@ -1,54 +1,25 @@
 using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Library;
 
-/// <summary>
-/// ViewModel for managing loaded PDKs with filtering capabilities.
-/// Displays loaded PDKs and allows toggling visibility of their components.
-/// </summary>
 public partial class PdkManagerViewModel : ObservableObject
 {
     [ObservableProperty]
     private string _statusText = "";
 
-    /// <summary>
-    /// True when the user may freely toggle individual PDKs on/off. Set to false while a real
-    /// (non-Playground) process governs the enabled set (issue #570), so the per-PDK checkboxes
-    /// in the PDK-manager UI can be disabled/hidden and reflect that the selection is locked.
-    /// </summary>
     [ObservableProperty]
-    [NotifyCanExecuteChangedFor(nameof(EnableAllCommand))]
-    [NotifyCanExecuteChangedFor(nameof(DisableAllCommand))]
     private bool _manualTogglesEnabled = true;
 
-    /// <summary>
-    /// True while a bulk update (SetEnabledPdks / EnableAll / DisableAll) is toggling
-    /// PDKs: the per-PDK PropertyChanged handler skips its per-item filter refresh so a
-    /// batch of N toggles costs one re-filter (and one preferences write), not N+1.
-    /// </summary>
     private bool _suppressFilterNotifications;
 
-    /// <summary>
-    /// Collection of all loaded PDK information.
-    /// Each item tracks name, path, component count, and enabled state.
-    /// </summary>
     public ObservableCollection<PdkInfoViewModel> LoadedPdks { get; } = new();
 
-    /// <summary>
-    /// Callback invoked when PDK filter state changes.
-    /// Set by MainViewModel to trigger component library filtering.
-    /// </summary>
     public Action? OnFilterChanged { get; set; }
 
-    /// <summary>
-    /// Registers a new PDK with the manager.
-    /// </summary>
-    /// <param name="name">PDK name.</param>
-    /// <param name="filePath">Path to PDK file (null for built-in).</param>
-    /// <param name="isBundled">True if bundled with application.</param>
-    /// <param name="componentCount">Number of components in PDK.</param>
     public void RegisterPdk(string name, string? filePath, bool isBundled, int componentCount)
     {
         var pdkVm = new PdkInfoViewModel(name, filePath, isBundled, componentCount);
@@ -64,9 +35,6 @@ public partial class PdkManagerViewModel : ObservableObject
         UpdateStatusText();
     }
 
-    /// <summary>
-    /// Checks if a PDK file is already loaded (duplicate detection).
-    /// </summary>
     public bool IsPdkLoaded(string filePath)
     {
         var normalizedPath = Path.GetFullPath(filePath);
@@ -74,44 +42,33 @@ public partial class PdkManagerViewModel : ObservableObject
                                    Path.GetFullPath(p.FilePath) == normalizedPath);
     }
 
-    /// <summary>
-    /// Checks if a PDK with the given name and source type exists.
-    /// </summary>
     public bool IsPdkNameLoaded(string name, string? pdkSource)
     {
         return LoadedPdks.Any(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase) &&
                                    (pdkSource == null || p.SourceType.Equals(pdkSource, StringComparison.OrdinalIgnoreCase)));
     }
 
-    /// <summary>
-    /// Enables all PDKs and refreshes the component library. Disabled while a process
-    /// governs the enabled set (issue #570) — the bulk buttons must not override the
-    /// same lock that greys out the per-PDK checkboxes.
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
+    [RelayCommand]
     private void EnableAll()
     {
-        SetAllEnabled(true);
-        StatusText = "All PDKs enabled";
+        var changed = SetAllEnabled(true);
+        StatusText = $"Enabled {changed} allowed PDK(s)";
     }
 
-    /// <summary>
-    /// Disables all PDKs and refreshes the component library. Disabled while a process
-    /// governs the enabled set (issue #570).
-    /// </summary>
-    [RelayCommand(CanExecute = nameof(ManualTogglesEnabled))]
+    [RelayCommand]
     private void DisableAll()
     {
-        SetAllEnabled(false);
-        StatusText = "All PDKs disabled";
+        var changed = SetAllEnabled(false);
+        StatusText = $"Disabled {changed} PDK(s)";
     }
 
-    private void SetAllEnabled(bool enabled)
+    private int SetAllEnabled(bool enabled)
     {
+        var toggleable = LoadedPdks.Where(p => !p.IsLockedByProcess).ToList();
         _suppressFilterNotifications = true;
         try
         {
-            foreach (var pdk in LoadedPdks)
+            foreach (var pdk in toggleable)
                 pdk.IsEnabled = enabled;
         }
         finally
@@ -119,12 +76,9 @@ public partial class PdkManagerViewModel : ObservableObject
             _suppressFilterNotifications = false;
         }
         OnFilterChanged?.Invoke();
+        return toggleable.Count;
     }
 
-    /// <summary>
-    /// Removes a user-loaded PDK from the manager.
-    /// Bundled PDKs cannot be unloaded.
-    /// </summary>
     [RelayCommand]
     private void UnloadPdk(PdkInfoViewModel? pdk)
     {
@@ -141,9 +95,6 @@ public partial class PdkManagerViewModel : ObservableObject
         StatusText = $"{enabledCount}/{LoadedPdks.Count} PDKs active";
     }
 
-    /// <summary>
-    /// Returns a list of enabled PDK names for filtering.
-    /// </summary>
     public HashSet<string> GetEnabledPdkNames()
     {
         return LoadedPdks
@@ -152,11 +103,14 @@ public partial class PdkManagerViewModel : ObservableObject
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
     }
 
-    /// <summary>
-    /// Drives the enabled set directly: every loaded PDK whose name is in <paramref name="names"/>
-    /// is enabled, all others disabled. Used to lock the library to the active process's member
-    /// PDKs (issue #570); callers are expected to also set <see cref="ManualTogglesEnabled"/>.
-    /// </summary>
+    public HashSet<string> GetProcessCompatiblePdkNames()
+    {
+        return LoadedPdks
+            .Where(p => !p.IsLockedByProcess)
+            .Select(p => p.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+    }
+
     public void SetEnabledPdks(IEnumerable<string> names)
     {
         var nameSet = names.ToHashSet(StringComparer.OrdinalIgnoreCase);
@@ -177,15 +131,7 @@ public partial class PdkManagerViewModel : ObservableObject
         OnFilterChanged?.Invoke();
     }
 
-    /// <summary>
-    /// Locks the library to a process (issue #570): PDKs in <paramref name="allowedNames"/>
-    /// (process members + process-agnostic tools) start enabled and REMAIN individually
-    /// toggleable — deselecting a member PDK to declutter the component library is a
-    /// filtering choice, not a process violation. All other PDKs are disabled and their
-    /// checkbox is locked, because enabling a foreign-process PDK would contradict the
-    /// single-process rule.
-    /// </summary>
-    public void ApplyProcessLock(IEnumerable<string> allowedNames)
+    public void ApplyProcessLock(IEnumerable<string> allowedNames, bool preserveMemberToggles = false)
     {
         var allowed = allowedNames.ToHashSet(StringComparer.OrdinalIgnoreCase);
         _suppressFilterNotifications = true;
@@ -194,7 +140,15 @@ public partial class PdkManagerViewModel : ObservableObject
             foreach (var pdk in LoadedPdks)
             {
                 var isAllowed = allowed.Contains(pdk.Name);
-                pdk.IsEnabled = isAllowed;
+                if (isAllowed)
+                {
+                    if (!preserveMemberToggles || pdk.IsLockedByProcess)
+                        pdk.IsEnabled = true;
+                }
+                else
+                {
+                    pdk.IsEnabled = false;
+                }
                 pdk.IsLockedByProcess = !isAllowed;
             }
         }
@@ -207,7 +161,6 @@ public partial class PdkManagerViewModel : ObservableObject
         OnFilterChanged?.Invoke();
     }
 
-    /// <summary>Removes all per-PDK process locks (returning to Playground / no selection).</summary>
     public void ClearProcessLock()
     {
         foreach (var pdk in LoadedPdks)
@@ -215,27 +168,30 @@ public partial class PdkManagerViewModel : ObservableObject
     }
 }
 
-/// <summary>
-/// ViewModel wrapper for PdkInfo that supports UI binding.
-/// </summary>
 public partial class PdkInfoViewModel : ObservableObject
 {
     [ObservableProperty]
     private bool _isEnabled = true;
 
-    /// <summary>
-    /// True when this PDK belongs to a foreign process while the design is locked
-    /// (issue #570): its checkbox is disabled because enabling it would violate the
-    /// single-process rule. Member/tool PDKs stay toggleable for library filtering.
-    /// </summary>
     [ObservableProperty]
     private bool _isLockedByProcess;
+
+    /// <summary>
+    /// True when this non-bundled PDK is the user's editable fork of a same-named bundled PDK
+    /// and "shadows" the read-only built-in original. Deleting such a fork reverts to the
+    /// foundry truth: the copy goes to the trash and the bundled original is re-registered.
+    /// </summary>
+    [ObservableProperty]
+    private bool _shadowsBundledPdk;
 
     public string Name { get; }
     public string? FilePath { get; }
     public bool IsBundled { get; }
     public int ComponentCount { get; }
-    public string SourceType => IsBundled ? "Bundled" : "User";
+
+    /// <summary>Localized source label ("Bundled"/"User"), re-read on language switch.</summary>
+    public string SourceType =>
+        LocalizationService.Instance.Translate(IsBundled ? "Pdk.Bundled" : "Pdk.User");
 
     public PdkInfoViewModel(string name, string? filePath, bool isBundled, int componentCount)
     {
@@ -243,8 +199,38 @@ public partial class PdkInfoViewModel : ObservableObject
         FilePath = filePath;
         IsBundled = isBundled;
         ComponentCount = componentCount;
+        SubscribeToLanguageChanges();
     }
 
     public string DisplayText => $"{Name} ({ComponentCount} components)";
-    public string SourceBadge => IsBundled ? "📦 Bundled" : "📂 User";
+
+    /// <summary>Localized source badge with an emoji prefix; re-read on language switch.</summary>
+    public string SourceBadge => IsBundled
+        ? $"📦 {LocalizationService.Instance.Translate("Pdk.Bundled")}"
+        : $"📂 {LocalizationService.Instance.Translate("Pdk.User")}";
+
+    /// <summary>
+    /// Re-raises the localized badge properties when the UI language switches. The subscription
+    /// is weak: the handler holds only a <see cref="WeakReference{T}"/> to this VM and detaches
+    /// itself once the VM is collected, so unloading a PDK never leaks it into the process-wide
+    /// <see cref="LocalizationService.Instance"/> (PdkInfoViewModel has no Dispose lifecycle).
+    /// </summary>
+    private void SubscribeToLanguageChanges()
+    {
+        var weakSelf = new WeakReference<PdkInfoViewModel>(this);
+        PropertyChangedEventHandler? handler = null;
+        handler = (_, _) =>
+        {
+            if (weakSelf.TryGetTarget(out var self))
+            {
+                self.OnPropertyChanged(nameof(SourceType));
+                self.OnPropertyChanged(nameof(SourceBadge));
+            }
+            else
+            {
+                LocalizationService.Instance.PropertyChanged -= handler;
+            }
+        };
+        LocalizationService.Instance.PropertyChanged += handler;
+    }
 }

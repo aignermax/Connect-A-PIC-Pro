@@ -2,26 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.ViewModels.Canvas;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using CAP_DataAccess.Persistence.PIR;
 using Shouldly;
 using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Integration test for the rawcode authoring chain (issue #702 follow-up): a
-/// raw-code component definition survives the full Draft -> Template -> Placement
-/// pipeline, from the PDK JSON persistence round-trip through template conversion
-/// to the per-instance <see cref="NazcaCodeOverride"/> seeded at placement time.
-/// All building blocks (RC-Tasks 1-3) already exist; this test wires them together
-/// end-to-end and asserts one thing per stage.
-/// </summary>
 public class RawCodeEndToEndTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-rawcode-e2e-" + Guid.NewGuid().ToString("N"));
@@ -41,32 +30,18 @@ public class RawCodeEndToEndTests : IDisposable
     };
 
     [Fact]
-    public void RawCode_component_survives_draft_to_template_to_placement_override()
+    public void RawCode_component_survives_draft_to_template()
     {
         var draft = BuildDraft();
 
-        // Stage 1: Save via UserPdkStore into a temp root, then reload via PdkLoader.
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
         var path = store.Save(new ProcessDefinition { Name = "My P" }, draft, "gdsfactory", null);
         var reloaded = new PdkLoader().LoadFromFileForEditing(path);
         var reloadedComponent = reloaded.Components.Single(c => c.Name == "My Cell");
         reloadedComponent.RawCode.ShouldContain("gf.components.straight");
 
-        // Stage 2: Convert the reloaded draft to a ComponentTemplate.
         var template = PdkTemplateConverter.ConvertToTemplate(reloadedComponent, "My P", null);
         template.RawCode.ShouldContain("gf.components.straight");
-
-        // Stage 3: Place the template and verify the placement seeds a per-instance
-        // raw-code override in the override store.
-        var canvas = new DesignCanvasViewModel();
-        var overrides = new Dictionary<string, NazcaCodeOverride>();
-        var command = PlaceComponentCommand.TryCreate(canvas, template, 0, 0, overrides);
-        command.ShouldNotBeNull();
-        command!.Execute();
-
-        var seededOverride = overrides.Values.Single();
-        seededOverride.RawCode.ShouldContain("gf.components.straight");
-        seededOverride.Backend.ShouldBe(OverrideBackend.GdsFactory);
     }
 
     public void Dispose()

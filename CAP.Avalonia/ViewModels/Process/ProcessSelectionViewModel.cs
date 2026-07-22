@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Process;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -40,7 +41,8 @@ public partial class ProcessSelectionViewModel : ObservableObject
                 ActiveProcessSelection.ForGroup(g), IsPlayground: false));
 
         Choices.Add(new ProcessChoiceItem(
-            "Playground", "Mix any components — not manufacturable",
+            LocalizationService.Instance.Translate("Process.Playground"),
+            LocalizationService.Instance.Translate("Process.PlaygroundSubtitle"),
             ActiveProcessSelection.Playground(), IsPlayground: true));
     }
 

@@ -1,14 +1,24 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport;
 
 /// <summary>Tests for the gdsfactory export dialog ViewModel (#581).</summary>
+[Trait("Category", "Slow")]
 public class GdsFactoryExportViewModelTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public GdsFactoryExportViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private sealed class FixedPathFileDialog : IFileDialogService
     {
         private readonly string? _path;
@@ -151,6 +161,95 @@ public class GdsFactoryExportViewModelTests
                 ErrorMessage = "Python script execution failed (exit code 1): "
                     + "ModuleNotFoundError: No module named 'gdsfactory'",
             });
+    }
+
+    /// <summary>Export service that reports script success without running Python, so the
+    /// mixed-process tests stay deterministic and offline.</summary>
+    private sealed class StubSuccessExportService : GdsExportService
+    {
+        public override Task<ExportResult> ExportToGdsAsync(string scriptPath, bool generateGds) =>
+            Task.FromResult(new ExportResult { ScriptPath = scriptPath, Success = true });
+    }
+
+    private static DesignCanvasViewModel MixedProcessCanvas()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var sin = TestComponentFactory.CreateBasicComponent();
+        sin.Identifier = "SIN1";
+        sin.NazcaFunctionName = "";
+        sin.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(sin, "SiN");
+        var siepic = TestComponentFactory.CreateBasicComponent();
+        siepic.Identifier = "EB1";
+        siepic.NazcaFunctionName = "ebeam_y_1550";   // maps to a ubcpdk cell
+        canvas.AddComponent(siepic, "Y-Branch");
+        return canvas;
+    }
+
+    [Fact]
+    public async Task Export_MixedProcessDesign_WarnsLoudlyButStillExports()
+    {
+        // Field decision (round 4): mixing processes no longer refuses the export. The GDS
+        // is still generated (for inspection in the Playground) and the user gets an
+        // unmissable warning in the dialog AND the Error Console that it is not fab-ready.
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                MixedProcessCanvas(), new StubSuccessExportService(), errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            File.Exists(scriptPath).ShouldBeTrue();   // export ran instead of refusing
+            var script = await File.ReadAllTextAsync(scriptPath);
+            script.ShouldContain("cspdk.sin300.PDK.activate()");
+            script.ShouldContain("ubcpdk.PDK.activate()");
+            // The warning stays visible in the final dialog status, next to the result.
+            vm.StatusText.ShouldContain("NOT manufacturable");
+            vm.StatusText.ShouldContain("cspdk.sin300");
+            vm.StatusText.ShouldContain("Exported");
+            // Logged as a WARNING (not an error) in the Error Console.
+            errorConsole.Entries.ShouldContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn
+                && e.Message.Contains("mixes fabrication processes"));
+            errorConsole.Entries.ShouldNotContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Error);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task Export_SingleProcessDesign_HasNoMixedProcessWarning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                CanvasWithComponent("ebeam_y_1550"), new StubSuccessExportService(),
+                errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            File.Exists(scriptPath).ShouldBeTrue();
+            vm.StatusText.ShouldNotContain("NOT manufacturable");
+            errorConsole.Entries.ShouldNotContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
     }
 
     [Fact]

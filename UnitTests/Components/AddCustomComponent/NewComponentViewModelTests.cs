@@ -1,9 +1,11 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Numerics;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
@@ -16,13 +18,11 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="NewComponentViewModel"/>: geometry preview + optional FDTD S-matrix
-/// recompute + save into a process's user PDK, with a hard rule that a missing or failed
-/// FDTD run always saves as a black box, never a fabricated S-matrix.
-/// </summary>
 public class NewComponentViewModelTests : IDisposable
 {
+    static NewComponentViewModelTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-nc-vm-" + Guid.NewGuid().ToString("N"));
 
     private static NazcaPreviewResult Ok() => new()
@@ -30,6 +30,13 @@ public class NewComponentViewModelTests : IDisposable
         Success = true, XMin = 0, YMin = 0, XMax = 10, YMax = 2,
         Polygons = new List<NazcaPreviewPolygon> { new() { Layer = 1, Vertices = new List<(double, double)> { (0, 0), (10, 0), (10, 2), (0, 2) } } },
         Pins = new List<NazcaPreviewPin> { new() { Name = "o1", X = 0, Y = 1, Angle = 180 }, new() { Name = "o2", X = 10, Y = 1, Angle = 0 } }
+    };
+
+    private static PdkComponentDraft SeedComponent(string n) => new()
+    {
+        Name = n, WidthMicrometers = 5, HeightMicrometers = 1,
+        RawCode = "import gdsfactory as gf\ncomponent = gf.components.straight()", RawCodeBackend = "gdsfactory",
+        Pins = new() { new PhysicalPinDraft { Name = "o1" }, new PhysicalPinDraft { Name = "o2" } }
     };
 
     private (NewComponentViewModel vm, Mock<IFdtdSMatrixService> fdtd) Build(bool withFdtd = true)
@@ -40,13 +47,13 @@ public class NewComponentViewModelTests : IDisposable
         var extractor = new ComponentGeometryExtractor(nazca.Object, gds.Object);
         var fdtd = new Mock<IFdtdSMatrixService>();
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
+        var process = new ProcessDefinition { Name = "P" };
+        store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, withFdtd ? fdtd.Object : null, store,
-            new List<ProcessDefinition> { new() { Name = "P" } });
+            new List<ProcessDefinition> { process });
         vm.ComponentName = "My Comp";
         vm.SelectedBackend = GeometryBackend.GdsFactory;
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
-        vm.SelectedProcess = vm.Processes[0];
-        vm.NewPdkName = "My PDK"; // no custom PDKs exist yet -> IsNewPdk defaults true, needs a name
         return (vm, fdtd);
     }
 
@@ -58,10 +65,10 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedDraft!.SMatrix.ShouldBeNull();      // black box, no invented physics
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
         vm.SavedDraft.Pins.Count.ShouldBe(2);
         vm.SavedDraft.RawCode.ShouldContain("gf.components.coupler");
-        vm.SavedDraft.GdsFactoryFunction.ShouldBeNull(); // always own-code now, never a reference
+        vm.SavedDraft.GdsFactoryFunction.ShouldBeNull();
     }
 
     [Fact]
@@ -78,7 +85,7 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.StatusText.ShouldContain("solver blew up");
-        vm.SavedDraft!.SMatrix.ShouldBeNull();       // failed FDTD => still no model, never fake
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
     }
 
     [Fact]
@@ -89,7 +96,7 @@ public class NewComponentViewModelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.StatusText.ShouldContain("Saved");   // black-box save still confirms
+        vm.StatusText.ShouldContain("Saved");
     }
 
     [Fact]
@@ -103,24 +110,55 @@ public class NewComponentViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task Changing_the_geometry_after_preview_invalidates_it_and_blocks_save()
+    public async Task Changing_the_geometry_after_preview_makesSaveRerenderTheNewCode()
     {
         var (vm, _) = Build(withFdtd: false);
         await vm.RunPreviewCommand.ExecuteAsync(null);
         vm.HasPreview.ShouldBeTrue();
         vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
-        // Edit the code without re-previewing: the rendered geometry no longer matches what
-        // would be saved, so Save must become impossible (drift guard, #656 review).
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
 
         vm.HasPreview.ShouldBeFalse();
-        vm.SaveCommand.CanExecute(null).ShouldBeFalse();
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
 
-        // Even if the command body is invoked directly (bypassing CanExecute), the cleared
-        // preview makes Save bail out — no mixed-geometry draft is ever persisted.
         await vm.SaveCommand.ExecuteAsync(null);
-        vm.SavedDraft.ShouldBeNull();
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.RawCode.ShouldContain("mmi1x2");
+    }
+
+    [Fact]
+    public async Task ComputeSMatrix_thenChangingTheCode_ForcesABlackBoxSave_NeverTheStaleSMatrix()
+    {
+        var (vm, fdtd) = Build();
+        fdtd.Setup(f => f.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FdtdAvailability.Available(""));
+        fdtd.Setup(f => f.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new FdtdSMatrixResult
+            {
+                Success = true,
+                Ports = new[] { "o1", "o2" },
+                Wavelengths = new[] { 1.55 },
+                Entries = new[]
+                {
+                    new FdtdSEntry { Key = "o2@0,o1@0", Values = new[] { new Complex(0.95, 0.0) } },
+                    new FdtdSEntry { Key = "o1@0,o2@0", Values = new[] { new Complex(0.95, 0.0) } },
+                },
+            });
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+        vm.StatusText.ShouldContain("computed");
+
+        vm.Code = "import gdsfactory as gf\ncomponent = gf.components.mmi1x2()";
+
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
+        vm.SavedDraft.RawCode.ShouldContain("mmi1x2");
+        vm.StatusText.ShouldContain("black box");
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

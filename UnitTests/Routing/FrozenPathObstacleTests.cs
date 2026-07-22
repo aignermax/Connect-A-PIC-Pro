@@ -15,6 +15,7 @@ namespace UnitTests.Routing;
 /// Tests that the waveguide router treats frozen group paths as obstacles.
 /// Issue #353: Router should proactively avoid frozen waveguide paths during A* pathfinding.
 /// </summary>
+[Trait("Category", "Slow")]
 public class FrozenPathObstacleTests
 {
     private const double CellSize = 4.0;

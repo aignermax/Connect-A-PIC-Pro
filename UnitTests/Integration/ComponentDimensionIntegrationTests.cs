@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP_Core.Components;
@@ -15,6 +16,15 @@ namespace UnitTests.Integration;
 /// </summary>
 public class ComponentDimensionIntegrationTests
 {
+    /// <summary>
+    /// The ViewModel's StatusText is localized via LocalizationService.Instance, so pin English
+    /// to keep these assertions culture-independent regardless of the CI/dev OS language.
+    /// </summary>
+    public ComponentDimensionIntegrationTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void DimensionValidator_DetectsIssuesInDesign_AndPopulatesViewModel()
     {

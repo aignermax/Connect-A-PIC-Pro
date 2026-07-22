@@ -19,6 +19,7 @@ namespace UnitTests.Components.PolarizationDomain;
 /// source to a TM output. The TE→rotator and rotator→TM connections are
 /// polarization-legal, while a direct TE→TM connection is refused.
 /// </summary>
+[Trait("Category", "Slow")]
 public class PolarizationRotatorSimulationTests
 {
     private const int WavelengthNm = 1550;

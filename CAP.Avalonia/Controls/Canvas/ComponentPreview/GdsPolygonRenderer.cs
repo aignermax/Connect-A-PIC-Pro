@@ -51,9 +51,14 @@ public static class GdsPolygonRenderer
 
         double centerX = comp.X + comp.Width  / 2.0;
         double centerY = comp.Y + comp.Height / 2.0;
-        var destRect = new Rect(comp.X, comp.Y, comp.Width, comp.Height);
+        double rotationDegrees = comp.Component.RotationDegrees;
 
-        using (context.PushTransform(BuildRotationMatrix(comp.Component.RotationDegrees, centerX, centerY)))
+        // The rotate command already swapped comp.Width/Height at 90°/270°, but the bitmap
+        // holds UNROTATED geometry: draw it into the unrotated-size rect and let the rotation
+        // transform map it onto the footprint — else the 90° swap is applied twice.
+        var destRect = GetUnrotatedDestRect(comp.X, comp.Y, comp.Width, comp.Height, rotationDegrees);
+
+        using (context.PushTransform(BuildRotationMatrix(rotationDegrees, centerX, centerY)))
         {
             if (previewData.Bitmap != null)
             {
@@ -62,7 +67,7 @@ public static class GdsPolygonRenderer
             }
 
             // Fallback: rebuild geometry (only during the brief pre-bitmap window)
-            DrawPolygonsAsGeometry(context, result, comp.X, comp.Y, comp.Width, comp.Height);
+            DrawPolygonsAsGeometry(context, result, destRect.X, destRect.Y, destRect.Width, destRect.Height);
         }
     }
 
@@ -115,6 +120,32 @@ public static class GdsPolygonRenderer
             compX + (nazcaX - xMin) * scaleX,
             compY + (yMax  - nazcaY) * scaleY   // Y-flip: Nazca Y-up → screen Y-down
         );
+    }
+
+    /// <summary>
+    /// Footprint size at RotationDegrees = 0: odd quarter-turns swap the live Width/Height
+    /// back. Accepts any 90°-multiple (normalises negatives and ≥360°).
+    /// </summary>
+    internal static (double Width, double Height) GetUnrotatedSize(
+        double rotationDegrees, double currentWidth, double currentHeight)
+    {
+        int quarterTurns = (((int)Math.Round(rotationDegrees / 90.0)) % 4 + 4) % 4;
+        return quarterTurns % 2 == 0
+            ? (currentWidth, currentHeight)
+            : (currentHeight, currentWidth);
+    }
+
+    /// <summary>
+    /// The rect the unrotated preview must be drawn into so that, after rotating around the
+    /// footprint centre, the image covers the current (rotation-swapped) footprint exactly.
+    /// </summary>
+    internal static Rect GetUnrotatedDestRect(
+        double compX, double compY, double compWidth, double compHeight, double rotationDegrees)
+    {
+        var (unrotatedW, unrotatedH) = GetUnrotatedSize(rotationDegrees, compWidth, compHeight);
+        double centerX = compX + compWidth  / 2.0;
+        double centerY = compY + compHeight / 2.0;
+        return new Rect(centerX - unrotatedW / 2.0, centerY - unrotatedH / 2.0, unrotatedW, unrotatedH);
     }
 
     /// <summary>

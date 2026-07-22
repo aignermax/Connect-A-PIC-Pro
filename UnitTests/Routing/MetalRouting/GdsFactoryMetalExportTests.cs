@@ -99,7 +99,7 @@ public class GdsFactoryMetalExportTests
     private static string Export(DesignCanvasViewModel canvas, MetalRoutingSpec? spec = null) =>
         new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            overrides: null, metalSpec: spec);
+            metalSpec: spec);
 
     private static DesignCanvasViewModel CreateCanvasWithCrossingConnections()
     {

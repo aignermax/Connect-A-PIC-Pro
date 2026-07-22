@@ -1,6 +1,7 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels.Solvers.ModeProbe"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.ModeProbePanel"
              x:DataType="vm:ModeProbeViewModel">
 
@@ -16,7 +17,7 @@
         <Button DockPanel.Dock="Right" Content="✕" Padding="4,0"
                 Background="Transparent" Foreground="#aaaaaa"
                 Command="{Binding CloseCommand}"
-                ToolTip.Tip="Close probe"/>
+                ToolTip.Tip="{loc:Localize ModeProbe.CloseTip}"/>
         <TextBlock Text="{Binding TargetName}" FontWeight="SemiBold"
                    Foreground="White" TextTrimming="CharacterEllipsis"
                    VerticalAlignment="Center"/>
@@ -27,7 +28,7 @@
               CornerRadius="4" Padding="8"
               IsVisible="{Binding IsInterferenceRegion}">
         <TextBlock TextWrapping="Wrap" Foreground="#f0c987" FontSize="11"
-                   Text="Interference region — the field here is a multimode superposition, not a single guided mode. A mode slice would be misleading; use FDTD for this component."/>
+                   Text="{loc:Localize ModeProbe.InterferenceNotice}"/>
       </Border>
 
       <!-- Probe inputs + results (hidden for interference regions) -->
@@ -39,7 +40,7 @@
                 CornerRadius="4" Padding="6"
                 IsVisible="{Binding IsGeometryAssumed}">
           <StackPanel Spacing="2">
-            <TextBlock Text="⚠ Geometry assumed — check values" Foreground="#f0c987"
+            <TextBlock Text="{loc:Localize ModeProbe.GeometryAssumed}" Foreground="#f0c987"
                        FontSize="11" FontWeight="SemiBold"/>
             <TextBlock Text="{Binding GeometrySourceText}" Foreground="#c9b18a"
                        FontSize="10" TextWrapping="Wrap"/>
@@ -53,10 +54,10 @@
           <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding WavelengthNm}"
                          Minimum="400" Maximum="20000" Increment="10"
                          FontSize="11" Height="28"/>
-          <Button Grid.Row="0" Grid.Column="2" Content="Solve" Margin="6,0,0,0"
+          <Button Grid.Row="0" Grid.Column="2" Content="{loc:Localize ModeProbe.Solve}" Margin="6,0,0,0"
                   Command="{Binding SolveCommand}"
                   IsEnabled="{Binding !IsSolving}"/>
-          <TextBlock Grid.Row="1" Grid.Column="0" Text="Backend:" Foreground="Gray"
+          <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Localize ModeProbe.Backend}" Foreground="Gray"
                      VerticalAlignment="Center" Margin="0,4,6,0"/>
           <ComboBox Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2" Margin="0,4,0,0"
                     ItemsSource="{x:Static vm:ModeProbeViewModel.AvailableBackends}"
@@ -74,7 +75,7 @@
             <TextBlock Grid.Row="0" Grid.Column="1" Text="{Binding NEff, StringFormat={}{0:F4}}" Foreground="White"/>
             <TextBlock Grid.Row="1" Grid.Column="0" Text="n_g:" Foreground="Gray" Margin="0,0,8,0"/>
             <TextBlock Grid.Row="1" Grid.Column="1" Text="{Binding NGroup, StringFormat={}{0:F4}}" Foreground="White"/>
-            <TextBlock Grid.Row="2" Grid.Column="0" Text="Polarisation:" Foreground="Gray" Margin="0,0,8,0"/>
+            <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Localize ModeProbe.Polarisation}" Foreground="Gray" Margin="0,0,8,0"/>
             <TextBlock Grid.Row="2" Grid.Column="1" Text="{Binding Polarisation}" Foreground="White"/>
             <TextBlock Grid.Row="3" Grid.Column="0" Text="MFD:" Foreground="Gray" Margin="0,0,8,0"/>
             <TextBlock Grid.Row="3" Grid.Column="1" Text="{Binding MfdText}" Foreground="White"/>
@@ -85,18 +86,18 @@
                   CornerRadius="4" Padding="6"
                   IsVisible="{Binding ShowFiberOverlap}">
             <StackPanel Spacing="3">
-              <TextBlock Text="Fiber overlap (Gaussian approx.)" Foreground="#9ad1ff"
+              <TextBlock Text="{loc:Localize ModeProbe.FiberOverlap}" Foreground="#9ad1ff"
                          FontSize="11" FontWeight="SemiBold"/>
               <Grid ColumnDefinitions="Auto,*" RowDefinitions="Auto,Auto,Auto">
-                <TextBlock Grid.Row="0" Grid.Column="0" Text="Fiber MFD (µm):" Foreground="Gray"
+                <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Localize ModeProbe.FiberMfd}" Foreground="Gray"
                            VerticalAlignment="Center" Margin="0,0,8,0"/>
                 <NumericUpDown Grid.Row="0" Grid.Column="1" Value="{Binding FiberMfdUm}"
                                Minimum="1" Maximum="50" Increment="0.1"
                                FormatString="F1" FontSize="11" Height="28"/>
-                <TextBlock Grid.Row="1" Grid.Column="0" Text="Efficiency:" Foreground="Gray" Margin="0,4,8,0"/>
+                <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Localize ModeProbe.Efficiency}" Foreground="Gray" Margin="0,4,8,0"/>
                 <TextBlock Grid.Row="1" Grid.Column="1" Margin="0,4,0,0" Foreground="White"
                            Text="{Binding OverlapPercent, StringFormat={}{0:F1} %}"/>
-                <TextBlock Grid.Row="2" Grid.Column="0" Text="Coupling loss:" Foreground="Gray" Margin="0,0,8,0"/>
+                <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Localize ModeProbe.CouplingLoss}" Foreground="Gray" Margin="0,0,8,0"/>
                 <TextBlock Grid.Row="2" Grid.Column="1" Foreground="White"
                            Text="{Binding OverlapLossDb, StringFormat={}{0:F2} dB}"/>
               </Grid>

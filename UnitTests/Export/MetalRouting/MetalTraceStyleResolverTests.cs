@@ -122,6 +122,39 @@ public class MetalTraceStyleResolverTests
     }
 
     /// <summary>
+    /// Review Finding [0] (placement-livemembers): a value-compatible custom PDK registered
+    /// after the active process was saved is missing from the persisted member snapshot, so a
+    /// snapshot-only lookup ignored its metal cross-section and exported default metal
+    /// (wrong width/layer) — physically wrong GDS. When the caller passes the live
+    /// (by-value) member set, it must replace the snapshot as the member filter.
+    /// </summary>
+    [Fact]
+    public void Resolve_EffectiveMemberNames_ReplaceTheSnapshotAsTheMemberFilter()
+    {
+        var customPdk = new PdkDraft
+        {
+            Name = "MyCustomFab",
+            Process = new ProcessDefinition
+            {
+                Layers = { new ProcessLayer { Name = "M1", Layer = 41, Datatype = 2 } },
+                Xsections =
+                {
+                    new ProcessXsection { Name = "metal", Kind = XsectionKind.Metal, WidthUm = 6.0, Layers = { "M1" } },
+                },
+            },
+        };
+        // Snapshot knows nothing about the custom PDK (it predates it).
+        var active = new ActiveProcessSelection("SnapshotFab", null, new[] { "OldFab" }, IsPlayground: false);
+
+        var style = MetalTraceStyleResolver.Resolve(
+            active, new[] { customPdk }, effectiveMemberPdkNames: new[] { "MyCustomFab" });
+
+        style.WidthUm.ShouldBe(6.0);
+        style.GdsLayer.ShouldBe(41);
+        style.GdsDatatype.ShouldBe(2);
+    }
+
+    /// <summary>
     /// Finding 7: the by-name PDK/draft lookup was copy-pasted across three call sites
     /// (this resolver, the Fabrication Process dialog, MainWindow's PDK-path wiring) — now a
     /// single shared helper all three call.
@@ -148,5 +181,37 @@ public class MetalTraceStyleResolverTests
 
         MetalTraceStyleResolver.FindByName(drafts, "Unknown", (PdkDraft d) => d.Name).ShouldBeNull();
         MetalTraceStyleResolver.FindByName((List<PdkDraft>?)null, "FabA", (PdkDraft d) => d.Name).ShouldBeNull();
+    }
+
+    /// <summary>
+    /// Finding 5 (#733 review): a by-NAME-only draft lookup can pick the wrong file when two
+    /// loaded PDKs share a display name (e.g. two custom PDKs authored under the same name from
+    /// different files) — an edit meant for one PDK could silently land in the other's JSON.
+    /// <see cref="MetalTraceStyleResolver.FindOwnDraft"/> matches by <see cref="PdkDraft.FilePath"/>
+    /// first (set by <see cref="PdkLoader"/> at load time), so the correct file always wins even
+    /// under a name collision.
+    /// </summary>
+    [Fact]
+    public void FindOwnDraft_PrefersFilePathMatch_OverNameOnlyMatch()
+    {
+        var drafts = new[]
+        {
+            new PdkDraft { Name = "Duplicate", FilePath = @"C:\pdks\one.json" },
+            new PdkDraft { Name = "Duplicate", FilePath = @"C:\pdks\two.json" },
+        };
+
+        var found = MetalTraceStyleResolver.FindOwnDraft(drafts, @"C:\pdks\two.json", "Duplicate");
+
+        found.ShouldBeSameAs(drafts[1]);
+    }
+
+    [Fact]
+    public void FindOwnDraft_NoFilePath_FallsBackToNameMatch()
+    {
+        var drafts = new[] { new PdkDraft { Name = "FabA", FilePath = null } };
+
+        var found = MetalTraceStyleResolver.FindOwnDraft(drafts, null, "FabA");
+
+        found.ShouldBeSameAs(drafts[0]);
     }
 }

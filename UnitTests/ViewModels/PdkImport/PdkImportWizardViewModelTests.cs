@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.PdkImport;
 using CAP_Core.Export;
 using Shouldly;
@@ -12,6 +13,15 @@ namespace UnitTests.ViewModels.PdkImport;
 /// </summary>
 public class PdkImportWizardViewModelTests
 {
+    public PdkImportWizardViewModelTests()
+    {
+        // StatusText is localized via LocalizationService.Instance, so pin English to keep the
+        // substring assertions below culture-independent regardless of the CI/dev OS language
+        // (the only test that live-switches the shared instance is isolated in the
+        // "LocalizationSingleton" collection, which disables cross-collection parallelization).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     // ── ComponentParseResultViewModel ────────────────────────────────────────
 
     [Fact]

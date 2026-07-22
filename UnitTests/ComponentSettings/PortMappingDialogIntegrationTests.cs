@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_DataAccess.Persistence.PIR;
 using Moq;
@@ -19,6 +20,8 @@ public class PortMappingDialogIntegrationTests : IDisposable
 
     public PortMappingDialogIntegrationTests()
     {
+        // Status strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
         _tempSparamPath = Path.Combine(Path.GetTempPath(), $"test-{Guid.NewGuid()}.sparam");
         WriteThreePortSplitterFile(_tempSparamPath);
     }

@@ -1,6 +1,7 @@
 using System.Numerics;
 using CAP_Core.LightCalculation.MaterialDispersion;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Components.Core;
 
 namespace CAP_Core.Components.Connections
@@ -11,17 +12,44 @@ namespace CAP_Core.Components.Connections
     /// </summary>
     public class WaveguideConnection
     {
+        /// <summary>Default waveguide width in micrometers (standard: 500 nm strip).</summary>
+        public const double DefaultWidthMicrometers = 0.5;
+
+        /// <summary>Default bend radius in micrometers.</summary>
+        public const double DefaultBendRadiusMicrometers = 10.0;
+
         public Guid Id { get; set; } = Guid.NewGuid();
         public PhysicalPin StartPin { get; set; }
         public PhysicalPin EndPin { get; set; }
-        public double WidthMicrometers { get; set; } = 0.5; // Standard: 500nm
-        public double BendRadiusMicrometers { get; set; } = 10.0;
+        public double WidthMicrometers { get; set; } = DefaultWidthMicrometers;
+        public double BendRadiusMicrometers { get; set; } = DefaultBendRadiusMicrometers;
         public WaveguideType Type { get; set; } = WaveguideType.Auto;
 
         /// <summary>
         /// Indicates whether this connection is locked (cannot be deleted or modified).
         /// </summary>
         public bool IsLocked { get; set; }
+
+        /// <summary>
+        /// When true, the current routed path is frozen: re-routing keeps the existing
+        /// geometry as long as both endpoints still match. Moving an endpoint beyond the
+        /// tolerance automatically unfreezes the connection and clears bend overrides.
+        /// Set automatically when a manual per-bend radius override is applied.
+        /// </summary>
+        public bool IsRouteFrozen { get; set; }
+
+        /// <summary>
+        /// Manual per-bend radius overrides in micrometers, keyed by the index of the
+        /// bend among the path's bend segments (0 = first bend along the path).
+        /// Cleared automatically when the connection is re-routed from scratch.
+        /// </summary>
+        public Dictionary<int, double> BendRadiusOverrides { get; } = new();
+
+        /// <summary>
+        /// Tolerance in micrometers for deciding whether a frozen path still matches
+        /// the current pin positions.
+        /// </summary>
+        public const double FrozenEndpointToleranceMicrometers = 1.0;
 
         /// <summary>
         /// True when this connection joins electrical pins and must be laid out as a
@@ -32,22 +60,6 @@ namespace CAP_Core.Components.Connections
         public bool IsElectrical =>
             StartPin?.MatterType == MatterType.Electricity ||
             EndPin?.MatterType == MatterType.Electricity;
-
-        /// <summary>
-        /// Target path length in micrometers. When set, the router will attempt to achieve this length.
-        /// Null means no target length (just route the shortest valid path).
-        /// </summary>
-        public double? TargetLengthMicrometers { get; set; } = null;
-
-        /// <summary>
-        /// Whether the target length constraint is enabled.
-        /// </summary>
-        public bool IsTargetLengthEnabled { get; set; } = false;
-
-        /// <summary>
-        /// Tolerance for target length matching in micrometers. Default: ±1µm.
-        /// </summary>
-        public double LengthToleranceMicrometers { get; set; } = 1.0;
 
         /// <summary>
         /// Propagation loss in dB per centimeter.
@@ -91,36 +103,6 @@ namespace CAP_Core.Components.Connections
         public double PathLengthMicrometers => RoutedPath?.TotalLengthMicrometers ?? 0;
 
         /// <summary>
-        /// Difference between actual path length and target length in micrometers.
-        /// Positive = actual is longer, negative = actual is shorter than target.
-        /// Returns null if target length is not enabled or not set.
-        /// </summary>
-        public double? LengthDifference
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                return PathLengthMicrometers - TargetLengthMicrometers.Value;
-            }
-        }
-
-        /// <summary>
-        /// Indicates if the current path length matches the target within tolerance.
-        /// Returns null if target length is not enabled.
-        /// </summary>
-        public bool? IsLengthMatched
-        {
-            get
-            {
-                if (!IsTargetLengthEnabled || !TargetLengthMicrometers.HasValue)
-                    return null;
-                var diff = Math.Abs(LengthDifference.Value);
-                return diff <= LengthToleranceMicrometers;
-            }
-        }
-
-        /// <summary>
         /// Gets the transmission coefficient calculated from current geometry and loss parameters.
         /// Call RecalculateTransmission() after component positions change.
         /// </summary>
@@ -153,13 +135,106 @@ namespace CAP_Core.Components.Connections
                 return;
             }
 
-            // Update router settings
+            // The effective bend radius honors both the connection's own setting and the
+            // fabrication process' minimum: the larger of the two governs the geometry.
+            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
+
+            if (Type != WaveguideType.Auto)
+            {
+                // A styled route the user has hand-edited (bend radius via the canvas handles,
+                // recorded in BendRadiusOverrides) is sacred: keep it as long as its endpoints
+                // still match the pins, only refreshing the losses. Rebuilding here would
+                // silently wipe the manual edit on every unrelated recalculation.
+                if (BendRadiusOverrides.Count > 0 && FrozenPathStillMatchesPins())
+                {
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // Explicit style: the visible curve is the styled primitive rebuilt from the
+                // current pins, so it tracks component moves while ignoring obstacles by design.
+                // An endpoint move (or style change, which invalidates the route) discards any
+                // manual bend edits — mirroring the Auto unfreeze behavior. Frozen so incremental
+                // routing and the exporter treat it as a fixed route and never replace it with
+                // the A* result.
+                BendRadiusOverrides.Clear();
+                var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, effectiveBendRadius);
+                if (styledPath != null)
+                {
+                    RoutedPath = styledPath;
+                    IsRouteFrozen = true;
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // The styled primitive cannot leave the start pin along the pin direction for
+                // this layout (e.g. the end pin lies behind the start pin). Rather than drawing
+                // a broken curve into the component, fall through to the A* route below; the
+                // style is kept and takes effect again once the layout allows it.
+                IsRouteFrozen = false;
+            }
+
+            if (IsRouteFrozen)
+            {
+                if (FrozenPathStillMatchesPins())
+                {
+                    // Keep manually edited geometry; just refresh the loss values.
+                    UpdateLossFromPath(wavelengthNm);
+                    return;
+                }
+
+                // An endpoint moved: unfreeze and discard manual bend edits.
+                IsRouteFrozen = false;
+                BendRadiusOverrides.Clear();
+            }
+
+            // Update router settings. The router owns the process floor: it first attempts
+            // max(connection radius, process minimum) and degrades to the connection radius
+            // with RoutedPath.ViolatesProcessMinBendRadius set when the floor finds no clean path.
             router.MinBendRadiusMicrometers = BendRadiusMicrometers;
 
             // Route the connection using two-phase A* (Phase 1 quick, Phase 2 extended)
             RoutedPath = router.Route(StartPin, EndPin, cancellationToken);
 
-            // Calculate total loss from actual path
+            UpdateLossFromPath(wavelengthNm);
+        }
+
+        /// <summary>
+        /// Checks whether the frozen path's endpoints still match the current pin positions
+        /// within <see cref="FrozenEndpointToleranceMicrometers"/>.
+        /// </summary>
+        public bool FrozenPathStillMatchesPins()
+        {
+            if (RoutedPath == null || RoutedPath.Segments.Count == 0 || StartPin == null || EndPin == null)
+                return false;
+
+            var (startX, startY) = StartPin.GetAbsolutePosition();
+            var (endX, endY) = EndPin.GetAbsolutePosition();
+            var first = RoutedPath.Segments[0];
+            var last = RoutedPath.Segments[^1];
+
+            return Distance(first.StartPoint.X, first.StartPoint.Y, startX, startY) <= FrozenEndpointToleranceMicrometers
+                && Distance(last.EndPoint.X, last.EndPoint.Y, endX, endY) <= FrozenEndpointToleranceMicrometers;
+        }
+
+        private static double Distance(double x1, double y1, double x2, double y2)
+        {
+            double dx = x2 - x1;
+            double dy = y2 - y1;
+            return Math.Sqrt(dx * dx + dy * dy);
+        }
+
+        /// <summary>
+        /// Recalculates <see cref="TotalLossDb"/> and <see cref="TransmissionCoefficient"/>
+        /// from the current <see cref="RoutedPath"/> geometry.
+        /// </summary>
+        /// <param name="wavelengthNm">Wavelength in nm used when a <see cref="DispersionModel"/> is set.</param>
+        public void UpdateLossFromPath(double wavelengthNm = 1550.0)
+        {
+            // Calculate total loss from actual path. Smooth polyline styles (SBend/Cobra)
+            // contain no BendSegments, so BendCount is 0 for them: their bend loss is
+            // APPROXIMATED as pure propagation loss over the sampled curve length — a
+            // conservative simplification for adiabatic curves without a single radius.
             double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
             double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm; // µm to cm
             double bendLoss = BendCount * BendLossDbPer90Deg;
@@ -185,14 +260,19 @@ namespace CAP_Core.Components.Connections
         public void RestoreCachedPath(RoutedPath cachedPath, double wavelengthNm = 1550.0)
         {
             RoutedPath = cachedPath;
+            UpdateLossFromPath(wavelengthNm);
+        }
 
-            double lossDbPerCm = DispersionModel?.LossDbPerCmAt(wavelengthNm) ?? PropagationLossDbPerCm;
-            double propagationLoss = (PathLengthMicrometers / 10000.0) * lossDbPerCm;
-            double bendLoss = BendCount * BendLossDbPer90Deg;
-            TotalLossDb = propagationLoss + bendLoss;
-
-            double amplitudeCoefficient = Math.Pow(10, -TotalLossDb / 20.0);
-            TransmissionCoefficient = new Complex(amplitudeCoefficient, 0);
+        /// <summary>
+        /// Discards the current <see cref="RoutedPath"/> so the next routing pass rebuilds it from
+        /// scratch. Needed when the routing intent changes (e.g. the user picks a new
+        /// <see cref="Type"/>) but no component moved: incremental routing keeps any route whose
+        /// endpoints still match, so without this the stale path would survive and the new style
+        /// would only take effect after the next component move.
+        /// </summary>
+        public void InvalidateRoute()
+        {
+            RoutedPath = null;
         }
 
         /// <summary>

@@ -1,6 +1,7 @@
 using System.Net.Http;
 using System.Text;
 using System.Text.Json;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.AI;
 
 namespace CAP.Avalonia.Services;
@@ -36,6 +37,21 @@ public class AiService : IAiService
         "If get_grid_state() shows fewer components than expected, report the discrepancy honestly — do NOT claim success. " +
         "Be concise and report what you did. Keep responses under 300 words.";
 
+    /// <summary>
+    /// Appends a directive to answer in the active UI language onto the base system
+    /// prompt. The language name is read from the shipped-language registry
+    /// (<see cref="SupportedLanguage.All"/>), so adding a language there is enough —
+    /// there is no second list to keep in sync here. Unknown codes fall back to English.
+    /// </summary>
+    private static string BuildSystemPrompt()
+    {
+        var active = LocalizationService.Instance.ActiveLanguageCode;
+        var language = SupportedLanguage.All
+            .FirstOrDefault(l => string.Equals(l.Code, active, StringComparison.OrdinalIgnoreCase))
+            ?.EnglishName ?? SupportedLanguage.English.EnglishName;
+        return $"{SystemPrompt} Always respond in {language}.";
+    }
+
     /// <inheritdoc/>
     public bool IsConfigured => !string.IsNullOrWhiteSpace(_apiKey);
 
@@ -60,14 +76,14 @@ public class AiService : IAiService
         CancellationToken ct = default)
     {
         if (!IsConfigured)
-            return "Please configure your Claude API key in the AI Assistant settings below.";
+            return LocalizationService.Instance.Translate("Ai.ConfigureKey");
 
         var messages = BuildTextMessageList(userMessage, history);
         var requestBody = new
         {
             model = ModelId,
             max_tokens = MaxTokens,
-            system = SystemPrompt,
+            system = BuildSystemPrompt(),
             messages
         };
 
@@ -80,13 +96,14 @@ public class AiService : IAiService
             var responseJson = await response.Content.ReadAsStringAsync(ct);
 
             if (!response.IsSuccessStatusCode)
-                return $"API error ({(int)response.StatusCode}): Check your API key and try again.";
+                return string.Format(
+                    LocalizationService.Instance.Translate("Ai.ApiError"), (int)response.StatusCode);
 
             return ParseResponseText(responseJson);
         }
         catch (OperationCanceledException) { throw; }
-        catch (HttpRequestException ex) { return $"Network error: {ex.Message}"; }
-        catch (Exception ex) { return $"Unexpected error: {ex.Message}"; }
+        catch (HttpRequestException ex) { return string.Format(LocalizationService.Instance.Translate("Ai.NetworkError"), ex.Message); }
+        catch (Exception ex) { return string.Format(LocalizationService.Instance.Translate("Ai.UnexpectedError"), ex.Message); }
     }
 
     /// <inheritdoc/>
@@ -98,7 +115,7 @@ public class AiService : IAiService
         CancellationToken ct = default)
     {
         if (!IsConfigured)
-            return "Please configure your Claude API key in the AI Assistant settings below.";
+            return LocalizationService.Instance.Translate("Ai.ConfigureKey");
 
         var toolDefs = BuildToolDefinitions(tools);
         var messages = new List<object>(BuildTextMessageList(userMessage, history));
@@ -111,19 +128,20 @@ public class AiService : IAiService
             {
                 model = ModelId,
                 max_tokens = MaxTokens,
-                system = SystemPrompt,
+                system = BuildSystemPrompt(),
                 tools = toolDefs,
                 messages
             };
 
             var responseJson = await PostJsonAsync(requestBody, ct);
-            if (responseJson == null) return "Network error during tool call.";
+            if (responseJson == null) return LocalizationService.Instance.Translate("Ai.NetworkErrorToolCall");
 
             using var doc = JsonDocument.Parse(responseJson);
             var root = doc.RootElement;
 
             if (root.TryGetProperty("error", out var errorEl))
-                return $"API error: {errorEl.GetRawText()}";
+                return string.Format(
+                    LocalizationService.Instance.Translate("Ai.ApiErrorRaw"), errorEl.GetRawText());
 
             var stopReason = root.TryGetProperty("stop_reason", out var sr) ? sr.GetString() : null;
             var contentArray = root.TryGetProperty("content", out var ca) ? ca : default;
@@ -158,7 +176,7 @@ public class AiService : IAiService
             messages.Add(new { role = "user", content = toolResults });
         }
 
-        return "Reached maximum tool iterations. Please try a simpler request.";
+        return LocalizationService.Instance.Translate("Ai.MaxIterations");
     }
 
     private async Task<string?> PostJsonAsync(object requestBody, CancellationToken ct)
@@ -273,7 +291,7 @@ public class AiService : IAiService
         }
         catch
         {
-            return "Could not parse AI response.";
+            return LocalizationService.Instance.Translate("Ai.ParseFailed");
         }
     }
 }

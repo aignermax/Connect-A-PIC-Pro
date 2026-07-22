@@ -2,6 +2,7 @@ using CAP.Avalonia.Services.GdsFactoryExport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport;
 
@@ -12,6 +13,7 @@ namespace UnitTests.Export.GdsFactoryExport;
 /// <c>%LOCALAPPDATA%\Lunima\tools\uv.exe venv %TEMP%\gf-groundtruth --python 3.12</c>
 /// + <c>uv pip install gdsfactory ubcpdk</c>.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsFactoryScriptExecutionTests
 {
     private static string? FindGdsFactoryPython()

@@ -141,6 +141,41 @@ public class FrozenPathDto
     /// Whether the path has geometry violations.
     /// </summary>
     public bool IsInvalidGeometry { get; set; }
+
+    /// <summary>
+    /// Routing style name of the original connection ("Auto", "Bend", "SBend", "Cobra").
+    /// Null in design files that predate settings persistence — loads as Auto.
+    /// </summary>
+    public string? ConnectionType { get; set; }
+
+    /// <summary>
+    /// Bend radius of the original connection in micrometers.
+    /// Null in old design files — loads with the model default.
+    /// </summary>
+    public double? BendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Waveguide width of the original connection in micrometers.
+    /// Null in old design files — loads with the model default.
+    /// </summary>
+    public double? WidthMicrometers { get; set; }
+
+    /// <summary>
+    /// Whether the original connection's route was frozen. Missing in old files — false.
+    /// </summary>
+    public bool IsRouteFrozen { get; set; }
+
+    /// <summary>
+    /// Propagation loss of the original connection in dB/cm.
+    /// Null in old design files — loads with the model default.
+    /// </summary>
+    public double? PropagationLossDbPerCm { get; set; }
+
+    /// <summary>
+    /// Manual per-bend radius overrides keyed by bend index.
+    /// Null in old design files — loads empty.
+    /// </summary>
+    public Dictionary<int, double>? BendRadiusOverrides { get; set; }
 }
 
 /// <summary>

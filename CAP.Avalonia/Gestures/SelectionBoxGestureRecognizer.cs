@@ -14,14 +14,19 @@ namespace CAP.Avalonia.Gestures;
 /// </summary>
 public class SelectionBoxGestureRecognizer : IGestureRecognizer
 {
+    /// <summary>Screen-space drag below which a press+release counts as a plain click.</summary>
+    private const double ClickTolerancePixels = 4.0;
+
     private readonly CanvasInteractionState _state;
     private readonly Action _invalidate;
+    private readonly Func<double> _getZoom;
     private DesignCanvasViewModel? _activeCanvas;
 
     /// <summary>Initializes a new instance of <see cref="SelectionBoxGestureRecognizer"/>.</summary>
-    public SelectionBoxGestureRecognizer(CanvasInteractionState state, Action invalidate)
+    public SelectionBoxGestureRecognizer(CanvasInteractionState state, Action invalidate, Func<double> getZoom)
     {
         _state = state;
+        _getZoom = getZoom;
         _invalidate = invalidate;
     }
 
@@ -72,11 +77,24 @@ public class SelectionBoxGestureRecognizer : IGestureRecognizer
     {
         if (!canvas.Selection.IsBoxSelecting) return;
         var (minX, minY, maxX, maxY) = canvas.Selection.GetNormalizedBox();
+        canvas.Selection.IsBoxSelecting = false;
+        _activeCanvas = null;
+
+        // A (near-)zero-size box is a plain left-click, not a rubber-band. Route it through
+        // the regular click pipeline (SelectAt): unlike SelectInRectangle — which only knows
+        // components — that also selects a waveguide CONNECTION under the cursor, so a line
+        // is selectable with the left button and not only via the right-click context path.
+        double clickTolerance = ClickTolerancePixels / Math.Max(_getZoom(), 0.0001);
+        if (maxX - minX < clickTolerance && maxY - minY < clickTolerance)
+        {
+            mainVm?.CanvasClicked(maxX, maxY);
+            _invalidate();
+            return;
+        }
+
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         bool alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         canvas.Selection.SelectInRectangle(canvas.Components, minX, minY, maxX, maxY, addToSelection: ctrl, removeFromSelection: alt);
-        canvas.Selection.IsBoxSelecting = false;
-        _activeCanvas = null;
         _invalidate();
     }
 

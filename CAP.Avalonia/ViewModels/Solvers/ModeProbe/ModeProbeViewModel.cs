@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Process;
 using CAP_Core.Solvers.ModeProbe;
 using CAP_Core.Solvers.ModeSolver;
@@ -145,7 +146,7 @@ public partial class ModeProbeViewModel : ObservableObject
 
         if (IsInterferenceRegion)
         {
-            StatusText = "Interference region — a single mode slice is not meaningful here. Use FDTD.";
+            StatusText = LocalizationService.Instance.Translate("ModeProbe.InterferenceStatus");
             return;
         }
         SolveCommand.Execute(null);
