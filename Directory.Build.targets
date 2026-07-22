@@ -1,0 +1,25 @@
+<Project>
+  <!--
+    Disable the Avalonia.BuildServices build telemetry collector.
+
+    The "AvaloniaStats" target (shipped transitively via the Avalonia packages)
+    spawns a background "Avalonia.BuildServices.Collector" dotnet process on every
+    build. That collector intermittently crashes with an unhandled
+    DirectoryNotFoundException while sweeping "~/.config/.avalonia-build-tasks"
+    (a race when several builds run in parallel, e.g. agent/QA machines), and its
+    SIGABRT can tear down a concurrently running `dotnet test` session with
+    "The active test run was aborted. Reason: Test host process crashed".
+
+    The task only runs when $(UsedAvaloniaProducts) is non-empty, and telemetry
+    opt-out is officially supported (AVALONIA_TELEMETRY_OPTOUT env var). Since an
+    environment variable cannot be guaranteed on every machine/CI, clear the
+    gating property early in the build (before the AvaloniaStats condition is
+    evaluated) so the collector is never spawned for this repository's builds.
+  -->
+  <Target Name="DisableAvaloniaBuildTelemetry"
+          BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <UsedAvaloniaProducts></UsedAvaloniaProducts>
+    </PropertyGroup>
+  </Target>
+</Project>

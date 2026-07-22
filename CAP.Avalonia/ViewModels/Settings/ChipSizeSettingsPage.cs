@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Settings;
@@ -8,22 +9,20 @@ namespace CAP.Avalonia.ViewModels.Settings;
 /// triggers a repaint. Lives in the Settings window because chip dimensions are a
 /// design-wide configuration, not a per-action knob.
 /// </summary>
-public class ChipSizeSettingsPage : ISettingsPage
+public class ChipSizeSettingsPage : LocalizedSettingsPage
 {
     /// <inheritdoc/>
-    public string Title => "Chip Size";
+    public override string Icon => "📏";
 
     /// <inheritdoc/>
-    public string Icon => "📏";
+    public override string? Category => "Canvas";
 
     /// <inheritdoc/>
-    public string? Category => "Canvas";
-
-    /// <inheritdoc/>
-    public object ViewModel { get; }
+    public override object ViewModel { get; }
 
     /// <summary>Initializes a new instance of <see cref="ChipSizeSettingsPage"/>.</summary>
-    public ChipSizeSettingsPage(ChipSizeViewModel chipSizeViewModel)
+    public ChipSizeSettingsPage(ChipSizeViewModel chipSizeViewModel, LocalizationService localization)
+        : base("Settings.Section.ChipSize", localization)
     {
         ViewModel = chipSizeViewModel;
     }

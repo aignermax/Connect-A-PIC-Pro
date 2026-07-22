@@ -64,7 +64,7 @@ public class GdsExportAlignmentTests
             dut.PhysicalPins.First(p => p.Name == "out1"),
             partner.PhysicalPins.First(p => p.Name == "in1"));
 
-        await RunRotationMatrixAsync(canvas, dutVm, dut, python, overrides: null);
+        await RunRotationMatrixAsync(canvas, dutVm, dut, python);
     }
 
     [Fact]
@@ -85,31 +85,7 @@ public class GdsExportAlignmentTests
         dut.Identifier = "bend_dut";
         var dutVm = canvas.AddComponent(dut, template.Name);
 
-        await RunRotationMatrixAsync(canvas, dutVm, dut, python, overrides: null);
-    }
-
-    [Fact]
-    public async Task OverrideComponent_AllRotations_PinsAlignInGds()
-    {
-        var (python, previewScript) = await GdsAlignmentTestSetup.ResolveEnvironmentAsync();
-        if (python == null || previewScript == null) return;   // env skip
-
-        var mmiTemplate = _library.First(t => t.Name == "1x2 MMI Splitter");
-        var canvas = new DesignCanvasViewModel();
-        var dut = ComponentTemplates.CreateFromTemplate(mmiTemplate, 100, 400);
-        dut.Identifier = "align_override_dut";
-        var dutVm = canvas.AddComponent(dut, mmiTemplate.Name);
-        var partner = ComponentTemplates.CreateFromTemplate(mmiTemplate, 900, 400);
-        partner.Identifier = "align_override_partner";
-        canvas.AddComponent(partner, mmiTemplate.Name);
-
-        var store = await GdsAlignmentTestSetup.ApplyShowcaseOverrideAsync(
-            canvas, dut, python, previewScript);
-        canvas.ConnectPins(
-            dut.PhysicalPins.First(p => p.Name == "out"),
-            partner.PhysicalPins.First(p => p.Name == "in"));
-
-        await RunRotationMatrixAsync(canvas, dutVm, dut, python, store);
+        await RunRotationMatrixAsync(canvas, dutVm, dut, python);
     }
 
     [Fact]
@@ -134,7 +110,7 @@ public class GdsExportAlignmentTests
             partner.PhysicalPins.First(p => p.Name == "a0"));
 
         // 0° and 90° are sufficient to catch the anchor mismatch on both axes.
-        await RunRotationMatrixAsync(canvas, dutVm, dut, python, overrides: null, maxSteps: 2);
+        await RunRotationMatrixAsync(canvas, dutVm, dut, python, maxSteps: 2);
     }
 
     /// <summary>
@@ -182,7 +158,7 @@ public class GdsExportAlignmentTests
     /// </summary>
     private static async Task RunRotationMatrixAsync(
         DesignCanvasViewModel canvas, ComponentViewModel dutVm, Component dut,
-        string python, IReadOnlyDictionary<string, NazcaCodeOverride>? overrides, int maxSteps = 4)
+        string python, int maxSteps = 4)
     {
         for (int rotationSteps = 0; rotationSteps < maxSteps; rotationSteps++)
         {
@@ -195,7 +171,7 @@ public class GdsExportAlignmentTests
             await canvas.RecalculateRoutesAsync();
 
             var script = new SimpleNazcaExporter().Export(
-                canvas, overrides: overrides, emitVerification: true);
+                canvas, emitVerification: true);
             var (pins, scriptPath, tempDir) = await RunScriptAsync(script, python, rotationSteps);
 
             AssertDutPinsAlign(dut, pins["comp_0"], rotationSteps, scriptPath);

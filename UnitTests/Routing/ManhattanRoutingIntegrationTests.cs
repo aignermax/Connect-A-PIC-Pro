@@ -14,6 +14,7 @@ namespace UnitTests.Routing;
 /// Integration tests for Manhattan router obstacle registration and collision detection.
 /// Tests fix for issue #87: Manhattan router waveguides not registered in PathfindingGrid.
 /// </summary>
+[Trait("Category", "Slow")]
 public class ManhattanRoutingIntegrationTests
 {
     [Fact]

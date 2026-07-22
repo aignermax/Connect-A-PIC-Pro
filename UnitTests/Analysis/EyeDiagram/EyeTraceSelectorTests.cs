@@ -1,0 +1,202 @@
+using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP_Core.LightCalculation.TimeDomainSimulation;
+using Shouldly;
+
+namespace UnitTests.Analysis.EyeDiagram;
+
+/// <summary>
+/// Tests for <see cref="EyeTraceSelector"/> (#690): the eye analysis must prefer
+/// traces at couplers whose laser is switched off (the design's true outputs),
+/// warn when every laser is still on, and error when the designated outputs
+/// receive no light.
+/// </summary>
+public class EyeTraceSelectorTests
+{
+    private static TimeDomainResult BuildResult(params (Guid PinId, double[] Trace)[] traces)
+    {
+        var dict = traces.ToDictionary(t => t.PinId, t => t.Trace);
+        var timeAxis = new double[traces.Length == 0 ? 0 : traces[0].Trace.Length];
+        return new TimeDomainResult(timeAxis, dict);
+    }
+
+    [Fact]
+    public void Select_PrefersOffCouplerTrace_EvenWhenWeaker()
+    {
+        var outputPin = Guid.NewGuid();
+        var otherPin = Guid.NewGuid();
+        var result = BuildResult(
+            (outputPin, new[] { 0.1, 0.2 }),
+            (otherPin, new[] { 5.0, 9.0 }));
+
+        var selection = EyeTraceSelector.Select(result, new[] { outputPin });
+
+        selection.Trace.ShouldBe(result.PinTraces[outputPin]);
+        selection.Warning.ShouldBeNull();
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_PicksStrongestAmongMultipleOffCouplers()
+    {
+        var weakOutput = Guid.NewGuid();
+        var strongOutput = Guid.NewGuid();
+        var result = BuildResult(
+            (weakOutput, new[] { 0.1, 0.2 }),
+            (strongOutput, new[] { 0.3, 0.8 }));
+
+        var selection = EyeTraceSelector.Select(result, new[] { weakOutput, strongOutput });
+
+        selection.Trace.ShouldBe(result.PinTraces[strongOutput]);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_FallsBackToStrongestWithWarning_WhenAllLasersOn()
+    {
+        var weakPin = Guid.NewGuid();
+        var strongPin = Guid.NewGuid();
+        var result = BuildResult(
+            (weakPin, new[] { 0.1, 0.2 }),
+            (strongPin, new[] { 5.0, 9.0 }));
+
+        var selection = EyeTraceSelector.Select(result, Array.Empty<Guid>());
+
+        selection.Trace.ShouldBe(result.PinTraces[strongPin]);
+        selection.Warning.ShouldBe(EyeTraceSelector.AllLasersOnWarning);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_ReturnsError_WhenNoTraceReachesOffCoupler()
+    {
+        var outputPin = Guid.NewGuid();
+        var unrelatedPin = Guid.NewGuid();
+        var result = BuildResult((unrelatedPin, new[] { 1.0, 2.0 }));
+
+        var selection = EyeTraceSelector.Select(result, new[] { outputPin });
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtOutputError);
+        selection.Warning.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputWins_OverStrongerOffCouplerTrace()
+    {
+        var designatedPin = Guid.NewGuid();
+        var strongerOffPin = Guid.NewGuid();
+        var result = BuildResult(
+            (designatedPin, new[] { 0.1, 0.2 }),
+            (strongerOffPin, new[] { 5.0, 9.0 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { designatedPin, strongerOffPin },
+            designatedPinIds: new[] { designatedPin });
+
+        selection.Trace.ShouldBe(result.PinTraces[designatedPin]);
+        selection.Warning.ShouldBeNull("an explicit designation needs no warning");
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputWithoutSignal_ReturnsError()
+    {
+        var designatedPin = Guid.NewGuid();
+        var otherPin = Guid.NewGuid();
+        var result = BuildResult((otherPin, new[] { 1.0, 2.0 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { otherPin },
+            designatedPinIds: new[] { designatedPin });
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtDesignatedOutputError);
+    }
+
+    [Fact]
+    public void Select_MultipleCandidatesWithoutDesignation_WarnsExplicitly()
+    {
+        var weakOutput = Guid.NewGuid();
+        var strongOutput = Guid.NewGuid();
+        var result = BuildResult(
+            (weakOutput, new[] { 0.1, 0.2 }),
+            (strongOutput, new[] { 0.3, 0.8 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            new[] { weakOutput, strongOutput },
+            hasMultipleCandidates: true);
+
+        selection.Trace.ShouldBe(result.PinTraces[strongOutput]);
+        selection.Warning.ShouldBe(EyeTraceSelector.MultipleOutputsWarning);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputBelowNoiseFloor_ReturnsThresholdError()
+    {
+        // Field round 4 review, finding [1]: the multi-hop closure creates numerically tiny
+        // traces at every reachable pin (spurious reflections/crosstalk). A designated
+        // output at −100 dB of the injected power is NOT a signal path — the gate must say
+        // so instead of computing garbage Q/BER on numerical residue.
+        var designatedPin = Guid.NewGuid();
+        var result = BuildResult((designatedPin, new[] { 1e-10, 5e-11 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            Array.Empty<Guid>(),
+            designatedPinIds: new[] { designatedPin },
+            injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.BelowNoiseFloorError);
+        selection.Error.ShouldContain("-60");
+    }
+
+    [Fact]
+    public void Select_DesignatedOutputAtMinus8dB_PassesTheGate()
+    {
+        // The real field case (−8.4 dB output) must keep working.
+        var designatedPin = Guid.NewGuid();
+        var result = BuildResult((designatedPin, new[] { 0.10, 0.145 }));
+
+        var selection = EyeTraceSelector.Select(
+            result,
+            Array.Empty<Guid>(),
+            designatedPinIds: new[] { designatedPin },
+            injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBe(result.PinTraces[designatedPin]);
+        selection.Error.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Select_OffCouplersAllBelowNoiseFloor_ReturnsNoSignalError()
+    {
+        var outputPin = Guid.NewGuid();
+        var result = BuildResult((outputPin, new[] { 1e-9, 1e-10 }));
+
+        var selection = EyeTraceSelector.Select(
+            result, new[] { outputPin }, injectedPeakPower: 1.0);
+
+        selection.Trace.ShouldBeNull();
+        selection.Error.ShouldBe(EyeTraceSelector.NoSignalAtOutputError);
+    }
+
+    [Fact]
+    public void Select_HandlesEmptyTraceArrays()
+    {
+        var outputPin = Guid.NewGuid();
+        var emptyPin = Guid.NewGuid();
+        var result = BuildResult(
+            (outputPin, new[] { 0.5 }),
+            (emptyPin, Array.Empty<double>()));
+
+        var selection = EyeTraceSelector.Select(result, new[] { outputPin, emptyPin });
+
+        selection.Trace.ShouldBe(result.PinTraces[outputPin]);
+        selection.Error.ShouldBeNull();
+    }
+}

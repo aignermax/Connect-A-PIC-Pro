@@ -44,69 +44,6 @@ public class GdsFactoryExporterTests
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
 
     [Fact]
-    public void NazcaExport_SkipsGdsFactoryBackendOverride()
-    {
-        // Safety: a gdsfactory-backend override must NOT be emitted into the Nazca script
-        // (its gdsfactory Python would crash the Nazca run); the PDK cell is used instead.
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var store = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "component = gf.components.mmi1x2()",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
-            },
-        };
-
-        var nazca = new CAP.Avalonia.Services.SimpleNazcaExporter().Export(canvas, overrides: store);
-
-        nazca.ShouldNotContain("gf.components.mmi1x2");   // gdsfactory code not in the Nazca script
-    }
-
-    [Fact]
-    public void Export_GdsFactoryBackendOverride_EmittedAsFactory()
-    {
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "component = gf.components.straight(length=12)",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory,
-            },
-        };
-
-        var script = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells), overrides);
-
-        script.ShouldContain("def override_C1(");
-        script.ShouldContain("component = gf.components.straight(length=12)");
-        script.ShouldContain("c.add_ref(override_C1())");
-        script.ShouldNotContain("gf.get_component('ebeam_y_1550')");  // override replaces the ubcpdk cell
-    }
-
-    [Fact]
-    public void Export_NazcaBackendOverride_IsNotHonoured_AndReportedAsMismatch()
-    {
-        var canvas = CreateCanvasWithComponent("ebeam_y_1550", "C1");
-        var overrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>
-        {
-            ["C1"] = new()
-            {
-                RawCode = "import nazca as nd\ndef component(): ...",
-                Backend = CAP_DataAccess.Persistence.PIR.OverrideBackend.Nazca,
-            },
-        };
-
-        var script = new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells), overrides);
-
-        script.ShouldNotContain("override_C1");                      // Nazca code not emitted
-        script.ShouldContain("gf.get_component('ebeam_y_1550')");    // uses the ubcpdk cell instead
-        GdsFactoryExporter.CollectBackendMismatches(canvas, overrides).ShouldBe(new[] { "C1" });
-    }
-
-    [Fact]
     public void Export_Standalone_HasGdsFactoryHeaderWithoutPdkActivation()
     {
         var script = ExportStandalone(CreateCanvasWithComponent("ebeam_y_1550"));
@@ -366,6 +303,159 @@ public class GdsFactoryExporterTests
 
         conflicts.ShouldNotBeEmpty();
         conflicts.ShouldContain(c => c.Contains("cspdk.sin300"));
+    }
+
+    [Fact]
+    public void Export_MixedTwoGdsFactoryModules_ActivatesEachPdkBeforeItsPlacement()
+    {
+        // Field decision (round 4): a mixed-process design still exports — for inspection
+        // only. Each cell must be instantiated under ITS OWN PDK (activation emitted right
+        // before the placement), so no cell is silently drawn with a foreign process' layers.
+        var canvas = new DesignCanvasViewModel();
+        foreach (var (id, func) in new[] { ("A", "cspdk.sin300.mmi1x2"), ("B", "cspdk.si220.mmi1x2") })
+        {
+            var c = TestComponentFactory.CreateBasicComponent();
+            c.Identifier = id;
+            c.NazcaFunctionName = "";
+            c.GdsFactoryFunction = func;
+            canvas.AddComponent(c, id);
+        }
+
+        var script = ExportUbcPdk(canvas);
+
+        // Loud inspection-only warning in the script header.
+        script.ShouldContain("NOT manufacturable");
+        // Per-placement activation: each activate line sits between "c = gf.Component" and
+        // the component it guards, in canvas order.
+        var designStart = script.IndexOf("c = gf.Component", StringComparison.Ordinal);
+        var activateSin = script.IndexOf("cspdk.sin300.PDK.activate()", StringComparison.Ordinal);
+        var placeA = script.IndexOf("# A", StringComparison.Ordinal);
+        var activateSi = script.IndexOf("cspdk.si220.PDK.activate()", StringComparison.Ordinal);
+        var placeB = script.IndexOf("# B", StringComparison.Ordinal);
+        activateSin.ShouldBeGreaterThan(designStart);
+        placeA.ShouldBeGreaterThan(activateSin);
+        activateSi.ShouldBeGreaterThan(placeA);
+        placeB.ShouldBeGreaterThan(activateSi);
+    }
+
+    [Fact]
+    public void Export_MixedModulePlusUbcCell_ActivatesUbcpdkForItsCell()
+    {
+        // gdsfactory-native (cspdk) + SiEPIC (ubcpdk-mapped) on one canvas: the ubcpdk cell
+        // must resolve under an activated ubcpdk, not crash under the cspdk PDK.
+        var canvas = new DesignCanvasViewModel();
+        var sin = TestComponentFactory.CreateBasicComponent();
+        sin.Identifier = "SIN1";
+        sin.NazcaFunctionName = "";
+        sin.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(sin, "SiN");
+        var siepic = TestComponentFactory.CreateBasicComponent();
+        siepic.Identifier = "EB1";
+        siepic.NazcaFunctionName = "ebeam_y_1550";   // maps to a ubcpdk cell
+        canvas.AddComponent(siepic, "Y-Branch");
+
+        var script = ExportUbcPdk(canvas);
+
+        script.ShouldContain("NOT manufacturable");
+        script.ShouldContain("import ubcpdk");
+        var activateSin = script.IndexOf("cspdk.sin300.PDK.activate()", StringComparison.Ordinal);
+        var placeSin = script.IndexOf("# SIN1", StringComparison.Ordinal);
+        var activateUbc = script.IndexOf("ubcpdk.PDK.activate()", StringComparison.Ordinal);
+        var placeUbc = script.IndexOf("gf.get_component('ebeam_y_1550')", StringComparison.Ordinal);
+        activateSin.ShouldBeGreaterThan(0);
+        placeSin.ShouldBeGreaterThan(activateSin);
+        activateUbc.ShouldBeGreaterThan(placeSin);
+        placeUbc.ShouldBeGreaterThan(activateUbc);
+    }
+
+    private static CAP_Core.Components.Core.Component CreateRoutableComponent(
+        string id, string gdsFactoryFunction, string crossSection, double x)
+    {
+        var c = CreateSinComponent(id, gdsFactoryFunction, x, 0);
+        c.GdsFactoryRoutingCrossSection = crossSection;
+        return c;
+    }
+
+    private static void Connect(
+        DesignCanvasViewModel canvas,
+        CAP_Core.Components.Core.Component a,
+        CAP_Core.Components.Core.Component b) =>
+        canvas.Connections.Add(new WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
+
+    [Fact]
+    public void Export_MixedProcessRouting_IsIndependentOfCanvasInsertionOrder()
+    {
+        // Field round 4 review, finding [5]: the routing cross-section owner was "first
+        // component in canvas order" — inserting/reordering a component silently flipped
+        // every routed waveguide to another process' geometry. The choice must be
+        // deterministic and named in the script.
+        string RoutingChoice(params (string Id, string Func, string Xs)[] order)
+        {
+            var canvas = new DesignCanvasViewModel();
+            var comps = order
+                .Select((o, i) => CreateRoutableComponent(o.Id, o.Func, o.Xs, 50 * i))
+                .ToList();
+            foreach (var c in comps)
+                canvas.AddComponent(c, c.Identifier);
+            Connect(canvas, comps[0], comps[1]);
+            var script = ExportUbcPdk(canvas);
+            script.ShouldContain("cross_section='xs_sc'");   // the connection is routed with the winner
+            // The routing-choice comment names cross-section AND activation — the
+            // deterministic part (the activation line itself is skipped when that PDK
+            // is already active after the last placement).
+            var start = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
+            return script.Substring(start).Split('\n')[0].Trim();
+        }
+
+        var sinFirst = RoutingChoice(
+            ("A", "cspdk.sin300.mmi1x2", "xs_nc"), ("B", "cspdk.si220.mmi1x2", "xs_sc"));
+        var siFirst = RoutingChoice(
+            ("B", "cspdk.si220.mmi1x2", "xs_sc"), ("A", "cspdk.sin300.mmi1x2", "xs_nc"));
+
+        // Same design, different insertion order → identical routing process.
+        sinFirst.ShouldBe(siFirst);
+        sinFirst.ShouldContain("'xs_sc'");                 // deterministic tie-break, not canvas order
+        sinFirst.ShouldContain("cspdk.si220");             // the winning process is NAMED in the script
+    }
+
+    [Fact]
+    public void Export_MixedProcessRouting_MajorityProcessOwnsTheWaveguides()
+    {
+        // Two si220 components vs one sin300 (which happens to be FIRST in canvas order):
+        // the routed waveguides belong to the majority process.
+        var canvas = new DesignCanvasViewModel();
+        var sin = CreateRoutableComponent("A", "cspdk.sin300.mmi1x2", "xs_nc", 0);
+        var si1 = CreateRoutableComponent("B", "cspdk.si220.mmi1x2", "xs_sc", 50);
+        var si2 = CreateRoutableComponent("C", "cspdk.si220.straight", "xs_sc", 100);
+        canvas.AddComponent(sin, "SiN");
+        canvas.AddComponent(si1, "Si 1");
+        canvas.AddComponent(si2, "Si 2");
+        Connect(canvas, sin, si1);
+
+        var script = ExportUbcPdk(canvas);
+
+        var routingStart = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
+        routingStart.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
+        var routingSection = script.Substring(routingStart);
+        routingSection.ShouldContain("cspdk.si220.PDK.activate()");
+        routingSection.ShouldContain("cross_section='xs_sc'");
+    }
+
+    [Fact]
+    public void Export_SingleBackend_HasNoMixedProcessWarning()
+    {
+        // Single-process designs keep the proven script shape — no warning, no
+        // per-placement activation churn.
+        var script = ExportUbcPdk(CreateCanvasWithComponent("ebeam_y_1550"));
+
+        script.ShouldNotContain("NOT manufacturable");
+        script.ShouldContain("from ubcpdk import PDK");   // unchanged single-backend header
     }
 
     [Fact]

@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Import;
 using CommunityToolkit.Mvvm.ComponentModel;
 
@@ -18,7 +19,7 @@ public partial class PortMappingDialogViewModel : ObservableObject
 {
     /// <summary>Title shown in the window header.</summary>
     [ObservableProperty]
-    private string _title = "Map imported ports to component pins";
+    private string _title = LocalizationService.Instance.Translate("PortMap.DefaultTitle");
 
     /// <summary>One-line summary of why the dialog appeared, surfaced above the rows.</summary>
     [ObservableProperty]
@@ -44,10 +45,8 @@ public partial class PortMappingDialogViewModel : ObservableObject
         foreach (var name in componentPinNames)
             AvailablePins.Add(name);
 
-        Title = $"Map ports for '{componentDisplayName}'";
-        Explanation = $"The imported file uses port names that don't match this component's pins. " +
-                      $"Pick the component pin each imported port represents. " +
-                      $"Defaults are kept-on-match-or-positional; correct any row that's wrong.";
+        Title = string.Format(LocalizationService.Instance.Translate("PortMap.Title"), componentDisplayName);
+        Explanation = LocalizationService.Instance.Translate("PortMap.Explanation");
 
         var defaults = PortNameMapping.BuildDefaultMapping(importedNames, componentPinNames);
 
@@ -76,14 +75,14 @@ public partial class PortMappingDialogViewModel : ObservableObject
         {
             if (string.IsNullOrEmpty(row.SelectedPin))
             {
-                errorReason = $"No target pin selected for imported port '{row.ImportedName}'.";
+                errorReason = string.Format(
+                    LocalizationService.Instance.Translate("PortMap.NoTargetPin"), row.ImportedName);
                 return null;
             }
             if (!usedTargets.Add(row.SelectedPin))
             {
-                errorReason = $"Component pin '{row.SelectedPin}' is mapped to more than one " +
-                              $"imported port. Each component pin can only receive data from one " +
-                              $"imported port.";
+                errorReason = string.Format(
+                    LocalizationService.Instance.Translate("PortMap.DuplicateTarget"), row.SelectedPin);
                 return null;
             }
             mapping[row.ImportedName] = row.SelectedPin;

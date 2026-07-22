@@ -1,4 +1,6 @@
+using System.Globalization;
 using CAP_Core.Export;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -23,7 +25,7 @@ public partial class GdsCoordinateComparisonViewModel : ObservableObject
     private string _systemJsonPath = string.Empty;
 
     [ObservableProperty]
-    private string _comparisonStatus = "Enter two coordinate JSON paths and click Compare.";
+    private string _comparisonStatus = LocalizationService.Instance.Translate("Diag.Gds.EnterPaths");
 
     [ObservableProperty]
     private string _resultText = string.Empty;
@@ -70,7 +72,7 @@ public partial class GdsCoordinateComparisonViewModel : ObservableObject
     {
         IsComparing = true;
         HasResults = false;
-        ComparisonStatus = "Running comparison…";
+        ComparisonStatus = LocalizationService.Instance.Translate("Diag.Gds.Running");
         ResultText = string.Empty;
         MaxDeviationText = string.Empty;
 
@@ -79,7 +81,11 @@ public partial class GdsCoordinateComparisonViewModel : ObservableObject
             var result = await _service.CompareAsync(ReferenceJsonPath.Trim(), SystemJsonPath.Trim());
 
             Passed = result.Passed;
-            MaxDeviationText = $"Max \u0394: {result.MaxDeviationUm:F6} \u03bcm  |  RMS: {result.RmsDeviationUm:F6} \u03bcm";
+            MaxDeviationText = string.Format(
+                CultureInfo.CurrentCulture,
+                LocalizationService.Instance.Translate("Diag.Gds.DeviationSummary"),
+                result.MaxDeviationUm,
+                result.RmsDeviationUm);
             ComparisonStatus = result.StatusText;
             ResultText = string.IsNullOrWhiteSpace(result.ErrorOutput)
                 ? result.RawOutput
@@ -88,7 +94,7 @@ public partial class GdsCoordinateComparisonViewModel : ObservableObject
         catch (Exception ex)
         {
             Passed = false;
-            ComparisonStatus = $"Error: {ex.Message}";
+            ComparisonStatus = string.Format(LocalizationService.Instance.Translate("Diag.ErrorFormat"), ex.Message);
             ResultText = ex.ToString();
             MaxDeviationText = string.Empty;
         }
@@ -134,7 +140,7 @@ public partial class GdsCoordinateComparisonViewModel : ObservableObject
         Passed = false;
         ResultText = string.Empty;
         MaxDeviationText = string.Empty;
-        ComparisonStatus = "Enter two coordinate JSON paths and click Compare.";
+        ComparisonStatus = LocalizationService.Instance.Translate("Diag.Gds.EnterPaths");
     }
 
 }

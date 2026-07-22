@@ -1,5 +1,7 @@
+using System.Globalization;
 using CAP_Core;
 using CAP_Core.LightCalculation;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -43,7 +45,7 @@ public partial class SMatrixPerformanceViewModel : ObservableObject
     private string _storageTypeText = "-";
 
     [ObservableProperty]
-    private string _statusText = "No analysis run yet";
+    private string _statusText = LocalizationService.Instance.Translate("Diag.SMatrix.NoAnalysisYet");
 
     [ObservableProperty]
     private bool _hasAnalysis;
@@ -63,24 +65,24 @@ public partial class SMatrixPerformanceViewModel : ObservableObject
         if (matrix == null)
         {
             ResetStatistics();
-            StatusText = "No S-Matrix available";
+            StatusText = LocalizationService.Instance.Translate("Diag.SMatrix.NoMatrix");
             return;
         }
 
         IsAnalyzing = true;
-        StatusText = "Analyzing...";
+        StatusText = LocalizationService.Instance.Translate("Diag.SMatrix.Analyzing");
 
         try
         {
             _lastStats = _analyzer.AnalyzeMatrix(matrix);
             UpdateDisplayedStatistics(_lastStats);
             HasAnalysis = true;
-            StatusText = "Analysis complete";
+            StatusText = LocalizationService.Instance.Translate("Diag.SMatrix.Complete");
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"S-Matrix analysis failed: {ex.Message}", ex);
-            StatusText = $"Analysis failed: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.AnalysisFailedFormat"), ex.Message);
             ResetStatistics();
         }
         finally
@@ -99,16 +101,21 @@ public partial class SMatrixPerformanceViewModel : ObservableObject
         NonZeroElementsText = FormatNumber(stats.NonZeroElements);
         SparsityText = $"{stats.SparsityPercentage:F2}%";
         MemoryUsageText = stats.FormattedMemorySize;
-        StorageTypeText = stats.IsSparse ? "Sparse (optimized)" : "Dense (unoptimized)";
+        StorageTypeText = stats.IsSparse
+            ? LocalizationService.Instance.Translate("Diag.SMatrix.Sparse")
+            : LocalizationService.Instance.Translate("Diag.SMatrix.Dense");
 
         double savings = _analyzer.CalculateMemorySavings(stats);
         if (stats.IsSparse && savings > 1.0)
         {
-            MemorySavingsText = $"{savings:F1}x savings vs dense";
+            MemorySavingsText = string.Format(
+                CultureInfo.CurrentCulture,
+                LocalizationService.Instance.Translate("Diag.SMatrix.SavingsFormat"),
+                savings);
         }
         else
         {
-            MemorySavingsText = "N/A";
+            MemorySavingsText = LocalizationService.Instance.Translate("Diag.NotAvailable");
         }
     }
 
@@ -143,6 +150,6 @@ public partial class SMatrixPerformanceViewModel : ObservableObject
     private void ClearAnalysis()
     {
         ResetStatistics();
-        StatusText = "Analysis cleared";
+        StatusText = LocalizationService.Instance.Translate("Diag.SMatrix.Cleared");
     }
 }

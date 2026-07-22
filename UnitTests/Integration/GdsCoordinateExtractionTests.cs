@@ -116,8 +116,8 @@ public class GdsCoordinateExtractionTests
             root.TryGetProperty("cells", out var cells).ShouldBeTrue(
                 "Output JSON must contain 'cells'");
 
-            // Each cell must have a name plus polygons and paths arrays
-            cells.ValueKind.ShouldBe(JsonValueKind.Array);
+            // Each cell entry must have a name plus polygons and paths arrays
+            cells.ValueKind.ShouldBe(JsonValueKind.Array, "'cells' must be an array");
             foreach (var cell in cells.EnumerateArray())
             {
                 cell.TryGetProperty("name", out var name).ShouldBeTrue(

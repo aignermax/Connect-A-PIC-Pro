@@ -136,6 +136,11 @@ public class SimulationService
             if (!IsLightSource(component))
                 continue;
 
+            // Couplers whose laser is switched off (#690) act as listen-only outputs.
+            // The flag lives on the core component, so it also covers group children.
+            if (!component.LaserEnabled)
+                continue;
+
             // For components inside groups, we don't have LaserConfig, so use defaults
             int wavelengthNm = StandardWaveLengths.RedNM;
             double power = 1.0;
@@ -257,19 +262,8 @@ public class SimulationService
         return sourcePin?.LogicalPin?.MatterType == MatterType.Light ? sourcePin : null;
     }
 
-    public static bool IsLightSource(Component component)
-    {
-        var id = component.Identifier?.ToLowerInvariant() ?? "";
-        if (id.Contains("grating") || id.Contains("edge coupler"))
-            return true;
-
-        // Check NazcaFunctionName (e.g., "ebeam_gc_te1550") — this is reliable because
-        // it comes from the PDK and is not user-editable (unlike HumanReadableName).
-        // After prefab serialize/deserialize, Identifier may be GUID-based while
-        // NazcaFunctionName preserves the PDK template.
-        var nazcaName = component.NazcaFunctionName?.ToLowerInvariant() ?? "";
-        return nazcaName.Contains("_gc_") || nazcaName.Contains("edge_coupler") || nazcaName.Contains("grating");
-    }
+    public static bool IsLightSource(Component component) =>
+        LightSourceClassifier.IsLightInjectingCoupler(component);
 
     internal static LaserType GetLaserTypeForWavelength(int wavelengthNm)
     {

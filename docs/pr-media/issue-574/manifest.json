@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-connection-selected.png",
+    "caption": "Selecting a waveguide connection shows the new Routing section with style, width, bend radius, freeze toggle and per-bend radius editor."
+  },
+  {
+    "file": "02-style-width-radius.png",
+    "caption": "Choosing the SBend style and setting width 0.80 \u00B5m / bend radius 30 \u00B5m applies immediately to the selected connection."
+  },
+  {
+    "file": "03-bend-radius-applied.png",
+    "caption": "Apply Bend Radius sets bend #1 to 25 \u00B5m and freezes the route, confirmed by the checked Freeze Route box and the status line."
+  },
+  {
+    "file": "04-settings-interconnects.png",
+    "caption": "The new Settings \u2192 Interconnects page edits the global export defaults: waveguide width, bend radius and optional GDS layer."
+  }
+]

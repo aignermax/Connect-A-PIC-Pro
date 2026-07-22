@@ -51,7 +51,7 @@
     "xsections": [
       {
         "name": "strip",
-        "kind": 0,
+        "kind": "Optical",
         "widthUm": 0.5,
         "minRadiusUm": 5,
         "recommendedRadiusUm": 10,
@@ -62,7 +62,7 @@
       },
       {
         "name": "metal_routing",
-        "kind": 1,
+        "kind": "Metal",
         "widthUm": 10,
         "minRadiusUm": 7,
         "recommendedRadiusUm": 10,
@@ -73,7 +73,7 @@
       },
       {
         "name": "heater_metal",
-        "kind": 1,
+        "kind": "Metal",
         "widthUm": 4,
         "minRadiusUm": 7,
         "recommendedRadiusUm": 4,
@@ -4596,7 +4596,7 @@
       "widthMicrometers": 21.52,
       "heightMicrometers": 11.46,
       "nazcaOriginOffsetX": 10.76,
-      "nazcaOriginOffsetY": 0.75,
+      "nazcaOriginOffsetY": 10.71,
       "pins": [
         {
           "name": "port 1",
@@ -4608,7 +4608,7 @@
           "name": "port 2",
           "offsetXMicrometers": 0.7599999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 90
+          "angleDegrees": 270
         },
         {
           "name": "port 3",
@@ -4620,7 +4620,7 @@
           "name": "port 4",
           "offsetXMicrometers": 20.759999999999998,
           "offsetYMicrometers": 0.009999999999999787,
-          "angleDegrees": 90
+          "angleDegrees": 270
         }
       ],
       "sMatrix": {
@@ -5846,7 +5846,7 @@
       "widthMicrometers": 344.178,
       "heightMicrometers": 5.5,
       "nazcaOriginOffsetX": 14.01,
-      "nazcaOriginOffsetY": 3.73,
+      "nazcaOriginOffsetY": 1.77,
       "pins": [
         {
           "name": "port 1",
@@ -8810,19 +8810,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -8840,7 +8840,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -8900,19 +8900,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -8930,7 +8930,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -8990,19 +8990,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9020,7 +9020,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9080,19 +9080,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9110,7 +9110,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9170,19 +9170,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9200,7 +9200,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9266,19 +9266,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9296,7 +9296,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9362,19 +9362,19 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9392,7 +9392,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -45
           },
           {
@@ -9464,13 +9464,13 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9488,25 +9488,25 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9524,13 +9524,13 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
@@ -9602,13 +9602,13 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9626,25 +9626,25 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9662,13 +9662,13 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
@@ -9740,13 +9740,13 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9764,25 +9764,25 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9800,13 +9800,13 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
@@ -9833,7 +9833,7 @@
       "widthMicrometers": 195.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.3000000000000003,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
@@ -9878,13 +9878,13 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9902,25 +9902,25 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -9938,13 +9938,13 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
@@ -9971,7 +9971,7 @@
       "widthMicrometers": 217.9,
       "heightMicrometers": 6.300000000000001,
       "nazcaOriginOffsetX": -0.05,
-      "nazcaOriginOffsetY": 3.3000000000000003,
+      "nazcaOriginOffsetY": 3,
       "pins": [
         {
           "name": "port 3",
@@ -10016,13 +10016,13 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -10040,25 +10040,25 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
@@ -10076,13 +10076,13 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": 0
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.7071067811865476,
+            "magnitude": 0.69,
             "phaseDegrees": -90
           },
           {
@@ -10130,7 +10130,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 1",
-            "magnitude": 0.1,
+            "magnitude": 0.047,
             "phaseDegrees": 180
           },
           {
@@ -10148,7 +10148,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 2",
-            "magnitude": 0.1,
+            "magnitude": 0.047,
             "phaseDegrees": 180
           }
         ],
@@ -10184,7 +10184,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 1",
-            "magnitude": 0.1,
+            "magnitude": 0.033,
             "phaseDegrees": 180
           },
           {
@@ -10202,7 +10202,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 2",
-            "magnitude": 0.1,
+            "magnitude": 0.033,
             "phaseDegrees": 180
           }
         ],
@@ -10238,7 +10238,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 1",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           },
           {
@@ -10256,7 +10256,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 2",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           }
         ],
@@ -10292,7 +10292,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 1",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           },
           {
@@ -10310,7 +10310,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 2",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           }
         ],
@@ -10346,7 +10346,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 1",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           },
           {
@@ -10364,7 +10364,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 2",
-            "magnitude": 0.1,
+            "magnitude": 0.067,
             "phaseDegrees": 180
           }
         ],
@@ -10538,7 +10538,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10556,7 +10556,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10598,7 +10598,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 4",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10616,7 +10616,7 @@
           {
             "fromPin": "port 4",
             "toPin": "port 3",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10676,7 +10676,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10694,7 +10694,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10736,7 +10736,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 4",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10754,7 +10754,7 @@
           {
             "fromPin": "port 4",
             "toPin": "port 3",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10814,7 +10814,7 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10832,7 +10832,7 @@
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10874,7 +10874,7 @@
           {
             "fromPin": "port 3",
             "toPin": "port 4",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {
@@ -10892,7 +10892,7 @@
           {
             "fromPin": "port 4",
             "toPin": "port 3",
-            "magnitude": 0.98,
+            "magnitude": 0.978,
             "phaseDegrees": -45
           },
           {

@@ -110,6 +110,11 @@ public partial class RightPanelViewModel : ObservableObject
     public AiAssistantViewModel AiAssistant { get; }
 
     /// <summary>
+    /// ViewModel for the Netlist panel (gdsfactory YAML view/export, issue #687).
+    /// </summary>
+    public Export.Netlist.NetlistViewModel Netlist { get; }
+
+    /// <summary>
     /// ViewModel for the read-only photonic registry browser panel (issue #656).
     /// </summary>
     public RegistryBrowserViewModel Registry { get; }
@@ -149,6 +154,7 @@ public partial class RightPanelViewModel : ObservableObject
         PdkConsistencyViewModel pdkConsistency,
         AiAssistantViewModel aiAssistant,
         OnaSweepViewModel onaAnalysis,
+        Export.Netlist.NetlistViewModel netlist,
         ComponentEditorFactory editorFactory,
         RegistryBrowserViewModel registry)
     {
@@ -168,10 +174,12 @@ public partial class RightPanelViewModel : ObservableObject
         PdkConsistency = pdkConsistency;
         AiAssistant = aiAssistant;
         OnaAnalysis = onaAnalysis;
+        Netlist = netlist;
         Registry = registry;
 
         // Configure ViewModels that need canvas reference
         RoutingDiagnostics.Configure(canvas);
+        Netlist.Configure(canvas);
         DimensionValidator.Configure(canvas);
         CompressLayout.Configure(canvas);
         OnaAnalysis.Configure(canvas);

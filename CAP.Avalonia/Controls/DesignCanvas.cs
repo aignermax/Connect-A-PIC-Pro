@@ -3,9 +3,12 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using CAP.Avalonia.Controls.Canvas.AnalysisOutput;
+using CAP.Avalonia.Controls.Canvas.BendHandles;
 using CAP.Avalonia.Controls.Handlers;
 using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.Gestures;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
@@ -68,7 +71,9 @@ public class DesignCanvas : Control
     private readonly GridRenderer _gridRenderer;
     private readonly PathfindingOverlayRenderer _pathfindingOverlayRenderer;
     private readonly WaveguideConnectionRenderer _waveguideConnectionRenderer;
+    private readonly BendHandleRenderer _bendHandleRenderer;
     private readonly ComponentRenderer _componentRenderer;
+    private readonly AnalysisOutputOverlayRenderer _analysisOutputRenderer;
     private readonly PreviewRenderer _previewRenderer;
     private readonly CanvasOverlayRenderer _overlayRenderer;
 
@@ -96,7 +101,9 @@ public class DesignCanvas : Control
         _gridRenderer = new GridRenderer();
         _pathfindingOverlayRenderer = new PathfindingOverlayRenderer();
         _waveguideConnectionRenderer = new WaveguideConnectionRenderer();
+        _bendHandleRenderer = new BendHandleRenderer();
         _componentRenderer = new ComponentRenderer();
+        _analysisOutputRenderer = new AnalysisOutputOverlayRenderer();
         _previewRenderer = new PreviewRenderer();
         _overlayRenderer = new CanvasOverlayRenderer();
         _keyboardHandler = new KeyboardHandler(() => ViewModel, () => MainViewModel, () => Bounds);
@@ -107,6 +114,24 @@ public class DesignCanvas : Control
         // right-clicked element. Tunnel phase runs before the menu evaluates its command CanExecute.
         AddHandler(ContextRequestedEvent, OnContextRequested, RoutingStrategies.Tunnel);
     }
+
+    /// <inheritdoc/>
+    protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnAttachedToVisualTree(e);
+        LocalizationService.Instance.PropertyChanged += OnLocalizationChanged;
+    }
+
+    /// <inheritdoc/>
+    protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
+    {
+        base.OnDetachedFromVisualTree(e);
+        LocalizationService.Instance.PropertyChanged -= OnLocalizationChanged;
+    }
+
+    // Redraw the code-drawn HUD (mode indicator, status line) in the newly chosen language.
+    private void OnLocalizationChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => InvalidateVisual();
 
     // ── Rendering ──────────────────────────────────────────────────────────
 
@@ -137,7 +162,12 @@ public class DesignCanvas : Control
             _pathfindingOverlayRenderer.Render(context, rc);
             _waveguideConnectionRenderer.Render(context, rc);
             _componentRenderer.Render(context, rc);
+            // Analysis-output overlay (#754) sits on top of components so the candidate
+            // glow and the designated "OUT" tag are never hidden by component fills.
+            _analysisOutputRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
+            // Bend-radius handles draw last so they sit on top of the routed path and components.
+            _bendHandleRenderer.Render(context, rc);
         }
 
         _overlayRenderer.Render(context, rc);
@@ -253,11 +283,14 @@ public class DesignCanvas : Control
     {
         _gestureRecognizers =
         [
+            // First: a bend-radius handle grab must win over selection / component drag (#574).
+            new BendHandleGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PanGestureRecognizer(_interactionState, InvalidateVisual),
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),
-            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual),
+            new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
+            new HoverHighlightGestureRecognizer(_interactionState, InvalidateVisual),
         ];
     }
 
@@ -276,15 +309,25 @@ public class DesignCanvas : Control
         {
             oldVm.CommandManager.StateChanged -= OnCommandStateChanged;
             oldVm.GdsPreviewRenderService.OnPreviewLoaded -= InvalidateVisual;
-            oldVm.GdsPreviewRenderService.RawCodeLookup = null;
+            oldVm.CanvasInteraction.PropertyChanged -= OnInteractionPropertyChanged;
         }
         if (e.NewValue is MainViewModel newVm)
         {
             newVm.CommandManager.StateChanged += OnCommandStateChanged;
             newVm.GdsPreviewRenderService.OnPreviewLoaded += InvalidateVisual;
-            newVm.GdsPreviewRenderService.RawCodeLookup = id =>
-                newVm.FileOperations.StoredNazcaOverrides.TryGetValue(id, out var o) ? o.RawCode : null;
+            newVm.CanvasInteraction.PropertyChanged += OnInteractionPropertyChanged;
         }
+    }
+
+    /// <summary>
+    /// Repaints when the interaction mode changes so mode-dependent overlays (the
+    /// analysis-output candidate glow #754, the HUD mode indicator) update immediately
+    /// after a mode button click instead of on the next pointer movement.
+    /// </summary>
+    private void OnInteractionPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(ViewModels.Panels.CanvasInteractionViewModel.CurrentMode))
+            InvalidateVisual();
     }
 
     private void OnViewModelChanged(AvaloniaPropertyChangedEventArgs e)
@@ -295,6 +338,7 @@ public class DesignCanvas : Control
             oldCanvas.RepaintRequested = null;
             oldCanvas.Components.CollectionChanged -= OnComponentsCollectionChanged;
             oldCanvas.Connections.CollectionChanged -= OnConnectionsCollectionChanged;
+            oldCanvas.AnalysisOutput.PropertyChanged -= OnAnalysisOutputChanged;
         }
         if (e.NewValue is DesignCanvasViewModel newCanvas)
         {
@@ -302,8 +346,13 @@ public class DesignCanvas : Control
             newCanvas.RepaintRequested = () => InvalidateVisual();
             newCanvas.Components.CollectionChanged += OnComponentsCollectionChanged;
             newCanvas.Connections.CollectionChanged += OnConnectionsCollectionChanged;
+            newCanvas.AnalysisOutput.PropertyChanged += OnAnalysisOutputChanged;
         }
     }
+
+    /// <summary>Repaints when the designated analysis output changes (#754) so the "OUT" tag follows.</summary>
+    private void OnAnalysisOutputChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => InvalidateVisual();
 
     private void OnComponentsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
         => InvalidateVisual();
@@ -314,10 +363,12 @@ public class DesignCanvas : Control
     private void OnCanvasViewModelPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
         if (e.PropertyName is nameof(DesignCanvasViewModel.ShowPowerFlow)
+            or nameof(DesignCanvasViewModel.IsSimulationModeActive)
             or nameof(DesignCanvasViewModel.IsRouting)
             or nameof(DesignCanvasViewModel.PanX)
             or nameof(DesignCanvasViewModel.PanY)
-            or nameof(DesignCanvasViewModel.SelectedComponent))
+            or nameof(DesignCanvasViewModel.SelectedComponent)
+            or nameof(DesignCanvasViewModel.ActiveProcessLabel))
         {
             // SelectedComponent: redraw so the highlight follows a selection made
             // outside the canvas (e.g. clicking a node in the hierarchy panel).

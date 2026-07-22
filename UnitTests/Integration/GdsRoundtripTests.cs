@@ -24,6 +24,7 @@ namespace UnitTests.Integration;
 ///   Phase 2 - Nazca script validation: positions/rotations verified via ExportValidator
 ///   Phase 3 - GDS binary validation: conditional on Python+Nazca availability
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsRoundtripTests
 {
     private readonly ObservableCollection<ComponentTemplate> _library;

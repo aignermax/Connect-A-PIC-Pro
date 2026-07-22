@@ -41,6 +41,10 @@ public class PlaceComponentCommand : IUndoableCommand
     /// <summary>
     /// Tries to create a placement command. Returns null if no valid position exists.
     /// </summary>
+    /// <param name="canvas">Canvas the component is placed onto.</param>
+    /// <param name="template">PDK template to instantiate.</param>
+    /// <param name="x">Requested X position (µm); may be nudged by placement search.</param>
+    /// <param name="y">Requested Y position (µm); may be nudged by placement search.</param>
     public static PlaceComponentCommand? TryCreate(
         DesignCanvasViewModel canvas,
         ComponentTemplate template,

@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
 using CAP_Core.Export;
@@ -12,6 +13,11 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class NazcaComponentPreviewServiceTests
 {
+    /// <summary>Alignment/status summaries are localized (issue #749); pin English so substring
+    /// assertions stay culture-independent regardless of the CI/dev OS language.</summary>
+    public NazcaComponentPreviewServiceTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     /// <summary>
     /// Resolves a working Python 3 path by running a minimal subprocess validation.
     /// Returns null when Python is not available or cannot execute scripts.
@@ -22,6 +28,11 @@ public class NazcaComponentPreviewServiceTests
         // rather than /usr/bin — let the workflow point us at the right binary
         // via env var so the SiEPIC pip-installed packages are actually visible
         // to the subprocess. Falls back to the autodiscovery list otherwise.
+        // Opt-in gate: these spawn real python (nazca) subprocesses, heavy enough to destabilise a
+        // desktop session. They run only when the workflow points at a python (CI sets this);
+        // a plain local `dotnet test` skips them.
+        if (string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable("LUNIMA_TEST_PYTHON3")))
+            return null;
         var envOverride = Environment.GetEnvironmentVariable("LUNIMA_TEST_PYTHON3");
         var candidates = !string.IsNullOrWhiteSpace(envOverride)
             ? new[] { envOverride, "/usr/bin/python3", "/usr/local/bin/python3", "python3" }

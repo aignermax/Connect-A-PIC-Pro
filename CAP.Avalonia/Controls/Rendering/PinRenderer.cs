@@ -31,10 +31,11 @@ internal sealed class PinRenderer
             var (pinX, pinY) = pin.GetAbsolutePosition();
             bool isHighlighted = pin == highlightedPin;
 
-            // During a connection drag, dim polarization-incompatible pins so
-            // the user sees which targets are valid (issue #534).
+            // During a connection drag, dim incompatible pins (wrong signal domain or wrong
+            // polarization) so the user sees which targets are valid before releasing
+            // (issue #534, extended to the domain check in #724 point 4).
             bool isIncompatibleTarget = dragStartPin != null && pin != dragStartPin &&
-                !PolarizationRules.CanConnect(dragStartPin.Polarization, pin.Polarization);
+                PinConnectionAffordance.IsIncompatibleTarget(dragStartPin, pin);
             byte alpha = isIncompatibleTarget ? (byte)(baseAlpha / 3) : baseAlpha;
 
             double pinSize = isConnectMode ? 8 : 5;
@@ -81,29 +82,60 @@ internal sealed class PinRenderer
     }
 
     /// <summary>
-    /// Draws the pin marker with a polarization-specific shape:
-    /// TE = solid circle (historical default), TM = solid square,
-    /// Both = circle with a square outline (accepts either polarization).
+    /// Draws the pin marker glyph resolved by <see cref="PinGlyphSelector"/> — the single
+    /// place deciding shape from (MatterType × Polarization), so an electrical pin can never
+    /// pick up a polarization shape and a TM pin can never look electrical (issue #724).
+    /// Color already encodes <see cref="MatterType"/> via <see cref="GetPinBrush"/>.
     /// </summary>
     private static void DrawPinShape(DrawingContext context, PhysicalPin pin, IBrush brush,
         double pinX, double pinY, double pinSize, byte alpha)
     {
-        switch (pin.Polarization)
+        switch (PinGlyphSelector.SelectGlyph(pin.MatterType, pin.Polarization))
         {
-            case PolarizationKind.TM:
-                context.DrawRectangle(brush, null,
-                    new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
+            case PinGlyph.ElectricalPad:
+                DrawElectricalPad(context, brush, pinX, pinY, pinSize, alpha);
                 break;
-            case PolarizationKind.Both:
+            case PinGlyph.OpticalDiamond:
+                context.DrawGeometry(brush, null, BuildDiamondGeometry(pinX, pinY, pinSize));
+                break;
+            case PinGlyph.OpticalCircleWithDiamondOutline:
                 context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
                 var outlinePen = new Pen(new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)), 1);
-                context.DrawRectangle(null, outlinePen,
-                    new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
+                context.DrawGeometry(null, outlinePen, BuildDiamondGeometry(pinX, pinY, pinSize));
                 break;
             default:
                 context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
                 break;
         }
+    }
+
+    /// <summary>
+    /// Draws the electrical pad glyph: a filled square (the historical electrical shape) plus a
+    /// darker contact-rim border, so it reads as a metal pad rather than a plain optical-domain
+    /// square — and never collides with the optical <see cref="PinGlyph.OpticalDiamond"/> shape.
+    /// </summary>
+    private static void DrawElectricalPad(DrawingContext context, IBrush brush,
+        double pinX, double pinY, double pinSize, byte alpha)
+    {
+        var rect = new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2);
+        context.DrawRectangle(brush, null, rect);
+        var rimPen = new Pen(new SolidColorBrush(Color.FromArgb(alpha, 90, 60, 10)), 1.5);
+        context.DrawRectangle(null, rimPen, rect);
+    }
+
+    /// <summary>Builds a diamond (rotated square) geometry centered at the pin position.</summary>
+    private static StreamGeometry BuildDiamondGeometry(double pinX, double pinY, double pinSize)
+    {
+        var geometry = new StreamGeometry();
+        using (var ctx = geometry.Open())
+        {
+            ctx.BeginFigure(new Point(pinX, pinY - pinSize), true);
+            ctx.LineTo(new Point(pinX + pinSize, pinY));
+            ctx.LineTo(new Point(pinX, pinY + pinSize));
+            ctx.LineTo(new Point(pinX - pinSize, pinY));
+            ctx.EndFigure(true);
+        }
+        return geometry;
     }
 
     private static IBrush GetPinBrush(bool isHighlighted, bool isConnectMode, PhysicalPin pin, byte alpha)
@@ -117,20 +149,6 @@ internal sealed class PinRenderer
         if (pin.LogicalPin != null)
             return new SolidColorBrush(Color.FromArgb(alpha, 100, 200, 100));
         return new SolidColorBrush(Color.FromArgb(alpha, 200, 100, 100));
-    }
-
-    /// <summary>
-    /// Draws the pin marker: optical pins as circles, electrical pins as squares
-    /// so the signal domain is visually distinguishable at a glance.
-    /// </summary>
-    private static void DrawPinShape(DrawingContext context, PhysicalPin pin, IBrush brush, double pinX, double pinY, double pinSize)
-    {
-        if (pin.MatterType == MatterType.Electricity)
-        {
-            context.DrawRectangle(brush, null, new Rect(pinX - pinSize, pinY - pinSize, pinSize * 2, pinSize * 2));
-            return;
-        }
-        context.DrawEllipse(brush, null, new Point(pinX, pinY), pinSize, pinSize);
     }
 
     private static void DrawPinDirectionIndicator(DrawingContext context, PhysicalPin pin, double pinX, double pinY, bool isHighlighted, bool isDimmed)

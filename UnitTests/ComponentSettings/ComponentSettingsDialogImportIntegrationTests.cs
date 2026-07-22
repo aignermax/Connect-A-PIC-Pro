@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_DataAccess.Persistence.PIR;
 using Moq;
@@ -25,6 +26,10 @@ namespace UnitTests.ComponentSettings;
 /// </summary>
 public class ComponentSettingsDialogImportIntegrationTests
 {
+    // Status strings are now localized; pin English so assertions are locale-independent (runner is de_DE).
+    public ComponentSettingsDialogImportIntegrationTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     private static readonly string DataDir = FindRepoRelative("Tools", "sparam-data");
 
     [Fact]

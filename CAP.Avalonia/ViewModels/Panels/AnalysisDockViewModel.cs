@@ -1,6 +1,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Canvas;
 
@@ -14,6 +15,9 @@ public partial class AnalysisDockViewModel : ObservableObject
 
     /// <summary>Eye-diagram / BER analysis tab.</summary>
     public EyeDiagramViewModel Eye { get; }
+
+    /// <summary>Shared analysis-output header (#754): shows/picks/clears THE output coupler.</summary>
+    public AnalysisOutputPanelViewModel Output { get; }
 
     [ObservableProperty]
     private bool _isVisible;
@@ -39,17 +43,21 @@ public partial class AnalysisDockViewModel : ObservableObject
     /// <summary>Initializes a new instance of <see cref="AnalysisDockViewModel"/>.</summary>
     /// <param name="transient">Transient (time-domain) analysis tab ViewModel.</param>
     /// <param name="eye">Eye-diagram / BER analysis tab ViewModel.</param>
-    public AnalysisDockViewModel(TimeDomainViewModel transient, EyeDiagramViewModel eye)
+    /// <param name="output">Shared analysis-output header ViewModel (#754).</param>
+    public AnalysisDockViewModel(
+        TimeDomainViewModel transient, EyeDiagramViewModel eye, AnalysisOutputPanelViewModel output)
     {
         Transient = transient;
         Eye = eye;
+        Output = output;
     }
 
-    /// <summary>Wires both tabs to the active design canvas.</summary>
+    /// <summary>Wires both tabs and the shared output header to the active design canvas.</summary>
     public void Configure(DesignCanvasViewModel canvas)
     {
         Transient.Configure(canvas);
         Eye.Configure(canvas);
+        Output.Configure(canvas);
     }
 
     /// <summary>Opens the dock on the Transient tab (called when Run is invoked in Transient mode).</summary>

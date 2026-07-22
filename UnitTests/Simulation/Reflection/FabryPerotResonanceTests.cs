@@ -14,6 +14,7 @@ namespace UnitTests.Simulation.Reflection;
 /// Convergence note: with r=0.3 and pinCount×2=24 steps, truncation error ≈ 7×10⁻⁴.
 /// For r > 0.8 the heuristic is insufficient — see issue #536 follow-up.
 /// </summary>
+[Trait("Category", "Slow")]
 public class FabryPerotResonanceTests
 {
     // Moderate reflectivity chosen so the default step heuristic (pinCount × 2) converges.

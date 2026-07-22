@@ -53,13 +53,6 @@ public partial class HierarchyPanelViewModel : ObservableObject
     public Func<string, bool>? CheckHasSMatrixOverride { get; set; }
 
     /// <summary>
-    /// Returns <c>true</c> when a per-instance Nazca parameter override exists for the
-    /// given component identifier. Wired to <c>FileOperationsViewModel.StoredNazcaOverrides</c>
-    /// by <see cref="CAP.Avalonia.Views.MainWindow"/>.
-    /// </summary>
-    public Func<string, bool>? CheckHasNazcaOverride { get; set; }
-
-    /// <summary>
     /// Guards against re-entrant selection sync when hierarchy triggers a canvas update.
     /// </summary>
     private bool _suppressSync;
@@ -73,6 +66,9 @@ public partial class HierarchyPanelViewModel : ObservableObject
 
         // Canvas → Hierarchy: mirror SelectedComponent changes into the hierarchy tree.
         _canvas.PropertyChanged += OnCanvasPropertyChanged;
+
+        // Canvas → Hierarchy: mirror the multi-selection set (box selection, Ctrl+click).
+        _canvas.Selection.SelectedComponents.CollectionChanged += OnCanvasSelectionSetChanged;
     }
 
     /// <summary>
@@ -83,6 +79,12 @@ public partial class HierarchyPanelViewModel : ObservableObject
     {
         if (e.PropertyName == nameof(DesignCanvasViewModel.SelectedComponent) && !_suppressSync)
             SyncSelectionFromCanvas(_canvas.SelectedComponent);
+    }
+
+    private void OnCanvasSelectionSetChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        if (!_suppressSync)
+            MirrorSelectionSetFromCanvas();
     }
 
     /// <summary>
@@ -120,7 +122,6 @@ public partial class HierarchyPanelViewModel : ObservableObject
     private void RefreshOverrideMarkersRecursive(HierarchyNodeViewModel node)
     {
         node.HasSMatrixOverride = CheckHasSMatrixOverride?.Invoke(node.Component.Identifier) ?? false;
-        node.HasNazcaOverride = CheckHasNazcaOverride?.Invoke(node.Component.Identifier) ?? false;
         foreach (var child in node.Children)
             RefreshOverrideMarkersRecursive(child);
     }
@@ -137,8 +138,7 @@ public partial class HierarchyPanelViewModel : ObservableObject
             SelectionRequested = SelectComponent,
             RenameConfirmed = (n, newName) => ApplyRename(n.Component, newName),
             OpenSettingsRequested = n => OpenComponentSettings?.Invoke(n),
-            HasSMatrixOverride = CheckHasSMatrixOverride?.Invoke(component.Identifier) ?? false,
-            HasNazcaOverride = CheckHasNazcaOverride?.Invoke(component.Identifier) ?? false
+            HasSMatrixOverride = CheckHasSMatrixOverride?.Invoke(component.Identifier) ?? false
         };
 
         // If this is a group, recursively add its children
@@ -157,24 +157,58 @@ public partial class HierarchyPanelViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Synchronizes hierarchy selection with canvas selection.
-    /// Called when a component is selected on the canvas.
+    /// Synchronizes hierarchy selection with canvas selection. When the canvas holds a
+    /// multi-selection, the whole set is highlighted instead.
     /// </summary>
     public void SyncSelectionFromCanvas(ComponentViewModel? selectedComponent)
     {
-        // Clear all selections in the tree
-        ClearAllSelections();
-
-        if (selectedComponent == null)
-            return;
-
-        // Find and select the corresponding node
-        var node = FindNodeByComponent(selectedComponent.Component);
-        if (node != null)
+        if (_canvas.Selection.SelectedComponents.Count > 1)
         {
-            node.IsSelected = true;
-            ExpandParentsToNode(node);
+            MirrorSelectionSetFromCanvas();
+            return;
         }
+
+        RunSuppressed(() =>
+        {
+            ClearAllSelections();
+            SelectNodeFor(selectedComponent);
+        });
+    }
+
+    private void MirrorSelectionSetFromCanvas()
+    {
+        RunSuppressed(() =>
+        {
+            ClearAllSelections();
+            var selectionSet = _canvas.Selection.SelectedComponents;
+            if (selectionSet.Count > 0)
+            {
+                foreach (var comp in selectionSet)
+                    SelectNodeFor(comp);
+            }
+            else
+            {
+                SelectNodeFor(_canvas.SelectedComponent);
+            }
+        });
+    }
+
+    private void SelectNodeFor(ComponentViewModel? component)
+    {
+        if (component == null) return;
+        var node = FindNodeByComponent(component.Component);
+        if (node == null) return;
+        node.IsSelected = true;
+        ExpandParentsToNode(node);
+    }
+
+    /// <summary>Runs with <see cref="_suppressSync"/> set, so node IsSelected writes do not re-enter the hierarchy → canvas path.</summary>
+    private void RunSuppressed(Action action)
+    {
+        bool wasSuppressed = _suppressSync;
+        _suppressSync = true;
+        try { action(); }
+        finally { _suppressSync = wasSuppressed; }
     }
 
     /// <summary>
@@ -318,10 +352,13 @@ public partial class HierarchyPanelViewModel : ObservableObject
     private void SelectComponent(HierarchyNodeViewModel node)
     {
         if (node.ComponentViewModel == null) return;
-        // Already the canvas selection — nothing to push. This value-equality guard is
-        // what stops the node.IsSelected → SelectionRequested → canvas → node.IsSelected
-        // cycle from recursing.
-        if (_canvas.SelectedComponent == node.ComponentViewModel) return;
+        // A canvas → hierarchy sync writing node.IsSelected must not push a single-select
+        // back to the canvas — that would collapse a box multi-selection to one node.
+        if (_suppressSync) return;
+        // Value-equality guard against the node → canvas → node recursion. Single selection
+        // only: clicking a node while a box multi-selection is active must still reduce to it.
+        if (_canvas.SelectedComponent == node.ComponentViewModel &&
+            _canvas.Selection.SelectedComponents.Count == 1) return;
 
         _suppressSync = true;
         try

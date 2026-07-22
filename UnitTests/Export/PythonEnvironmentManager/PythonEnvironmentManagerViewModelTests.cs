@@ -135,11 +135,13 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         var registry = CreateRegistry();
         var env = MakeEnv("gf-env");
         env.GdsFactoryVersion = "9.34.2";
+        env.CspdkVersion = "1.4.4";
         registry.AddOrUpdate(env);
 
         var reloaded = new PythonEnvironmentRegistry(_tempRegistryFile);
 
         reloaded.GetAll().Single().GdsFactoryVersion.ShouldBe("9.34.2");
+        reloaded.GetAll().Single().CspdkVersion.ShouldBe("1.4.4");
     }
 
     [Fact]
@@ -168,6 +170,41 @@ public class PythonEnvironmentManagerViewModelTests : IDisposable
         pushedPath.ShouldBe(@"/usr/bin/python3.12");
         registry.GetActive().ShouldBeNull();
         vm.ProgressText.ShouldContain(@"/usr/bin/python3.12");
+    }
+
+    [Fact]
+    public async Task EnsureBackendInstalled_BlankSpec_ReturnsFalseWithoutSideEffects()
+    {
+        var registry = CreateRegistry();
+        var vm = CreateViewModel(registry);
+        var progress = new SyncProgress();
+
+        var ok = await vm.EnsureBackendInstalledAsync("  ", progress, CancellationToken.None);
+
+        ok.ShouldBeFalse();
+        vm.IsBusy.ShouldBeFalse();
+        registry.GetAll().ShouldBeEmpty();          // no env created for a blank package
+    }
+
+    [Fact]
+    public async Task EnsureBackendInstalled_WhileBusy_ReportsDistinctMessageAndDoesNothing()
+    {
+        var registry = CreateRegistry();
+        var vm = CreateViewModel(registry);
+        vm.IsBusy = true;                            // another env operation is running
+        var progress = new SyncProgress();
+
+        var ok = await vm.EnsureBackendInstalledAsync("EMpy", progress, CancellationToken.None);
+
+        ok.ShouldBeFalse();
+        registry.GetAll().ShouldBeEmpty();
+        progress.Messages.ShouldContain(m => m.Contains("already running"));
+    }
+
+    private sealed class SyncProgress : IProgress<string>
+    {
+        public List<string> Messages { get; } = new();
+        public void Report(string value) => Messages.Add(value);
     }
 
     private static PythonEnvironment MakeEnv(string name) => new()

@@ -190,14 +190,18 @@ public class GroupLibraryManager
         // Use MoveGroup to properly move the entire group (including children, pins, and paths)
         deepCopy.MoveGroup(deltaX, deltaY);
 
+        // Ensure the S-Matrix is computed for all supported wavelengths BEFORE any global
+        // state changes: the physics guard may reject non-passive template data here
+        // (NonConvergentCircuitException), and a rejected instantiation must leave zero
+        // side effects — the instance counter must not advance for a group that is
+        // never handed out (round-4 hotfix).
+        deepCopy.EnsureSMatrixComputed();
+
         // Use incremental counter instead of timestamp for cleaner names
         deepCopy.GroupName = $"{template.Name}_{_instanceCounter++}";
 
         // Rename child components with clean sequential names
         RenameComponentsWithSequentialNames(deepCopy);
-
-        // Ensure S-Matrix is computed for all supported wavelengths
-        deepCopy.EnsureSMatrixComputed();
 
         return deepCopy;
     }

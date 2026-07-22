@@ -4,8 +4,10 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Process;
+using CAP_Core.Routing;
 using CAP_DataAccess.Persistence;
 using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Commands;
@@ -34,13 +36,22 @@ public partial class FileOperationsViewModel : ObservableObject
     private readonly ErrorConsoleService? _errorConsole;
     private readonly UserSMatrixOverrideStore? _userSMatrixOverrideStore;
     private readonly IUrlLauncher _urlLauncher;
+    private readonly RecentProjectsService? _recentProjects;
 
     /// <summary>
     /// Current .lun format version this build reads and writes. Files with any other value are rejected at load time.
     /// </summary>
     private const string CurrentFormatVersion = "2.0";
 
+    /// <summary>
+    /// Absolute path of the currently open .lun file, or null for an unsaved
+    /// new project. Observable so the Home screen and window title can react.
+    /// </summary>
+    [ObservableProperty]
     private string? _currentFilePath;
+
+    /// <summary>Prompt shown before discarding unsaved changes to load another design.</summary>
+    private const string LoadPromptMessage = "Do you want to save your changes before loading another design?";
 
     /// <summary>
     /// Persists metadata loaded from the last opened file so that Created date
@@ -49,18 +60,19 @@ public partial class FileOperationsViewModel : ObservableObject
     private DesignMetadata? _loadedMetadata;
 
     /// <summary>
+    /// Names of components whose pin calibration changed since the loaded design was
+    /// saved (a cached route docked against the pin's current angle and was discarded).
+    /// Collected during connection load, reported once per component afterwards
+    /// (round-5 review [2] — e.g. the DC-Halfring port-angle correction).
+    /// </summary>
+    private readonly HashSet<string> _pinCalibrationMigratedComponents = new(StringComparer.Ordinal);
+
+    /// <summary>
     /// Per-component S-matrix overrides loaded from the PIR section of the .lun file,
     /// or added via the S-parameter import feature. Survives save-over-reload cycles.
     /// Keyed by component identifier string; values are the stored S-matrices.
     /// </summary>
     public Dictionary<string, ComponentSMatrixData> StoredSMatrices { get; } = new();
-
-    /// <summary>
-    /// Per-instance Nazca function parameter overrides. Keyed by component Identifier;
-    /// values hold the override and the original template values for reset.
-    /// Serialised to/from the .lun file's <c>NazcaOverrides</c> section.
-    /// </summary>
-    public Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride> StoredNazcaOverrides { get; } = new();
 
     [ObservableProperty]
     private bool _hasUnsavedChanges;
@@ -79,6 +91,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// to the live PDK catalog; used to migrate legacy files that predate single-process support.
     /// </summary>
     public Func<IReadOnlyList<ProcessGroup>>? ProcessCatalogProvider { get; set; }
+
+    /// <summary>
+    /// Supplies the process-derived metal routing parameters (trace width, GDS layer,
+    /// crossing policy) for electrical connections at export time (issue #682). Wired by
+    /// MainViewModel to the active process' PDK definitions; null falls back to
+    /// <see cref="CAP_Core.Routing.MetalRouting.MetalRoutingSpec.Default"/>.
+    /// </summary>
+    public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? MetalRoutingSpecProvider { get; set; }
 
     /// <summary>
     /// Supplies the names of loaded PDKs flagged process-agnostic (e.g. "Analysis Tools").
@@ -115,6 +135,12 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Callback to update status text in the UI.
     /// </summary>
     public Action<string>? UpdateStatus { get; set; }
+
+    /// <summary>
+    /// Callback invoked after a project is successfully opened or created
+    /// (load from file or File → New). The Home screen uses this to dismiss itself.
+    /// </summary>
+    public Action? ProjectOpened { get; set; }
 
     /// <summary>
     /// Callback to rebuild hierarchy tree after loading.
@@ -155,10 +181,6 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Func<Task>? RequestGdsFactoryExport { get; set; }
 
-    /// <summary>Supplies the metal trace style for electrical routing (issue #682), resolved
-    /// from the design's active process. Null falls back to <see cref="MetalTraceStyle.Default"/>.</summary>
-    public Func<MetalTraceStyle>? MetalStyleProvider { get; set; }
-
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -171,7 +193,8 @@ public partial class FileOperationsViewModel : ObservableObject
         VerilogAExportViewModel verilogAExport,
         ErrorConsoleService? errorConsole = null,
         UserSMatrixOverrideStore? userSMatrixOverrideStore = null,
-        IUrlLauncher? urlLauncher = null)
+        IUrlLauncher? urlLauncher = null,
+        RecentProjectsService? recentProjects = null)
     {
         _canvas = canvas;
         _commandManager = commandManager;
@@ -184,10 +207,13 @@ public partial class FileOperationsViewModel : ObservableObject
         _errorConsole = errorConsole;
         _userSMatrixOverrideStore = userSMatrixOverrideStore;
         _urlLauncher = urlLauncher ?? PlatformShellLauncher.CreateDefault();
+        _recentProjects = recentProjects;
 
         // Track changes to mark project as unsaved
         _canvas.Components.CollectionChanged += (s, e) => HasUnsavedChanges = true;
         _canvas.Connections.CollectionChanged += (s, e) => HasUnsavedChanges = true;
+        // The analysis-output designation (#754) is part of the design file too.
+        _canvas.AnalysisOutput.PropertyChanged += (s, e) => HasUnsavedChanges = true;
 
         // Apply any stored S-matrix override the moment a component lands
         // on the canvas. Without this, the override only takes effect after
@@ -210,9 +236,10 @@ public partial class FileOperationsViewModel : ObservableObject
             .ToList();
         if (addedComponents.Count == 0) return;
 
-        // Reuse ApplyAll with a single-component view so the identifier /
-        // template-key lookup logic stays in one place. Re-applying the
-        // same matrix to an already-up-to-date component is a no-op.
+        // Precedence per-instance > user-global > template: user-global first, project-local
+        // per-instance LAST so they win the last-write-per-wavelength application.
+        ApplyUserGlobalOverrides(addedComponents);
+
         if (StoredSMatrices.Count > 0)
         {
             Services.SMatrixOverrideApplicator.ApplyAll(
@@ -223,16 +250,12 @@ public partial class FileOperationsViewModel : ObservableObject
                 errorConsole: _errorConsole,
                 keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate);
         }
-
-        ApplyUserGlobalOverrides(addedComponents);
-        ApplyAllNazcaOverrides(addedComponents);
     }
 
     /// <summary>
-    /// Applies the user-global PDK template S-matrix overrides to a set of
-    /// components. Project-local instance overrides (in <see cref="StoredSMatrices"/>)
-    /// take precedence and are intentionally applied first; this fills the
-    /// gap for components that don't have a project-local override.
+    /// Applies the user-global PDK template S-matrix overrides. Project-local instance
+    /// overrides take precedence and are intentionally applied AFTER these — application is
+    /// last-write-wins per wavelength.
     /// </summary>
     private void ApplyUserGlobalOverrides(IEnumerable<Component> components)
     {
@@ -285,7 +308,7 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
         }
 
-        var filePath = _currentFilePath ?? await FileDialogService.ShowSaveFileDialogAsync(
+        var filePath = CurrentFilePath ?? await FileDialogService.ShowSaveFileDialogAsync(
             "Save Design",
             "lun",
             "Lunima Files|*.lun|All Files|*.*");
@@ -356,9 +379,13 @@ public partial class FileOperationsViewModel : ObservableObject
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
                         IsLocked = c.Connection.IsLocked ? true : null,
-                        TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
-                        IsTargetLengthEnabled = c.Connection.IsTargetLengthEnabled ? true : null,
-                        LengthToleranceMicrometers = c.Connection.IsTargetLengthEnabled ? c.Connection.LengthToleranceMicrometers : null
+                        RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
+                        WidthMicrometers = c.Connection.WidthMicrometers,
+                        BendRadiusMicrometers = c.Connection.BendRadiusMicrometers,
+                        IsRouteFrozen = c.Connection.IsRouteFrozen ? true : null,
+                        BendRadiusOverrides = c.Connection.BendRadiusOverrides.Count > 0
+                            ? new Dictionary<int, double>(c.Connection.BendRadiusOverrides)
+                            : null
                     };
                 }).ToList()
             };
@@ -387,11 +414,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (swept.Count > 0)
                     designData.SMatrices = swept;
             }
-            if (StoredNazcaOverrides.Count > 0)
-                designData.NazcaOverrides = new Dictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>(StoredNazcaOverrides);
             designData.ChipWidthMicrometers  = _canvas.ChipMaxX;
             designData.ChipHeightMicrometers = _canvas.ChipMaxY;
             designData.ActiveProcess = ActiveProcessResolver.ToData(ActiveProcess);
+            // Persist the designated analysis-output coupler (#754) by its Identifier —
+            // the runtime Component.Id is regenerated on every load.
+            designData.AnalysisOutputCoupler = _canvas.AnalysisOutput.CouplerId is Guid outputId
+                ? componentsList.FirstOrDefault(c => c.Component.Id == outputId)?.Component.Identifier
+                : null;
 
             var json = JsonSerializer.Serialize(designData, new JsonSerializerOptions
             {
@@ -399,8 +429,9 @@ public partial class FileOperationsViewModel : ObservableObject
                 DefaultIgnoreCondition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull
             });
             await File.WriteAllTextAsync(filePath, json);
-            _currentFilePath = filePath;
+            CurrentFilePath = filePath;
             HasUnsavedChanges = false;
+            _recentProjects?.RecordProject(filePath);
             UpdateStatus?.Invoke($"Saved to {Path.GetFileName(filePath)}");
         }
         catch (Exception ex)
@@ -428,6 +459,7 @@ public partial class FileOperationsViewModel : ObservableObject
             SliderValue = c.HasSliders ? c.SliderValue : null,
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
+            LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
             IsLocked = c.Component.IsLocked ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
@@ -447,7 +479,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// fallback lookup in <see cref="Services.SMatrixOverrideApplicator.ApplyAll"/> so PDK-template
     /// overrides reach every instance of the template.
     /// </summary>
-    private string? ResolveTemplateKey(Component component)
+    public string? ResolveTemplateKey(Component component)
     {
         var pdkSource = FindTemplatePdkSource(component);
         if (pdkSource == null) return null;
@@ -462,9 +494,7 @@ public partial class FileOperationsViewModel : ObservableObject
     /// raw-code override (if any) through <see cref="Services.ComponentGeometryKey.For"/>.
     /// </summary>
     private string ResolveGeometryKey(Component component) =>
-        CAP.Avalonia.Services.ComponentGeometryKey.For(
-            component,
-            c => StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null);
+        CAP.Avalonia.Services.ComponentGeometryKey.For(component);
 
     /// <summary>
     /// Returns true when the given override-store key (shape
@@ -727,11 +757,67 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
         }
 
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return;
+
         var filePath = await FileDialogService.ShowOpenFileDialogAsync(
             "Load Design",
             "Lunima Files|*.lun|All Files|*.*");
 
         if (filePath != null)
+        {
+            await LoadDesignFromFileAsync(filePath);
+        }
+    }
+
+    /// <summary>
+    /// Loads a design directly from a file path (no file picker), prompting to save
+    /// unsaved changes first. Used by the Home screen's recent-projects list and
+    /// command-line file arguments.
+    /// </summary>
+    /// <param name="filePath">Absolute path to the .lun file to open.</param>
+    /// <returns>True when the design was loaded; false when cancelled, missing, or failed.</returns>
+    public async Task<bool> LoadDesignFromPathAsync(string filePath)
+    {
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return false;
+
+        return await LoadDesignFromFileAsync(filePath);
+    }
+
+    /// <summary>
+    /// Opens a design as an untitled copy, detached from its source file — used
+    /// for the Home screen's shipped examples. The design loads, but the file
+    /// path stays null (Save prompts for a new location, so the source can't be
+    /// overwritten), the design is marked unsaved, and the source is not
+    /// recorded in the recent-projects list.
+    /// </summary>
+    /// <param name="filePath">Absolute path to the template/example .lun file.</param>
+    /// <returns>True when the design was opened; false when cancelled, missing, or failed.</returns>
+    public async Task<bool> OpenDesignAsCopyAsync(string filePath)
+    {
+        if (!await ConfirmUnsavedChangesAsync(LoadPromptMessage))
+            return false;
+
+        if (!await LoadDesignFromFileAsync(filePath, recordRecent: false))
+            return false;
+
+        CurrentFilePath = null;
+        // A copy must not inherit the source's metadata (Created date, author);
+        // BuildMetadataForSave then stamps fresh values on the first save.
+        _loadedMetadata = null;
+        HasUnsavedChanges = true;
+        return true;
+    }
+
+    /// <summary>
+    /// Core load step shared by the file-picker command and path-based loading:
+    /// reads a .lun file and replaces the current canvas contents with it.
+    /// Does NOT prompt about unsaved changes — callers do that first.
+    /// </summary>
+    private async Task<bool> LoadDesignFromFileAsync(string filePath, bool recordRecent = true)
+    {
+        if (File.Exists(filePath))
         {
             try
             {
@@ -741,7 +827,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (designData == null)
                 {
                     UpdateStatus?.Invoke("Invalid design file");
-                    return;
+                    return false;
                 }
 
                 if (designData.FormatVersion != CurrentFormatVersion)
@@ -757,6 +843,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.AllPins.Clear();
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
+                _pinCalibrationMigratedComponents.Clear();
 
                 // Load standalone components
                 foreach (var compData in designData.Components)
@@ -776,6 +863,9 @@ public partial class FileOperationsViewModel : ObservableObject
                 {
                     LoadConnectionFromData(connData);
                 }
+
+                // Pin-calibration migration: report discarded stale routes and re-route them.
+                ReportPinCalibrationMigrations();
 
                 // Notify all connections about their paths for UI rendering
                 foreach (var conn in _canvas.Connections)
@@ -800,6 +890,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         $"File '{Path.GetFileName(filePath)}' has only one chip-size field set " +
                         $"(width: {hasWidth}, height: {hasHeight}). Falling back to current canvas size.");
                 }
+
+                // Restore the designated analysis-output coupler (#754); files without
+                // the field (older versions) simply load with no designation.
+                RestoreAnalysisOutput(designData);
 
                 // Preserve PIR metadata so Created date survives subsequent saves
                 _loadedMetadata = designData.Metadata;
@@ -860,11 +954,10 @@ public partial class FileOperationsViewModel : ObservableObject
                         HasUnsavedChanges = true;
                     }
 
-                    // Apply per-instance overrides to live components so the
-                    // next simulation run picks up the stored S-matrices.
-                    // Falls back to "{pdkSource}::{templateName}" so PDK-template-scoped
-                    // overrides reach every instance of the template, not just renamed instances.
+                    // Precedence per-instance > user-global > template: user-global first,
+                    // project-local per-instance LAST (last-write-wins per wavelength).
                     var allComponents = _canvas.Components.Select(vm => vm.Component).ToList();
+                    ApplyUserGlobalOverrides(allComponents);
                     // Project load is the one place we hold the COMPLETE component set,
                     // so it is also the only place an orphan check is meaningful — let
                     // it surface genuinely unmatched overrides (renamed/removed).
@@ -876,7 +969,6 @@ public partial class FileOperationsViewModel : ObservableObject
                         errorConsole: _errorConsole,
                         keyMatchesKnownTemplate: KeyMatchesKnownLibraryTemplate,
                         reportOrphans: true);
-                    ApplyUserGlobalOverrides(allComponents);
                 }
                 else
                 {
@@ -886,18 +978,12 @@ public partial class FileOperationsViewModel : ObservableObject
                     ApplyUserGlobalOverrides(_canvas.Components.Select(vm => vm.Component));
                 }
 
-                // Restore per-instance Nazca overrides and apply them to live components
-                StoredNazcaOverrides.Clear();
-                if (designData.NazcaOverrides != null)
-                {
-                    foreach (var kv in designData.NazcaOverrides)
-                        StoredNazcaOverrides[kv.Key] = kv.Value;
-
-                    ApplyAllNazcaOverrides(_canvas.Components.Select(vm => vm.Component));
-                }
-
-                _currentFilePath = filePath;
+                CurrentFilePath = filePath;
                 HasUnsavedChanges = false;
+                if (recordRecent)
+                {
+                    _recentProjects?.RecordProject(filePath);
+                }
                 UpdateStatus?.Invoke($"Loaded {Path.GetFileName(filePath)} ({_canvas.Components.Count} components, {_canvas.Connections.Count} connections, {groupCount} groups)");
                 _commandManager.NotifyStateChanged();
 
@@ -906,13 +992,53 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 // Auto zoom-to-fit after loading
                 ZoomToFitAfterLoad?.Invoke(900, 800);
+
+                ProjectOpened?.Invoke();
+                return true;
             }
             catch (Exception ex)
             {
                 _errorConsole?.LogError($"Failed to load design: {ex.Message}", ex);
                 UpdateStatus?.Invoke($"Load failed: {ex.Message}");
+                return false;
             }
         }
+
+        UpdateStatus?.Invoke($"File not found: {filePath}");
+        return false;
+    }
+
+    /// <summary>
+    /// Prompts to save unsaved changes (Save / Don't Save / Cancel) before a
+    /// destructive action. Returns true when it is safe to proceed: nothing was
+    /// unsaved, the user saved successfully, or chose Don't Save. Returns false
+    /// on Cancel or when the user aborted the save dialog.
+    /// </summary>
+    private async Task<bool> ConfirmUnsavedChangesAsync(string message)
+    {
+        if (!HasUnsavedChanges || MessageBoxService == null)
+            return true;
+
+        var result = await MessageBoxService.ShowSavePromptAsync(message, "Save Changes?");
+        if (result == SavePromptResult.Save)
+        {
+            await SaveDesign();
+
+            // Still dirty means the user cancelled the save dialog — abort the action.
+            return !HasUnsavedChanges;
+        }
+
+        return result == SavePromptResult.DontSave;
+    }
+
+    /// <summary>
+    /// Asks whether the application may close, prompting to save unsaved changes
+    /// first. Wired to the main window's Closing event.
+    /// </summary>
+    /// <returns>True when closing may proceed; false when the user cancelled.</returns>
+    public async Task<bool> ConfirmCloseAsync()
+    {
+        return await ConfirmUnsavedChangesAsync("Do you want to save your changes before closing?");
     }
 
     /// <summary>
@@ -931,31 +1057,9 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public async Task<bool> TryNewProjectAsync()
     {
-        // Check if there are unsaved changes
-        if (HasUnsavedChanges && MessageBoxService != null)
-        {
-            var result = await MessageBoxService.ShowSavePromptAsync(
-                "Do you want to save your changes before creating a new project?",
-                "Save Changes?");
-
-            if (result == SavePromptResult.Save)
-            {
-                await SaveDesign();
-
-                // Check if save was actually performed (user might have cancelled)
-                if (HasUnsavedChanges)
-                {
-                    // User cancelled the save dialog, so cancel new project
-                    return false;
-                }
-            }
-            else if (result == SavePromptResult.Cancel)
-            {
-                // User cancelled, do nothing
-                return false;
-            }
-            // DontSave: continue to clear
-        }
+        if (!await ConfirmUnsavedChangesAsync(
+                "Do you want to save your changes before creating a new project?"))
+            return false;
 
         // Exit group edit mode if active
         if (_canvas.IsInGroupEditMode)
@@ -966,13 +1070,15 @@ public partial class FileOperationsViewModel : ObservableObject
         // Clear the canvas
         ClearCanvas();
 
-        _currentFilePath = null;
+        CurrentFilePath = null;
         _loadedMetadata = null;
         HasUnsavedChanges = false;
         UpdateStatus?.Invoke("New project created");
 
         // Rebuild hierarchy
         RebuildHierarchy?.Invoke();
+
+        ProjectOpened?.Invoke();
         return true;
     }
 
@@ -991,59 +1097,36 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.Connections.Clear();
         _canvas.AllPins.Clear();
         _canvas.ConnectionManager.Clear();
+        _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
         StoredSMatrices.Clear();
-        StoredNazcaOverrides.Clear();
     }
 
     /// <summary>
-    /// Applies any stored per-instance Nazca overrides to the given components.
-    /// Called on project load and when a new component is added to the canvas.
+    /// Restores the analysis-output designation (#754) from a loaded design file,
+    /// re-anchoring the stored component Identifier to the freshly created component's
+    /// runtime id. A stale reference (component renamed/removed outside the app) is
+    /// cleared with a warning instead of silently pinning a wrong output.
     /// </summary>
-    private void ApplyAllNazcaOverrides(IEnumerable<Component> components)
+    private void RestoreAnalysisOutput(DesignFileData designData)
     {
-        if (StoredNazcaOverrides.Count == 0)
+        if (designData.AnalysisOutputCoupler == null)
+        {
+            _canvas.AnalysisOutput.Clear();
             return;
-
-        var pinChangedComponents = new List<Component>();
-        foreach (var component in components)
-        {
-            if (StoredNazcaOverrides.TryGetValue(component.Identifier, out var nazcaOverride))
-            {
-                component.NazcaFunctionName = nazcaOverride.FunctionName ?? component.NazcaFunctionName;
-                component.NazcaFunctionParameters = nazcaOverride.FunctionParameters ?? component.NazcaFunctionParameters;
-                if (nazcaOverride.ModuleName != null)
-                    component.NazcaModuleName = nazcaOverride.ModuleName;
-
-                // Issue #556: a raw-code override recomputes the component's size.
-                // Restore the persisted bbox-derived dimensions so the canvas thumbnail
-                // and layout reflect the edited geometry on load.
-                if (nazcaOverride.OverrideWidthMicrometers is { } w)
-                    component.WidthMicrometers = w;
-                if (nazcaOverride.OverrideHeightMicrometers is { } h)
-                    component.HeightMicrometers = h;
-
-                // Issue #561: a raw-code override may also redefine the component's ports.
-                // Restore the persisted override pins so in-app connections and export use
-                // the correct port layout after project load.
-                if (nazcaOverride.OverridePins?.Count > 0)
-                {
-                    OverridePinMapper.ApplyPinsToComponent(component, nazcaOverride.OverridePins);
-                    pinChangedComponents.Add(component);
-                }
-            }
         }
 
-        // Connections (and the canvas pin view-models) were created against the
-        // template pins BEFORE the override replaced them, so they hold stale pin
-        // objects — the GDS export would then reference pins the override cell does
-        // not define. Re-anchor them onto the same-named new pins, drop the rest.
-        foreach (var component in pinChangedComponents)
+        var coupler = _canvas.Components
+            .FirstOrDefault(c => c.Component.Identifier == designData.AnalysisOutputCoupler);
+        if (coupler != null)
         {
-            var warnings = _canvas.OnComponentPinsChanged(component);
-            foreach (var warning in warnings)
-                _errorConsole?.LogWarning(warning);
+            _canvas.AnalysisOutput.Designate(coupler.Component.Id);
+            return;
         }
+
+        _canvas.AnalysisOutput.Clear();
+        _errorConsole?.LogWarning(
+            $"Designated analysis output '{designData.AnalysisOutputCoupler}' was not found in the design — designation cleared.");
     }
 
     /// <summary>
@@ -1103,6 +1186,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.WavelengthNm = compData.LaserWavelengthNm.Value;
             if (compData.LaserPower.HasValue)
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
+            if (compData.LaserEnabled.HasValue)
+                vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
         }
 
         // Restore lock state
@@ -1308,6 +1393,21 @@ public partial class FileOperationsViewModel : ObservableObject
         var cachedPath = PathSegmentConverter.ToRoutedPath(
             connData.CachedSegments, connData.IsBlockedFallback ?? false);
 
+        // Pin-calibration migration (round-5 review [2]): when a PDK release corrected a
+        // component's pin ANGLES (positions unchanged), the saved geometry still touches
+        // the pins, so the incremental router would keep it — visibly docking against the
+        // port direction and kinking into the component on GDS export. Discard the stale
+        // geometry (the post-load pass re-routes) and drop the frozen state with it.
+        bool pinCalibrationChanged = false;
+        if (cachedPath != null && cachedPath.IsValid)
+        {
+            var (startOk, endOk) = CachedRouteValidator.CheckPinDirections(startPin, endPin, cachedPath);
+            if (!startOk) _pinCalibrationMigratedComponents.Add(startComp.Component.Name);
+            if (!endOk) _pinCalibrationMigratedComponents.Add(endComp.Component.Name);
+            pinCalibrationChanged = !startOk || !endOk;
+            if (pinCalibrationChanged) cachedPath = null;
+        }
+
         WaveguideConnectionViewModel? connVm;
 
         if (cachedPath != null && cachedPath.IsValid)
@@ -1325,15 +1425,59 @@ public partial class FileOperationsViewModel : ObservableObject
             connVm.Connection.IsLocked = true;
         }
 
-        // Restore target length configuration
+        // Restore routing style / interconnect settings / freeze state (issue #574)
         if (connVm != null)
+            RestoreRoutingSettings(connVm.Connection, connData, keepFrozenGeometry: !pinCalibrationChanged);
+    }
+
+    /// <summary>
+    /// Logs one localized hint per component whose pin calibration changed since the
+    /// design was saved and re-routes the affected — now path-less — connections.
+    /// </summary>
+    private void ReportPinCalibrationMigrations()
+    {
+        if (_pinCalibrationMigratedComponents.Count == 0)
+            return;
+
+        foreach (var name in _pinCalibrationMigratedComponents.OrderBy(n => n, StringComparer.Ordinal))
         {
-            if (connData.TargetLengthMicrometers.HasValue)
-                connVm.Connection.TargetLengthMicrometers = connData.TargetLengthMicrometers.Value;
-            if (connData.IsTargetLengthEnabled == true)
-                connVm.Connection.IsTargetLengthEnabled = true;
-            if (connData.LengthToleranceMicrometers.HasValue)
-                connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers.Value;
+            _errorConsole?.LogWarning(string.Format(
+                System.Globalization.CultureInfo.InvariantCulture,
+                Services.Localization.LocalizationService.Instance.Translate("Load.PinCalibrationChanged"),
+                name));
+        }
+        _pinCalibrationMigratedComponents.Clear();
+        _ = _canvas.RecalculateRoutesAsync();
+    }
+
+    /// <summary>
+    /// Restores per-connection routing style, width/radius and freeze state from saved data.
+    /// <paramref name="keepFrozenGeometry"/> is false when the cached geometry was
+    /// discarded by the pin-calibration migration — the freeze flag and the per-bend
+    /// overrides describe exactly that stale geometry and must not survive it.
+    /// </summary>
+    private static void RestoreRoutingSettings(
+        WaveguideConnection connection, ConnectionData connData, bool keepFrozenGeometry = true)
+    {
+        // Legacy styles removed from WaveguideType: "Euler" was drawn as the same generous
+        // arc as Bend (migrate to Bend); "Straight" (and any other unknown name) falls back
+        // to Auto by simply not parsing — the connection keeps its default Type.
+        if (connData.RoutingStyle == "Euler")
+            connection.Type = WaveguideType.Bend;
+        else if (connData.RoutingStyle != null &&
+            Enum.TryParse<WaveguideType>(connData.RoutingStyle, ignoreCase: false, out var style) &&
+            Enum.IsDefined(style))
+            connection.Type = style;
+        if (connData.WidthMicrometers.HasValue)
+            connection.WidthMicrometers = connData.WidthMicrometers.Value;
+        if (connData.BendRadiusMicrometers.HasValue)
+            connection.BendRadiusMicrometers = connData.BendRadiusMicrometers.Value;
+        if (keepFrozenGeometry && connData.IsRouteFrozen == true)
+            connection.IsRouteFrozen = true;
+        if (keepFrozenGeometry && connData.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in connData.BendRadiusOverrides)
+                connection.BendRadiusOverrides[bendIndex] = radius;
         }
     }
 
@@ -1416,22 +1560,10 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script
+                // Export Python script (metal spec: process-derived electrical routing, #682)
                 var nazcaCode = _nazcaExporter.Export(
-                    _canvas, overrides: StoredNazcaOverrides, metalStyle: MetalStyleProvider?.Invoke());
+                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
-
-                // Warn if any instance has a gdsfactory-backend override: the Nazca export
-                // can't run gdsfactory code, so those instances use their PDK cell here.
-                var gfOverrides = StoredNazcaOverrides
-                    .Where(kv => !string.IsNullOrWhiteSpace(kv.Value.RawCode)
-                                 && kv.Value.Backend == CAP_DataAccess.Persistence.PIR.OverrideBackend.GdsFactory)
-                    .Select(kv => kv.Key).ToList();
-                if (gfOverrides.Count > 0)
-                    _errorConsole?.LogWarning(
-                        $"Nazca export: {gfOverrides.Count} instance(s) have a gdsfactory override "
-                        + $"not applied here (PDK geometry used instead): {string.Join(", ", gfOverrides)}. "
-                        + "Use the gdsfactory export to honour them.");
 
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.

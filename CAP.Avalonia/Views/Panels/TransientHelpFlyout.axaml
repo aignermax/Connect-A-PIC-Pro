@@ -1,5 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.TransientHelpFlyout"
              MaxWidth="420">
 
@@ -96,7 +97,7 @@
     <ScrollViewer MaxHeight="440">
         <StackPanel Margin="12" Spacing="8">
 
-            <TextBlock Text="What does Transient mode do?"
+            <TextBlock Text="{loc:Localize TransientHelp.Title}"
                        FontWeight="Bold" FontSize="13" Foreground="White"/>
 
             <!-- Looping animation: laser → chip → split to two outputs. -->
@@ -105,7 +106,7 @@
                 <Canvas Width="380" Height="80">
                     <!-- Laser source -->
                     <Ellipse Canvas.Left="10" Canvas.Top="30" Width="20" Height="20" Fill="#FFD54F"/>
-                    <TextBlock Canvas.Left="2" Canvas.Top="54" Text="light source"
+                    <TextBlock Canvas.Left="2" Canvas.Top="54" Text="{loc:Localize TransientHelp.DiagramLightSource}"
                                FontSize="9" Foreground="Gray"/>
                     <!-- Waveguides -->
                     <Line StartPoint="34,40" EndPoint="150,40" Stroke="#4d4d4d" StrokeThickness="2"/>
@@ -114,7 +115,7 @@
                     <!-- The user's circuit -->
                     <Border Canvas.Left="150" Canvas.Top="18" Width="90" Height="44"
                             Background="#2a2a3d" BorderBrush="#5d5d8d" BorderThickness="1" CornerRadius="4">
-                        <TextBlock Text="your circuit" FontSize="9" Foreground="LightGray"
+                        <TextBlock Text="{loc:Localize TransientHelp.DiagramCircuit}" FontSize="9" Foreground="LightGray"
                                    HorizontalAlignment="Center" VerticalAlignment="Center"/>
                     </Border>
                     <!-- Outputs -->
@@ -122,7 +123,7 @@
                              Fill="Transparent" Stroke="#4FC3F7" StrokeThickness="2"/>
                     <Ellipse Canvas.Left="338" Canvas.Top="52" Width="12" Height="12"
                              Fill="Transparent" Stroke="#FF8A65" StrokeThickness="2"/>
-                    <TextBlock Canvas.Left="330" Canvas.Top="0" Text="outputs"
+                    <TextBlock Canvas.Left="330" Canvas.Top="0" Text="{loc:Localize TransientHelp.DiagramOutputs}"
                                FontSize="9" Foreground="Gray"/>
                     <!-- Animated light pulses -->
                     <Ellipse Classes="pulseIn" Canvas.Top="34" Width="12" Height="12" Fill="#FFF176"/>
@@ -131,51 +132,39 @@
                 </Canvas>
             </Border>
 
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                Think of it as an oscilloscope for your chip: light is sent into the
-                inputs, and the plot shows how much power arrives at each output —
-                moment by moment, not just the final steady value.
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.Intro1}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.Intro2}"/>
 
-            <TextBlock Text="Why does it exist?" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize TransientHelp.WhyTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                The normal simulation (CW mode) only shows the end state. Transient
-                mode shows *when* light arrives, how short pulses spread out on the
-                way, and whether fast data survives the trip through your circuit —
-                the questions that matter for real communication links.
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.WhyBody}"/>
 
-            <TextBlock Text="The three light sources" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize TransientHelp.SourcesTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
             <StackPanel Spacing="5">
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                    <Run FontWeight="Bold" Foreground="#FFD54F">Gaussian pulse</Run>
-                    <Run> — one short flash of light. Use it to see delays and echoes:
-                    each output shows when, and how smeared-out, the flash arrives.</Run>
+                    <Run FontWeight="Bold" Foreground="#FFD54F" Text="{loc:Localize TransientHelp.GaussianLabel}"/>
+                    <Run Text="{loc:Localize TransientHelp.GaussianBody}"/>
                 </TextBlock>
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                    <Run FontWeight="Bold" Foreground="#81C784">Continuous wave (CW)</Run>
-                    <Run> — light switched on and kept on. Use it to check power splitting:
-                    after a brief settling time, each output holds its share of the input power.</Run>
+                    <Run FontWeight="Bold" Foreground="#81C784" Text="{loc:Localize TransientHelp.CwLabel}"/>
+                    <Run Text="{loc:Localize TransientHelp.CwBody}"/>
                 </TextBlock>
                 <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
                     <Run FontWeight="Bold" Foreground="#4FC3F7">PRBS-NRZ</Run>
-                    <Run> — a pseudo-random stream of 0/1 data bits, like real network
-                    traffic (e.g. 25 Gbit/s). Use it to judge signal quality: are the 1s
-                    and 0s still clearly separated at the output? The same seed always
-                    produces the same bit pattern, so results are reproducible.</Run>
+                    <Run Text="{loc:Localize TransientHelp.PrbsBody}"/>
                 </TextBlock>
             </StackPanel>
 
-            <TextBlock Text="How to read the plot" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize TransientHelp.ReadingTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
-            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray">
-                X axis: time, in picoseconds or nanoseconds (see the axis label —
-                1000 ps = 1 ns). Y axis: the optical power arriving at that output.
-                Each coloured line is one output pin of your circuit; use the
-                checkboxes under the plot to show or hide lines.
-            </TextBlock>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.ReadingBody}"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.ZoomNote}"/>
 
         </StackPanel>
     </ScrollViewer>

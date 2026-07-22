@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services.GdsFactoryExport;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -86,8 +87,12 @@ public partial class PdkOffsetEditorViewModel
             RefreshCanvasMarkers(SelectedComponent.Draft);
     }
 
-    /// <summary>Triggers an async Nazca render for the given component draft.</summary>
-    private async Task TriggerNazcaRenderAsync(PdkComponentDraft draft)
+    /// <summary>
+    /// Triggers an async Nazca render for the given component draft.
+    /// Internal so unit tests can await the full pipeline deterministically
+    /// (selection change fires it fire-and-forget).
+    /// </summary>
+    internal async Task TriggerNazcaRenderAsync(PdkComponentDraft draft)
     {
         _renderCts?.Cancel();
         _renderCts = new CancellationTokenSource();
@@ -99,7 +104,7 @@ public partial class PdkOffsetEditorViewModel
         var draftAtStart = draft;
 
         IsNazcaRendering = true;
-        NazcaOverlayStatus = "Rendering Nazca GDS preview…";
+        NazcaOverlayStatus = "Rendering GDS preview…";
 
         try
         {
@@ -124,6 +129,15 @@ public partial class PdkOffsetEditorViewModel
                     if (!string.IsNullOrEmpty(result.PolygonWarning))
                         status += "  " + result.PolygonWarning;
                     NazcaOverlayStatus = status;
+                    // A "successful" render with zero polygons leaves the canvas
+                    // showing only the dashed Lunima box — without this banner the
+                    // user cannot tell an empty render from a working one (field
+                    // bug: adiabatic couplers rendered nothing, no error shown).
+                    OverlayErrorText = result.Polygons.Count == 0
+                        ? string.Format(
+                            LocalizationService.Instance.Translate("PdkOffset.Overlay.NoGeometry"),
+                            draftAtStart.Name, result.PolygonWarning ?? "").TrimEnd()
+                        : "";
                     // Replace the synthetic Lunima-side snippet with the actual
                     // PDK function source pulled live by the helper script.
                     if (!string.IsNullOrEmpty(result.Source))
@@ -135,6 +149,9 @@ public partial class PdkOffsetEditorViewModel
                     _lastNazcaResult = null;
                     HasNazcaOverlay = false;
                     NazcaOverlayStatus = $"Preview unavailable: {result.Error}";
+                    OverlayErrorText = string.Format(
+                        LocalizationService.Instance.Translate("PdkOffset.Overlay.RenderFailed"),
+                        draftAtStart.Name, result.Error ?? "unknown error");
                 }
             });
         }
@@ -148,6 +165,9 @@ public partial class PdkOffsetEditorViewModel
             {
                 HasNazcaOverlay = false;
                 NazcaOverlayStatus = $"Preview error: {ex.Message}";
+                OverlayErrorText = string.Format(
+                    LocalizationService.Instance.Translate("PdkOffset.Overlay.RenderFailed"),
+                    draftAtStart.Name, ex.Message);
             });
         }
         finally

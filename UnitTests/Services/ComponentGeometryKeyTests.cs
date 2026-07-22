@@ -21,36 +21,23 @@ public class ComponentGeometryKeyTests
     [Fact]
     public void SameModuleFunctionParameters_SameKey()
     {
-        var a = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"), _ => null);
-        var b = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"), _ => null);
+        var a = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"));
+        var b = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"));
         a.ShouldBe(b);
     }
 
     [Fact]
     public void DifferentParameters_DifferentKey()
     {
-        var a = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"), _ => null);
-        var b = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=9"), _ => null);
+        var a = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=5"));
+        var b = ComponentGeometryKey.For(Wg("siepic", "ebeam_dc", "Lc=9"));
         a.ShouldNotBe(b);
     }
 
     [Fact]
-    public void RawCodeOverride_UsesCodeHash_IndependentOfFunction()
+    public void GeometryKey_HasGeoPrefix()
     {
-        var comp = Wg("siepic", "ebeam_dc", "Lc=5");
-        var withOverride = ComponentGeometryKey.For(comp, _ => "import nazca; def component(): ...");
-        var noOverride = ComponentGeometryKey.For(comp, _ => null);
-        withOverride.ShouldNotBe(noOverride);
-        var other = Wg("other", "different_fn", "");
-        ComponentGeometryKey.For(other, _ => "import nazca; def component(): ...")
-            .ShouldBe(withOverride);
-    }
-
-    [Fact]
-    public void Prefixed_RawVsGeo_NeverCollide()
-    {
-        ComponentGeometryKey.For(Wg("m", "f", "p"), _ => null).ShouldStartWith("geo:");
-        ComponentGeometryKey.For(Wg("m", "f", "p"), _ => "x").ShouldStartWith("raw:");
+        ComponentGeometryKey.For(Wg("m", "f", "p")).ShouldStartWith("geo:");
     }
 
     [Fact]
@@ -62,7 +49,7 @@ public class ComponentGeometryKeyTests
         var original = Wg("siepic_ebeam_pdk", "ebeam_crossing4", "");
         var clone = (Component)original.Clone();
 
-        ComponentGeometryKey.For(clone, _ => null)
-            .ShouldBe(ComponentGeometryKey.For(original, _ => null));
+        ComponentGeometryKey.For(clone)
+            .ShouldBe(ComponentGeometryKey.For(original));
     }
 }

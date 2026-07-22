@@ -1,5 +1,6 @@
 using Avalonia.Controls.ApplicationLifetimes;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Update;
 using CAP_Core.Update;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -80,14 +81,14 @@ public partial class UpdateViewModel : ObservableObject
 
         IsChecking = true;
         UpdateAvailable = false;
-        StatusText = "Checking for updates...";
+        StatusText = LocalizationService.Instance.Translate("Update.Checking");
 
         try
         {
             var release = await _updateChecker.GetLatestReleaseAsync();
             if (release == null)
             {
-                StatusText = "Could not reach update server. Check your internet connection.";
+                StatusText = LocalizationService.Instance.Translate("Update.NoServer");
                 return;
             }
 
@@ -95,7 +96,8 @@ public partial class UpdateViewModel : ObservableObject
 
             if (!UpdateChecker.IsNewerThan(release, _currentVersion))
             {
-                StatusText = $"You are up to date! (v{releaseVersion ?? _currentVersion})";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Update.UpToDate"), releaseVersion ?? _currentVersion);
                 return;
             }
 
@@ -111,7 +113,8 @@ public partial class UpdateViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Update check failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.CheckFailed"), ex.Message);
         }
         finally
         {
@@ -158,7 +161,8 @@ public partial class UpdateViewModel : ObservableObject
                 // Progress callbacks run off the UI thread; guard on IsDownloading so a late one
                 // can't clobber the terminal status set after the download finishes.
                 if (IsDownloading)
-                    StatusText = $"Downloading... {p:P0}";
+                    StatusText = string.Format(
+                        LocalizationService.Instance.Translate("Update.Downloading"), p.ToString("P0"));
             });
 
             downloadedPath = await _downloader.DownloadInstallerAsync(
@@ -167,7 +171,8 @@ public partial class UpdateViewModel : ObservableObject
         catch (Exception ex)
         {
             // A failed download has no side effects — the user can simply click Install again.
-            StatusText = $"Download failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.DownloadFailed"), ex.Message);
             return;
         }
         finally
@@ -181,7 +186,7 @@ public partial class UpdateViewModel : ObservableObject
             return;
         }
 
-        StatusText = "Download complete. Opening installer...";
+        StatusText = LocalizationService.Instance.Translate("Update.DownloadComplete");
         OpenDownloadedInstaller(downloadedPath);
     }
 
@@ -192,14 +197,15 @@ public partial class UpdateViewModel : ObservableObject
     /// </summary>
     private void ApplySelfUpdate(string archivePath)
     {
-        StatusText = "Installing update and restarting...";
+        StatusText = LocalizationService.Instance.Translate("Update.Installing");
         try
         {
             _installer.LaunchUpdater(archivePath);
         }
         catch (Exception ex)
         {
-            StatusText = $"Update failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.UpdateFailed"), ex.Message);
             return;
         }
         ShutdownApplication();
@@ -218,8 +224,8 @@ public partial class UpdateViewModel : ObservableObject
         }
         catch (Exception)
         {
-            StatusText = $"The update was downloaded to {installerPath} but could not be opened "
-                + "automatically. Run it from there to finish updating.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Update.OpenFailed"), installerPath);
             TryRevealInstaller(installerPath);
             return;
         }
@@ -241,14 +247,15 @@ public partial class UpdateViewModel : ObservableObject
     /// <summary>Opens the GitHub releases page for the available release in the default browser.</summary>
     private void OpenReleasesPageInBrowser()
     {
-        StatusText = "Opening GitHub releases page in browser...";
+        StatusText = LocalizationService.Instance.Translate("Update.OpeningReleases");
         try
         {
             _urlLauncher.Open(BuildReleaseUrl(_availableRelease!.TagName));
         }
         catch (Exception ex)
         {
-            StatusText = $"Could not open browser: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Status.CouldNotOpenBrowser"), ex.Message);
         }
     }
 
@@ -262,7 +269,8 @@ public partial class UpdateViewModel : ObservableObject
 
         _preferences.SetSkippedUpdateVersion(_availableRelease.ParsedVersion);
         UpdateAvailable = false;
-        StatusText = $"Version {_availableRelease.ParsedVersion} will not be shown again.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Update.VersionSkipped"), _availableRelease.ParsedVersion);
         _availableRelease = null;
     }
 
@@ -273,7 +281,7 @@ public partial class UpdateViewModel : ObservableObject
     private void RemindLater()
     {
         UpdateAvailable = false;
-        StatusText = "Update available — will remind again next check.";
+        StatusText = LocalizationService.Instance.Translate("Update.RemindAgain");
     }
 
     /// <summary>
@@ -284,7 +292,7 @@ public partial class UpdateViewModel : ObservableObject
     {
         _preferences.SkipToday();
         UpdateAvailable = false;
-        StatusText = "Update notification suppressed until tomorrow.";
+        StatusText = LocalizationService.Instance.Translate("Update.SuppressedToday");
         _availableRelease = null;
     }
 
@@ -382,10 +390,13 @@ public partial class UpdateViewModel : ObservableObject
             return;
         }
 
-        // A running app with no desktop lifetime (e.g. a single-view host): the detached updater is
-        // already waiting for this process to exit, so exit hard rather than leaving it to time out.
-        // When Application.Current is null (unit tests / headless) do nothing — never kill the host.
-        if (app is not null)
+        // A running app with a non-desktop lifetime (e.g. a single-view host): the detached updater
+        // is already waiting for this process to exit, so exit hard rather than leaving it to time
+        // out. Gate on the LIFETIME, not on Application.Current: headless unit-test sessions
+        // (Avalonia.Headless.XUnit) set Application.Current process-wide but never assign a
+        // lifetime, so exiting on a mere non-null Application intermittently killed the xUnit
+        // test host ("Test host process crashed") whenever this ran after any [AvaloniaFact].
+        if (app?.ApplicationLifetime is not null)
             Environment.Exit(0);
     }
 }

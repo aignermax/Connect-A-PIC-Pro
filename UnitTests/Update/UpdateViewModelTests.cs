@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Update;
 using CAP.Avalonia.ViewModels.Update;
 using CAP_Core.Update;
@@ -14,6 +15,13 @@ namespace UnitTests.Update;
 /// </summary>
 public class UpdateViewModelTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public UpdateViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private const string NewerReleaseJson = """
         {
           "tag_name": "v99.0.0",
@@ -311,6 +319,34 @@ public class UpdateViewModelTests
         installer.LaunchedArchivePath.ShouldNotBeNull();   // the in-place updater was launched
         urlLauncher.LastOpenedUrl.ShouldBeNull();          // not the browser fallback
         urlLauncher.LastOpenedPath.ShouldBeNull();         // not the manual open-installer path
+
+        if (installer.LaunchedArchivePath is not null && File.Exists(installer.LaunchedArchivePath))
+            File.Delete(installer.LaunchedArchivePath);
+    }
+
+    [global::Avalonia.Headless.XUnit.AvaloniaFact]
+    public async Task InstallUpdate_SelfUpdateUnderHeadlessAvaloniaSession_MustNotKillTheProcess()
+    {
+        // Regression guard for the intermittent "Test host process crashed" suite abort:
+        // inside the headless Avalonia session Application.Current is non-null (process-wide)
+        // but has NO lifetime. ShutdownApplication used to Environment.Exit(0) on any non-null
+        // Application, killing the whole xUnit host whenever the self-update path ran after
+        // any [AvaloniaFact]. Running the exact same flow *inside* the session makes a
+        // reintroduction fail loudly (and deterministically) instead of aborting random runs.
+        if (OperatingSystem.IsWindows()) return; // Windows in-place self-update is deferred (manual MSI)
+        global::Avalonia.Application.Current.ShouldNotBeNull();          // precondition: session app is set
+        global::Avalonia.Application.Current!.ApplicationLifetime.ShouldBeNull(); // ...with no lifetime
+
+        var installer = new FakeInstaller { CanUpdate = true };
+        var vm = CreateViewModelForDownload(AutoUpdateReleaseJson, new FakeUrlLauncher(), installer);
+        await vm.CheckForUpdatesCommand.ExecuteAsync(null);
+        vm.UpdateAvailable.ShouldBeTrue();
+
+        await vm.InstallUpdateCommand.ExecuteAsync(null);
+
+        // Reaching these asserts at all proves the process survived ShutdownApplication.
+        installer.LaunchedArchivePath.ShouldNotBeNull();
+        vm.StatusText.ShouldContain("Installing update");
 
         if (installer.LaunchedArchivePath is not null && File.Exists(installer.LaunchedArchivePath))
             File.Delete(installer.LaunchedArchivePath);

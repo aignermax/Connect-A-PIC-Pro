@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.PdkResolution"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.PdkResolutionCheckDialog"
         x:DataType="vm:PdkResolutionCheckViewModel"
-        Title="Check PDKs against Python"
+        Title="{loc:Localize PdkCheck.WindowTitle}"
         Width="720" Height="560"
         MinWidth="520" MinHeight="400"
         WindowStartupLocation="CenterOwner"
@@ -15,16 +16,16 @@
         <!-- Buttons — always visible at the bottom -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="📋 Copy Failing List"
+            <Button Content="{loc:Localize PdkCheck.CopyFailingList}"
                     Command="{Binding CopyFailingListCommand}"
                     Background="#3d3d3d" FontSize="11"
                     IsEnabled="{Binding HasFailures}"
-                    ToolTip.Tip="Copy all dead references and warnings — paste into a PDK-JSON-fix PR"/>
-            <Button Content="Run Check"
+                    ToolTip.Tip="{loc:Localize PdkCheck.CopyFailingListTip}"/>
+            <Button Content="{loc:Localize PdkCheck.RunCheck}"
                     Command="{Binding RunCheckCommand}"
                     Width="100" Background="#3d4d6d"
                     IsEnabled="{Binding !IsRunning}"/>
-            <Button Content="Close" Width="70" Click="OnCloseClicked"/>
+            <Button Content="{loc:Localize Common.Close}" Width="70" Click="OnCloseClicked"/>
         </StackPanel>
 
         <!-- Status line -->
@@ -35,9 +36,9 @@
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
-                <TextBlock Text="PDK Consistency Check" FontSize="15" FontWeight="SemiBold"
+                <TextBlock Text="{loc:Localize PdkCheck.Title}" FontSize="15" FontWeight="SemiBold"
                            Foreground="LightBlue"/>
-                <TextBlock Text="Verifies that every component's export function — nazcaFunction, or gdsFactoryFunction for gdsfactory-native PDKs — resolves against the installed Python packages (nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk). Dead references only surface at render or export time otherwise."
+                <TextBlock Text="{loc:Localize PdkCheck.Description}"
                            Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
 
                 <Separator Background="#3d3d3d"/>

@@ -1,4 +1,3 @@
-// CAP.Avalonia/Services/ComponentGeometryKey.cs
 using System;
 using System.Security.Cryptography;
 using System.Text;
@@ -8,9 +7,8 @@ namespace CAP.Avalonia.Services;
 
 /// <summary>
 /// Geometry identity of a component, used to scope S-matrix overrides: components with
-/// the same geometry must share the same (recomputed) S-matrix. When a raw-code Nazca
-/// override (#561) is active the code itself defines the geometry; otherwise the Nazca
-/// call (module|function|parameters) does. Same identity ⇒ same key.
+/// the same geometry must share the same (recomputed) S-matrix. The Nazca call
+/// (module|function|parameters) defines the geometry. Same identity ⇒ same key.
 /// </summary>
 public static class ComponentGeometryKey
 {
@@ -20,16 +18,9 @@ public static class ComponentGeometryKey
     /// <summary>ASCII unit separator — never appears in module/function/parameter strings.</summary>
     private const char FieldSeparator = (char)31;
 
-    /// <summary>
-    /// Builds the geometry key. <paramref name="rawCodeLookup"/> returns the active raw-code
-    /// override for the component (e.g. from StoredNazcaOverrides), or null if none.
-    /// </summary>
-    public static string For(Component component, Func<Component, string?> rawCodeLookup)
+    /// <summary>Builds the geometry key from the component's Nazca call tuple.</summary>
+    public static string For(Component component)
     {
-        var raw = rawCodeLookup(component);
-        if (!string.IsNullOrWhiteSpace(raw))
-            return $"raw:v{FormatVersion}-{Hash(raw)}";
-
         // Separate fields so distinct tuples can't collide via boundary shifts.
         var material = $"{component.NazcaModuleName}{FieldSeparator}{component.NazcaFunctionName}{FieldSeparator}{component.NazcaFunctionParameters}";
         return $"geo:v{FormatVersion}-{Hash(material)}";

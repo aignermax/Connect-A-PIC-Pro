@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.Export"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.VerilogAExportDialog"
         x:DataType="vm:VerilogAExportViewModel"
-        Title="Export — Verilog-A / SPICE"
+        Title="{loc:Localize VerilogAExport.Title}"
         Width="440" Height="380"
         WindowStartupLocation="CenterOwner"
         CanResize="False"
@@ -15,35 +16,35 @@
         <!-- Buttons docked at the bottom so they're always visible -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Open Folder"
+            <Button Content="{loc:Localize Common.OpenFolder}"
                     Command="{Binding OpenOutputDirectoryCommand}"
                     Width="100" Background="#2d4d3d" FontSize="11"
                     IsVisible="{Binding LastExportSucceeded}"/>
-            <Button Content="Export…"
+            <Button Content="{loc:Localize Common.ExportEllipsis}"
                     Command="{Binding ExportCommand}"
                     Width="90" Background="#3d6d4d"
                     IsEnabled="{Binding IsExporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="Close" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
+            <Button Content="{loc:Localize Common.Close}" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
         </StackPanel>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel Spacing="10">
-            <TextBlock Text="📊 Verilog-A / SPICE Export" FontSize="15" FontWeight="SemiBold"
+            <TextBlock Text="{loc:Localize VerilogAExport.Heading}" FontSize="15" FontWeight="SemiBold"
                        Foreground="#7BC8A4"/>
-            <TextBlock Text="Export photonic circuit for co-simulation with electronic circuits (ngspice, Xyce). Click Export… to choose where to save."
+            <TextBlock Text="{loc:Localize VerilogAExport.Description}"
                        Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
 
             <Separator Background="#3d3d3d"/>
 
             <!-- Wavelength -->
-            <TextBlock Text="Wavelength for S-parameters:" Foreground="Gray" FontSize="11"/>
+            <TextBlock Text="{loc:Localize VerilogAExport.WavelengthLabel}" Foreground="Gray" FontSize="11"/>
             <ComboBox ItemsSource="{Binding WavelengthOptions}"
                       SelectedValue="{Binding WavelengthNm}"
                       HorizontalAlignment="Stretch"
                       Background="#2d2d2d"/>
 
             <!-- Options -->
-            <CheckBox Content="Include SPICE test bench (.sp)"
+            <CheckBox Content="{loc:Localize VerilogAExport.IncludeTestBench}"
                       IsChecked="{Binding IncludeTestBench}"
                       Foreground="White"/>
 
@@ -51,11 +52,11 @@
                  chain the generated files target. Mirko hit this when the
                  modules looked like "weird Verilog-A" in his usual flow —
                  they're correct for OpenVAF + NGSpice OSDI, not arbitrary SPICE. -->
-            <Expander Header="ℹ Compatible simulators / known caveats"
+            <Expander Header="{loc:Localize VerilogAExport.CaveatsHeader}"
                       Foreground="LightGray" FontSize="10"
                       IsExpanded="False">
                 <TextBlock Foreground="LightGray" FontSize="10" TextWrapping="Wrap"
-                           Text="Generated for the OpenVAF + NGSpice OSDI flow.&#x0a;&#x0a;• Compile each *.va to *.osdi with OpenVAF.&#x0a;• The SPICE test bench loads the OSDI artefacts via the NGSpice-specific 'pre_osdi' directive.&#x0a;• Each optical port is exported as TWO electrical nodes — *_re and *_im — because Verilog-A has no native complex voltages. Driving only the real node simulates a real-valued source; driving both reproduces the photonic complex amplitude.&#x0a;&#x0a;Other simulators (Cadence Spectre, Synopsys HSPICE, Mentor AMS) need adaptation — 'pre_osdi' is an NGSpice extension, and the twin-node model is a Lunima convention, not a Verilog-A standard."/>
+                           Text="{loc:Localize VerilogAExport.CaveatsBody}"/>
             </Expander>
 
             <!-- Status -->

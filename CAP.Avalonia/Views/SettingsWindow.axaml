@@ -7,9 +7,10 @@
         xmlns:vmAi="using:CAP.Avalonia.ViewModels.AI"
         xmlns:vmPyEnv="using:CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager"
         xmlns:panels="using:CAP.Avalonia.Views.Panels"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.SettingsWindow"
         x:DataType="settings:SettingsWindowViewModel"
-        Title="Settings"
+        Title="{loc:Localize Settings.WindowTitle}"
         Width="820" Height="680"
         WindowStartupLocation="CenterOwner"
         Background="#1e1e1e"
@@ -20,7 +21,7 @@
         <!-- Navigation sidebar -->
         <DockPanel Grid.Column="0" Background="#252525">
             <TextBlock DockPanel.Dock="Top"
-                       Text="Settings"
+                       Text="{loc:Localize Settings.WindowTitle}"
                        FontSize="16" FontWeight="SemiBold"
                        Foreground="White"
                        Margin="15,15,15,12"/>
@@ -64,12 +65,12 @@
                     <!-- Grid Snap & Alignment -->
                     <DataTemplate DataType="{x:Type settings:GridSnapSettingsViewModel}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Grid Snap" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <CheckBox Content="Enable Grid Snapping  [G Key]"
+                            <TextBlock Text="{loc:Localize Settings.GridSnap.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <CheckBox Content="{loc:Localize Settings.GridSnap.Enable}"
                                       IsChecked="{Binding GridSnap.IsEnabled}"
                                       Foreground="White"/>
                             <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
-                                <TextBlock Text="Grid Size:" Foreground="Gray" VerticalAlignment="Center" Width="80"/>
+                                <TextBlock Text="{loc:Localize Settings.GridSnap.GridSize}" Foreground="Gray" VerticalAlignment="Center" Width="80"/>
                                 <NumericUpDown Value="{Binding GridSnap.GridSizeMicrometers}"
                                                Minimum="1" Maximum="1000" Increment="10"
                                                Width="130" FormatString="F0"/>
@@ -77,51 +78,42 @@
                             </StackPanel>
 
                             <Separator Margin="0,16,0,8" Background="#3d3d3d"/>
-                            <TextBlock Text="Alignment Guides" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
-                            <CheckBox Content="Show Pin Alignment Guides during dragging"
+                            <TextBlock Text="{loc:Localize Settings.GridSnap.AlignmentTitle}" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
+                            <CheckBox Content="{loc:Localize Settings.GridSnap.ShowGuides}"
                                       IsChecked="{Binding AlignmentGuide.IsEnabled}"
                                       Foreground="White"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
-                                Displays cyan guide lines when component pins share an X or Y axis.
-                                The component snaps to alignment when released nearby.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.GridSnap.GuidesDescription}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </DataTemplate>
 
                     <!-- Routing -->
                     <DataTemplate DataType="{x:Type settings:RoutingSettingsViewModel}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Routing" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <CheckBox Content="Enable diagonal routing (45° waveguides)"
+                            <TextBlock Text="{loc:Localize Settings.Routing.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <CheckBox Content="{loc:Localize Settings.Routing.EnableDiagonal}"
                                       IsChecked="{Binding Canvas.UseDiagonalRouting}"
                                       Foreground="White"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
-                                Octile A* with 45° diagonals produces shorter, more compact routes,
-                                but every re-route needs considerably more compute. When disabled,
-                                the fast 4-direction (Manhattan) search is used. Toggling this
-                                re-routes all connections immediately.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.Routing.DiagonalDescription}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
 
                             <Separator Margin="0,16,0,8" Background="#3d3d3d"/>
-                            <TextBlock Text="Crossings" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
-                            <CheckBox Content="Adaptive crossing insertion"
+                            <TextBlock Text="{loc:Localize Settings.Routing.CrossingsTitle}" FontSize="16" FontWeight="SemiBold" Foreground="Cyan" Margin="0,0,0,4"/>
+                            <CheckBox Content="{loc:Localize Settings.Routing.AdaptiveCrossing}"
                                       IsChecked="{Binding CrossingInsertionEnabled}"
                                       Foreground="White"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0">
-                                After routing, replaces a detouring waveguide with a real PDK crossing component
-                                where that lowers insertion loss. Turn off for classic avoid-only routing —
-                                faster on large designs, and no crossings are inserted.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.Routing.CrossingDescription}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
                         </StackPanel>
                     </DataTemplate>
 
                     <!-- Software Updates -->
                     <DataTemplate DataType="{x:Type vmUpdate:UpdateViewModel}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="Software Updates" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Updates.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
                             <TextBlock Text="{Binding CurrentVersionText}" Foreground="Gray" FontSize="11"/>
 
-                            <Button Content="Check for Updates"
+                            <Button Content="{loc:Localize Settings.Updates.Check}"
                                     Command="{Binding CheckForUpdatesCommand}"
                                     Width="150" Margin="0,8,0,0" Background="#3d4d5d"
                                     HorizontalAlignment="Left"
@@ -147,15 +139,15 @@
                                              IsVisible="{Binding IsDownloading}"/>
 
                                 <StackPanel Orientation="Horizontal" Spacing="8">
-                                    <Button Content="Download &amp; Install"
+                                    <Button Content="{loc:Localize Settings.Updates.DownloadInstall}"
                                             Command="{Binding InstallUpdateCommand}"
                                             Background="#3d5d3d"
                                             IsEnabled="{Binding IsDownloading, Converter={x:Static BoolConverters.Not}}"/>
-                                    <Button Content="Remind Later"
+                                    <Button Content="{loc:Localize Settings.Updates.RemindLater}"
                                             Command="{Binding RemindLaterCommand}"
                                             Background="#3d3d3d"
                                             IsEnabled="{Binding IsDownloading, Converter={x:Static BoolConverters.Not}}"/>
-                                    <Button Content="Skip Version"
+                                    <Button Content="{loc:Localize Settings.Updates.SkipVersion}"
                                             Command="{Binding SkipThisVersionCommand}"
                                             Background="#5d4330"
                                             IsEnabled="{Binding IsDownloading, Converter={x:Static BoolConverters.Not}}"/>
@@ -167,29 +159,23 @@
                     <!-- GDS Export (GDS toggle + Python environment) -->
                     <DataTemplate DataType="{x:Type vmExport:GdsExportViewModel}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="GDS Export" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
-                                Configures how the "Export" top-toolbar action generates a GDS file
-                                from the exported Nazca Python script. The gdsfactory export is a separate
-                                Export-menu entry; install gdsfactory below via "Install gdsfactory".
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.GdsExport.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.GdsExport.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
 
-                            <CheckBox Content="Generate GDS file after Nazca export (Nazca export requires Python + Nazca; gdsfactory export requires gdsfactory)"
+                            <CheckBox Content="{loc:Localize Settings.GdsExport.GenerateGds}"
                                       IsChecked="{Binding GenerateGdsEnabled}"
                                       Foreground="White" Margin="0,4,0,0"/>
 
                             <Separator Margin="0,12,0,4" Background="#3d3d3d"/>
-                            <TextBlock Text="Python Environment" FontSize="14" FontWeight="SemiBold" Foreground="LightGray"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4">
-                                The interpreter used to run the exported Nazca script is chosen in the
-                                Python Environments page — one place lists managed environments and
-                                discovered system Pythons with their Nazca and gdsfactory versions.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.GdsExport.PythonEnvTitle}" FontSize="14" FontWeight="SemiBold" Foreground="LightGray"/>
+                            <TextBlock Text="{loc:Localize Settings.GdsExport.PythonEnvDescription}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
 
-                            <TextBlock Text="Active interpreter:" Foreground="Gray" FontSize="12" Margin="0,4,0,3"/>
+                            <TextBlock Text="{loc:Localize Settings.GdsExport.ActiveInterpreter}" Foreground="Gray" FontSize="12" Margin="0,4,0,3"/>
                             <TextBox Text="{Binding CustomPythonPath}"
                                      IsReadOnly="True"
-                                     Watermark="No interpreter selected yet"/>
+                                     Watermark="{loc:Localize Settings.GdsExport.NoInterpreter}"/>
 
                             <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
                                 <TextBlock Text="Python: " Foreground="Gray" Width="70"/>
@@ -200,11 +186,11 @@
                                 <TextBlock Text="{Binding NazcaStatus}" Foreground="White"/>
                             </StackPanel>
 
-                            <Button Content="Manage in Python Environments →"
+                            <Button Content="{loc:Localize Settings.GdsExport.Manage}"
                                     Click="OnManageInterpretersClick"
                                     HorizontalAlignment="Left" Margin="0,10,0,0"
                                     Padding="12,4" Background="#3d4d5d" FontSize="11"
-                                    ToolTip.Tip="Open the Python Environments page to select or create an interpreter"/>
+                                    ToolTip.Tip="{loc:Localize Settings.GdsExport.ManageTip}"/>
                         </StackPanel>
                     </DataTemplate>
 
@@ -216,13 +202,11 @@
                     <!-- AI Assistant -->
                     <DataTemplate DataType="{x:Type vmAi:AiAssistantViewModel}">
                         <StackPanel Spacing="8">
-                            <TextBlock Text="AI Assistant" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                Configure the Anthropic Claude API key used by the AI Design Assistant
-                                in the right panel. The key is stored locally and never transmitted elsewhere.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.Ai.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Ai.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-                            <TextBlock Text="API Key:" Foreground="Gray" FontSize="12" Margin="0,0,0,3"/>
+                            <TextBlock Text="{loc:Localize Settings.Ai.ApiKey}" Foreground="Gray" FontSize="12" Margin="0,0,0,3"/>
                             <TextBox Text="{Binding ApiKey}"
                                      Watermark="sk-ant-..."
                                      PasswordChar="•"/>
@@ -236,40 +220,37 @@
                     <!-- Chip Size — design-wide footprint of the PIC -->
                     <DataTemplate DataType="{x:Type vmCanvas:ChipSizeViewModel}">
                         <StackPanel Spacing="6">
-                            <TextBlock Text="Chip Size" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
-                            <TextBlock Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8">
-                                Sets the physical footprint of the PIC chip. Components placed
-                                outside the boundary are flagged in Design Checks but not moved.
-                                Range: 0.25–100 mm per dimension.
-                            </TextBlock>
+                            <TextBlock Text="{loc:Localize Settings.ChipSize.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,4"/>
+                            <TextBlock Text="{loc:Localize Settings.ChipSize.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
-                            <TextBlock Text="Preset:" Foreground="Gray" FontSize="12" Margin="0,4,0,2"/>
+                            <TextBlock Text="{loc:Localize Settings.ChipSize.Preset}" Foreground="Gray" FontSize="12" Margin="0,4,0,2"/>
                             <ComboBox ItemsSource="{Binding Presets}"
                                       SelectedItem="{Binding SelectedPreset}"
                                       DisplayMemberBinding="{Binding Name}"
                                       HorizontalAlignment="Stretch"/>
 
-                            <TextBlock Text="Width (mm):" Foreground="Gray" FontSize="12" Margin="0,8,0,2"/>
+                            <TextBlock Text="{loc:Localize Settings.ChipSize.Width}" Foreground="Gray" FontSize="12" Margin="0,8,0,2"/>
                             <NumericUpDown Value="{Binding WidthMillimeters}"
                                            Minimum="0.25" Maximum="100"
                                            Increment="1" FormatString="F2"
                                            HorizontalAlignment="Stretch"/>
 
-                            <TextBlock Text="Height (mm):" Foreground="Gray" FontSize="12" Margin="0,8,0,2"/>
+                            <TextBlock Text="{loc:Localize Settings.ChipSize.Height}" Foreground="Gray" FontSize="12" Margin="0,8,0,2"/>
                             <NumericUpDown Value="{Binding HeightMillimeters}"
                                            Minimum="0.25" Maximum="100"
                                            Increment="1" FormatString="F2"
                                            HorizontalAlignment="Stretch"/>
 
                             <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                                <TextBlock Text="Grid: " Foreground="Gray" FontSize="11"/>
+                                <TextBlock Text="{loc:Localize Settings.ChipSize.GridPrefix}" Foreground="Gray" FontSize="11"/>
                                 <TextBlock Text="{Binding TileColumns}" Foreground="LightGray" FontSize="11"/>
                                 <TextBlock Text=" × " Foreground="Gray" FontSize="11"/>
                                 <TextBlock Text="{Binding TileRows}" Foreground="LightGray" FontSize="11"/>
-                                <TextBlock Text=" tiles (250 µm pitch)" Foreground="Gray" FontSize="11"/>
+                                <TextBlock Text="{loc:Localize Settings.ChipSize.TilesSuffix}" Foreground="Gray" FontSize="11"/>
                             </StackPanel>
 
-                            <Button Content="Apply"
+                            <Button Content="{loc:Localize Common.Apply}"
                                     Command="{Binding ApplyCommand}"
                                     HorizontalAlignment="Left" Padding="16,4"
                                     Background="#3d5d5d"
@@ -278,6 +259,66 @@
                             <TextBlock Text="{Binding StatusText}"
                                        Foreground="LightGreen" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
                                        IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Interconnect defaults (issue #574) -->
+                    <DataTemplate DataType="{x:Type settings:InterconnectSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{loc:Localize Settings.Interconnect.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Interconnect.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.Width}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding WidthMicrometers}"
+                                               Minimum="0.05" Maximum="100" Increment="0.05"
+                                               Width="130" FormatString="F2"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.BendRadius}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <NumericUpDown Value="{Binding BendRadiusMicrometers}"
+                                               Minimum="0.5" Maximum="10000" Increment="1"
+                                               Width="130" FormatString="F1"/>
+                                <TextBlock Text="µm" Foreground="Gray" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{loc:Localize Settings.Interconnect.GdsLayer}" Foreground="Gray" VerticalAlignment="Center" Width="100"/>
+                                <TextBox Text="{Binding GdsLayerText}" Width="130" Watermark="{loc:Localize Settings.Interconnect.GdsLayerWatermark}"/>
+                            </StackPanel>
+
+                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,12,0,0">
+                                <Button Content="{loc:Localize Settings.Interconnect.Apply}"
+                                        Command="{Binding ApplyCommand}"
+                                        Padding="16,4" Background="#3d5d5d"/>
+                                <Button Content="{loc:Localize Settings.Interconnect.Reset}"
+                                        Command="{Binding ResetToDefaultsCommand}"
+                                        Padding="16,4"/>
+                            </StackPanel>
+
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="LightGreen" FontSize="11" Margin="0,8,0,0" TextWrapping="Wrap"
+                                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Language — UI language picker (issue #744) -->
+                    <DataTemplate DataType="{x:Type settings:LanguageSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{loc:Localize Settings.Language.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Language.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
+
+                            <TextBlock Text="{loc:Localize Settings.Language.PickerLabel}" Foreground="Gray" FontSize="12" Margin="0,4,0,2"/>
+                            <ComboBox ItemsSource="{Binding Options}"
+                                      SelectedItem="{Binding SelectedOption}"
+                                      HorizontalAlignment="Stretch"/>
+
+                            <TextBlock Text="{loc:Localize Settings.Language.RestartNote}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,8,0,0"/>
                         </StackPanel>
                     </DataTemplate>
 

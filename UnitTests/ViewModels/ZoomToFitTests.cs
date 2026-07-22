@@ -8,6 +8,7 @@ namespace UnitTests.ViewModels;
 /// <summary>
 /// Tests for <see cref="MainViewModel.ZoomToFit"/> and viewport centering.
 /// </summary>
+[Trait("Category", "Slow")]
 public class ZoomToFitTests
 {
     private static MainViewModel CreateViewModel() =>
