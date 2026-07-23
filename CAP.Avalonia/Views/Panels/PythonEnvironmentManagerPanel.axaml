@@ -86,9 +86,10 @@
                                 CornerRadius="3" Margin="0,2,0,0" Padding="6,4">
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                                 <!-- Interpreter info (not clickable — activation is an explicit button) -->
-                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center">
-                                    <!-- Grid instead of a horizontal StackPanel, so the text wraps
-                                         at narrow widths instead of pushing the buttons out of view. -->
+                                <!-- ClipToBounds: an unbreakable long token (e.g. the path) must never
+                                     paint over the action buttons — Grid cells do not clip by default. -->
+                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            ClipToBounds="True">
                                     <Grid ColumnDefinitions="Auto,*">
                                         <Border Grid.Column="0" CornerRadius="3" Padding="4,1" Background="#333333"
                                                 VerticalAlignment="Top" Margin="0,0,6,0"
@@ -100,7 +101,8 @@
                                                    FontSize="11" TextWrapping="Wrap"/>
                                     </Grid>
                                     <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                               TextWrapping="Wrap"/>
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding Path}"/>
                                 </StackPanel>
 
                                 <!-- Currently active: static indicator -->
