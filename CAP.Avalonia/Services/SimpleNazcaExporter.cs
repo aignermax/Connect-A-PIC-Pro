@@ -58,6 +58,7 @@ public class SimpleNazcaExporter
         var componentNames = AppendComponents(sb, canvas, emitVerification);
         AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer);
         AppendFooter(sb);
+        SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas);
         if (emitVerification)
             AppendVerificationEpilog(sb);
 
@@ -89,6 +90,7 @@ public class SimpleNazcaExporter
         AppendPdkComponentStubs(sb, canvas, include);
         AppendComponents(sb, canvas, emitVerification: false, include, topCellName);
         AppendFooter(sb);
+        SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
         return sb.ToString();
     }
@@ -119,6 +121,9 @@ public class SimpleNazcaExporter
     /// Each unique PDK function used in the design gets a stub cell
     /// with correct dimensions and pin positions — no external PDK install needed.
     /// ComponentGroups are flattened — stubs are generated for all child components.
+    /// SiEPIC stubs are placeholders only: after <c>nd.export_gds()</c> the script's
+    /// klayout post-pass (<see cref="SiepicCellUpgradeWriter"/>) swaps their content
+    /// for the real foundry geometry when the PDK is installed.
     /// </summary>
     private static void AppendPdkComponentStubs(
         StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
@@ -238,6 +243,9 @@ public class SimpleNazcaExporter
     /// the org pin is put at (PhysicalX+ox, -(PhysicalY+oy)) and the box top edge
     /// must lie oy above org. Pins render exactly where the app model places them
     /// (plain Y negation), so exported waveguides meet the stub pins.
+    /// The stub box doubles as the anchor the klayout post-pass
+    /// (<see cref="SiepicCellUpgradeWriter"/>) fills with real foundry geometry
+    /// for SiEPIC cells — same cell name, so instances keep their placement.
     /// </summary>
     private static void AppendStandardComponentStub(
         StringBuilder sb, string funcName, Component comp, CultureInfo ci)
