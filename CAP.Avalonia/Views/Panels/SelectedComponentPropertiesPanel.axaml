@@ -74,10 +74,14 @@
                             <Slider Grid.Column="0"
                                     Minimum="{Binding Min}" Maximum="{Binding Max}"
                                     Value="{Binding Value, Mode=TwoWay}"/>
+                            <!-- No spinner buttons (#779): in the 80px column Fluent's two
+                                 spinners would cover the value entirely. The slider handles
+                                 stepping; this stays a validated numeric text input. -->
                             <NumericUpDown Grid.Column="1"
                                            Value="{Binding Value, Mode=TwoWay}"
                                            Minimum="{Binding Min}" Maximum="{Binding Max}"
                                            Increment="1" FormatString="F2"
+                                           ShowButtonSpinner="False"
                                            Margin="6,0,0,0"/>
                         </Grid>
                     </StackPanel>
