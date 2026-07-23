@@ -12,29 +12,20 @@ using Xunit;
 
 namespace UnitTests.UI;
 
-/// <summary>
-/// Visual walkthrough for issue #697 (small dialogs rendering collapsed on every other opening
-/// on Linux/X11): renders the real <see cref="RenameDialog"/> in its intended state, in the
-/// collapsed state the X11 race produced, and after <see cref="DialogSizeGuard"/> restores it.
-/// Writes step-ordered PNGs plus a <c>manifest.json</c> with one-sentence captions into
-/// <c>artifacts/ui-screenshots/issue-697/</c>, using the same Skia headless harness as
-/// <see cref="UiScreenshotTests"/>.
-/// </summary>
+// Renders the issue #697 walkthrough PNGs (requested / collapsed / restored) into artifacts/ui-screenshots.
 [Trait("Category", "UiScreenshots")]
 public class Issue697WalkthroughScreenshotTests
 {
     private const int MinDistinctSampledColors = 10;
     private const int SampleGridSize = 64;
 
-    /// <summary>RenameDialog's declared size in AXAML (Width="340" Height="130").</summary>
+    // RenameDialog's declared AXAML size.
     private const double RequestedWidth = 340;
     private const double RequestedHeight = 130;
 
-    /// <summary>Collapsed size mimicking the late X11 ConfigureNotify shrinking the dialog.</summary>
     private const double CollapsedWidth = 200;
     private const double CollapsedHeight = 40;
 
-    /// <summary>Renders the three walkthrough steps and writes the manifest.</summary>
     [AvaloniaFact]
     public void CaptureIssue697Walkthrough()
     {
@@ -53,8 +44,6 @@ public class Issue697WalkthroughScreenshotTests
             "The Rename dialog as it should always appear: its full requested 340x130 size with "
             + "prompt, text box and buttons visible.", manifest);
 
-        // Simulate the Linux/X11 bug (AvaloniaUI/Avalonia#12581): a late ConfigureNotify during
-        // the show handshake collapses the window on every other opening.
         dialog.Width = CollapsedWidth;
         dialog.Height = CollapsedHeight;
         PumpRenderLoop();
@@ -64,8 +53,6 @@ public class Issue697WalkthroughScreenshotTests
             "Without the guard, the X11 race collapses the same dialog on every other opening, "
             + "clipping the text box and buttons away.", manifest);
 
-        // The fix: DialogSizeGuard (installed app-wide in App.axaml.cs) detects the collapse
-        // shortly after Opened and re-applies the size requested at show time.
         DialogSizeGuard.EnforceRequestedSize(dialog, RequestedWidth, RequestedHeight, SizeToContent.Manual);
         PumpRenderLoop();
         dialog.Width.ShouldBe(RequestedWidth);
@@ -88,10 +75,6 @@ public class Issue697WalkthroughScreenshotTests
         manifest.Count.ShouldBe(3);
     }
 
-    /// <summary>
-    /// Pumps the headless render timer and dispatcher a few times so size changes and
-    /// layout actually reach the rendered frame before capture.
-    /// </summary>
     private static void PumpRenderLoop()
     {
         for (int i = 0; i < 5; i++)
@@ -101,7 +84,6 @@ public class Issue697WalkthroughScreenshotTests
         }
     }
 
-    /// <summary>Captures the shown window to a PNG, fails on a near-blank frame, records the caption.</summary>
     private static void Capture(
         Window window, string dir, string filename, string caption, List<ManifestEntry> manifest)
     {
@@ -121,7 +103,6 @@ public class Issue697WalkthroughScreenshotTests
         manifest.Add(new ManifestEntry(filename, caption));
     }
 
-    /// <summary>Samples a grid of pixels and counts distinct ARGB values (blank-frame guard).</summary>
     private static int CountDistinctSampledColors(WriteableBitmap bitmap)
     {
         using var fb = bitmap.Lock();
@@ -141,7 +122,7 @@ public class Issue697WalkthroughScreenshotTests
         return colors.Count;
     }
 
-    /// <summary>Repo-root walkthrough output directory (env override: <c>UI_SHOT_DIR</c>).</summary>
+    // UI_SHOT_DIR overrides the output location.
     private static string ResolveOutputDirectory()
     {
         var envDir = Environment.GetEnvironmentVariable("UI_SHOT_DIR");
@@ -159,6 +140,5 @@ public class Issue697WalkthroughScreenshotTests
         return Path.Combine(AppContext.BaseDirectory, "artifacts", "ui-screenshots", "issue-697");
     }
 
-    /// <summary>One walkthrough step in the manifest embedded into the PR comment.</summary>
     private sealed record ManifestEntry(string File, string Caption);
 }

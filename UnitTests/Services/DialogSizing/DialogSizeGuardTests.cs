@@ -9,10 +9,6 @@ using Xunit;
 
 namespace UnitTests.Services.DialogSizing;
 
-/// <summary>
-/// Tests for <see cref="DialogSizeGuard"/>, the central workaround for issue #697
-/// (small dialogs rendering collapsed on every other opening on Linux/X11).
-/// </summary>
 [Collection("AvaloniaGlobalHook")]
 public class DialogSizeGuardTests
 {
@@ -20,11 +16,11 @@ public class DialogSizeGuardTests
     private const double RequestedHeight = 180;
 
     [Theory]
-    [InlineData(480, 10, true)]   // collapsed far below requested
-    [InlineData(480, 475, true)]  // just outside tolerance
-    [InlineData(480, 477, false)] // within tolerance
-    [InlineData(480, 480, false)] // exact
-    [InlineData(480, 900, false)] // grown — must be left alone
+    [InlineData(480, 10, true)]
+    [InlineData(480, 475, true)]
+    [InlineData(480, 477, false)]
+    [InlineData(480, 480, false)]
+    [InlineData(480, 900, false)]
     public void IsCollapsed_DetectsOnlySizesBelowRequested(double requested, double actual, bool expected)
     {
         DialogSizeGuard.IsCollapsed(requested, actual).ShouldBe(expected);
@@ -51,7 +47,7 @@ public class DialogSizeGuardTests
     [AvaloniaFact]
     public void MinimumSizeFallback_SizeToContentHeightDialog_GetsFallbackMinHeight()
     {
-        // Mirrors MessageBoxService.ShowChoicePromptAsync (Width fixed, height content-sized).
+        // Shape mirrors MessageBoxService.ShowChoicePromptAsync.
         var window = new Window { Width = RequestedWidth, SizeToContent = SizeToContent.Height, CanResize = false };
 
         DialogSizeGuard.ApplyMinimumSizeFallback(window, RequestedWidth, double.NaN, SizeToContent.Height);
@@ -63,7 +59,7 @@ public class DialogSizeGuardTests
     [AvaloniaFact]
     public void MinimumSizeFallback_ResizableWindow_IsLeftUntouched()
     {
-        // Mirrors ProcessManagementWindow, which defines its own smaller MinWidth/MinHeight.
+        // Shape mirrors ProcessManagementWindow.
         var window = new Window { Width = 820, Height = 680, MinWidth = 500, MinHeight = 400 };
 
         DialogSizeGuard.ApplyMinimumSizeFallback(window, 820, 680, SizeToContent.Manual);
@@ -77,11 +73,8 @@ public class DialogSizeGuardTests
     {
         var window = new Window { Width = RequestedWidth, Height = RequestedHeight };
         window.Show();
-        window.Width = 10;   // simulate the platform collapsing the window after opening
+        window.Width = 10;
         window.Height = 20;
-        // Precondition, hard-asserted: the collapse must have reached ClientSize, which is
-        // what EnforceRequestedSize inspects (on X11 the collapse arrives via HandleResized,
-        // which updates ClientSize itself — this propagation is a headless artifact).
         PumpUntilClientSize(window, 10, 20);
 
         DialogSizeGuard.EnforceRequestedSize(window, RequestedWidth, RequestedHeight, SizeToContent.Manual);
@@ -97,7 +90,7 @@ public class DialogSizeGuardTests
     {
         var window = new Window { Width = RequestedWidth, Height = RequestedHeight };
         window.Show();
-        window.Width = 900;  // e.g. user or window manager grew the window
+        window.Width = 900;
         window.Height = 700;
         Dispatcher.UIThread.RunJobs();
 
@@ -114,7 +107,7 @@ public class DialogSizeGuardTests
     {
         var window = new Window { Width = RequestedWidth, SizeToContent = SizeToContent.Height };
         window.Show();
-        window.SizeToContent = SizeToContent.Manual; // simulate the X11 ConfigureNotify race
+        window.SizeToContent = SizeToContent.Manual;
         Dispatcher.UIThread.RunJobs();
 
         DialogSizeGuard.EnforceRequestedSize(window, RequestedWidth, double.NaN, SizeToContent.Height);
@@ -145,16 +138,10 @@ public class DialogSizeGuardTests
         DialogSizeGuard.Attach(window);
 
         window.Show();
-        // Precondition, hard-asserted: the window reached its requested size before the race.
         PumpUntilClientSize(window, RequestedWidth, RequestedHeight);
 
-        window.Width = 10;   // collapse arrives after Opened but before the posted enforcement
+        window.Width = 10;
         window.Height = 20;
-        // The guard posted its two passes at Loaded/Background priority during Opened; headless
-        // propagates the collapse to ClientSize ahead of Loaded-priority jobs, so the first
-        // pumped RunJobs lets the posted passes observe the collapsed client size and restore
-        // it (verified on Avalonia 11.3.x headless). If that priority ordering ever changes,
-        // the bounded pump below fails honestly instead of flaking downstream.
         PumpUntilRestored(window, RequestedWidth, RequestedHeight);
 
         window.Width.ShouldBe(RequestedWidth);
@@ -165,8 +152,7 @@ public class DialogSizeGuardTests
     [AvaloniaFact]
     public void Initialize_ShowOwnedDialog_GuardAttachesViaOwnerAssignment()
     {
-        // Exercises the real production wiring (OwnerProperty class handler), not Attach
-        // directly: Avalonia assigns Owner during Show(owner), before OnOpened.
+        // Goes through the real Show(owner) wiring, not Attach directly.
         DialogSizeGuard.ResetForTesting();
         DialogSizeGuard.Initialize();
         try
@@ -177,7 +163,7 @@ public class DialogSizeGuardTests
             var dialog = new Window { Width = RequestedWidth, Height = RequestedHeight, CanResize = false };
             dialog.Show(owner);
 
-            // Observable proof the guard attached: the min-size fallback ran.
+            // The min-size fallback ran only if the guard attached.
             dialog.MinWidth.ShouldBe(RequestedWidth);
             dialog.MinHeight.ShouldBe(RequestedHeight);
 
@@ -186,9 +172,7 @@ public class DialogSizeGuardTests
         }
         finally
         {
-            // Drain enforcement passes the guard posted for the now-closed windows: the
-            // headless dispatcher queue is shared process-wide, so leftover callbacks would
-            // fire inside an unrelated later test's RunJobs().
+            // Drain the shared headless dispatcher so posted passes can't leak into later tests.
             Dispatcher.UIThread.RunJobs();
             DialogSizeGuard.ResetForTesting();
         }
@@ -204,16 +188,12 @@ public class DialogSizeGuardTests
             var owner = new Window { Width = 800, Height = 600 };
             owner.Show();
 
-            // Resizable, so no min-size fallback clamps the client size: setting Width/Height
-            // below the requested size really shrinks ClientSize, mimicking the platform
-            // collapse the posted enforcement must repair.
+            // Resizable so no min-size fallback clamps the shrink.
             var dialog = new Window { Width = RequestedWidth, Height = RequestedHeight };
-            _ = dialog.ShowDialog(owner); // completes when the dialog closes; result unused here
+            _ = dialog.ShowDialog(owner);
 
-            dialog.Width = 10;   // simulate the late X11 ConfigureNotify collapsing the window
+            dialog.Width = 10;
             dialog.Height = 20;
-            // Bounded pump (render-timer tick + RunJobs): the posted passes must observe the
-            // collapsed ClientSize — a plain RunJobs() can starve under full-suite load.
             PumpUntilRestored(dialog, RequestedWidth, RequestedHeight);
 
             dialog.Width.ShouldBe(RequestedWidth);
@@ -224,20 +204,14 @@ public class DialogSizeGuardTests
         }
         finally
         {
-            // Drain enforcement passes the guard posted for the now-closed windows: the
-            // headless dispatcher queue is shared process-wide, so leftover callbacks would
-            // fire inside an unrelated later test's RunJobs().
+            // Drain the shared headless dispatcher so posted passes can't leak into later tests.
             Dispatcher.UIThread.RunJobs();
             DialogSizeGuard.ResetForTesting();
         }
     }
 
-    /// <summary>
-    /// Pumps the headless layout/render pipeline until <paramref name="window"/>'s ClientSize
-    /// reaches the given size. Width/Height propagate to ClientSize asynchronously through
-    /// layout; the bounded loop plus hard assert turns a propagation failure into an honest
-    /// precondition failure instead of a downstream flake.
-    /// </summary>
+    // Width/Height reach ClientSize only asynchronously through layout in headless; the hard
+    // assert turns a propagation failure into an honest precondition failure instead of a flake.
     private static void PumpUntilClientSize(Window window, double width, double height)
     {
         for (var i = 0; i < 50; i++)
@@ -255,12 +229,6 @@ public class DialogSizeGuardTests
         window.ClientSize.Height.ShouldBe(height);
     }
 
-    /// <summary>
-    /// Pumps the headless layout/render pipeline until the window's Width/Height properties are
-    /// back at the requested size — i.e. until the guard's posted enforcement passes have run
-    /// and restored them. Hard-asserts on exhaustion so a missed enforcement fails here instead
-    /// of surfacing as a downstream flake.
-    /// </summary>
     private static void PumpUntilRestored(Window window, double width, double height)
     {
         for (var i = 0; i < 50; i++)
@@ -275,15 +243,8 @@ public class DialogSizeGuardTests
         window.Height.ShouldBe(height);
     }
 
-    /// <summary>
-    /// Runs one pump iteration over every dispatcher that can carry layout/render work. Under
-    /// the headless xunit runner's default PerTest isolation, the MediaContext that layout
-    /// invalidations flow into can stay bound to a dispatcher from an earlier scope — then
-    /// <see cref="Dispatcher.UIThread"/> is a different instance and a plain
-    /// <c>UIThread.RunJobs()</c> never drives layout or rendering at all. Pump the
-    /// MediaContext's dispatcher first (layout propagates the collapse to ClientSize), then
-    /// the UI thread's (the guard's posted passes observe it).
-    /// </summary>
+    // Under headless PerTest isolation the MediaContext can stay bound to a dispatcher from an
+    // earlier scope, and then UIThread.RunJobs() never drives layout or rendering — pump both.
     private static void RunLayoutAndDispatcherJobs()
     {
         AvaloniaHeadlessPlatform.ForceRenderTimerTick();
@@ -292,7 +253,6 @@ public class DialogSizeGuardTests
         Dispatcher.UIThread.RunJobs();
     }
 
-    /// <summary>The dispatcher the current MediaContext schedules render/layout work on.</summary>
     private static Dispatcher? GetMediaContextDispatcher()
     {
         try

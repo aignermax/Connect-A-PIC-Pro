@@ -56,8 +56,7 @@ public partial class App : Application
 
     public override void OnFrameworkInitializationCompleted()
     {
-        // Central fix for issue #697: re-enforces the requested size of every window shortly
-        // after it opens, so small dialogs cannot render collapsed on Linux/X11.
+        // Issue #697: re-enforce requested dialog sizes after open (Linux/X11 collapse).
         DialogSizeGuard.Initialize();
 
         var services = new ServiceCollection();
