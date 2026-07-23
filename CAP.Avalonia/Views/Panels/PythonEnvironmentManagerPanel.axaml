@@ -5,7 +5,7 @@
              x:Class="CAP.Avalonia.Views.Panels.PythonEnvironmentManagerPanel"
              x:DataType="vm:PythonEnvironmentManagerViewModel">
 
-    <StackPanel>
+    <StackPanel x:Name="PanelRoot">
         <TextBlock Text="{loc:Localize PyEnvMgr.Title}" Foreground="LightSkyBlue"
                    Margin="0,0,0,5" FontWeight="SemiBold"/>
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"
@@ -82,8 +82,12 @@
             <ItemsControl ItemsSource="{Binding Interpreters}" x:Name="InterpretersList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
+                        <!-- Cap at PanelRoot's arranged width: the host's padded ScrollViewer measures
+                             this row ~48px too wide (Avalonia deflates Padding only at arrange), which
+                             pushed the action buttons past the viewport (issue #698). -->
                         <Border Background="#1e1e1e" BorderBrush="#3d3d3d" BorderThickness="1"
-                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4">
+                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4"
+                                MaxWidth="{Binding #PanelRoot.Bounds.Width}">
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                                 <!-- Interpreter info (not clickable — activation is an explicit button) -->
                                 <!-- ClipToBounds: an unbreakable long token (e.g. the path) must never
