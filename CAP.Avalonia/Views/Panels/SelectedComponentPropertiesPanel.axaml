@@ -82,6 +82,7 @@
                                            Minimum="{Binding Min}" Maximum="{Binding Max}"
                                            Increment="1" FormatString="F2"
                                            ShowButtonSpinner="False"
+                                           VerticalAlignment="Center"
                                            Margin="6,0,0,0"/>
                         </Grid>
                     </StackPanel>
