@@ -86,15 +86,18 @@
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                                 <!-- Interpreter info (not clickable — activation is an explicit button) -->
                                 <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border CornerRadius="3" Padding="4,1" Background="#333333"
+                                    <!-- Grid statt horizontaler StackPanel, damit der Text bei schmalem
+                                         Fenster umbricht statt die Buttons rechts herauszuschieben. -->
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" CornerRadius="3" Padding="4,1" Background="#333333"
+                                                VerticalAlignment="Top"
                                                 IsVisible="{Binding HasStatusBadge}">
                                             <TextBlock Text="{Binding StatusBadge}"
                                                        Foreground="{Binding StatusColor}" FontSize="10"/>
                                         </Border>
-                                        <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
+                                        <TextBlock Grid.Column="1" Margin="6,0,0,0" Text="{Binding DisplayText}" Foreground="LightGray"
                                                    FontSize="11" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    </Grid>
                                     <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
                                                TextWrapping="Wrap"/>
                                 </StackPanel>
