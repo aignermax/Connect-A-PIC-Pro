@@ -73,6 +73,16 @@ namespace UnitTests.ViewModels.Properties
             content.ShouldContain("{Binding Value, Mode=TwoWay}");
         }
 
+        [Fact]
+        public void PropertiesPanel_SliderNumericInput_HasNoSpinnerButtons()
+        {
+            // Issue #779: in the 80px editor column the Fluent spinner buttons
+            // covered the numeric value (e.g. directional-coupler coupling %).
+            // The slider provides stepping, so the NumericUpDown must stay a
+            // plain validated text input without spinner buttons.
+            PropertiesPanelAxaml.ShouldContain("ShowButtonSpinner=\"False\"");
+        }
+
         private static string FindRepoRoot()
         {
             var dir = new DirectoryInfo(AppContext.BaseDirectory);
