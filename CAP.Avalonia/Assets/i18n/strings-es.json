@@ -345,7 +345,7 @@
   "GdsFactoryExport.Description": "Exporta el diseño a un script de Python de gdsfactory, lo ejecuta para producir el GDS y abre el GDS. Donde estén disponibles se usan celdas reales de ubcpdk (SiEPIC); los demás componentes usan geometría de relleno. Si gdsfactory no está instalado, se configura automáticamente en un entorno gestionado.",
   "GdsFactoryExport.Heading": "🏭 Exportación de gdsfactory",
   "GdsFactoryExport.StubGeometry": "Geometría de relleno (sin celda ubcpdk):",
-  "GdsFactoryExport.Title": "Exportar — gdsfactory",
+  "GdsFactoryExport.Title": "Exportar — diseño completo (gdsfactory)",
   "Hierarchy.ComponentSettings": "Configuración del componente…",
   "Hierarchy.SMatrixOverrideTip": "Anulación de matriz S por instancia activa",
   "Hierarchy.Title": "Jerarquía",

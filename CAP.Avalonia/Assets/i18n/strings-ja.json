@@ -345,7 +345,7 @@
   "GdsFactoryExport.Description": "設計を gdsfactory Python スクリプトにエクスポートし、それを実行して GDS を生成し、GDS を開きます。利用可能な場合は実際の ubcpdk (SiEPIC) セルが使用され、その他のコンポーネントはスタブジオメトリを使用します。gdsfactory がインストールされていない場合は、マネージド環境に自動的にセットアップされます。",
   "GdsFactoryExport.Heading": "🏭 gdsfactory エクスポート",
   "GdsFactoryExport.StubGeometry": "スタブジオメトリ（ubcpdk セルなし）:",
-  "GdsFactoryExport.Title": "エクスポート — gdsfactory",
+  "GdsFactoryExport.Title": "エクスポート — 全体レイアウト（gdsfactory）",
   "Hierarchy.ComponentSettings": "コンポーネント設定…",
   "Hierarchy.SMatrixOverrideTip": "インスタンス単位の S-matrix 上書きが有効",
   "Hierarchy.Title": "階層",

@@ -89,6 +89,18 @@ public class MixedBackendGdsOrchestratorTests
         scripts.GdsFactoryScript.ShouldContain("c.add_ref(_nazca_partial)");
     }
 
+    [Fact]
+    public void BuildScripts_BothScriptsCarryDesignerWorkflowHeaders()
+    {
+        var scripts = BuildMixedScripts();
+
+        scripts.NazcaPartialScript.ShouldContain("part 1 of 2 (nazca)");
+        scripts.NazcaPartialScript.ShouldContain("chip1_nazca_partial.gds");
+        scripts.NazcaPartialScript.ShouldContain("chip1.py");
+        scripts.GdsFactoryScript.ShouldContain("part 2 of 2 (gdsfactory)");
+        scripts.GdsFactoryScript.ShouldContain("chip1_nazca_partial.py");
+    }
+
     private static MixedBackendScriptSet BuildMixedScripts() =>
         new MixedBackendGdsOrchestrator().BuildScripts(
             MixedCanvas(),

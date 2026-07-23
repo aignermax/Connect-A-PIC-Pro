@@ -99,7 +99,27 @@ public class MixedBackendGdsOrchestrator
             include: c => !IsNazcaNative(c),
             mergeGdsFileName: partialGdsFileName);
 
-        return new MixedBackendScriptSet(gdsFactoryScript, nazcaScript);
+        return new MixedBackendScriptSet(
+            DesignerHeader(mainScriptPath, isMain: true) + gdsFactoryScript,
+            DesignerHeader(mainScriptPath, isMain: false) + nazcaScript);
+    }
+
+    /// <summary>
+    /// Two scripts, one GDS: the header spells out the run order inside each file so
+    /// both stay editable and re-runnable outside Lunima — the same script-in-hand
+    /// workflow the single-file nazca export offers.
+    /// </summary>
+    private static string DesignerHeader(string mainScriptPath, bool isMain)
+    {
+        var mainName = Path.GetFileName(mainScriptPath);
+        var partialName = Path.GetFileName(PartialScriptPathFor(mainScriptPath));
+        var partialGds = Path.GetFileNameWithoutExtension(partialName) + ".gds";
+        var nl = Environment.NewLine;
+        return isMain
+            ? $"# Mixed-backend export — part 2 of 2 (gdsfactory).{nl}" +
+              $"# Run AFTER '{partialName}' — this merges '{partialGds}' (must sit next to this script).{nl}"
+            : $"# Mixed-backend export — part 1 of 2 (nazca).{nl}" +
+              $"# Run FIRST — this writes '{partialGds}' next to itself; then run '{mainName}'.{nl}";
     }
 
     /// <summary>Flattens the canvas to exportable components (groups recursed, analysis

@@ -345,7 +345,7 @@
   "GdsFactoryExport.Description": "将设计导出为 gdsfactory Python 脚本，运行它生成 GDS 并打开 GDS。在可用时使用真实的 ubcpdk (SiEPIC) 单元；其他组件使用占位几何。如果未安装 gdsfactory，将自动在受管环境中进行设置。",
   "GdsFactoryExport.Heading": "🏭 gdsfactory 导出",
   "GdsFactoryExport.StubGeometry": "占位几何（无 ubcpdk 单元）：",
-  "GdsFactoryExport.Title": "导出 — gdsfactory",
+  "GdsFactoryExport.Title": "导出 — 完整版图（gdsfactory）",
   "Hierarchy.ComponentSettings": "组件设置…",
   "Hierarchy.SMatrixOverrideTip": "已启用按实例的 S 矩阵覆盖",
   "Hierarchy.Title": "层级",

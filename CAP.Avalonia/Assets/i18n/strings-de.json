@@ -345,7 +345,7 @@
   "GdsFactoryExport.Description": "Exportiert das Design in ein gdsfactory-Python-Skript, führt es aus, um das GDS zu erzeugen, und öffnet das GDS. Wo verfügbar, werden echte ubcpdk-Zellen (SiEPIC) verwendet; andere Komponenten nutzen Stub-Geometrie. Falls gdsfactory nicht installiert ist, wird es automatisch in einer verwalteten Umgebung eingerichtet.",
   "GdsFactoryExport.Heading": "🏭 gdsfactory-Export",
   "GdsFactoryExport.StubGeometry": "Stub-Geometrie (keine ubcpdk-Zelle):",
-  "GdsFactoryExport.Title": "Export — gdsfactory",
+  "GdsFactoryExport.Title": "Export — Gesamtlayout (gdsfactory)",
   "Hierarchy.ComponentSettings": "Komponenteneinstellungen…",
   "Hierarchy.SMatrixOverrideTip": "Instanzspezifische S-Matrix-Überschreibung aktiv",
   "Hierarchy.Title": "Hierarchie",
