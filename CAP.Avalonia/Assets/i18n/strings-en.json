@@ -739,7 +739,6 @@
   "ProcessMgmt.Status.SavedToPdk": "Saved to {0}. Electrical routing now uses this process's metal cross-section.",
   "ProcessMgmt.Status.UnsupportedFile": "Unsupported PDK file: {0}",
   "ProcessSelection.Explanation": "A design is locked to one fabrication process — components from incompatible PDKs can't be mixed on the same chip. Choose Playground to prototype freely with any component (not manufacturable).",
-  "ProcessSelection.StartDesign": "Start design",
   "ProcessSelection.Title": "Choose fabrication process",
   "Properties.Dimensions": "Dimensions:",
   "Properties.EmptyState": "No component selected. Click a component on the canvas to see its properties here.",
