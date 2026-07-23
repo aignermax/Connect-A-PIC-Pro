@@ -7,11 +7,11 @@ namespace CAP.Avalonia.Services;
 
 /// <summary>
 /// Emits the klayout post-pass that upgrades SiEPIC stub boxes to real foundry
-/// geometry in the exported GDS (PR #780 field finding). The nazca script places
-/// stub cells (polygon boxes) so routing and positions work without any PDK
-/// install; after <c>nd.export_gds()</c> this block reopens the GDS, resolves each
-/// SiEPIC function in the EBeam* KLayout libraries — static library cell first,
-/// then PCell with the component's parameters, the same resolution
+/// geometry in the exported GDS. The nazca script places stub cells (polygon
+/// boxes) so routing and positions work without any PDK install; after
+/// <c>nd.export_gds()</c> this block reopens the GDS, resolves each SiEPIC
+/// function in the EBeam* KLayout libraries — static library cell first, then
+/// PCell with the component's parameters, the same resolution
 /// <c>scripts/render_component_preview.py</c> uses for the editor preview — and
 /// deep-copies the real geometry into the stub cell, keeping the cell name so
 /// placed instances stay put. Any failure (klayout or PDK missing, cell unknown)
@@ -27,7 +27,7 @@ public static class SiepicCellUpgradeWriter
     /// <param name="sb">The script under construction; the block runs after the
     /// footer's <c>nd.export_gds()</c>, which defines <c>gds_filename</c>.</param>
     /// <param name="canvas">The design canvas.</param>
-    /// <param name="include">Optional group filter of a partial export (#776).</param>
+    /// <param name="include">Optional group filter of a partial (mixed-backend) export.</param>
     public static void AppendUpgradeBlock(
         StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
     {

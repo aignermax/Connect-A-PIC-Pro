@@ -10,16 +10,15 @@ using Xunit;
 namespace UnitTests.Export;
 
 /// <summary>
-/// Repro for the PR #780 field finding: SiEPIC/nazca PDK components (ebeam_*) exported
-/// as stub boxes, not real foundry geometry. The editor preview renders the REAL cell
-/// via klayout (fixed-cell GDS / PCell from siepic_ebeam_pdk), while the nazca export
-/// emitted a single <c>nd.Polygon</c> rectangle per component. The fix adds a klayout
-/// post-pass to the generated script (<see cref="SiepicCellUpgradeWriter"/>) that swaps
-/// the stub cell content for the real cell — same name, so instances stay put.
-/// These tests run the generated script with the real managed env (siepic_ebeam_pdk
-/// present) and count polygons in the written GDS: the stub box is exactly 1 polygon,
-/// the real ebeam_dc_te1550 cell is more. The fallback test pins the contract that a
-/// non-resolvable cell keeps the stub and only warns on stderr.
+/// SiEPIC/nazca PDK components (ebeam_*) must export with real foundry geometry,
+/// not the stub box: the editor preview renders the real cell via klayout
+/// (fixed-cell GDS / PCell from siepic_ebeam_pdk), and the export's klayout
+/// post-pass (<see cref="SiepicCellUpgradeWriter"/>) swaps the stub cell content
+/// for that same cell — same name, so instances stay put. These tests run the
+/// generated script with a managed env (siepic_ebeam_pdk present) and count
+/// polygons in the written GDS: the stub box is exactly 1 polygon, the real
+/// ebeam_dc_te1550 cell is more. The fallback test pins the contract that an
+/// unresolvable cell keeps the stub and only warns on stderr.
 /// </summary>
 [Trait("Category", "Slow")]
 public class SiepicRealGeometryExportTests
@@ -48,8 +47,8 @@ public class SiepicRealGeometryExportTests
         var python = FindSiepicPython();
         Skip.If(python == null, "No Lunima managed env with siepic_ebeam_pdk (expected on CI).");
 
-        // The mixed-backend export (#776) renders its nazca-native group through the
-        // same stub machinery, so the merged GDS shows the same box for ebeam cells.
+        // The mixed-backend export renders its nazca-native group through the same
+        // stub machinery, so without the upgrade its merged GDS shows the same box.
         var script = new SimpleNazcaExporter().ExportPartial(
             EbeamCanvas(), _ => true, MixedBackendGdsOrchestrator.NazcaPartialTopCellName);
 
@@ -65,9 +64,8 @@ public class SiepicRealGeometryExportTests
         var python = FindSiepicPython();
         Skip.If(python == null, "No Lunima managed env with siepic_ebeam_pdk (expected on CI).");
 
-        // Field decision: a cell that resolves neither as fixed-cell nor PCell must
-        // never break the export — the stub box plus a stderr warning is the
-        // documented fallback.
+        // A cell that resolves neither as fixed-cell nor PCell must never break the
+        // export — the stub box plus a stderr warning is the documented fallback.
         var script = new SimpleNazcaExporter().Export(EbeamCanvas(funcName: "ebeam_does_not_exist_999"));
 
         var result = await ExportAndCountPolygonsAsync(python, script, "siepic_repro_fallback");
