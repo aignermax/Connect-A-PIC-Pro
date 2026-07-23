@@ -64,6 +64,35 @@ public class SimpleNazcaExporter
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Exports only the components matching <paramref name="include"/> — the nazca-native
+    /// group of a mixed-backend export (issue #776). Connections are NOT emitted: routed
+    /// waveguides are owned by the main gdsfactory script, which imports the partial GDS
+    /// this script renders and merges it into the final output. The top cell is named
+    /// <paramref name="topCellName"/> so it cannot collide with the gdsfactory design cell.
+    /// </summary>
+    /// <param name="canvas">The design canvas to export.</param>
+    /// <param name="include">Predicate selecting the components to render.</param>
+    /// <param name="topCellName">Name of the partial design's top cell.</param>
+    /// <param name="metalSpec">Metal routing parameters; null uses <see cref="MetalRoutingSpec.Default"/>.</param>
+    public string ExportPartial(
+        DesignCanvasViewModel canvas,
+        Func<Component, bool> include,
+        string topCellName,
+        MetalRoutingSpec? metalSpec = null)
+    {
+        var sb = new StringBuilder();
+        var metal = metalSpec ?? MetalRoutingSpec.Default;
+        var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+
+        AppendHeader(sb, interconnectSettings, metal);
+        AppendPdkComponentStubs(sb, canvas, include);
+        AppendComponents(sb, canvas, emitVerification: false, include, topCellName);
+        AppendFooter(sb);
+
+        return sb.ToString();
+    }
+
     private static void AppendHeader(StringBuilder sb, InterconnectSettings settings, MetalRoutingSpec metal)
     {
         var ci = CultureInfo.InvariantCulture;
@@ -92,7 +121,7 @@ public class SimpleNazcaExporter
     /// ComponentGroups are flattened — stubs are generated for all child components.
     /// </summary>
     private static void AppendPdkComponentStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas)
+        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
@@ -106,11 +135,13 @@ public class SimpleNazcaExporter
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
+                    if (include != null && !include(child)) continue;
                     AppendComponentStub(sb, child, generated, ci);
                 }
             }
             else
             {
+                if (include != null && !include(comp)) continue;
                 AppendComponentStub(sb, comp, generated, ci);
             }
         }
@@ -260,10 +291,11 @@ public class SimpleNazcaExporter
     }
 
     private static Dictionary<Component, string> AppendComponents(
-        StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false)
+        StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false,
+        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design")
     {
         sb.AppendLine("def create_design():");
-        sb.AppendLine("    with nd.Cell(name='ConnectAPIC_Design') as design:");
+        sb.AppendLine($"    with nd.Cell(name='{topCellName}') as design:");
         sb.AppendLine();
         sb.AppendLine("        # Components");
         var componentNames = new Dictionary<Component, string>();
@@ -285,11 +317,13 @@ public class SimpleNazcaExporter
                 {
                     if (child.IsAnalysisTool) continue;
                     if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
+                    if (include != null && !include(child)) continue;
                     AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
                 }
             }
             else
             {
+                if (include != null && !include(comp)) continue;
                 AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci);
             }
         }

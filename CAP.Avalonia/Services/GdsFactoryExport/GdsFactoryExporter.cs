@@ -27,16 +27,26 @@ public class GdsFactoryExporter
     /// connections are emitted as metal on that layer instead of as optical waveguides.
     /// Null uses <see cref="MetalRoutingSpec.Default"/>.
     /// </param>
+    /// <param name="include">
+    /// Optional component filter (mixed-backend export, issue #776): only matching components
+    /// are placed/stubbed; connections are always emitted (the gdsfactory script owns routing).
+    /// </param>
+    /// <param name="mergeGdsFileName">
+    /// Optional file name (relative to the script) of a nazca-rendered partial GDS to merge
+    /// into the design cell via <c>gf.import_gds()</c> before writing the output (issue #776).
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        MetalRoutingSpec? metalSpec = null)
+        MetalRoutingSpec? metalSpec = null,
+        Func<Component, bool>? include = null,
+        string? mergeGdsFileName = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
-        var mixedProcesses = CollectBackendConflicts(canvas, options);
-        AppendHeader(sb, canvas, options, mixedProcesses);
+        var mixedProcesses = CollectBackendConflicts(canvas, options, include);
+        AppendHeader(sb, canvas, options, mixedProcesses, include);
         GdsFactoryMetalTraceWriter.AppendHeaderConstants(sb, metal);
-        AppendStubs(sb, canvas, options);
+        AppendStubs(sb, canvas, options, include);
         var refIndex = 0;
         sb.AppendLine("c = gf.Component('ConnectAPIC_Design')");
         sb.AppendLine();
@@ -44,14 +54,34 @@ public class GdsFactoryExporter
         // Mixed-process export: track the currently active PDK so each placement can switch
         // to its own process before instantiating (null = single-backend, no switching).
         var activePdk = mixedProcesses.Count > 0 ? GdsFactoryPdkContext.GenericActivation : null;
-        foreach (var comp in EnumerateExportableComponents(canvas))
+        foreach (var comp in EnumerateExportableComponents(canvas, include))
             AppendPlacement(sb, comp, options, ref refIndex, ref activePdk);
         sb.AppendLine();
-        var routingOwner = SelectRoutingCrossSectionOwner(canvas, options);
+        var routingOwner = SelectRoutingCrossSectionOwner(canvas, options, include);
         AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
         AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal);
+        if (mergeGdsFileName != null)
+            AppendMixedBackendMerge(sb, mergeGdsFileName);
         AppendFooter(sb);
         return sb.ToString();
+    }
+
+    /// <summary>
+    /// Merges the nazca-rendered partial GDS into the design cell (issue #776). Both
+    /// exporters emit the same absolute Y-up micrometre coordinates (the shared
+    /// <see cref="NazcaCoordinateMapper"/> contract), so the imported cell is referenced
+    /// at the origin with no transform.
+    /// </summary>
+    private static void AppendMixedBackendMerge(StringBuilder sb, string mergeGdsFileName)
+    {
+        var escaped = mergeGdsFileName.Replace("'", "\\'");
+        sb.AppendLine("# Mixed-backend design (issue #776): merge the nazca-rendered partial GDS.");
+        sb.AppendLine("# Both renders share the same absolute coordinate contract, so no transform.");
+        sb.AppendLine("_nazca_partial_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), " +
+                      $"'{escaped}')");
+        sb.AppendLine("_nazca_partial = gf.import_gds(_nazca_partial_path)");
+        sb.AppendLine("c.add_ref(_nazca_partial)");
+        sb.AppendLine();
     }
 
     /// <summary>
@@ -86,8 +116,9 @@ public class GdsFactoryExporter
     /// must not silently flip every routed waveguide to another process' geometry.
     /// </summary>
     private static Component? SelectRoutingCrossSectionOwner(
-        DesignCanvasViewModel canvas, GdsFactoryExportOptions options) =>
-        EnumerateExportableComponents(canvas)
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        Func<Component, bool>? include = null) =>
+        EnumerateExportableComponents(canvas, include)
             .Where(c => !string.IsNullOrEmpty(c.GdsFactoryRoutingCrossSection))
             .GroupBy(c => GdsFactoryPdkContext.ActivationOf(c, options), StringComparer.Ordinal)
             .OrderByDescending(g => g.Count())
@@ -119,19 +150,21 @@ public class GdsFactoryExporter
     /// ubcpdk-mapped components; empty when the design is single-backend (#570 review).
     /// </summary>
     public static IReadOnlyList<string> CollectBackendConflicts(
-        DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+        DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        Func<Component, bool>? include = null)
     {
-        var modules = GdsFactoryModules(canvas).ToList();
+        var modules = GdsFactoryModules(canvas, include).ToList();
         var conflicts = new List<string>();
         if (modules.Count > 1)
             conflicts.AddRange(modules);
         else if (modules.Count == 1 &&
-                 EnumerateExportableComponents(canvas).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
+                 EnumerateExportableComponents(canvas, include).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
             conflicts.Add(modules[0] + " + ubcpdk cells");
         return conflicts;
     }
 
-    private static IEnumerable<Component> EnumerateExportableComponents(DesignCanvasViewModel canvas)
+    private static IEnumerable<Component> EnumerateExportableComponents(
+        DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
     {
         foreach (var compVm in canvas.Components)
         {
@@ -140,10 +173,10 @@ public class GdsFactoryExporter
             if (comp is ComponentGroup group)
             {
                 foreach (var child in group.GetAllComponentsRecursive())
-                    if (!child.IsAnalysisTool)
+                    if (!child.IsAnalysisTool && (include == null || include(child)))
                         yield return child;
             }
-            else
+            else if (include == null || include(comp))
             {
                 yield return comp;
             }
@@ -152,15 +185,15 @@ public class GdsFactoryExporter
 
     private static void AppendHeader(
         StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyList<string> mixedProcesses)
+        IReadOnlyList<string> mixedProcesses, Func<Component, bool>? include = null)
     {
         sb.AppendLine("import os");
         sb.AppendLine("import gdsfactory as gf");
 
-        var gdsfactoryModules = GdsFactoryModules(canvas).ToList();
+        var gdsfactoryModules = GdsFactoryModules(canvas, include).ToList();
         if (mixedProcesses.Count > 0)
         {
-            AppendMixedProcessHeader(sb, canvas, options, gdsfactoryModules, mixedProcesses);
+            AppendMixedProcessHeader(sb, canvas, options, gdsfactoryModules, mixedProcesses, include);
         }
         else if (gdsfactoryModules.Count > 0)
         {
@@ -199,7 +232,8 @@ public class GdsFactoryExporter
     /// </summary>
     private static void AppendMixedProcessHeader(
         StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        IReadOnlyList<string> gdsfactoryModules, IReadOnlyList<string> mixedProcesses)
+        IReadOnlyList<string> gdsfactoryModules, IReadOnlyList<string> mixedProcesses,
+        Func<Component, bool>? include = null)
     {
         sb.AppendLine();
         sb.AppendLine("# " + new string('=', 74));
@@ -209,7 +243,7 @@ public class GdsFactoryExporter
         sb.AppendLine("# " + new string('=', 74));
         foreach (var module in gdsfactoryModules)
             sb.AppendLine($"import {module}");
-        if (EnumerateExportableComponents(canvas).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
+        if (EnumerateExportableComponents(canvas, include).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
             sb.AppendLine("import ubcpdk");
         sb.AppendLine(GdsFactoryPdkContext.GenericActivation);
     }
@@ -244,10 +278,11 @@ public class GdsFactoryExporter
     }
 
     private static void AppendStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options)
+        StringBuilder sb, DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
+        Func<Component, bool>? include = null)
     {
         var generated = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var comp in EnumerateExportableComponents(canvas))
+        foreach (var comp in EnumerateExportableComponents(canvas, include))
         {
             // A real gdsfactory factory / ubcpdk cell replaces the stub.
             if (UsesGdsFactoryFactory(comp)
@@ -277,8 +312,9 @@ public class GdsFactoryExporter
     /// Distinct Python modules of the design's gdsfactory-backend components. Each is imported
     /// and PDK-activated in the header (#570).
     /// </summary>
-    private static IEnumerable<string> GdsFactoryModules(DesignCanvasViewModel canvas) =>
-        EnumerateExportableComponents(canvas)
+    private static IEnumerable<string> GdsFactoryModules(
+        DesignCanvasViewModel canvas, Func<Component, bool>? include = null) =>
+        EnumerateExportableComponents(canvas, include)
             .Select(c => GdsFactoryPdkContext.ModuleOf(c.GdsFactoryFunction))
             .Where(m => m != null)
             .Select(m => m!)

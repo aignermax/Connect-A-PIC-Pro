@@ -187,12 +187,15 @@ public class GdsFactoryExportViewModelTests
     }
 
     [Fact]
-    public async Task Export_MixedProcessDesign_WarnsLoudlyButStillExports()
+    public async Task Export_MixedBackendDesign_WarnsAndMergesInsteadOfRefusing()
     {
-        // Field decision (round 4): mixing processes no longer refuses the export. The GDS
-        // is still generated (for inspection in the Playground) and the user gets an
-        // unmissable warning in the dialog AND the Error Console that it is not fab-ready.
+        // Since #776 a design mixing a gdsfactory-native and a nazca-native component takes
+        // the two-script merge path: each backend renders its own group, the main gdsfactory
+        // script merges the nazca partial GDS, and the user gets a warning (dialog AND Error
+        // Console) that cross-process layer alignment must be verified before fabrication.
         var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        var partialPath = CAP.Avalonia.Services.GdsFactoryExport.MixedBackend
+            .MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
         try
         {
             var errorConsole = new CAP_Core.ErrorConsoleService();
@@ -205,23 +208,25 @@ public class GdsFactoryExportViewModelTests
             await vm.ExportCommand.ExecuteAsync(null);
 
             File.Exists(scriptPath).ShouldBeTrue();   // export ran instead of refusing
+            File.Exists(partialPath).ShouldBeTrue();  // nazca partial written next to it
             var script = await File.ReadAllTextAsync(scriptPath);
             script.ShouldContain("cspdk.sin300.PDK.activate()");
-            script.ShouldContain("ubcpdk.PDK.activate()");
+            script.ShouldContain("gf.import_gds");    // merges the nazca partial GDS
+            script.ShouldNotContain("ebeam_y_1550");  // nazca-native group left to nazca
             // The warning stays visible in the final dialog status, next to the result.
-            vm.StatusText.ShouldContain("NOT manufacturable");
-            vm.StatusText.ShouldContain("cspdk.sin300");
+            vm.StatusText.ShouldContain("merged into one GDS");
             vm.StatusText.ShouldContain("Exported");
             // Logged as a WARNING (not an error) in the Error Console.
             errorConsole.Entries.ShouldContain(e =>
                 e.Level == CAP_Contracts.Logger.LogLevel.Warn
-                && e.Message.Contains("mixes fabrication processes"));
+                && e.Message.Contains("mixes gdsfactory-native and nazca-native"));
             errorConsole.Entries.ShouldNotContain(e =>
                 e.Level == CAP_Contracts.Logger.LogLevel.Error);
         }
         finally
         {
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
         }
     }
 
