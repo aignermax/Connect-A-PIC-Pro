@@ -739,7 +739,6 @@
   "ProcessMgmt.Status.SavedToPdk": "Guardado en {0}. El enrutamiento eléctrico ahora usa la sección transversal metálica de este proceso.",
   "ProcessMgmt.Status.UnsupportedFile": "Archivo PDK no compatible: {0}",
   "ProcessSelection.Explanation": "Un diseño queda vinculado a un único proceso de fabricación: los componentes de PDKs incompatibles no pueden mezclarse en el mismo chip. Elija Playground para prototipar libremente con cualquier componente (no fabricable).",
-  "ProcessSelection.StartDesign": "Iniciar diseño",
   "ProcessSelection.Title": "Elegir proceso de fabricación",
   "Properties.Dimensions": "Dimensiones:",
   "Properties.EmptyState": "Ningún componente seleccionado. Haga clic en un componente del lienzo para ver aquí sus propiedades.",
