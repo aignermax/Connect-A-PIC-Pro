@@ -11,13 +11,13 @@ public class GdsFactoryExportFormat : IExportFormat
     private readonly AsyncRelayCommand _exportCommand;
 
     /// <inheritdoc/>
-    public string Name => "Whole layout → GDS (gdsfactory)";
+    public string Name => "Whole layout → GDS";
 
     /// <inheritdoc/>
     public string Icon => "🏭";
 
     /// <inheritdoc/>
-    public string Description => "One merged GDS for the whole design — gdsfactory-native, ubcpdk (SiEPIC) and nazca parts merged automatically; editable Python script(s)";
+    public string Description => "One merged GDS for the whole design — every component rendered by its own engine (gdsfactory, ubcpdk (SiEPIC), nazca) and merged automatically; editable Python script(s)";
 
     /// <inheritdoc/>
     public string Background => "#3d5d4d";

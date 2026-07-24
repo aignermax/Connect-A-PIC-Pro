@@ -70,6 +70,63 @@ public class MixedBackendMergeIntegrationTests
         }
     }
 
+    [SkippableFact]
+    public async Task AllNazcaDesign_RunBothScripts_MergedGdsHasRealDemofabGeometry()
+    {
+        // The whole-layout path must also work with an empty gdsfactory group: a pure
+        // demo-PDK design renders real demofab cells via the partial — no stubs.
+        var python = SiepicRealGeometryExportTests.FindSiepicPython();
+        Skip.If(python == null,
+            "No Python with klayout+siepic_ebeam_pdk+nazca+gdsfactory (expected on CI without the full env).");
+
+        var dir = Path.Combine(Path.GetTempPath(), "mixed_merge_" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        try
+        {
+            var canvas = new DesignCanvasViewModel();
+            var demo = TestComponentFactory.CreateBasicComponent();
+            demo.Identifier = "D1";
+            demo.NazcaFunctionName = "demo.mmi2x2_dp";
+            demo.WidthMicrometers = 12.5;
+            demo.HeightMicrometers = 7;
+            canvas.AddComponent(demo, "Demo MMI");
+
+            var mainPath = Path.Combine(dir, "chip.py");
+            var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(mainPath);
+            var scripts = new MixedBackendGdsOrchestrator().BuildScripts(
+                canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
+                metalSpec: null, Array.Empty<ComponentTemplate>(), mainPath);
+            await File.WriteAllTextAsync(partialPath, scripts.NazcaPartialScript);
+            await File.WriteAllTextAsync(mainPath, scripts.GdsFactoryScript);
+
+            var partial = await SiepicRealGeometryExportTests.RunPythonAsync(python, dir, partialPath);
+            partial.ExitCode.ShouldBe(0, $"nazca partial failed:\n{partial.StdOut}\n{partial.StdErr}");
+            var main = await SiepicRealGeometryExportTests.RunPythonAsync(python, dir, mainPath);
+            main.ExitCode.ShouldBe(0, $"gdsfactory main failed:\n{main.StdOut}\n{main.StdErr}");
+
+            var gdsPath = Path.ChangeExtension(mainPath, ".gds");
+            File.Exists(gdsPath).ShouldBeTrue("the main script did not write the merged GDS");
+
+            const string inspect =
+                "import sys, json, klayout.db as db\n" +
+                "ly = db.Layout()\n" +
+                "ly.read(sys.argv[1])\n" +
+                "counts = {c.name: sum(c.shapes(li).size() for li in ly.layer_indexes()) for c in ly.each_cell()}\n" +
+                "print(json.dumps(counts))";
+            var probe = await SiepicRealGeometryExportTests.RunPythonAsync(python, dir, "-c", inspect, gdsPath);
+            probe.ExitCode.ShouldBe(0, $"GDS inspection failed:\n{probe.StdErr}");
+            var counts = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(probe.StdOut.Trim())!;
+
+            counts.ShouldContainKey("mmi2x2_dp");
+            counts["mmi2x2_dp"].ShouldBeGreaterThan(1,
+                "the demofab MMI must render real geometry, not a stub box");
+        }
+        finally
+        {
+            try { Directory.Delete(dir, recursive: true); } catch { /* temp cleanup best effort */ }
+        }
+    }
+
     /// <summary>One gdsfactory-native built-in and one SiEPIC directional coupler.</summary>
     private static DesignCanvasViewModel MixedCanvas()
     {

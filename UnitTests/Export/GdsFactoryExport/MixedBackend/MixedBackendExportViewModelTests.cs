@@ -136,16 +136,17 @@ public class MixedBackendExportViewModelTests
     }
 
     [Fact]
-    public async Task Export_SingleBackendDesign_WritesNoPartialScript()
+    public async Task Export_SingleGdsFactoryBackendDesign_WritesNoPartialScript()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"gfmx-{Guid.NewGuid():N}.py");
         var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
         try
         {
             var canvas = new DesignCanvasViewModel();
-            var nazca = TestComponentFactory.CreateBasicComponent();
-            nazca.NazcaFunctionName = "ebeam_y_1550";
-            canvas.AddComponent(nazca, "Y-Branch");
+            var gf = TestComponentFactory.CreateBasicComponent();
+            gf.NazcaFunctionName = "";
+            gf.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+            canvas.AddComponent(gf, "SiN MMI");
             var service = new RecordingExportService();
             var vm = new GdsFactoryExportViewModel(canvas, service)
             {
@@ -155,7 +156,7 @@ public class MixedBackendExportViewModelTests
             await vm.ExportCommand.ExecuteAsync(null);
 
             File.Exists(scriptPath).ShouldBeTrue();
-            File.Exists(partialPath).ShouldBeFalse();
+            File.Exists(partialPath).ShouldBeFalse();   // single-backend gdsfactory: one-script path
             service.RunScripts.ShouldBe(new[] { scriptPath });
         }
         finally

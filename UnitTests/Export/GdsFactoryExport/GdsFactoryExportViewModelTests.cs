@@ -41,6 +41,17 @@ public class GdsFactoryExportViewModelTests
         return canvas;
     }
 
+    private static DesignCanvasViewModel CanvasWithGdsFactoryComponent(string gdsFactoryFunction)
+    {
+        var canvas = new DesignCanvasViewModel();
+        var component = TestComponentFactory.CreateBasicComponent();
+        component.Identifier = "C1";
+        component.NazcaFunctionName = "";
+        component.GdsFactoryFunction = gdsFactoryFunction;
+        canvas.AddComponent(component, gdsFactoryFunction);
+        return canvas;
+    }
+
     [Fact]
     public async Task Export_EmptyCanvas_ExplainsAndWritesNothing()
     {
@@ -70,11 +81,14 @@ public class GdsFactoryExportViewModelTests
     }
 
     [Fact]
-    public async Task Export_AlwaysWritesUbcPdkScript()
+    public async Task Export_UbcPdkMappableNazcaComponent_RendersViaNazcaPartialNotUbcPdk()
     {
-        // No geometry question anymore: the export always uses ubcpdk cells where available
-        // (stub fallback otherwise) and always attempts GDS generation.
+        // ubcpdk-mappable nazca components (ebeam_*) take the nazca partial — the real
+        // foundry cell from siepic_ebeam_pdk — not the ubcpdk substitute in the
+        // gdsfactory script.
         var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        var partialPath = CAP.Avalonia.Services.GdsFactoryExport.MixedBackend
+            .MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
         try
         {
             var vm = new GdsFactoryExportViewModel(CanvasWithComponent("ebeam_y_1550"), new GdsExportService())
@@ -85,12 +99,14 @@ public class GdsFactoryExportViewModelTests
             await vm.ExportCommand.ExecuteAsync(null);
 
             File.Exists(scriptPath).ShouldBeTrue();
-            var script = await File.ReadAllTextAsync(scriptPath);
-            script.ShouldContain("gf.get_component('ebeam_y_1550')");   // real ubcpdk cell used
+            File.Exists(partialPath).ShouldBeTrue();
+            (await File.ReadAllTextAsync(scriptPath)).ShouldNotContain("gf.get_component('ebeam_y_1550')");
+            (await File.ReadAllTextAsync(partialPath)).ShouldContain("ebeam_y_1550");
         }
         finally
         {
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
         }
     }
 
@@ -131,7 +147,7 @@ public class GdsFactoryExportViewModelTests
             // here we only assert the delegate is invoked, so a stub export service that always
             // reports the missing-module error drives the path deterministically.
             var vm = new GdsFactoryExportViewModel(
-                CanvasWithComponent("ebeam_y_1550"),
+                CanvasWithGdsFactoryComponent("cspdk.sin300.mmi1x2"),
                 new StubMissingGdsFactoryExportService())
             {
                 FileDialogService = new FixedPathFileDialog(scriptPath),
@@ -230,6 +246,70 @@ public class GdsFactoryExportViewModelTests
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
             if (File.Exists(partialPath)) File.Delete(partialPath);
         }
+    }
+
+    [Fact]
+    public async Task Export_AllNazcaDesign_TakesTwoScriptPathWithoutMergeNotice()
+    {
+        // An all-nazca design (e.g. a pure demo-PDK circuit) takes the two-script path so
+        // its components render with nazca instead of gdsfactory stubs. The merge notice
+        // stays away — nothing is mixed.
+        var canvas = new DesignCanvasViewModel();
+        var demo = TestComponentFactory.CreateBasicComponent();
+        demo.Identifier = "D1";
+        demo.NazcaFunctionName = "demo.mmi2x2_dp";
+        canvas.AddComponent(demo, "Demo MMI");
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        var partialPath = CAP.Avalonia.Services.GdsFactoryExport.MixedBackend
+            .MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                canvas, new StubSuccessExportService(), errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            File.Exists(scriptPath).ShouldBeTrue();
+            File.Exists(partialPath).ShouldBeTrue();   // two-script path even with an empty gf group
+            (await File.ReadAllTextAsync(partialPath)).ShouldContain("demo.mmi2x2_dp");
+            (await File.ReadAllTextAsync(scriptPath)).ShouldContain("gf.import_gds");
+            vm.StatusText.ShouldNotContain("merged into one GDS");
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
+        }
+    }
+
+    [Fact]
+    public void RefreshUnmappedComponents_DoesNotListPartialRenderedComponents()
+    {
+        // demo/demofab and SiEPIC components render real via the nazca partial — the
+        // stub-geometry warning must not list them; a bare gdsfactory name still stubs.
+        var canvas = new DesignCanvasViewModel();
+        var demo = TestComponentFactory.CreateBasicComponent();
+        demo.NazcaFunctionName = "demo.mmi2x2_dp";
+        canvas.AddComponent(demo, "Demo MMI");
+        var siepic = TestComponentFactory.CreateBasicComponent();
+        siepic.NazcaFunctionName = "ebeam_gc_te895";
+        siepic.NazcaModuleName = "siepic_ebeam_pdk";
+        canvas.AddComponent(siepic, "GC");
+        var bare = TestComponentFactory.CreateBasicComponent();
+        bare.NazcaFunctionName = "my_custom_cell";
+        canvas.AddComponent(bare, "Custom");
+
+        var vm = new GdsFactoryExportViewModel(canvas, new StubSuccessExportService());
+        vm.RefreshUnmappedComponents();
+
+        vm.UnmappedComponents.ShouldNotContain("demo.mmi2x2_dp");
+        vm.UnmappedComponents.ShouldNotContain("ebeam_gc_te895");
+        vm.UnmappedComponents.ShouldContain("my_custom_cell");
     }
 
     [Fact]

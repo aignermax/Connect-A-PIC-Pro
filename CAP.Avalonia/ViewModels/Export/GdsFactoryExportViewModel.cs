@@ -6,6 +6,7 @@ using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core;
+using CAP_Core.Components.Core;
 using CAP_Core.Export;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -13,11 +14,12 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.Export;
 
 /// <summary>
-/// ViewModel for the gdsfactory export dialog (#581/#643). The export "just works":
-/// it always uses real ubcpdk (SiEPIC) cells where a mapping exists and falls back to
-/// stub geometry otherwise (no geometry question), always generates the GDS and opens it,
-/// and — when gdsfactory is missing from the active interpreter — auto-installs it into a
-/// managed environment (creating one if needed) and retries.
+/// ViewModel for the whole-layout GDS export. Every component renders with its own
+/// engine — gdsfactory-native cells directly, nazca-native components via a nazca
+/// partial script that is run first and merged into the one output GDS (real
+/// foundry geometry where the PDK is installed, stub fallback otherwise). The GDS
+/// is always generated and opened; a missing gdsfactory is auto-installed into a
+/// managed environment and the export retried.
 /// </summary>
 public partial class GdsFactoryExportViewModel : ObservableObject
 {
@@ -78,14 +80,41 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Recomputes the pre-export info: components that fall back to stub geometry (no ubcpdk
-    /// cell). Called when the export dialog opens.
+    /// Recomputes the pre-export info: components that fall back to stub geometry (no real
+    /// cell on the path the design will take). Called when the export dialog opens.
     /// </summary>
     public void RefreshUnmappedComponents()
     {
         UnmappedComponents.Clear();
+        // nazca-native components render via the partial with a real cell whenever one
+        // exists (demofab, module call, or the siepic klayout upgrade) — those are not
+        // stubs and must not be listed.
+        var components = _canvas.Components
+            .SelectMany(vm => vm.Component is ComponentGroup group
+                ? group.GetAllComponentsRecursive()
+                : (IEnumerable<Component>)new[] { vm.Component })
+            .Where(c => !c.IsAnalysisTool)
+            .ToList();
         foreach (var name in GdsFactoryExporter.CollectUnmappedComponents(_canvas))
+        {
+            var comp = components.FirstOrDefault(c => c.NazcaFunctionName == name);
+            if (comp != null && RendersRealViaNazcaPartial(comp))
+                continue;
             UnmappedComponents.Add(name);
+        }
+    }
+
+    /// <summary>True when the nazca partial renders the component with a real cell:
+    /// a module.attr call (demofab or an installed PDK module — the same rule the stub
+    /// generator uses to decide a stub is needed at all), or a SiEPIC module resolved
+    /// by the klayout upgrade. Everything else genuinely falls back to a stub box.</summary>
+    private static bool RendersRealViaNazcaPartial(Component comp)
+    {
+        var funcName = comp.NazcaFunctionName ?? string.Empty;
+        if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        return funcName.Contains('.', StringComparison.Ordinal)
+            && !funcName.StartsWith("demo_pdk.", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Runs the export: file dialog → shadowing guard → script → optional GDS.</summary>
@@ -111,6 +140,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         // so cross-process layer alignment must still be verified before fabrication.
         var library = (TemplateLibraryProvider?.Invoke() ?? Enumerable.Empty<ComponentTemplate>()).ToList();
         var isMixedBackend = MixedBackendGdsOrchestrator.IsMixedBackendDesign(_canvas, library);
+        // The two-script path is taken whenever anything is nazca-native — even with an
+        // empty gdsfactory group — so nazca components always render with their own
+        // engine instead of falling back to gdsfactory stubs.
+        var hasNazcaNative = MixedBackendGdsOrchestrator.HasNazcaNativeComponents(_canvas, library);
 
         // A GDS is one fabrication process — but the Playground deliberately lets you place
         // components from different processes (e.g. CornerStone SiN + SiEPIC SOI) together.
@@ -155,7 +188,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        await RunExportAsync(filePath, mixedProcessWarning, isMixedBackend ? library : null);
+        await RunExportAsync(filePath, mixedProcessWarning, hasNazcaNative ? library : null);
     }
 
     /// <summary>

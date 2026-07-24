@@ -58,6 +58,56 @@ public class MixedBackendGdsOrchestratorTests
     }
 
     [Fact]
+    public void HasNazcaNativeComponents_AllNazcaCanvas_IsTrue()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var nazca = TestComponentFactory.CreateBasicComponent();
+        nazca.NazcaFunctionName = "ebeam_y_1550";
+        canvas.AddComponent(nazca, "Y-Branch");
+
+        MixedBackendGdsOrchestrator.HasNazcaNativeComponents(canvas, EmptyLibrary).ShouldBeTrue();
+        MixedBackendGdsOrchestrator.IsMixedBackendDesign(canvas, EmptyLibrary).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void HasNazcaNativeComponents_AllGdsFactoryCanvas_IsFalse()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var gf = TestComponentFactory.CreateBasicComponent();
+        gf.NazcaFunctionName = "";
+        gf.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(gf, "SiN MMI");
+
+        MixedBackendGdsOrchestrator.HasNazcaNativeComponents(canvas, EmptyLibrary).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void BuildScripts_AllNazcaDesign_MainScriptIsMergeOnly()
+    {
+        // An all-nazca design takes the two-script path with an empty gdsfactory group:
+        // every component lands in the partial, the main script only routes and merges.
+        var canvas = new DesignCanvasViewModel();
+        var demo = TestComponentFactory.CreateBasicComponent();
+        demo.Identifier = "D1";
+        demo.NazcaFunctionName = "demo.mmi2x2_dp";
+        canvas.AddComponent(demo, "Demo MMI");
+
+        var scripts = new MixedBackendGdsOrchestrator().BuildScripts(
+            canvas,
+            new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
+            metalSpec: null,
+            EmptyLibrary,
+            Path.Combine(Path.GetTempPath(), "chip1.py"));
+
+        scripts.NazcaPartialScript.ShouldContain("demo.mmi2x2_dp");
+        scripts.GdsFactoryScript.ShouldContain("gf.import_gds");
+        scripts.GdsFactoryScript.ShouldNotContain("demo.mmi2x2_dp");
+        // Not an actual backend mix — the header must not claim one.
+        scripts.NazcaPartialScript.ShouldContain("Two-script export");
+        scripts.NazcaPartialScript.ShouldNotContain("Mixed-backend");
+    }
+
+    [Fact]
     public void PartialScriptPathFor_AppendsSuffixNextToMainScript()
     {
         var main = Path.Combine(Path.GetTempPath(), "chip1.py");
