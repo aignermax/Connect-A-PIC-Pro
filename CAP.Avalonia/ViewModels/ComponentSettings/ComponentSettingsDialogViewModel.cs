@@ -60,7 +60,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IFdtdSMatrixService? fdtdService = null,
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
         INotificationService? notificationService = null,
-        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null)
+        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null,
+        Solvers.FdtdBackendSelectionViewModel? backendSelection = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -69,6 +70,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
         _dockerSetupDialog = dockerSetupDialog;
+        SetBackendSelection(backendSelection);
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),

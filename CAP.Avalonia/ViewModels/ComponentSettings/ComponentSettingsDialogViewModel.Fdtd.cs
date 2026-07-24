@@ -7,6 +7,7 @@ using CAP_DataAccess.Persistence.PIR;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Services.Solvers;
+using CAP.Avalonia.ViewModels.Solvers;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -15,8 +16,8 @@ namespace CAP.Avalonia.ViewModels.ComponentSettings;
 /// <summary>
 /// FDTD "Recalculate S-matrix" half of the dialog: instead of loading an
 /// S-matrix from a file, compute it from the component's geometry with the
-/// open-source Meep solver and feed the result through the same store-and-apply
-/// path the file import uses.
+/// selected FDTD backend (local Meep/Docker or the Tidy3D cloud) and feed the
+/// result through the same store-and-apply path the file import uses.
 /// </summary>
 public partial class ComponentSettingsDialogViewModel
 {
@@ -24,6 +25,13 @@ public partial class ComponentSettingsDialogViewModel
     private readonly Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? _fdtdRequestFactory;
     private readonly IDockerSetupDialogService? _dockerSetupDialog;
     private CancellationTokenSource? _recalcCts;
+
+    /// <summary>
+    /// Backend picker shared with other FDTD flows. Null when the dialog was
+    /// created with a single fixed service (tests / legacy wiring) — the picker
+    /// UI hides itself in that case.
+    /// </summary>
+    public FdtdBackendSelectionViewModel? BackendSelection { get; private set; }
 
     /// <summary>True while an FDTD recompute is running.</summary>
     [ObservableProperty]
@@ -41,26 +49,69 @@ public partial class ComponentSettingsDialogViewModel
     /// service + geometry factory present and a live component is configured).
     /// </summary>
     public bool CanRecalculate =>
-        _fdtdService != null && _fdtdRequestFactory != null && _liveComponent != null;
+        ActiveFdtdService != null && _fdtdRequestFactory != null && _liveComponent != null;
 
-    private bool CanRunRecalculate => CanRecalculate && !IsComputing && !IsImporting;
+    /// <summary>True when a backend picker is wired (drives the split-button ▼ part).</summary>
+    public bool HasBackendSelection => BackendSelection != null;
+
+    private bool CanRunRecalculate =>
+        CanRecalculate && !IsComputing && !IsImporting && !IsAwaitingCloudConfirmation
+        && BackendSelection?.IsCurrentBackendUnavailable != true;
+
+    /// <summary>The solver behind the current backend selection (or the fixed fallback service).</summary>
+    private IFdtdSMatrixService? ActiveFdtdService => BackendSelection?.CurrentService ?? _fdtdService;
+
+    /// <summary>Short backend label ("Meep", "Tidy3D Cloud") used in status texts and notes.</summary>
+    private string SolverLabel => BackendSelection?.CurrentSolverLabel
+        ?? FdtdBackendRegistry.SolverLabel(FdtdBackendType.MeepDocker);
+
+    /// <summary>Caption of the recompute button, naming the selected backend.</summary>
+    public string RecalculateButtonLabel => string.Format(
+        LocalizationService.Instance.Translate("CompSettings.RecalculateWithBackend"), SolverLabel);
+
+    private void SetBackendSelection(FdtdBackendSelectionViewModel? selection)
+    {
+        BackendSelection = selection;
+        if (selection == null)
+            return;
+        selection.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(FdtdBackendSelectionViewModel.IsCurrentBackendUnavailable))
+                RecalculateSMatrixCommand.NotifyCanExecuteChanged();
+            if (e.PropertyName is nameof(FdtdBackendSelectionViewModel.CurrentSolverLabel))
+                OnPropertyChanged(nameof(RecalculateButtonLabel));
+        };
+    }
+
+    /// <summary>
+    /// Probes the selected backend so a known-bad state (Docker down, no API key)
+    /// disables the run button and shows the hint before the user clicks.
+    /// </summary>
+    public async Task RefreshBackendAvailabilityAsync(CancellationToken ct = default)
+    {
+        if (BackendSelection != null)
+            await BackendSelection.CheckAvailabilityAsync(ct);
+    }
 
     partial void OnIsComputingChanged(bool value) => RecalculateSMatrixCommand.NotifyCanExecuteChanged();
 
     /// <summary>
     /// Cancels a running FDTD recompute. Called when the dialog is closed so the
-    /// solve (and its Docker container) doesn't keep running in the background.
+    /// solve (local container or cloud poll) doesn't keep running in the background.
     /// </summary>
     public void CancelRecalculate() => _recalcCts?.Cancel();
 
     /// <summary>
-    /// Recomputes this component's S-matrix from its geometry via FDTD and applies
-    /// it like an import. Surfaces the raw solver error on failure — no silent fallback.
+    /// Recomputes this component's S-matrix from its geometry via the selected FDTD
+    /// backend and applies it like an import. Backends that cost credits pause for
+    /// an explicit cost confirmation before submitting. Surfaces the raw solver
+    /// error on failure — no silent fallback.
     /// </summary>
     [RelayCommand(CanExecute = nameof(CanRunRecalculate))]
     private async Task RecalculateSMatrix()
     {
-        if (_fdtdService == null || _fdtdRequestFactory == null || _liveComponent == null || _storedSMatrices == null)
+        var service = ActiveFdtdService;
+        if (service == null || _fdtdRequestFactory == null || _liveComponent == null || _storedSMatrices == null)
         {
             // Trips only when the dialog was never Configure()d — never fail silently.
             SolverStatus = LocalizationService.Instance.Translate("CompSettings.FdtdNotAvailable");
@@ -72,23 +123,30 @@ public partial class ComponentSettingsDialogViewModel
 
         try
         {
-            // Fail fast with an actionable message if Docker isn't ready, before
-            // exporting geometry / building images.
+            // Fail fast with an actionable message if the backend isn't ready, before
+            // exporting geometry / building images / contacting the cloud.
             SolverStatus = LocalizationService.Instance.Translate("CompSettings.CheckingFdtd");
-            var availability = await _fdtdService.CheckAvailabilityAsync(_recalcCts.Token);
+            var availability = BackendSelection != null
+                ? await BackendSelection.CheckAvailabilityAsync(_recalcCts.Token)
+                : await service.CheckAvailabilityAsync(_recalcCts.Token);
             if (!availability.IsAvailable)
             {
                 SolverStatus = availability.Message;
+                // Cloud backends have no local guided setup — the amber hint under the
+                // button row (and its settings link) tells the user what to fix.
+                if (service is IFdtdCostEstimator || _dockerSetupDialog == null)
+                    return;
                 // Guided setup (issue #649): open the "Set up FDTD" dialog with
                 // platform-specific install/start guidance and a re-check button.
                 // Headless/test consumers without the dialog service keep the
                 // plain error-string behaviour above.
-                if (_dockerSetupDialog == null)
-                    return;
                 var ready = await _dockerSetupDialog.ShowAsync(
-                    availability, ct => _fdtdService.CheckAvailabilityAsync(ct));
+                    availability, ct => service.CheckAvailabilityAsync(ct));
                 if (!ready)
                     return;
+                // The guided dialog's re-check proved readiness — clear the failed
+                // probe state so the run button doesn't stay disabled.
+                BackendSelection?.ClearAvailabilityState();
                 SolverStatus = LocalizationService.Instance.Translate("CompSettings.DockerReady");
             }
 
@@ -112,55 +170,15 @@ public partial class ComponentSettingsDialogViewModel
                 return;
             }
 
-            var result = await RunWithLiveStatusAsync(request, _recalcCts.Token);
-
-            if (!result.Success)
+            // Cloud backends cost credits: estimate first and wait for an explicit
+            // confirmation. The solve continues via ConfirmCloudSubmitCommand.
+            if (service is IFdtdCostEstimator estimator)
             {
-                // A user cancel (typically closing the dialog mid-run) comes back as a
-                // failed result, not an OperationCanceledException. Closing a window is
-                // intentional, not an error, so stay quiet — don't open the error console.
-                if (_recalcCts?.IsCancellationRequested == true)
-                {
-                    SolverStatus = LocalizationService.Instance.Translate("CompSettings.RecomputeCancelled");
-                    NotifyCancelled();
-                    return;
-                }
-
-                SolverStatus = result.MissingDependency != null
-                    ? string.Format(
-                        LocalizationService.Instance.Translate("CompSettings.FdtdUnavailableDependency"),
-                        result.MissingDependency, result.Error)
-                    : string.Format(LocalizationService.Instance.Translate("CompSettings.FdtdFailed"), result.Error);
-                _errorConsole?.LogError($"FDTD recompute failed for '{_displayName}': {result.Error}\n{result.RawStderr}");
+                await PrepareCloudConfirmationAsync(estimator, request, _recalcCts.Token);
                 return;
             }
 
-            var note = $"FDTD Meep {(result.Is3D ? "3D" : "2D")}";
-            var data = FdtdSMatrixConverter.ToComponentSMatrixData(result, note);
-            _storedSMatrices[_smatrixKey] = data;
-
-            var applyResult = SMatrixOverrideApplicator.Apply(_liveComponent, data, _errorConsole);
-            var staleNm = FindStaleWavelengths(_liveComponent, data);
-            if (staleNm.Count > 0)
-            {
-                _errorConsole?.LogWarning(
-                    $"FDTD recompute for '{_displayName}' did not cover {staleNm.Count} previously defined " +
-                    $"wavelength(s): {FormatNm(staleNm)} — those entries keep their old (PDK-default) values.");
-            }
-
-            // Issue #580 E: when the instance geometry matches the template draft,
-            // the caller-provided sink promotes the result to the template-scoped
-            // (user-global) override so every instance of the type inherits it.
-            var propagated = _propagateToTemplate?.Invoke(data) == true;
-            SolverStatus = BuildSolverStatus(result, applyResult, propagated, staleNm);
-            StatusText = propagated
-                ? string.Format(LocalizationService.Instance.Translate("CompSettings.RecomputedPropagated"), note)
-                : string.Format(LocalizationService.Instance.Translate("CompSettings.Recomputed"), note);
-            _notificationService?.ShowSuccess(propagated
-                ? string.Format(
-                    LocalizationService.Instance.Translate("CompSettings.NotifyRecomputedPropagated"), _displayName, note)
-                : string.Format(
-                    LocalizationService.Instance.Translate("CompSettings.NotifyRecomputed"), _displayName, note));
+            await ExecuteSolveAsync(service, request, _recalcCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -182,15 +200,79 @@ public partial class ComponentSettingsDialogViewModel
     }
 
     /// <summary>
+    /// Runs the solver and applies the result to the stored/live S-matrices — the
+    /// shared tail of both the local path and the confirmed cloud path.
+    /// </summary>
+    private async Task ExecuteSolveAsync(
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct)
+    {
+        var result = await RunWithLiveStatusAsync(service, request, ct);
+
+        if (!result.Success)
+        {
+            // A user cancel (typically closing the dialog mid-run) comes back as a
+            // failed result, not an OperationCanceledException. Closing a window is
+            // intentional, not an error, so stay quiet — don't open the error console.
+            if (_recalcCts?.IsCancellationRequested == true)
+            {
+                SolverStatus = LocalizationService.Instance.Translate("CompSettings.RecomputeCancelled");
+                NotifyCancelled();
+                return;
+            }
+
+            SolverStatus = result.MissingDependency != null
+                ? string.Format(
+                    LocalizationService.Instance.Translate("CompSettings.FdtdUnavailableDependency"),
+                    result.MissingDependency, result.Error)
+                : string.Format(LocalizationService.Instance.Translate("CompSettings.FdtdFailed"), result.Error);
+            _errorConsole?.LogError($"FDTD recompute failed for '{_displayName}': {result.Error}\n{result.RawStderr}");
+            return;
+        }
+
+        var note = string.Format(
+            LocalizationService.Instance.Translate("CompSettings.FdtdProvenance"),
+            SolverLabel, result.Is3D ? "3D" : "2D");
+        var data = FdtdSMatrixConverter.ToComponentSMatrixData(result, note);
+        _storedSMatrices![_smatrixKey] = data;
+
+        var applyResult = SMatrixOverrideApplicator.Apply(_liveComponent!, data, _errorConsole);
+        var staleNm = FindStaleWavelengths(_liveComponent!, data);
+        if (staleNm.Count > 0)
+        {
+            _errorConsole?.LogWarning(
+                $"FDTD recompute for '{_displayName}' did not cover {staleNm.Count} previously defined " +
+                $"wavelength(s): {FormatNm(staleNm)} — those entries keep their old (PDK-default) values.");
+        }
+
+        // Issue #580 E: when the instance geometry matches the template draft,
+        // the caller-provided sink promotes the result to the template-scoped
+        // (user-global) override so every instance of the type inherits it.
+        var propagated = _propagateToTemplate?.Invoke(data) == true;
+        SolverStatus = BuildSolverStatus(result, applyResult, propagated, staleNm);
+        StatusText = propagated
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.RecomputedPropagated"), note)
+            : string.Format(LocalizationService.Instance.Translate("CompSettings.Recomputed"), note);
+        _notificationService?.ShowSuccess(propagated
+            ? string.Format(
+                LocalizationService.Instance.Translate("CompSettings.NotifyRecomputedPropagated"), _displayName, note)
+            : string.Format(
+                LocalizationService.Instance.Translate("CompSettings.NotifyRecomputed"), _displayName, note));
+    }
+
+    /// <summary>
     /// Runs the solver while keeping <see cref="SolverStatus"/> alive: a once-per-second
     /// elapsed-time heartbeat (so the long image build / FDTD run never looks frozen)
-    /// plus the latest progress line streamed from Meep.
+    /// plus the latest progress line streamed from the solver.
     /// </summary>
-    private async Task<FdtdSMatrixResult> RunWithLiveStatusAsync(FdtdSMatrixRequest request, CancellationToken ct)
+    private async Task<FdtdSMatrixResult> RunWithLiveStatusAsync(
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();
         string? lastLine = null;
-        var baseMsg = LocalizationService.Instance.Translate("CompSettings.FdtdRunBaseMessage");
+        var baseMsg = service is IFdtdCostEstimator
+            ? string.Format(
+                LocalizationService.Instance.Translate("CompSettings.FdtdRunBaseMessageCloud"), SolverLabel)
+            : LocalizationService.Instance.Translate("CompSettings.FdtdRunBaseMessage");
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) =>
@@ -207,7 +289,7 @@ public partial class ComponentSettingsDialogViewModel
         var progress = new Progress<string>(line => lastLine = Shorten(line));
         try
         {
-            return await _fdtdService!.SolveAsync(request, progress, ct);
+            return await service.SolveAsync(request, progress, ct);
         }
         finally
         {

@@ -5,6 +5,7 @@
         xmlns:vmUpdate="using:CAP.Avalonia.ViewModels.Update"
         xmlns:vmExport="using:CAP.Avalonia.ViewModels.Export"
         xmlns:vmAi="using:CAP.Avalonia.ViewModels.AI"
+        xmlns:vmSolvers="using:CAP.Avalonia.ViewModels.Solvers"
         xmlns:vmPyEnv="using:CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager"
         xmlns:panels="using:CAP.Avalonia.Views.Panels"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
@@ -214,6 +215,30 @@
                             <TextBlock Text="{Binding StatusText}"
                                        Foreground="Gray" FontSize="11"
                                        IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+
+                    <!-- Tidy3D Cloud — API key for the cloud FDTD S-matrix backend -->
+                    <DataTemplate DataType="{x:Type vmSolvers:Tidy3dSettingsViewModel}">
+                        <StackPanel Spacing="8">
+                            <TextBlock Text="{loc:Localize Settings.Tidy3d.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <TextBlock Text="{loc:Localize Settings.Tidy3d.Description}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+                            <TextBlock Text="{loc:Localize Settings.Tidy3d.ApiKey}" Foreground="Gray" FontSize="12" Margin="0,0,0,3"/>
+                            <TextBox Text="{Binding ApiKey}"
+                                     Watermark="{loc:Localize Settings.Tidy3d.ApiKeyWatermark}"
+                                     PasswordChar="•"/>
+
+                            <TextBlock Text="{Binding StatusText}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap"
+                                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                            <SelectableTextBlock Text="{loc:Localize Settings.Tidy3d.LinkText}"
+                                                 Foreground="#7faaff" FontSize="11" TextWrapping="Wrap"
+                                                 Margin="0,8,0,0"/>
+                            <TextBlock Text="{loc:Localize Settings.Tidy3d.PackageNote}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap"/>
                         </StackPanel>
                     </DataTemplate>
 

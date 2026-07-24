@@ -1,4 +1,5 @@
 using CAP.Avalonia.ViewModels.Settings;
+using CAP.Avalonia.ViewModels.Solvers;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace CAP.Avalonia.DI;
@@ -23,6 +24,8 @@ internal static class SettingsFeatureExtensions
         services.AddTransient<ISettingsPage, ChipSizeSettingsPage>();
         services.AddTransient<ISettingsPage, InterconnectSettingsPage>();
         services.AddTransient<ISettingsPage, AiAssistantSettingsPage>();
+        services.AddTransient<ISettingsPage, Tidy3dSettingsPage>();
+        services.AddTransient<Tidy3dSettingsViewModel>();
         services.AddTransient<InterconnectSettingsViewModel>();
         services.AddTransient<SettingsWindowViewModel>();
 

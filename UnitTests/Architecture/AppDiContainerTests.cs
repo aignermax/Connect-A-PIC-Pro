@@ -35,4 +35,23 @@ public class AppDiContainerTests
         sp.GetRequiredService<NazcaComponentPreviewService>().ShouldNotBeNull();
         sp.GetRequiredService<ComponentEditorFactory>().ShouldNotBeNull();
     }
+
+    [Fact]
+    public void Container_ResolvesFdtdBackendsAndRegistry()
+    {
+        var services = new ServiceCollection();
+        App.ConfigureServices(services);
+        using var sp = services.BuildServiceProvider();
+
+        // The NewComponent editor path keeps the local/free backend.
+        sp.GetRequiredService<IFdtdSMatrixService>()
+            .ShouldBeOfType<CAP.Avalonia.Services.Solvers.DockerFdtdSMatrixService>();
+        sp.GetRequiredService<CAP.Avalonia.Services.Solvers.Tidy3dSMatrixService>().ShouldNotBeNull();
+
+        var registry = sp.GetRequiredService<CAP.Avalonia.Services.Solvers.FdtdBackendRegistry>();
+        registry.GetService(FdtdBackendType.MeepDocker)
+            .ShouldBeOfType<CAP.Avalonia.Services.Solvers.DockerFdtdSMatrixService>();
+        registry.GetService(FdtdBackendType.Tidy3D)
+            .ShouldBeOfType<CAP.Avalonia.Services.Solvers.Tidy3dSMatrixService>();
+    }
 }

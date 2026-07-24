@@ -432,6 +432,18 @@ public class UserPreferences
     public string AiApiKey { get; set; } = "";
 
     /// <summary>
+    /// API key for the Tidy3D cloud solver (FDTD S-matrix backend).
+    /// Empty string means no key is configured.
+    /// </summary>
+    public string Tidy3dApiKey { get; set; } = "";
+
+    /// <summary>
+    /// Persisted FDTD S-matrix backend choice as an <c>FdtdBackendType</c> name
+    /// (e.g. "MeepDocker" or "Tidy3D"). Null/unknown falls back to Meep/Docker.
+    /// </summary>
+    public string? FdtdBackend { get; set; }
+
+    /// <summary>
     /// Default chip width in millimeters for new projects (default 5 mm).
     /// </summary>
     public double DefaultChipWidthMm { get; set; } = 5.0;

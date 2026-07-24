@@ -1232,6 +1232,18 @@ public partial class MainWindow : Window
         var notificationService = App.Services.GetService(typeof(INotificationService))
             as INotificationService;
 
+        // FDTD backend picker (Meep local / Tidy3D cloud): persisted choice, shared
+        // with other FDTD flows. Optional — the dialog falls back to the fixed
+        // service when the registry isn't wired.
+        CAP.Avalonia.ViewModels.Solvers.FdtdBackendSelectionViewModel? backendSelection = null;
+        if (App.Services.GetService(typeof(CAP.Avalonia.Services.Solvers.FdtdBackendRegistry))
+                is CAP.Avalonia.Services.Solvers.FdtdBackendRegistry fdtdBackendRegistry)
+        {
+            backendSelection = new CAP.Avalonia.ViewModels.Solvers.FdtdBackendSelectionViewModel(
+                fdtdBackendRegistry,
+                App.Services.GetService(typeof(IUrlLauncher)) as IUrlLauncher);
+        }
+
         var dialogVm = new ComponentSettingsDialogViewModel(
             new FileDialogService(this),
             errorConsole,
@@ -1240,7 +1252,8 @@ public partial class MainWindow : Window
             fdtdService: fdtdService,
             fdtdRequestFactory: fdtdRequestFactory,
             notificationService: notificationService,
-            dockerSetupDialog: dockerSetupDialog);
+            dockerSetupDialog: dockerSetupDialog,
+            backendSelection: backendSelection);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
@@ -1346,6 +1359,9 @@ public partial class MainWindow : Window
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         _openComponentSettingsDialogs[entityKey] = dialog;
         dialog.Closed += (_, _) => _openComponentSettingsDialogs.Remove(entityKey);
+        // Probe the selected backend upfront so a known-bad state (Docker down, no
+        // API key) disables the run button and shows the hint before the first click.
+        _ = dialogVm.RefreshBackendAvailabilityAsync();
         dialog.Show(this);
     }
 

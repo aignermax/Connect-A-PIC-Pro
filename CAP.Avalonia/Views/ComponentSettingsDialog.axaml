@@ -4,6 +4,7 @@
         xmlns:io="using:CAP.Avalonia.ViewModels.ComponentSettings.InstanceOverride"
         xmlns:behaviors="using:CAP.Avalonia.Behaviors"
         xmlns:services="using:CAP.Avalonia.Services"
+        xmlns:solvers="using:CAP.Avalonia.ViewModels.Solvers"
         xmlns:edit="using:AvaloniaEdit"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.ComponentSettingsDialog"
@@ -32,18 +33,128 @@
                        TextWrapping="Wrap"/>
         </Border>
 
-        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Spacing="8" Margin="0,4,0,0">
-            <Button Content="{loc:Localize ComponentSettings.LoadFromFile}"
-                    Command="{Binding LoadFromFileCommand}"
-                    Padding="12,2"
-                    Background="#3d5d3d"
-                    ToolTip.Tip="{loc:Localize ComponentSettings.LoadTip}"
-                    IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
-            <Button Content="{loc:Localize ComponentSettings.Recalculate}"
-                    Command="{Binding RecalculateSMatrixCommand}"
-                    Padding="12,2"
-                    Background="#3d4d6d"
-                    IsVisible="{Binding CanRecalculate}"/>
+        <StackPanel DockPanel.Dock="Bottom" Spacing="6" Margin="0,4,0,0">
+            <StackPanel Orientation="Horizontal" Spacing="8">
+                <Button Content="{loc:Localize ComponentSettings.LoadFromFile}"
+                        Command="{Binding LoadFromFileCommand}"
+                        Padding="12,2"
+                        Background="#3d5d3d"
+                        ToolTip.Tip="{loc:Localize ComponentSettings.LoadTip}"
+                        IsEnabled="{Binding IsImporting, Converter={x:Static BoolConverters.Not}}"/>
+                <!-- Split button: recalculate with the selected backend; ▼ picks the backend. -->
+                <StackPanel Orientation="Horizontal" Spacing="0" IsVisible="{Binding CanRecalculate}">
+                    <Button Content="{Binding RecalculateButtonLabel}"
+                            Command="{Binding RecalculateSMatrixCommand}"
+                            Padding="12,2"
+                            Background="#3d4d6d"/>
+                    <Button Content="▼"
+                            Padding="8,2"
+                            FontSize="9"
+                            Background="#2d3d5d"
+                            VerticalContentAlignment="Center"
+                            IsVisible="{Binding HasBackendSelection}"
+                            ToolTip.Tip="{loc:Localize CompSettings.BackendPickerTip}">
+                        <Button.IsEnabled>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="IsComputing" Converter="{x:Static BoolConverters.Not}"/>
+                                <Binding Path="IsAwaitingCloudConfirmation" Converter="{x:Static BoolConverters.Not}"/>
+                            </MultiBinding>
+                        </Button.IsEnabled>
+                        <Button.Flyout>
+                            <Flyout Placement="BottomEdgeAlignedLeft">
+                                <StackPanel MinWidth="280" Margin="6" Spacing="2">
+                                    <TextBlock Text="{loc:Localize CompSettings.ChooseFdtdBackend}"
+                                               Foreground="Gray" FontSize="11" Margin="0,0,0,6"/>
+                                    <ItemsControl ItemsSource="{Binding BackendSelection.BackendItems}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="solvers:FdtdBackendItemViewModel">
+                                                <Button HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Left"
+                                                        Margin="0,2" Padding="10,4"
+                                                        Background="#2b2b3d"
+                                                        Command="{Binding SelectCommand}">
+                                                    <Grid ColumnDefinitions="22,*">
+                                                        <TextBlock Grid.Column="0"
+                                                                   Text="{Binding SelectionMark}"
+                                                                   Foreground="#88ccaa"
+                                                                   FontSize="12"
+                                                                   VerticalAlignment="Top"
+                                                                   Margin="0,1,0,0"/>
+                                                        <StackPanel Grid.Column="1">
+                                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                                <TextBlock Text="{Binding Icon}" FontSize="13"/>
+                                                                <TextBlock Text="{Binding Name}"
+                                                                           Foreground="White"
+                                                                           FontWeight="SemiBold"
+                                                                           FontSize="12"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Description}"
+                                                                       Foreground="#aaaaaa"
+                                                                       FontSize="9"
+                                                                       TextWrapping="Wrap"
+                                                                       MaxWidth="230"/>
+                                                        </StackPanel>
+                                                    </Grid>
+                                                </Button>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </Flyout>
+                        </Button.Flyout>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Amber hint when the selected backend can't run yet (Docker down / no API key). -->
+            <Border Background="#26261a"
+                    BorderBrush="#5d5330"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,6"
+                    IsVisible="{Binding BackendSelection.HasAvailabilityHint, FallbackValue=False}">
+                <StackPanel Spacing="4"
+                            DataContext="{Binding BackendSelection}"
+                            x:DataType="solvers:FdtdBackendSelectionViewModel">
+                    <TextBlock Text="{Binding AvailabilityHint}"
+                               Foreground="#ccaa66"
+                               FontSize="10"
+                               TextWrapping="Wrap"/>
+                    <Button Content="{loc:Localize CompSettings.Tidy3dGetKeyLink}"
+                            Command="{Binding OpenTidy3dPortalCommand}"
+                            Padding="0"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Foreground="#7faaff"
+                            FontSize="10"
+                            HorizontalAlignment="Left"
+                            Cursor="Hand"
+                            IsVisible="{Binding ShowMissingKeyLink}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Cloud cost confirmation: Tidy3D runs consume credits, so nothing is
+                 submitted until the user reviews the estimate and confirms. -->
+            <Border Background="#26261a"
+                    BorderBrush="#5d5330"
+                    BorderThickness="1"
+                    CornerRadius="4"
+                    Padding="8,6"
+                    IsVisible="{Binding IsAwaitingCloudConfirmation}">
+                <StackPanel Spacing="6">
+                    <TextBlock Text="{Binding CloudCostText}"
+                               Foreground="#ddcc88" FontSize="11" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <Button Content="{loc:Localize CompSettings.CloudSubmit}"
+                                Command="{Binding ConfirmCloudSubmitCommand}"
+                                Padding="12,2" Background="#5d4330"/>
+                        <Button Content="{loc:Localize Common.Cancel}"
+                                Command="{Binding CancelCloudSubmitCommand}"
+                                Padding="12,2" Background="#3d3d3d"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </StackPanel>
 
         <Border DockPanel.Dock="Bottom"
