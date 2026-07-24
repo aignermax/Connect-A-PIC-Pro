@@ -5,27 +5,22 @@
              x:Class="CAP.Avalonia.Views.Panels.PythonEnvironmentManagerPanel"
              x:DataType="vm:PythonEnvironmentManagerViewModel">
 
-    <StackPanel>
+    <StackPanel x:Name="PanelRoot">
         <TextBlock Text="{loc:Localize PyEnvMgr.Title}" Foreground="LightSkyBlue"
                    Margin="0,0,0,5" FontWeight="SemiBold"/>
         <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"
                    Text="{loc:Localize PyEnvMgr.Description}"/>
 
-        <!-- Create new managed environment (installs Nazca + gdsfactory together, #645) -->
+        <!-- Create new managed environment (#645); the name is auto-generated from the version (#698). -->
         <TextBlock Text="{loc:Localize PyEnvMgr.CreateHeading}" Foreground="Gray" FontSize="10"
                    Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-            <TextBlock Text="{loc:Localize PyEnvMgr.Name}" Foreground="Gray" FontSize="11"
-                       VerticalAlignment="Center" Width="50"/>
-            <TextBox Text="{Binding NewEnvironmentName}"
-                     Width="150" FontSize="11" Watermark="{loc:Localize PyEnvMgr.NameWatermark}"/>
-        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <TextBlock Text="Python:" Foreground="Gray" FontSize="11"
                        VerticalAlignment="Center" Width="50"/>
             <ComboBox ItemsSource="{Binding PythonVersionChoices}"
                       SelectedItem="{Binding PythonVersion}"
-                      Width="90" FontSize="11"/>
+                      Width="90" FontSize="11"
+                      ToolTip.Tip="{loc:Localize PyEnvMgr.AutoNameTip}"/>
         </StackPanel>
         <Button Content="{loc:Localize PyEnvMgr.CreateInstall}"
                 Command="{Binding CreateAndInstallCommand}"
@@ -82,26 +77,36 @@
 
         <ScrollViewer MaxHeight="260" Margin="0,0,0,6"
                       VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
                       IsVisible="{Binding Interpreters.Count}">
             <ItemsControl ItemsSource="{Binding Interpreters}" x:Name="InterpretersList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
+                        <!-- Cap at PanelRoot's arranged width: the host's padded ScrollViewer measures
+                             this row ~48px too wide (Avalonia deflates Padding only at arrange), which
+                             pushed the action buttons past the viewport (issue #698). -->
                         <Border Background="#1e1e1e" BorderBrush="#3d3d3d" BorderThickness="1"
-                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4">
+                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4"
+                                MaxWidth="{Binding #PanelRoot.Bounds.Width}">
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                                 <!-- Interpreter info (not clickable — activation is an explicit button) -->
-                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border CornerRadius="3" Padding="4,1" Background="#333333"
+                                <!-- ClipToBounds: an unbreakable long token (e.g. the path) must never
+                                     paint over the action buttons — Grid cells do not clip by default. -->
+                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            ClipToBounds="True">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" CornerRadius="3" Padding="4,1" Background="#333333"
+                                                VerticalAlignment="Top" Margin="0,0,6,0"
                                                 IsVisible="{Binding HasStatusBadge}">
                                             <TextBlock Text="{Binding StatusBadge}"
                                                        Foreground="{Binding StatusColor}" FontSize="10"/>
                                         </Border>
-                                        <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
+                                        <TextBlock Grid.Column="1" Text="{Binding DisplayText}" Foreground="LightGray"
                                                    FontSize="11" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    </Grid>
                                     <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                               TextWrapping="Wrap"/>
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding Path}"/>
                                 </StackPanel>
 
                                 <!-- Currently active: static indicator -->

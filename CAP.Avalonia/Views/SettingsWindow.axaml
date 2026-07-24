@@ -57,7 +57,7 @@
         <Rectangle Grid.Column="1" Fill="#3d3d3d"/>
 
         <!-- Content area -->
-        <ScrollViewer Grid.Column="2" Padding="24,20">
+        <ScrollViewer Grid.Column="2" Padding="24,20" HorizontalScrollBarVisibility="Disabled">
             <ContentControl Content="{Binding SelectedPage.ViewModel}">
                 <ContentControl.DataTemplates>
 
