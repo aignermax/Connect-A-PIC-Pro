@@ -3,6 +3,7 @@ using global::Avalonia.Controls;
 using global::Avalonia.Controls.ApplicationLifetimes;
 using global::Avalonia.Layout;
 using global::Avalonia.Media;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.Services;
 
@@ -28,7 +29,7 @@ public class MessageBoxService : IMessageBoxService
         {
             Title = title,
             Width = 450,
-            Height = 180,
+            SizeToContent = SizeToContent.Height,
             WindowStartupLocation = WindowStartupLocation.CenterOwner,
             CanResize = false,
             Background = new SolidColorBrush(Color.Parse("#2d2d2d"))
@@ -53,33 +54,36 @@ public class MessageBoxService : IMessageBoxService
         var buttonPanel = new StackPanel
         {
             Orientation = Orientation.Horizontal,
-            HorizontalAlignment = HorizontalAlignment.Right,
+            HorizontalAlignment = HorizontalAlignment.Center,
             Spacing = 10
         };
 
         var saveButton = new Button
         {
-            Content = "Save",
-            Width = 90,
-            Height = 32,
+            Content = LocalizationService.Instance.Translate("Common.Save"),
+            MinWidth = 90,
+            MinHeight = 28,
+            Padding = new Thickness(12, 4),
             Background = new SolidColorBrush(Color.Parse("#0d6efd")),
             Foreground = Brushes.White
         };
 
         var dontSaveButton = new Button
         {
-            Content = "Don't Save",
-            Width = 90,
-            Height = 32,
+            Content = LocalizationService.Instance.Translate("Dialog.DontSave"),
+            MinWidth = 90,
+            MinHeight = 28,
+            Padding = new Thickness(12, 4),
             Background = new SolidColorBrush(Color.Parse("#6c757d")),
             Foreground = Brushes.White
         };
 
         var cancelButton = new Button
         {
-            Content = "Cancel",
-            Width = 90,
-            Height = 32,
+            Content = LocalizationService.Instance.Translate("Common.Cancel"),
+            MinWidth = 90,
+            MinHeight = 28,
+            Padding = new Thickness(12, 4),
             Background = new SolidColorBrush(Color.Parse("#3d3d3d")),
             Foreground = Brushes.White
         };

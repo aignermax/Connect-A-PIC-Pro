@@ -135,6 +135,73 @@ namespace UnitTests
         }
 
         /// <summary>
+        /// Creates a 250×250 µm component with four physical pins (two per side), mimicking
+        /// a directional coupler: west0/east0 in the upper row, west1/east1 in the lower row.
+        /// </summary>
+        public static Component CreateFourPinCouplerWithPhysicalPins(string idSuffix)
+        {
+            var component = CreateStraightWaveGuide();
+            component.Identifier = $"coupler_{idSuffix}";
+            component.WidthMicrometers = 250;
+            component.HeightMicrometers = 250;
+
+            AddPhysicalPin(component, "west0", 0, 80, 180);
+            AddPhysicalPin(component, "west1", 0, 180, 180);
+            AddPhysicalPin(component, "east0", 250, 80, 0);
+            AddPhysicalPin(component, "east1", 250, 180, 0);
+            return component;
+        }
+
+        /// <summary>
+        /// Creates a flat 4-pin coupler with the Cornerstone SiN "Coupler Straight" footprint:
+        /// 20 × 2.636 µm with two pins per side only 1.436 µm apart vertically
+        /// (west0/east0 upper row at y = 0.6, west1/east1 lower row at y = 2.036).
+        /// </summary>
+        public static Component CreateFlatCouplerWithPhysicalPins(string idSuffix)
+        {
+            var component = CreateStraightWaveGuide();
+            component.Identifier = $"flat_coupler_{idSuffix}";
+            component.WidthMicrometers = 20;
+            component.HeightMicrometers = 2.636;
+
+            AddPhysicalPin(component, "west0", 0, 0.6, 180);
+            AddPhysicalPin(component, "west1", 0, 2.036, 180);
+            AddPhysicalPin(component, "east0", 20, 0.6, 0);
+            AddPhysicalPin(component, "east1", 20, 2.036, 0);
+            return component;
+        }
+
+        /// <summary>
+        /// Creates a flat 2-pin straight with the Cornerstone SiN "Straight" footprint:
+        /// 10 × 1.2 µm with pins at mid-height (y = 0.6).
+        /// </summary>
+        public static Component CreateFlatStraightWithPhysicalPins(string idSuffix)
+        {
+            var component = CreateStraightWaveGuide();
+            component.Identifier = $"flat_straight_{idSuffix}";
+            component.WidthMicrometers = 10;
+            component.HeightMicrometers = 1.2;
+
+            AddPhysicalPin(component, "in", 0, 0.6, 180);
+            AddPhysicalPin(component, "out", 10, 0.6, 0);
+            return component;
+        }
+
+        /// <summary>Adds a physical pin at the given component-relative offset and angle.</summary>
+        private static void AddPhysicalPin(
+            Component component, string name, double offsetX, double offsetY, double angleDegrees)
+        {
+            component.PhysicalPins.Add(new PhysicalPin
+            {
+                Name = name,
+                ParentComponent = component,
+                OffsetXMicrometers = offsetX,
+                OffsetYMicrometers = offsetY,
+                AngleDegrees = angleDegrees,
+            });
+        }
+
+        /// <summary>
         /// Creates a basic component for testing (uses CreateStraightWaveGuide).
         /// </summary>
         public static Component CreateBasicComponent()

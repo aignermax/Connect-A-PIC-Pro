@@ -14,20 +14,32 @@ namespace UnitTests.Integration;
 /// <summary>
 /// Integration tests for NewProject workflow across ViewModels.
 /// Tests the complete flow from MainViewModel through FileOperationsViewModel.
+/// Uses an isolated temp preferences file so saves in these tests cannot
+/// pollute the developer's real settings (e.g. the recent-projects list).
 /// </summary>
-public class NewProjectIntegrationTests
+public class NewProjectIntegrationTests : IDisposable
 {
     private readonly SimulationService _simulationService;
     private readonly CommandManager _commandManager;
     private readonly UserPreferencesService _preferencesService;
     private readonly GroupLibraryManager _groupLibraryManager;
+    private readonly string _testPreferencesPath;
 
     public NewProjectIntegrationTests()
     {
         _simulationService = new SimulationService();
         _commandManager = new CommandManager();
-        _preferencesService = new UserPreferencesService();
+        _testPreferencesPath = Path.Combine(Path.GetTempPath(), $"test-newproject-prefs-{Guid.NewGuid()}.json");
+        _preferencesService = new UserPreferencesService(_testPreferencesPath);
         _groupLibraryManager = new GroupLibraryManager();
+    }
+
+    public void Dispose()
+    {
+        if (File.Exists(_testPreferencesPath))
+        {
+            File.Delete(_testPreferencesPath);
+        }
     }
 
     private MainViewModel CreateMainViewModel() =>

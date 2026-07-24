@@ -128,13 +128,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
     {
         UpdateGroupHover(canvasPoint, canvas);
         UpdateLaserIconHover(canvasPoint, canvas);
-        if (canvas.ShowPowerFlow)
-        {
-            var prev = _state.HoveredConnection;
-            _state.HoveredConnection = DesignCanvasHitTesting.HitTestConnection(canvasPoint, canvas);
-            if (_state.HoveredConnection != prev) _invalidate();
-        }
-        else _state.HoveredConnection = null;
+        // Connection hover (highlight + power-flow label) is owned by HoverHighlightGestureRecognizer.
     }
 
     /// <summary>Tracks hover over a laser on/off icon (#690) for highlight + hand cursor.</summary>

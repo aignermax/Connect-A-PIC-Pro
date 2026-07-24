@@ -56,7 +56,8 @@ public class EnvironmentHealthChecker
         }
 
         env.HasPyclipper = await CheckPyclipperAsync(pythonExe, ct);
-        env.GdsFactoryVersion = await ProbeGdsFactoryVersionAsync(pythonExe, ct);
+        env.GdsFactoryVersion = await ProbePackageVersionAsync(pythonExe, "gdsfactory", ct);
+        env.CspdkVersion = await ProbePackageVersionAsync(pythonExe, "cspdk", ct);
 
         env.Status = PythonEnvironmentStatus.Healthy;
         env.LastError = null;
@@ -72,17 +73,17 @@ public class EnvironmentHealthChecker
     }
 
     /// <summary>
-    /// Returns the installed gdsfactory version, or null when it is not importable.
-    /// gdsfactory is optional — its absence never marks the environment broken.
+    /// The installed version of <paramref name="module"/>, or null when it is not importable.
+    /// These packages are optional — their absence never marks the environment broken.
     /// </summary>
-    private async Task<string?> ProbeGdsFactoryVersionAsync(string pythonPath, CancellationToken ct)
+    private async Task<string?> ProbePackageVersionAsync(string pythonPath, string module, CancellationToken ct)
     {
         try
         {
             var (exitCode, output, _) = await UvBootstrapper.RunProcessAsync(
                 _launchFactory,
                 pythonPath,
-                new[] { "-c", "import gdsfactory; print(gdsfactory.__version__)" },
+                new[] { "-c", $"import {module}; print({module}.__version__)" },
                 ct,
                 timeoutMs: 30_000);
             return exitCode == 0 && !string.IsNullOrWhiteSpace(output) ? output.Trim() : null;

@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -20,7 +21,7 @@ public partial class PdkConsistencyViewModel : ObservableObject
 
     /// <summary>Status text shown below the Run button.</summary>
     [ObservableProperty]
-    private string _statusText = "Press 'Check PDKs' to validate loaded JSON PDK files.";
+    private string _statusText = LocalizationService.Instance.Translate("Diag.Pdk.Prompt");
 
     /// <summary>True when a check has been run and findings are available.</summary>
     [ObservableProperty]
@@ -48,7 +49,7 @@ public partial class PdkConsistencyViewModel : ObservableObject
     {
         Findings.Clear();
         HasFindings = false;
-        StatusText = "Running PDK consistency checks…";
+        StatusText = LocalizationService.Instance.Translate("Diag.Pdk.Running");
 
         try
         {
@@ -58,7 +59,7 @@ public partial class PdkConsistencyViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"Error: {ex.Message}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.ErrorFormat"), ex.Message);
         }
     }
 
@@ -69,7 +70,7 @@ public partial class PdkConsistencyViewModel : ObservableObject
         var pdkDir = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "PDKs");
         if (!Directory.Exists(pdkDir))
         {
-            StatusText = $"PDK directory not found: {pdkDir}";
+            StatusText = string.Format(LocalizationService.Instance.Translate("Diag.Pdk.DirNotFound"), pdkDir);
             return allFindings;
         }
 
@@ -87,7 +88,7 @@ public partial class PdkConsistencyViewModel : ObservableObject
                 {
                     ComponentName = Path.GetFileName(file),
                     FindingType = "LoadError",
-                    Message = $"Failed to load: {ex.Message}",
+                    Message = string.Format(LocalizationService.Instance.Translate("Diag.Pdk.LoadFailed"), ex.Message),
                     Severity = PdkFindingSeverity.Error
                 });
             }
@@ -113,7 +114,9 @@ public partial class PdkConsistencyViewModel : ObservableObject
                     _ => "LightGray"
                 },
                 DeviationText = f.DeviationMicrometers.HasValue
-                    ? $"Δ{f.DeviationMicrometers.Value.ToString("F3", CultureInfo.InvariantCulture)} µm"
+                    ? string.Format(
+                        LocalizationService.Instance.Translate("Diag.Pdk.DeviationFormat"),
+                        f.DeviationMicrometers.Value.ToString("F3", CultureInfo.InvariantCulture))
                     : ""
             });
         }
@@ -129,15 +132,16 @@ public partial class PdkConsistencyViewModel : ObservableObject
 
         if (findings.Count == 0)
         {
-            SummaryText = "All PDK definitions are consistent.";
-            StatusText = "No issues found.";
+            SummaryText = LocalizationService.Instance.Translate("Diag.Pdk.AllConsistent");
+            StatusText = LocalizationService.Instance.Translate("Diag.Pdk.NoIssues");
         }
         else
         {
-            SummaryText = $"{errors} error(s), {warnings} warning(s), {infos} info(s)";
+            SummaryText = string.Format(
+                LocalizationService.Instance.Translate("Diag.Pdk.SummaryFormat"), errors, warnings, infos);
             StatusText = errors > 0
-                ? "Issues found — see findings below."
-                : "Warnings found — review recommended.";
+                ? LocalizationService.Instance.Translate("Diag.Pdk.IssuesFound")
+                : LocalizationService.Instance.Translate("Diag.Pdk.WarningsFound");
         }
     }
 }

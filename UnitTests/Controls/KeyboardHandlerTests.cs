@@ -5,6 +5,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using Shouldly;
 using UnitTests.Helpers;
+using Xunit;
 
 namespace UnitTests.Controls;
 
@@ -12,6 +13,7 @@ namespace UnitTests.Controls;
 /// Unit tests for <see cref="KeyboardHandler"/>.
 /// Verifies that keyboard shortcuts dispatch to the correct ViewModel commands.
 /// </summary>
+[Trait("Category", "Slow")]
 public class KeyboardHandlerTests
 {
     private static KeyEventArgs MakeKey(Key key, KeyModifiers modifiers = KeyModifiers.None)

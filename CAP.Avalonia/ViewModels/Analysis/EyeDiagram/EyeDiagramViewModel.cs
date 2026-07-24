@@ -1,6 +1,8 @@
 using System.Globalization;
 using CAP_Core.Analysis.EyeDiagram;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP.Avalonia.Services.Localization;
+using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Canvas;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -60,6 +62,14 @@ public partial class EyeDiagramViewModel : ObservableObject
     /// <summary>File dialog service for CSV export. Set by MainViewModel.</summary>
     public Services.IFileDialogService? FileDialogService { get; set; }
 
+    /// <summary>
+    /// Callback that activates the canvas analysis-output picker (#754). Invoked when a
+    /// run is ambiguous (several possible outputs, none designated) or the designation
+    /// became invalid, so the user can pick instead of facing a modal dialog. Wired by
+    /// <c>MainViewModel</c>.
+    /// </summary>
+    public Action? RequestOutputPicker { get; set; }
+
     private readonly CAP_Core.ErrorConsoleService? _errorConsole;
     private DesignCanvasViewModel? _canvas;
     private EyeHistogram? _lastHistogram;
@@ -89,19 +99,26 @@ public partial class EyeDiagramViewModel : ObservableObject
     {
         if (_canvas == null || _canvas.Components.Count == 0)
         {
-            StatusText = "No circuit loaded.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Common.NoCircuit");
             return;
         }
         if (IsRunning) return;
 
+        // Resolve the analysis output BEFORE simulating (#754): an invalid designation
+        // aborts with a clear warning instead of silently guessing. Without a
+        // designation every off-laser coupler counts as an output (field wish, round 4
+        // final) — the eyedropper only restricts, so no picker mode is forced here.
+        var resolution = AnalysisOutputResolver.Resolve(_canvas!);
+        if (ReportInvalidDesignation(resolution)) return;
+
         IsRunning = true;
-        StatusText = "Running PRBS transient simulation…";
+        StatusText = LocalizationService.Instance.Translate("Analysis.Eye.RunningPrbs");
         MetricsText = "";
         _lastHistogram = null;
 
         try
         {
-            var outcome = await Task.Run(RunAnalysisCore);
+            var outcome = await Task.Run(() => RunAnalysisCore(resolution));
             if (outcome.Error != null || outcome.Histogram == null)
             {
                 // Expected "can't run" conditions (no light source / no output traces) are surfaced
@@ -115,10 +132,18 @@ public partial class EyeDiagramViewModel : ObservableObject
             OnPropertyChanged(nameof(HasResult));
             StatusText = outcome.Warning ?? "Done";
         }
+        catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+        {
+            // Physics-integrity abort (non-passive data, resonant loop, fabricated
+            // energy): render the structured diagnostics fully localized.
+            _errorConsole?.LogError($"Eye-diagram analysis blocked: {ex.Message}", ex);
+            StatusText = NonConvergentCircuitMessageFormatter.Format(ex);
+        }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Eye-diagram analysis failed: {ex.Message}", ex);
-            StatusText = $"Failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.Failed"), ex.Message);
         }
         finally
         {
@@ -142,17 +167,19 @@ public partial class EyeDiagramViewModel : ObservableObject
             }
             if (path == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled");
                 return;
             }
 
             await File.WriteAllTextAsync(path, _lastHistogram.ToCsv());
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Eye histogram export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
     }
 
@@ -162,10 +189,38 @@ public partial class EyeDiagramViewModel : ObservableObject
     private sealed record EyeRunOutcome(
         EyeHistogram? Histogram, EyeMetrics? Metrics, string? Error, string? Warning = null);
 
-    private EyeRunOutcome RunAnalysisCore()
+    /// <summary>
+    /// Surfaces an invalid designation (#754) as a status warning and activates the
+    /// picker. Returns true when the run must not proceed.
+    /// </summary>
+    private bool ReportInvalidDesignation(AnalysisOutputResolution resolution)
     {
-        var (simulator, ports) = TransientCircuitFactory.Create(_canvas!);
+        if (resolution.State == AnalysisOutputState.DesignatedMissing)
+        {
+            StatusText = LocalizationService.Instance.Translate("Analysis.Output.DesignatedMissing");
+            RequestOutputPicker?.Invoke();
+            return true;
+        }
+        if (resolution.State == AnalysisOutputState.DesignatedLaserOn)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Output.DesignatedLaserOn"),
+                resolution.Output!.Name);
+            return true;
+        }
+        return false;
+    }
+
+    private EyeRunOutcome RunAnalysisCore(AnalysisOutputResolution resolution)
+    {
+        // Tolerated measurement noise (≤ 0.5 % passivity excess in shipped measured
+        // data) surfaces as a console warning; the run continues (review finding [1]).
+        var (simulator, ports) = TransientCircuitFactory.Create(
+            _canvas!, warning => _errorConsole?.LogWarning(warning.ToMessage()));
         var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas!);
+        var designatedPinIds = resolution.State == AnalysisOutputState.DesignatedValid
+            ? AnalysisOutputResolver.CollectLightPinIds(resolution.Output!)
+            : null;
 
         double bitRateHz = BitRateGbps * GigabitsToBits;
         var sweepDef = TimeSignalDefinition.FromWavelengthSweep(CenterWavelengthNm, SpanNm, FreqPoints);
@@ -176,9 +231,13 @@ public partial class EyeDiagramViewModel : ObservableObject
         var timeDef = new TimeSignalDefinition(sweepDef.SampleRateHz, plan.TotalSamples);
 
         var signals = new Dictionary<Guid, double[]>();
+        double injectedPeakPower = 0;
         foreach (var used in ports.GetUsedExternalInputs())
         {
             double amplitude = Math.Sqrt(used.Input.InFlowPower.Magnitude);
+            // Peak intensity of the strongest input — the reference for the −60 dB
+            // no-signal gate in EyeTraceSelector (#762 review).
+            injectedPeakPower = Math.Max(injectedPeakPower, amplitude * amplitude);
             signals[used.AttachedComponentPinId] = PrbsGenerator.ToNrzSamples(bits, plan.SamplesPerBit, amplitude);
         }
         if (signals.Count == 0)
@@ -191,9 +250,12 @@ public partial class EyeDiagramViewModel : ObservableObject
             return new EyeRunOutcome(null, null,
                 "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
 
-        // Analyse the trace at a coupler whose laser is off (a true output, #690);
-        // fall back to the strongest trace (with a warning) for all-lasers-on designs.
-        var selection = EyeTraceSelector.Select(result, outputPinIds);
+        // Analyse the trace at the designated output coupler (#754) or, without a
+        // designation, at a coupler whose laser is off (a true output, #690); fall
+        // back to the strongest trace (with a warning) for all-lasers-on designs.
+        var selection = EyeTraceSelector.Select(result, outputPinIds, designatedPinIds,
+            hasMultipleCandidates: resolution.State == AnalysisOutputState.MultipleCandidates,
+            injectedPeakPower: injectedPeakPower);
         if (selection.Trace == null)
             return new EyeRunOutcome(null, null, selection.Error);
         var trace = selection.Trace;

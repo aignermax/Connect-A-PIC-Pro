@@ -8,12 +8,6 @@ using Xunit;
 
 namespace UnitTests.ViewModels;
 
-/// <summary>
-/// Covers <see cref="ProcessManagementViewModel.LoadForSinglePdkEdit"/>: the toolbar-wide
-/// "Fabrication Process" dialog is gone (issue #726 follow-up); each custom PDK now opens the
-/// same editor scoped to just that PDK's own process, and saving never touches
-/// <c>FileOperationsViewModel.ActiveProcess</c> — only the target PDK's JSON file.
-/// </summary>
 public class SinglePdkEditTests
 {
     [Fact]
@@ -132,13 +126,6 @@ public class SinglePdkEditTests
         }
     }
 
-    /// <summary>
-    /// Finding 0 (#733 review): SaveProcess used to filter rows by a NAME snapshot taken at
-    /// Load() time, so a row renamed afterwards — including every row added via "+ Layer"/
-    /// "+ Cross-section" (they start as NEW_LAYER/new_xs and are always renamed) — fell outside
-    /// that snapshot and was silently dropped on save. Ownership must be tracked by row
-    /// object identity, not by name, so a rename can never un-own a row.
-    /// </summary>
     [Fact]
     public async Task SaveProcess_AfterAddingAndRenamingRows_PersistsBothUnderTheirNewNames()
     {
@@ -176,12 +163,6 @@ public class SinglePdkEditTests
         }
     }
 
-    /// <summary>
-    /// Finding 3 (#733 review): LoadForSinglePdkEdit used to copy the draft's process rows by
-    /// reference into the editable collections, so every keystroke mutated the live in-memory
-    /// PDK immediately, even before Save. Closing the editor without saving must leave the
-    /// original draft untouched; only Save may write the edit back.
-    /// </summary>
     [Fact]
     public void LoadForSinglePdkEdit_EditingWithoutSave_DoesNotMutateTheLiveDraft()
     {
@@ -203,11 +184,6 @@ public class SinglePdkEditTests
             "editing the editor's copy must not mutate the live draft before Save");
     }
 
-    /// <summary>
-    /// Finding 4 (#733 review): SaveProcess rebuilt the process from the editable grids but never
-    /// wrote the edited <c>ProcessName</c> back onto it, so renaming the process in the editor was
-    /// silently discarded on save.
-    /// </summary>
     [Fact]
     public async Task SaveProcess_AfterRenamingTheProcess_PersistsTheNewName()
     {

@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.PdkResolution;
 using CAP_Core.Export.PdkResolution;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -17,6 +18,12 @@ public class PdkResolutionCheckViewModelTests : IDisposable
 
     public PdkResolutionCheckViewModelTests()
     {
+        // StatusText is localized via LocalizationService.Instance, so pin English to keep the
+        // status assertions below culture-independent regardless of the CI/dev OS language
+        // (the only test that live-switches the shared instance is isolated in the
+        // "LocalizationSingleton" collection, which disables cross-collection parallelization).
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
         _pdkDir = Path.Combine(Path.GetTempPath(), $"lunima_pdkcheck_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_pdkDir);
     }

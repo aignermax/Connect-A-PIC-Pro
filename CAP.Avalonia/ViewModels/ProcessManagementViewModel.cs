@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -84,7 +85,7 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Status / result message.</summary>
     [ObservableProperty]
-    private string _statusText = "No process loaded. Import a PDK (uPDK YAML or Nazca CSV) or start a new one.";
+    private string _statusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NoProcessLoaded");
 
     /// <summary>True once a process is loaded (drives the grids' visibility).</summary>
     [ObservableProperty]
@@ -165,8 +166,8 @@ public partial class ProcessManagementViewModel : ObservableObject
         Load(process);
         _memberDrafts = new List<PdkDraft> { draft };
         StatusText = draft.Process == null
-            ? $"'{draft.Name}' has no process yet. Add layers, cross-sections and materials, then Save."
-            : $"Editing the process of '{draft.Name}'. Adjust as needed, then Save to PDK.";
+            ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkNoProcessYet"), draft.Name)
+            : string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingProcess"), draft.Name);
     }
 
     /// <summary>
@@ -196,7 +197,8 @@ public partial class ProcessManagementViewModel : ObservableObject
 
         Load(value.Process ?? new ProcessDefinition { Name = value.Name });
         _memberDrafts = new List<PdkDraft> { value };
-        StatusText = $"Loaded '{value.Name}' as a starting process. Adjust as needed, then Save to PDK.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("ProcessMgmt.Status.LoadedPreset"), value.Name);
     }
 
     /// <summary>
@@ -247,7 +249,8 @@ public partial class ProcessManagementViewModel : ObservableObject
         var importer = _importers.FirstOrDefault(i => i.CanImport(path));
         if (importer == null)
         {
-            StatusText = $"Unsupported PDK file: {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.UnsupportedFile"), Path.GetFileName(path));
             return;
         }
 
@@ -255,13 +258,14 @@ public partial class ProcessManagementViewModel : ObservableObject
         {
             var process = importer.Import(path);
             Merge(process);
-            StatusText = $"Imported '{process.Name}' via {importer.FormatName}. Now: {Layers.Count} layers, " +
-                         $"{Xsections.Count} cross-sections, {Materials.Count} materials. " +
-                         "Tip: uPDK has cross-sections only — import the CSV tables too for the layer stack.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.Imported"),
+                process.Name, importer.FormatName, Layers.Count, Xsections.Count, Materials.Count);
         }
         catch (Exception ex)
         {
-            StatusText = $"Import failed ({importer.FormatName}): {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.ImportFailed"), importer.FormatName, ex.Message);
         }
     }
 
@@ -306,7 +310,7 @@ public partial class ProcessManagementViewModel : ObservableObject
             Name = "New process",
             Materials = ProcessMaterialDefaults.Soi(),
         });
-        StatusText = "New process started with public SOI material defaults. Add layers and cross-sections.";
+        StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NewProcessStarted");
     }
 
     /// <summary>Adds an empty layer row for manual entry.</summary>
@@ -359,7 +363,7 @@ public partial class ProcessManagementViewModel : ObservableObject
         Xsections.Add(metalXsection);
         _ownedRows.Add(metalXsection);
         HasProcess = true;
-        StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
+        StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.MetalXsectionAdded");
     }
 
     /// <summary>
@@ -384,13 +388,12 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         if (_memberDrafts.Count == 0)
         {
-            StatusText = "Nothing to save — this process has no editable member PDK (Playground or import-only).";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NothingToSave");
             return;
         }
         if (_memberDrafts.Count > 1)
         {
-            StatusText = "This process merges several PDKs; pick which one owns the edit by saving to that PDK "
-                       + "directly (multi-PDK target selection is not implemented yet).";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.MultiPdkNotSupported");
             return;
         }
 
@@ -398,7 +401,8 @@ public partial class ProcessManagementViewModel : ObservableObject
         var path = PdkFilePathResolver?.Invoke(draft.Name);
         if (string.IsNullOrEmpty(path))
         {
-            StatusText = $"Could not locate the PDK file for '{draft.Name}' — save unavailable.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkFileNotFound"), draft.Name);
             return;
         }
 
@@ -407,7 +411,7 @@ public partial class ProcessManagementViewModel : ObservableObject
         // own rows are written regardless; the prompt makes the file target explicit.
         if (ConfirmSaveToPdk != null && !await ConfirmSaveToPdk(path))
         {
-            StatusText = "Save cancelled — the PDK file was not changed.";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveCancelled");
             return;
         }
 
@@ -427,12 +431,14 @@ public partial class ProcessManagementViewModel : ObservableObject
             draft.Process = process;
 
             _pdkSaver.SaveToFile(draft, path);
-            StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SavedToPdk"), Path.GetFileName(path));
             ProcessSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
-            StatusText = $"Save failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveFailed"), ex.Message);
         }
     }
 

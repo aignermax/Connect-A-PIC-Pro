@@ -6,15 +6,8 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
-/// <summary>
-/// "New Component" assistant entry points for <see cref="LeftPanelViewModel"/> — opening it for a
-/// brand-new component (issue #656) and opening it prefilled to edit an existing custom one
-/// (issue #656 follow-up, task 6). Split out purely to keep <c>LeftPanelViewModel.cs</c> under
-/// the project's line-count limit; still one partial class, one cohesive feature area.
-/// </summary>
 public partial class LeftPanelViewModel
 {
-    /// <summary>Opens the "New Component" window (issue #656); see <see cref="NewComponentWindowLauncher"/>.</summary>
     [RelayCommand]
     private async Task OpenNewComponent()
     {
@@ -23,36 +16,136 @@ public partial class LeftPanelViewModel
         await ShowNewComponentWindowAsync(NewComponentWindowLauncher.BuildViewModel(_addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent));
     }
 
-    /// <summary>Registers a saved custom component into the library; see <see cref="CustomComponentLibraryRegistrar"/>.</summary>
-    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath) =>
+    /// <summary>
+    /// Raised with the fresh template after a saved definition replaced its library template.
+    /// Wired to <see cref="FileOperationsViewModel.RefreshInstancesFromTemplate"/> so the saved
+    /// S-matrix takes effect type-wide, including already-placed instances.
+    /// </summary>
+    public Action<ComponentTemplate>? TemplateDefinitionSaved { get; set; }
+
+    public void RegisterSavedCustomComponent(PdkComponentDraft draft, string pdkName, string filePath, bool savedViaBundledFork = false)
+    {
+        // A fork-on-save file is the user's copy of the whole bundled PDK and replaces (shadows)
+        // the bundled entry. Only the explicit fork flow may shadow — a save that merely SHARES
+        // a bundled PDK's name must not.
+        if (savedViaBundledFork && TryShadowBundledPdkWithSavedFork(pdkName, filePath))
+        {
+            NotifyTemplateDefinitionSaved(pdkName, draft.Name);
+            return;
+        }
+
+        // Defensive guard: never register a second library entry under a loaded bundled PDK's
+        // name — the UI blocks creating such PDKs, so reaching this means a stale/foreign file.
+        if (PdkManager.LoadedPdks.Any(p => p.IsBundled && p.Name.Equals(pdkName, StringComparison.OrdinalIgnoreCase)))
+        {
+            _errorConsole?.LogError(
+                $"Component '{draft.Name}' was saved to '{filePath}', but PDK '{pdkName}' collides with a " +
+                "built-in PDK's name and was not added to the library. Rename the PDK and save again.");
+            return;
+        }
+
         CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
+        NotifyTemplateDefinitionSaved(pdkName, draft.Name);
+    }
 
-    /// <summary>
-    /// True when <paramref name="template"/> belongs to a currently-loaded, non-bundled PDK —
-    /// the only components the "New Component" assistant is allowed to edit in place. Foundry
-    /// (bundled) PDKs are read-only, so a template whose <see cref="ComponentTemplate.PdkSource"/>
-    /// resolves to a bundled entry (or to none at all — e.g. a stale reference) is not editable.
-    /// Re-derives the answer from the live <see cref="PdkManager"/> registry rather than trusting
-    /// <see cref="ComponentTemplate.IsCustom"/> alone, so it stays correct even if that flag was
-    /// never set (defensive default).
-    /// </summary>
+    private void NotifyTemplateDefinitionSaved(string pdkName, string componentName)
+    {
+        if (TemplateDefinitionSaved is null)
+            return;
+        var fresh = AllTemplates.FirstOrDefault(t =>
+            string.Equals(t.PdkSource, pdkName, StringComparison.OrdinalIgnoreCase)
+            && string.Equals(t.Name, componentName, StringComparison.OrdinalIgnoreCase));
+        if (fresh != null)
+            TemplateDefinitionSaved(fresh);
+    }
+
+    internal void RemoveMigratedLibraryTemplate(string oldPdkName, string componentName)
+    {
+        var stale = AllTemplates.FirstOrDefault(t =>
+            t.PdkSource == oldPdkName &&
+            string.Equals(t.Name, componentName, System.StringComparison.OrdinalIgnoreCase));
+        if (stale is null)
+            return;
+
+        AllTemplates.Remove(stale);
+        if (!AllTemplates.Any(t => t.Category == stale.Category))
+            Categories.Remove(stale.Category);
+
+        var oldPdk = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == oldPdkName);
+        if (oldPdk?.FilePath is { } path)
+        {
+            var normalized = Path.GetFullPath(path);
+            _loadedPdkDrafts
+                .FirstOrDefault(d => d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized)
+                ?.Components.RemoveAll(c => string.Equals(c.Name, componentName, System.StringComparison.OrdinalIgnoreCase));
+        }
+
+        FilterComponents();
+    }
+
     public bool CanEditTemplate(ComponentTemplate template) =>
-        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false };
+        PdkManager.LoadedPdks.Any(p => p.Name == template.PdkSource);
 
     /// <summary>
-    /// Opens the "New Component" assistant prefilled to edit an existing custom component
-    /// (issue #656 follow-up, task 6). No-ops for a bundled/Foundry template — see
-    /// <see cref="CanEditTemplate"/> — since those are read-only.
+    /// Whether the ✕ (delete / Restore Original) applies: the PDK must be a loaded non-bundled
+    /// PDK AND the component must diverge from the bundled original — on a fork, untouched
+    /// components have nothing to delete or restore.
     /// </summary>
+    public bool CanDeleteTemplate(ComponentTemplate template) =>
+        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false }
+        && ComponentDivergesFromBundledOriginal(template);
+
     [RelayCommand]
     private async Task EditCustomComponent(ComponentTemplate? template)
     {
         if (template is null || !CanEditTemplate(template)) return;
         if (ShowNewComponentWindowAsync is null || _addCustomComponentDeps is null) return;
 
+        var pdkInfo = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource);
+
         var vm = NewComponentWindowLauncher.BuildViewModel(
-            _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(), RegisterSavedCustomComponent);
-        vm.LoadForEdit(template);
+            _addCustomComponentDeps, _pdkLoader, GetLoadedPdkDrafts(),
+            RegisterSavedCustomComponent, RemoveMigratedLibraryTemplate);
+
+        // A bundled component opens with a DEFERRED fork: nothing is written to disk until
+        // "Save changes" creates the user's copy of the PDK; closing without saving leaves no trace.
+        var loaded = pdkInfo is { IsBundled: true, FilePath: not null }
+            ? vm.LoadForEditBundled(template, pdkInfo.FilePath, ResolvePdkProcess(pdkInfo))
+            : vm.LoadForEdit(template);
+        if (!loaded)
+        {
+            // Never show a half-initialized window — surface LoadForEdit's reason instead.
+            _errorConsole?.LogError($"Cannot edit component '{template.Name}': {vm.StatusText}");
+            UpdateStatus?.Invoke(vm.StatusText);
+            return;
+        }
         await ShowNewComponentWindowAsync(vm);
+    }
+
+    /// <summary>
+    /// The fabrication process a PDK declares — from the loaded draft when available,
+    /// otherwise read from its file.
+    /// </summary>
+    private ProcessDefinition? ResolvePdkProcess(PdkInfoViewModel pdkInfo)
+    {
+        if (pdkInfo.FilePath is null)
+            return null;
+
+        var normalized = Path.GetFullPath(pdkInfo.FilePath);
+        var draft = _loadedPdkDrafts.FirstOrDefault(d =>
+            d.FilePath != null && Path.GetFullPath(d.FilePath) == normalized);
+        if (draft?.Process is { } process)
+            return process;
+
+        try
+        {
+            return _pdkLoader.LoadFromFile(pdkInfo.FilePath).Process;
+        }
+        catch (Exception ex)
+        {
+            // An unreadable file is NOT "declares no fabrication process" — log the real cause.
+            _errorConsole?.LogError($"Could not read PDK '{pdkInfo.Name}' at '{pdkInfo.FilePath}': {ex.Message}", ex);
+            return null;
+        }
     }
 }

@@ -118,6 +118,36 @@ public class AiGridServiceTests
         result.ShouldContain("\"connections\"");
     }
 
+    /// <summary>
+    /// Review Finding [5] (placement-livemembers): CheckProcess used to re-invoke the
+    /// GetLiveMemberPdkNames / GetProcessAgnosticPdkNames callbacks per template, making
+    /// GetAvailableComponentTypes O(Templates x PDKs) — the guard inputs must be resolved
+    /// once per public entry point and reused across the loop.
+    /// </summary>
+    [Fact]
+    public void GetAvailableComponentTypes_ResolvesProcessGuardOncePerCall_NotPerTemplate()
+    {
+        for (var i = 0; i < 5; i++)
+            _leftPanel.AllTemplates.Add(new ComponentTemplate { Name = $"T{i}", Category = "Test", PdkSource = "MyLib" });
+
+        var liveCalls = 0;
+        var agnosticCalls = 0;
+        _svc.PlacementContext = new CAP_Core.Components.Process.PlacementPolicyContext(
+            getActiveProcess: () => CAP_Core.Components.Process.ActiveProcessSelection.ForGroup(
+                new CAP_Core.Components.Process.ProcessGroup(
+                    "SOI 220", new CAP_Core.Components.Process.ProcessFingerprint("Si", 220, "SiO2", 1550, "SOI 220"),
+                    new[] { "Demo" })),
+            getProcessAgnosticPdkNames: () => { agnosticCalls++; return Array.Empty<string>(); },
+            resolveComponentPdkSource: _ => null,
+            resolveLiveMemberPdkNames: () => { liveCalls++; return new[] { "MyLib" }; });
+
+        var types = _svc.GetAvailableComponentTypes();
+
+        types.Count.ShouldBe(5, "all templates are live members and must pass the guard");
+        liveCalls.ShouldBe(1, "the live member set must be resolved once per call, not per template");
+        agnosticCalls.ShouldBe(1, "the agnostic set must be resolved once per call, not per template");
+    }
+
     [Fact]
     public void ClearGrid_EmptyCanvas_ReportsZeroRemovedComponents()
     {

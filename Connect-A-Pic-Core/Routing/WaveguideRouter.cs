@@ -7,12 +7,25 @@ namespace CAP_Core.Routing;
 /// Routes waveguides between physical pins, generating path segments.
 /// Uses A* pathfinding with Manhattan fallback.
 /// </summary>
-public class WaveguideRouter
+public partial class WaveguideRouter
 {
     /// <summary>
-    /// Minimum bend radius in micrometers. Violating this causes high loss.
+    /// The connection's minimum bend radius in micrometers. Violating this causes high loss.
     /// </summary>
     public double MinBendRadiusMicrometers { get; set; } = 10.0;
+
+    /// <summary>
+    /// Bend-radius floor (µm) imposed by the active fabrication process
+    /// (<c>WaveguideBendRadiusResolver</c>). <see cref="Route"/> first attempts the larger of
+    /// this floor and <see cref="MinBendRadiusMicrometers"/>; when no clean path exists at the
+    /// floor it retries at the connection radius and marks the result with
+    /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/> so the design checks surface the
+    /// violation. 0 means no process constraint.
+    /// </summary>
+    public double ProcessMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>Tolerance (µm) below which two bend radii count as equal.</summary>
+    private const double RadiusToleranceMicrometers = 1e-6;
 
     /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
@@ -166,9 +179,13 @@ public class WaveguideRouter
 
     /// <summary>
     /// Routes a waveguide between two pins using two-phase A* pathfinding.
-    /// Phase 1 uses a limited node budget for fast results.
-    /// Phase 2 uses an extended node budget for complex routes (triggers <see cref="OnComplexRouteStarted"/>).
-    /// Falls back to Manhattan (marked as blocked) if both A* phases fail.
+    /// The first attempt honors the process bend-radius floor
+    /// (<see cref="ProcessMinBendRadiusMicrometers"/>); when no clean path exists at the floor,
+    /// it retries at the connection radius and marks the result with
+    /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/>. Falls back to Manhattan routing
+    /// if all A* attempts fail; a self-intersecting or blocked fallback at the floor radius
+    /// is discarded in favor of the connection radius, and unresolvable results are marked
+    /// <see cref="RoutedPath.IsBlockedFallback"/>.
     /// </summary>
     /// <param name="startPin">Source pin.</param>
     /// <param name="endPin">Target pin.</param>
@@ -183,33 +200,97 @@ public class WaveguideRouter
 
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
+        double connectionRadius = MinBendRadiusMicrometers;
+        double effectiveRadius = Math.Max(connectionRadius, ProcessMinBendRadiusMicrometers);
+        bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
+
         if (PathfindingGrid != null)
         {
             var astarPath = new RoutedPath();
-            if (TryRouteAStar(startX, startY, startAngle, endX, endY, endInputAngle,
-                              astarPath, startPin, endPin, cancellationToken))
+            if (TryRouteAStar(effectiveRadius, startX, startY, startAngle, endX, endY, endInputAngle,
+                              astarPath, startPin, endPin, cancellationToken)
+                && IsCleanAStarResult(astarPath))
             {
-                if (astarPath.IsValid) return astarPath;
+                return astarPath;
+            }
+
+            // Controlled degradation: the process floor found no clean path — retry at the
+            // connection radius and surface the violation instead of degenerate geometry.
+            if (floorRaisesRadius)
+            {
+                astarPath = new RoutedPath();
+                if (TryRouteAStar(connectionRadius, startX, startY, startAngle, endX, endY, endInputAngle,
+                                  astarPath, startPin, endPin, cancellationToken)
+                    && IsCleanAStarResult(astarPath))
+                {
+                    astarPath.ViolatesProcessMinBendRadius = true;
+                    return astarPath;
+                }
             }
         }
 
-        // A* failed - try Manhattan routing as fallback
-        var path = new RoutedPath();
-        // Use small lead-in/lead-out for smoother transitions (15% of bend radius)
-        double leadLength = MinBendRadiusMicrometers * 0.15;
-        var manhattan = new ManhattanRouter(MinBendRadiusMicrometers, leadOut: leadLength, leadIn: leadLength);
-        manhattan.Route(startX, startY, startAngle, endX, endY, endInputAngle, path);
+        return RouteManhattanFallback(startX, startY, startAngle, endX, endY, endInputAngle,
+                                      connectionRadius, effectiveRadius, floorRaisesRadius);
+    }
 
-        // Check if the Manhattan path collides with existing obstacles
-        // Manhattan routing doesn't use PathfindingGrid, so we check manually
-        if (path.Segments.Count == 0 || !path.IsValid || IsPathBlocked(path.Segments))
+    /// <summary>
+    /// Manhattan (CSC) fallback when all A* attempts fail. Tries the process floor radius
+    /// first; a result that loops through itself or crosses obstacles is discarded in favor
+    /// of the connection radius (marked as a process-minimum violation). A result that is
+    /// still blocked or self-intersecting is marked <see cref="RoutedPath.IsBlockedFallback"/>.
+    /// </summary>
+    private RoutedPath RouteManhattanFallback(
+        double startX, double startY, double startAngle,
+        double endX, double endY, double endInputAngle,
+        double connectionRadius, double effectiveRadius, bool floorRaisesRadius)
+    {
+        var path = RouteManhattan(startX, startY, startAngle, endX, endY, endInputAngle, effectiveRadius);
+        if (IsCleanFallback(path)) return path;
+
+        if (floorRaisesRadius)
         {
-            // Path is blocked - mark as faulty fallback
-            path.IsBlockedFallback = true;
+            var relaxed = RouteManhattan(startX, startY, startAngle, endX, endY, endInputAngle, connectionRadius);
+            relaxed.ViolatesProcessMinBendRadius = true;
+            if (IsCleanFallback(relaxed)) return relaxed;
+
+            // Both radii failed — keep the tighter (shorter, less loop-prone) geometry.
+            relaxed.IsBlockedFallback = true;
+            return relaxed;
         }
 
+        path.IsBlockedFallback = true;
         return path;
     }
+
+    /// <summary>Runs the Manhattan (CSC) router at the given bend radius.</summary>
+    private static RoutedPath RouteManhattan(
+        double startX, double startY, double startAngle,
+        double endX, double endY, double endInputAngle, double bendRadius)
+    {
+        var path = new RoutedPath();
+        // Use small lead-in/lead-out for smoother transitions (15% of bend radius)
+        double leadLength = bendRadius * 0.15;
+        var manhattan = new ManhattanRouter(bendRadius, leadOut: leadLength, leadIn: leadLength);
+        manhattan.Route(startX, startY, startAngle, endX, endY, endInputAngle, path);
+        return path;
+    }
+
+    /// <summary>
+    /// An A* result is accepted only when its segments connect and the smoothed geometry
+    /// does not intersect itself (arcs can drift when the grid path is tighter than planned).
+    /// </summary>
+    private static bool IsCleanAStarResult(RoutedPath path) =>
+        path.IsValid && !PathIntersectionDetector.HasSelfIntersection(path);
+
+    /// <summary>
+    /// A fallback path is acceptable as-is only when it has connected segments, does not
+    /// pass through obstacles, and does not intersect itself (no loops/teardrops).
+    /// </summary>
+    private bool IsCleanFallback(RoutedPath path) =>
+        path.Segments.Count > 0
+        && path.IsValid
+        && !IsPathBlocked(path.Segments)
+        && !PathIntersectionDetector.HasSelfIntersection(path);
 
     /// <summary>
     /// Checks if any segment in a path passes through blocked cells.
@@ -217,181 +298,45 @@ public class WaveguideRouter
     public bool IsPathBlocked(IEnumerable<PathSegment> segments)
     {
         if (PathfindingGrid == null) return false;
+        return IsPathBlocked(segments, PathfindingGrid.IsBlocked);
+    }
 
+    /// <summary>
+    /// Checks if any segment in a path passes through cells blocked by COMPONENTS
+    /// (including frozen group paths), ignoring registered waveguide obstacles.
+    /// Use this to judge component collisions of an existing route regardless of
+    /// which sibling routes are currently in the grid.
+    /// </summary>
+    public bool IsPathBlockedByComponents(IEnumerable<PathSegment> segments)
+    {
+        if (PathfindingGrid == null) return false;
+        return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponent);
+    }
+
+    /// <summary>Checks all segments against the given cell-blocked predicate.</summary>
+    private bool IsPathBlocked(IEnumerable<PathSegment> segments, Func<int, int, bool> isCellBlocked)
+    {
         foreach (var segment in segments)
         {
             if (segment is StraightSegment)
             {
                 if (IsLineBlocked(segment.StartPoint.X, segment.StartPoint.Y,
-                                  segment.EndPoint.X, segment.EndPoint.Y))
+                                  segment.EndPoint.X, segment.EndPoint.Y, isCellBlocked))
                     return true;
             }
             else if (segment is BendSegment bend)
             {
-                if (IsArcBlocked(bend)) return true;
+                if (IsArcBlocked(bend, isCellBlocked)) return true;
             }
         }
         return false;
     }
 
     /// <summary>
-    /// Attempts to route using two-phase A* pathfinding with obstacle avoidance.
-    /// Phase 1 uses <see cref="Phase1MaxNodes"/> for fast results.
-    /// Phase 2 uses <see cref="Phase2MaxNodes"/> and fires <see cref="OnComplexRouteStarted"/> if Phase 1 fails.
-    /// </summary>
-    private bool TryRouteAStar(double startX, double startY, double startAngle,
-                                double endX, double endY, double endInputAngle,
-                                RoutedPath path, PhysicalPin startPin, PhysicalPin endPin,
-                                CancellationToken cancellationToken = default)
-    {
-        if (PathfindingGrid == null) return false;
-
-        double corridorLength = MinBendRadiusMicrometers * 3;
-        double corridorWidth = MinBendRadiusMicrometers;
-
-        var clearedStart = PathfindingGrid.ClearPinCorridor(
-            startX, startY, startAngle, corridorLength, corridorWidth);
-
-        // Clear corridors in BOTH directions for the end pin:
-        // 1. Facing direction (away from component) — ensures approach path is clear
-        // 2. Input direction (into component) — ensures the terminal grid cell is reachable
-        double endFacingAngle = AngleUtilities.NormalizeAngle(endInputAngle + 180);
-        var clearedEndApproach = PathfindingGrid.ClearPinCorridor(
-            endX, endY, endFacingAngle, corridorLength, corridorWidth);
-        var clearedEndTerminal = PathfindingGrid.ClearPinCorridor(
-            endX, endY, endInputAngle, corridorLength, corridorWidth);
-
-        try
-        {
-            var (gridStartX, gridStartY) = PathfindingGrid.PhysicalToGrid(startX, startY);
-            var (gridEndX, gridEndY) = PathfindingGrid.PhysicalToGrid(endX, endY);
-
-            var startDir = GridDirectionExtensions.FromAngle(startAngle);
-            var endDir = GridDirectionExtensions.FromAngle(endInputAngle);
-
-            int originalEscapeCells = CostCalculator.MinPinEscapeCells;
-
-            // Scale escape distance based on pin separation.
-            // Both start escape + end approach must fit within the total distance,
-            // with room left for turns. Use 1/6 of distance, minimum 2 cells.
-            int gridDistance = Math.Abs(gridEndX - gridStartX) + Math.Abs(gridEndY - gridStartY);
-            int scaledEscape = Math.Min(originalEscapeCells, Math.Max(2, gridDistance / 6));
-            CostCalculator.MinPinEscapeCells = scaledEscape;
-
-            // Also scale MinStraightRunCells for close pins to allow tighter turns
-            int originalStraightRun = CostCalculator.MinStraightRunCells;
-            int scaledStraightRun = Math.Min(originalStraightRun, Math.Max(2, gridDistance / 4));
-            CostCalculator.MinStraightRunCells = scaledStraightRun;
-
-            List<AStarNode>? gridPath = null;
-
-            // The heuristic's distance metric must match the movement model.
-            CostCalculator.UseDiagonals = UseDiagonalRouting;
-
-            if (_hierarchicalPathfinder != null && UseHierarchicalPathfinding)
-            {
-                gridPath = _hierarchicalPathfinder.FindPath(
-                    gridStartX, gridStartY, startDir,
-                    gridEndX, gridEndY, endDir);
-            }
-            else
-            {
-                // Phase 1: Quick search with limited node budget for fast results
-                var phase1 = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
-                {
-                    MaxNodesExpanded = Phase1MaxNodes,
-                    UseDiagonals = UseDiagonalRouting
-                };
-                gridPath = phase1.FindPath(gridStartX, gridStartY, startDir,
-                                           gridEndX, gridEndY, endDir, cancellationToken);
-
-                // Phase 2: Extended search when Phase 1 exhausted its node budget
-                if (gridPath == null && !cancellationToken.IsCancellationRequested)
-                {
-                    OnComplexRouteStarted?.Invoke();
-                    var phase2 = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
-                    {
-                        MaxNodesExpanded = Phase2MaxNodes,
-                        UseDiagonals = UseDiagonalRouting
-                    };
-                    gridPath = phase2.FindPath(gridStartX, gridStartY, startDir,
-                                               gridEndX, gridEndY, endDir, cancellationToken);
-                }
-            }
-
-            // Lateral-tolerance retry: the strict phases require an exact
-            // on-axis arrival, which is impossible when another waveguide
-            // crosses the pin's entry axis outside the cleared corridor.
-            // Retry accepting a small lateral offset; the smoother snaps the
-            // final approach onto the axis. Only otherwise-blocked routes
-            // reach this point, so successful routes are unaffected.
-            if (gridPath == null && !cancellationToken.IsCancellationRequested)
-            {
-                var tolerantRetry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
-                {
-                    MaxNodesExpanded = Phase1MaxNodes,
-                    AllowLateralGoalTolerance = true,
-                    UseDiagonals = UseDiagonalRouting
-                };
-                gridPath = tolerantRetry.FindPath(gridStartX, gridStartY, startDir,
-                                                  gridEndX, gridEndY, endDir, cancellationToken);
-            }
-
-            // Loop detection: if path is >2× Manhattan distance, retry with minimal constraints
-            if (gridPath != null && gridPath.Count > gridDistance * 2 && scaledEscape > 2)
-            {
-                CostCalculator.MinPinEscapeCells = 2;
-                CostCalculator.MinStraightRunCells = 2;
-                var retry = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
-                {
-                    UseDiagonals = UseDiagonalRouting
-                };
-                var retryPath = retry.FindPath(gridStartX, gridStartY, startDir,
-                                               gridEndX, gridEndY, endDir, cancellationToken);
-                if (retryPath != null && retryPath.Count < gridPath.Count)
-                    gridPath = retryPath;
-            }
-
-            if (gridPath == null || gridPath.Count < 2)
-            {
-                CostCalculator.MinPinEscapeCells = 2;
-                CostCalculator.MinStraightRunCells = 2;
-                var fallback = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
-                {
-                    UseDiagonals = UseDiagonalRouting
-                };
-                gridPath = fallback.FindPath(gridStartX, gridStartY, startDir,
-                                             gridEndX, gridEndY, endDir, cancellationToken);
-            }
-
-            CostCalculator.MinStraightRunCells = originalStraightRun;
-
-            CostCalculator.MinPinEscapeCells = originalEscapeCells;
-
-            if (gridPath == null || gridPath.Count < 2) return false;
-
-            var smoother = new PathSmoother(PathfindingGrid, MinBendRadiusMicrometers, AllowedBendRadii);
-            var smoothedPath = smoother.ConvertToSegments(gridPath, startPin, endPin);
-
-            path.Segments.AddRange(smoothedPath.Segments);
-            path.IsInvalidGeometry = smoothedPath.IsInvalidGeometry;
-            path.DebugGridPath = gridPath;
-
-            // Success requires valid segments without geometry violations
-            return path.Segments.Count > 0 && !path.IsInvalidGeometry;
-        }
-        finally
-        {
-            PathfindingGrid.RestoreCells(clearedStart);
-            PathfindingGrid.RestoreCells(clearedEndApproach);
-            PathfindingGrid.RestoreCells(clearedEndTerminal);
-        }
-    }
-
-    /// <summary>
     /// Checks if a straight line passes through any blocked cells.
     /// </summary>
-    private bool IsLineBlocked(double x1, double y1, double x2, double y2)
+    private bool IsLineBlocked(double x1, double y1, double x2, double y2,
+                               Func<int, int, bool> isCellBlocked)
     {
         if (PathfindingGrid == null) return false;
 
@@ -411,36 +356,26 @@ public class WaveguideRouter
             double px = x1 + dx * t;
             double py = y1 + dy * t;
             var (gx, gy) = PathfindingGrid.PhysicalToGrid(px, py);
-            if (PathfindingGrid.IsBlocked(gx, gy)) return true;
+            if (isCellBlocked(gx, gy)) return true;
         }
         return false;
     }
 
     /// <summary>
     /// Checks if an arc segment passes through blocked cells.
+    /// The arc endpoints themselves are skipped (they legitimately touch pin corridors).
     /// </summary>
-    private bool IsArcBlocked(BendSegment bend)
+    private bool IsArcBlocked(BendSegment bend, Func<int, int, bool> isCellBlocked)
     {
         if (PathfindingGrid == null) return false;
 
-        double startRad = bend.StartAngleDegrees * Math.PI / 180;
-        double sweepRad = bend.SweepAngleDegrees * Math.PI / 180;
-        double arcLength = Math.Abs(sweepRad) * bend.RadiusMicrometers;
         double stepLength = PathfindingGrid.CellSizeMicrometers * 0.5;
-        int numSamples = Math.Max(10, (int)Math.Ceiling(arcLength / stepLength));
+        var samples = ArcSampling.SamplePoints(bend, stepLength).ToList();
 
-        double sign = Math.Sign(bend.SweepAngleDegrees);
-        if (sign == 0) sign = 1;
-
-        for (int i = 1; i < numSamples; i++)
+        for (int i = 1; i < samples.Count - 1; i++)
         {
-            double t = (double)i / numSamples;
-            double angle = startRad + sweepRad * t;
-            double px = bend.Center.X + bend.RadiusMicrometers * Math.Cos(angle - Math.PI / 2 * sign);
-            double py = bend.Center.Y + bend.RadiusMicrometers * Math.Sin(angle - Math.PI / 2 * sign);
-
-            var (gx, gy) = PathfindingGrid.PhysicalToGrid(px, py);
-            if (PathfindingGrid.IsBlocked(gx, gy)) return true;
+            var (gx, gy) = PathfindingGrid.PhysicalToGrid(samples[i].X, samples[i].Y);
+            if (isCellBlocked(gx, gy)) return true;
         }
         return false;
     }

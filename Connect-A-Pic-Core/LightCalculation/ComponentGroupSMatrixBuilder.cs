@@ -88,7 +88,8 @@ public class ComponentGroupSMatrixBuilder
         if (group == null)
             throw new ArgumentNullException(nameof(group));
 
-        return BuildFullTransitiveMatrix(group, wavelengthNm);
+        // Internal fields are read per pin, so every closure column is needed here.
+        return BuildFullTransitiveMatrix(group, wavelengthNm, restrictSolveToExternalPins: false);
     }
 
     /// <summary>
@@ -183,7 +184,8 @@ public class ComponentGroupSMatrixBuilder
     /// This is the common implementation used by both the external-pin-projection path
     /// and the full-internal-matrix path.
     /// </summary>
-    private SMatrix? BuildFullTransitiveMatrix(ComponentGroup group, int wavelengthNm)
+    private SMatrix? BuildFullTransitiveMatrix(
+        ComponentGroup group, int wavelengthNm, bool restrictSolveToExternalPins)
     {
         var allChildPinIds = CollectAllChildPinIds(group);
 
@@ -206,7 +208,75 @@ public class ComponentGroupSMatrixBuilder
         var mergedMatrix = SMatrix.CreateSystemSMatrix(childMatrices);
 
         // Compute transitive closure so light propagates through multi-hop chains.
-        return ComputeTransitiveMatrix(mergedMatrix, allChildPinIds.Count);
+        return ComputeTransitiveMatrix(
+            mergedMatrix, BuildClosureContext(group, wavelengthNm, restrictSolveToExternalPins));
+    }
+
+    /// <summary>
+    /// Circuit knowledge for the closure solve: pin owner names (passivity pre-check +
+    /// feedback-loop naming), the group's external pins (energy-guard scope — field
+    /// enhancement INSIDE a ring is legitimate physics), and the wavelength (messages).
+    /// With <paramref name="restrictSolveToExternalPins"/> the solve computes only the
+    /// external source columns (review finding [7]): the projection path discards every
+    /// internal column anyway, so one O(n²) substitution per external pin replaces the
+    /// full-inverse solve without changing a single projected value.
+    /// </summary>
+    private static TransitiveClosureContext BuildClosureContext(
+        ComponentGroup group, int wavelengthNm, bool restrictSolveToExternalPins)
+    {
+        var owners = new Dictionary<Guid, string>();
+        CollectPinOwnerNames(group, owners);
+
+        var externalPinIds = CollectExternalPinFlowIds(group);
+        return new TransitiveClosureContext
+        {
+            PinOwnerNames = owners,
+            ExternallyObservablePinIds = externalPinIds,
+            SourcePinIds = restrictSolveToExternalPins ? externalPinIds : null,
+            WavelengthNm = wavelengthNm,
+        };
+    }
+
+    /// <summary>Both flow ids of every external group pin backed by a logical pin.</summary>
+    private static HashSet<Guid> CollectExternalPinFlowIds(ComponentGroup group)
+    {
+        var externalPinIds = new HashSet<Guid>();
+        foreach (var extPin in group.ExternalPins)
+        {
+            if (extPin.InternalPin?.LogicalPin == null) continue;
+            externalPinIds.Add(extPin.InternalPin.LogicalPin.IDInFlow);
+            externalPinIds.Add(extPin.InternalPin.LogicalPin.IDOutFlow);
+        }
+        return externalPinIds;
+    }
+
+    /// <summary>
+    /// Maps every child pin flow id to its owning child's display name. Mirrors
+    /// <see cref="CollectAllChildPinIds"/>: nested groups contribute their external
+    /// pins (their matrix is already closed), regular components their physical pins.
+    /// </summary>
+    private static void CollectPinOwnerNames(ComponentGroup group, Dictionary<Guid, string> owners)
+    {
+        foreach (var child in group.ChildComponents)
+        {
+            var name = child.HumanReadableName ?? child.Identifier;
+            if (child is ComponentGroup nestedGroup)
+            {
+                foreach (var groupPin in nestedGroup.ExternalPins)
+                {
+                    if (groupPin.InternalPin?.LogicalPin == null) continue;
+                    owners[groupPin.InternalPin.LogicalPin.IDInFlow] = name;
+                    owners[groupPin.InternalPin.LogicalPin.IDOutFlow] = name;
+                }
+                continue;
+            }
+            foreach (var pin in child.PhysicalPins)
+            {
+                if (pin.LogicalPin == null) continue;
+                owners[pin.LogicalPin.IDInFlow] = name;
+                owners[pin.LogicalPin.IDOutFlow] = name;
+            }
+        }
     }
 
     /// <summary>
@@ -214,23 +284,13 @@ public class ComponentGroupSMatrixBuilder
     /// </summary>
     private SMatrix? BuildSMatrixForWavelength(ComponentGroup group, int wavelengthNm)
     {
-        var fullMatrix = BuildFullTransitiveMatrix(group, wavelengthNm);
+        // Only the external columns are kept below, so the solve is restricted to them.
+        var fullMatrix = BuildFullTransitiveMatrix(group, wavelengthNm, restrictSolveToExternalPins: true);
         if (fullMatrix == null)
             return null;
 
-        // Create the external pin mapping
-        var externalPinIds = new List<Guid>();
-        foreach (var extPin in group.ExternalPins)
-        {
-            if (extPin.InternalPin?.LogicalPin != null)
-            {
-                externalPinIds.Add(extPin.InternalPin.LogicalPin.IDInFlow);
-                externalPinIds.Add(extPin.InternalPin.LogicalPin.IDOutFlow);
-            }
-        }
-
         // Extract the sub-matrix for external pins only
-        return ExtractExternalPinMatrix(fullMatrix, externalPinIds);
+        return ExtractExternalPinMatrix(fullMatrix, CollectExternalPinFlowIds(group).ToList());
     }
 
     /// <summary>
@@ -315,52 +375,18 @@ public class ComponentGroupSMatrixBuilder
     }
 
     /// <summary>
-    /// Computes the transitive S-Matrix via the Neumann series (M + M² + … + Mⁿ).
-    /// This is required because CreateSystemSMatrix only stores single-hop transfers.
-    /// Light traversing a chain of k components needs k matrix steps; summing the series
-    /// gives the complete multi-hop transfer in a single combined matrix.
-    /// Iteration stops early when the matrix power falls below numerical noise.
+    /// Computes the exact transitive S-Matrix Σ Mᵏ (k ≥ 1) via the shared
+    /// <see cref="TransitiveSMatrixCalculator"/> linear solve ((I − M)·X = I). This is
+    /// required because CreateSystemSMatrix only stores single-hop transfers. Feedback
+    /// loops inside the group (ring resonators) are solved exactly, including their
+    /// resonance response; a non-passive member matrix or a lossless loop exactly on
+    /// resonance aborts with <see cref="NonConvergentCircuitException"/> naming the
+    /// culprit — never a silently wrong result.
     /// </summary>
     /// <param name="singleHopMatrix">Merged single-hop S-Matrix for the group.</param>
-    /// <param name="maxSteps">Maximum number of steps (upper bound = total pin count).</param>
-    private SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix, int maxSteps)
-    {
-        var pinIds = singleHopMatrix.PinReference.Keys.ToList();
-        int n = pinIds.Count;
-
-        if (n == 0 || maxSteps <= 0)
-            return singleHopMatrix;
-
-        var M = singleHopMatrix.SMat;
-        var transitiveS = M.Clone();
-        var Mk = M.Clone();
-
-        for (int k = 1; k < maxSteps; k++)
-        {
-            Mk = Mk.Multiply(M);
-            if (Mk.InfinityNorm() < 1e-15)
-                break;
-            transitiveS = transitiveS.Add(Mk);
-        }
-
-        // Rebuild an SMatrix from the accumulated values
-        var reversePinRef = singleHopMatrix.PinReference.ToDictionary(kv => kv.Value, kv => kv.Key);
-        var transfers = new Dictionary<(Guid, Guid), Complex>();
-
-        for (int iOut = 0; iOut < n; iOut++)
-        {
-            for (int iIn = 0; iIn < n; iIn++)
-            {
-                var val = transitiveS[iOut, iIn];
-                if (val != Complex.Zero)
-                    transfers[(reversePinRef[iIn], reversePinRef[iOut])] = val;
-            }
-        }
-
-        var result = new SMatrix(pinIds, new());
-        result.SetValues(transfers);
-        return result;
-    }
+    /// <param name="context">Owner names, external pins and wavelength for diagnostics.</param>
+    private static SMatrix ComputeTransitiveMatrix(SMatrix singleHopMatrix, TransitiveClosureContext context)
+        => TransitiveSMatrixCalculator.Compute(singleHopMatrix, context);
 
     /// <summary>
     /// Extracts a sub-matrix containing only the specified external pins.

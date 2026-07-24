@@ -13,6 +13,7 @@ using OxyPlot.Axes;
 using OxyPlot.Series;
 using CAP.Avalonia.Controls.Plotting;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
@@ -82,7 +83,7 @@ public partial class OnaSweepViewModel : ObservableObject
         if (_canvas == null || IsSweeping) return;
 
         IsSweeping = true;
-        StatusText = "Preparing ONA sweep...";
+        StatusText = LocalizationService.Instance.Translate("Analysis.Ona.Preparing");
         WarningText = "";
         _lastResult = null;
         OnPropertyChanged(nameof(HasResult));
@@ -93,7 +94,7 @@ public partial class OnaSweepViewModel : ObservableObject
             var (gridManager, portManager) = BuildSimulationGrid();
             if (gridManager == null)
             {
-                StatusText = "No components on canvas.";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Ona.NoComponents");
                 return;
             }
 
@@ -107,7 +108,7 @@ public partial class OnaSweepViewModel : ObservableObject
                     ? $"ONA Analyzer '{Analyzer.Name}' source pin is not connected to a light input."
                     : "No light source found on the canvas (place a Grating Coupler / Edge Coupler, or select an ONA Analyzer and connect its source pin).";
                 _errorConsole?.LogError($"ONA sweep aborted: {hint}");
-                StatusText = "Aborted — no light source. See Error Console.";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Ona.AbortedNoLight");
                 return;
             }
 
@@ -116,7 +117,8 @@ public partial class OnaSweepViewModel : ObservableObject
             _sweepCts?.Dispose();
             _sweepCts = new CancellationTokenSource();
 
-            StatusText = $"Running ONA sweep ({StepCount} steps)...";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Ona.Running"), StepCount);
             _lastResult = await sweeper.RunSweepAsync(config, gridManager, _sweepCts.Token);
             OnPropertyChanged(nameof(HasResult));
 
@@ -128,16 +130,18 @@ public partial class OnaSweepViewModel : ObservableObject
             }
 
             UpdatePlotModel(_lastResult);
-            StatusText = $"ONA sweep complete: {_lastResult.DataPoints.Count} points";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Ona.Complete"), _lastResult.DataPoints.Count);
         }
         catch (OperationCanceledException)
         {
-            StatusText = "Sweep cancelled.";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Ona.Cancelled");
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"ONA sweep failed: {ex.Message}", ex);
-            StatusText = $"Sweep failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Sweep.Failed"), ex.Message);
         }
         finally
         {
@@ -187,15 +191,17 @@ public partial class OnaSweepViewModel : ObservableObject
                     "Export ONA Results", "csv", "CSV Files|*.csv|All Files|*.*");
             }
 
-            if (path == null) { StatusText = "Export cancelled"; return; }
+            if (path == null) { StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled"); return; }
 
             await File.WriteAllTextAsync(path, _lastResult.GenerateCsvContent(ResolvePinName));
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"ONA export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
     }
 
@@ -374,7 +380,7 @@ public partial class OnaSweepViewModel : ObservableObject
     {
         var model = new PlotModel
         {
-            Title = "ONA — Insertion Loss",
+            Title = LocalizationService.Instance.Translate("Analysis.Ona.ChartTitle"),
             Background = OxyColors.Transparent,
             TextColor = PlotForeground,
             TitleColor = PlotForeground,

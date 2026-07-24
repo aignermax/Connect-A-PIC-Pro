@@ -26,7 +26,8 @@ internal static class AddCustomComponentFeature
         services.AddSingleton(sp => new AddCustomComponentDependencies(
             sp.GetRequiredService<ComponentGeometryExtractor>(),
             sp.GetRequiredService<IFdtdSMatrixService>(),
-            sp.GetRequiredService<UserPdkStore>()));
+            sp.GetRequiredService<UserPdkStore>(),
+            sp.GetService<CAP_Core.ErrorConsoleService>()));
         return services;
     }
 }

@@ -4,6 +4,8 @@
              RequestedThemeVariant="Dark">
     <Application.Styles>
         <FluentTheme />
+        <!-- App-wide compact control heights — see the file for rationale. -->
+        <StyleInclude Source="avares://CAP.Avalonia/Styles/CompactControlHeights.axaml" />
         <!-- OxyPlot.Avalonia ships its control templates here. Without this include
              the <oxy:PlotView> control has no template and renders blank. -->
         <StyleInclude Source="avares://OxyPlot.Avalonia/Themes/Default.axaml" />

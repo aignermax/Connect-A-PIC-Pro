@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.PdkImport"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.PdkImport.PdkImportWizardWindow"
         x:DataType="vm:PdkImportWizardViewModel"
-        Title="PDK Import Wizard"
+        Title="{loc:Localize PdkImport.WindowTitle}"
         Width="700" Height="540"
         WindowStartupLocation="CenterOwner"
         CanResize="True"
@@ -14,7 +15,7 @@
 
         <!-- Header -->
         <StackPanel DockPanel.Dock="Top" Margin="0,0,0,14">
-            <TextBlock Text="PDK Import Wizard" FontSize="17" FontWeight="Bold" Foreground="White"/>
+            <TextBlock Text="{loc:Localize PdkImport.WindowTitle}" FontSize="17" FontWeight="Bold" Foreground="White"/>
             <TextBlock Text="{Binding PyFilePath}" FontSize="10" Foreground="Gray"
                        TextWrapping="Wrap" Margin="0,4,0,0"/>
             <!-- Step indicator -->
@@ -27,17 +28,17 @@
                         </MultiBinding>
                     </Border.Background>
                 </Border>
-                <TextBlock Text="1. Parse" FontSize="11"
+                <TextBlock Text="{loc:Localize PdkImport.StepParse}" FontSize="11"
                            Foreground="{Binding IsParsingStep, Converter={x:Static BoolConverters.Not}, FallbackValue=Gray}">
                     <TextBlock.Foreground>
                         <SolidColorBrush Color="LightBlue"/>
                     </TextBlock.Foreground>
                 </TextBlock>
                 <TextBlock Text="›" Foreground="Gray"/>
-                <TextBlock Text="2. Review" FontSize="11"
+                <TextBlock Text="{loc:Localize PdkImport.StepReview}" FontSize="11"
                            Foreground="{Binding IsReviewStep, Converter={x:Static BoolConverters.Not}, FallbackValue=Gray}"/>
                 <TextBlock Text="›" Foreground="Gray"/>
-                <TextBlock Text="3. Save" FontSize="11"
+                <TextBlock Text="{loc:Localize PdkImport.StepSave}" FontSize="11"
                            Foreground="{Binding IsSaveStep, Converter={x:Static BoolConverters.Not}, FallbackValue=Gray}"/>
             </StackPanel>
         </StackPanel>
@@ -45,21 +46,21 @@
         <!-- Bottom buttons (always visible) -->
         <Border DockPanel.Dock="Bottom" Margin="0,14,0,0">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-                <Button Content="Cancel" Command="{Binding CancelCommand}"
+                <Button Content="{loc:Localize Common.Cancel}" Command="{Binding CancelCommand}"
                         Background="#4d3d3d" Foreground="White" Width="80"/>
                 <!-- Parsing step: Retry on error -->
-                <Button Content="↺ Retry" Command="{Binding RetryParsingCommand}"
+                <Button Content="{loc:Localize PdkImport.Retry}" Command="{Binding RetryParsingCommand}"
                         Background="#3d3d5d" Foreground="White" Width="80"
                         IsVisible="{Binding HasError}"/>
                 <!-- Review step buttons -->
-                <Button Content="Next ›" Command="{Binding ProceedToSaveCommand}"
+                <Button Content="{loc:Localize PdkImport.Next}" Command="{Binding ProceedToSaveCommand}"
                         Background="#3d5d3d" Foreground="White" Width="80"
                         IsVisible="{Binding IsReviewStep}"/>
                 <!-- Save step buttons -->
-                <Button Content="‹ Back" Command="{Binding BackToReviewCommand}"
+                <Button Content="{loc:Localize PdkImport.Back}" Command="{Binding BackToReviewCommand}"
                         Background="#3d3d5d" Foreground="White" Width="80"
                         IsVisible="{Binding IsSaveStep}"/>
-                <Button Content="Save &amp; Load" Command="{Binding SaveAndLoadCommand}"
+                <Button Content="{loc:Localize PdkImport.SaveAndLoad}" Command="{Binding SaveAndLoadCommand}"
                         Background="#3d5d3d" Foreground="White" Padding="12,4"
                         IsVisible="{Binding IsSaveStep}"
                         IsEnabled="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
@@ -71,7 +72,7 @@
 
             <!-- ═══ Step 1: Parsing ═══ -->
             <StackPanel IsVisible="{Binding IsParsingStep}" Spacing="10">
-                <TextBlock Text="Parsing Nazca Python Module"
+                <TextBlock Text="{loc:Localize PdkImport.ParsingTitle}"
                            FontWeight="SemiBold" FontSize="13" Foreground="LightBlue"/>
                 <ProgressBar IsIndeterminate="{Binding IsLoading}"
                              Height="5" Minimum="0" Maximum="1"
@@ -83,7 +84,7 @@
                 <Border Background="#3d1515" CornerRadius="4" Padding="10"
                         IsVisible="{Binding HasError}">
                     <StackPanel Spacing="4">
-                        <TextBlock Text="Parse error:" Foreground="#FF6B6B" FontWeight="SemiBold" FontSize="11"/>
+                        <TextBlock Text="{loc:Localize PdkImport.ParseError}" Foreground="#FF6B6B" FontWeight="SemiBold" FontSize="11"/>
                         <TextBlock Text="{Binding ErrorText}" Foreground="#FF9090"
                                    TextWrapping="Wrap" FontFamily="Consolas, Courier New, monospace"
                                    FontSize="10"/>
@@ -115,11 +116,11 @@
 
             <!-- ═══ Step 2: Review ═══ -->
             <StackPanel IsVisible="{Binding IsReviewStep}" Spacing="10">
-                <TextBlock Text="Review Parsed Components"
+                <TextBlock Text="{loc:Localize PdkImport.ReviewTitle}"
                            FontWeight="SemiBold" FontSize="13" Foreground="LightBlue"/>
                 <TextBlock Text="{Binding StatusText}" Foreground="LightGray"
                            TextWrapping="Wrap" FontSize="11"/>
-                <TextBlock Text="Uncheck components to exclude them from the import:"
+                <TextBlock Text="{loc:Localize PdkImport.ReviewHint}"
                            Foreground="Gray" FontSize="10"/>
 
                 <ListBox ItemsSource="{Binding ParsedComponents}"
@@ -149,25 +150,25 @@
 
             <!-- ═══ Step 3: Save ═══ -->
             <StackPanel IsVisible="{Binding IsSaveStep}" Spacing="12">
-                <TextBlock Text="Save as PDK JSON"
+                <TextBlock Text="{loc:Localize PdkImport.SaveTitle}"
                            FontWeight="SemiBold" FontSize="13" Foreground="LightBlue"/>
 
                 <Grid ColumnDefinitions="90,*" RowDefinitions="Auto,Auto,Auto">
                     <!-- PDK Name -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="PDK Name:"
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Localize PdkImport.PdkNameLabel}"
                                Foreground="LightGray" VerticalAlignment="Center" Margin="0,0,0,8"/>
                     <TextBox Grid.Row="0" Grid.Column="1" Text="{Binding PdkName}"
                              Background="#2d2d2d" Foreground="White" Margin="0,0,0,8"/>
 
                     <!-- Output path -->
-                    <TextBlock Grid.Row="1" Grid.Column="0" Text="Output File:"
+                    <TextBlock Grid.Row="1" Grid.Column="0" Text="{loc:Localize PdkImport.OutputFileLabel}"
                                Foreground="LightGray" VerticalAlignment="Center" Margin="0,0,0,8"/>
                     <Grid Grid.Row="1" Grid.Column="1" ColumnDefinitions="*,Auto" Margin="0,0,0,8">
                         <TextBox Grid.Column="0" Text="{Binding OutputPath}"
                                  Background="#2d2d2d" Foreground="White"/>
                         <Button Grid.Column="1" Content="..." Command="{Binding BrowseOutputPathCommand}"
                                 Width="36" Margin="4,0,0,0" Background="#3d3d3d" Foreground="White"
-                                ToolTip.Tip="Browse for output location"/>
+                                ToolTip.Tip="{loc:Localize PdkImport.BrowseTip}"/>
                     </Grid>
 
                     <!-- Summary -->

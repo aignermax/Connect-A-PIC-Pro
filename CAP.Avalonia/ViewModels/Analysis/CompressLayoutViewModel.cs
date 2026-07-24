@@ -2,6 +2,7 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Analysis;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using Avalonia.Threading;
 
@@ -59,13 +60,13 @@ public partial class CompressLayoutViewModel : ObservableObject
     {
         if (_canvas == null || _canvas.Components.Count == 0)
         {
-            StatusText = "No components to compress";
+            StatusText = LocalizationService.Instance.Translate("Analysis.Compress.NoComponents");
             return;
         }
 
         if (IsCompressing) return;
         IsCompressing = true;
-        StatusText = "Compressing layout...";
+        StatusText = LocalizationService.Instance.Translate("Analysis.Compress.Running");
         ResultText = "";
 
         try
@@ -98,7 +99,9 @@ public partial class CompressLayoutViewModel : ObservableObject
                     Dispatcher.UIThread.Post(() =>
                     {
                         CurrentIteration = iteration;
-                        StatusText = $"Compressing layout... iteration {iteration}/{MaxIterations}";
+                        StatusText = string.Format(
+                            LocalizationService.Instance.Translate("Analysis.Compress.RunningIteration"),
+                            iteration, MaxIterations);
 
                         // Update component positions for animation
                         foreach (var compVm in _canvas.Components)
@@ -134,13 +137,15 @@ public partial class CompressLayoutViewModel : ObservableObject
                 $"({newBounds.area / 1_000_000:F2} mm²)\n" +
                 $"Area reduction: {areaReduction:F1}%";
 
-            StatusText = $"Compression complete: {areaReduction:F1}% area reduction";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Compress.Complete"), areaReduction);
             CurrentIteration = MaxIterations;
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Layout compression failed: {ex.Message}", ex);
-            StatusText = $"Compression failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Compress.Failed"), ex.Message);
             ResultText = "";
         }
         finally

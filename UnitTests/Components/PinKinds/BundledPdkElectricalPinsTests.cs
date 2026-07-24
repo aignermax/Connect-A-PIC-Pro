@@ -71,6 +71,7 @@ namespace UnitTests.Components.PinKinds
         [InlineData("demo-pdk.json", "Phase Shifter", "Photodetector", "Probe Pad")]
         [InlineData("siepic-ebeam-pdk.json", "Bond Pad")]
         [InlineData("cornerstone-sin-pdk.json")]
+        [InlineData("tools-pdk.json")]
         public void BundledPdks_PassiveComponents_HaveNoElectricalPins(
             string pdkFile, params string[] activeComponentNames)
         {

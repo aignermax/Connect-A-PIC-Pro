@@ -68,10 +68,35 @@ public class UngroupCommand : IUndoableCommand
             _restoredConnectionViewModels.Clear();
             foreach (var frozenPath in _group.InternalPaths)
             {
-                var connection = _canvas.ConnectionManager.AddConnectionDeferred(
-                    frozenPath.StartPin,
-                    frozenPath.EndPin
-                );
+                var connection = new WaveguideConnection
+                {
+                    StartPin = frozenPath.StartPin,
+                    EndPin = frozenPath.EndPin,
+                    PropagationLossDbPerCm = _canvas.ConnectionManager.DefaultPropagationLossDbPerCm,
+                    BendLossDbPer90Deg = _canvas.ConnectionManager.DefaultBendLossDbPer90Deg
+                };
+
+                // Restore the per-connection routing settings (style, radius, width,
+                // freeze flag, bend overrides, loss) captured when the group was
+                // created; without this the restored connection reverts to "Auto".
+                frozenPath.ApplySettingsTo(connection);
+
+                // Re-attach the frozen geometry so a frozen route (and its manual
+                // bend edits) survives the re-route triggered below: RecalculateRoutes
+                // only keeps frozen/hand-edited paths whose endpoints still match.
+                // DeepCopy is essential: the group's InternalPaths stay stored for
+                // Undo, and a shared RoutedPath would let later canvas edits (bend
+                // handles mutate segments in place) corrupt the undone group's
+                // geometry. Both steps happen BEFORE the manager add so the published
+                // connection is never half-initialized; the manager itself guards its
+                // Connections list against the concurrently running routing pass
+                // (mutations locked, routing enumerates a snapshot).
+                if (frozenPath.Path != null && frozenPath.Path.Segments.Count > 0)
+                {
+                    connection.RestoreCachedPath(frozenPath.Path.DeepCopy());
+                }
+
+                _canvas.ConnectionManager.AddExistingConnection(connection);
 
                 var connVm = new WaveguideConnectionViewModel(connection);
                 _canvas.Connections.Add(connVm);

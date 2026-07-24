@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
@@ -11,6 +12,16 @@ namespace UnitTests.Analysis;
 /// </summary>
 public class CompressLayoutIntegrationTests
 {
+    /// <summary>
+    /// Pins the UI language to English so status-string assertions (e.g. "complete",
+    /// "No components") are locale-independent — they read the localized status text
+    /// (#749) which otherwise varies with the runner's OS culture.
+    /// </summary>
+    public CompressLayoutIntegrationTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     [Fact]
     public void ViewModel_ExecutesCompressionAndUpdatesStatus()
     {

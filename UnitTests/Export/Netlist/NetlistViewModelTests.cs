@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export.Netlist;
 using CAP_Core.Components.Core;
@@ -14,6 +15,13 @@ namespace UnitTests.Export.Netlist;
 /// </summary>
 public class NetlistViewModelTests
 {
+    /// <summary>Pin the UI language so status-text assertions match the English literals
+    /// regardless of the runner's locale (LocalizationService.Instance is process-wide).</summary>
+    public NetlistViewModelTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private static DesignCanvasViewModel MakeCanvasWithComponent()
     {
         var canvas = new DesignCanvasViewModel();

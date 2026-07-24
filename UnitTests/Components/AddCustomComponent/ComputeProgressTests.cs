@@ -17,13 +17,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers the live-progress + cancellation path of
-/// <see cref="NewComponentViewModel"/>'s <c>ComputeSMatrix</c> command: the FDTD solver must
-/// always be given a non-null progress sink, and a line reported through it must reach
-/// <see cref="NewComponentViewModel.StatusText"/> without depending on the once-per-second
-/// heartbeat timer actually ticking (this test never pumps the Avalonia dispatcher).
-/// </summary>
 public class ComputeProgressTests : IDisposable
 {
     private readonly string _root =
@@ -72,8 +65,6 @@ public class ComputeProgressTests : IDisposable
         var fdtd = new Mock<IFdtdSMatrixService>();
         var store = new UserPdkStore(_root, new PdkJsonSaver(), new PdkLoader());
         var process = new ProcessDefinition { Name = "P" };
-        // PDK-first: Save always appends to a selected existing named custom PDK, so seed one
-        // and let the ctor pre-select it (same pattern as NewComponentViewModelTests).
         store.SaveToNamedPdk("My PDK", process, SeedComponent("seed"), "gdsfactory", null);
         var vm = new NewComponentViewModel(extractor, fdtd.Object, store, new List<ProcessDefinition> { process });
         vm.ComponentName = "My Comp";
@@ -104,13 +95,6 @@ public class ComputeProgressTests : IDisposable
     [Fact]
     public async Task ComputeSMatrix_surfaces_a_reported_progress_line_in_StatusText()
     {
-        // The VM reports progress through a UI-thread-safe Progress<string>, which marshals its
-        // callback onto the SynchronizationContext captured when it is constructed. Under xUnit's
-        // async context that callback would run non-deterministically off-thread, so pin a context
-        // that runs posted callbacks inline (synchronously) for the duration of this test — the
-        // production code is unchanged, only the test's context is controlled. The Moq mock returns
-        // already-completed tasks, so every await continuation runs inline too; the only thing that
-        // posts to the context is Progress.Report, so there is no reentrancy or deadlock.
         var original = SynchronizationContext.Current;
         SynchronizationContext.SetSynchronizationContext(new InlineSynchronizationContext());
         try
@@ -123,11 +107,6 @@ public class ComputeProgressTests : IDisposable
                     progress?.Report("Meep step 50%"))
                 .ReturnsAsync(SuccessResult());
 
-            // The final "S-matrix computed" status overwrites the last progress line once the
-            // solve completes, so capture every StatusText value seen while the command runs
-            // (rather than only the value after it finishes) to prove the reported line was
-            // actually surfaced live, not just passed through and discarded. With the inline
-            // context this recorder is deterministic — the report runs synchronously.
             var seenStatuses = new List<string>();
             vm.PropertyChanged += (_, e) =>
             {
@@ -159,7 +138,7 @@ public class ComputeProgressTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.StatusText.ShouldContain("solver blew up");
-        vm.SavedDraft!.SMatrix.ShouldBeNull(); // failed FDTD => still no model, never fake
+        vm.SavedDraft!.SMatrix.ShouldBeNull();
     }
 
     [Fact]
@@ -169,11 +148,6 @@ public class ComputeProgressTests : IDisposable
         Should.NotThrow(() => vm.CancelCompute());
     }
 
-    /// <summary>
-    /// A <see cref="SynchronizationContext"/> that runs posted callbacks inline (synchronously)
-    /// on the calling thread, so a <see cref="Progress{T}"/> report is observed deterministically
-    /// within the test rather than being marshalled off-thread by xUnit's async context.
-    /// </summary>
     private sealed class InlineSynchronizationContext : SynchronizationContext
     {
         public override void Post(SendOrPostCallback d, object? state) => d(state);

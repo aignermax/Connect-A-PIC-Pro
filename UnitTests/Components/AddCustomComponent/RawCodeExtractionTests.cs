@@ -9,12 +9,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="ComponentGeometryExtractor"/>'s raw-code mode
-/// (<see cref="GeometryReference.RawCode"/>): pasted code is rendered verbatim by the
-/// backend-appropriate renderer, with no import/wrapper synthesis, and a failed render
-/// surfaces the error without pins — same contract as v1's module/function path.
-/// </summary>
 public class RawCodeExtractionTests
 {
     private static NazcaPreviewResult Ok() => new()

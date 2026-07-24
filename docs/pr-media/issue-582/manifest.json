@@ -1,0 +1,5 @@
+[
+  {"file": "01-before-recompute.png", "caption": "Before recompute: all three wavelengths (980/1310/1550 nm) are tagged 'PDK Default'."},
+  {"file": "02-partial-coverage-warning.png", "caption": "A run covering only 1550 nm: that row is tagged 'Override active — FDTD Meep 2D' and the status warns that 980/1310 nm are still PDK default."},
+  {"file": "03-full-coverage.png", "caption": "Fixed recompute sweeps the component's own wavelengths: every row is FDTD-overridden and no stale warning appears."}
+]

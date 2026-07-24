@@ -1,5 +1,6 @@
 using System.Text;
 using CAP_Core.Export;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -15,7 +16,7 @@ public partial class NazcaReferenceViewModel : ObservableObject
     private readonly NazcaReferenceGenerator _generator = new();
 
     [ObservableProperty]
-    private string _statusText = "Generate a ground-truth Nazca script for GDS comparison.";
+    private string _statusText = LocalizationService.Instance.Translate("Analysis.Nazca.InitialStatus");
 
     [ObservableProperty]
     private string _coordinatesText = string.Empty;
@@ -49,7 +50,8 @@ public partial class NazcaReferenceViewModel : ObservableObject
 
         ScriptPath = path;
         HasScript  = true;
-        StatusText = $"Saved: {Path.GetFileName(path)}";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Analysis.Nazca.Saved"), Path.GetFileName(path));
         RefreshCoordinatesText();
     }
 

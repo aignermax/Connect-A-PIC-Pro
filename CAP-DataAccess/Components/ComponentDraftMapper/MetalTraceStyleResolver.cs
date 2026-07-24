@@ -54,13 +54,22 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
         /// </summary>
         /// <param name="active">The design's active process selection.</param>
         /// <param name="loadedPdks">All currently loaded PDK drafts.</param>
+        /// <param name="effectiveMemberPdkNames">
+        /// When non-null, REPLACES <see cref="ActiveProcessSelection.MemberPdkNames"/> as the
+        /// member filter — pass the live by-value member set (see
+        /// <c>LeftPanelViewModel.ResolveLiveMemberPdkNames</c>) so a value-compatible custom PDK
+        /// registered after the snapshot was persisted still contributes its metal cross-section
+        /// (placement-livemembers review, Finding 0). Null keeps the snapshot-only lookup.
+        /// </param>
         public static MetalTraceStyle Resolve(
-            ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks)
+            ActiveProcessSelection? active, IReadOnlyList<PdkDraft> loadedPdks,
+            IReadOnlyCollection<string>? effectiveMemberPdkNames = null)
         {
             if (active == null || loadedPdks == null)
                 return MetalTraceStyle.Default;
 
-            var definitions = active.MemberPdkNames
+            var memberNames = effectiveMemberPdkNames ?? (IEnumerable<string>)active.MemberPdkNames;
+            var definitions = memberNames
                 .Select(name => FindByName(loadedPdks, name, d => d.Name)?.Process);
 
             return Resolve(definitions);

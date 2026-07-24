@@ -1,5 +1,6 @@
 using System.Text.Json;
 using CAP_Core;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Update;
 
 namespace CAP.Avalonia.Services;
@@ -7,8 +8,10 @@ namespace CAP.Avalonia.Services;
 /// <summary>
 /// Manages user preferences with JSON file persistence.
 /// Stores PDK filter states and other user settings.
+/// Recent-projects preference access lives in the
+/// <c>UserPreferencesService.RecentProjects.cs</c> partial (file-size split).
 /// </summary>
-public class UserPreferencesService
+public partial class UserPreferencesService
 {
     private readonly string _preferencesFilePath;
     private readonly ErrorConsoleService? _errorConsole;
@@ -135,6 +138,29 @@ public class UserPreferencesService
     public void SetEnabledPdks(IEnumerable<string> pdkNames)
     {
         _preferences.EnabledPdks = pdkNames.ToList();
+        Save();
+    }
+
+    /// <summary>
+    /// Every PDK name the last filter-state save saw as loaded — enabled or not. Distinguishes a
+    /// PDK the user deliberately unchecked (known, absent from <see cref="GetEnabledPdks"/>) from
+    /// one the save never saw (e.g. created under a process lock, where the filter state is not
+    /// persisted): only the former must restore as disabled (PR #739 review). Empty for
+    /// preferences written before this list existed.
+    /// </summary>
+    public HashSet<string> GetKnownPdks()
+    {
+        return new HashSet<string>(_preferences.KnownPdks, StringComparer.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Sets both PDK filter lists — the enabled names and the full set of loaded ("known")
+    /// names — in one save. See <see cref="GetKnownPdks"/> for why the second list exists.
+    /// </summary>
+    public void SetPdkFilterState(IEnumerable<string> enabledPdkNames, IEnumerable<string> knownPdkNames)
+    {
+        _preferences.EnabledPdks = enabledPdkNames.ToList();
+        _preferences.KnownPdks = knownPdkNames.ToList();
         Save();
     }
 
@@ -281,6 +307,45 @@ public class UserPreferencesService
     }
 
     /// <summary>
+    /// Gets the global interconnect settings (waveguide width/bend radius/GDS layer).
+    /// Falls back to the historical export defaults when not configured.
+    /// </summary>
+    public InterconnectSettings GetInterconnectSettings() => new()
+    {
+        WidthMicrometers = _preferences.InterconnectWidthMicrometers
+            ?? InterconnectSettings.DefaultWidthMicrometers,
+        BendRadiusMicrometers = _preferences.InterconnectBendRadiusMicrometers
+            ?? InterconnectSettings.DefaultBendRadiusMicrometers,
+        GdsLayer = _preferences.InterconnectGdsLayer,
+    };
+
+    /// <summary>
+    /// Sets the global interconnect settings and saves preferences.
+    /// </summary>
+    public void SetInterconnectSettings(InterconnectSettings settings)
+    {
+        _preferences.InterconnectWidthMicrometers = settings.WidthMicrometers;
+        _preferences.InterconnectBendRadiusMicrometers = settings.BendRadiusMicrometers;
+        _preferences.InterconnectGdsLayer = settings.GdsLayer;
+        Save();
+    }
+
+    /// <summary>
+    /// Gets the UI language preference: a shipped language code ("en", "de",
+    /// "zh-Hans", "es") or "system" to follow the OS display language (default).
+    /// </summary>
+    public string GetUiLanguage() => _preferences.UiLanguage;
+
+    /// <summary>
+    /// Sets the UI language preference and saves. See <see cref="GetUiLanguage"/> for values.
+    /// </summary>
+    public void SetUiLanguage(string languageCodeOrSystem)
+    {
+        _preferences.UiLanguage = languageCodeOrSystem;
+        Save();
+    }
+
+    /// <summary>
     /// Clears any skipped update version and saves preferences.
     /// </summary>
     public void ClearSkippedUpdateVersion()
@@ -319,6 +384,13 @@ public class UserPreferences
     /// List of PDK names that are currently enabled (visible in library).
     /// </summary>
     public List<string> EnabledPdks { get; set; } = new();
+
+    /// <summary>
+    /// All PDK names loaded at the last filter-state save (enabled or not) — lets restore tell a
+    /// deliberately-unchecked PDK from one it has never seen. See
+    /// <see cref="UserPreferencesService.GetKnownPdks"/>.
+    /// </summary>
+    public List<string> KnownPdks { get; set; } = new();
 
     /// <summary>
     /// List of user-loaded PDK file paths to auto-load at startup.
@@ -368,4 +440,38 @@ public class UserPreferences
     /// Default chip height in millimeters for new projects (default 5 mm).
     /// </summary>
     public double DefaultChipHeightMm { get; set; } = 5.0;
+
+    /// <summary>
+    /// Recently opened project files, most recently opened first.
+    /// Maintained by <see cref="RecentProjectsService"/>.
+    /// </summary>
+    public List<RecentProjectEntry> RecentProjects { get; set; } = new();
+
+    /// <summary>
+    /// When true, the app reopens the most recent project at startup
+    /// instead of showing the Home screen (default false).
+    /// </summary>
+    public bool ReopenLastProjectOnStartup { get; set; }
+
+    /// <summary>
+    /// Global interconnect waveguide width in µm. Null = export default (0.45).
+    /// </summary>
+    public double? InterconnectWidthMicrometers { get; set; }
+
+    /// <summary>
+    /// Global interconnect bend radius in µm. Null = export default (50).
+    /// </summary>
+    public double? InterconnectBendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Global interconnect GDS layer. Null = PDK/Nazca default layer.
+    /// </summary>
+    public int? InterconnectGdsLayer { get; set; }
+
+    /// <summary>
+    /// UI language: a shipped language code ("en", "de", "zh-Hans", "es") or
+    /// "system" (default) to auto-detect the OS display language at startup.
+    /// </summary>
+    public string UiLanguage { get; set; } = "system";
+
 }

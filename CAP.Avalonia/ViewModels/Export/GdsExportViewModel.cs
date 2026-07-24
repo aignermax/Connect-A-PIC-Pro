@@ -2,6 +2,7 @@ using CAP_Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Export;
+using CAP.Avalonia.Services.Localization;
 using System.Collections.ObjectModel;
 
 namespace CAP.Avalonia.ViewModels.Export;
@@ -19,13 +20,13 @@ public partial class GdsExportViewModel : ObservableObject
     private bool _pythonAvailable;
 
     [ObservableProperty]
-    private string _pythonStatus = "Checking...";
+    private string _pythonStatus = LocalizationService.Instance.Translate("Export.Checking");
 
     [ObservableProperty]
     private bool _nazcaAvailable;
 
     [ObservableProperty]
-    private string _nazcaStatus = "Checking...";
+    private string _nazcaStatus = LocalizationService.Instance.Translate("Export.Checking");
 
     [ObservableProperty]
     private bool _generateGdsEnabled = true;
@@ -125,8 +126,8 @@ public partial class GdsExportViewModel : ObservableObject
     public async Task CheckEnvironmentAsync()
     {
         IsChecking = true;
-        PythonStatus = "Checking...";
-        NazcaStatus = "Checking...";
+        PythonStatus = LocalizationService.Instance.Translate("Export.Checking");
+        NazcaStatus = LocalizationService.Instance.Translate("Export.Checking");
 
         try
         {

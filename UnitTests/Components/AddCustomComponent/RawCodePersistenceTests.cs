@@ -6,12 +6,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies that a raw-code component definition (issue #702 follow-up: rawcode
-/// authoring) survives the PDK JSON save/load round-trip and is carried over
-/// onto the <see cref="CAP.Avalonia.ViewModels.Library.ComponentTemplate"/>
-/// produced by <see cref="PdkTemplateConverter.ConvertToTemplate"/>.
-/// </summary>
 public class RawCodePersistenceTests
 {
     [Fact]

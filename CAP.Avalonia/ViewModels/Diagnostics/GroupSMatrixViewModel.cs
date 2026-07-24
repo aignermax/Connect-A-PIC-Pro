@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP_Core.Components.Core;
 using CAP_Core.Grid;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -23,6 +24,15 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
     private GridManager? _grid;
 
+    private readonly CAP_Core.ErrorConsoleService? _errorConsole;
+
+    /// <summary>Initializes the group S-matrix diagnostics ViewModel.</summary>
+    /// <param name="errorConsole">Error console receiving physics-guard reports (optional).</param>
+    public GroupSMatrixViewModel(CAP_Core.ErrorConsoleService? errorConsole = null)
+    {
+        _errorConsole = errorConsole;
+    }
+
     /// <summary>
     /// Updates the diagnostics display based on the current grid state.
     /// </summary>
@@ -33,7 +43,7 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
         if (grid == null)
         {
-            StatusText = "No grid loaded";
+            StatusText = LocalizationService.Instance.Translate("Diag.Group.NoGrid");
             HasGroups = false;
             return;
         }
@@ -43,7 +53,7 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
         if (groups.Count == 0)
         {
-            StatusText = "No component groups in design";
+            StatusText = LocalizationService.Instance.Translate("Diag.Group.NoGroups");
             HasGroups = false;
             return;
         }
@@ -66,11 +76,15 @@ public partial class GroupSMatrixViewModel : ObservableObject
         }
 
         int validCount = GroupMatrices.Count(g => g.HasSMatrix);
-        StatusText = $"{validCount} of {groups.Count} groups have computed S-Matrices";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Diag.Group.SummaryFormat"), validCount, groups.Count);
     }
 
     /// <summary>
-    /// Computes S-Matrices for all groups in the current design.
+    /// Computes S-Matrices for all groups in the current design. A group whose data trips
+    /// the physics guard (<see cref="CAP_Core.LightCalculation.NonConvergentCircuitException"/>)
+    /// is reported to the Error Console and skipped — a diagnostics button must never
+    /// crash the app (round-4 hotfix); the remaining groups still get computed.
     /// </summary>
     [RelayCommand]
     private void ComputeAllGroupMatrices()
@@ -83,9 +97,18 @@ public partial class GroupSMatrixViewModel : ObservableObject
 
         foreach (var group in groups)
         {
-            if (group.ExternalPins.Count > 0)
+            if (group.ExternalPins.Count == 0)
+                continue;
+
+            try
             {
                 group.ComputeSMatrix();
+            }
+            catch (CAP_Core.LightCalculation.NonConvergentCircuitException ex)
+            {
+                _errorConsole?.LogError(
+                    $"Group '{group.GroupName}' S-matrix not computed: " +
+                    Analysis.NonConvergentCircuitMessageFormatter.Format(ex));
             }
         }
 
@@ -126,8 +149,8 @@ public class GroupMatrixInfo
     public int WavelengthCount { get; set; }
 
     public string Status => HasSMatrix
-        ? $"✓ {WavelengthCount} wavelengths"
+        ? string.Format(LocalizationService.Instance.Translate("Diag.Group.WavelengthsFormat"), WavelengthCount)
         : ExternalPinCount > 0
-            ? "⚠ Not computed"
-            : "No external pins";
+            ? LocalizationService.Instance.Translate("Diag.Group.NotComputed")
+            : LocalizationService.Instance.Translate("Diag.Group.NoExternalPins");
 }

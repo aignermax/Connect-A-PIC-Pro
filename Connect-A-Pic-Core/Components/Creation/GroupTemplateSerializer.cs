@@ -1,4 +1,5 @@
 using System.Text.Json;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
@@ -317,7 +318,13 @@ public static class GroupTemplateSerializer
             EndPinName = path.EndPin.Name,
             IsBlockedFallback = path.Path.IsBlockedFallback,
             IsInvalidGeometry = path.Path.IsInvalidGeometry,
-            Segments = segments
+            Segments = segments,
+            ConnectionType = path.ConnectionType.ToString(),
+            BendRadiusMicrometers = path.BendRadiusMicrometers,
+            WidthMicrometers = path.WidthMicrometers,
+            IsRouteFrozen = path.IsRouteFrozen,
+            PropagationLossDbPerCm = path.PropagationLossDbPerCm,
+            BendRadiusOverrides = new Dictionary<int, double>(path.BendRadiusOverrides)
         };
     }
 
@@ -367,13 +374,41 @@ public static class GroupTemplateSerializer
             }
         }
 
-        return new FrozenWaveguidePath
+        var frozenPath = new FrozenWaveguidePath
         {
             PathId = Guid.NewGuid(),
             Path = routedPath,
             StartPin = startPin,
             EndPin = endPin
         };
+        ApplyConnectionSettings(dto, frozenPath);
+        return frozenPath;
+    }
+
+    /// <summary>
+    /// Restores the per-connection routing settings from the DTO. Templates written
+    /// before these fields existed leave them null/absent and keep the model defaults
+    /// ("Auto" style); unknown style names also fall back to Auto.
+    /// </summary>
+    private static void ApplyConnectionSettings(FrozenPathDto dto, FrozenWaveguidePath frozenPath)
+    {
+        if (Enum.TryParse<WaveguideType>(dto.ConnectionType, out var connectionType)
+            && Enum.IsDefined(connectionType))
+        {
+            frozenPath.ConnectionType = connectionType;
+        }
+        if (dto.BendRadiusMicrometers is double bendRadius)
+            frozenPath.BendRadiusMicrometers = bendRadius;
+        if (dto.WidthMicrometers is double width)
+            frozenPath.WidthMicrometers = width;
+        frozenPath.IsRouteFrozen = dto.IsRouteFrozen;
+        if (dto.PropagationLossDbPerCm is double loss)
+            frozenPath.PropagationLossDbPerCm = loss;
+        if (dto.BendRadiusOverrides != null)
+        {
+            foreach (var (bendIndex, radius) in dto.BendRadiusOverrides)
+                frozenPath.BendRadiusOverrides[bendIndex] = radius;
+        }
     }
 
     /// <summary>
@@ -552,6 +587,41 @@ public class FrozenPathDto
     public bool IsBlockedFallback { get; set; }
     public bool IsInvalidGeometry { get; set; }
     public List<SegmentDto> Segments { get; set; } = new();
+
+    /// <summary>
+    /// Routing style name of the original connection ("Auto", "Bend", "SBend", "Cobra").
+    /// Null in templates that predate settings persistence — loads as Auto.
+    /// </summary>
+    public string? ConnectionType { get; set; }
+
+    /// <summary>
+    /// Bend radius of the original connection in micrometers.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? BendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Waveguide width of the original connection in micrometers.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? WidthMicrometers { get; set; }
+
+    /// <summary>
+    /// Whether the original connection's route was frozen. Missing in old templates — false.
+    /// </summary>
+    public bool IsRouteFrozen { get; set; }
+
+    /// <summary>
+    /// Propagation loss of the original connection in dB/cm.
+    /// Null in old templates — loads with the model default.
+    /// </summary>
+    public double? PropagationLossDbPerCm { get; set; }
+
+    /// <summary>
+    /// Manual per-bend radius overrides keyed by bend index.
+    /// Null in old templates — loads empty.
+    /// </summary>
+    public Dictionary<int, double>? BendRadiusOverrides { get; set; }
 }
 
 /// <summary>

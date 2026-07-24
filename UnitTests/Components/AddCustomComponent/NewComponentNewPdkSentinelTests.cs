@@ -15,14 +15,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers the "New PDK…" dropdown sentinel that replaces the old inline new-PDK/process UI
-/// (task 4 of the PDK-first component wizard, #723/#727 follow-up):
-/// <see cref="NewComponentViewModel.PdkChoices"/> always ends with the sentinel, selecting it
-/// invokes <see cref="NewComponentViewModel.CreateNewPdk"/> and adopts a successful result,
-/// a cancelled (null) creation reverts to the previously selected PDK, and saving against an
-/// existing PDK always appends to that PDK's own file (never a new "SaveToNamedPdk" branch).
-/// </summary>
 public class NewComponentNewPdkSentinelTests : IDisposable
 {
     private readonly string _root =
@@ -67,7 +59,7 @@ public class NewComponentNewPdkSentinelTests : IDisposable
         store.SaveToNamedPdk("Lib A", new ProcessDefinition { Name = "P" }, SeedComponent("x"), "gdsfactory", null);
         var vm = Build(store);
 
-        vm.PdkChoices.Count.ShouldBe(2); // one existing PDK + the sentinel
+        vm.PdkChoices.Count.ShouldBe(2);
         vm.PdkChoices[^1].IsNewPdk.ShouldBeTrue();
         vm.PdkChoices[^1].DisplayName.ShouldBe("New PDK…");
         vm.PdkChoices[^1].Pdk.ShouldBeNull();
@@ -79,7 +71,7 @@ public class NewComponentNewPdkSentinelTests : IDisposable
         var store = Store();
         var process = new ProcessDefinition { Name = "SiN 300" };
         var vm = Build(store);
-        vm.PdkChoices.Count.ShouldBe(1); // no custom PDKs yet -> only the sentinel
+        vm.PdkChoices.Count.ShouldBe(1);
 
         vm.CreateNewPdk = () =>
         {
@@ -87,8 +79,8 @@ public class NewComponentNewPdkSentinelTests : IDisposable
             return Task.FromResult<UserPdkInfo?>(new UserPdkInfo("Brand New Lib", path, process));
         };
 
-        vm.SelectedPdkChoice = vm.PdkChoices[0]; // the sentinel (only entry)
-        await Task.Yield(); // let the fire-and-forget creation task settle
+        vm.SelectedPdkChoice = vm.PdkChoices[0];
+        await Task.Yield();
 
         vm.SelectedCustomPdk.ShouldNotBeNull();
         vm.SelectedCustomPdk!.Name.ShouldBe("Brand New Lib");
@@ -103,11 +95,11 @@ public class NewComponentNewPdkSentinelTests : IDisposable
         var process = new ProcessDefinition { Name = "P" };
         store.SaveToNamedPdk("Existing Lib", process, SeedComponent("x"), "gdsfactory", null);
         var vm = Build(store);
-        var existingChoice = vm.PdkChoices[0]; // ctor already pre-selected this one
+        var existingChoice = vm.PdkChoices[0];
 
-        vm.CreateNewPdk = () => Task.FromResult<UserPdkInfo?>(null); // user cancels the modal
+        vm.CreateNewPdk = () => Task.FromResult<UserPdkInfo?>(null);
 
-        vm.SelectedPdkChoice = vm.PdkChoices[^1]; // the sentinel
+        vm.SelectedPdkChoice = vm.PdkChoices[^1];
         await Task.Yield();
 
         vm.SelectedPdkChoice.ShouldBe(existingChoice);
@@ -122,7 +114,7 @@ public class NewComponentNewPdkSentinelTests : IDisposable
         var vm = Build(store);
         var existingChoice = vm.PdkChoices[0];
 
-        vm.SelectedPdkChoice = vm.PdkChoices[^1]; // sentinel, but CreateNewPdk was never set
+        vm.SelectedPdkChoice = vm.PdkChoices[^1];
         await Task.Yield();
 
         vm.SelectedPdkChoice.ShouldBe(existingChoice);
@@ -142,9 +134,9 @@ public class NewComponentNewPdkSentinelTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.SavedDraft.ShouldNotBeNull();
-        vm.SavedFilePath.ShouldBe(pdkInfo.FilePath); // appended to the selected PDK's own file
+        vm.SavedFilePath.ShouldBe(pdkInfo.FilePath);
         var pdk = new PdkLoader().LoadFromFileForEditing(pdkInfo.FilePath);
-        pdk.Components.Count.ShouldBe(2); // appended, not replacing the file
+        pdk.Components.Count.ShouldBe(2);
         pdk.Components.ShouldContain(c => c.Name == "My Comp");
     }
 
@@ -152,7 +144,7 @@ public class NewComponentNewPdkSentinelTests : IDisposable
     public async Task CanSave_isFalse_untilAPdkIsSelected()
     {
         var store = Store();
-        var vm = Build(store); // no custom PDKs -> nothing selected
+        var vm = Build(store);
 
         await vm.RunPreviewCommand.ExecuteAsync(null);
         vm.HasPreview.ShouldBeTrue();

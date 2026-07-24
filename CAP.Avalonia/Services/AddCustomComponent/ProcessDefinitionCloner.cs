@@ -4,21 +4,8 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP.Avalonia.Services.AddCustomComponent;
 
-/// <summary>
-/// Deep-copies a <see cref="ProcessDefinition"/> so it can be handed to a
-/// <see cref="CAP.Avalonia.ViewModels.ProcessManagementViewModel"/> editor as an independent
-/// starting point without ever aliasing the source's rows (issue #733 review, Finding 3).
-/// A <see cref="ProcessDefinition"/> handed to the editor can be a live, in-memory object owned
-/// elsewhere — an already-loaded PDK's own process (<see cref="ProcessManagementViewModel.LoadForSinglePdkEdit"/>)
-/// or a template offered by <c>CreateCustomPdkViewModel</c> — and
-/// <see cref="ProcessManagementViewModel.Load"/> only copies collection references. Without a
-/// deep copy, editing the loaded grid rows would mutate that other owner's process object in
-/// place before the user ever saves. Shared by both call sites so the copy logic exists exactly
-/// once.
-/// </summary>
 public static class ProcessDefinitionCloner
 {
-    /// <summary>Returns an independent deep copy of <paramref name="source"/>.</summary>
     public static ProcessDefinition Clone(ProcessDefinition source) => new()
     {
         Name = source.Name,

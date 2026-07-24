@@ -1,3 +1,4 @@
+using System.Linq;
 using Avalonia;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
 using Shouldly;
@@ -129,5 +130,84 @@ public sealed class GdsPolygonRendererTests
 
         pivot.X.ShouldBe(15.0, tolerance: 1e-9);
         pivot.Y.ShouldBe(25.0, tolerance: 1e-9);
+    }
+
+    // ── GetUnrotatedSize ────────────────────────────────────────────────────
+
+    [Theory]
+    [InlineData(0, 50, 100, 50, 100)]
+    [InlineData(90, 50, 100, 100, 50)]    // rotate command swapped dims → swap back
+    [InlineData(180, 50, 100, 50, 100)]
+    [InlineData(270, 50, 100, 100, 50)]
+    [InlineData(360, 50, 100, 50, 100)]
+    [InlineData(-90, 50, 100, 100, 50)]
+    public void GetUnrotatedSize_SwapsBackAtOddQuarterTurns(
+        double rotationDegrees, double currentW, double currentH, double expectedW, double expectedH)
+    {
+        var (w, h) = GdsPolygonRenderer.GetUnrotatedSize(rotationDegrees, currentW, currentH);
+        w.ShouldBe(expectedW);
+        h.ShouldBe(expectedH);
+    }
+
+    // ── GetUnrotatedDestRect ────────────────────────────────────────────────
+
+    [Fact]
+    public void GetUnrotatedDestRect_90Degrees_IsUnrotatedSizeCenteredOnFootprint()
+    {
+        // Footprint after one R press: 50 wide × 100 tall (dims already swapped by the
+        // rotate command). The unrotated bitmap (100×50) must be centred on the footprint
+        // centre (25, 50) so the rotation transform maps it back onto the footprint.
+        var rect = GdsPolygonRenderer.GetUnrotatedDestRect(
+            compX: 0, compY: 0, compWidth: 50, compHeight: 100, rotationDegrees: 90);
+
+        rect.X.ShouldBe(-25.0, tolerance: 1e-9);
+        rect.Y.ShouldBe(25.0, tolerance: 1e-9);
+        rect.Width.ShouldBe(100.0, tolerance: 1e-9);
+        rect.Height.ShouldBe(50.0, tolerance: 1e-9);
+    }
+
+    [Fact]
+    public void GetUnrotatedDestRect_ZeroDegrees_EqualsFootprint()
+    {
+        var rect = GdsPolygonRenderer.GetUnrotatedDestRect(
+            compX: 10, compY: 20, compWidth: 50, compHeight: 100, rotationDegrees: 0);
+
+        rect.ShouldBe(new Rect(10, 20, 50, 100));
+    }
+
+    [Theory]
+    [InlineData(0)]
+    [InlineData(90)]
+    [InlineData(180)]
+    [InlineData(270)]
+    public void GetUnrotatedDestRect_RotatedByRotationMatrix_CoversComponentFootprint(double rotationDegrees)
+    {
+        // Invariant behind the fix for the "preview stays unrotated" bug: drawing the
+        // unrotated bitmap into GetUnrotatedDestRect and then applying BuildRotationMatrix
+        // (exactly what DrawGdsPreview does) must land the image precisely on the
+        // component's current, rotation-swapped footprint — for a NON-square component.
+        const double compX = 10, compY = 20, compW = 50, compH = 100;
+        double centerX = compX + compW / 2.0;
+        double centerY = compY + compH / 2.0;
+
+        var dest = GdsPolygonRenderer.GetUnrotatedDestRect(compX, compY, compW, compH, rotationDegrees);
+        var m = GdsPolygonRenderer.BuildRotationMatrix(rotationDegrees, centerX, centerY);
+
+        var corners = new[]
+        {
+            dest.TopLeft.Transform(m),
+            dest.TopRight.Transform(m),
+            dest.BottomLeft.Transform(m),
+            dest.BottomRight.Transform(m),
+        };
+        double minX = corners.Min(p => p.X);
+        double minY = corners.Min(p => p.Y);
+        double maxX = corners.Max(p => p.X);
+        double maxY = corners.Max(p => p.Y);
+
+        minX.ShouldBe(compX, tolerance: 1e-9);
+        minY.ShouldBe(compY, tolerance: 1e-9);
+        maxX.ShouldBe(compX + compW, tolerance: 1e-9);
+        maxY.ShouldBe(compY + compH, tolerance: 1e-9);
     }
 }

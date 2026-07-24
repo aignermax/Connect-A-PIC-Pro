@@ -16,6 +16,7 @@ public sealed class PlacementPolicyContext
     private readonly Func<ActiveProcessSelection?> _getActiveProcess;
     private readonly Func<IReadOnlyCollection<string>> _getProcessAgnosticPdkNames;
     private readonly Func<Component, string?> _resolveComponentPdkSource;
+    private readonly Func<IReadOnlyCollection<string>?> _resolveLiveMemberPdkNames;
 
     /// <summary>
     /// Creates a context from live accessors.
@@ -23,14 +24,19 @@ public sealed class PlacementPolicyContext
     /// <param name="getActiveProcess">Returns the design's active process, or null when unset.</param>
     /// <param name="getProcessAgnosticPdkNames">Returns the names of loaded process-agnostic tool PDKs.</param>
     /// <param name="resolveComponentPdkSource">Resolves a placed component's PDK source (null = built-in/unknown).</param>
+    /// <param name="resolveLiveMemberPdkNames">Returns by-value-compatible member PDK names for
+    /// the active process, computed live against the current PDK catalog; null falls back to the
+    /// persisted snapshot.</param>
     public PlacementPolicyContext(
         Func<ActiveProcessSelection?> getActiveProcess,
         Func<IReadOnlyCollection<string>> getProcessAgnosticPdkNames,
-        Func<Component, string?> resolveComponentPdkSource)
+        Func<Component, string?> resolveComponentPdkSource,
+        Func<IReadOnlyCollection<string>?>? resolveLiveMemberPdkNames = null)
     {
         _getActiveProcess = getActiveProcess ?? throw new ArgumentNullException(nameof(getActiveProcess));
         _getProcessAgnosticPdkNames = getProcessAgnosticPdkNames ?? throw new ArgumentNullException(nameof(getProcessAgnosticPdkNames));
         _resolveComponentPdkSource = resolveComponentPdkSource ?? throw new ArgumentNullException(nameof(resolveComponentPdkSource));
+        _resolveLiveMemberPdkNames = resolveLiveMemberPdkNames ?? (() => null);
     }
 
     /// <summary>
@@ -52,12 +58,16 @@ public sealed class PlacementPolicyContext
     /// </summary>
     public string? ResolveComponentPdkSource(Component component) => _resolveComponentPdkSource(component);
 
+    /// <summary>By-value-compatible member PDK names for the active process, computed live
+    /// against the current PDK catalog (null = fall back to the persisted snapshot).</summary>
+    public IReadOnlyCollection<string>? LiveMemberPdkNames => _resolveLiveMemberPdkNames();
+
     /// <summary>
     /// Checks a single component's placement against the current context.
     /// See <see cref="SingleProcessPolicy.CheckPlacement"/>.
     /// </summary>
     public (bool IsAllowed, string? BlockReason) CheckPlacement(string? componentPdkName) =>
-        SingleProcessPolicy.CheckPlacement(ActiveProcess, componentPdkName, ProcessAgnosticPdkNames);
+        SingleProcessPolicy.CheckPlacement(ActiveProcess, componentPdkName, ProcessAgnosticPdkNames, LiveMemberPdkNames);
 
     /// <summary>
     /// Checks a group's placement (over its children's PDK sources) against the current context.
@@ -65,5 +75,5 @@ public sealed class PlacementPolicyContext
     /// </summary>
     public (bool IsAllowed, string? BlockReason) CheckGroupPlacement(
         IEnumerable<string?> childPdkSources, string? groupName = null) =>
-        GroupProcessPolicy.CheckGroupPlacement(ActiveProcess, childPdkSources, ProcessAgnosticPdkNames, groupName);
+        GroupProcessPolicy.CheckGroupPlacement(ActiveProcess, childPdkSources, ProcessAgnosticPdkNames, LiveMemberPdkNames, groupName);
 }

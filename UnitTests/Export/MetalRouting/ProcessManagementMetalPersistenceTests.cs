@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP_Core.Components.Process;
 using CAP_Core.Export;
@@ -16,6 +17,13 @@ namespace UnitTests.Export.MetalRouting;
 /// </summary>
 public class ProcessManagementMetalPersistenceTests
 {
+    /// <summary>StatusText is localized (issue #749); pin English so the substring
+    /// assertion stays culture-independent regardless of the CI/dev OS language.</summary>
+    public ProcessManagementMetalPersistenceTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private static ProcessManagementViewModel VmSavingTo(string path, string pdkName)
     {
         var vm = new ProcessManagementViewModel(Mock.Of<IFileDialogService>())

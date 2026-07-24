@@ -1,5 +1,6 @@
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.Controls.Plotting;
+using CAP.Avalonia.Services.Localization;
 using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Legends;
@@ -93,7 +94,8 @@ internal static class TimeTracePlotBuilder
         bool useNs = windowPs >= NanosecondThresholdPs;
         double scale = useNs ? SecondsToNanoseconds : SecondsToPicoseconds;
         string unit = useNs ? "ns" : "ps";
-        model.Axes.First(a => a.Position == AxisPosition.Bottom).Title = $"Time ({unit})";
+        model.Axes.First(a => a.Position == AxisPosition.Bottom).Title =
+            string.Format(LocalizationService.Instance.Translate("Analysis.TimeDomain.TimeAxis"), unit);
 
         var scaledTime = result.TimeAxis.Select(t => t * scale).ToArray();
 
@@ -127,18 +129,24 @@ internal static class TimeTracePlotBuilder
     {
         var model = new PlotModel
         {
-            Title = "Transient — Power vs Time",
+            Title = LocalizationService.Instance.Translate("Analysis.TimeDomain.ChartTitle"),
             Background = OxyColors.Transparent,
             TextColor = PlotForeground,
             TitleColor = PlotForeground,
             PlotAreaBorderColor = PlotAxisline,
         };
+        // The per-pin checkbox list below the chart (TimeDomainPanel.axaml) is the only
+        // series-visibility control; an in-plot legend duplicated it as clickable buttons
+        // cluttering the chart (field feedback, round 5 finding 1). Kept (not removed) so a
+        // future need for the in-plot legend is a one-line flip, not a re-derivation.
         model.Legends.Add(new Legend
         {
             LegendPosition = LegendPosition.RightTop,
             LegendTextColor = PlotForeground,
+            IsLegendVisible = false,
         });
-        model.Axes.Add(CreateAxis(AxisPosition.Bottom, "Time (ps)"));
+        model.Axes.Add(CreateAxis(AxisPosition.Bottom,
+            string.Format(LocalizationService.Instance.Translate("Analysis.TimeDomain.TimeAxis"), "ps")));
         model.Axes.Add(CreateAxis(AxisPosition.Left, "Power |E(t)|²"));
         return model;
     }

@@ -590,7 +590,8 @@
     {
       "name": "Probe Pad",
       "category": "Electrical",
-      "nazcaFunction": "demo_pdk.probe_pad",
+      "nazcaFunction": "demo.pad_dc",
+      "nazcaParameters": "length=100, width=100",
       "widthMicrometers": 100,
       "heightMicrometers": 100,
       "nazcaOriginOffsetX": 0,

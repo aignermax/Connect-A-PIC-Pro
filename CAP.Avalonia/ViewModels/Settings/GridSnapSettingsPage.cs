@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Settings;
@@ -7,24 +8,22 @@ namespace CAP.Avalonia.ViewModels.Settings;
 /// Wraps the canvas-owned <see cref="GridSnapSettings"/> and
 /// <see cref="AlignmentGuideViewModel"/> so changes are live.
 /// </summary>
-public class GridSnapSettingsPage : ISettingsPage
+public class GridSnapSettingsPage : LocalizedSettingsPage
 {
     /// <inheritdoc/>
-    public string Title => "Grid & Alignment";
+    public override string Icon => "⊞";
 
     /// <inheritdoc/>
-    public string Icon => "⊞";
+    public override string? Category => "Canvas";
 
     /// <inheritdoc/>
-    public string? Category => "Canvas";
-
-    /// <inheritdoc/>
-    public object ViewModel { get; }
+    public override object ViewModel { get; }
 
     /// <summary>
     /// Initializes a new instance of <see cref="GridSnapSettingsPage"/>.
     /// </summary>
-    public GridSnapSettingsPage(DesignCanvasViewModel canvas)
+    public GridSnapSettingsPage(DesignCanvasViewModel canvas, LocalizationService localization)
+        : base("Settings.Section.GridAlignment", localization)
     {
         ViewModel = new GridSnapSettingsViewModel(canvas.GridSnap, canvas.AlignmentGuide);
     }

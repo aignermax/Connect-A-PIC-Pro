@@ -8,20 +8,12 @@ using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
 namespace CAP_DataAccess.Components.AddCustomComponent;
 
-/// <summary>
-/// Persists user-authored components into a writable, per-process user PDK file under
-/// the user's local app-data directory. Never touches the bundled foundry PDK JSONs
-/// (those live under <c>CAP-DataAccess/PDKs</c> and are read-only at runtime).
-/// One PDK file per fabrication process, because the S-matrix and layout are
-/// process-specific (issue #570).
-/// </summary>
 public sealed class UserPdkStore
 {
     private readonly string _root;
     private readonly PdkJsonSaver _saver;
     private readonly PdkLoader _loader;
 
-    /// <summary>Creates a store rooted at an explicit directory (used by tests).</summary>
     public UserPdkStore(string userPdkRootDirectory, PdkJsonSaver saver, PdkLoader loader)
     {
         _root = userPdkRootDirectory;
@@ -29,21 +21,51 @@ public sealed class UserPdkStore
         _loader = loader;
     }
 
-    /// <summary>
-    /// Creates the store used at runtime, rooted at
-    /// <c>%LOCALAPPDATA%/Lunima/user-pdks</c> (per-user, per-machine; never inside the
-    /// installed application directory so it survives reinstalls/updates).
-    /// </summary>
-    public static UserPdkStore CreateDefault() => new(
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "user-pdks"),
-        new PdkJsonSaver(),
-        new PdkLoader());
+    public static string DefaultRootDirectory =>
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "user-pdks");
 
-    /// <summary>The user-PDK file path for a fabrication process. Does not create the file.</summary>
+    public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
+
+    public string ForkBundledPdk(string bundledFilePath, string pdkName)
+    {
+        var target = ResolveNamedPath(pdkName);
+        if (File.Exists(target))
+            return target;
+
+        Directory.CreateDirectory(_root);
+        File.Copy(bundledFilePath, target);
+        return target;
+    }
+
+    /// <summary>
+    /// Writes an edited whole-PDK draft as the user's fork of a bundled PDK
+    /// (offset-editor save path). The bundled JSON is never touched; the draft
+    /// is saved to the fork location in the managed root. If a fork already
+    /// exists (e.g. created earlier by the component editor), its previous
+    /// state is backed up to <c>.trash</c> before being replaced, so no user
+    /// edit is silently lost. Returns the fork file path.
+    /// </summary>
+    public string SaveDraftAsFork(PdkDraft draft, string pdkName)
+    {
+        var target = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        if (File.Exists(target))
+        {
+            var trashPath = ResolveTrashDestination(target);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(target, trashPath);
+        }
+
+        _saver.SaveToFile(draft, target);
+        return target;
+    }
+
+    public PdkTrashService CreateTrashService() => new(_root, _loader, _saver);
+
     public string ResolvePath(ProcessDefinition process) =>
         Path.Combine(_root, Slug(process.Name) + ".json");
 
-    /// <summary>True when a component of that name is already stored for the process.</summary>
     public bool ComponentExists(ProcessDefinition process, string componentName)
     {
         var path = ResolvePath(process);
@@ -56,10 +78,6 @@ public sealed class UserPdkStore
         return pdk.Components.Exists(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Adds or replaces (by name, case-insensitive) the component in the process's user PDK,
-    /// creating the PDK file on first use. Returns the file path written to.
-    /// </summary>
     public string Save(ProcessDefinition process, PdkComponentDraft component, string backend, string? routingCrossSection)
     {
         var path = ResolvePath(process);
@@ -86,22 +104,11 @@ public sealed class UserPdkStore
         Components = new()
     };
 
-    /// <summary>
-    /// The file path a named custom PDK would live at. Does not create the file.
-    /// </summary>
     public string ResolveNamedPath(string pdkName) =>
         Path.Combine(_root, Slug(pdkName) + ".json");
 
-    /// <summary>True when a named custom PDK file already exists for that name.</summary>
     public bool NamedPdkExists(string pdkName) => File.Exists(ResolveNamedPath(pdkName));
 
-    /// <summary>
-    /// Creates a new, empty named custom PDK file (no components yet) bound to a
-    /// fabrication process, for the "PDK first, then add components" wizard flow.
-    /// Callers must check <see cref="NamedPdkExists"/> first; this method refuses to
-    /// silently overwrite an existing file with the same name.
-    /// </summary>
-    /// <exception cref="InvalidOperationException">A named PDK with that name already exists.</exception>
     public string CreateNamedPdkWithProcess(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection)
     {
         if (NamedPdkExists(pdkName))
@@ -126,7 +133,6 @@ public sealed class UserPdkStore
         return path;
     }
 
-    /// <summary>True when a component of that name exists in the PDK file at <paramref name="filePath"/>.</summary>
     public bool ComponentExistsInFile(string filePath, string componentName)
     {
         if (!File.Exists(filePath))
@@ -138,12 +144,6 @@ public sealed class UserPdkStore
         return pdk.Components.Exists(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
     }
 
-    /// <summary>
-    /// Lists every named custom PDK found directly under the store root: every
-    /// <c>*.json</c> file that loads successfully and declares a <see cref="ProcessDefinition"/>.
-    /// Unreadable or process-less files (e.g. legacy per-process files predating #570, or
-    /// files damaged outside the app) are silently skipped rather than failing the listing.
-    /// </summary>
     public IReadOnlyList<UserPdkInfo> ListCustomPdks()
     {
         var result = new List<UserPdkInfo>();
@@ -164,19 +164,12 @@ public sealed class UserPdkStore
             }
             catch
             {
-                // Skip files that don't parse as a valid PDK draft — the listing
-                // must stay usable even if one custom PDK file is malformed.
             }
         }
 
         return result;
     }
 
-    /// <summary>
-    /// Adds or replaces (by name, case-insensitive) the component in a user-named custom
-    /// PDK, independent of any single fabrication process's default file. Creates the file
-    /// (named <c>&lt;slug(pdkName)&gt;.json</c>) on first use. Returns the file path written to.
-    /// </summary>
     public string SaveToNamedPdk(string pdkName, ProcessDefinition process, PdkComponentDraft component, string backend, string? routingCrossSection)
     {
         var path = ResolveNamedPath(pdkName);
@@ -195,10 +188,6 @@ public sealed class UserPdkStore
         return path;
     }
 
-    /// <summary>
-    /// Adds or replaces (by name, case-insensitive) the component in an already-created
-    /// named custom PDK file. Returns <paramref name="filePath"/> for chaining.
-    /// </summary>
     public string AppendToExistingPdk(string filePath, PdkComponentDraft component)
     {
         var pdk = _loader.LoadFromFileForEditing(filePath);
@@ -220,10 +209,104 @@ public sealed class UserPdkStore
         Components = new()
     };
 
+    public string MoveToTrash(string filePath)
+    {
+        if (!File.Exists(filePath))
+        {
+            throw new FileNotFoundException($"PDK file not found: {filePath}", filePath);
+        }
+        if (!IsInManagedRoot(filePath))
+        {
+            throw new InvalidOperationException(
+                $"'{filePath}' is outside the managed user-PDK directory and must not be moved to its trash.");
+        }
+
+        var trashPath = ResolveTrashDestination(filePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+        File.Move(filePath, trashPath);
+        return trashPath;
+    }
+
+    public bool IsInManagedRoot(string filePath)
+    {
+        var directory = Path.GetDirectoryName(Path.GetFullPath(filePath));
+        var root = Path.GetFullPath(_root)
+            .TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        return string.Equals(directory, root, StringComparison.OrdinalIgnoreCase);
+    }
+
     /// <summary>
-    /// Converts a process display name into a filesystem- and culture-invariant slug
-    /// (lowercase, non-alphanumeric runs collapsed to a single hyphen).
+    /// Replaces (or adds) <paramref name="component"/> in the PDK file with a single
+    /// load-modify-save — any failure leaves the file fully old or fully new, never with the
+    /// component missing. Optionally backs the previous state up to <c>.trash</c> first.
+    /// Returns false when the file does not exist.
     /// </summary>
+    public bool ReplaceComponent(string filePath, PdkComponentDraft component, bool backupFirst = true)
+    {
+        if (!File.Exists(filePath))
+        {
+            return false;
+        }
+
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        if (backupFirst)
+        {
+            var trashPath = ResolveTrashDestination(filePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(filePath, trashPath);
+        }
+
+        _saver.SaveToFile(pdk, filePath);
+        return true;
+    }
+
+    public string? RemoveComponent(string filePath, string componentName, bool backupFirst = true)
+    {
+        if (!File.Exists(filePath))
+        {
+            return null;
+        }
+
+        var pdk = _loader.LoadFromFileForEditing(filePath);
+        var removedCount = pdk.Components.RemoveAll(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
+        if (removedCount == 0)
+        {
+            return null;
+        }
+
+        if (backupFirst)
+        {
+            var trashPath = ResolveTrashDestination(filePath);
+            Directory.CreateDirectory(Path.GetDirectoryName(trashPath)!);
+            File.Copy(filePath, trashPath);
+        }
+
+        _saver.SaveToFile(pdk, filePath);
+        return filePath;
+    }
+
+    private string ResolveTrashDestination(string filePath)
+    {
+        var trashDir = Path.Combine(_root, TrashDirectoryName);
+        var baseName = Path.GetFileNameWithoutExtension(filePath);
+        var timestamp = DateTime.Now.ToString("yyyyMMdd-HHmmss", CultureInfo.InvariantCulture);
+
+        var candidate = Path.Combine(trashDir, $"{baseName}-{timestamp}.json");
+        var suffix = 1;
+        while (File.Exists(candidate))
+        {
+            candidate = Path.Combine(trashDir, $"{baseName}-{timestamp}-{suffix}.json");
+            suffix++;
+        }
+
+        return candidate;
+    }
+
+    private const string TrashDirectoryName = ".trash";
+
     private static string Slug(string name)
     {
         var lower = (name ?? string.Empty).ToLower(CultureInfo.InvariantCulture);

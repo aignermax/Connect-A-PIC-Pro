@@ -5,14 +5,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers the render contract (see <c>scripts/render_component_preview.py</c>,
-/// <c>_build_cell_from_code_file</c>) for the Nazca starter snippet in
-/// <see cref="BackendCodeExamples"/>: the preview renderer requires either a
-/// <c>component()</c> function returning a Nazca cell, or a module-level <c>cell</c>
-/// variable. The old <c>component = nd.Cell(...)</c> form satisfies neither and fails
-/// the preview render.
-/// </summary>
 public class BackendCodeExamplesNazcaTests
 {
     [Fact]

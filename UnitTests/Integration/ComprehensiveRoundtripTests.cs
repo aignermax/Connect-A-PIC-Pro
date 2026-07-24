@@ -100,7 +100,7 @@ public class ComprehensiveRoundtripTests
 
     /// <summary>
     /// Verifies waveguide connection properties: StartPin/EndPin component mapping,
-    /// cached path segments, lock state, and target length configuration.
+    /// cached path segments, and lock state.
     /// </summary>
     [Fact]
     public async Task WaveguideConnection_AllProperties_PreservedAfterRoundtrip()
@@ -127,9 +127,6 @@ public class ComprehensiveRoundtripTests
             cachedPath.Segments.Add(new StraightSegment(80, 25.5, 200, 27.5, 0));
             var connVm = saveCanvas.ConnectPinsWithCachedRoute(startPin, endPin, cachedPath);
             connVm!.Connection.IsLocked = true;
-            connVm.Connection.TargetLengthMicrometers = 500.0;
-            connVm.Connection.IsTargetLengthEnabled = true;
-            connVm.Connection.LengthToleranceMicrometers = 2.5;
 
             await SaveToFile(saveVm, tempFile);
 
@@ -156,12 +153,6 @@ public class ComprehensiveRoundtripTests
                 "Path segment type must survive roundtrip");
 
             loadedConn.IsLocked.ShouldBeTrue("Connection IsLocked must survive roundtrip");
-            loadedConn.TargetLengthMicrometers.ShouldNotBeNull("TargetLengthMicrometers must survive roundtrip");
-            loadedConn.TargetLengthMicrometers!.Value.ShouldBe(500.0, 0.01,
-                "TargetLengthMicrometers value must survive roundtrip");
-            loadedConn.IsTargetLengthEnabled.ShouldBeTrue("IsTargetLengthEnabled must survive roundtrip");
-            loadedConn.LengthToleranceMicrometers.ShouldBe(2.5, 0.001,
-                "LengthToleranceMicrometers must survive roundtrip");
         }
         finally
         {

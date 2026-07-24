@@ -23,19 +23,10 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Covers <see cref="LeftPanelViewModel.CanEditTemplate"/> and
-/// <see cref="LeftPanelViewModel.EditCustomComponent"/> (issue #656 follow-up, task 6): the
-/// library's "Edit…" action must only ever act on a template that belongs to a currently-loaded,
-/// non-bundled (custom) PDK, and must open the "New Component" assistant prefilled via
-/// <see cref="NewComponentViewModel.LoadForEdit"/> — never the window itself, which cannot be
-/// opened headlessly.
-/// </summary>
 public class LibraryEditActionTests : IDisposable
 {
     private readonly List<string> _tempDirs = new();
 
-    /// <summary>Builds a <see cref="LeftPanelViewModel"/>, optionally with the "add custom component" collaborators wired.</summary>
     private LeftPanelViewModel CreateLeftPanelViewModel(UserPdkStore? userPdkStore = null)
     {
         var canvas = new DesignCanvasViewModel();
@@ -61,7 +52,6 @@ public class LibraryEditActionTests : IDisposable
             addCustomComponentDeps: deps);
     }
 
-    /// <summary>Creates a <see cref="UserPdkStore"/> rooted at a fresh temp directory, tracked for cleanup.</summary>
     private UserPdkStore CreateUserPdkStore()
     {
         var root = Path.Combine(Path.GetTempPath(), $"lunima-lea-{Guid.NewGuid():N}");
@@ -69,7 +59,6 @@ public class LibraryEditActionTests : IDisposable
         return new UserPdkStore(root, new PdkJsonSaver(), new PdkLoader());
     }
 
-    /// <summary>Writes a real user-PDK file containing a sample component into <paramref name="store"/>, mirroring <c>LeftPanelNewComponentTests</c>.</summary>
     private static (string filePath, string pdkName, PdkComponentDraft draft) SaveUserPdk(UserPdkStore store, string processName)
     {
         var process = new ProcessDefinition { Name = processName };
@@ -94,7 +83,7 @@ public class LibraryEditActionTests : IDisposable
     {
         foreach (var dir in _tempDirs.Where(Directory.Exists))
         {
-            try { Directory.Delete(dir, true); } catch { /* best effort */ }
+            try { Directory.Delete(dir, true); } catch { }
         }
     }
 
@@ -109,13 +98,14 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public void CanEditTemplate_false_forTemplateBelongingToABundledFoundryPdk()
+    public void BundledTemplate_isEditable_butNotDeletable()
     {
         var vm = CreateLeftPanelViewModel();
         vm.PdkManager.RegisterPdk("Foundry Pdk", null, isBundled: true, componentCount: 1);
         var template = new ComponentTemplate { Name = "X", PdkSource = "Foundry Pdk" };
 
-        vm.CanEditTemplate(template).ShouldBeFalse();
+        vm.CanEditTemplate(template).ShouldBeTrue();
+        vm.CanDeleteTemplate(template).ShouldBeFalse();
     }
 
     [Fact]
@@ -128,27 +118,50 @@ public class LibraryEditActionTests : IDisposable
     }
 
     [Fact]
-    public async Task EditCustomComponent_forBundledTemplate_doesNothing()
+    public async Task EditCustomComponent_forBundledTemplate_opensEditorWithoutForking_untilSave()
     {
-        var vm = CreateLeftPanelViewModel(CreateUserPdkStore());
-        vm.PdkManager.RegisterPdk("Foundry Pdk", null, isBundled: true, componentCount: 1);
-        var template = new ComponentTemplate { Name = "Grating Coupler", PdkSource = "Foundry Pdk" };
+        // Fork-on-save semantics: just LOOKING at a bundled component (✏ click) must leave the
+        // disk untouched — only "Save changes" creates the user copy of the PDK.
+        var userStore = CreateUserPdkStore();
+        var vm = CreateLeftPanelViewModel(userStore);
+
+        var (bundledPath, bundledName, _) = SaveUserPdk(CreateUserPdkStore(), "ActiveProc");
+        vm.PdkManager.RegisterPdk(bundledName, bundledPath, isBundled: true, componentCount: 1);
+
+        var showCalls = 0;
+        vm.ShowNewComponentWindowAsync = _ => { showCalls++; return Task.CompletedTask; };
+
+        var template = new ComponentTemplate { Name = "My Coupler", PdkSource = bundledName, IsCustom = false };
+        await vm.EditCustomComponentCommand.ExecuteAsync(template);
+
+        showCalls.ShouldBe(1);
+        userStore.NamedPdkExists(bundledName).ShouldBeFalse(
+            "opening the editor must not fork the bundled PDK — only saving does");
+        File.Exists(bundledPath).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task EditCustomComponent_whenLoadForEditFails_opensNoWindow()
+    {
+        // A template whose PDK is registered (so CanEditTemplate
+        // passes) but has no matching entry in the user PDK store makes LoadForEdit fail —
+        // that must NOT leave a half-initialized "New Component" window on screen.
+        var userStore = CreateUserPdkStore(); // empty store: no custom PDK to edit into
+        var vm = CreateLeftPanelViewModel(userStore);
+        vm.PdkManager.RegisterPdk("Ghost Pdk", "/tmp/ghost.json", isBundled: false, componentCount: 1);
+        var template = new ComponentTemplate { Name = "X", PdkSource = "Ghost Pdk" };
 
         var showCalls = 0;
         vm.ShowNewComponentWindowAsync = _ => { showCalls++; return Task.CompletedTask; };
 
         await vm.EditCustomComponentCommand.ExecuteAsync(template);
 
-        showCalls.ShouldBe(0);
+        showCalls.ShouldBe(0, "LoadForEdit failed, so no editor window may open");
     }
 
     [Fact]
     public async Task EditCustomComponent_forCustomTemplate_opensTheAssistantPrefilledForEdit()
     {
-        // Same UserPdkStore instance for both the assistant's deps and the on-disk PDK, so
-        // NewComponentViewModel's PdkChoices (read from the store) actually contain "ActiveProc"
-        // — a real bug caught by this test: two separate stores would silently leave PdkChoices
-        // empty and LoadForEdit unable to find a match.
         var store = CreateUserPdkStore();
         var vm = CreateLeftPanelViewModel(store);
         var (filePath, pdkName, draft) = SaveUserPdk(store, "ActiveProc");

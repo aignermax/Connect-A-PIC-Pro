@@ -19,8 +19,16 @@ public enum AutoCalibrateOutcome
 /// <summary>Per-component verdict from <see cref="PdkOffsetCalibration.Evaluate"/>.</summary>
 public enum ComponentCheckStatus
 {
-    /// <summary>Every Lunima pin is within the alignment tolerance of its matched Nazca pin.</summary>
+    /// <summary>Every Lunima pin is within the strict alignment tolerance of its matched Nazca pin.</summary>
     Aligned,
+    /// <summary>
+    /// Worst pin delta sits between the strict tolerance and the check tolerance
+    /// (default 0.1–0.5 µm). Waveguide widths are ~0.5 µm, so an offset in this
+    /// band is a visible port mismatch in the GDS export even though older
+    /// reports called it "Aligned" (round-5 field report: adiabatic couplers at
+    /// 0.30 µm). Auto-Calibrate fixes it like a Misaligned component.
+    /// </summary>
+    CheckAlignment,
     /// <summary>Bbox / pin counts match but at least one pin is outside tolerance — fixable by Auto-Calibrate.</summary>
     Misaligned,
     /// <summary>Lunima and Nazca disagree on the pin count — manual edit required.</summary>
@@ -44,6 +52,7 @@ public record ComponentCheckResult(
     public string StatusBadge => Status switch
     {
         ComponentCheckStatus.Aligned          => "✓",
+        ComponentCheckStatus.CheckAlignment   => "≈",
         ComponentCheckStatus.Misaligned       => "⚠",
         ComponentCheckStatus.PinCountMismatch => "✗",
         ComponentCheckStatus.NoNazcaPins      => "?",
@@ -54,6 +63,7 @@ public record ComponentCheckResult(
     /// <summary>True when Auto-Calibrate would resolve the issue without manual edits.</summary>
     public bool IsAutoFixable =>
         Status == ComponentCheckStatus.Misaligned ||
+        Status == ComponentCheckStatus.CheckAlignment ||
         Status == ComponentCheckStatus.Aligned;
 }
 
@@ -64,6 +74,26 @@ public record ComponentCheckResult(
 /// </summary>
 public static class PdkOffsetCalibration
 {
+    /// <summary>
+    /// Strict tolerance in micrometres below which a pin counts as Aligned.
+    /// Rationale (round-5 field report): single-mode strip waveguides are
+    /// ~0.5 µm wide, so a 0.3 µm pin offset visibly misses the port in the
+    /// GDS export — yet the old single 0.5 µm tolerance reported it as
+    /// "Aligned". 0.1 µm stays far above sub-grid rounding noise (1 nm dbu,
+    /// float round-trips ≤ 1e-9) while flagging anything a reviewer could
+    /// actually see at export scale.
+    /// </summary>
+    public const double AlignedToleranceMicrometers = 0.1;
+
+    /// <summary>
+    /// Upper edge of the "check" band: deltas in (Aligned..Check] evaluate as
+    /// <see cref="ComponentCheckStatus.CheckAlignment"/> (verify or Auto-Calibrate);
+    /// anything above is <see cref="ComponentCheckStatus.Misaligned"/>. Matches
+    /// the historical 0.5 µm threshold so existing "Misaligned" semantics are
+    /// unchanged — the new band only splits the former "Aligned" range.
+    /// </summary>
+    public const double CheckToleranceMicrometers = 0.5;
+
     /// <summary>
     /// Greedy bipartite pin matcher: repeatedly takes the closest Lunima/Nazca
     /// pair (in current Lunima→Nazca-space projection) and removes both from
@@ -210,11 +240,16 @@ public static class PdkOffsetCalibration
     /// Inspects the alignment of <paramref name="draft"/>'s pins against
     /// <paramref name="result"/>'s Nazca pins under the current calibration
     /// and returns a verdict suitable for Check-All reports. Does NOT mutate
-    /// the draft.
+    /// the draft. Verdict tiers: worst ≤ <paramref name="toleranceMicrometers"/>
+    /// → Aligned; ≤ <paramref name="checkToleranceMicrometers"/> → CheckAlignment;
+    /// above → Misaligned. Omitting the check tolerance collapses the middle
+    /// band (legacy two-tier behaviour).
     /// </summary>
     public static ComponentCheckResult Evaluate(
-        PdkComponentDraft draft, NazcaPreviewResult result, double toleranceMicrometers)
+        PdkComponentDraft draft, NazcaPreviewResult result, double toleranceMicrometers,
+        double? checkToleranceMicrometers = null)
     {
+        var checkTolerance = Math.Max(toleranceMicrometers, checkToleranceMicrometers ?? toleranceMicrometers);
         var name = draft.Name ?? "(unnamed)";
         if (result is not { Success: true })
             return new ComponentCheckResult(name, ComponentCheckStatus.RenderFailed,
@@ -246,6 +281,13 @@ public static class PdkOffsetCalibration
             return new ComponentCheckResult(name, ComponentCheckStatus.Aligned,
                 draft.Pins.Count, result.Pins.Count, worst,
                 $"All {draft.Pins.Count} pins within {toleranceMicrometers:F1} µm.");
+
+        if (worst <= checkTolerance)
+            return new ComponentCheckResult(name, ComponentCheckStatus.CheckAlignment,
+                draft.Pins.Count, result.Pins.Count, worst,
+                $"Worst pin delta {worst:F2} µm — within the check band " +
+                $"({toleranceMicrometers:F1}–{checkTolerance:F1} µm); visible at waveguide " +
+                $"scale, Auto-Calibrate will fix.");
 
         return new ComponentCheckResult(name, ComponentCheckStatus.Misaligned,
             draft.Pins.Count, result.Pins.Count, worst,

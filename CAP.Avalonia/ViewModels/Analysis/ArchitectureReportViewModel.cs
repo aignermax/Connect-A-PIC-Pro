@@ -1,4 +1,5 @@
 using CAP_Core.Analysis;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using System.Collections.ObjectModel;
@@ -42,7 +43,7 @@ public partial class ArchitectureReportViewModel : ObservableObject
 
     /// <summary>Gets or sets the status text shown below the Run button.</summary>
     [ObservableProperty]
-    private string _statusText = "Press 'Load Metrics' to view the architecture report";
+    private string _statusText = LocalizationService.Instance.Translate("Analysis.Architecture.InitialStatus");
 
     /// <summary>Gets whether metrics have been loaded.</summary>
     [ObservableProperty]
@@ -79,6 +80,8 @@ public partial class ArchitectureReportViewModel : ObservableObject
             Recommendations.Add(r);
 
         HasMetrics = true;
-        StatusText = $"Maturity: {MaturityScore}/5 | {TestFileCount} test files | {Recommendations.Count} action items";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Analysis.Architecture.Summary"),
+            MaturityScore, TestFileCount, Recommendations.Count);
     }
 }

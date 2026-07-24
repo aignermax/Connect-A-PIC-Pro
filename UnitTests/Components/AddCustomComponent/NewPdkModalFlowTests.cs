@@ -8,11 +8,6 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// End-to-end test for the PDK-first "New PDK…" modal flow (issue #726 follow-up, task 6): a
-/// named custom PDK is created empty via <see cref="UserPdkStore"/>, and a component is appended
-/// to it afterwards. Mirrors <c>UserPdkCreateEmptyTests</c> and <c>UserPdkNamedStoreTests</c>.
-/// </summary>
 public class NewPdkModalFlowTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-newpdkmodal-" + Guid.NewGuid().ToString("N"));

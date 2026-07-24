@@ -1,0 +1,58 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!--
+    App-wide compact control heights: Fluent's 32px Button/ComboBox/TextBox chrome shrinks
+    to ~21px (padding floor 1/2 plus FontSize 12); Expander headers shrink from 48px to 22px.
+
+    Sizing goes through the Fluent theme's resource keys, NOT a Style Selector="Button":
+    ToggleButton (and CheckBox/RadioButton) derive from Button at the CLR level, so a type
+    selector would match them too. ButtonPadding is also read by ToggleButton/RepeatButton —
+    accepted, the compact look is intended app-wide; CheckBox/RadioButton have their own keys
+    and stay untouched. Button has no MinHeight resource — its height is purely
+    padding+content driven. TextControlThemePadding/MinHeight drive TextBox, NumericUpDown
+    (its inner PART_TextBox template-binds to the outer Padding) and AutoCompleteBox;
+    NumericUpDown's spinner RepeatButtons pick up ButtonPadding for free.
+  -->
+  <Styles.Resources>
+    <ResourceDictionary>
+      <Thickness x:Key="ButtonPadding">8,1,8,2</Thickness>
+
+      <!-- Right=0 leaves room for the drop-down arrow glyph; only vertical padding is reduced. -->
+      <Thickness x:Key="ComboBoxPadding">12,1,0,2</Thickness>
+      <Thickness x:Key="ComboBoxItemThemePadding">11,1,11,2</Thickness>
+      <x:Double x:Key="ComboBoxMinHeight">21</x:Double>
+
+      <!-- Right=6 leaves room for the clear/reveal glyph some TextBoxes host in
+           InnerRightContent. MinHeight matches ComboBoxMinHeight so text inputs and combo
+           boxes align at the same row height. -->
+      <Thickness x:Key="TextControlThemePadding">10,1,6,2</Thickness>
+      <x:Double x:Key="TextControlThemeMinHeight">21</x:Double>
+
+      <!-- Fluent's Expander header defaults to MinHeight=48 with a 32px chevron button —
+           roughly 3x taller than the other compact rows above (measured empirically via a
+           headless probe against FluentTheme). ChevronButtonSize must shrink together with
+           MinHeight: the header's Grid sizes to fit the chevron, so leaving it at 32 would
+           still force a 32px-tall row regardless of MinHeight (round 5 finding 3a — the
+           PDK-offset editor's "per-pin deltas" / "preview source" fold-outs). -->
+      <x:Double x:Key="ExpanderMinHeight">22</x:Double>
+      <Thickness x:Key="ExpanderHeaderPadding">8,0,0,0</Thickness>
+      <x:Double x:Key="ExpanderChevronButtonSize">20</x:Double>
+      <Thickness x:Key="ExpanderChevronMargin">8,0,4,0</Thickness>
+    </ResourceDictionary>
+  </Styles.Resources>
+
+  <!-- Type selectors match by StyleKey, so CheckBox/ToggleButton/RadioButton (own StyleKeys)
+       stay untouched; views that set FontSize locally win anyway. -->
+  <Style Selector="Button">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="ComboBox">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="TextBox">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+  <Style Selector="NumericUpDown">
+    <Setter Property="FontSize" Value="12"/>
+  </Style>
+</Styles>

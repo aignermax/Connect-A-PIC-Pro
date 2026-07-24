@@ -13,15 +13,16 @@ using Xunit;
 
 namespace UnitTests.Components.AddCustomComponent;
 
-/// <summary>
-/// Verifies <see cref="CreateCustomPdkViewModel"/>: a name plus either an adopted existing
-/// process or a freshly defined one creates a named user PDK via <see cref="UserPdkStore"/>,
-/// with name-collision (by display name) and empty/contentless-selection guards on
-/// <c>CreatePdk</c>'s availability, and a fully specified fingerprint for a "define new" process.
-/// </summary>
 public class CreateCustomPdkViewModelTests : IDisposable
 {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "lunima-createpdk-" + Guid.NewGuid().ToString("N"));
+
+    /// <summary>StatusText assertions expect English substrings ("built-in"); pin the language
+    /// so the tests don't depend on the machine locale or on which test class ran first
+    /// (same pattern as the PdkOffset test classes, issue #749).</summary>
+    public CreateCustomPdkViewModelTests() =>
+        CAP.Avalonia.Services.Localization.LocalizationService.Instance.SetLanguage(
+            CAP.Avalonia.Services.Localization.SupportedLanguage.English.Code);
 
     private UserPdkStore CreateStore() => new(_root, new PdkJsonSaver(), new PdkLoader());
 
@@ -38,7 +39,7 @@ public class CreateCustomPdkViewModelTests : IDisposable
     {
         if (Directory.Exists(_root))
         {
-            try { Directory.Delete(_root, true); } catch { /* best effort */ }
+            try { Directory.Delete(_root, true); } catch { }
         }
     }
 
@@ -69,8 +70,6 @@ public class CreateCustomPdkViewModelTests : IDisposable
         vm.PdkName = "Fresh Lib";
         vm.ProcessSource = PdkProcessSource.DefineNew;
         vm.ProcessDefinitionEditor.ProcessName = "My New Process";
-        // NewProcess() already seeds Si/SiO2 core/cladding materials; add a cross-section
-        // (required content) and a core thickness so the fingerprint is fully specified.
         vm.ProcessDefinitionEditor.AddXsectionCommand.Execute(null);
         vm.CoreThicknessNm = 220;
 
@@ -145,8 +144,6 @@ public class CreateCustomPdkViewModelTests : IDisposable
     public void CreatePdk_CollisionIsByDisplayName_CaseInsensitive()
     {
         var store = CreateStore();
-        // The collision check keys on the stored DISPLAY name (via ListCustomPdks), not the
-        // slugged file name: an exact display-name match (case-insensitive) is a collision.
         store.CreateNamedPdkWithProcess("My Lib", ExistingProcess(), "gdsfactory", null);
 
         var vm = CreateVm(store);
@@ -160,12 +157,34 @@ public class CreateCustomPdkViewModelTests : IDisposable
     }
 
     [Fact]
+    public void CreatePdk_NameCollidingWithALoadedBundledPdk_IsRejectedWithAnExplanation()
+    {
+        // A brand-new user PDK named like a loaded bundled PDK
+        // would be mistaken for its fork on the next save/startup and silently displace the
+        // whole built-in library — block the name at creation time instead.
+        var store = CreateStore();
+        var vm = new CreateCustomPdkViewModel(
+            store, new[] { ExistingProcess() },
+            new ProcessManagementViewModel(Mock.Of<IFileDialogService>()),
+            reservedBundledPdkNames: new[] { "CornerStone SiN" });
+        vm.SelectedExistingProcess = vm.AvailableProcesses[0];
+        vm.PdkName = "cornerstone sin"; // case-insensitive
+
+        var eventFired = false;
+        vm.PdkCreated += (_, _) => eventFired = true;
+
+        vm.CreatePdkCommand.Execute(null);
+
+        eventFired.ShouldBeFalse();
+        vm.CreatedFilePath.ShouldBeNull();
+        store.ListCustomPdks().ShouldBeEmpty("no file may be created under a bundled PDK's name");
+        vm.StatusText.ShouldContain("built-in");
+    }
+
+    [Fact]
     public void CreatePdk_DoesNotThrow_WhenStoreLevelSlugCollisionOccurs()
     {
         var store = CreateStore();
-        // "My Lib" and "My  Lib" are distinct display names but slug to the same file, so the
-        // by-display-name check passes yet the store refuses the write. The command must surface
-        // that as a status message rather than letting the exception escape and crash the dialog.
         store.CreateNamedPdkWithProcess("My Lib", ExistingProcess(), "gdsfactory", null);
 
         var vm = CreateVm(store);
