@@ -23,8 +23,10 @@ public class CreateConnectionCommand : IUndoableCommand
     private WaveguideConnection? _connection;
     private WaveguideConnectionViewModel? _connectionViewModel;
 
-    // Track any connections that were removed when creating this connection
-    private List<(WaveguideConnection connection, WaveguideConnectionViewModel viewModel)>? _removedConnections;
+    // Connections that were removed when creating this connection. Crossing
+    // sub-connections are stored as their pre-split ORIGINALS (#705): restoring a
+    // sub whose crossing was dissolved would leave ghost pins on a dead component.
+    private List<WaveguideConnection>? _removedConnections;
 
     public CreateConnectionCommand(
         DesignCanvasViewModel canvas,
@@ -52,12 +54,15 @@ public class CreateConnectionCommand : IUndoableCommand
 
         if (_connection != null && _connectionViewModel != null)
         {
-            // Redo: remove any restored connections first, then re-add the new connection
+            // Redo: remove any restored connections first, then re-add the new connection.
+            // RemoveConnectionDeferred dissolves a crossing if one was re-inserted meanwhile.
             if (_removedConnections != null)
             {
-                foreach (var (conn, vm) in _removedConnections)
+                foreach (var conn in _removedConnections)
                 {
-                    _canvas.Connections.Remove(vm);
+                    var vm = _canvas.Connections.FirstOrDefault(c => c.Connection == conn);
+                    if (vm != null)
+                        _canvas.Connections.Remove(vm);
                     _canvas.ConnectionManager.RemoveConnectionDeferred(conn);
                 }
             }
@@ -68,7 +73,8 @@ public class CreateConnectionCommand : IUndoableCommand
         else
         {
             // First execution: track connections that will be removed
-            _removedConnections = new List<(WaveguideConnection, WaveguideConnectionViewModel)>();
+            _removedConnections = new List<WaveguideConnection>();
+            var crossing = _canvas.ConnectionManager.CrossingInsertion;
 
             // Find connections on start pin
             var startConnections = _canvas.Connections
@@ -80,10 +86,13 @@ public class CreateConnectionCommand : IUndoableCommand
                 .Where(c => c.Connection.StartPin == _endPin || c.Connection.EndPin == _endPin)
                 .ToList();
 
-            // Store all connections that will be removed
-            foreach (var conn in startConnections.Concat(endConnections).Distinct())
+            // Store all connections that will be removed, normalized to their
+            // pre-split originals (two subs of the same crossing dedupe to one).
+            foreach (var connVm in startConnections.Concat(endConnections).Distinct())
             {
-                _removedConnections.Add((conn.Connection, conn));
+                var original = crossing?.ResolveToOriginal(connVm.Connection) ?? connVm.Connection;
+                if (!_removedConnections.Contains(original))
+                    _removedConnections.Add(original);
             }
 
             // Create new connection (this will remove the old ones)
@@ -101,17 +110,19 @@ public class CreateConnectionCommand : IUndoableCommand
     {
         if (_connection != null && _connectionViewModel != null)
         {
-            // Remove the new connection
+            // Remove the new connection. If the crossing pass split it, this
+            // dissolves the crossing instead of removing a stale object (#705).
             _canvas.ConnectionManager.RemoveConnectionDeferred(_connection);
             _canvas.Connections.Remove(_connectionViewModel);
 
             // Restore any connections that were removed
             if (_removedConnections != null)
             {
-                foreach (var (conn, vm) in _removedConnections)
+                foreach (var conn in _removedConnections)
                 {
                     _canvas.ConnectionManager.AddExistingConnection(conn);
-                    _canvas.Connections.Add(vm);
+                    if (!_canvas.Connections.Any(c => c.Connection == conn))
+                        _canvas.Connections.Add(new WaveguideConnectionViewModel(conn));
                 }
             }
 

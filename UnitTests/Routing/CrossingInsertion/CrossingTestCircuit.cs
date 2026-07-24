@@ -58,8 +58,13 @@ public static class CrossingTestCircuit
     /// Optional crossing component factory (defaults to <see cref="CreateCrossingComponent"/>).
     /// Pass a factory backed by the real PDK instantiation path to exercise production wiring.
     /// </param>
+    /// <param name="extraComponents">
+    /// Optional additional components placed as pathfinding obstacles (e.g. a wall
+    /// blocking a crossing port to provoke an insertion rollback).
+    /// </param>
     public static CrossLayout Build(
-        double bendLossDbPer90Deg, Func<Component?>? crossingFactory = null)
+        double bendLossDbPer90Deg, Func<Component?>? crossingFactory = null,
+        IEnumerable<Component>? extraComponents = null)
     {
         // Only the light-source terminal maps InFlow→OutFlow; the sink terminals are
         // absorbing, otherwise the mirrors would form a Fabry–Pérot cavity through
@@ -73,6 +78,8 @@ public static class CrossingTestCircuit
         {
             aLeft.Component, aRight.Component, bTop.Component, bBottom.Component
         };
+        if (extraComponents != null)
+            components.AddRange(extraComponents);
 
         var router = new WaveguideRouter { MinBendRadiusMicrometers = 10.0, AStarCellSize = 4.0 };
         router.InitializePathfindingGrid(0, 0, 400, 400, components);

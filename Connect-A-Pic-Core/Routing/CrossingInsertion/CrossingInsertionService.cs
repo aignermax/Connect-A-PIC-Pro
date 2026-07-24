@@ -13,7 +13,7 @@ namespace CAP_Core.Routing.CrossingInsertion;
 /// </summary>
 public class CrossingInsertionService
 {
-    private readonly List<CrossingRecord> _records = new();
+    private readonly CrossingRecordRegistry _registry = new();
     private readonly CrossingInserter _inserter = new();
     private readonly CrossingPlacement _placement = new();
 
@@ -40,13 +40,51 @@ public class CrossingInsertionService
     public Action<Component>? ComponentAdded { get; set; }
 
     /// <summary>Invoked when a crossing component was removed during dissolution.</summary>
-    public Action<Component>? ComponentRemoved { get; set; }
+    public Action<Component>? ComponentRemoved
+    {
+        get => _registry.ComponentRemoved;
+        set => _registry.ComponentRemoved = value;
+    }
 
     /// <summary>Safety cap on crossings inserted in one pass.</summary>
     public int MaxCrossingsPerPass { get; set; } = 8;
 
     /// <summary>Currently active crossings.</summary>
-    public IReadOnlyList<CrossingRecord> Records => _records;
+    public IReadOnlyList<CrossingRecord> Records => _registry.Records;
+
+    /// <summary>
+    /// Drops all records without touching connections or components — called when
+    /// the whole design is discarded (File → New, project load, group-edit swap).
+    /// </summary>
+    public void Reset() => _registry.Reset();
+
+    /// <summary>True when the connection participates in any active crossing (as sub or original).</summary>
+    public bool IsCrossingConnection(WaveguideConnection connection) =>
+        _registry.IsCrossingConnection(connection);
+
+    /// <summary>
+    /// Maps a crossing sub-connection back to its pre-split original connection.
+    /// Returns the connection itself when it is not a sub-connection. Undo/redo
+    /// snapshots must store the ORIGINAL so restoring never re-adds sub-connections
+    /// whose crossing component was dissolved (ghost pins, duplicate connectivity).
+    /// </summary>
+    public WaveguideConnection ResolveToOriginal(WaveguideConnection connection) =>
+        _registry.ResolveToOriginal(connection);
+
+    /// <summary>
+    /// Registers a record reconstructed from a loaded design (see
+    /// <see cref="CrossingRecordRebuilder"/>) so loaded crossings dissolve and
+    /// re-evaluate exactly like ones inserted in the running session.
+    /// </summary>
+    public void RestoreRecord(CrossingRecord record) => _registry.Add(record);
+
+    /// <summary>
+    /// Dissolves every crossing whose net endpoints moved since placement, so the
+    /// next routing + crossing pass re-evaluates them instead of forcing the nets
+    /// through a leftover crossing forever.
+    /// </summary>
+    public void DissolveStaleRecords(WaveguideConnectionManager manager, WaveguideRouter router) =>
+        _registry.DissolveStaleRecords(manager, router);
 
     /// <summary>
     /// Runs one crossing-insertion pass over all routed connections.
@@ -90,22 +128,14 @@ public class CrossingInsertionService
     }
 
     /// <summary>
-    /// Dissolves the crossing a removed connection participates in: all four
-    /// sub-connections and the crossing component are removed and the OTHER
-    /// original connection is restored unsplit. Returns false when the
-    /// connection is not part of any crossing.
+    /// Dissolves the crossing a removed connection participates in (as a
+    /// sub-connection or as a split original): all four sub-connections and the
+    /// crossing component are removed and the OTHER original connection is
+    /// restored unsplit. Returns false when the connection is not part of any crossing.
     /// </summary>
     public bool TryDissolveForConnection(
-        WaveguideConnection removedConnection, WaveguideConnectionManager manager, WaveguideRouter router)
-    {
-        var record = _records.FirstOrDefault(r => r.ContainsSubConnection(removedConnection));
-        if (record == null) return false;
-
-        var removedOriginal = record.GetOriginalFor(removedConnection)!;
-        var survivor = removedOriginal == record.OriginalA ? record.OriginalB : record.OriginalA;
-        Dissolve(record, manager, router, new List<WaveguideConnection> { survivor });
-        return true;
-    }
+        WaveguideConnection removedConnection, WaveguideConnectionManager manager, WaveguideRouter router) =>
+        _registry.TryDissolveForConnection(removedConnection, manager, router);
 
     /// <summary>
     /// Dissolves all crossings whose sub-connections touch the given component
@@ -113,44 +143,8 @@ public class CrossingInsertionService
     /// that component are restored unsplit.
     /// </summary>
     public void DissolveForComponent(
-        Component component, WaveguideConnectionManager manager, WaveguideRouter router)
-    {
-        var affected = _records
-            .Where(r => r.AllSubConnections.Any(c => Touches(c, component)) ||
-                        r.CrossingComponent == component)
-            .ToList();
-
-        foreach (var record in affected)
-        {
-            var survivors = new List<WaveguideConnection>();
-            if (!Touches(record.OriginalA, component)) survivors.Add(record.OriginalA);
-            if (!Touches(record.OriginalB, component)) survivors.Add(record.OriginalB);
-            Dissolve(record, manager, router, survivors);
-        }
-    }
-
-    private void Dissolve(
-        CrossingRecord record, WaveguideConnectionManager manager, WaveguideRouter router,
-        List<WaveguideConnection> survivors)
-    {
-        _records.Remove(record);
-        foreach (var sub in record.AllSubConnections)
-        {
-            router.PathfindingGrid?.RemoveWaveguideObstacle(sub.Id);
-            manager.Connections.Remove(sub);
-        }
-
-        router.RemoveComponentObstacle(record.CrossingComponent);
-
-        foreach (var survivor in survivors)
-        {
-            manager.Connections.Add(survivor);
-        }
-
-        // Notify AFTER the connection list is consistent again, so hosts
-        // (e.g. the canvas binder) can sync their view of the connections.
-        ComponentRemoved?.Invoke(record.CrossingComponent);
-    }
+        Component component, WaveguideConnectionManager manager, WaveguideRouter router) =>
+        _registry.DissolveForComponent(component, manager, router);
 
     private bool TryInsertForConnection(
         WaveguideConnection connection, WaveguideConnectionManager manager, WaveguideRouter router,
@@ -213,7 +207,12 @@ public class CrossingInsertionService
                 return false;
             }
 
-            ApplyInsertion(candidate!, crossing, manager, router);
+            if (!ApplyInsertion(candidate!, crossing, manager, router))
+            {
+                // Sub-routing failed and the insertion was rolled back — the
+                // originals (including this connection's detour) are registered again.
+                return false;
+            }
             return true;
         }
         catch
@@ -243,34 +242,77 @@ public class CrossingInsertionService
         }
     }
 
-    private void ApplyInsertion(
+    /// <summary>
+    /// Replaces the two originals by the crossing and its four sub-connections.
+    /// When any sub-connection fails to route (blocked or invalid), the insertion
+    /// is rolled back structurally — the crossing is removed and the originals are
+    /// restored with their working detours — and false is returned, so a working
+    /// net is never irreversibly replaced by a broken one.
+    /// </summary>
+    private bool ApplyInsertion(
         CrossingCandidate candidate, Component crossing,
         WaveguideConnectionManager manager, WaveguideRouter router)
     {
         var grid = router.PathfindingGrid!;
         crossing.Name = $"{crossing.Name}_{Guid.NewGuid().ToString("N")[..8]}";
+        crossing.IsInsertedCrossing = true;
         var record = _placement.Place(candidate, crossing);
 
-        grid.RemoveWaveguideObstacle(record.OriginalA.Id);
-        grid.RemoveWaveguideObstacle(record.OriginalB.Id);
-        manager.Connections.Remove(record.OriginalA);
-        manager.Connections.Remove(record.OriginalB);
-
-        router.AddComponentObstacle(crossing);
-
-        foreach (var sub in record.AllSubConnections)
+        lock (manager.SyncRoot)
         {
-            manager.Connections.Add(sub);
-            sub.RecalculateTransmission(router);
-            if (sub.IsPathValid && sub.RoutedPath != null)
-                grid.AddWaveguideObstacle(sub.Id, sub.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
+            grid.RemoveWaveguideObstacle(record.OriginalA.Id);
+            grid.RemoveWaveguideObstacle(record.OriginalB.Id);
+            manager.Connections.Remove(record.OriginalA);
+            manager.Connections.Remove(record.OriginalB);
+
+            router.AddComponentObstacle(crossing);
+
+            foreach (var sub in record.AllSubConnections)
+            {
+                manager.Connections.Add(sub);
+                sub.RecalculateTransmission(router);
+                if (sub.IsPathValid && sub.RoutedPath != null)
+                    grid.AddWaveguideObstacle(sub.Id, sub.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
+            }
+
+            if (record.AllSubConnections.Any(sub => !sub.IsPathValid || sub.IsBlockedFallback))
+            {
+                RollbackInsertion(record, manager, router);
+                return false;
+            }
         }
 
-        _records.Add(record);
+        _registry.Add(record);
 
         // Notify AFTER the sub-connections replaced the originals, so hosts
         // (e.g. the canvas binder) see a consistent connection list.
         ComponentAdded?.Invoke(crossing);
+        return true;
+    }
+
+    /// <summary>
+    /// Structurally reverts a failed insertion: removes the sub-connections and
+    /// the crossing obstacle, restores both originals and their grid obstacles.
+    /// Caller holds the manager's <see cref="WaveguideConnectionManager.SyncRoot"/>.
+    /// </summary>
+    private static void RollbackInsertion(
+        CrossingRecord record, WaveguideConnectionManager manager, WaveguideRouter router)
+    {
+        var grid = router.PathfindingGrid!;
+        foreach (var sub in record.AllSubConnections)
+        {
+            grid.RemoveWaveguideObstacle(sub.Id);
+            manager.Connections.Remove(sub);
+        }
+
+        router.RemoveComponentObstacle(record.CrossingComponent);
+
+        foreach (var original in new[] { record.OriginalA, record.OriginalB })
+        {
+            manager.Connections.Add(original);
+            if (original.IsPathValid && original.RoutedPath != null)
+                grid.AddWaveguideObstacle(original.Id, original.RoutedPath.Segments, manager.WaveguideWidthMicrometers);
+        }
     }
 
     private static double StraightLineLossDb(WaveguideConnection connection)
@@ -285,9 +327,5 @@ public class CrossingInsertionService
 
     /// <summary>True when the connection is a sub-connection of any active crossing.</summary>
     private bool IsCrossingSubConnection(WaveguideConnection connection) =>
-        _records.Any(r => r.ContainsSubConnection(connection));
-
-    private static bool Touches(WaveguideConnection connection, Component component) =>
-        connection.StartPin.ParentComponent == component ||
-        connection.EndPin.ParentComponent == component;
+        _registry.IsSubConnection(connection);
 }

@@ -35,6 +35,14 @@ public partial class WaveguideConnectionManager
     /// </summary>
     private readonly object _connectionsSync = new();
 
+    /// <summary>
+    /// Guards structural mutations of <see cref="Connections"/> that happen on the
+    /// routing thread (crossing insertion / dissolution) against UI-thread consumers
+    /// that enumerate the list (S-matrix building, save, drop). Aliases the mutation
+    /// lock so the crossing pass and the UI commands share ONE lock object.
+    /// </summary>
+    public object SyncRoot => _connectionsSync;
+
     /// <summary>Copy of <see cref="Connections"/> taken under the mutation lock.</summary>
     private List<WaveguideConnection> SnapshotConnections()
     {
@@ -226,13 +234,13 @@ public partial class WaveguideConnectionManager
 
         // Remove waveguide obstacle from pathfinding grid
         var router = _router;
-        if (router.PathfindingGrid != null)
-        {
-            router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
-        }
-
         lock (_connectionsSync)
         {
+            if (router.PathfindingGrid != null)
+            {
+                router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            }
+
             Connections.Remove(connection);
         }
 
@@ -246,16 +254,26 @@ public partial class WaveguideConnectionManager
     /// <summary>
     /// Removes a connection without triggering route recalculation.
     /// Used for async routing: remove connection first, then route asynchronously.
+    /// When the connection participates in an inserted crossing (as a sub-connection
+    /// or as a split original), the crossing is dissolved instead: the crossing
+    /// component and all four sub-connections are removed and the other original is
+    /// restored unsplit — no delete path may leave an orphaned crossing behind.
     /// </summary>
     public void RemoveConnectionDeferred(WaveguideConnection connection)
     {
-        var router = _router;
-        if (router.PathfindingGrid != null)
+        if (CrossingInsertion != null &&
+            CrossingInsertion.TryDissolveForConnection(connection, this, _router))
         {
-            router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            return;
         }
+
+        var router = _router;
         lock (_connectionsSync)
         {
+            if (router.PathfindingGrid != null)
+            {
+                router.PathfindingGrid.RemoveWaveguideObstacle(connection.Id);
+            }
             Connections.Remove(connection);
         }
     }
@@ -273,6 +291,10 @@ public partial class WaveguideConnectionManager
 
     public void Clear()
     {
+        // Drop crossing bookkeeping with the design: stale records must never
+        // resurrect dissolved originals into a fresh/loaded design (File → New,
+        // project load, group-edit canvas swap).
+        CrossingInsertion?.Reset();
         lock (_connectionsSync)
         {
             Connections.Clear();
@@ -301,6 +323,14 @@ public partial class WaveguideConnectionManager
         Action? progressCallback = null,
         CancellationToken cancellationToken = default)
     {
+        // Re-evaluate existing crossings first: when a net endpoint moved, the
+        // crossing is dissolved so its originals are routed from scratch below and
+        // the insertion pass re-inserts a crossing only if it is still beneficial.
+        if (CrossingInsertion != null && !_isCrossingPassRunning)
+        {
+            CrossingInsertion.DissolveStaleRecords(this, _router);
+        }
+
         RouteAllConnections(progressCallback, cancellationToken);
         RunCrossingInsertionPass(cancellationToken);
 
@@ -741,6 +771,8 @@ public partial class WaveguideConnectionManager
     /// </summary>
     public Dictionary<(Guid PinIdInflow, Guid PinIdOutflow), Complex> GetConnectionTransfers()
     {
+        // Snapshot under the lock: the crossing pass may swap connections
+        // structurally on the routing thread while the S-matrix is being built.
         var transfers = new Dictionary<(Guid, Guid), Complex>();
         // Snapshot: simulation reads this while routing/commands may mutate the list.
         foreach (var conn in SnapshotConnections())

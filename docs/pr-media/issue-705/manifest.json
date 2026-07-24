@@ -1,0 +1,26 @@
+[
+  {
+    "file": "01-crossing-inserted.png",
+    "caption": "Two nets intersect, so the routing pass automatically splits them through an inserted crossing component (gold) at the intersection."
+  },
+  {
+    "file": "02-delete-sub-dissolves-crossing.png",
+    "caption": "Deleting one sub-connection of the vertical net dissolves the whole crossing and restores the untouched horizontal net unsplit instead of orphaning the component."
+  },
+  {
+    "file": "03-undo-reinserts-crossing.png",
+    "caption": "Undoing the delete restores the vertical net and the routing pass re-evaluates and re-inserts the crossing without ghost pins or duplicate connections."
+  },
+  {
+    "file": "04-delete-endpoint-dissolves-crossing.png",
+    "caption": "Deleting the A_right terminal removes the horizontal net, dissolves the crossing, and restores the vertical net unsplit."
+  },
+  {
+    "file": "05-undo-restores-and-reinserts.png",
+    "caption": "Undoing the component delete restores both nets, which are re-evaluated and split through a fresh crossing again."
+  },
+  {
+    "file": "06-unroutable-insertion-rolls-back.png",
+    "caption": "When a crossing port cannot be routed (sabotaged port buried in the wall) the insertion rolls back completely and the working detour route is kept."
+  }
+]

@@ -66,7 +66,25 @@ public class CrossingInsertionCanvasBinder
     public bool IsEnabled
     {
         get => _canvas.ConnectionManager.CrossingInsertion != null;
-        set => _canvas.ConnectionManager.CrossingInsertion = value ? Service : null;
+        set
+        {
+            _canvas.ConnectionManager.CrossingInsertion = value ? Service : null;
+            if (value)
+                RebuildRecordsForExistingCrossings();
+        }
+    }
+
+    /// <summary>
+    /// Rebuilds dissolution records for auto-inserted crossings that exist on the
+    /// canvas without a record (#705) — e.g. loaded from file, or placed before the
+    /// feature was toggled off and on again. Idempotent: recorded crossings are skipped.
+    /// </summary>
+    private void RebuildRecordsForExistingCrossings()
+    {
+        CrossingRecordRebuilder.Rebuild(
+            Service,
+            _canvas.ConnectionManager,
+            _canvas.Components.Select(vm => vm.Component));
     }
 
     /// <summary>Creates a fresh crossing component and remembers its template metadata.</summary>

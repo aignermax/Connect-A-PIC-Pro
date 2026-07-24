@@ -61,6 +61,14 @@ public class Component : ICloneable
     public bool IsLocked { get; set; }
 
     /// <summary>
+    /// True when this component is a waveguide crossing placed automatically by the
+    /// adaptive crossing-insertion pass (Issue #553), as opposed to a crossing the
+    /// user placed manually. Persisted with the design so crossing records can be
+    /// rebuilt after load and the crossing stays dissolvable.
+    /// </summary>
+    public bool IsInsertedCrossing { get; set; }
+
+    /// <summary>
     /// Whether this component's laser emits light (issue #690): true = input coupler,
     /// false = listen-only output coupler. Lives on the core component (like
     /// <see cref="IsLocked"/>) so the state survives grouping, ungrouping and

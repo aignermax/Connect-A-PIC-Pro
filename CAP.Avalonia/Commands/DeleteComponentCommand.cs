@@ -19,7 +19,14 @@ public class DeleteComponentCommand : IUndoableCommand
     private readonly double _y;
     private readonly int? _laserWavelengthNm;
     private readonly double? _laserInputPower;
-    private readonly List<(WaveguideConnection connection, WaveguideConnectionViewModel vm)> _deletedConnections = new();
+
+    /// <summary>
+    /// Connections to restore on Undo. Crossing sub-connections are snapshotted as
+    /// their pre-split ORIGINALS (#705): deleting the component dissolves its
+    /// crossings, so re-adding the subs would resurrect ghost pins on a removed
+    /// crossing component and duplicate the survivors the dissolution restored.
+    /// </summary>
+    private readonly List<WaveguideConnection> _deletedConnections = new();
 
     public DeleteComponentCommand(
         DesignCanvasViewModel canvas,
@@ -47,8 +54,10 @@ public class DeleteComponentCommand : IUndoableCommand
         if (_component.IsLocked)
             return;
 
-        // Store connections that will be deleted
+        // Store connections that will be deleted, normalized to pre-split originals
+        // (two subs of the same crossing dedupe to one original).
         _deletedConnections.Clear();
+        var crossing = _canvas.ConnectionManager.CrossingInsertion;
         foreach (var connVm in _canvas.Connections.ToList())
         {
             // Check if connection is to regular pins or to GroupPins (ExternalPins)
@@ -57,7 +66,9 @@ public class DeleteComponentCommand : IUndoableCommand
 
             if (startConnected || endConnected)
             {
-                _deletedConnections.Add((connVm.Connection, connVm));
+                var original = crossing?.ResolveToOriginal(connVm.Connection) ?? connVm.Connection;
+                if (!_deletedConnections.Contains(original))
+                    _deletedConnections.Add(original);
             }
         }
 
@@ -80,12 +91,13 @@ public class DeleteComponentCommand : IUndoableCommand
                 _componentViewModel.LaserConfig.InputPower = _laserInputPower.Value;
         }
 
-        // Re-add connections
-        foreach (var (connection, _) in _deletedConnections)
+        // Re-add connections. Dissolution may already have restored a survivor
+        // original — both the manager and the VM list guard against duplicates.
+        foreach (var connection in _deletedConnections)
         {
             _canvas.ConnectionManager.AddExistingConnection(connection);
-            var connVm = new WaveguideConnectionViewModel(connection);
-            _canvas.Connections.Add(connVm);
+            if (!_canvas.Connections.Any(c => c.Connection == connection))
+                _canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
         }
 
         // Recalculate routes asynchronously (grid is rebuilt inside RecalculateRoutesAsync)

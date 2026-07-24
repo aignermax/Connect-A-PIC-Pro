@@ -60,6 +60,44 @@ public class CrossingRecord
     /// <summary>The two sub-connections that replaced <see cref="OriginalB"/>.</summary>
     public required List<WaveguideConnection> SubConnectionsB { get; init; }
 
+    /// <summary>Tolerance for anchor-pin movement before a crossing is considered stale (µm).</summary>
+    public const double AnchorToleranceMicrometers = 1.0;
+
+    /// <summary>
+    /// Absolute positions of the four outer anchor pins (the originals' endpoints)
+    /// at the time the crossing was placed. Used to detect that a net endpoint
+    /// moved so the crossing must be re-evaluated (dissolved and re-inserted only
+    /// if still beneficial) instead of forcing the nets through it forever.
+    /// </summary>
+    public required List<(double X, double Y)> AnchorPositions { get; init; }
+
+    /// <summary>
+    /// Captures the current anchor positions for the given originals
+    /// (order: A.Start, A.End, B.Start, B.End).
+    /// </summary>
+    public static List<(double X, double Y)> CaptureAnchors(
+        WaveguideConnection originalA, WaveguideConnection originalB) => new()
+    {
+        originalA.StartPin.GetAbsolutePosition(),
+        originalA.EndPin.GetAbsolutePosition(),
+        originalB.StartPin.GetAbsolutePosition(),
+        originalB.EndPin.GetAbsolutePosition(),
+    };
+
+    /// <summary>True when any anchor pin moved beyond the tolerance since placement.</summary>
+    public bool HaveAnchorsMoved()
+    {
+        var current = CaptureAnchors(OriginalA, OriginalB);
+        for (int i = 0; i < current.Count; i++)
+        {
+            double dx = current[i].X - AnchorPositions[i].X;
+            double dy = current[i].Y - AnchorPositions[i].Y;
+            if (Math.Sqrt(dx * dx + dy * dy) > AnchorToleranceMicrometers)
+                return true;
+        }
+        return false;
+    }
+
     /// <summary>All four sub-connections of this crossing.</summary>
     public IEnumerable<WaveguideConnection> AllSubConnections =>
         SubConnectionsA.Concat(SubConnectionsB);
