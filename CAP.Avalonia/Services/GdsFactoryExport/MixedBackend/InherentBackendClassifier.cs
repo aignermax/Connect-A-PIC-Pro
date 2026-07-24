@@ -3,7 +3,7 @@ using CAP_Core.Components.Core;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 
-/// <summary>The layout engine a component's geometry is natively defined in (issue #776).</summary>
+/// <summary>The layout engine a component's geometry is natively defined in.</summary>
 public enum InherentBackend
 {
     /// <summary>Rendered by the gdsfactory exporter (gdsfactory-native PDKs, gdsfactory raw code).</summary>
@@ -14,9 +14,10 @@ public enum InherentBackend
 }
 
 /// <summary>
-/// Determines a placed component's INHERENT backend for the mixed-backend GDS export
-/// (issue #776): the <c>rawCodeBackend</c> for raw-code components, the PDK's native
-/// backend otherwise. Explicitly NOT per-instance overrides — those were retired in #748.
+/// Determines a placed component's INHERENT backend for the mixed-backend GDS export:
+/// the <c>rawCodeBackend</c> for raw-code components, the PDK's native
+/// backend otherwise. Explicitly NOT per-instance overrides — the inherent
+/// backend is a property of the template/PDK, not of the placement.
 /// Raw-code information lives only on the library <see cref="ComponentTemplate"/> (core
 /// components carry no PDK source of their own), so classification resolves the template
 /// with the same matching rules as <see cref="ComponentPdkSourceResolver"/>.

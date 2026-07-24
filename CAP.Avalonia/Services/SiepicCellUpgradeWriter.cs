@@ -16,6 +16,9 @@ namespace CAP.Avalonia.Services;
 /// deep-copies the real geometry into the stub cell, keeping the cell name so
 /// placed instances stay put. Any failure (klayout or PDK missing, cell unknown)
 /// downgrades to a stderr warning and keeps the stub — the export never breaks.
+/// Components sharing a function name with different parameters share one cell
+/// (the stub generator dedupes by name); the script warns on stderr when that
+/// happens rather than silently rendering one variant for all.
 /// </summary>
 public static class SiepicCellUpgradeWriter
 {
@@ -42,7 +45,55 @@ public static class SiepicCellUpgradeWriter
         sb.AppendLine("# --- Lunima: upgrade SiEPIC stub boxes to real foundry geometry (klayout) ---");
         sb.AppendLine(PythonBlock);
         sb.AppendLine($"_lunima_upgrade_siepic_cells(gds_filename, {{{mapLiteral}}})");
+        foreach (var collision in FindParamCollisions(canvas, include))
+            sb.AppendLine(
+                $"print(\"[Lunima] WARN: multiple parameter sets for SiEPIC cell '{Escape(collision)}' " +
+                "— one shared cell is used for all instances; check geometry against the PDK.\", file=sys.stderr)");
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Function names placed with more than one parameter set. The stub generator dedupes
+    /// by function name, so such components share one cell — flag it in the script output
+    /// instead of silently rendering one variant for all.
+    /// </summary>
+    private static IEnumerable<string> FindParamCollisions(
+        DesignCanvasViewModel canvas, Func<Component, bool>? include)
+    {
+        var seen = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var compVm in canvas.Components)
+        {
+            var comp = compVm.Component;
+            if (comp.IsAnalysisTool) continue;
+            if (comp is ComponentGroup group)
+            {
+                foreach (var child in group.GetAllComponentsRecursive())
+                {
+                    var hit = TrackParam(seen, child, include);
+                    if (hit != null) yield return hit;
+                }
+            }
+            else
+            {
+                var hit = TrackParam(seen, comp, include);
+                if (hit != null) yield return hit;
+            }
+        }
+    }
+
+    private static string? TrackParam(
+        Dictionary<string, string> seen, Component comp, Func<Component, bool>? include)
+    {
+        if (comp.IsAnalysisTool) return null;
+        if (include != null && !include(comp)) return null;
+        var funcName = comp.NazcaFunctionName;
+        if (string.IsNullOrEmpty(funcName)) return null;
+        if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) != true) return null;
+        var parameters = comp.NazcaFunctionParameters ?? string.Empty;
+        if (seen.TryGetValue(funcName, out var existing))
+            return existing != parameters ? funcName : null;
+        seen[funcName] = parameters;
+        return null;
     }
 
     /// <summary>
@@ -112,7 +163,11 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
                     try:
                         _kw[_k.strip()] = float(_v)
                     except ValueError:
-                        _kw[_k.strip()] = _v.strip()
+                        _v = _v.strip()
+                        # PDK strings quote text values (pol='TE') — the PCell wants the bare text.
+                        if len(_v) >= 2 and _v[0] == _v[-1] and _v[0] in "'\"":
+                            _v = _v[1:-1]
+                        _kw[_k.strip()] = _v
             return _kw
 
         def _resolve(_func_name, _params):
@@ -156,7 +211,10 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
             _stub.copy_tree(_real)
             _upgraded += 1
         if _upgraded:
-            _out.write(gds_path)
+            import os as _os
+            _tmp = _os.path.splitext(gds_path)[0] + '.tmp.gds'  # .gds suffix — klayout sniffs the format from the extension
+            _out.write(_tmp)
+            _os.replace(_tmp, gds_path)  # atomic — a failed write never truncates the export
             print(f"[Lunima] {_upgraded} SiEPIC cell(s) upgraded to real foundry geometry.")
     except Exception as _exc:
         print(f"[Lunima] WARN: SiEPIC real-geometry upgrade skipped ({_exc}); stub boxes kept.", file=_sys.stderr)

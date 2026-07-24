@@ -67,7 +67,7 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Exports only the components matching <paramref name="include"/> — the nazca-native
-    /// group of a mixed-backend export (issue #776). Connections are NOT emitted: routed
+    /// group of a mixed-backend export. Connections are NOT emitted: routed
     /// waveguides are owned by the main gdsfactory script, which imports the partial GDS
     /// this script renders and merges it into the final output. The top cell is named
     /// <paramref name="topCellName"/> so it cannot collide with the gdsfactory design cell.
@@ -315,16 +315,19 @@ public class SimpleNazcaExporter
             var comp = compVm.Component;
             if (comp.IsAnalysisTool) continue;
             // gdsfactory-native components (e.g. CornerStone SiN) have no Nazca representation —
-            // skip them rather than emit a meaningless demofab stub (#570). They export via the
-            // gdsfactory export instead.
-            if (!string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
+            // skip them rather than emit a meaningless demofab stub. They export via the
+            // gdsfactory export instead. Only in the full export, though: when an include
+            // predicate partitions the design (mixed-backend partial), it alone decides —
+            // skipping here would silently drop raw-code nazca components that also carry a
+            // gdsfactory function name.
+            if (include == null && !string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
             if (comp is ComponentGroup group)
             {
                 // Flatten group: export all child components at their absolute positions
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
-                    if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
+                    if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     if (include != null && !include(child)) continue;
                     AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
                 }

@@ -5,7 +5,7 @@ using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport.MixedBackend;
 
-/// <summary>Tests for the inherent-backend classification of placed components (#776).</summary>
+/// <summary>Tests for the inherent-backend classification of placed components.</summary>
 public class InherentBackendClassifierTests
 {
     private static readonly ComponentTemplate[] EmptyLibrary = Array.Empty<ComponentTemplate>();

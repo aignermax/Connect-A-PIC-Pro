@@ -9,7 +9,7 @@ using Xunit;
 
 namespace UnitTests.Export.GdsFactoryExport.MixedBackend;
 
-/// <summary>Dialog-flow tests for the mixed-backend GDS export (#776): the nazca partial
+/// <summary>Dialog-flow tests for the mixed-backend GDS export: the nazca partial
 /// script is written and run first, then the main gdsfactory script merges its GDS.</summary>
 [Trait("Category", "Slow")]
 public class MixedBackendExportViewModelTests

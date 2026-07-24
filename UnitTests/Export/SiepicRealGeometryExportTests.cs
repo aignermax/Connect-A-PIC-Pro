@@ -58,6 +58,52 @@ public class SiepicRealGeometryExportTests
             "stub export draws one nd.Polygon box; the real siepic_ebeam_pdk ebeam_dc_te1550 cell has many polygons");
     }
 
+    [Fact]
+    public void NazcaExport_SiepicComponent_EmitsUpgradeBlockWithSafeFallback()
+    {
+        // Env-independent pins: the post-pass exists, is fully guarded (any failure keeps
+        // the stub and only warns), and writes the GDS atomically.
+        var script = new SimpleNazcaExporter().Export(EbeamCanvas());
+
+        script.ShouldContain("_lunima_upgrade_siepic_cells(gds_filename, {'ebeam_dc_te1550': 'gap=200E-9'})");
+        script.ShouldContain("try:");
+        script.ShouldContain("except Exception");
+        script.ShouldContain("[Lunima] WARN: real SiEPIC cell");
+        script.ShouldContain("SiEPIC real-geometry upgrade skipped");
+        script.ShouldContain("_os.replace(_tmp, gds_path)");
+    }
+
+    [Fact]
+    public void PartialExport_ExcludedSiepicComponent_EmitsNoUpgradeBlock()
+    {
+        var script = new SimpleNazcaExporter().ExportPartial(
+            EbeamCanvas(), _ => false, MixedBackendGdsOrchestrator.NazcaPartialTopCellName);
+
+        script.ShouldNotContain("_lunima_upgrade_siepic_cells");
+    }
+
+    [Fact]
+    public void NazcaExport_ParamCollision_WarnsInScript()
+    {
+        // Two placements of the same SiEPIC function with different parameters share one
+        // cell (the stub generator dedupes by name) — the script must say so on stderr.
+        var canvas = EbeamCanvas();
+        var second = TestComponentFactory.CreateBasicComponent();
+        second.Identifier = "DC2";
+        second.NazcaFunctionName = "ebeam_dc_te1550";
+        second.NazcaModuleName = "siepic_ebeam_pdk";
+        second.NazcaFunctionParameters = "gap=200E-9,Lc=5E-6";
+        second.WidthMicrometers = 12.02;
+        second.HeightMicrometers = 6.2;
+        second.NazcaOriginOffsetX = 6.01;
+        second.NazcaOriginOffsetY = 3.1;
+        canvas.AddComponent(second, "Directional Coupler TE 1550 (Lc=5um)");
+
+        var script = new SimpleNazcaExporter().Export(canvas);
+
+        script.ShouldContain("multiple parameter sets for SiEPIC cell 'ebeam_dc_te1550'");
+    }
+
     [SkippableFact]
     public async Task NazcaExport_UnresolvableSiepicCell_FallsBackToStub_WithWarning()
     {
@@ -134,7 +180,7 @@ public class SiepicRealGeometryExportTests
         }
     }
 
-    private static async Task<(int ExitCode, string StdOut, string StdErr)> RunPythonAsync(
+    internal static async Task<(int ExitCode, string StdOut, string StdErr)> RunPythonAsync(
         string python, string workingDir, params string[] args)
     {
         var psi = new ProcessStartInfo { WorkingDirectory = workingDir };
@@ -160,41 +206,47 @@ public class SiepicRealGeometryExportTests
         return (process.ExitCode, await stdOut, await stdErr);
     }
 
-    /// <summary>Walks up from the test output dir to the repo root (temporary debug dump).</summary>
-    private static string FindRepoRootForDump()
-    {
-        var dir = new DirectoryInfo(AppContext.BaseDirectory);
-        while (dir != null && !File.Exists(Path.Combine(dir.FullName, "CAP.Avalonia", "App.axaml.cs")))
-            dir = dir.Parent;
-        return dir?.FullName ?? Path.GetTempPath();
-    }
-
-    /// <summary>Locates a Lunima managed env (%LOCALAPPDATA%/Lunima/envs/*) with siepic_ebeam_pdk installed.</summary>
-    private static string? FindSiepicPython()
+    /// <summary>
+    /// Locates a Python with klayout + siepic_ebeam_pdk + nazca + gdsfactory: first a
+    /// Lunima managed env (%LOCALAPPDATA%/Lunima/envs/*), then python/python3 on PATH
+    /// (CI installs the packages into setup-python).
+    /// </summary>
+    internal static string? FindSiepicPython()
     {
         var envs = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "envs");
-        if (!Directory.Exists(envs))
-            return null;
-
-        foreach (var root in Directory.GetDirectories(envs))
+        if (Directory.Exists(envs))
         {
-            if (!HasSiepicPdk(root)) continue;
-            foreach (var rel in new[] { Path.Combine("Scripts", "python.exe"), Path.Combine("bin", "python") })
+            foreach (var root in Directory.GetDirectories(envs))
             {
-                var py = Path.Combine(root, rel);
-                if (File.Exists(py)) return py;
+                foreach (var rel in new[] { Path.Combine("Scripts", "python.exe"), Path.Combine("bin", "python") })
+                {
+                    var py = Path.Combine(root, rel);
+                    if (File.Exists(py) && ProbeSiepic(py).GetAwaiter().GetResult())
+                        return py;
+                }
             }
+        }
+
+        foreach (var candidate in new[] { "python", "python3" })
+        {
+            if (ProbeSiepic(candidate).GetAwaiter().GetResult())
+                return candidate;
         }
         return null;
     }
 
-    private static bool HasSiepicPdk(string envRoot)
+    private static async Task<bool> ProbeSiepic(string python)
     {
-        if (Directory.Exists(Path.Combine(envRoot, "Lib", "site-packages", "siepic_ebeam_pdk")))
-            return true;   // Windows venv layout
-        var lib = Path.Combine(envRoot, "lib");
-        return Directory.Exists(lib)
-            && Directory.GetDirectories(lib).Any(d => Directory.Exists(Path.Combine(d, "site-packages", "siepic_ebeam_pdk")));
+        try
+        {
+            var probe = await RunPythonAsync(
+                python, Path.GetTempPath(), "-c", "import klayout.db, siepic_ebeam_pdk, nazca, gdsfactory");
+            return probe.ExitCode == 0;
+        }
+        catch
+        {
+            return false;   // not on PATH at all
+        }
     }
 }

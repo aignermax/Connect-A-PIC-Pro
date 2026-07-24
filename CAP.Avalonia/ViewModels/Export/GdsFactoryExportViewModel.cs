@@ -45,11 +45,11 @@ public partial class GdsFactoryExportViewModel : ObservableObject
 
     /// <summary>Supplies the loaded component library, used to resolve each placed
     /// component's inherent backend (raw-code backend lookup) for the mixed-backend
-    /// export (issue #776); wired by the DI layer. Null means an empty library.</summary>
+    /// export; wired by the DI layer. Null means an empty library.</summary>
     public Func<IEnumerable<ComponentTemplate>>? TemplateLibraryProvider { get; set; }
 
     /// <summary>Supplies the configured nazca exporter (carries the interconnect settings
-    /// source) for the mixed-backend export (issue #776); wired by the DI layer. Null falls
+    /// source) for the mixed-backend export; wired by the DI layer. Null falls
     /// back to a default <see cref="SimpleNazcaExporter"/>.</summary>
     public Func<SimpleNazcaExporter>? NazcaExporterProvider { get; set; }
 
@@ -104,7 +104,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        // Mixed-backend design (issue #776): gdsfactory-native and nazca-native components
+        // Mixed-backend design: gdsfactory-native and nazca-native components
         // coexist. Each group renders with its own backend into a separate GDS; the main
         // gdsfactory script merges both into ONE output GDS. The user is told what happens
         // (dialog + Error Console) — layer maps of the two processes are not reconciled,
@@ -114,25 +114,26 @@ public partial class GdsFactoryExportViewModel : ObservableObject
 
         // A GDS is one fabrication process — but the Playground deliberately lets you place
         // components from different processes (e.g. CornerStone SiN + SiEPIC SOI) together.
-        // Field decision (round 4): such a design still exports, so the user can look at the
-        // result, with an unmissable warning (dialog + Error Console) that the GDS is
-        // inspection-only and NOT manufacturable. The generated script activates each cell's
-        // own PDK right before instantiating it (see GdsFactoryPdkContext), so no cell is
-        // silently drawn with a foreign process' layers (#570 integrity preserved).
+        // Such a design still exports, so the user can look at the result, with an
+        // unmissable warning (dialog + Error Console) that the GDS is inspection-only and
+        // NOT manufacturable. The generated script activates each cell's own PDK right
+        // before instantiating it (see GdsFactoryPdkContext), so no cell is silently drawn
+        // with a foreign process' layers. The process check runs for mixed-backend designs
+        // too: the canonical SiN + SOI mix keeps the strong not-manufacturable warning;
+        // the soft merge notice is for same-process mixes only.
+        var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
+            _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
         string? mixedProcessWarning = null;
-        if (isMixedBackend)
+        if (backendConflicts.Count > 0)
+        {
+            mixedProcessWarning = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.MixedProcessWarning"),
+                string.Join(" + ", backendConflicts));
+        }
+        else if (isMixedBackend)
         {
             mixedProcessWarning = LocalizationService.Instance.Translate(
                 "Export.GdsFactory.MixedBackendWarning");
-        }
-        else
-        {
-            var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
-                _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
-            if (backendConflicts.Count > 0)
-                mixedProcessWarning = string.Format(
-                    LocalizationService.Instance.Translate("Export.GdsFactory.MixedProcessWarning"),
-                    string.Join(" + ", backendConflicts));
         }
         if (mixedProcessWarning != null)
         {
@@ -159,7 +160,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
 
     /// <summary>
     /// Writes the export script(s) and runs them. For a mixed-backend design
-    /// (<paramref name="mixedBackendLibrary"/> non-null, issue #776) the nazca partial
+    /// (<paramref name="mixedBackendLibrary"/> non-null) the nazca partial
     /// script is written and run FIRST — it produces the partial GDS the main gdsfactory
     /// script merges into the final output.
     /// </summary>
@@ -221,7 +222,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Mixed-backend export (issue #776): writes both scripts (nazca partial next to the main
+    /// Mixed-backend export: writes both scripts (nazca partial next to the main
     /// script) and runs the nazca partial so its GDS exists before the main script merges it.
     /// Returns false — with a dialog status and an Error Console entry — when the nazca
     /// render fails; the main script is not run against a stale/missing partial.

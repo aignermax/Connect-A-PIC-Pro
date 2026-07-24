@@ -189,10 +189,11 @@ public class GdsFactoryExportViewModelTests
     [Fact]
     public async Task Export_MixedBackendDesign_WarnsAndMergesInsteadOfRefusing()
     {
-        // Since #776 a design mixing a gdsfactory-native and a nazca-native component takes
+        // A design mixing a gdsfactory-native and a nazca-native component takes
         // the two-script merge path: each backend renders its own group, the main gdsfactory
-        // script merges the nazca partial GDS, and the user gets a warning (dialog AND Error
-        // Console) that cross-process layer alignment must be verified before fabrication.
+        // script merges the nazca partial GDS. Because this canvas ALSO mixes fabrication
+        // processes (CornerStone SiN + SiEPIC SOI), the user gets the strong
+        // not-manufacturable warning (dialog AND Error Console).
         var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
         var partialPath = CAP.Avalonia.Services.GdsFactoryExport.MixedBackend
             .MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
@@ -213,15 +214,62 @@ public class GdsFactoryExportViewModelTests
             script.ShouldContain("cspdk.sin300.PDK.activate()");
             script.ShouldContain("gf.import_gds");    // merges the nazca partial GDS
             script.ShouldNotContain("ebeam_y_1550");  // nazca-native group left to nazca
-            // The warning stays visible in the final dialog status, next to the result.
-            vm.StatusText.ShouldContain("merged into one GDS");
+            // The strong mixed-process warning stays visible in the final dialog status,
+            // next to the result.
+            vm.StatusText.ShouldContain("NOT manufacturable");
             vm.StatusText.ShouldContain("Exported");
             // Logged as a WARNING (not an error) in the Error Console.
             errorConsole.Entries.ShouldContain(e =>
                 e.Level == CAP_Contracts.Logger.LogLevel.Warn
-                && e.Message.Contains("mixes gdsfactory-native and nazca-native"));
+                && e.Message.Contains("mixes fabrication processes"));
             errorConsole.Entries.ShouldNotContain(e =>
                 e.Level == CAP_Contracts.Logger.LogLevel.Error);
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
+        }
+    }
+
+    [Fact]
+    public async Task Export_SameProcessMixedBackendDesign_GetsSoftMergeNotice()
+    {
+        // A mixed-backend design WITHOUT a process conflict (plain gdsfactory built-ins
+        // carry no process module, so no conflict is detectable) gets the neutral merge
+        // notice instead of the strong not-manufacturable warning.
+        var canvas = new DesignCanvasViewModel();
+        var gf = TestComponentFactory.CreateBasicComponent();
+        gf.Identifier = "GF1";
+        gf.NazcaFunctionName = "";
+        gf.GdsFactoryFunction = "mmi2x2";   // gdsfactory built-in — no module, no process
+        canvas.AddComponent(gf, "MMI");
+        var nz = TestComponentFactory.CreateBasicComponent();
+        nz.Identifier = "NZ1";
+        nz.NazcaFunctionName = "ebeam_y_1550";
+        canvas.AddComponent(nz, "Y-Branch");
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        var partialPath = CAP.Avalonia.Services.GdsFactoryExport.MixedBackend
+            .MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                canvas, new StubSuccessExportService(), errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            File.Exists(scriptPath).ShouldBeTrue();
+            File.Exists(partialPath).ShouldBeTrue();
+            vm.StatusText.ShouldContain("merged into one GDS");
+            vm.StatusText.ShouldNotContain("NOT manufacturable");
+            errorConsole.Entries.ShouldContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn
+                && e.Message.Contains("mixes gdsfactory-native and nazca-native"));
         }
         finally
         {

@@ -15,7 +15,7 @@ using Xunit;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Visual documentation for the mixed-backend GDS export (#776): the gdsfactory export
+/// Visual documentation for the mixed-backend GDS export: the gdsfactory export
 /// dialog with a design mixing a gdsfactory-native and a nazca-native component, showing
 /// (1) the automatic merge notice when the export starts and (2) the notice kept next to
 /// the success line after both scripts ran. PNGs land in <c>UI_SHOT_DIR/issue-776/</c>.

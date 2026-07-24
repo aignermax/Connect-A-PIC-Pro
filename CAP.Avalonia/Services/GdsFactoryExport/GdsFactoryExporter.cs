@@ -28,12 +28,12 @@ public class GdsFactoryExporter
     /// Null uses <see cref="MetalRoutingSpec.Default"/>.
     /// </param>
     /// <param name="include">
-    /// Optional component filter (mixed-backend export, issue #776): only matching components
+    /// Optional component filter (mixed-backend export): only matching components
     /// are placed/stubbed; connections are always emitted (the gdsfactory script owns routing).
     /// </param>
     /// <param name="mergeGdsFileName">
     /// Optional file name (relative to the script) of a nazca-rendered partial GDS to merge
-    /// into the design cell via <c>gf.import_gds()</c> before writing the output (issue #776).
+    /// into the design cell via <c>gf.import_gds()</c> before writing the output.
     /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
@@ -67,7 +67,7 @@ public class GdsFactoryExporter
     }
 
     /// <summary>
-    /// Merges the nazca-rendered partial GDS into the design cell (issue #776). Both
+    /// Merges the nazca-rendered partial GDS into the design cell. Both
     /// exporters emit the same absolute Y-up micrometre coordinates (the shared
     /// <see cref="NazcaCoordinateMapper"/> contract), so the imported cell is referenced
     /// at the origin with no transform.
@@ -75,7 +75,7 @@ public class GdsFactoryExporter
     private static void AppendMixedBackendMerge(StringBuilder sb, string mergeGdsFileName)
     {
         var escaped = mergeGdsFileName.Replace("'", "\\'");
-        sb.AppendLine("# Mixed-backend design (issue #776): merge the nazca-rendered partial GDS.");
+        sb.AppendLine("# Mixed-backend design: merge the nazca-rendered partial GDS.");
         sb.AppendLine("# Both renders share the same absolute coordinate contract, so no transform.");
         sb.AppendLine("_nazca_partial_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), " +
                       $"'{escaped}')");

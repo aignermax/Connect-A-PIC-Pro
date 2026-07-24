@@ -5,14 +5,14 @@ using CAP_Core.Routing.MetalRouting;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 
-/// <summary>The two scripts of a mixed-backend export (issue #776).</summary>
+/// <summary>The two scripts of a mixed-backend export.</summary>
 /// <param name="GdsFactoryScript">Main gdsfactory script: gdsfactory-native placements, all
 /// routed connections, and the merge of the nazca partial GDS into one output GDS.</param>
 /// <param name="NazcaPartialScript">Nazca script rendering only the nazca-native placements.</param>
 public sealed record MixedBackendScriptSet(string GdsFactoryScript, string NazcaPartialScript);
 
 /// <summary>
-/// Orchestrates the mixed-backend GDS export (issue #776): placements are grouped by their
+/// Orchestrates the mixed-backend GDS export: placements are grouped by their
 /// component's INHERENT backend (<see cref="InherentBackendClassifier"/>), the nazca-native
 /// group is rendered by <see cref="SimpleNazcaExporter"/> into a partial GDS, and the main
 /// gdsfactory script renders its own group, imports the partial via <c>gf.import_gds()</c>,

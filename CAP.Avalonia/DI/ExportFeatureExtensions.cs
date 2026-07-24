@@ -62,7 +62,7 @@ internal static class ExportFeatureExtensions
             vm.EnsureGdsFactoryAsync = (progress, ct) =>
                 sp.GetRequiredService<PythonEnvironmentManagerViewModel>()
                     .EnsureGdsFactoryInstalledAsync(progress, ct);
-            // Mixed-backend export (issue #776): the classifier needs the loaded library
+            // Mixed-backend export: the classifier needs the loaded library
             // (raw-code backend lookup) and the configured nazca exporter (lazy resolution).
             vm.TemplateLibraryProvider = () =>
                 sp.GetRequiredService<CAP.Avalonia.ViewModels.Panels.LeftPanelViewModel>().AllTemplates;
