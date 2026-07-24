@@ -742,7 +742,6 @@
   "ProcessMgmt.Status.SavedToPdk": "{0} に保存しました。電気配線はこのプロセスの金属断面を使用するようになりました。",
   "ProcessMgmt.Status.UnsupportedFile": "サポートされていない PDK ファイル: {0}",
   "ProcessSelection.Explanation": "設計は 1 つの製造プロセスにロックされます — 互換性のない PDK のコンポーネントは同じチップ上で混在できません。任意のコンポーネントで自由にプロトタイプするには Playground を選択してください（製造不可）。",
-  "ProcessSelection.StartDesign": "設計を開始",
   "ProcessSelection.Title": "製造プロセスを選択",
   "Properties.Dimensions": "寸法:",
   "Properties.EmptyState": "コンポーネントが選択されていません。キャンバス上のコンポーネントをクリックすると、ここにプロパティが表示されます。",

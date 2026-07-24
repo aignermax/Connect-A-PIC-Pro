@@ -742,7 +742,6 @@
   "ProcessMgmt.Status.SavedToPdk": "已保存到 {0}。电气布线现在使用此工艺的金属横截面。",
   "ProcessMgmt.Status.UnsupportedFile": "不支持的 PDK 文件：{0}",
   "ProcessSelection.Explanation": "一个设计锁定到单一制造工艺——来自不兼容 PDK 的组件不能混用在同一芯片上。选择 Playground 可使用任意组件自由建立原型（不可制造）。",
-  "ProcessSelection.StartDesign": "开始设计",
   "ProcessSelection.Title": "选择制造工艺",
   "Properties.Dimensions": "尺寸：",
   "Properties.EmptyState": "未选择组件。点击画布上的组件以在此查看其属性。",

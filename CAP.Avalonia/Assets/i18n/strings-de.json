@@ -742,7 +742,6 @@
   "ProcessMgmt.Status.SavedToPdk": "In {0} gespeichert. Die elektrische Verdrahtung verwendet jetzt den Metall-Querschnitt dieses Prozesses.",
   "ProcessMgmt.Status.UnsupportedFile": "Nicht unterstützte PDK-Datei: {0}",
   "ProcessSelection.Explanation": "Ein Entwurf ist an einen einzigen Fertigungsprozess gebunden — Komponenten aus inkompatiblen PDKs können nicht auf demselben Chip kombiniert werden. Wählen Sie Playground, um frei mit beliebigen Komponenten zu prototypen (nicht fertigbar).",
-  "ProcessSelection.StartDesign": "Entwurf starten",
   "ProcessSelection.Title": "Fertigungsprozess wählen",
   "Properties.Dimensions": "Abmessungen:",
   "Properties.EmptyState": "Keine Komponente ausgewählt. Klicken Sie auf eine Komponente auf der Arbeitsfläche, um hier ihre Eigenschaften zu sehen.",
