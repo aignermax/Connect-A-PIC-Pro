@@ -58,8 +58,39 @@ public class SimpleNazcaExporter
         var componentNames = AppendComponents(sb, canvas, emitVerification);
         AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer);
         AppendFooter(sb);
+        SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas);
         if (emitVerification)
             AppendVerificationEpilog(sb);
+
+        return sb.ToString();
+    }
+
+    /// <summary>
+    /// Exports only the components matching <paramref name="include"/> — the nazca-native
+    /// group of a mixed-backend export. Connections are NOT emitted: routed
+    /// waveguides are owned by the main gdsfactory script, which imports the partial GDS
+    /// this script renders and merges it into the final output. The top cell is named
+    /// <paramref name="topCellName"/> so it cannot collide with the gdsfactory design cell.
+    /// </summary>
+    /// <param name="canvas">The design canvas to export.</param>
+    /// <param name="include">Predicate selecting the components to render.</param>
+    /// <param name="topCellName">Name of the partial design's top cell.</param>
+    /// <param name="metalSpec">Metal routing parameters; null uses <see cref="MetalRoutingSpec.Default"/>.</param>
+    public string ExportPartial(
+        DesignCanvasViewModel canvas,
+        Func<Component, bool> include,
+        string topCellName,
+        MetalRoutingSpec? metalSpec = null)
+    {
+        var sb = new StringBuilder();
+        var metal = metalSpec ?? MetalRoutingSpec.Default;
+        var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+
+        AppendHeader(sb, interconnectSettings, metal);
+        AppendPdkComponentStubs(sb, canvas, include);
+        AppendComponents(sb, canvas, emitVerification: false, include, topCellName);
+        AppendFooter(sb);
+        SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
         return sb.ToString();
     }
@@ -90,9 +121,12 @@ public class SimpleNazcaExporter
     /// Each unique PDK function used in the design gets a stub cell
     /// with correct dimensions and pin positions — no external PDK install needed.
     /// ComponentGroups are flattened — stubs are generated for all child components.
+    /// SiEPIC stubs are placeholders only: after <c>nd.export_gds()</c> the script's
+    /// klayout post-pass (<see cref="SiepicCellUpgradeWriter"/>) swaps their content
+    /// for the real foundry geometry when the PDK is installed.
     /// </summary>
     private static void AppendPdkComponentStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas)
+        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
@@ -106,11 +140,13 @@ public class SimpleNazcaExporter
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
+                    if (include != null && !include(child)) continue;
                     AppendComponentStub(sb, child, generated, ci);
                 }
             }
             else
             {
+                if (include != null && !include(comp)) continue;
                 AppendComponentStub(sb, comp, generated, ci);
             }
         }
@@ -207,6 +243,9 @@ public class SimpleNazcaExporter
     /// the org pin is put at (PhysicalX+ox, -(PhysicalY+oy)) and the box top edge
     /// must lie oy above org. Pins render exactly where the app model places them
     /// (plain Y negation), so exported waveguides meet the stub pins.
+    /// The stub box doubles as the anchor the klayout post-pass
+    /// (<see cref="SiepicCellUpgradeWriter"/>) fills with real foundry geometry
+    /// for SiEPIC cells — same cell name, so instances keep their placement.
     /// </summary>
     private static void AppendStandardComponentStub(
         StringBuilder sb, string funcName, Component comp, CultureInfo ci)
@@ -260,10 +299,11 @@ public class SimpleNazcaExporter
     }
 
     private static Dictionary<Component, string> AppendComponents(
-        StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false)
+        StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false,
+        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design")
     {
         sb.AppendLine("def create_design():");
-        sb.AppendLine("    with nd.Cell(name='ConnectAPIC_Design') as design:");
+        sb.AppendLine($"    with nd.Cell(name='{topCellName}') as design:");
         sb.AppendLine();
         sb.AppendLine("        # Components");
         var componentNames = new Dictionary<Component, string>();
@@ -275,21 +315,26 @@ public class SimpleNazcaExporter
             var comp = compVm.Component;
             if (comp.IsAnalysisTool) continue;
             // gdsfactory-native components (e.g. CornerStone SiN) have no Nazca representation —
-            // skip them rather than emit a meaningless demofab stub (#570). They export via the
-            // gdsfactory export instead.
-            if (!string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
+            // skip them rather than emit a meaningless demofab stub. They export via the
+            // gdsfactory export instead. Only in the full export, though: when an include
+            // predicate partitions the design (mixed-backend partial), it alone decides —
+            // skipping here would silently drop raw-code nazca components that also carry a
+            // gdsfactory function name.
+            if (include == null && !string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
             if (comp is ComponentGroup group)
             {
                 // Flatten group: export all child components at their absolute positions
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
-                    if (!string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
+                    if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
+                    if (include != null && !include(child)) continue;
                     AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
                 }
             }
             else
             {
+                if (include != null && !include(comp)) continue;
                 AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci);
             }
         }

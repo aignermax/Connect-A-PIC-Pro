@@ -1,0 +1,13 @@
+{
+  "issue": 776,
+  "screenshots": [
+    {
+      "file": "01-mixed-backend-merge-notice.png",
+      "description": "gdsfactory export dialog on a design mixing gdsfactory-native and nazca-native components: the automatic mixed-backend merge notice appears in the status area."
+    },
+    {
+      "file": "02-mixed-backend-exported.png",
+      "description": "After the export: the nazca partial script ran first, the main gdsfactory script merged its GDS; the merge notice stays visible next to the success line."
+    }
+  ]
+}

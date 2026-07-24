@@ -144,6 +144,7 @@ When in doubt: choose the simplest correct solution.
   - _camelCase for private fields
   - No abbreviations except well-known ones (VM, DI, etc.)
 - Every public class and method must have XML documentation.
+- Comments are rare: they explain only *why* something exists or behaves unusually, never *what* the code already says. PR/issue references ("#776", "field finding", "PR review") do not belong in code comments — they belong in the PR description.
 - No magic numbers — use named constants.
 - Prefer readonly fields and immutable data where possible.
 - Use clear, intention-revealing names.

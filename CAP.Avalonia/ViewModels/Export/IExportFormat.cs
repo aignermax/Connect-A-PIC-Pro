@@ -9,7 +9,7 @@ namespace CAP.Avalonia.ViewModels.Export;
 /// </summary>
 public interface IExportFormat
 {
-    /// <summary>Display name shown in the export menu (e.g., "Nazca Python + GDS").</summary>
+    /// <summary>Display name shown in the export menu (e.g., "Nazca → GDS (Python)").</summary>
     string Name { get; }
 
     /// <summary>Emoji icon displayed next to the format name.</summary>
