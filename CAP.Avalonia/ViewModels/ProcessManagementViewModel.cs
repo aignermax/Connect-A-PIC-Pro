@@ -8,6 +8,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
+using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -50,10 +51,25 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// (issue #733 review, Finding 2); captured by <see cref="Load"/> so a Load()/ToProcess()
     /// round-trip (e.g. the "Start from template" prefill) never silently drops them.</summary>
     private List<int> _passThroughAllowedAngles = new();
-    private bool? _passThroughElectricalBridgeRequired;
     private string? _passThroughFoundry;
     private string? _passThroughVersion;
     private double? _passThroughCoreThicknessNm;
+
+    /// <summary>The store forks of bundled PDKs are written to (managed user root).</summary>
+    private readonly UserPdkStore _userPdkStore;
+
+    /// <summary>The fork created by an implicit bundled-source save; later saves write to it directly.</summary>
+    private PdkDraft? _forkedDraft;
+    private string? _forkPath;
+
+    /// <summary>
+    /// Checked when metal traces may cross photonic waveguides directly; unchecked means every
+    /// metal/waveguide crossing needs a bridge. Maps to <see cref="ProcessDefinition.ElectricalBridgeRequired"/>
+    /// inverted — null/absent and false both mean direct crossing, so checked writes null to keep
+    /// unedited files byte-identical (the saver drops nulls).
+    /// </summary>
+    [ObservableProperty]
+    private bool _metalMayCrossPhotonic = true;
 
     /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
     public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
@@ -112,11 +128,13 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Initialises the ViewModel with a specific importer set (tests).</summary>
     public ProcessManagementViewModel(
-        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers, PdkJsonSaver? pdkSaver = null)
+        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers,
+        PdkJsonSaver? pdkSaver = null, UserPdkStore? userPdkStore = null)
     {
         _fileDialog = fileDialog;
         _importers = importers;
         _pdkSaver = pdkSaver ?? new PdkJsonSaver();
+        _userPdkStore = userPdkStore ?? UserPdkStore.CreateDefault();
     }
 
     /// <summary>Populates the editable collections from a process definition.</summary>
@@ -130,10 +148,10 @@ public partial class ProcessManagementViewModel : ObservableObject
         // Finding 2) so a later ToProcess() call emits them unchanged instead of silently
         // dropping them.
         _passThroughAllowedAngles = new List<int>(process.AllowedAngles);
-        _passThroughElectricalBridgeRequired = process.ElectricalBridgeRequired;
         _passThroughFoundry = process.Foundry;
         _passThroughVersion = process.Version;
         _passThroughCoreThicknessNm = process.CoreThicknessNm;
+        MetalMayCrossPhotonic = process.ElectricalBridgeRequired != true;
         MarkAllRowsOwned();
         HasProcess = true;
     }
@@ -165,9 +183,14 @@ public partial class ProcessManagementViewModel : ObservableObject
             : ProcessDefinitionCloner.Clone(draft.Process);
         Load(process);
         _memberDrafts = new List<PdkDraft> { draft };
-        StatusText = draft.Process == null
-            ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkNoProcessYet"), draft.Name)
-            : string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingProcess"), draft.Name);
+        _forkedDraft = null;
+        _forkPath = null;
+        var isBundledSource = draft.FilePath != null && BundledPdkPaths.IsBundledPdkFile(draft.FilePath);
+        StatusText = isBundledSource
+            ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingBundledProcess"), draft.Name)
+            : draft.Process == null
+                ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkNoProcessYet"), draft.Name)
+                : string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingProcess"), draft.Name);
     }
 
     /// <summary>
@@ -230,7 +253,7 @@ public partial class ProcessManagementViewModel : ObservableObject
         Xsections = Xsections.ToList(),
         Materials = Materials.ToList(),
         AllowedAngles = new List<int>(_passThroughAllowedAngles),
-        ElectricalBridgeRequired = _passThroughElectricalBridgeRequired,
+        ElectricalBridgeRequired = MetalMayCrossPhotonic ? null : true,
     };
 
     /// <summary>
@@ -383,6 +406,13 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// </summary>
     public Func<string, Task<bool>>? ConfirmSaveToPdk { get; set; }
 
+    /// <summary>
+    /// Raised when a save on a bundled read-only PDK implicitly created the user's custom
+    /// copy (fork). The UI layer swaps the library entry to the fork — it keeps the bundled
+    /// name, so the active process keeps resolving it by value.
+    /// </summary>
+    public event EventHandler<BundledPdkForkSavedEventArgs>? BundledPdkForkSaved;
+
     [RelayCommand]
     private async Task SaveProcess()
     {
@@ -404,6 +434,20 @@ public partial class ProcessManagementViewModel : ObservableObject
             StatusText = string.Format(
                 LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkFileNotFound"), draft.Name);
             return;
+        }
+
+        // A bundled read-only PDK must never be written — the first save implicitly forks it
+        // into the user's custom copy (no explicit duplicate step) and re-scopes the editor;
+        // every later save writes that fork directly.
+        if (_forkedDraft == null && BundledPdkPaths.IsBundledPdkFile(path))
+        {
+            SaveAsFork(draft);
+            return;
+        }
+        if (_forkedDraft != null)
+        {
+            draft = _forkedDraft;
+            path = _forkPath!;
         }
 
         // Writing edits back to a PDK's JSON on disk is a deliberate act — confirm first so a
@@ -428,11 +472,59 @@ public partial class ProcessManagementViewModel : ObservableObject
             process.Layers = Layers.Where(l => _ownedRows.Contains(l)).ToList();
             process.Xsections = Xsections.Where(x => _ownedRows.Contains(x)).ToList();
             process.Materials = Materials.Where(m => _ownedRows.Contains(m)).ToList();
+            process.ElectricalBridgeRequired = MetalMayCrossPhotonic ? null : true;
             draft.Process = process;
 
             _pdkSaver.SaveToFile(draft, path);
             StatusText = string.Format(
                 LocalizationService.Instance.Translate("ProcessMgmt.Status.SavedToPdk"), Path.GetFileName(path));
+            ProcessSaved?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveFailed"), ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// First save on a bundled read-only PDK: writes the edited process (with all of the
+    /// bundled PDK's components) as the user's fork in the managed root — the bundled JSON
+    /// is never touched — and points the editor at the fork for the rest of the session.
+    /// </summary>
+    private void SaveAsFork(PdkDraft bundledDraft)
+    {
+        try
+        {
+            var edited = ToProcess();
+            // Only rows owned by this PDK — a foreign PDK pulled in for reference via
+            // ImportFromPdk must never be written into the fork either.
+            edited.Layers = edited.Layers.Where(l => _ownedRows.Contains(l)).ToList();
+            edited.Xsections = edited.Xsections.Where(x => _ownedRows.Contains(x)).ToList();
+            edited.Materials = edited.Materials.Where(m => _ownedRows.Contains(m)).ToList();
+            var forkDraft = new PdkDraft
+            {
+                Name = bundledDraft.Name,
+                Description = bundledDraft.Description,
+                Foundry = bundledDraft.Foundry,
+                Version = bundledDraft.Version,
+                DefaultWavelengthNm = bundledDraft.DefaultWavelengthNm,
+                ProcessAgnostic = bundledDraft.ProcessAgnostic,
+                NazcaModuleName = bundledDraft.NazcaModuleName,
+                Backend = bundledDraft.Backend,
+                GdsFactoryRoutingCrossSection = bundledDraft.GdsFactoryRoutingCrossSection,
+                Components = new List<PdkComponentDraft>(bundledDraft.Components),
+                Process = edited,
+            };
+            var forkPath = _userPdkStore.SaveDraftAsFork(forkDraft, bundledDraft.Name);
+            forkDraft.FilePath = forkPath;
+            _forkedDraft = forkDraft;
+            _forkPath = forkPath;
+            _memberDrafts = new List<PdkDraft> { forkDraft };
+
+            BundledPdkForkSaved?.Invoke(this, new BundledPdkForkSavedEventArgs(bundledDraft.Name, forkPath));
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SavedAsFork"), Path.GetFileName(forkPath));
             ProcessSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
@@ -457,4 +549,22 @@ public partial class ProcessManagementViewModel : ObservableObject
         foreach (var item in items)
             target.Add(item);
     }
+}
+
+/// <summary>Payload of <see cref="ProcessManagementViewModel.BundledPdkForkSaved"/>: the bundled
+/// PDK's name and the fork file the first save wrote in the managed user root.</summary>
+public sealed class BundledPdkForkSavedEventArgs : EventArgs
+{
+    /// <summary>Creates the payload.</summary>
+    public BundledPdkForkSavedEventArgs(string pdkName, string forkPath)
+    {
+        PdkName = pdkName;
+        ForkPath = forkPath;
+    }
+
+    /// <summary>Name of the bundled PDK the fork shadows (kept identical on purpose).</summary>
+    public string PdkName { get; }
+
+    /// <summary>Full path of the written fork JSON in the managed user root.</summary>
+    public string ForkPath { get; }
 }
