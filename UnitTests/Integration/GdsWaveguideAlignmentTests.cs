@@ -31,6 +31,7 @@ namespace UnitTests.Integration;
 ///   D - Absolute positioning, no chaining
 ///   E - Conditional GDS binary test (requires Python + Nazca)
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsWaveguideAlignmentTests
 {
     private const double Tolerance = 0.05; // µm — tight alignment tolerance

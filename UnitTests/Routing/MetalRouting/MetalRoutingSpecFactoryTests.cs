@@ -146,4 +146,65 @@ public class MetalRoutingSpecFactoryTests
         spec.TraceWidthMicrometers.ShouldBe(10);
         spec.MetalGdsLayer.ShouldBe(11);
     }
+
+    /// <summary>
+    /// Review Finding [0] (placement-livemembers): a value-compatible custom PDK registered
+    /// after the process snapshot was persisted carries the metal cross-section and/or
+    /// ElectricalBridgeRequired flag, but a snapshot-only member filter ignores it — the GDS
+    /// export then routes default metal (wrong width/layer, missing bridges). The live member
+    /// set must replace the snapshot as the filter when the caller provides it.
+    /// </summary>
+    [Fact]
+    public void FromActiveProcess_EffectiveMemberNames_ReplaceTheSnapshotAsTheMemberFilter()
+    {
+        var customPdk = new PdkDraft
+        {
+            Name = "MyCustomFab",
+            Process = new ProcessDefinition
+            {
+                Name = "MyCustomFab",
+                ElectricalBridgeRequired = true,
+                Layers = new List<ProcessLayer> { new() { Name = "METAL2", Layer = 21, Datatype = 3 } },
+                Xsections = new List<ProcessXsection>
+                {
+                    new() { Name = "MetalDC", Kind = XsectionKind.Metal, WidthUm = 7, Layers = new List<string> { "METAL2" } }
+                }
+            }
+        };
+        // Snapshot predates the custom PDK — it only knows a member without metal data.
+        var active = new ActiveProcessSelection(
+            "SnapshotFab", Fingerprint: null, MemberPdkNames: new List<string> { "OldFab" }, IsPlayground: false);
+
+        var spec = MetalRoutingSpecFactory.FromActiveProcess(
+            active, new List<PdkDraft> { customPdk }, effectiveMemberPdkNames: new[] { "MyCustomFab" });
+
+        spec.TraceWidthMicrometers.ShouldBe(7);
+        spec.MetalGdsLayer.ShouldBe(21);
+        spec.MetalGdsDatatype.ShouldBe(3);
+        spec.CrossingPolicy.ShouldBe(ElectricalCrossingPolicy.BridgeRequired);
+    }
+
+    /// <summary>Null effective set (unwired caller) keeps the old snapshot behavior.</summary>
+    [Fact]
+    public void FromActiveProcess_NullEffectiveMemberNames_UsesTheSnapshot()
+    {
+        var pdk = new PdkDraft
+        {
+            Name = "SnapFab",
+            Process = new ProcessDefinition
+            {
+                Name = "SnapFab",
+                Xsections = new List<ProcessXsection>
+                {
+                    new() { Name = "MetalDC", Kind = XsectionKind.Metal, WidthUm = 9 }
+                }
+            }
+        };
+        var active = new ActiveProcessSelection(
+            "Snap", Fingerprint: null, MemberPdkNames: new List<string> { "SnapFab" }, IsPlayground: false);
+
+        var spec = MetalRoutingSpecFactory.FromActiveProcess(active, new List<PdkDraft> { pdk }, effectiveMemberPdkNames: null);
+
+        spec.TraceWidthMicrometers.ShouldBe(9);
+    }
 }

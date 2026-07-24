@@ -1,26 +1,27 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.NetlistPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Netlist (gdsfactory YAML):" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"
-                   ToolTip.Tip="Circuit topology: instances, placements, connections and ports — for gdsfactory / SAX interop"/>
+        <TextBlock Text="{loc:Localize Netlist.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"
+                   ToolTip.Tip="{loc:Localize NetlistPanel.TitleTip}"/>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
-            <Button Content="Generate"
+            <Button Content="{loc:Localize Netlist.Generate}"
                     Command="{Binding RightPanel.Netlist.RefreshCommand}"
                     MinWidth="80" Margin="0,0,5,0" Padding="8,4" Background="#3d4d4d"
-                    ToolTip.Tip="Derive the netlist from the current design"/>
+                    ToolTip.Tip="{loc:Localize NetlistPanel.GenerateTip}"/>
             <Button Content="💾"
                     Command="{Binding RightPanel.Netlist.SaveYamlCommand}"
                     Width="36" Margin="0,0,5,0" Background="#3d3d5d"
-                    ToolTip.Tip="Save netlist as .yml"/>
+                    ToolTip.Tip="{loc:Localize NetlistPanel.SaveTip}"/>
             <Button Content="📋"
                     Command="{Binding RightPanel.Netlist.CopyYamlCommand}"
                     Width="36" Background="#3d3d5d"
-                    ToolTip.Tip="Copy netlist YAML to clipboard"/>
+                    ToolTip.Tip="{loc:Localize NetlistPanel.CopyTip}"/>
         </StackPanel>
         <TextBlock Text="{Binding RightPanel.Netlist.StatusText}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,3"

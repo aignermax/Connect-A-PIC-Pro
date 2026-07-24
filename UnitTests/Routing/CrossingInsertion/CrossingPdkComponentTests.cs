@@ -18,8 +18,13 @@ public class CrossingPdkComponentTests
     private const string SiepicPdkFile = "siepic-ebeam-pdk.json";
     private const string CrossingNazcaFunction = "ebeam_crossing4";
 
-    /// <summary>-20·log10(0.98) — through-loss of the PDK crossing at 1550 nm.</summary>
-    private const double ExpectedThroughLossDb = 0.1755;
+    /// <summary>
+    /// -20·log10(0.978) — through-loss of the PDK crossing at 1550 nm. The through
+    /// amplitude was corrected from 0.98 to 0.978 in field round 4 (final batch): with
+    /// the 0.02 crosstalk and 0.01 reflection parasitics the hand-authored matrix
+    /// exceeded passivity (σ_max = 1.0014) and fabricated energy in every simulation.
+    /// </summary>
+    private const double ExpectedThroughLossDb = 0.1932;
 
     private static ComponentTemplate LoadCrossingTemplate()
     {

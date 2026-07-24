@@ -1,37 +1,31 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels.Export.PythonEnvironmentManager"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.PythonEnvironmentManagerPanel"
              x:DataType="vm:PythonEnvironmentManagerViewModel">
 
-    <StackPanel>
-        <TextBlock Text="Python Environments:" Foreground="LightSkyBlue"
+    <StackPanel x:Name="PanelRoot">
+        <TextBlock Text="{loc:Localize PyEnvMgr.Title}" Foreground="LightSkyBlue"
                    Margin="0,0,0,5" FontWeight="SemiBold"/>
-        <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap">
-            One place to pick the interpreter used for GDS export and preview. Create a managed
-            environment (Nazca + gdsfactory pre-installed) or activate one of your system Pythons.
-        </TextBlock>
+        <TextBlock Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"
+                   Text="{loc:Localize PyEnvMgr.Description}"/>
 
-        <!-- Create new managed environment (installs Nazca + gdsfactory together, #645) -->
-        <TextBlock Text="Create managed environment:" Foreground="Gray" FontSize="10"
+        <!-- Create new managed environment (#645); the name is auto-generated from the version (#698). -->
+        <TextBlock Text="{loc:Localize PyEnvMgr.CreateHeading}" Foreground="Gray" FontSize="10"
                    Margin="0,0,0,4"/>
-        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
-            <TextBlock Text="Name:" Foreground="Gray" FontSize="11"
-                       VerticalAlignment="Center" Width="50"/>
-            <TextBox Text="{Binding NewEnvironmentName}"
-                     Width="150" FontSize="11" Watermark="e.g. nazca-env"/>
-        </StackPanel>
         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,4">
             <TextBlock Text="Python:" Foreground="Gray" FontSize="11"
                        VerticalAlignment="Center" Width="50"/>
             <ComboBox ItemsSource="{Binding PythonVersionChoices}"
                       SelectedItem="{Binding PythonVersion}"
-                      Width="90" FontSize="11"/>
+                      Width="90" FontSize="11"
+                      ToolTip.Tip="{loc:Localize PyEnvMgr.AutoNameTip}"/>
         </StackPanel>
-        <Button Content="Create + Install (Nazca + gdsfactory)"
+        <Button Content="{loc:Localize PyEnvMgr.CreateInstall}"
                 Command="{Binding CreateAndInstallCommand}"
                 Background="#3d5d7d" FontSize="11" Margin="0,0,0,6"
-                ToolTip.Tip="Creates a managed venv and installs Nazca, pyclipper, gdsfactory and ubcpdk"
+                ToolTip.Tip="{loc:Localize PyEnvMgr.CreateInstallTip}"
                 IsEnabled="{Binding IsBusy,
                                     Converter={x:Static BoolConverters.Not}}"/>
 
@@ -40,7 +34,7 @@
             <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock Text="{Binding ProgressText}"
                            Foreground="LightSkyBlue" FontSize="10" TextWrapping="Wrap"/>
-                <Button Content="Cancel"
+                <Button Content="{loc:Localize Common.Cancel}"
                         Command="{Binding CancelCommand}"
                         FontSize="10" Padding="6,2" Background="#5d3d3d"
                         IsEnabled="{Binding CanCancel}"/>
@@ -51,11 +45,11 @@
              discovered system Pythons, each activatable the same way (issue #645). -->
         <Separator Margin="0,6,0,6" Background="#2d2d2d"/>
         <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-            <TextBlock Grid.Column="0" Text="Available interpreters (managed + system):"
+            <TextBlock Grid.Column="0" Text="{loc:Localize PyEnvMgr.AvailableInterpreters}"
                        Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
-            <Button Grid.Column="1" Content="↻ Rescan" Padding="10,3" FontSize="11"
+            <Button Grid.Column="1" Content="{loc:Localize PyEnvMgr.Rescan}" Padding="10,3" FontSize="11"
                     Command="{Binding RefreshInterpretersCommand}"
-                    ToolTip.Tip="Search the system again for Python interpreters (shows Nazca + gdsfactory versions)"
+                    ToolTip.Tip="{loc:Localize PyEnvMgr.RescanTip}"
                     IsEnabled="{Binding IsDiscoveringInterpreters,
                                         Converter={x:Static BoolConverters.Not}}"/>
         </Grid>
@@ -67,42 +61,52 @@
             <StackPanel Spacing="5">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="🔍" FontSize="12" VerticalAlignment="Center"/>
-                    <TextBlock Text="Searching your system for Python interpreters…"
+                    <TextBlock Text="{loc:Localize PyEnvMgr.Searching}"
                                Foreground="LightSkyBlue" FontSize="11" FontWeight="SemiBold"
                                VerticalAlignment="Center"/>
                 </StackPanel>
-                <TextBlock Text="Probing each interpreter for Nazca and gdsfactory — this can take a few seconds."
+                <TextBlock Text="{loc:Localize PyEnvMgr.Probing}"
                            Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
                 <ProgressBar IsIndeterminate="True" Height="4" Foreground="LightSkyBlue"/>
             </StackPanel>
         </Border>
 
-        <TextBlock Text="No interpreters found. Create a managed environment above."
+        <TextBlock Text="{loc:Localize PyEnvMgr.NoInterpreters}"
                    Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,4"
                    IsVisible="{Binding ShowNoInterpretersHint}"/>
 
         <ScrollViewer MaxHeight="260" Margin="0,0,0,6"
                       VerticalScrollBarVisibility="Auto"
+                      HorizontalScrollBarVisibility="Disabled"
                       IsVisible="{Binding Interpreters.Count}">
             <ItemsControl ItemsSource="{Binding Interpreters}" x:Name="InterpretersList">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate>
+                        <!-- Cap at PanelRoot's arranged width: the host's padded ScrollViewer measures
+                             this row ~48px too wide (Avalonia deflates Padding only at arrange), which
+                             pushed the action buttons past the viewport (issue #698). -->
                         <Border Background="#1e1e1e" BorderBrush="#3d3d3d" BorderThickness="1"
-                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4">
+                                CornerRadius="3" Margin="0,2,0,0" Padding="6,4"
+                                MaxWidth="{Binding #PanelRoot.Bounds.Width}">
                             <Grid ColumnDefinitions="*,Auto,Auto,Auto" VerticalAlignment="Center">
                                 <!-- Interpreter info (not clickable — activation is an explicit button) -->
-                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center">
-                                    <StackPanel Orientation="Horizontal" Spacing="6">
-                                        <Border CornerRadius="3" Padding="4,1" Background="#333333"
+                                <!-- ClipToBounds: an unbreakable long token (e.g. the path) must never
+                                     paint over the action buttons — Grid cells do not clip by default. -->
+                                <StackPanel Grid.Column="0" Margin="0,0,6,0" VerticalAlignment="Center"
+                                            ClipToBounds="True">
+                                    <Grid ColumnDefinitions="Auto,*">
+                                        <Border Grid.Column="0" CornerRadius="3" Padding="4,1" Background="#333333"
+                                                VerticalAlignment="Top" Margin="0,0,6,0"
                                                 IsVisible="{Binding HasStatusBadge}">
                                             <TextBlock Text="{Binding StatusBadge}"
                                                        Foreground="{Binding StatusColor}" FontSize="10"/>
                                         </Border>
-                                        <TextBlock Text="{Binding DisplayText}" Foreground="LightGray"
+                                        <TextBlock Grid.Column="1" Text="{Binding DisplayText}" Foreground="LightGray"
                                                    FontSize="11" TextWrapping="Wrap"/>
-                                    </StackPanel>
+                                    </Grid>
                                     <TextBlock Text="{Binding Path}" Foreground="Gray" FontSize="10"
-                                               TextWrapping="Wrap"/>
+                                               TextWrapping="Wrap" TextTrimming="CharacterEllipsis"
+                                               ToolTip.Tip="{Binding Path}"/>
                                 </StackPanel>
 
                                 <!-- Currently active: static indicator -->
@@ -111,27 +115,27 @@
                                         CornerRadius="3" Padding="8,3" Background="#2e4d2e">
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Text="✓" Foreground="Gold" FontWeight="Bold" FontSize="11"/>
-                                        <TextBlock Text="Active" Foreground="#a8e0a8" FontSize="11"/>
+                                        <TextBlock Text="{loc:Localize PyEnvMgr.Active}" Foreground="#a8e0a8" FontSize="11"/>
                                     </StackPanel>
                                 </Border>
 
                                 <!-- Not active: explicit button to switch the active interpreter -->
-                                <Button Grid.Column="1" Content="Set Active"
+                                <Button Grid.Column="1" Content="{loc:Localize PyEnvMgr.SetActive}"
                                         IsVisible="{Binding !IsActive}"
                                         Command="{Binding #InterpretersList.DataContext.SetActiveInterpreterCommand}"
                                         CommandParameter="{Binding}"
                                         VerticalAlignment="Center" Margin="2,0,0,0"
                                         Padding="10,3" FontSize="11" Background="#3d5d3d"
-                                        ToolTip.Tip="Switch export and preview to use this interpreter"/>
+                                        ToolTip.Tip="{loc:Localize PyEnvMgr.SetActiveTip}"/>
 
                                 <!-- Managed-only: health check -->
-                                <Button Grid.Column="2" Content="Check"
+                                <Button Grid.Column="2" Content="{loc:Localize PyEnvMgr.Check}"
                                         Command="{Binding #InterpretersList.DataContext.CheckHealthInterpreterCommand}"
                                         CommandParameter="{Binding}"
                                         IsVisible="{Binding IsManaged}"
                                         VerticalAlignment="Center" Margin="4,0,0,0"
                                         Padding="8,3" FontSize="10" Background="#3d4d5d"
-                                        ToolTip.Tip="Re-check this environment's health"/>
+                                        ToolTip.Tip="{loc:Localize PyEnvMgr.CheckTip}"/>
 
                                 <!-- Managed-only: remove -->
                                 <Button Grid.Column="3" Content="✕"
@@ -140,7 +144,7 @@
                                         IsVisible="{Binding IsManaged}"
                                         VerticalAlignment="Center" Margin="4,0,0,0"
                                         Padding="8,3" FontSize="10" Background="#5d3d3d"
-                                        ToolTip.Tip="Remove this managed environment (deletes its venv)"/>
+                                        ToolTip.Tip="{loc:Localize PyEnvMgr.RemoveTip}"/>
                             </Grid>
                         </Border>
                     </DataTemplate>

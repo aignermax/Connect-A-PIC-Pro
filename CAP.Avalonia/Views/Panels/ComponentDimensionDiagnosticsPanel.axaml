@@ -1,17 +1,18 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.ComponentDimensionDiagnosticsPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Component Dimensions:" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
-        <Button Content="Check Dimensions"
+        <TextBlock Text="{loc:Localize DimDiag.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <Button Content="{loc:Localize DimDiag.CheckButton}"
                 Command="{Binding RightPanel.DimensionDiagnostics.RefreshDiagnosticsCommand}"
                 MinWidth="110" Margin="0,5,0,5" Padding="8,4"
                 Background="#5d3d3d" HorizontalAlignment="Stretch"/>
-        <TextBlock Text="Validates that component dimensions in GDS export match the UI display."
+        <TextBlock Text="{loc:Localize DimDiag.Description}"
                    Foreground="Gray" FontSize="9" Margin="0,0,0,5" TextWrapping="Wrap"/>
         <ScrollViewer MaxHeight="200" Margin="0,5,0,0"
                       IsVisible="{Binding RightPanel.DimensionDiagnostics.DiagnosticsText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">

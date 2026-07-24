@@ -1,6 +1,7 @@
 using Avalonia;
 using Avalonia.Input;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 
@@ -150,13 +151,13 @@ public sealed class KeyboardHandler
                 vm.ShowPowerFlow = true;
                 vm.PowerFlowVisualizer.IsEnabled = true;
             }
-            mainVm.StatusText = "Power flow overlay: ON (auto-updates on changes)";
+            mainVm.StatusText = LocalizationService.Instance.Translate("Overlay.PowerFlowOn");
         }
         else
         {
             vm.ShowPowerFlow = false;
             vm.PowerFlowVisualizer.IsEnabled = false;
-            mainVm.StatusText = "Power flow overlay: OFF";
+            mainVm.StatusText = LocalizationService.Instance.Translate("Overlay.PowerFlowOff");
         }
     }
 
@@ -174,7 +175,7 @@ public sealed class KeyboardHandler
             {
                 vm.ExitGroupEditMode();
             }
-            mainVm.StatusText = "Exited group edit mode";
+            mainVm.StatusText = LocalizationService.Instance.Translate("Status.ExitedGroupEditMode");
         }
         else
         {

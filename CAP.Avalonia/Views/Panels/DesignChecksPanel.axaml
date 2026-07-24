@@ -1,28 +1,29 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.DesignChecksPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Design Checks:" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
-        <Button Content="Run Design Checks"
+        <TextBlock Text="{loc:Localize DesignChecks.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <Button Content="{loc:Localize DesignChecks.Run}"
                 Command="{Binding RunDesignChecksCommand}"
-                Width="160" Margin="0,5,0,5"
+                HorizontalAlignment="Left" Padding="12,4" Margin="0,5,0,5"
                 Background="#5d3d3d"/>
         <TextBlock Text="{Binding RightPanel.DesignValidation.StatusText}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,5"
                    IsVisible="{Binding RightPanel.DesignValidation.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
         <StackPanel Orientation="Horizontal" Margin="0,5,0,5"
                     IsVisible="{Binding RightPanel.DesignValidation.HasIssues}">
-            <Button Content="&lt;&lt; Prev"
+            <Button Content="{loc:Localize DesignChecks.Prev}"
                     Command="{Binding RightPanel.DesignValidation.PreviousIssueCommand}"
                     Width="70" Margin="0,0,5,0" Background="#3d3d3d"/>
             <TextBlock Text="{Binding RightPanel.DesignValidation.NavigationText}"
                        Foreground="White" VerticalAlignment="Center"
                        Width="50" TextAlignment="Center"/>
-            <Button Content="Next &gt;&gt;"
+            <Button Content="{loc:Localize DesignChecks.Next}"
                     Command="{Binding RightPanel.DesignValidation.NextIssueCommand}"
                     Width="70" Margin="5,0,0,0" Background="#3d3d3d"/>
         </StackPanel>

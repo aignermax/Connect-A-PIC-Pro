@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-create-form-version-only.png",
+    "caption": "The create form now asks only for a Python version \u2014 the environment name textbox is gone because the name is generated automatically."
+  },
+  {
+    "file": "02-version-picked.png",
+    "caption": "The user picks 3.12 from the dropdown; the create button needs no further input before installing Nazca \u002B gdsfactory."
+  },
+  {
+    "file": "03-generated-names-in-list.png",
+    "caption": "After creating, environments appear under their generated names \u2014 py3.12, then py3.12-2 on collision \u2014 while the legacy hand-named \u0027nazca\u0027 entry is untouched."
+  }
+]

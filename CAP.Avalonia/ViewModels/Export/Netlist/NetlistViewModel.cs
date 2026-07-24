@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core;
 using CAP_Core.Export.Netlist;
@@ -61,11 +62,11 @@ public partial class NetlistViewModel : ObservableObject
         if (!TryGenerate()) return;
         if (CopyToClipboard == null)
         {
-            StatusText = "Clipboard not available";
+            StatusText = LocalizationService.Instance.Translate("Netlist.ClipboardNotAvailable");
             return;
         }
         await CopyToClipboard(NetlistYaml);
-        StatusText = "Netlist copied to clipboard";
+        StatusText = LocalizationService.Instance.Translate("Netlist.Copied");
     }
 
     /// <summary>Saves the current netlist YAML to a .yml file chosen by the user.</summary>
@@ -75,7 +76,7 @@ public partial class NetlistViewModel : ObservableObject
         if (!TryGenerate()) return;
         if (FileDialogService == null)
         {
-            StatusText = "Export not available";
+            StatusText = LocalizationService.Instance.Translate("Netlist.ExportNotAvailable");
             return;
         }
 
@@ -85,19 +86,21 @@ public partial class NetlistViewModel : ObservableObject
             "YAML Netlist|*.yml;*.yaml|All Files|*.*");
         if (filePath == null)
         {
-            StatusText = "Export cancelled";
+            StatusText = LocalizationService.Instance.Translate("Netlist.ExportCancelled");
             return;
         }
 
         try
         {
             await File.WriteAllTextAsync(filePath, NetlistYaml);
-            StatusText = $"Exported netlist: {Path.GetFileName(filePath)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Netlist.Exported"), Path.GetFileName(filePath));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Failed to export netlist: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Netlist.ExportFailed"), ex.Message);
         }
     }
 
@@ -110,7 +113,7 @@ public partial class NetlistViewModel : ObservableObject
         if (_canvas == null || _canvas.Components.Count == 0)
         {
             NetlistYaml = "";
-            StatusText = "Nothing to export — add some components first";
+            StatusText = LocalizationService.Instance.Translate("Netlist.NothingToExport");
             return false;
         }
 
@@ -120,14 +123,16 @@ public partial class NetlistViewModel : ObservableObject
                 _canvas.Components.Select(vm => vm.Component),
                 _canvas.Connections.Select(vm => vm.Connection));
             NetlistYaml = _writer.Write(netlist);
-            StatusText = $"{netlist.Instances.Count} instances, " +
-                         $"{netlist.Connections.Count} connections, {netlist.Ports.Count} ports";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Netlist.Summary"),
+                netlist.Instances.Count, netlist.Connections.Count, netlist.Ports.Count);
             return true;
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Netlist derivation failed: {ex.Message}", ex);
-            StatusText = $"Netlist failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Netlist.Failed"), ex.Message);
             return false;
         }
     }

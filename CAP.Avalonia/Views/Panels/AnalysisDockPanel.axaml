@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:panels="using:CAP.Avalonia.Views.Panels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.AnalysisDockPanel"
              x:DataType="vm:MainViewModel">
 
@@ -16,13 +17,13 @@
                         HorizontalAlignment="Stretch"
                         HorizontalContentAlignment="Left"
                         Height="26" Padding="8,0"
-                        ToolTip.Tip="Toggle analysis dock">
+                        ToolTip.Tip="{loc:Localize AnalysisDock.ToggleTip}">
                     <StackPanel Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
                         <TextBlock Text="▶" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
                                    IsVisible="{Binding BottomPanel.Analysis.IsVisible, Converter={x:Static BoolConverters.Not}}"/>
                         <TextBlock Text="▼" Foreground="Gray" FontSize="9" VerticalAlignment="Center"
                                    IsVisible="{Binding BottomPanel.Analysis.IsVisible}"/>
-                        <TextBlock Text="Analysis" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                        <TextBlock Text="{loc:Localize AnalysisDock.Title}" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     </StackPanel>
                 </Button>
             </DockPanel>
@@ -31,21 +32,53 @@
             <Border x:Name="ResizeGrip"
                     IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
                     Height="5" Background="#3d3d3d" Cursor="SizeNorthSouth"
-                    ToolTip.Tip="Drag to resize the analysis dock"
+                    ToolTip.Tip="{loc:Localize AnalysisDock.ResizeTip}"
                     PointerPressed="ResizeGrip_PointerPressed"
                     PointerMoved="ResizeGrip_PointerMoved"
                     PointerReleased="ResizeGrip_PointerReleased"/>
 
+            <!-- Shared analysis-output header (#754): both tabs evaluate THIS coupler.
+                 Shows the designated output, starts the eyedropper picker, clears it. -->
+            <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
+                    Background="#1e1e1e" Padding="8,3" BorderThickness="0,0,0,1" BorderBrush="#3d3d3d">
+                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                    <TextBlock Text="{loc:Localize AnalysisDock.OutputLabel}"
+                               Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding BottomPanel.Analysis.Output.OutputDisplayName}"
+                               Foreground="#e5c07b" FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                    <Button Content="{loc:Localize AnalysisDock.PickOutput}"
+                            Command="{Binding BottomPanel.Analysis.Output.PickCommand}"
+                            ToolTip.Tip="{loc:Localize AnalysisDock.PickOutputTip}"
+                            FontSize="11" Padding="8,2" Background="#3d3d5d"/>
+                    <Button Content="{loc:Localize AnalysisDock.ClearOutput}"
+                            Command="{Binding BottomPanel.Analysis.Output.ClearCommand}"
+                            IsVisible="{Binding BottomPanel.Analysis.Output.HasOutput}"
+                            ToolTip.Tip="{loc:Localize AnalysisDock.ClearOutputTip}"
+                            FontSize="11" Padding="8,2" Background="#3d3d3d"/>
+                </StackPanel>
+            </Border>
+
             <!-- Content area: only shown when IsVisible is true; height is user-adjustable. -->
             <Border IsVisible="{Binding BottomPanel.Analysis.IsVisible}"
                     Height="{Binding BottomPanel.Analysis.DockHeight}" Background="#161616">
-                <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}">
-                    <TabItem Header="Transient">
+                <TabControl SelectedIndex="{Binding BottomPanel.Analysis.SelectedTabIndex}"
+                            Padding="0">
+                    <TabControl.Styles>
+                        <!-- Compact tab headers (#695): the Fluent default wastes ~20 px of plot height. Scoped to this TabControl only. -->
+                        <Style Selector="TabItem">
+                            <Setter Property="FontSize" Value="12"/>
+                            <Setter Property="MinHeight" Value="26"/>
+                            <Setter Property="Height" Value="26"/>
+                            <Setter Property="Padding" Value="10,0"/>
+                            <Setter Property="VerticalContentAlignment" Value="Center"/>
+                        </Style>
+                    </TabControl.Styles>
+                    <TabItem Header="{loc:Localize AnalysisDock.TabTransient}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <panels:TimeDomainPanel/>
                         </ScrollViewer>
                     </TabItem>
-                    <TabItem Header="Eye / BER">
+                    <TabItem Header="{loc:Localize AnalysisDock.TabEyeBer}">
                         <ScrollViewer VerticalScrollBarVisibility="Auto">
                             <panels:EyeDiagramPanel/>
                         </ScrollViewer>

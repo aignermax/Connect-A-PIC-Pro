@@ -17,6 +17,8 @@ public class DeleteComponentCommand : IUndoableCommand
     private readonly string? _templatePdkSource;
     private readonly double _x;
     private readonly double _y;
+    private readonly int? _laserWavelengthNm;
+    private readonly double? _laserInputPower;
 
     /// <summary>
     /// Connections to restore on Undo. Crossing sub-connections are snapshotted as
@@ -37,6 +39,11 @@ public class DeleteComponentCommand : IUndoableCommand
         _templatePdkSource = componentViewModel.TemplatePdkSource;
         _x = componentViewModel.X;
         _y = componentViewModel.Y;
+        // Wavelength/power live only on the ViewModel's LaserConfig — snapshot them so
+        // undo does not silently reset the laser (#690; IsEnabled itself survives on
+        // the core component, which is reused by Undo).
+        _laserWavelengthNm = componentViewModel.LaserConfig?.WavelengthNm;
+        _laserInputPower = componentViewModel.LaserConfig?.InputPower;
     }
 
     public string Description => $"Delete {_component.Identifier}";
@@ -76,6 +83,13 @@ public class DeleteComponentCommand : IUndoableCommand
         _component.PhysicalX = _x;
         _component.PhysicalY = _y;
         _componentViewModel = _canvas.AddComponent(_component, _templateName, _templatePdkSource);
+        if (_componentViewModel.LaserConfig != null)
+        {
+            if (_laserWavelengthNm.HasValue)
+                _componentViewModel.LaserConfig.WavelengthNm = _laserWavelengthNm.Value;
+            if (_laserInputPower.HasValue)
+                _componentViewModel.LaserConfig.InputPower = _laserInputPower.Value;
+        }
 
         // Re-add connections. Dissolution may already have restored a survivor
         // original — both the manager and the VM list guard against duplicates.

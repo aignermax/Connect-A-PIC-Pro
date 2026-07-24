@@ -8,6 +8,7 @@ namespace UnitTests.Export;
 /// Unit tests for PythonDiscoveryService.
 /// Tests Python discovery in venv and system locations.
 /// </summary>
+[Trait("Category", "Slow")]
 public class PythonDiscoveryServiceTests
 {
     private readonly PythonDiscoveryService _service;

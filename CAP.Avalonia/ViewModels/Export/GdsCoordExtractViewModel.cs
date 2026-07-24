@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -48,13 +49,13 @@ public partial class GdsCoordExtractViewModel : ObservableObject
     {
         if (string.IsNullOrWhiteSpace(GdsFilePath))
         {
-            StatusText = "Please specify a GDS file path.";
+            StatusText = LocalizationService.Instance.Translate("Export.CoordExtract.SpecifyPath");
             return;
         }
 
         IsExtracting = true;
         HasResult = false;
-        StatusText = "Extracting coordinates...";
+        StatusText = LocalizationService.Instance.Translate("Export.CoordExtract.Extracting");
         ResultSummary = string.Empty;
         OutputJsonPath = string.Empty;
 
@@ -71,7 +72,8 @@ public partial class GdsCoordExtractViewModel : ObservableObject
             }
             else
             {
-                StatusText = $"Failed: {result.ErrorMessage}";
+                StatusText = string.Format(
+                    LocalizationService.Instance.Translate("Export.CoordExtract.Failed"), result.ErrorMessage);
             }
         }
         finally
@@ -106,7 +108,7 @@ public partial class GdsCoordExtractViewModel : ObservableObject
     private static string BuildSummary(string? jsonContent)
     {
         if (string.IsNullOrWhiteSpace(jsonContent))
-            return "No data";
+            return LocalizationService.Instance.Translate("Export.CoordExtract.NoData");
 
         try
         {
@@ -128,11 +130,13 @@ public partial class GdsCoordExtractViewModel : ObservableObject
                 }
             }
 
-            return $"Cells: {cells}  |  Polygons: {totalPolygons}  |  Paths: {totalPaths}  |  DB unit: {dbUnit:e1} m";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.CoordExtract.Summary"),
+                cells, totalPolygons, totalPaths, dbUnit.ToString("e1"));
         }
         catch
         {
-            return "Extracted (could not parse summary)";
+            return LocalizationService.Instance.Translate("Export.CoordExtract.ParseError");
         }
     }
 }

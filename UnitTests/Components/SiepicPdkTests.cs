@@ -61,11 +61,14 @@ public class SiepicPdkTests
     [Fact]
     public void LoadSiepicPdk_DcHalfringStraight_UpperRingPortsFaceUp()
     {
-        // #636: DC Halfring-Straight is a half-ring — the waveguide enters from the top,
-        // arcs down, and exits at the top again. Its two upper ports (the ring-arc ends,
-        // port 2 and port 4 at offsetY≈0) must face up (90°), not left/right; the lower
-        // straight-bus ports (port 1/3) stay horizontal. The arc connects port 2↔port 4,
-        // which is why the S-matrix shows strong transmission between them.
+        // #636 introduced vertical angles for the ring-arc ports (port 2/4 at
+        // offsetY≈0, the bbox TOP edge) but wrote them in the Nazca Y-up math
+        // convention (90°). The app model is Y-down (see PhysicalPin /
+        // NazcaCoordinateMapper: nazca angle = -app angle), so "exits upward on
+        // screen" is 270° — the same convention the crossings and the Bond Pad
+        // already use and exactly what Auto-Calibrate writes
+        // (PdkOffsetCalibration.FlipAngleConvention). Round 5 recalibrated the
+        // halfring from the real GDS: nazca pin angle 90 → app 270.
         var path = GetSiepicPdkPath();
         if (!File.Exists(path)) return;
 
@@ -73,11 +76,15 @@ public class SiepicPdkTests
         var pdk = loader.LoadFromFile(path);
 
         var halfring = pdk.Components.First(c => c.NazcaFunction == "ebeam_dc_halfring_straight");
-        halfring.Pins.First(p => p.Name == "port 2").AngleDegrees.ShouldBe(90);
-        halfring.Pins.First(p => p.Name == "port 4").AngleDegrees.ShouldBe(90);
+        halfring.Pins.First(p => p.Name == "port 2").AngleDegrees.ShouldBe(270);
+        halfring.Pins.First(p => p.Name == "port 4").AngleDegrees.ShouldBe(270);
         // Lower straight-bus ports remain horizontal.
         halfring.Pins.First(p => p.Name == "port 1").AngleDegrees.ShouldBe(180);
         halfring.Pins.First(p => p.Name == "port 3").AngleDegrees.ShouldBe(0);
+        // The calibrated origin offset is the bbox TOP edge above the cell org
+        // (YMax = 10.71), not -YMin (0.75) — the #635 convention bug that
+        // shipped as a 9.96 µm pin offset in the round-5 field report.
+        halfring.NazcaOriginOffsetY.ShouldBe(10.71);
     }
 
     [Fact]

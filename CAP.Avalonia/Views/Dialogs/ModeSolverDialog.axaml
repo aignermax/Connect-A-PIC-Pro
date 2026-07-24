@@ -1,9 +1,10 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:vm="using:CAP.Avalonia.ViewModels.Solvers"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.ModeSolverDialog"
         x:DataType="vm:ModeSolverViewModel"
-        Title="Compute Modes for Waveguide"
+        Title="{loc:Localize ModeSolver.WindowTitle}"
         Width="480" Height="560"
         MinWidth="400" MinHeight="460"
         WindowStartupLocation="CenterOwner"
@@ -15,36 +16,36 @@
         <!-- Buttons — always visible at the bottom -->
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal"
                     HorizontalAlignment="Right" Spacing="8" Margin="0,12,0,0">
-            <Button Content="Cancel Solve"
+            <Button Content="{loc:Localize ModeSolver.CancelSolve}"
                     Command="{Binding CancelSolveCommand}"
                     Width="100" Background="#5d3d3d" FontSize="11"
                     IsVisible="{Binding IsSolving}"/>
-            <Button Content="Solve"
+            <Button Content="{loc:Localize ModeSolver.Solve}"
                     Command="{Binding SolveCommand}"
                     Width="90" Background="#3d4d6d"
                     IsEnabled="{Binding CanSolve}"/>
-            <Button Content="Close" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
+            <Button Content="{loc:Localize Common.Close}" x:Name="CloseButton" Width="70" Click="OnCloseClicked"/>
         </StackPanel>
 
         <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Spacing="10">
 
                 <!-- Title -->
-                <TextBlock Text="Waveguide Mode Solver" FontSize="15" FontWeight="SemiBold"
+                <TextBlock Text="{loc:Localize ModeSolver.Title}" FontSize="15" FontWeight="SemiBold"
                            Foreground="LightBlue"/>
-                <TextBlock Text="Computes n_eff, n_g and polarisation for guided modes via a Python FDE solver."
+                <TextBlock Text="{loc:Localize ModeSolver.Description}"
                            Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
 
                 <Separator Background="#3d3d3d"/>
 
                 <!-- Cross-section geometry -->
-                <TextBlock Text="Cross-section geometry" Foreground="#aaaaaa" FontSize="11"
+                <TextBlock Text="{loc:Localize ModeSolver.GeometrySection}" Foreground="#aaaaaa" FontSize="11"
                            FontWeight="SemiBold"/>
 
                 <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto">
 
                     <!-- Width -->
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Core width (µm):"
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Localize ModeSolver.CoreWidth}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="2"
                                   Value="{Binding Width}"
@@ -53,7 +54,7 @@
                                   Background="#2d2d2d" Foreground="White"/>
 
                     <!-- Height -->
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Core height (µm):"
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Localize ModeSolver.CoreHeight}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="2" Grid.Column="2"
                                   Value="{Binding Height}"
@@ -62,7 +63,7 @@
                                   Background="#2d2d2d" Foreground="White"/>
 
                     <!-- Slab height -->
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Slab height (µm, 0 = strip):"
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Localize ModeSolver.SlabHeight}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="4" Grid.Column="2"
                                   Value="{Binding SlabHeight}"
@@ -74,11 +75,11 @@
                 <Separator Background="#3d3d3d"/>
 
                 <!-- Refractive indices -->
-                <TextBlock Text="Refractive indices" Foreground="#aaaaaa" FontSize="11"
+                <TextBlock Text="{loc:Localize ModeSolver.RefractiveIndicesSection}" Foreground="#aaaaaa" FontSize="11"
                            FontWeight="SemiBold"/>
 
                 <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Core index (n_core):"
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Localize ModeSolver.CoreIndex}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="2"
                                   Value="{Binding CoreIndex}"
@@ -86,7 +87,7 @@
                                   FormatString="F3"
                                   Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Clad index (n_clad):"
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Localize ModeSolver.CladIndex}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="2" Grid.Column="2"
                                   Value="{Binding CladIndex}"
@@ -98,11 +99,11 @@
                 <Separator Background="#3d3d3d"/>
 
                 <!-- Solver settings -->
-                <TextBlock Text="Solver settings" Foreground="#aaaaaa" FontSize="11"
+                <TextBlock Text="{loc:Localize ModeSolver.SolverSettingsSection}" Foreground="#aaaaaa" FontSize="11"
                            FontWeight="SemiBold"/>
 
                 <Grid ColumnDefinitions="*,8,*" RowDefinitions="Auto,8,Auto,8,Auto">
-                    <TextBlock Grid.Row="0" Grid.Column="0" Text="Wavelength (nm):"
+                    <TextBlock Grid.Row="0" Grid.Column="0" Text="{loc:Localize ModeSolver.Wavelength}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="0" Grid.Column="2"
                                   Value="{Binding WavelengthNm}"
@@ -110,7 +111,7 @@
                                   FormatString="F0"
                                   Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Grid.Row="2" Grid.Column="0" Text="Max modes:"
+                    <TextBlock Grid.Row="2" Grid.Column="0" Text="{loc:Localize ModeSolver.MaxModes}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <NumericUpDown Grid.Row="2" Grid.Column="2"
                                   Value="{Binding NumModes}"
@@ -118,7 +119,7 @@
                                   FormatString="F0"
                                   Background="#2d2d2d" Foreground="White"/>
 
-                    <TextBlock Grid.Row="4" Grid.Column="0" Text="Backend:"
+                    <TextBlock Grid.Row="4" Grid.Column="0" Text="{loc:Localize ModeSolver.Backend}"
                                Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
                     <ComboBox Grid.Row="4" Grid.Column="2"
                               ItemsSource="{x:Static vm:ModeSolverViewModel.AvailableBackends}"
@@ -134,17 +135,17 @@
 
                 <!-- Results table -->
                 <StackPanel IsVisible="{Binding HasResult}" Spacing="6">
-                    <TextBlock Text="Results" Foreground="#aaaaaa" FontSize="11"
+                    <TextBlock Text="{loc:Localize ModeSolver.Results}" Foreground="#aaaaaa" FontSize="11"
                                FontWeight="SemiBold"/>
 
                     <!-- Header row -->
                     <Border Background="#3a3a3a" Padding="4,3">
                         <Grid ColumnDefinitions="70,48,85,75,55">
                             <TextBlock Grid.Column="0" Text="λ (µm)"  Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="1" Text="Mode"    Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="1" Text="{loc:Localize ModeSolver.ColMode}"    Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
                             <TextBlock Grid.Column="2" Text="n_eff"   Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
                             <TextBlock Grid.Column="3" Text="n_g"     Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
-                            <TextBlock Grid.Column="4" Text="Pol."    Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
+                            <TextBlock Grid.Column="4" Text="{loc:Localize ModeSolver.ColPol}"    Foreground="#bbbbbb" FontSize="11" FontWeight="SemiBold"/>
                         </Grid>
                     </Border>
 
@@ -168,7 +169,7 @@
 
                 <!-- Raw stderr expander — shown only on failure with stderr -->
                 <Expander IsVisible="{Binding HasStderr}"
-                          Header="Raw solver output (stderr)"
+                          Header="{loc:Localize ModeSolver.RawOutputHeader}"
                           Foreground="#cc8888">
                     <TextBox Text="{Binding RawStderr}"
                              IsReadOnly="True"

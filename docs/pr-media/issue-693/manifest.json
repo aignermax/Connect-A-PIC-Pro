@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-transient-plot-initial.png",
+    "caption": "Transient tab of the analysis dock with a waveform result; the plot border\u0027s new tooltip reads \u201CCtrl\u002Bscroll to zoom (Cmd on macOS) \u00B7 right-drag to pan \u00B7 scroll to move the panel\u201D."
+  },
+  {
+    "file": "02-ctrl-wheel-zooms-plot.png",
+    "caption": "Ctrl\u002Bwheel (Cmd on macOS) over the plot zooms the time axis in while the dock\u0027s scroll position stays untouched."
+  },
+  {
+    "file": "03-plain-wheel-scrolls-dock.png",
+    "caption": "A plain wheel over the very same plot no longer zooms \u2014 the event bubbles up and scrolls the analysis dock (content moved, plot axes unchanged)."
+  },
+  {
+    "file": "04-eye-tab-same-behavior.png",
+    "caption": "The Eye/BER heat map gets the same scroll-friendly controller and tooltip, so both analysis charts behave consistently."
+  },
+  {
+    "file": "05-help-flyout-zoom-note.png",
+    "caption": "The Transient help flyout (like the Eye one) now documents the behavior: hold Ctrl (Cmd on macOS) to zoom, plain scrolling moves the panel, right-drag pans."
+  }
+]

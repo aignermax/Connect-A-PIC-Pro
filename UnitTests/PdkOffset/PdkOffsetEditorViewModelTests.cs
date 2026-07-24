@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.PdkOffset;
 using CAP_Core.Export;
@@ -16,6 +17,11 @@ namespace UnitTests.PdkOffset;
 /// </summary>
 public class PdkOffsetEditorViewModelTests
 {
+    /// <summary>StatusText is localized (issue #749); pin English so substring assertions
+    /// stay culture-independent regardless of the CI/dev OS language.</summary>
+    public PdkOffsetEditorViewModelTests() =>
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+
     [Fact]
     public void BuildPreviewSource_GdsFactoryNativeDraft_EmitsFactoryCode_NotDemoCall()
     {

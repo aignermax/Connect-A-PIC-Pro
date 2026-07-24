@@ -15,6 +15,7 @@ namespace UnitTests.ViewModels;
 /// Integration tests for Undo/Redo functionality in MainViewModel.
 /// Tests the complete flow: User action → Command → CommandManager → UI update.
 /// </summary>
+[Trait("Category", "Slow")]
 public class UndoRedoIntegrationTests
 {
     [Fact]

@@ -42,6 +42,14 @@ public class CanvasInteractionProcessEnforcementTests
         }
     };
 
+    private static PlacementPolicyContext Context(
+        ActiveProcessSelection? active,
+        IReadOnlyCollection<string>? agnosticPdkNames = null,
+        Func<Component, string?>? resolvePdkSource = null) =>
+        new(() => active,
+            () => agnosticPdkNames ?? Array.Empty<string>(),
+            component => resolvePdkSource?.Invoke(component));
+
     private static (DesignCanvasViewModel canvas, CanvasInteractionViewModel interaction, CommandManager commandManager) CreateSetup()
     {
         var canvas = new DesignCanvasViewModel();
@@ -54,8 +62,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_ForeignProcessPdk_BlocksPlacementAndReportsStatus()
     {
         var (canvas, interaction, _) = CreateSetup();
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
 
         interaction.SelectedTemplate = BuildTemplate("HHI-InP");
 
@@ -73,8 +80,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_MemberPdk_IsPlaced()
     {
         var (canvas, interaction, _) = CreateSetup();
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
 
         interaction.SelectedTemplate = BuildTemplate("Demo");
 
@@ -87,8 +93,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_BuiltIn_IsPlaced()
     {
         var (canvas, interaction, _) = CreateSetup();
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
 
         interaction.SelectedTemplate = BuildTemplate("Built-in");
 
@@ -101,8 +106,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_ProcessAgnosticToolPdk_IsPlaced()
     {
         var (canvas, interaction, _) = CreateSetup();
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => new[] { "Analysis Tools" };
+        interaction.PlacementContext = Context(Soi("Demo"), new[] { "Analysis Tools" });
 
         interaction.SelectedTemplate = BuildTemplate("Analysis Tools");
 
@@ -115,7 +119,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_NoActiveProcess_AllowsAnyPdk()
     {
         var (canvas, interaction, _) = CreateSetup();
-        // GetActiveProcess left unwired (null) — mirrors a fresh/Playground design.
+        // PlacementContext left at the Unrestricted default — mirrors a fresh/Playground design.
         interaction.SelectedTemplate = BuildTemplate("HHI-InP");
 
         interaction.CanvasClicked(100, 100);
@@ -127,8 +131,7 @@ public class CanvasInteractionProcessEnforcementTests
     public void PlaceComponentAt_BlockedPlacement_DoesNotTouchUndoStack()
     {
         var (canvas, interaction, commandManager) = CreateSetup();
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
         interaction.SelectedTemplate = BuildTemplate("HHI-InP");
 
         interaction.CanvasClicked(100, 100);
@@ -152,8 +155,7 @@ public class CanvasInteractionProcessEnforcementTests
         interaction.CopySelectedCommand.Execute(null);
         canvas.Clipboard.HasContent.ShouldBeTrue();
 
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
 
         string? status = null;
         interaction.UpdateStatus = s => status = s;
@@ -178,8 +180,7 @@ public class CanvasInteractionProcessEnforcementTests
 
         interaction.CopySelectedCommand.Execute(null);
 
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
+        interaction.PlacementContext = Context(Soi("Demo"));
 
         int countBeforePaste = canvas.Components.Count;
         interaction.PasteSelected();
@@ -195,11 +196,9 @@ public class CanvasInteractionProcessEnforcementTests
         var libraryVm = new ComponentLibraryViewModel(new GroupLibraryManager());
         var interaction = new CanvasInteractionViewModel(canvas, commandManager, libraryVm);
 
-        interaction.GetActiveProcess = () => Soi("Demo");
-        interaction.GetProcessAgnosticPdkNames = () => Array.Empty<string>();
         // Group templates record no PDK source — every child resolves through the library,
         // here to a PDK that is not a member of the active process.
-        interaction.ResolveComponentPdkSource = _ => "HHI-InP";
+        interaction.PlacementContext = Context(Soi("Demo"), resolvePdkSource: _ => "HHI-InP");
 
         var group = TestComponentFactory.CreateComponentGroup("ForeignGroup", addChildren: true);
         interaction.SelectedGroupTemplate = new GroupTemplate

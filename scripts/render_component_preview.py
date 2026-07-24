@@ -536,8 +536,14 @@ def _render_siepic_via_klayout(module_name, function_name, stub_length, paramete
     xmin, ymin = bb.left * dbu, bb.bottom * dbu
     xmax, ymax = bb.right * dbu, bb.top * dbu
 
-    # Pull polygons from every drawing layer that holds geometry. SiEPIC
-    # uses 1/0 for silicon on most components but grating couplers etc.
+    # Pull polygons from every drawing layer that holds geometry — RECURSIVELY.
+    # SiEPIC fixed-cell GDS files may keep the real geometry in a sub-cell the
+    # top cell merely instantiates (e.g. ebeam_adiabatic_te1550 references
+    # Adiabatic3dB_TE_FullEtch, which owns all layer-1/0 silicon). Iterating
+    # only cell.shapes() returned zero polygons for those cells and the editor
+    # showed a silent, empty dashed box. begin_shapes_rec walks the hierarchy
+    # and it.trans() accumulates the instance transform into top-cell space.
+    # SiEPIC uses 1/0 for silicon on most components but grating couplers etc.
     # live on dedicated layers (e.g. 998/0). Skip the bookkeeping layers:
     #   1/10 = PinRec   68/0 = DevRec   10/0 = FloorPlan / Text labels
     SKIP_LAYERS = {(1, 10), (68, 0), (10, 0)}
@@ -546,16 +552,20 @@ def _render_siepic_via_klayout(module_name, function_name, stub_length, paramete
         info = ly.get_info(li)
         if (info.layer, info.datatype) in SKIP_LAYERS:
             continue
-        for shape in cell.shapes(li).each():
+        it = cell.begin_shapes_rec(li)
+        while not it.at_end():
+            shape = it.shape()
             try:
                 poly = shape.polygon
             except Exception:
-                continue
-            if poly is None:
-                continue
-            verts = [[float(p.x * dbu), float(p.y * dbu)] for p in poly.each_point_hull()]
-            if len(verts) >= 3:
-                polygons.append({"layer": info.layer, "vertices": verts})
+                poly = None
+            if poly is not None:
+                poly = poly.transformed(it.trans())
+                verts = [[float(p.x * dbu), float(p.y * dbu)]
+                         for p in poly.each_point_hull()]
+                if len(verts) >= 3:
+                    polygons.append({"layer": info.layer, "vertices": verts})
+            it.next()
 
     # Pins: SiEPIC stores each pin on layer 1/10 (PinRec) as a Path + a Text.
     # The text label ("opt1", "opt2", …) sits at the pin's xy. The Path
@@ -565,24 +575,33 @@ def _render_siepic_via_klayout(module_name, function_name, stub_length, paramete
     pin_layer = ly.layer(1, 10)
     paths = []   # (cx, cy, angle_deg)
     texts = []   # (x, y, name)
-    for shape in cell.shapes(pin_layer).each():
+    # RECURSIVELY, for exactly the same reason as the polygon loop above: SiEPIC
+    # fixed cells may keep their PinRec shapes inside the instantiated sub-cell
+    # (the very hierarchy pattern the polygon fix addresses) — the flat
+    # cell.shapes() iteration returned zero pins there, so Evaluate reported
+    # "rendered GDS exposes no pins" and Auto-Calibrate refused to run although
+    # the pins sit right next to the rendered geometry. it.trans() maps each
+    # shape into top-cell space (incl. sub-cell rotation/mirror), so both pin
+    # positions and exit directions stay correct.
+    it = cell.begin_shapes_rec(pin_layer)
+    while not it.at_end():
+        shape = it.shape()
         if shape.is_text():
-            t = shape.text
+            t = shape.text.transformed(it.trans())
             texts.append((t.x * dbu, t.y * dbu, t.string))
-            continue
-        if shape.is_path():
-            p = shape.path
+        elif shape.is_path():
+            p = shape.path.transformed(it.trans())
             pts = list(p.each_point())
-            if len(pts) < 2:
-                continue
-            # SiEPIC convention: path goes FROM the pin position OUTWARD,
-            # so the direction from pts[0] to pts[-1] is the exit direction.
-            x0, y0 = pts[0].x * dbu, pts[0].y * dbu
-            x1, y1 = pts[-1].x * dbu, pts[-1].y * dbu
-            angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
-            if angle < 0:
-                angle += 360
-            paths.append((x0, y0, angle))
+            if len(pts) >= 2:
+                # SiEPIC convention: path goes FROM the pin position OUTWARD,
+                # so the direction from pts[0] to pts[-1] is the exit direction.
+                x0, y0 = pts[0].x * dbu, pts[0].y * dbu
+                x1, y1 = pts[-1].x * dbu, pts[-1].y * dbu
+                angle = math.degrees(math.atan2(y1 - y0, x1 - x0))
+                if angle < 0:
+                    angle += 360
+                paths.append((x0, y0, angle))
+        it.next()
 
     pins = []
     for tx, ty, tname in texts:
@@ -606,12 +625,19 @@ def _render_siepic_via_klayout(module_name, function_name, stub_length, paramete
             "stubX1": stub_x, "stubY1": stub_y,
         })
 
-    return {
+    result = {
         "success": True,
         "bbox": {"xmin": xmin, "ymin": ymin, "xmax": xmax, "ymax": ymax},
         "polygons": polygons,
         "pins": pins,
     }
+    if not polygons:
+        # Never let an empty overlay pass silently again — the C# editor
+        # surfaces this warning next to the component.
+        result["polygon_warning"] = (
+            f"No polygons found in cell '{cell.name}' outside the bookkeeping "
+            f"layers (PinRec 1/10, DevRec 68/0, FloorPlan 10/0).")
+    return result
 
 
 def main():

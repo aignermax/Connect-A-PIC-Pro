@@ -25,22 +25,9 @@ public class LeftPanelWidthPersistenceTests : IDisposable
         _testPrefsPath = Path.Combine(Path.GetTempPath(), $"LeftPanelPrefs_{Guid.NewGuid():N}");
         Directory.CreateDirectory(_testPrefsPath);
 
-        // Create preferences service with custom path
+        // Create preferences service with an isolated test file path
         var prefsFile = Path.Combine(_testPrefsPath, "user-preferences.json");
-        _preferencesService = new UserPreferencesService();
-
-        // Use reflection to set the file path and reload preferences for testing
-        var pathField = typeof(UserPreferencesService).GetField("_preferencesFilePath",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-        var prefsField = typeof(UserPreferencesService).GetField("_preferences",
-            System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Instance);
-
-        if (pathField != null && prefsField != null)
-        {
-            pathField.SetValue(_preferencesService, prefsFile);
-            // Reset preferences to default (not loaded from disk)
-            prefsField.SetValue(_preferencesService, new UserPreferences());
-        }
+        _preferencesService = new UserPreferencesService(prefsFile);
     }
 
     public void Dispose()

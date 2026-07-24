@@ -20,26 +20,33 @@ public class AiGridService : IAiGridService
     private readonly SimulationService _simulationService;
 
     /// <summary>
-    /// Returns the design's active process. Wired by <c>MainViewModel</c> alongside the
-    /// identical wires on <c>CanvasInteractionViewModel</c> — the AI placement path must
-    /// obey the same single-process enforcement as manual placement (issue #570).
+    /// Shared placement-policy context (issues #570/#653/#737). Wired by <c>MainViewModel</c>
+    /// to the same instance <c>CanvasInteractionViewModel</c> uses, so the AI placement path
+    /// obeys exactly the same single-process enforcement as manual placement.
+    /// Defaults to <see cref="PlacementPolicyContext.Unrestricted"/>.
     /// </summary>
-    public Func<ActiveProcessSelection?>? GetActiveProcess { get; set; }
-
-    /// <summary>Names of loaded process-agnostic tool PDKs (see CanvasInteractionViewModel).</summary>
-    public Func<IReadOnlyCollection<string>>? GetProcessAgnosticPdkNames { get; set; }
+    public PlacementPolicyContext PlacementContext { get; set; } = PlacementPolicyContext.Unrestricted;
 
     /// <summary>
-    /// Resolves a placed core component's PDK source from the loaded library
-    /// (see <c>ComponentPdkSourceResolver</c>). Needed so copying a GROUP via the AI
-    /// path checks the group's children instead of the group's null source (#653).
+    /// Snapshot of the process-guard inputs (active process, agnostic tool PDKs, live by-value
+    /// member set), resolved ONCE per public entry point and reused across per-template /
+    /// per-clipboard-item loops — re-invoking the callbacks per candidate made
+    /// <see cref="GetAvailableComponentTypes"/> O(Templates × PDKs) (review Finding 5).
+    /// Short-lived (one call); never cached across calls, so it can't go stale.
     /// </summary>
-    public Func<Component, string?>? ResolveComponentPdkSource { get; set; }
+    private sealed record ProcessGuard(
+        ActiveProcessSelection? Active,
+        IReadOnlyCollection<string> AgnosticPdkNames,
+        IReadOnlyCollection<string>? LiveMemberPdkNames);
 
-    private (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource) =>
-        SingleProcessPolicy.CheckPlacement(
-            GetActiveProcess?.Invoke(), pdkSource,
-            GetProcessAgnosticPdkNames?.Invoke() ?? Array.Empty<string>());
+    /// <summary>Resolves the guard inputs from the shared context (see <see cref="ProcessGuard"/>).</summary>
+    private ProcessGuard ResolveProcessGuard() => new(
+        PlacementContext.ActiveProcess,
+        PlacementContext.ProcessAgnosticPdkNames,
+        PlacementContext.LiveMemberPdkNames);
+
+    private static (bool IsAllowed, string? BlockReason) CheckProcess(string? pdkSource, ProcessGuard guard) =>
+        SingleProcessPolicy.CheckPlacement(guard.Active, pdkSource, guard.AgnosticPdkNames, guard.LiveMemberPdkNames);
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -118,7 +125,7 @@ public class AiGridService : IAiGridService
 
         // Single-process enforcement (issue #570): the AI path must not bypass the
         // same gate manual placement goes through.
-        var (isAllowed, blockReason) = CheckProcess(template.PdkSource);
+        var (isAllowed, blockReason) = CheckProcess(template.PdkSource, ResolveProcessGuard());
         if (!isAllowed)
             return blockReason ?? $"Cannot place '{componentType}' — it belongs to another process.";
 
@@ -208,10 +215,13 @@ public class AiGridService : IAiGridService
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<string> GetAvailableComponentTypes() =>
-        _leftPanel.AllTemplates
-            .Where(t => CheckProcess(t.PdkSource).IsAllowed)
+    public IReadOnlyList<string> GetAvailableComponentTypes()
+    {
+        var guard = ResolveProcessGuard();
+        return _leftPanel.AllTemplates
+            .Where(t => CheckProcess(t.PdkSource, guard).IsAllowed)
             .Select(t => t.Name).Distinct().ToList();
+    }
 
     /// <inheritdoc/>
     public string CreateGroup(IReadOnlyList<string> componentIds, string? groupName = null)
@@ -324,13 +334,14 @@ public class AiGridService : IAiGridService
         if (sourceVm == null)
             return Task.FromResult($"Component '{sourceId}' not found.");
 
-        var tempClipboard = new ComponentClipboard { PdkSourceResolver = ResolveComponentPdkSource };
+        var tempClipboard = new ComponentClipboard { PdkSourceResolver = PlacementContext.ResolveComponentPdkSource };
         tempClipboard.Copy(new[] { sourceVm }, _canvas.Connections);
 
         // Single-process enforcement (issues #570/#653) — mirrors the paste gate;
         // PeekPdkSources expands groups to their resolved children.
+        var guard = ResolveProcessGuard();
         var copyBlockReason = tempClipboard.PeekPdkSources()
-            .Select(pdk => CheckProcess(pdk))
+            .Select(pdk => CheckProcess(pdk, guard))
             .Where(check => !check.IsAllowed)
             .Select(check => check.BlockReason)
             .FirstOrDefault();

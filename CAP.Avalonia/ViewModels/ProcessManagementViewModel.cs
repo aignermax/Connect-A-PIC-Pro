@@ -5,7 +5,10 @@ using System.IO;
 using System.Linq;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Export;
+using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -29,21 +32,44 @@ public partial class ProcessManagementViewModel : ObservableObject
     private IReadOnlyList<PdkDraft> _memberDrafts = new List<PdkDraft>();
 
     /// <summary>
-    /// Names of the layer/cross-section/material rows that belong to the currently loaded member
-    /// PDK(s), as opposed to rows pulled in later by <see cref="ImportFromPdk"/>'s <see cref="Merge"/>
-    /// from an unrelated reference PDK. <see cref="SaveProcess"/> only ever writes rows in these
-    /// sets, so an ad-hoc reference import can never corrupt the member PDK's own layer stack
-    /// (issue #686 review, Finding 2). Populated by <see cref="Load"/> / <see cref="ShowLockedProcess"/>
-    /// and by the manual Add* commands; a later <see cref="Merge"/> call (the import path) does
-    /// NOT add to these sets.
+    /// Row objects (<see cref="ProcessLayer"/>/<see cref="ProcessXsection"/>/<see cref="ProcessMaterial"/>)
+    /// that belong to the currently loaded member PDK(s), tracked by REFERENCE rather than by
+    /// name (issue #733 review, Finding 0). A name-based snapshot silently dropped every row
+    /// renamed after <see cref="Load"/> — including every row added via "+ Layer"/
+    /// "+ Cross-section"/"+ Material" (they start as NEW_LAYER/new_xs/NewMaterial and are always
+    /// renamed before saving) — because <see cref="SaveProcess"/> then filtered it out as "not in
+    /// the owned-names snapshot", silently discarding it. Tracking the row OBJECTS instead means a
+    /// rename can never un-own a row: only <see cref="Load"/>/<see cref="MarkAllRowsOwned"/> (rows
+    /// loaded from the process being edited) and the Add* commands (rows the user explicitly
+    /// created here) ever add to this set. A later <see cref="Merge"/> call (the reference-import
+    /// path via <see cref="ImportFromPdk"/>) does NOT add to it, so a foreign PDK's rows still can
+    /// never be written into this PDK's file (issue #686 review, Finding 2 — preserved).
     /// </summary>
-    private readonly HashSet<string> _ownLayerNames = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<object> _ownedRows = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>Cross-section names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
-    private readonly HashSet<string> _ownXsectionNames = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Process-level fields <see cref="ToProcess"/> doesn't rebuild from the editable grids
+    /// (issue #733 review, Finding 2); captured by <see cref="Load"/> so a Load()/ToProcess()
+    /// round-trip (e.g. the "Start from template" prefill) never silently drops them.</summary>
+    private List<int> _passThroughAllowedAngles = new();
+    private string? _passThroughFoundry;
+    private string? _passThroughVersion;
+    private double? _passThroughCoreThicknessNm;
 
-    /// <summary>Material names owned by the loaded member PDK(s); see <see cref="_ownLayerNames"/>.</summary>
-    private readonly HashSet<string> _ownMaterialNames = new(StringComparer.OrdinalIgnoreCase);
+    /// <summary>The store forks of bundled PDKs are written to (managed user root).</summary>
+    private readonly UserPdkStore _userPdkStore;
+
+    /// <summary>The fork created by an implicit bundled-source save; later saves write to it directly.</summary>
+    private PdkDraft? _forkedDraft;
+    private string? _forkPath;
+
+    /// <summary>
+    /// Checked when metal traces may cross photonic waveguides directly; unchecked means every
+    /// metal/waveguide crossing needs a bridge. Maps to <see cref="ProcessDefinition.ElectricalBridgeRequired"/>
+    /// inverted — null/absent and false both mean direct crossing, so checked writes null to keep
+    /// unedited files byte-identical (the saver drops nulls).
+    /// </summary>
+    [ObservableProperty]
+    private bool _metalMayCrossPhotonic = true;
 
     /// <summary>The cross-section kinds offered in the editor (Optical / Metal).</summary>
     public static IReadOnlyList<XsectionKind> XsectionKinds { get; } =
@@ -75,7 +101,7 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Status / result message.</summary>
     [ObservableProperty]
-    private string _statusText = "No process loaded. Import a PDK (uPDK YAML or Nazca CSV) or start a new one.";
+    private string _statusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NoProcessLoaded");
 
     /// <summary>True once a process is loaded (drives the grids' visibility).</summary>
     [ObservableProperty]
@@ -102,11 +128,13 @@ public partial class ProcessManagementViewModel : ObservableObject
 
     /// <summary>Initialises the ViewModel with a specific importer set (tests).</summary>
     public ProcessManagementViewModel(
-        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers, PdkJsonSaver? pdkSaver = null)
+        IFileDialogService fileDialog, IReadOnlyList<IProcessImporter> importers,
+        PdkJsonSaver? pdkSaver = null, UserPdkStore? userPdkStore = null)
     {
         _fileDialog = fileDialog;
         _importers = importers;
         _pdkSaver = pdkSaver ?? new PdkJsonSaver();
+        _userPdkStore = userPdkStore ?? UserPdkStore.CreateDefault();
     }
 
     /// <summary>Populates the editable collections from a process definition.</summary>
@@ -116,8 +144,53 @@ public partial class ProcessManagementViewModel : ObservableObject
         Replace(Layers, process.Layers);
         Replace(Xsections, process.Xsections);
         Replace(Materials, process.Materials);
+        // Preserve the fields ToProcess() doesn't rebuild from the grids (issue #733 review,
+        // Finding 2) so a later ToProcess() call emits them unchanged instead of silently
+        // dropping them.
+        _passThroughAllowedAngles = new List<int>(process.AllowedAngles);
+        _passThroughFoundry = process.Foundry;
+        _passThroughVersion = process.Version;
+        _passThroughCoreThicknessNm = process.CoreThicknessNm;
+        MetalMayCrossPhotonic = process.ElectricalBridgeRequired != true;
         MarkAllRowsOwned();
         HasProcess = true;
+    }
+
+    /// <summary>
+    /// Raised after <see cref="SaveProcess"/> has written the edited process back to a PDK's
+    /// JSON file on disk. The UI layer subscribes to re-apply the design's active process lock
+    /// by value, so an edit that changes a custom PDK's fingerprint (or newly declares one) is
+    /// reflected immediately without requiring a restart (issue #726 follow-up).
+    /// </summary>
+    public event EventHandler? ProcessSaved;
+
+    /// <summary>
+    /// Opens this editor scoped to exactly one custom PDK (issue #726 follow-up): the toolbar-wide
+    /// "Fabrication Process" dialog with its preset/import pickers is gone, replaced by a small
+    /// "Edit…" button per custom PDK in PDK Management. This loads <paramref name="draft"/>'s own
+    /// process (or a blank one named after the draft, if it declares none yet) and scopes
+    /// <see cref="SaveProcess"/> to that single PDK. It never reads or writes the design's active
+    /// fabrication process selection — only the PDK's own JSON file, via <see cref="PdkFilePathResolver"/>.
+    /// </summary>
+    public void LoadForSinglePdkEdit(PdkDraft draft)
+    {
+        // Loads a deep copy (issue #733 review, Finding 3), never draft.Process itself: the
+        // editable grids would otherwise alias the live in-memory PDK, so every keystroke would
+        // mutate it immediately — before the user ever presses Save, and even if the editor
+        // window is closed without saving. Only SaveProcess writes the edit back to draft.Process.
+        var process = draft.Process == null
+            ? new ProcessDefinition { Name = draft.Name }
+            : ProcessDefinitionCloner.Clone(draft.Process);
+        Load(process);
+        _memberDrafts = new List<PdkDraft> { draft };
+        _forkedDraft = null;
+        _forkPath = null;
+        var isBundledSource = draft.FilePath != null && BundledPdkPaths.IsBundledPdkFile(draft.FilePath);
+        StatusText = isBundledSource
+            ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingBundledProcess"), draft.Name)
+            : draft.Process == null
+                ? string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkNoProcessYet"), draft.Name)
+                : string.Format(LocalizationService.Instance.Translate("ProcessMgmt.Status.EditingProcess"), draft.Name);
     }
 
     /// <summary>
@@ -147,35 +220,40 @@ public partial class ProcessManagementViewModel : ObservableObject
 
         Load(value.Process ?? new ProcessDefinition { Name = value.Name });
         _memberDrafts = new List<PdkDraft> { value };
-        StatusText = $"Loaded '{value.Name}' as a starting process. Adjust as needed, then Save to PDK.";
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("ProcessMgmt.Status.LoadedPreset"), value.Name);
     }
 
     /// <summary>
-    /// Snapshots the names currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
-    /// as belonging to the process being edited (issue #686 review, Finding 2) — called right after
-    /// the collections are populated from the process's OWN definition(s), before any later
-    /// <see cref="ImportFromPdk"/> reference import can add unrelated rows.
+    /// Marks every row currently in <see cref="Layers"/>/<see cref="Xsections"/>/<see cref="Materials"/>
+    /// as belonging to the process being edited (issue #686 review, Finding 2; tracked by object
+    /// reference since issue #733 review, Finding 0) — called right after the collections are
+    /// populated from the process's OWN definition(s), before any later <see cref="ImportFromPdk"/>
+    /// reference import can add unrelated rows.
     /// </summary>
     private void MarkAllRowsOwned()
     {
-        _ownLayerNames.Clear();
-        _ownXsectionNames.Clear();
-        _ownMaterialNames.Clear();
+        _ownedRows.Clear();
         foreach (var layer in Layers)
-            if (layer.Name != null) _ownLayerNames.Add(layer.Name);
+            _ownedRows.Add(layer);
         foreach (var xs in Xsections)
-            if (xs.Name != null) _ownXsectionNames.Add(xs.Name);
+            _ownedRows.Add(xs);
         foreach (var mat in Materials)
-            if (mat.Name != null) _ownMaterialNames.Add(mat.Name);
+            _ownedRows.Add(mat);
     }
 
     /// <summary>Builds a process definition from the current editable state.</summary>
     public ProcessDefinition ToProcess() => new()
     {
         Name = ProcessName,
+        Foundry = _passThroughFoundry,
+        Version = _passThroughVersion,
+        CoreThicknessNm = _passThroughCoreThicknessNm,
         Layers = Layers.ToList(),
         Xsections = Xsections.ToList(),
         Materials = Materials.ToList(),
+        AllowedAngles = new List<int>(_passThroughAllowedAngles),
+        ElectricalBridgeRequired = MetalMayCrossPhotonic ? null : true,
     };
 
     /// <summary>
@@ -194,7 +272,8 @@ public partial class ProcessManagementViewModel : ObservableObject
         var importer = _importers.FirstOrDefault(i => i.CanImport(path));
         if (importer == null)
         {
-            StatusText = $"Unsupported PDK file: {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.UnsupportedFile"), Path.GetFileName(path));
             return;
         }
 
@@ -202,13 +281,14 @@ public partial class ProcessManagementViewModel : ObservableObject
         {
             var process = importer.Import(path);
             Merge(process);
-            StatusText = $"Imported '{process.Name}' via {importer.FormatName}. Now: {Layers.Count} layers, " +
-                         $"{Xsections.Count} cross-sections, {Materials.Count} materials. " +
-                         "Tip: uPDK has cross-sections only — import the CSV tables too for the layer stack.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.Imported"),
+                process.Name, importer.FormatName, Layers.Count, Xsections.Count, Materials.Count);
         }
         catch (Exception ex)
         {
-            StatusText = $"Import failed ({importer.FormatName}): {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.ImportFailed"), importer.FormatName, ex.Message);
         }
     }
 
@@ -253,7 +333,7 @@ public partial class ProcessManagementViewModel : ObservableObject
             Name = "New process",
             Materials = ProcessMaterialDefaults.Soi(),
         });
-        StatusText = "New process started with public SOI material defaults. Add layers and cross-sections.";
+        StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NewProcessStarted");
     }
 
     /// <summary>Adds an empty layer row for manual entry.</summary>
@@ -262,7 +342,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var layer = new ProcessLayer { Name = "NEW_LAYER" };
         Layers.Add(layer);
-        _ownLayerNames.Add(layer.Name);
+        _ownedRows.Add(layer);
     }
 
     /// <summary>Adds an empty cross-section row for manual entry.</summary>
@@ -271,7 +351,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var xsection = new ProcessXsection { Name = "new_xs" };
         Xsections.Add(xsection);
-        _ownXsectionNames.Add(xsection.Name);
+        _ownedRows.Add(xsection);
     }
 
     /// <summary>
@@ -292,7 +372,7 @@ public partial class ProcessManagementViewModel : ObservableObject
                 Description = "Electrical routing metal",
             };
             Layers.Add(metalLayer);
-            _ownLayerNames.Add(metalLayer.Name);
+            _ownedRows.Add(metalLayer);
         }
 
         var metalXsection = new ProcessXsection
@@ -304,9 +384,9 @@ public partial class ProcessManagementViewModel : ObservableObject
             Description = "Electrical routing trace",
         };
         Xsections.Add(metalXsection);
-        _ownXsectionNames.Add(metalXsection.Name);
+        _ownedRows.Add(metalXsection);
         HasProcess = true;
-        StatusText = "Added a metal cross-section for electrical routing. Set its width/layer, then Save.";
+        StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.MetalXsectionAdded");
     }
 
     /// <summary>
@@ -314,7 +394,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// cross-section (issue #682). Only unambiguous single-member processes are written; the
     /// PDK's fingerprint fields (thickness, materials, angles) are preserved — only the layer
     /// stack, cross-sections and materials are updated, and only the rows that belong to this
-    /// member PDK (<see cref="_ownLayerNames"/> etc.) — an unrelated PDK pulled in via
+    /// member PDK (<see cref="_ownedRows"/>) — an unrelated PDK pulled in via
     /// <see cref="ImportFromPdk"/> for reference must never be written into this PDK's file
     /// (issue #686 review, Finding 2).
     /// </summary>
@@ -326,18 +406,24 @@ public partial class ProcessManagementViewModel : ObservableObject
     /// </summary>
     public Func<string, Task<bool>>? ConfirmSaveToPdk { get; set; }
 
+    /// <summary>
+    /// Raised when a save on a bundled read-only PDK implicitly created the user's custom
+    /// copy (fork). The UI layer swaps the library entry to the fork — it keeps the bundled
+    /// name, so the active process keeps resolving it by value.
+    /// </summary>
+    public event EventHandler<BundledPdkForkSavedEventArgs>? BundledPdkForkSaved;
+
     [RelayCommand]
     private async Task SaveProcess()
     {
         if (_memberDrafts.Count == 0)
         {
-            StatusText = "Nothing to save — this process has no editable member PDK (Playground or import-only).";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NothingToSave");
             return;
         }
         if (_memberDrafts.Count > 1)
         {
-            StatusText = "This process merges several PDKs; pick which one owns the edit by saving to that PDK "
-                       + "directly (multi-PDK target selection is not implemented yet).";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.MultiPdkNotSupported");
             return;
         }
 
@@ -345,8 +431,23 @@ public partial class ProcessManagementViewModel : ObservableObject
         var path = PdkFilePathResolver?.Invoke(draft.Name);
         if (string.IsNullOrEmpty(path))
         {
-            StatusText = $"Could not locate the PDK file for '{draft.Name}' — save unavailable.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.PdkFileNotFound"), draft.Name);
             return;
+        }
+
+        // A bundled read-only PDK must never be written — the first save implicitly forks it
+        // into the user's custom copy (no explicit duplicate step) and re-scopes the editor;
+        // every later save writes that fork directly.
+        if (_forkedDraft == null && BundledPdkPaths.IsBundledPdkFile(path))
+        {
+            SaveAsFork(draft);
+            return;
+        }
+        if (_forkedDraft != null)
+        {
+            draft = _forkedDraft;
+            path = _forkPath!;
         }
 
         // Writing edits back to a PDK's JSON on disk is a deliberate act — confirm first so a
@@ -354,7 +455,7 @@ public partial class ProcessManagementViewModel : ObservableObject
         // own rows are written regardless; the prompt makes the file target explicit.
         if (ConfirmSaveToPdk != null && !await ConfirmSaveToPdk(path))
         {
-            StatusText = "Save cancelled — the PDK file was not changed.";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveCancelled");
             return;
         }
 
@@ -364,17 +465,72 @@ public partial class ProcessManagementViewModel : ObservableObject
             // user-editable stack/xsections/materials change, and update the in-memory draft so
             // the next export uses the new metal cross-section without a reload.
             var process = draft.Process ?? new ProcessDefinition { Name = ProcessName };
-            process.Layers = Layers.Where(l => l.Name != null && _ownLayerNames.Contains(l.Name)).ToList();
-            process.Xsections = Xsections.Where(x => x.Name != null && _ownXsectionNames.Contains(x.Name)).ToList();
-            process.Materials = Materials.Where(m => m.Name != null && _ownMaterialNames.Contains(m.Name)).ToList();
+            // Reflect a process rename made in the editor — draft.Process (when it already
+            // existed) still carries its OLD name until this assignment (issue #733 review,
+            // Finding 4).
+            process.Name = ProcessName;
+            process.Layers = Layers.Where(l => _ownedRows.Contains(l)).ToList();
+            process.Xsections = Xsections.Where(x => _ownedRows.Contains(x)).ToList();
+            process.Materials = Materials.Where(m => _ownedRows.Contains(m)).ToList();
+            process.ElectricalBridgeRequired = MetalMayCrossPhotonic ? null : true;
             draft.Process = process;
 
             _pdkSaver.SaveToFile(draft, path);
-            StatusText = $"Saved to {Path.GetFileName(path)}. Electrical routing now uses this process's metal cross-section.";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SavedToPdk"), Path.GetFileName(path));
+            ProcessSaved?.Invoke(this, EventArgs.Empty);
         }
         catch (Exception ex)
         {
-            StatusText = $"Save failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveFailed"), ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// First save on a bundled read-only PDK: writes the edited process (with all of the
+    /// bundled PDK's components) as the user's fork in the managed root — the bundled JSON
+    /// is never touched — and points the editor at the fork for the rest of the session.
+    /// </summary>
+    private void SaveAsFork(PdkDraft bundledDraft)
+    {
+        try
+        {
+            var edited = ToProcess();
+            // Only rows owned by this PDK — a foreign PDK pulled in for reference via
+            // ImportFromPdk must never be written into the fork either.
+            edited.Layers = edited.Layers.Where(l => _ownedRows.Contains(l)).ToList();
+            edited.Xsections = edited.Xsections.Where(x => _ownedRows.Contains(x)).ToList();
+            edited.Materials = edited.Materials.Where(m => _ownedRows.Contains(m)).ToList();
+            var forkDraft = new PdkDraft
+            {
+                Name = bundledDraft.Name,
+                Description = bundledDraft.Description,
+                Foundry = bundledDraft.Foundry,
+                Version = bundledDraft.Version,
+                DefaultWavelengthNm = bundledDraft.DefaultWavelengthNm,
+                ProcessAgnostic = bundledDraft.ProcessAgnostic,
+                NazcaModuleName = bundledDraft.NazcaModuleName,
+                Backend = bundledDraft.Backend,
+                GdsFactoryRoutingCrossSection = bundledDraft.GdsFactoryRoutingCrossSection,
+                Components = new List<PdkComponentDraft>(bundledDraft.Components),
+                Process = edited,
+            };
+            var forkPath = _userPdkStore.SaveDraftAsFork(forkDraft, bundledDraft.Name);
+            forkDraft.FilePath = forkPath;
+            _forkedDraft = forkDraft;
+            _forkPath = forkPath;
+            _memberDrafts = new List<PdkDraft> { forkDraft };
+
+            BundledPdkForkSaved?.Invoke(this, new BundledPdkForkSavedEventArgs(bundledDraft.Name, forkPath));
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SavedAsFork"), Path.GetFileName(forkPath));
+            ProcessSaved?.Invoke(this, EventArgs.Empty);
+        }
+        catch (Exception ex)
+        {
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.SaveFailed"), ex.Message);
         }
     }
 
@@ -384,7 +540,7 @@ public partial class ProcessManagementViewModel : ObservableObject
     {
         var material = new ProcessMaterial { Name = "NewMaterial" };
         Materials.Add(material);
-        _ownMaterialNames.Add(material.Name);
+        _ownedRows.Add(material);
     }
 
     private static void Replace<T>(ObservableCollection<T> target, IEnumerable<T> items)
@@ -393,4 +549,22 @@ public partial class ProcessManagementViewModel : ObservableObject
         foreach (var item in items)
             target.Add(item);
     }
+}
+
+/// <summary>Payload of <see cref="ProcessManagementViewModel.BundledPdkForkSaved"/>: the bundled
+/// PDK's name and the fork file the first save wrote in the managed user root.</summary>
+public sealed class BundledPdkForkSavedEventArgs : EventArgs
+{
+    /// <summary>Creates the payload.</summary>
+    public BundledPdkForkSavedEventArgs(string pdkName, string forkPath)
+    {
+        PdkName = pdkName;
+        ForkPath = forkPath;
+    }
+
+    /// <summary>Name of the bundled PDK the fork shadows (kept identical on purpose).</summary>
+    public string PdkName { get; }
+
+    /// <summary>Full path of the written fork JSON in the managed user root.</summary>
+    public string ForkPath { get; }
 }

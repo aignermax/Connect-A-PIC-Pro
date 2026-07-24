@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.Headless;
+using Avalonia.Markup.Xaml.Styling;
 using Avalonia.Themes.Fluent;
 
 [assembly: AvaloniaTestApplication(typeof(UnitTests.UI.ScreenshotTestAppBuilder))]
@@ -8,8 +9,10 @@ namespace UnitTests.UI;
 
 /// <summary>
 /// Minimal Avalonia application for headless screenshot tests.
-/// Loads only Fluent theme — intentionally avoids production App.cs DI setup
-/// so tests control all ViewModel construction themselves.
+/// Loads the Fluent theme plus the app-wide compact control height overrides —
+/// intentionally avoids production App.cs DI setup so tests control all ViewModel
+/// construction themselves, but still needs the production style include so the
+/// screenshots reflect the real Button/ComboBox chrome.
 /// </summary>
 internal class ScreenshotTestApp : Application
 {
@@ -17,6 +20,21 @@ internal class ScreenshotTestApp : Application
     {
         RequestedThemeVariant = Avalonia.Styling.ThemeVariant.Dark;
         Styles.Add(new FluentTheme());
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://CAP.Avalonia/Styles/CompactControlHeights.axaml"),
+        });
+        // Mirrors the production App.axaml includes: without them AvaloniaEdit's TextEditor and
+        // OxyPlot's PlotView have no control template, so UI-flow tests could not type into the
+        // component code editor (issue #556 rationale in App.axaml applies here too).
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://AvaloniaEdit/Themes/Fluent/AvaloniaEdit.xaml"),
+        });
+        Styles.Add(new StyleInclude(new Uri("avares://CAP.Avalonia/Styles/"))
+        {
+            Source = new Uri("avares://OxyPlot.Avalonia/Themes/Default.axaml"),
+        });
     }
 }
 

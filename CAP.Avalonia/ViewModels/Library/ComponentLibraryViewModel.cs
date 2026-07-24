@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core.Components.Creation;
+using CAP.Avalonia.Services.Localization;
 
 namespace CAP.Avalonia.ViewModels.Library;
 
@@ -14,7 +15,7 @@ public partial class ComponentLibraryViewModel : ObservableObject
     private readonly GroupLibraryManager _libraryManager;
 
     [ObservableProperty]
-    private string _statusText = "No groups loaded";
+    private string _statusText = LocalizationService.Instance.Translate("Library.NoGroupsLoaded");
 
     /// <summary>
     /// User-created group templates (wrapped for UI interactions).
@@ -190,7 +191,7 @@ public partial class ComponentLibraryViewModel : ObservableObject
         // Only the empty-state hint is worth a line: when groups exist, the
         // "User Groups" / "PDK Macros" sections below already show the counts,
         // so a separate summary line is just redundant vertical space.
-        StatusText = UserGroups.Count + PdkGroups.Count == 0 ? "No saved groups" : "";
+        StatusText = UserGroups.Count + PdkGroups.Count == 0 ? LocalizationService.Instance.Translate("Library.NoSavedGroups") : "";
     }
 
     /// <summary>

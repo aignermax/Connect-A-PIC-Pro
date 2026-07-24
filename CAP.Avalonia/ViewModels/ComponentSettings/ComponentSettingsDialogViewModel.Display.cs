@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Linq;
+using CAP_DataAccess.Persistence.PIR;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
 
@@ -45,18 +46,20 @@ public partial class ComponentSettingsDialogViewModel
             return;
         }
 
+        ComponentSMatrixData? overrideData = null;
+        _storedSMatrices?.TryGetValue(_smatrixKey, out overrideData);
         foreach (var kvp in _effectiveSMatrices.OrderBy(k => k.Key))
         {
             // A wavelength is "overridden" iff the active store has an entry
             // with the same wavelength key — a wavelength present in the
             // PDK default but not in the override is still PDK-driven.
             bool isOverridden =
-                _storedSMatrices != null &&
-                _storedSMatrices.TryGetValue(_smatrixKey, out var data) &&
-                data.Wavelengths.ContainsKey(kvp.Key.ToString(CultureInfo.InvariantCulture));
+                overrideData != null &&
+                overrideData.Wavelengths.ContainsKey(kvp.Key.ToString(CultureInfo.InvariantCulture));
 
             EffectiveEntries.Add(new EffectiveSMatrixEntryViewModel(
-                kvp.Key, kvp.Value, _effectivePins, isOverridden));
+                kvp.Key, kvp.Value, _effectivePins, isOverridden,
+                isOverridden ? overrideData!.SourceNote : null));
         }
 
         HasEffectiveEntries = EffectiveEntries.Count > 0;

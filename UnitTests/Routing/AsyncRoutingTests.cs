@@ -13,6 +13,7 @@ namespace UnitTests.Routing;
 /// <summary>
 /// Tests for async routing infrastructure (deferred connections, async recalculation, cancellation).
 /// </summary>
+[Trait("Category", "Slow")]
 public class AsyncRoutingTests
 {
     [Fact]

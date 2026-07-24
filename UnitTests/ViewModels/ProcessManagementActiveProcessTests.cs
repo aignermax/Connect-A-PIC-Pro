@@ -1,6 +1,7 @@
 using System.Collections.Generic;
 using System.Linq;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -17,6 +18,16 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class ProcessManagementActiveProcessTests
 {
+    /// <summary>
+    /// StatusText/FingerprintSummary now read the localized <see cref="LocalizationService"/>
+    /// (issue #749), so these tests pin English to stay culture-independent regardless of the
+    /// CI/dev OS language.
+    /// </summary>
+    public ProcessManagementActiveProcessTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
+
     private static ProcessManagementViewModel CreateVm() =>
         new(Mock.Of<IFileDialogService>());
 

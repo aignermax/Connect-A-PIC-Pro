@@ -60,6 +60,24 @@ public sealed class GdsPreviewRenderServiceTests
     }
 
     [Fact]
+    public void BuildCacheKey_RotatedComponent_MatchesUnrotatedKey()
+    {
+        // Rotating with R swaps Component.Width/HeightMicrometers and bumps RotationDegrees.
+        // The preview bitmap content is rotation-independent (the canvas rotates it at draw
+        // time), so the cache key must not change — otherwise every rotation re-runs the
+        // Python render and rasterises the unrotated geometry into a swapped-aspect bitmap.
+        var unrotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 8, heightMicrometers: 4);
+
+        var rotated = TestComponentFactory.CreateComponentViewModel(
+            nazcaFunctionName: "demo.io", widthMicrometers: 4, heightMicrometers: 8);
+        rotated.Component.RotationDegrees = 90;
+
+        GdsPreviewRenderService.BuildCacheKey(rotated)
+            .ShouldBe(GdsPreviewRenderService.BuildCacheKey(unrotated));
+    }
+
+    [Fact]
     public void BuildCacheKey_GdsFactoryNativeComponent_ReturnsGdsfactoryKey()
     {
         // A gdsfactory-native component (no Nazca function, a gdsfactory factory) must still get
@@ -79,7 +97,7 @@ public sealed class GdsPreviewRenderServiceTests
         // On placement, a gdsfactory-native component is given a synthesized nazcaFunction
         // ("nazca_<name>") that no Nazca script can render. The gdsfactory factory must take
         // precedence so the placed component previews via gdsfactory, not a dead Nazca call —
-        // otherwise the canvas grid stays blank (#570 field test).
+        // otherwise the canvas grid stays blank.
         var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_mmi1x2");
         comp.Component.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
 
@@ -145,121 +163,6 @@ public sealed class GdsPreviewRenderServiceTests
         result.ShouldBeNull();
     }
 
-    // ── BuildCacheKey — raw-code override ──────────────────────────────────
-
-    [Fact]
-    public void BuildCacheKey_WithRawCode_ReturnsRawcodePrefixedKey()
-    {
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.mmi1x2_sh");
-
-        var key = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: "import nazca");
-
-        key.ShouldNotBeNull();
-        key!.ShouldStartWith("rawcode|");
-    }
-
-    [Fact]
-    public void BuildCacheKey_SameRawCode_ReturnsSameKey()
-    {
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.mmi1x2_sh");
-        const string code = "import nazca\ncell = nazca.Cell(name='test')";
-
-        var key1 = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: code);
-        var key2 = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: code);
-
-        key1.ShouldBe(key2);
-    }
-
-    [Fact]
-    public void BuildCacheKey_DifferentRawCode_ReturnsDifferentKeys()
-    {
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.mmi1x2_sh");
-
-        var key1 = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: "code version 1");
-        var key2 = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: "code version 2");
-
-        key1.ShouldNotBe(key2);
-    }
-
-    [Fact]
-    public void BuildCacheKey_RawCodeWithNoNazcaFunction_StillReturnsKey()
-    {
-        // A raw-code override must produce a cache key even when NazcaFunctionName is empty,
-        // because the raw code completely replaces the template function.
-        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "");
-
-        var key = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: "import nazca");
-
-        key.ShouldNotBeNull();
-        key!.ShouldStartWith("rawcode|");
-    }
-
-    [Fact]
-    public void BuildCacheKey_RawCodeKeyDiffersFromTemplateKey()
-    {
-        // Ensure a raw-code key never collides with the template key for the same component.
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.mmi1x2_sh");
-
-        var templateKey = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: null);
-        var rawKey      = GdsPreviewRenderService.BuildCacheKey(comp, rawCode: "some code");
-
-        rawKey.ShouldNotBe(templateKey);
-    }
-
-    // ── TryGetPreview — raw-code lookup ───────────────────────────────────
-
-    [Fact]
-    public void TryGetPreview_WithRawCodeLookup_ReturnsNullWhileFetching()
-    {
-        var service = new GdsPreviewRenderService(
-            new NazcaComponentPreviewService("python3", "/nonexistent/script.py"))
-        {
-            RawCodeLookup = _ => "import nazca"
-        };
-
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.mmi1x2_sh");
-
-        // Should enqueue a raw-code fetch and return null (not yet complete)
-        service.TryGetPreview(comp).ShouldBeNull();
-    }
-
-    [Fact]
-    public void TryGetPreview_RawCodeLookupReturnsNull_FallsBackToTemplateKey()
-    {
-        // When the lookup returns null the template cache key must be used, not a raw-code key.
-        var service = new GdsPreviewRenderService(
-            new NazcaComponentPreviewService("python3", "/nonexistent/script.py"))
-        {
-            RawCodeLookup = _ => null
-        };
-
-        var comp = TestComponentFactory.CreateComponentViewModel(
-            nazcaFunctionName: "demo.shallow.strt");
-
-        // Should behave exactly like no RawCodeLookup set — returns null while fetching
-        service.TryGetPreview(comp).ShouldBeNull();
-    }
-
-    [Fact]
-    public void TryGetPreview_ComponentWithoutNazcaFunctionAndNoRawCode_ReturnsNull()
-    {
-        var service = new GdsPreviewRenderService(
-            new NazcaComponentPreviewService("python3", "/nonexistent/script.py"))
-        {
-            RawCodeLookup = _ => null
-        };
-
-        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "");
-
-        // No function name and no raw code → no thumbnail possible
-        service.TryGetPreview(comp).ShouldBeNull();
-    }
-
     // ── TryGetGeometry — key-based lookup with disk cache + render throttle ──
 
     private static NazcaPreviewResult Ok() => new()
@@ -295,7 +198,7 @@ public sealed class GdsPreviewRenderServiceTests
     {
         // A failed render (broken/half-provisioned interpreter) must NOT be persisted as an
         // empty marker — otherwise the component stays blank forever, even after the env is
-        // fixed. A fresh instance must re-attempt the render (#570 field test).
+        // fixed. A fresh instance must re-attempt the render.
         var diskDir = Path.Combine(Path.GetTempPath(), "lunima-fail-" + Guid.NewGuid().ToString("N"));
         var key = new GdsPreviewKey("m", "f", "p");
 

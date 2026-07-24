@@ -1,8 +1,12 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsFactoryExport;
+using CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core;
+using CAP_Core.Components.Core;
 using CAP_Core.Export;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -10,11 +14,12 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.Export;
 
 /// <summary>
-/// ViewModel for the gdsfactory export dialog (#581/#643). The export "just works":
-/// it always uses real ubcpdk (SiEPIC) cells where a mapping exists and falls back to
-/// stub geometry otherwise (no geometry question), always generates the GDS and opens it,
-/// and — when gdsfactory is missing from the active interpreter — auto-installs it into a
-/// managed environment (creating one if needed) and retries.
+/// ViewModel for the whole-layout GDS export. Every component renders with its own
+/// engine — gdsfactory-native cells directly, nazca-native components via a nazca
+/// partial script that is run first and merged into the one output GDS (real
+/// foundry geometry where the PDK is installed, stub fallback otherwise). The GDS
+/// is always generated and opened; a missing gdsfactory is auto-installed into a
+/// managed environment and the export retried.
 /// </summary>
 public partial class GdsFactoryExportViewModel : ObservableObject
 {
@@ -27,11 +32,6 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     [ObservableProperty]
     private ObservableCollection<string> _unmappedComponents = new();
 
-    /// <summary>Instances whose override is written for Nazca — not honoured in the gdsfactory
-    /// export (they use ubcpdk/stub geometry instead). Surfaced as a pre-export warning.</summary>
-    [ObservableProperty]
-    private ObservableCollection<string> _backendMismatches = new();
-
     [ObservableProperty]
     private string _statusText = string.Empty;
 
@@ -41,13 +41,19 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// <summary>File dialog service; wired by the UI layer like the other exporters.</summary>
     public IFileDialogService? FileDialogService { get; set; }
 
-    /// <summary>Supplies the per-instance overrides (wired by the UI layer to the design's
-    /// stored overrides); gdsfactory-backend ones are emitted as factories.</summary>
-    public Func<IReadOnlyDictionary<string, CAP_DataAccess.Persistence.PIR.NazcaCodeOverride>>? OverridesProvider { get; set; }
-
     /// <summary>Supplies the metal routing spec derived from the active process (trace width,
     /// metal/bridge GDS layers, crossing policy); wired by the UI layer (#682).</summary>
     public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? MetalRoutingSpecProvider { get; set; }
+
+    /// <summary>Supplies the loaded component library, used to resolve each placed
+    /// component's inherent backend (raw-code backend lookup) for the mixed-backend
+    /// export; wired by the DI layer. Null means an empty library.</summary>
+    public Func<IEnumerable<ComponentTemplate>>? TemplateLibraryProvider { get; set; }
+
+    /// <summary>Supplies the configured nazca exporter (carries the interconnect settings
+    /// source) for the mixed-backend export; wired by the DI layer. Null falls
+    /// back to a default <see cref="SimpleNazcaExporter"/>.</summary>
+    public Func<SimpleNazcaExporter>? NazcaExporterProvider { get; set; }
 
     /// <summary>
     /// Ensures gdsfactory is installed into a managed environment (creating one if needed)
@@ -74,19 +80,41 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Recomputes the pre-export info: components that fall back to stub geometry (no ubcpdk
-    /// cell) and instances whose override targets Nazca (not honoured here). Called when the
-    /// export dialog opens.
+    /// Recomputes the pre-export info: components that fall back to stub geometry (no real
+    /// cell on the path the design will take). Called when the export dialog opens.
     /// </summary>
     public void RefreshUnmappedComponents()
     {
         UnmappedComponents.Clear();
+        // nazca-native components render via the partial with a real cell whenever one
+        // exists (demofab, module call, or the siepic klayout upgrade) — those are not
+        // stubs and must not be listed.
+        var components = _canvas.Components
+            .SelectMany(vm => vm.Component is ComponentGroup group
+                ? group.GetAllComponentsRecursive()
+                : (IEnumerable<Component>)new[] { vm.Component })
+            .Where(c => !c.IsAnalysisTool)
+            .ToList();
         foreach (var name in GdsFactoryExporter.CollectUnmappedComponents(_canvas))
+        {
+            var comp = components.FirstOrDefault(c => c.NazcaFunctionName == name);
+            if (comp != null && RendersRealViaNazcaPartial(comp))
+                continue;
             UnmappedComponents.Add(name);
+        }
+    }
 
-        BackendMismatches.Clear();
-        foreach (var id in GdsFactoryExporter.CollectBackendMismatches(_canvas, OverridesProvider?.Invoke()))
-            BackendMismatches.Add(id);
+    /// <summary>True when the nazca partial renders the component with a real cell:
+    /// a module.attr call (demofab or an installed PDK module — the same rule the stub
+    /// generator uses to decide a stub is needed at all), or a SiEPIC module resolved
+    /// by the klayout upgrade. Everything else genuinely falls back to a stub box.</summary>
+    private static bool RendersRealViaNazcaPartial(Component comp)
+    {
+        var funcName = comp.NazcaFunctionName ?? string.Empty;
+        if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) == true)
+            return true;
+        return funcName.Contains('.', StringComparison.Ordinal)
+            && !funcName.StartsWith("demo_pdk.", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <summary>Runs the export: file dialog → shadowing guard → script → optional GDS.</summary>
@@ -95,34 +123,55 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     {
         if (FileDialogService == null)
         {
-            StatusText = "Export not available (no file dialog service).";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.NotAvailable");
             return;
         }
 
         if (_canvas.Components.Count == 0)
         {
-            StatusText = "Nothing to export — add some components first.";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.NothingToExport");
             return;
         }
 
-        // A GDS is one fabrication process. Playground lets you place components from different
-        // processes (e.g. CornerStone SiN + SiEPIC SOI) together, but they cannot be exported into
-        // one gdsfactory GDS — the script activates a single PDK and the foreign cells fail to
-        // resolve. Detect this up front and refuse with a clear message instead of a raw Python
-        // crash at runtime (#570).
+        // Mixed-backend design: gdsfactory-native and nazca-native components
+        // coexist. Each group renders with its own backend into a separate GDS; the main
+        // gdsfactory script merges both into ONE output GDS. The user is told what happens
+        // (dialog + Error Console) — layer maps of the two processes are not reconciled,
+        // so cross-process layer alignment must still be verified before fabrication.
+        var library = (TemplateLibraryProvider?.Invoke() ?? Enumerable.Empty<ComponentTemplate>()).ToList();
+        var isMixedBackend = MixedBackendGdsOrchestrator.IsMixedBackendDesign(_canvas, library);
+        // The two-script path is taken whenever anything is nazca-native — even with an
+        // empty gdsfactory group — so nazca components always render with their own
+        // engine instead of falling back to gdsfactory stubs.
+        var hasNazcaNative = MixedBackendGdsOrchestrator.HasNazcaNativeComponents(_canvas, library);
+
+        // A GDS is one fabrication process — but the Playground deliberately lets you place
+        // components from different processes (e.g. CornerStone SiN + SiEPIC SOI) together.
+        // Such a design still exports, so the user can look at the result, with an
+        // unmissable warning (dialog + Error Console) that the GDS is inspection-only and
+        // NOT manufacturable. The generated script activates each cell's own PDK right
+        // before instantiating it (see GdsFactoryPdkContext), so no cell is silently drawn
+        // with a foreign process' layers. The process check runs for mixed-backend designs
+        // too: the canonical SiN + SOI mix keeps the strong not-manufacturable warning;
+        // the soft merge notice is for same-process mixes only.
         var backendConflicts = GdsFactoryExporter.CollectBackendConflicts(
             _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells));
+        string? mixedProcessWarning = null;
         if (backendConflicts.Count > 0)
         {
-            var message =
-                "Cannot export: this design mixes incompatible fabrication processes ("
-                + string.Join(" + ", backendConflicts)
-                + "). A single GDS is one process — keep one PDK's components per design and export "
-                + "each separately. (Playground lets you place mixed components for experimentation, "
-                + "but they can't be exported together.)";
-            StatusText = message;
-            _errorConsole?.LogError(message);
-            return;
+            mixedProcessWarning = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.MixedProcessWarning"),
+                string.Join(" + ", backendConflicts));
+        }
+        else if (isMixedBackend)
+        {
+            mixedProcessWarning = LocalizationService.Instance.Translate(
+                "Export.GdsFactory.MixedBackendWarning");
+        }
+        if (mixedProcessWarning != null)
+        {
+            StatusText = mixedProcessWarning;
+            _errorConsole?.LogWarning(mixedProcessWarning);
         }
 
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
@@ -133,55 +182,106 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         var stem = Path.GetFileNameWithoutExtension(filePath);
         if (PythonModuleShadowing.ShadowsPythonModule(stem))
         {
-            StatusText = $"'{Path.GetFileName(filePath)}' shadows the Python module "
-                + $"'{stem.ToLowerInvariant()}' — please choose a different file name (e.g. chip1.py).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.Shadows"),
+                Path.GetFileName(filePath), stem.ToLowerInvariant());
             return;
         }
 
-        await RunExportAsync(filePath);
+        await RunExportAsync(filePath, mixedProcessWarning, hasNazcaNative ? library : null);
     }
 
-    private async Task RunExportAsync(string filePath)
+    /// <summary>
+    /// Writes the export script(s) and runs them. For a mixed-backend design
+    /// (<paramref name="mixedBackendLibrary"/> non-null) the nazca partial
+    /// script is written and run FIRST — it produces the partial GDS the main gdsfactory
+    /// script merges into the final output.
+    /// </summary>
+    private async Task RunExportAsync(
+        string filePath, string? mixedProcessWarning = null,
+        IReadOnlyList<ComponentTemplate>? mixedBackendLibrary = null)
     {
         IsExporting = true;
         try
         {
-            // Always ubcpdk-where-available with stub fallback — no geometry question.
-            // gdsfactory-backend overrides are emitted as factories; Nazca-backend ones fall
-            // back to ubcpdk/stub (surfaced as a mismatch warning).
-            await File.WriteAllTextAsync(filePath,
-                _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                    OverridesProvider?.Invoke(), MetalRoutingSpecProvider?.Invoke()));
+            if (mixedBackendLibrary != null)
+            {
+                if (!await WriteAndRunMixedBackendPartAsync(filePath, mixedBackendLibrary))
+                    return;
+            }
+            else
+            {
+                // Always ubcpdk-where-available with stub fallback — no geometry question.
+                await File.WriteAllTextAsync(filePath,
+                    _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
+                        MetalRoutingSpecProvider?.Invoke()));
+            }
 
-            StatusText = "Running gdsfactory to generate the GDS...";
+            StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Running");
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
 
             // gdsfactory missing → auto-install into a managed environment and retry once.
             if (!result.Success && IsGdsFactoryMissing(result.ErrorMessage) && EnsureGdsFactoryAsync != null)
             {
                 var progress = new Progress<string>(m => StatusText = m);
-                StatusText = "gdsfactory not found — installing it into a managed environment...";
+                StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Installing");
                 var installed = await EnsureGdsFactoryAsync(progress, CancellationToken.None);
                 if (installed)
                 {
-                    StatusText = "Retrying GDS generation...";
+                    StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Retrying");
                     result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
                 }
             }
 
-            StatusText = DescribeResult(filePath, result);
+            // Keep the mixed-process warning visible next to the final result — it must not
+            // be scrolled away by the success line (field round 4).
+            var status = DescribeResult(filePath, result);
+            StatusText = mixedProcessWarning == null
+                ? status
+                : mixedProcessWarning + Environment.NewLine + status;
             if (result.Success && result.GdsPath != null)
                 TryOpenGds(result.GdsPath);
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"gdsfactory export failed: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.ExportFailed"), ex.Message);
         }
         finally
         {
             IsExporting = false;
         }
+    }
+
+    /// <summary>
+    /// Mixed-backend export: writes both scripts (nazca partial next to the main
+    /// script) and runs the nazca partial so its GDS exists before the main script merges it.
+    /// Returns false — with a dialog status and an Error Console entry — when the nazca
+    /// render fails; the main script is not run against a stale/missing partial.
+    /// </summary>
+    private async Task<bool> WriteAndRunMixedBackendPartAsync(
+        string filePath, IReadOnlyList<ComponentTemplate> library)
+    {
+        var orchestrator = new MixedBackendGdsOrchestrator(NazcaExporterProvider?.Invoke());
+        var scripts = orchestrator.BuildScripts(
+            _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
+            MetalRoutingSpecProvider?.Invoke(), library, filePath);
+
+        var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(filePath);
+        await File.WriteAllTextAsync(partialPath, scripts.NazcaPartialScript);
+        await File.WriteAllTextAsync(filePath, scripts.GdsFactoryScript);
+
+        StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.MixedBackendRunningNazca");
+        var partialResult = await _exportService.ExportToGdsAsync(partialPath, generateGds: true);
+        if (partialResult.Success)
+            return true;
+
+        _errorConsole?.LogError($"Mixed-backend nazca partial failed: {partialResult.ErrorMessage}");
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("Export.GdsFactory.MixedBackendNazcaFailed"),
+            Path.GetFileName(partialPath));
+        return false;
     }
 
     private static bool IsGdsFactoryMissing(string? errorMessage) =>
@@ -211,9 +311,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     {
         var scriptName = Path.GetFileName(filePath);
         if (result.Success && result.GdsPath != null)
-            return $"Exported {scriptName} and opened {Path.GetFileName(result.GdsPath)}.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.ExportedOpened"),
+                scriptName, Path.GetFileName(result.GdsPath));
         if (result.Success)
-            return $"Exported {scriptName}.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.Exported"), scriptName);
 
         // Full traceback goes to the (copyable) Error Console only — the dialog shows a
         // short, actionable line so it doesn't duplicate an uncopyable wall of text.
@@ -231,10 +334,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         var gdsFactoryMissing = errorMessage?.Contains("No module named 'gdsfactory'",
             StringComparison.OrdinalIgnoreCase) == true;
         if (gdsFactoryMissing)
-            return $"Exported {scriptName}, but gdsfactory is not installed in the active "
-                + "environment. Install it under Settings → Python Environments → Install gdsfactory, "
-                + "then export again.";
+            return string.Format(
+                LocalizationService.Instance.Translate("Export.GdsFactory.MissingGdsFactory"), scriptName);
 
-        return $"Exported {scriptName}, but the GDS run failed — see the Error Console for details.";
+        return string.Format(
+            LocalizationService.Instance.Translate("Export.GdsFactory.RunFailed"), scriptName);
     }
 }

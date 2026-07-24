@@ -28,7 +28,12 @@ internal static class CoreServicesExtensions
         services.AddSingleton<CAP_Core.Export.ExecutablePathProber>();
         services.AddSingleton<CAP_Core.Export.ProcessLaunchFactory>();
         services.AddSingleton<CAP_Core.ErrorConsoleService>();
-        services.AddSingleton<SimpleNazcaExporter>();
+        // Exporter reads the global interconnect settings (width/radius/layer, issue #574)
+        // lazily at export time so Settings-window changes apply without restart.
+        services.AddSingleton(sp => new SimpleNazcaExporter
+        {
+            SettingsSource = () => sp.GetRequiredService<UserPreferencesService>().GetInterconnectSettings(),
+        });
 
         services.AddSingleton<SimulationService>();
         services.AddSingleton<PdkLoader>();

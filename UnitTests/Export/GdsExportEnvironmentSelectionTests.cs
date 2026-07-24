@@ -2,6 +2,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Export;
 using CAP_Core.Export;
 using Shouldly;
+using Xunit;
 
 namespace UnitTests.Export;
 
@@ -9,6 +10,7 @@ namespace UnitTests.Export;
 /// Tests for the managed-environment candidate list and the "install Nazca"
 /// offer on <see cref="GdsExportViewModel"/> (settings page integration).
 /// </summary>
+[Trait("Category", "Slow")]
 public class GdsExportEnvironmentSelectionTests
 {
     private static GdsExportViewModel CreateViewModel() =>

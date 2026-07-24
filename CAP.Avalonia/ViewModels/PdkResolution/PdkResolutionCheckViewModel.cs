@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Text;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Export.PdkResolution;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -32,7 +33,7 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
 
     /// <summary>Status line shown at the bottom of the dialog.</summary>
     [ObservableProperty]
-    private string _statusText = "Click 'Run Check' to verify all PDK nazcaFunction strings against Python.";
+    private string _statusText = LocalizationService.Instance.Translate("PdkResolution.StatusInitial");
 
     /// <summary>True when at least one row failed — enables the copy-to-clipboard button.</summary>
     [ObservableProperty]
@@ -68,13 +69,13 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
         IsRunning = true;
         Pdks.Clear();
         HasFailures = false;
-        StatusText = "Checking PDKs against installed Python packages…";
+        StatusText = LocalizationService.Instance.Translate("PdkResolution.StatusChecking");
         try
         {
             var pdkDir = _pdkDirectoryResolver();
             if (pdkDir == null || !Directory.Exists(pdkDir))
             {
-                StatusText = "No PDK directory found.";
+                StatusText = LocalizationService.Instance.Translate("PdkResolution.StatusNoDirectory");
                 return;
             }
 
@@ -84,14 +85,17 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
             var errors = Pdks.SelectMany(p => p.Rows).Count(r => r.Status == PdkResolutionStatus.Error);
             var warnings = Pdks.SelectMany(p => p.Rows).Count(r => r.Status == PdkResolutionStatus.Warning);
             HasFailures = errors > 0 || warnings > 0 || Pdks.Any(p => p.HasError);
-            StatusText = $"Checked {Pdks.Count} PDK file(s): {errors} dead reference(s), {warnings} warning(s).";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkResolution.StatusChecked"),
+                Pdks.Count, errors, warnings);
         }
         catch (Exception ex)
         {
             // e.g. Directory.GetFiles throwing (permissions / TOCTOU) — without this the async
             // command would fault unobserved, leaving the UI stuck on "Checking…" (#515 review).
             HasFailures = true;
-            StatusText = $"PDK check failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("PdkResolution.StatusCheckFailed"), ex.Message);
         }
         finally
         {
@@ -112,7 +116,12 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
         catch (Exception ex)
         {
             return new PdkResolutionGroupViewModel
-            { PdkName = fileName, FileName = fileName, Error = $"Failed to load: {ex.Message}" };
+            {
+                PdkName = fileName,
+                FileName = fileName,
+                Error = string.Format(
+                    LocalizationService.Instance.Translate("PdkResolution.StatusFailedToLoad"), ex.Message)
+            };
         }
 
         var group = new PdkResolutionGroupViewModel { PdkName = draft.Name, FileName = fileName };
@@ -159,7 +168,8 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
                 ComponentName = components[i].Name,
                 FunctionPath = functionPaths[i],
                 Status = result?.Status ?? PdkResolutionStatus.Error,
-                Message = result?.Message ?? "No result returned by resolution script."
+                Message = result?.Message
+                    ?? LocalizationService.Instance.Translate("PdkResolution.StatusNoResult")
             });
         }
         return group;
@@ -174,11 +184,11 @@ public partial class PdkResolutionCheckViewModel : ObservableObject
             return;
         if (CopyToClipboard == null)
         {
-            StatusText = "Clipboard is unavailable in this context.";
+            StatusText = LocalizationService.Instance.Translate("PdkResolution.StatusClipboardUnavailable");
             return;
         }
         await CopyToClipboard(text);
-        StatusText = "Failing list copied to clipboard.";
+        StatusText = LocalizationService.Instance.Translate("PdkResolution.StatusCopied");
     }
 
     /// <summary>

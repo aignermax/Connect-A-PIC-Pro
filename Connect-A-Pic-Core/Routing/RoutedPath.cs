@@ -22,6 +22,22 @@ public class RoutedPath
     public bool IsInvalidGeometry { get; set; } = false;
 
     /// <summary>
+    /// True when the path could only be routed with a bend radius below the active
+    /// fabrication process' minimum (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>).
+    /// The geometry itself is clean, but the design violates the process rule; the
+    /// design checks surface it as a <c>BendRadiusBelowProcessMinimum</c> issue.
+    /// </summary>
+    public bool ViolatesProcessMinBendRadius { get; set; } = false;
+
+    /// <summary>
+    /// True when a STYLED (forced-shape) route passes through a component obstacle.
+    /// Styled routes deliberately ignore obstacles and are never auto-rerouted, so a
+    /// collision cannot be resolved by the router; the design checks surface it as a
+    /// <c>StyledRouteThroughComponent</c> issue instead. Refreshed on every routing pass.
+    /// </summary>
+    public bool PassesThroughComponent { get; set; } = false;
+
+    /// <summary>
     /// Debug information: The raw A* grid path used to generate this path.
     /// Only populated when A* routing is used.
     /// </summary>
@@ -38,6 +54,49 @@ public class RoutedPath
     public double TotalEquivalent90DegreeBends => Segments
         .OfType<BendSegment>()
         .Sum(b => b.Equivalent90DegreeBends);
+
+    /// <summary>
+    /// Creates an independent deep copy (segments cloned, flags copied). Use whenever
+    /// stored geometry (e.g. a group's frozen internal paths kept for Undo) is handed
+    /// to a live connection: sharing the segment objects would let canvas edits
+    /// (bend-radius handles mutate segments in place) silently corrupt the stored
+    /// original. <c>DebugGridPath</c> is not copied — it is diagnostic-only.
+    /// </summary>
+    public RoutedPath DeepCopy()
+    {
+        var copy = new RoutedPath
+        {
+            IsBlockedFallback = IsBlockedFallback,
+            IsInvalidGeometry = IsInvalidGeometry,
+            ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
+            PassesThroughComponent = PassesThroughComponent
+        };
+
+        foreach (var segment in Segments)
+        {
+            switch (segment)
+            {
+                case BendSegment bend:
+                    copy.Segments.Add(new BendSegment(
+                        bend.Center.X,
+                        bend.Center.Y,
+                        bend.RadiusMicrometers,
+                        bend.StartAngleDegrees,
+                        bend.SweepAngleDegrees));
+                    break;
+                case StraightSegment straight:
+                    copy.Segments.Add(new StraightSegment(
+                        straight.StartPoint.X,
+                        straight.StartPoint.Y,
+                        straight.EndPoint.X,
+                        straight.EndPoint.Y,
+                        straight.StartAngleDegrees));
+                    break;
+            }
+        }
+
+        return copy;
+    }
 
     /// <summary>
     /// Checks if the path is valid (segments connect properly).

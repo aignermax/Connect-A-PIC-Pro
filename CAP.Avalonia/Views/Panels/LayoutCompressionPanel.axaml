@@ -1,15 +1,16 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.LayoutCompressionPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="Layout Compression:" Foreground="Cyan" Margin="0,0,0,5" FontWeight="SemiBold"/>
-        <TextBlock Text="Minimize chip area while maintaining connectivity."
+        <TextBlock Text="{loc:Localize LayoutCompression.Title}" Foreground="Cyan" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <TextBlock Text="{loc:Localize LayoutCompression.Description}"
                    Foreground="Gray" FontSize="10" Margin="0,0,0,8" TextWrapping="Wrap"/>
-        <Button Content="Compress Layout"
+        <Button Content="{loc:Localize LayoutCompression.CompressButton}"
                 Command="{Binding RightPanel.CompressLayout.CompressLayoutCommand}"
                 Width="160" Margin="0,5,0,5"
                 Background="#3d5d5d"

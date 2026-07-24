@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 
@@ -109,7 +110,9 @@ public class PdkConsistencyChecker
             {
                 ComponentName = comp.Name,
                 FindingType = "InvalidDimension",
-                Message = $"Width {comp.WidthMicrometers} µm is not positive.",
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("PdkConsistency.WidthNotPositive"),
+                    comp.WidthMicrometers),
                 Severity = PdkFindingSeverity.Error
             });
 
@@ -118,7 +121,9 @@ public class PdkConsistencyChecker
             {
                 ComponentName = comp.Name,
                 FindingType = "InvalidDimension",
-                Message = $"Height {comp.HeightMicrometers} µm is not positive.",
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("PdkConsistency.HeightNotPositive"),
+                    comp.HeightMicrometers),
                 Severity = PdkFindingSeverity.Error
             });
     }
@@ -137,8 +142,10 @@ public class PdkConsistencyChecker
                 {
                     ComponentName = comp.Name,
                     FindingType = "PinOutOfBounds",
-                    Message = $"Pin '{pin.Name}' at ({pin.OffsetXMicrometers}, {pin.OffsetYMicrometers}) µm " +
-                              $"is outside component bounds ({comp.WidthMicrometers} x {comp.HeightMicrometers} µm).",
+                    Message = string.Format(
+                        LocalizationService.Instance.Translate("PdkConsistency.PinOutOfBounds"),
+                        pin.Name, pin.OffsetXMicrometers, pin.OffsetYMicrometers,
+                        comp.WidthMicrometers, comp.HeightMicrometers),
                     Severity = PdkFindingSeverity.Warning
                 });
         }
@@ -161,9 +168,9 @@ public class PdkConsistencyChecker
             {
                 ComponentName = comp.Name,
                 FindingType = "OriginOffsetRisk",
-                Message = $"First pin '{firstPin.Name}' may not be the Nazca origin pin. " +
-                          $"NazcaOriginOffset will be derived as ({firstPin.OffsetXMicrometers}, " +
-                          $"{firstPin.OffsetYMicrometers}) which may cause coordinate mismatches.",
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("PdkConsistency.OriginOffsetRisk"),
+                    firstPin.Name, firstPin.OffsetXMicrometers, firstPin.OffsetYMicrometers),
                 Severity = PdkFindingSeverity.Warning
             });
     }
@@ -179,8 +186,9 @@ public class PdkConsistencyChecker
             {
                 ComponentName = comp.Name,
                 FindingType = "DimensionMismatch",
-                Message = $"Width mismatch: JSON={comp.WidthMicrometers} µm, " +
-                          $"Template={template.WidthMicrometers} µm (diff={widthDiff:F2} µm).",
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("PdkConsistency.WidthMismatch"),
+                    comp.WidthMicrometers, template.WidthMicrometers, widthDiff),
                 Severity = PdkFindingSeverity.Error,
                 DeviationMicrometers = widthDiff
             });
@@ -190,8 +198,9 @@ public class PdkConsistencyChecker
             {
                 ComponentName = comp.Name,
                 FindingType = "DimensionMismatch",
-                Message = $"Height mismatch: JSON={comp.HeightMicrometers} µm, " +
-                          $"Template={template.HeightMicrometers} µm (diff={heightDiff:F2} µm).",
+                Message = string.Format(
+                    LocalizationService.Instance.Translate("PdkConsistency.HeightMismatch"),
+                    comp.HeightMicrometers, template.HeightMicrometers, heightDiff),
                 Severity = PdkFindingSeverity.Error,
                 DeviationMicrometers = heightDiff
             });
@@ -211,7 +220,9 @@ public class PdkConsistencyChecker
                 {
                     ComponentName = comp.Name,
                     FindingType = "PinNotInTemplate",
-                    Message = $"Pin '{pin.Name}' exists in JSON but not in reference template.",
+                    Message = string.Format(
+                        LocalizationService.Instance.Translate("PdkConsistency.PinNotInTemplate"),
+                        pin.Name),
                     Severity = PdkFindingSeverity.Warning
                 });
                 continue;
@@ -226,8 +237,10 @@ public class PdkConsistencyChecker
                 {
                     ComponentName = comp.Name,
                     FindingType = "PinPositionMismatch",
-                    Message = $"Pin '{pin.Name}': JSON=({pin.OffsetXMicrometers}, {pin.OffsetYMicrometers}) µm, " +
-                              $"Template=({refPin.OffsetX}, {refPin.OffsetY}) µm (dist={dist:F3} µm).",
+                    Message = string.Format(
+                        LocalizationService.Instance.Translate("PdkConsistency.PinPositionMismatch"),
+                        pin.Name, pin.OffsetXMicrometers, pin.OffsetYMicrometers,
+                        refPin.OffsetX, refPin.OffsetY, dist),
                     Severity = PdkFindingSeverity.Error,
                     DeviationMicrometers = dist
                 });

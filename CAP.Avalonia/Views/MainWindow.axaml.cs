@@ -6,8 +6,10 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Notifications;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
+using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP.Avalonia.ViewModels.ComponentSettings;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Library;
@@ -17,6 +19,7 @@ using CAP.Avalonia.Views.Dialogs;
 using CAP.Avalonia.Views.PdkImport;
 using CAP.Avalonia.ViewModels.Solvers;
 using System.ComponentModel;
+using System.IO;
 using System.Linq;
 
 namespace CAP.Avalonia.Views;
@@ -25,9 +28,46 @@ public partial class MainWindow : Window
 {
     private SettingsWindow? _settingsWindow;
 
+    /// <summary>Set once the user confirmed closing so the guard lets the re-issued Close() through.</summary>
+    private bool _forceClose;
+
+    /// <summary>Suppresses a second save prompt while the first close confirmation is still open.</summary>
+    private bool _confirmingClose;
+
+    /// <summary>
+    /// Tracks the currently-open per-PDK "Edit Process" window, keyed by the PDK's
+    /// file path (falling back to its name when the path is null, e.g. an
+    /// unsaved draft). Prevents a second click on the same PDK's "Edit…" button
+    /// from opening a duplicate editor window — the existing one is activated
+    /// instead. Entries are removed when their window closes.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, ProcessManagementWindow> _openPdkEditWindows = new();
+
+    /// <summary>
+    /// Open "Edit Component" windows keyed by <c>EditOriginalPdkKey + "::" + EditingOriginalName</c>:
+    /// a second ✏ click on the same component activates the existing window instead of opening
+    /// a duplicate. "New Component" sessions are never keyed here, so several blank windows can
+    /// stay open in parallel.
+    /// </summary>
+    private readonly System.Collections.Generic.Dictionary<string, NewComponentWindow> _openComponentEditWindows = new();
+
+    /// <summary>Open Component Settings dialogs keyed by entity, so a repeat open activates the existing one.</summary>
+    private readonly System.Collections.Generic.Dictionary<string, ComponentSettingsDialog> _openComponentSettingsDialogs = new();
+
+    /// <summary>
+    /// The open Component Registry browser window (issue #656). Both entry points
+    /// (Component Library header 🌐 and the Tools flyout) share it: a second open
+    /// activates the existing window instead of spawning a duplicate — same
+    /// pattern as <see cref="_openPdkEditWindows"/>. Cleared when it closes.
+    /// </summary>
+    private RegistryBrowserWindow? _registryBrowserWindow;
+
     public MainWindow()
     {
         InitializeComponent();
+
+        // Guard against losing unsaved changes when the window is closed
+        Closing += OnWindowClosing;
 
         // Set up the FileDialogService when the window is loaded
         Loaded += async (_, _) =>
@@ -80,7 +120,54 @@ public partial class MainWindow : Window
                 // iterating on the design while it stays open.
                 vm.LeftPanel.ShowNewComponentWindowAsync = newComponentVm =>
                 {
-                    var window = new NewComponentWindow { DataContext = newComponentVm };
+                    // By the time this hook runs, LoadForEdit was already applied — IsEditMode
+                    // and the edit-identity fields are set, so the dedup key can be built here.
+                    var editKey = newComponentVm.IsEditMode && newComponentVm.EditOriginalPdkKey is not null
+                        && newComponentVm.EditingOriginalName is not null
+                        ? $"{newComponentVm.EditOriginalPdkKey}::{newComponentVm.EditingOriginalName}"
+                        : null;
+                    if (editKey is not null
+                        && _openComponentEditWindows.TryGetValue(editKey, out var existingComponentWindow)
+                        && existingComponentWindow.IsVisible)
+                    {
+                        // The existing window may hold an outdated snapshot (file changed on
+                        // disk since it opened) — saving from it would overwrite the newer
+                        // state. If the user has no unsaved input, adopt the freshly loaded
+                        // view model WHOLESALE (a field-by-field copy would lose the edit
+                        // bookkeeping); otherwise only activate — input is never thrown away.
+                        if (existingComponentWindow.DataContext is NewComponentViewModel existingVm
+                            && !existingVm.HasUnsavedEditChanges)
+                        {
+                            WireNewComponentEditorHooks(newComponentVm, existingComponentWindow, vm);
+                            existingComponentWindow.DataContext = newComponentVm;
+                        }
+                        // Un-minimize first: Activate() alone leaves a minimized window
+                        // minimized, which looks like the ✏ button silently did nothing.
+                        existingComponentWindow.WindowState = WindowState.Normal;
+                        existingComponentWindow.Activate();
+                        return System.Threading.Tasks.Task.CompletedTask;
+                    }
+
+                    var window = new NewComponentWindow();
+                    WireNewComponentEditorHooks(newComponentVm, window, vm);
+                    window.DataContext = newComponentVm;
+                    // Closing the window (via Save, the titlebar X, or Alt+F4) always cancels
+                    // any Meep compute still running so it doesn't keep burning CPU/Docker
+                    // resources after the user has moved on. Wired against the CURRENT
+                    // DataContext because the dedup above may swap in a fresh view model.
+                    window.Closing += (_, _) => (window.DataContext as NewComponentViewModel)?.CancelCompute();
+                    if (editKey is not null)
+                    {
+                        _openComponentEditWindows[editKey] = window;
+                        // Only remove the entry if it still points at THIS window: if the key
+                        // was ever re-assigned to a newer window, the older window's Closed
+                        // handler must not deregister the newer one.
+                        window.Closed += (_, _) =>
+                        {
+                            if (_openComponentEditWindows.TryGetValue(editKey, out var tracked) && ReferenceEquals(tracked, window))
+                                _openComponentEditWindows.Remove(editKey);
+                        };
+                    }
                     window.Show(this);
                     return System.Threading.Tasks.Task.CompletedTask;
                 };
@@ -97,34 +184,6 @@ public partial class MainWindow : Window
                     editorWindow.Show(this);
                 };
 
-                // Wire up Fabrication Process window (process model — #570). The dialog derives
-                // its state from the design's active process + loaded PDKs at open time, so a
-                // reopened dialog always reflects the current selection (#660).
-                vm.ShowProcessManagerRequested = () =>
-                {
-                    var processVm = new ProcessManagementViewModel(new FileDialogService(this));
-                    // Resolve a PDK name to its source JSON so edited metal cross-sections (#682) can be
-                    // persisted, using the same loaded-PDK registry the offset editor writes through.
-                    processVm.PdkFilePathResolver = name => MetalTraceStyleResolver
-                        .FindByName(vm.LeftPanel.PdkManager.LoadedPdks, name, p => p.Name)?.FilePath;
-                    processVm.ShowActiveProcess(vm.FileOperations.ActiveProcess, vm.LeftPanel.GetLoadedPdkDrafts());
-                    // Confirm before overwriting a PDK's JSON on disk (user field feedback): naming
-                    // the exact file so a real PDK can't be edited by accident.
-                    processVm.ConfirmSaveToPdk = async path =>
-                    {
-                        var choice = await new MessageBoxService().ShowChoicePromptAsync(
-                            $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
-                            + "layers and cross-sections are written — imported or preset rows are not. Continue?",
-                            "Save to PDK file?", new[] { "Cancel", "Save" });
-                        return choice == 1;
-                    };
-                    var processWindow = new ProcessManagementWindow
-                    {
-                        DataContext = processVm
-                    };
-                    processWindow.Show(this);
-                };
-
                 // Wire up the New-Design process-selection dialog (issue #570)
                 vm.ShowProcessSelectionAsync = async groups =>
                 {
@@ -134,12 +193,25 @@ public partial class MainWindow : Window
                     return pvm.Result;
                 };
 
-                // Prompt for the fabrication process once at startup (issue #570). Deferred so
-                // the main window is fully shown before the modal picker opens; dismissing it
-                // starts in Playground.
-                global::Avalonia.Threading.Dispatcher.UIThread.Post(
-                    async () => await vm.PromptForInitialProcessAsync(),
-                    global::Avalonia.Threading.DispatcherPriority.Background);
+                // Prompt for the fabrication process (issue #570) once the Home screen
+                // is dismissed. A design opened from Home/startup restores its own
+                // active process, so only a truly fresh start still needs the picker;
+                // prompting over the Home card would be premature and redundant.
+                var processPromptShown = false;
+                void MaybePromptForInitialProcess()
+                {
+                    if (processPromptShown || vm.Home.IsHomeVisible || vm.FileOperations.ActiveProcess != null)
+                        return;
+                    processPromptShown = true;
+                    global::Avalonia.Threading.Dispatcher.UIThread.Post(
+                        async () => await vm.PromptForInitialProcessAsync(),
+                        global::Avalonia.Threading.DispatcherPriority.Background);
+                }
+                vm.Home.PropertyChanged += (_, args) =>
+                {
+                    if (args.PropertyName == nameof(vm.Home.IsHomeVisible))
+                        MaybePromptForInitialProcess();
+                };
 
                 // Wire up clipboard for RoutingDiagnostics
                 vm.RightPanel.RoutingDiagnostics.CopyToClipboard = async (text) =>
@@ -194,33 +266,16 @@ public partial class MainWindow : Window
                     }
                 };
 
-                // Wire up Component Settings dialog for hierarchy nodes
+                // Both component context-menu entry points share one routing — see
+                // OpenComponentEditorOrSettings.
                 vm.LeftPanel.HierarchyPanel.OpenComponentSettings = node =>
-                {
-                    ShowComponentSettingsDialog(
-                        node.Component.Identifier,
-                        node.Component.HumanReadableName ?? node.Component.Identifier,
-                        node.Component,
-                        vm);
-                };
-
-                // Wire up Component Settings dialog for canvas context menu
+                    OpenComponentEditorOrSettings(node.ComponentViewModel, node.Component, vm);
                 vm.CanvasInteraction.OpenComponentSettings = compVm =>
-                {
-                    ShowComponentSettingsDialog(
-                        compVm.Component.Identifier,
-                        compVm.Component.HumanReadableName ?? compVm.Component.Identifier,
-                        compVm.Component,
-                        vm);
-                };
+                    OpenComponentEditorOrSettings(compVm, compVm.Component, vm);
 
                 // Wire up per-instance S-matrix override marker in hierarchy
                 vm.LeftPanel.HierarchyPanel.CheckHasSMatrixOverride =
                     id => vm.FileOperations.StoredSMatrices.ContainsKey(id);
-
-                // Wire up per-instance Nazca override marker in hierarchy
-                vm.LeftPanel.HierarchyPanel.CheckHasNazcaOverride =
-                    id => vm.FileOperations.StoredNazcaOverrides.ContainsKey(id);
 
                 // Initial badge population for PDK templates (covers user-global
                 // overrides loaded from disk on app start). Updated again every
@@ -238,8 +293,62 @@ public partial class MainWindow : Window
                         UpdateGroupTemplateListBoxSelections(vm.LeftPanel.SelectedGroupTemplate);
                     }
                 };
+
+                // Startup project — LAST, after every service/callback above is
+                // wired (dialogs, hierarchy override badges). A command-line
+                // .lun file wins; otherwise honor the reopen-last preference.
+                // The Home card is disabled while the load is in flight.
+                vm.Home.IsStartupLoadInProgress = true;
+                try
+                {
+                    if (vm.StartupDesignFile is { } startupFile)
+                    {
+                        await vm.FileOperations.LoadDesignFromPathAsync(startupFile);
+                    }
+                    else
+                    {
+                        await vm.Home.TryReopenLastProjectAsync();
+                    }
+                }
+                finally
+                {
+                    vm.Home.IsStartupLoadInProgress = false;
+                }
+
+                // Covers the startup-load path: Home is already dismissed, but a
+                // legacy design may not have restored an active process.
+                MaybePromptForInitialProcess();
             }
         };
+    }
+
+    /// <summary>
+    /// Prompts to save unsaved changes before the window closes. Cancels the
+    /// close, asks via <see cref="ViewModels.Panels.FileOperationsViewModel.ConfirmCloseAsync"/>,
+    /// and re-issues Close() when the user confirmed (saved or discarded).
+    /// </summary>
+    private async void OnWindowClosing(object? sender, WindowClosingEventArgs e)
+    {
+        if (_forceClose || DataContext is not MainViewModel vm || !vm.FileOperations.HasUnsavedChanges)
+            return;
+
+        e.Cancel = true;
+        if (_confirmingClose)
+            return;
+
+        _confirmingClose = true;
+        try
+        {
+            if (await vm.FileOperations.ConfirmCloseAsync())
+            {
+                _forceClose = true;
+                Close();
+            }
+        }
+        finally
+        {
+            _confirmingClose = false;
+        }
     }
 
     /// <summary>
@@ -324,6 +433,19 @@ public partial class MainWindow : Window
         base.OnKeyDown(e);
         if (e.Handled) return;
         if (DataContext is not MainViewModel mainVm) return;
+
+        // While the Home screen overlay is shown, canvas shortcuts don't apply.
+        // Escape dismisses it (same as "Continue without a project") — checked
+        // BEFORE the TextBox guard so it also works from the recents search box.
+        if (mainVm.Home.IsHomeVisible)
+        {
+            if (e.Key == Key.Escape)
+            {
+                mainVm.Home.ContinueWithoutProjectCommand.Execute(null);
+                e.Handled = true;
+            }
+            return;
+        }
 
         // Don't intercept keystrokes when a text input has focus (e.g., search box)
         if (FocusManager?.GetFocusedElement() is TextBox)
@@ -474,6 +596,38 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Opens the non-modal "Component Registry" browser window (issue #656) from
+    /// either entry point (Component Library header 🌐 / Tools flyout). A second
+    /// click activates the already-open window; the lazy index load happens in
+    /// the window's own Opened hook.
+    /// </summary>
+    private void OpenRegistryBrowser_Click(object? sender, RoutedEventArgs e)
+    {
+        if (_registryBrowserWindow is { IsVisible: true } existing)
+        {
+            // Un-minimize first: Activate() alone leaves a minimized window
+            // minimized, which looks like the button silently did nothing.
+            existing.WindowState = WindowState.Normal;
+            existing.Activate();
+            return;
+        }
+
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var window = new RegistryBrowserWindow { DataContext = vm.Registry };
+        _registryBrowserWindow = window;
+        // Only clear the field if it still points at THIS window (defensive,
+        // mirrors the keyed-dictionary windows above).
+        window.Closed += (_, _) =>
+        {
+            if (ReferenceEquals(_registryBrowserWindow, window))
+                _registryBrowserWindow = null;
+        };
+        window.Show(this);
+    }
+
+    /// <summary>
     /// Opens the "Check PDKs against Python" dialog from the Tools menu (issue #515).
     /// </summary>
     private void OpenPdkResolutionCheckDialog_Click(object? sender, RoutedEventArgs e)
@@ -608,19 +762,414 @@ public partial class MainWindow : Window
         vm.LeftPanel.RefreshUserGlobalOverrideBadges(userStore.Overrides.ContainsKey);
     }
 
-    /// <summary>
-    /// Handles "Component Settings…" click in the PDK template list context menu.
-    /// </summary>
-    private void TemplateComponentSettings_Click(object? sender, RoutedEventArgs e)
+    private void TemplateEditComponent_Click(object? sender, RoutedEventArgs e)
     {
         if (DataContext is not MainViewModel vm)
             return;
 
-        if (sender is MenuItem { DataContext: ComponentTemplate template })
+        if (sender is Control { DataContext: ComponentTemplate template })
         {
-            var key = $"{template.PdkSource}::{template.Name}";
-            ShowComponentSettingsDialog(key, template.Name, null, vm, template);
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
         }
+    }
+
+    /// <summary>
+    /// Handles "Delete…" click in the PDK template list context menu (LC-T5): confirms, then
+    /// moves the component out of its user PDK file into <c>.trash</c> (backing up the pre-edit
+    /// file) and out of the library via <see cref="LeftPanelViewModel.RemoveCustomComponentCommand"/>.
+    /// Only wired to a visible/enabled menu item for custom (non-Foundry) templates — same
+    /// <c>IsCustom</c> binding as "Edit…" — but repeats the authoritative
+    /// <see cref="LeftPanelViewModel.CanEditTemplate"/> guard here before even showing the
+    /// confirm dialog. Placed components on the canvas are never touched (Design Checks flag any
+    /// resulting conflict).
+    /// </summary>
+    private async void TemplateDeleteComponent_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // Accept both the context-menu item and the inline hover ✕ button.
+        if (sender is not Control { DataContext: ComponentTemplate template } || !vm.LeftPanel.CanDeleteTemplate(template))
+            return;
+
+        // On a fork of a bundled PDK, a component the built-in original also has is not
+        // deleted but reverted to the foundry definition.
+        var isRevertToBundled = vm.LeftPanel.IsComponentRevertToBundled(template);
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{template.Name}' and restore the built-in original?\n\n"
+              + "A full backup of your customized PDK file is saved to user-pdks/.trash first. "
+              + "Placed instances on the canvas are kept."
+            : $"Move component '{template.Name}' to trash?\n\n"
+              + "The PDK file is rewritten without this component; a full pre-edit backup "
+              + "(including any hand-added JSON comments, which the rewrite does not preserve) is "
+              + "saved to user-pdks/.trash first. Placed instances on the canvas are kept.";
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            prompt, "Delete Component?", new[] { "Cancel", isRevertToBundled ? "Restore Original" : "Move to Trash" });
+        if (choice != 1)
+            return;
+
+        vm.LeftPanel.RemoveCustomComponentCommand.Execute(template);
+    }
+
+    /// <summary>
+    /// Handles "Edit…" click on a custom PDK's row in PDK Management (issue #726 follow-up):
+    /// opens the Fabrication Process editor scoped to just that PDK's own process, replacing the
+    /// old toolbar-wide dialog with its preset/import pickers. Bundled PDKs have no Edit button
+    /// (see the <c>!IsBundled</c> visibility binding in <c>MainWindow.axaml</c>), but the check is
+    /// repeated here as the authoritative guard. Never touches
+    /// <c>FileOperationsViewModel.ActiveProcess</c> — only the PDK's own JSON file.
+    /// </summary>
+    private void PdkEditProcess_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk })
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        // Match by file path first, not just display name: two loaded PDKs can share a name
+        // (e.g. two custom PDKs authored under the same name from different files), and a
+        // name-only lookup could then load the wrong draft here while still resolving
+        // PdkFilePathResolver to this row's OWN file below — silently writing this edit into a
+        // different PDK's JSON (issue #733 review, Finding 5).
+        var draft = MetalTraceStyleResolver.FindOwnDraft(vm.LeftPanel.GetLoadedPdkDrafts(), pdk.FilePath, pdk.Name);
+        if (draft is null)
+            return;
+
+        // Dedup: a second click on the same PDK's "Edit…" button re-activates the
+        // already-open editor instead of spawning a duplicate window. Deliberately shows the
+        // window's CURRENT (possibly unsaved) editor state rather than reloading the draft —
+        // reloading would silently destroy the user's in-progress edits.
+        var key = pdk.FilePath ?? pdk.Name;
+        if (_openPdkEditWindows.TryGetValue(key, out var existingWindow) && existingWindow.IsVisible)
+        {
+            // Un-minimize first: Activate() alone leaves a minimized window minimized,
+            // which looks like the button silently did nothing.
+            existingWindow.WindowState = WindowState.Normal;
+            existingWindow.Activate();
+            return;
+        }
+
+        var processVm = new ProcessManagementViewModel(new FileDialogService(this))
+        {
+            // Resolve straight to this row's own file path — no name-based lookup needed since
+            // the button is already scoped to this exact PDK.
+            PdkFilePathResolver = _ => pdk.FilePath,
+            // Confirm before overwriting the PDK's JSON on disk (same prompt as the former
+            // toolbar dialog): naming the exact file so it can't be edited by accident.
+            ConfirmSaveToPdk = async path =>
+            {
+                var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                    $"This overwrites the PDK file on disk:\n{path}\n\nOnly this process's own "
+                    + "layers and cross-sections are written. Continue?",
+                    "Save to PDK file?", new[] { "Cancel", "Save" });
+                return choice == 1;
+            },
+        };
+        processVm.LoadForSinglePdkEdit(draft);
+        // Re-apply the active process lock by value after a save, so an edit that changes this
+        // PDK's fingerprint is reflected immediately without a restart.
+        processVm.ProcessSaved += async (_, _) =>
+        {
+            vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
+            await WarnIfSavedProcessDivergedFromDesign(vm, pdk);
+        };
+        // A first save on a bundled PDK implicitly wrote a fork — swap the library entry to it
+        // (same name, so the active process keeps resolving by value).
+        processVm.BundledPdkForkSaved += (_, args) =>
+            vm.LeftPanel.RegisterSavedPdkFork(args.PdkName, args.ForkPath);
+
+        var processWindow = new ProcessManagementWindow
+        {
+            DataContext = processVm,
+            Title = $"Edit Process — {pdk.Name}",
+        };
+        _openPdkEditWindows[key] = processWindow;
+        // Only remove the entry if it still points at THIS window: if the key was ever
+        // re-assigned to a newer window, the older window's Closed handler must not
+        // deregister the newer one.
+        processWindow.Closed += (_, _) =>
+        {
+            if (_openPdkEditWindows.TryGetValue(key, out var tracked) && ReferenceEquals(tracked, processWindow))
+                _openPdkEditWindows.Remove(key);
+        };
+        processWindow.Show(this);
+    }
+
+    /// <summary>
+    /// Warns the user when a per-PDK process save (<see cref="PdkEditProcess_Click"/>) diverged
+    /// <paramref name="pdk"/> from the design's active process (issue #570 follow-up, LC-T4):
+    /// the placement lock (<c>IsLockedByProcess</c>, just recomputed by
+    /// <see cref="LeftPanelViewModel.ReapplyActiveProcessAfterPdkChange"/>) already blocks NEW
+    /// placements from this PDK, but components placed from it BEFORE the edit are deliberately
+    /// kept on the canvas — this tells the user they are now in conflict instead of leaving that
+    /// discoverable only via Design Checks. No dialog when the PDK isn't locked (no divergence)
+    /// or there are zero placed components from it (the lock alone is enough). Never deletes
+    /// anything.
+    /// </summary>
+    private static async Task WarnIfSavedProcessDivergedFromDesign(MainViewModel vm, PdkInfoViewModel pdk)
+    {
+        var pdkInfo = vm.LeftPanel.PdkManager.LoadedPdks.FirstOrDefault(p =>
+            pdk.FilePath != null ? p.FilePath == pdk.FilePath : p.Name == pdk.Name);
+        if (pdkInfo is not { IsLockedByProcess: true })
+            return;
+
+        var conflictedCount = vm.Canvas.Components.Count(c =>
+            (c.TemplatePdkSource ?? vm.CanvasInteraction.PlacementContext.ResolveComponentPdkSource(c.Component))
+            == pdkInfo.Name);
+        if (conflictedCount == 0)
+            return;
+
+        await new MessageBoxService().ShowChoicePromptAsync(
+            "The saved process no longer matches the design's active process. "
+            + $"{conflictedCount} placed component(s) from '{pdkInfo.Name}' are now in conflict "
+            + "and new placements are blocked. Existing components are kept — see Design Checks.",
+            "Process Changed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Handles "Delete…" click on a custom PDK's row in PDK Management (LC-T5): after a confirm
+    /// prompt, moves the whole PDK file to <c>user-pdks/.trash</c> via <see cref="UserPdkStore"/>
+    /// and then deregisters it from the library (templates, PDK-manager entry, in-memory draft,
+    /// remembered import path) via <see cref="LeftPanelViewModel.UnregisterPdk"/> — mirrors
+    /// <see cref="PdkCreate_Click"/>'s store-then-register order, just in reverse. Bundled PDKs
+    /// have no Delete button (see the <c>!IsBundled</c> visibility binding in
+    /// <c>MainWindow.axaml</c>), but the check is repeated here as the authoritative guard.
+    /// Placed components on the canvas are never touched (Design Checks flag any resulting
+    /// conflict, mirroring <see cref="WarnIfSavedProcessDivergedFromDesign"/>).
+    /// </summary>
+    private async void PdkDelete_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || pdk.IsBundled || pdk.FilePath is null)
+            return;
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return;
+
+        // Only files inside the managed user-pdks root are moved to its .trash. An
+        // externally-stored PDK (imported from an arbitrary folder, remembered via preferences)
+        // is the user's own file in a place they chose — deleting it from the library must not
+        // relocate it into a hidden app-data folder (PR #739 review), so that path only
+        // deregisters and leaves the file untouched.
+        var isManaged = userPdkStore.IsInManagedRoot(pdk.FilePath);
+        // A fork of a bundled PDK "reverts to the foundry truth" instead: the user's copy is
+        // removed and the read-only built-in original reappears in the library.
+        var bundledCount = pdk.ShadowsBundledPdk
+            ? vm.LeftPanel.GetBundledOriginalComponentCount(pdk.Name)
+            : null;
+        var isRevertToBundled = bundledCount is not null;
+        var prompt = isRevertToBundled
+            ? $"Remove your customized copy of '{pdk.Name}' and restore the built-in original (its {bundledCount} components)?\n\n"
+              + (isManaged
+                  ? "Your copy is moved to the trash."
+                  : $"Your file stays untouched at:\n{pdk.FilePath}")
+            : isManaged
+                ? $"Move '{pdk.Name}' ({pdk.ComponentCount} components) to trash?\n\n"
+                  + "The file is moved to user-pdks/.trash and can be restored manually."
+                : $"Remove '{pdk.Name}' ({pdk.ComponentCount} components) from the library?\n\n"
+                  + $"The file stays untouched at:\n{pdk.FilePath}";
+        var confirmLabel = isRevertToBundled ? "Restore Original" : isManaged ? "Move to Trash" : "Remove";
+        var choice = await new MessageBoxService().ShowChoicePromptAsync(
+            prompt, "Delete PDK?", new[] { "Cancel", confirmLabel });
+        if (choice != 1)
+            return;
+
+        if (isRevertToBundled && isManaged)
+        {
+            // The revert is all-or-nothing: a false here means nothing was changed —
+            // tell the user instead of closing as if it worked.
+            if (!vm.LeftPanel.RevertShadowForkToBundled(pdk))
+                await ShowRestoreOriginalFailedAsync(pdk.Name);
+            return;
+        }
+
+        if (isManaged)
+        {
+            try
+            {
+                userPdkStore.MoveToTrash(pdk.FilePath);
+            }
+            catch (Exception ex)
+            {
+                vm.ErrorConsole.LogError($"Failed to move PDK '{pdk.Name}' to trash: {ex.Message}", ex);
+                return;
+            }
+        }
+
+        vm.LeftPanel.UnregisterPdk(pdk.FilePath);
+        if (isRevertToBundled && !vm.LeftPanel.RestoreBundledPdk(pdk.Name))
+            await ShowRestoreOriginalFailedAsync(pdk.Name);
+    }
+
+    private static async Task ShowRestoreOriginalFailedAsync(string pdkName)
+    {
+        await new MessageBoxService().ShowChoicePromptAsync(
+            $"Could not restore the built-in original of '{pdkName}'.\n\n"
+            + "See the Error Console for details.",
+            "Restore failed", new[] { "OK" });
+    }
+
+    /// <summary>
+    /// Wires one <see cref="NewComponentViewModel"/> to the window that hosts it. Runs both for
+    /// a brand-new editor window and when the editor dedup swaps a freshly loaded view model
+    /// into an already-open window, so the two paths can never drift apart.
+    /// </summary>
+    private void WireNewComponentEditorHooks(NewComponentViewModel newComponentVm, NewComponentWindow window, MainViewModel vm)
+    {
+        // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the view model
+        // only knows the file's already-read contents (PickPyFile's contract), never a path,
+        // so it can't own a FileDialogService itself.
+        newComponentVm.PickPyFile = async () =>
+        {
+            var path = await new FileDialogService(this).ShowOpenFileDialogAsync(
+                "Load Python file", "Python Files (*.py)|*.py|All Files (*.*)|*.*");
+            return path is null ? null : await File.ReadAllTextAsync(path);
+        };
+        newComponentVm.PickSMatrixFile = () => new FileDialogService(this).ShowOpenFileDialogAsync(
+            "Load S-Parameter File",
+            "S-Parameter Files|*.sparam;*.dat;*.txt;*.s1p;*.s2p;*.s3p;*.s4p;*.sNp|All Files|*.*");
+        newComponentVm.ShowStoredSMatrices = (pdkName, compName) =>
+        {
+            var template = vm.LeftPanel.AllTemplates
+                .FirstOrDefault(t => t.Name == compName && t.PdkSource == pdkName);
+            ShowComponentSettingsDialog($"{pdkName}::{compName}", compName, null, vm, template);
+            return System.Threading.Tasks.Task.CompletedTask;
+        };
+        // Confirm before overwriting an existing component name in the target PDK
+        // (new or existing custom PDK — the message names whichever applies).
+        newComponentVm.ConfirmOverwrite = async (name, pdkName) =>
+        {
+            var choice = await new MessageBoxService().ShowChoicePromptAsync(
+                $"'{name}' already exists in PDK '{pdkName}'. Overwrite?",
+                "Overwrite?", new[] { "Cancel", "Overwrite" });
+            return choice == 1;
+        };
+        newComponentVm.Saved += (_, _) => window.Close();
+        // "New PDK…" opens the purpose-built CreateCustomPdkWindow, not the general Fabrication
+        // Process editor. Modal with the New Component window as owner, so its PDK dropdown
+        // cannot be left mid-selection while the modal is open.
+        newComponentVm.CreateNewPdk = async () =>
+        {
+            // ShowCreateCustomPdkDialogAsync also registers the new (possibly component-less)
+            // PDK, so cancelling the component afterwards doesn't leave the PDK invisible.
+            var createdPath = await ShowCreateCustomPdkDialogAsync(window);
+            if (createdPath is null)
+                return null;
+
+            var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+            return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
+        };
+    }
+
+    /// <summary>
+    /// Handles the "+" click in the PDK-Management panel header (issue #700 follow-up, LC-T2):
+    /// opens <see cref="CreateCustomPdkWindow"/> directly, modal on the main window, instead of
+    /// going through the "New Component" assistant's "New PDK…" sentinel first. Built the same
+    /// way as that assistant's <c>CreateNewPdk</c> hook (<c>ShowNewComponentWindowAsync</c>
+    /// lambda above) — same view model, same available-processes filter, same
+    /// <see cref="ProcessManagementViewModel"/> definition editor — just with the main window as
+    /// owner and no parent assistant window to close afterwards. On success, the (possibly
+    /// component-less) new PDK is registered straight into the library via
+    /// <see cref="LeftPanel.RegisterCreatedPdk"/> so it appears in the list immediately.
+    /// </summary>
+    private async void PdkCreate_Click(object? sender, RoutedEventArgs e)
+    {
+        await ShowCreateCustomPdkDialogAsync(this);
+    }
+
+    /// <summary>
+    /// The single shared wiring for the Create-Custom-PDK dialog — used by both entry points
+    /// (the PDK-Management "+" button above and the New Component assistant's "New PDK…"
+    /// sentinel), so their importer lists, event wiring, and post-create registration can never
+    /// drift apart (PR #739 review). Shows the dialog modally over <paramref name="owner"/>;
+    /// on success the (possibly component-less) new PDK is registered straight into the library
+    /// via <see cref="LeftPanelViewModel.RegisterCreatedPdk"/> — so it appears in PDK Management
+    /// immediately regardless of entry point — and its file path is returned. Returns null when
+    /// the user cancelled or the dialog faulted (logged, not swallowed).
+    /// </summary>
+    private async Task<string?> ShowCreateCustomPdkDialogAsync(Window owner)
+    {
+        if (DataContext is not MainViewModel vm)
+            return null;
+
+        var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
+        if (userPdkStore is null)
+            return null;
+
+        var availableProcesses = vm.LeftPanel.GetLoadedPdkDrafts()
+            .Where(d => d.Process != null && !d.ProcessAgnostic)
+            .Select(d => d.Process!)
+            .ToList();
+        var processDefinitionEditor = new ProcessManagementViewModel(new FileDialogService(this),
+            new IProcessImporter[]
+            {
+                new UpdkYamlProcessImporter(),
+                new NazcaCsvProcessImporter(),
+            }, new PdkJsonSaver());
+
+        // Loaded bundled PDK names are reserved: a user PDK under such a name would be taken
+        // for a fork of the built-in PDK and shadow it.
+        var reservedBundledNames = vm.LeftPanel.PdkManager.LoadedPdks
+            .Where(p => p.IsBundled || p.ShadowsBundledPdk)
+            .Select(p => p.Name)
+            .ToList();
+        var createVm = new CreateCustomPdkViewModel(
+            userPdkStore, availableProcesses, processDefinitionEditor, reservedBundledNames);
+        var createWindow = new CreateCustomPdkWindow { DataContext = createVm };
+
+        string? createdPath = null;
+        createVm.PdkCreated += (_, path) =>
+        {
+            createdPath = path;
+            createWindow.Close();
+        };
+
+        try
+        {
+            await createWindow.ShowDialog(owner);
+        }
+        catch (Exception ex)
+        {
+            vm.ErrorConsole.LogError($"Create-PDK dialog failed: {ex.Message}", ex);
+            return null;
+        }
+
+        if (createdPath is not null)
+            vm.LeftPanel.RegisterCreatedPdk(createdPath);
+        return createdPath;
+    }
+
+    /// <summary>
+    /// Shared routing for both component context-menu entry points (canvas and hierarchy):
+    /// an editable PDK template opens the unified "Edit Component" editor via the same command
+    /// as the library's ✏ button, so fork-on-edit and window dedup apply automatically;
+    /// otherwise (ComponentGroups, template-less legacy instances) falls back to the
+    /// per-instance Component Settings dialog instead of a misleading error.
+    /// </summary>
+    private void OpenComponentEditorOrSettings(
+        CAP.Avalonia.ViewModels.Canvas.ComponentViewModel? compVm,
+        CAP_Core.Components.Core.Component component,
+        MainViewModel vm)
+    {
+        var template = compVm is null
+            ? null
+            : CanvasComponentTemplateResolver.ResolveEditable(
+                compVm, vm.LeftPanel.AllTemplates,
+                vm.CanvasInteraction.PlacementContext.ResolveComponentPdkSource,
+                vm.LeftPanel.CanEditTemplate);
+        if (template is not null)
+        {
+            vm.LeftPanel.EditCustomComponentCommand.Execute(template);
+            return;
+        }
+
+        ShowComponentSettingsDialog(
+            component.Identifier,
+            component.HumanReadableName ?? component.Identifier,
+            component,
+            vm);
     }
 
     /// <summary>
@@ -644,6 +1193,12 @@ public partial class MainWindow : Window
         MainViewModel vm,
         ComponentTemplate? templateForDefaults = null)
     {
+        if (_openComponentSettingsDialogs.TryGetValue(entityKey, out var existingDialog))
+        {
+            existingDialog.Activate();
+            return;
+        }
+
         var errorConsole = App.Services.GetService(typeof(CAP_Core.ErrorConsoleService))
             as CAP_Core.ErrorConsoleService;
         var userStore = App.Services.GetService(typeof(UserSMatrixOverrideStore))
@@ -658,10 +1213,15 @@ public partial class MainWindow : Window
             as CAP_Core.Solvers.Fdtd.IFdtdSMatrixService;
         var previewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
             as CAP_Core.Export.NazcaComponentPreviewService;
+        // gdsfactory-native components carry only a synthesized "nazca_<name>" placeholder as
+        // their Nazca function, so the factory needs both renderers.
+        var gdsFactoryGeometryService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
+            as CAP_Core.Export.GdsFactoryComponentPreviewService;
         Func<CAP_Core.Components.Core.Component, CancellationToken, Task<CAP_Core.Solvers.Fdtd.FdtdSMatrixRequest?>>? fdtdRequestFactory = null;
         if (fdtdService != null && previewService != null)
         {
-            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(previewService);
+            var requestFactory = new CAP.Avalonia.Services.Solvers.ComponentFdtdRequestFactory(
+                previewService, gdsFactoryGeometryService);
             fdtdRequestFactory = (component, ct) => requestFactory.BuildAsync(component, ct);
         }
 
@@ -733,79 +1293,20 @@ public partial class MainWindow : Window
                 .ToList();
         }
 
-        // Resolve Nazca template values for per-instance mode.
-        // When no override is stored yet, the live component's current values ARE the template values.
-        // When an override was applied from a previous session, use the saved template reference
-        // from within the stored override record so "Reset to template" always targets the
-        // correct PDK defaults rather than the already-overridden live values.
-        string? templateFunctionName = null;
-        string? templateFunctionParameters = null;
-        string? templateModuleName = null;
-        if (liveComponent != null)
-        {
-            if (vm.FileOperations.StoredNazcaOverrides.TryGetValue(entityKey, out var existingNazca))
-            {
-                templateFunctionName = existingNazca.TemplateFunctionName ?? liveComponent.NazcaFunctionName;
-                templateFunctionParameters = existingNazca.TemplateFunctionParameters ?? liveComponent.NazcaFunctionParameters;
-                templateModuleName = existingNazca.TemplateModuleName ?? liveComponent.NazcaModuleName;
-            }
-            else
-            {
-                templateFunctionName = liveComponent.NazcaFunctionName;
-                templateFunctionParameters = liveComponent.NazcaFunctionParameters;
-                templateModuleName = liveComponent.NazcaModuleName;
-            }
-        }
+        string? templateFunctionName = liveComponent?.NazcaFunctionName;
+        string? templateFunctionParameters = liveComponent?.NazcaFunctionParameters;
+        string? templateModuleName = liveComponent?.NazcaModuleName;
 
-        // Per-instance raw Nazca code editor (issue #556) — only in per-instance mode.
-        var nazcaPreviewService = App.Services.GetService(typeof(CAP_Core.Export.NazcaComponentPreviewService))
-            as CAP_Core.Export.NazcaComponentPreviewService;
-        var gdsFactoryPreviewService = App.Services.GetService(typeof(CAP_Core.Export.GdsFactoryComponentPreviewService))
-            as CAP_Core.Export.GdsFactoryComponentPreviewService;
-        string? nazcaTemplateCode = null;
-        Func<double, double, IReadOnlyList<string>>? nazcaOverlapCheck = null;
-        Action? nazcaDimensionsChanged = null;
-        Action<IReadOnlyList<CAP_Core.Components.Core.PhysicalPin>>? nazcaPinsChanged = null;
-        if (liveComponent != null && !isTemplateMode)
-        {
-            nazcaTemplateCode = NazcaCodeTemplateBuilder.Build(
-                templateModuleName, templateFunctionName, templateFunctionParameters);
-            nazcaOverlapCheck = (w, h) => FindOverlappingComponentNames(vm, liveComponent, w, h);
-            nazcaDimensionsChanged = () =>
-            {
-                var compVm = vm.Canvas.Components.FirstOrDefault(c => c.Component == liveComponent);
-                compVm?.NotifyDimensionsChanged();
-                // Repaint the canvas immediately so the resized footprint shows on Apply.
-                DesignCanvasControl.InvalidateVisual();
-            };
-            nazcaPinsChanged = _ =>
-            {
-                // Issue #561: Connections auf die neuen Override-Pins umhaengen bzw.
-                // mit Warnung trennen, Pin-VMs auffrischen, Routen + Simulation neu.
-                var warnings = vm.Canvas.OnComponentPinsChanged(liveComponent);
-                foreach (var warning in warnings)
-                    errorConsole?.LogWarning(warning);
-                DesignCanvasControl.InvalidateVisual();
-            };
-        }
-
-        // S-matrix overrides (FDTD recompute / file import) are stored under the
-        // component's geometry identity so a copy inherits them; the per-instance
-        // Nazca raw-code override keeps using entityKey (component.Identifier).
-        // The library/template path has no live component and keeps the {PdkSource}::{Name} key.
-        // Resolve lazily so the dialog can re-derive the key after a Nazca geometry override
-        // (raw code / parameters) changes the identity mid-session.
+        // S-matrix overrides (FDTD recompute / file import) are stored under the component's
+        // geometry identity so a copy inherits them; the library/template path keys on entityKey.
         Func<string> smatrixKeyResolver = liveComponent != null
-            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(
-                liveComponent,
-                c => vm.FileOperations.StoredNazcaOverrides.TryGetValue(c.Identifier, out var o) ? o.RawCode : null)
+            ? () => CAP.Avalonia.Services.ComponentGeometryKey.For(liveComponent)
             : () => entityKey;
         string smatrixKey = smatrixKeyResolver();
 
-        // Issue #580 E: after a per-instance FDTD recompute, promote the result to
-        // the user-global template override — but only while the instance geometry
-        // still matches the template draft (no Nazca override active). Everything
-        // is checked at invoke time so mid-session geometry edits are honoured.
+        // Issue #580 E: after a per-instance FDTD recompute, promote the result to the
+        // user-global template override — but only while the instance geometry still matches
+        // the template draft.
         Func<CAP_DataAccess.Persistence.PIR.ComponentSMatrixData, bool>? propagateToTemplate = null;
         if (liveComponent != null && userStore != null)
         {
@@ -813,13 +1314,10 @@ public partial class MainWindow : Window
             {
                 var templateKey = vm.FileOperations.ResolveTemplateKey(liveComponent);
                 if (templateKey == null)
-                    return false; // no matching PDK template (e.g. user group)
+                    return false;
 
-                vm.FileOperations.StoredNazcaOverrides
-                    .TryGetValue(liveComponent.Identifier, out var nazcaOverride);
                 if (!CAP.Avalonia.Services.TemplateGeometryMatch.Matches(
-                        liveComponent, nazcaOverride,
-                        templateModuleName, templateFunctionName, templateFunctionParameters))
+                        liveComponent, templateModuleName, templateFunctionName, templateFunctionParameters))
                     return false;
 
                 userStore.Overrides[templateKey] = data;
@@ -842,20 +1340,12 @@ public partial class MainWindow : Window
             effectiveSMatrices: effectiveSMatrices,
             effectivePins: effectivePins,
             availablePinNames: availablePinNames,
-            storedNazcaOverrides: isTemplateMode ? null : vm.FileOperations.StoredNazcaOverrides,
-            templateFunctionName: templateFunctionName,
-            templateFunctionParameters: templateFunctionParameters,
-            templateModuleName: templateModuleName,
-            nazcaPreviewService: nazcaPreviewService,
-            nazcaTemplateCode: nazcaTemplateCode,
-            nazcaOverlapCheck: nazcaOverlapCheck,
-            nazcaDimensionsChanged: nazcaDimensionsChanged,
-            nazcaPinsChanged: nazcaPinsChanged,
             smatrixKeyResolver: smatrixKeyResolver,
-            propagateToTemplate: propagateToTemplate,
-            gdsFactoryPreviewService: gdsFactoryPreviewService);
+            propagateToTemplate: propagateToTemplate);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
+        _openComponentSettingsDialogs[entityKey] = dialog;
+        dialog.Closed += (_, _) => _openComponentSettingsDialogs.Remove(entityKey);
         dialog.Show(this);
     }
 

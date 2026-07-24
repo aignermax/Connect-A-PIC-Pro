@@ -27,13 +27,6 @@ public partial class ElementLockViewModel : ObservableObject
     [ObservableProperty]
     private int _lockedConnectionCount;
 
-    /// <summary>
-    /// Whether any components are currently selected.
-    /// Used to show/hide the lock button panel.
-    /// </summary>
-    [ObservableProperty]
-    private bool _hasSelection;
-
     public ElementLockViewModel()
     {
         _lockManager = new LockManager();
@@ -244,6 +237,23 @@ public partial class ElementLockViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Unlocks every locked component and connection in one step. Backs the combined
+    /// "Unlock All" entry in the toolbar's Tools menu (the former per-kind buttons lived
+    /// in the now-removed "Lock Elements" properties-panel section).
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(CanUnlockAll))]
+    private void UnlockAll()
+    {
+        if (UnlockAllComponentsCommand.CanExecute(null))
+            UnlockAllComponentsCommand.Execute(null);
+
+        if (UnlockAllConnectionsCommand.CanExecute(null))
+            UnlockAllConnectionsCommand.Execute(null);
+    }
+
+    private bool CanUnlockAll() => HasLockedComponents() || HasLockedConnections();
+
+    /// <summary>
     /// Updates the count of locked elements for display.
     /// </summary>
     private void UpdateLockCounts()
@@ -266,12 +276,12 @@ public partial class ElementLockViewModel : ObservableObject
     public void RefreshCommands()
     {
         UpdateLockCounts();
-        HasSelection = Canvas?.Selection.SelectedComponents.Any() ?? false;
         LockSelectedComponentsCommand.NotifyCanExecuteChanged();
         UnlockSelectedComponentsCommand.NotifyCanExecuteChanged();
         ToggleSelectedComponentsCommand.NotifyCanExecuteChanged();
         UnlockAllComponentsCommand.NotifyCanExecuteChanged();
         LockSelectedConnectionsCommand.NotifyCanExecuteChanged();
         UnlockAllConnectionsCommand.NotifyCanExecuteChanged();
+        UnlockAllCommand.NotifyCanExecuteChanged();
     }
 }

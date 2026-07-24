@@ -69,6 +69,15 @@ public class Component : ICloneable
     public bool IsInsertedCrossing { get; set; }
 
     /// <summary>
+    /// Whether this component's laser emits light (issue #690): true = input coupler,
+    /// false = listen-only output coupler. Lives on the core component (like
+    /// <see cref="IsLocked"/>) so the state survives grouping, ungrouping and
+    /// delete/undo, where the owning ViewModel is recreated. Only meaningful for
+    /// light-injecting couplers; defaults to true.
+    /// </summary>
+    public bool LaserEnabled { get; set; } = true;
+
+    /// <summary>
     /// Reference to the parent ComponentGroup if this component is part of a group.
     /// Null if this is a top-level component.
     /// </summary>
@@ -417,6 +426,7 @@ public class Component : ICloneable
         clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
         clonedComponent.GdsFactoryRoutingCrossSection = GdsFactoryRoutingCrossSection;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
+        clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
 
         return clonedComponent;

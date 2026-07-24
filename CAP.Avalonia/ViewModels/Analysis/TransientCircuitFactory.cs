@@ -8,6 +8,8 @@ using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.ViewModels.Canvas;
 
+using CAP.Avalonia.Services;
+
 namespace CAP.Avalonia.ViewModels.Analysis;
 
 /// <summary>
@@ -19,11 +21,18 @@ internal static class TransientCircuitFactory
 {
     /// <summary>
     /// Creates the simulator and the port manager holding all configured light sources.
-    /// Every non-directional coupler on the canvas is treated as a laser input.
+    /// Every non-directional coupler with its laser switched on is treated as a laser
+    /// input; couplers with the laser off are listen-only outputs (#690).
     /// </summary>
     /// <param name="canvas">Canvas providing components and connections.</param>
+    /// <param name="onPassivityWarning">
+    /// Receives at most ONE warning per component per created simulator when a shipped
+    /// measured dataset exceeds passivity within the tolerated noise band (the closure
+    /// sweeps many wavelengths — without deduplication the console would repeat the
+    /// same component hundreds of times).
+    /// </param>
     public static (TimeDomainSimulator Simulator, PhysicalExternalPortManager Ports) Create(
-        DesignCanvasViewModel canvas)
+        DesignCanvasViewModel canvas, Action<PassivityWarning>? onPassivityWarning = null)
     {
         var tileManager = new ComponentListTileManager();
         foreach (var compVm in canvas.Components)
@@ -36,24 +45,99 @@ internal static class TransientCircuitFactory
             tileManager, canvas.ConnectionManager, portManager);
 
         var builder = new SystemMatrixBuilder(gridManager);
-        return (new TimeDomainSimulator(builder), portManager);
+        var context = BuildClosureContext(canvas) with
+        {
+            PassivityWarningSink = DedupePerComponent(onPassivityWarning),
+        };
+        return (new TimeDomainSimulator(builder, context), portManager);
     }
 
-    /// <summary>Registers a light source on every light pin of each input coupler.</summary>
+    /// <summary>Forwards only the FIRST warning per component name to <paramref name="sink"/>.</summary>
+    internal static Action<PassivityWarning>? DedupePerComponent(Action<PassivityWarning>? sink)
+    {
+        if (sink == null)
+            return null;
+        var warnedComponents = new HashSet<string>();
+        return warning =>
+        {
+            if (warnedComponents.Add(warning.ComponentName))
+                sink(warning);
+        };
+    }
+
+    /// <summary>
+    /// Circuit knowledge for the multi-hop closure solve (field round 4, final batch):
+    /// pin owner names let a failure name the non-passive component or the feedback
+    /// loop; the coupler light pins are the circuit's external ports, so the |H| ≤ 1
+    /// energy guard applies there and NOT to pins inside a ring (cavity buildup is
+    /// legitimate physics).
+    /// </summary>
+    /// <param name="canvas">Canvas providing components.</param>
+    private static TransitiveClosureContext BuildClosureContext(DesignCanvasViewModel canvas)
+    {
+        var owners = new Dictionary<Guid, string>();
+        var couplerPinIds = new HashSet<Guid>();
+        foreach (var compVm in canvas.Components)
+        {
+            bool isCoupler = compVm.IsLightSource;
+            foreach (var pin in compVm.Component.PhysicalPins)
+            {
+                if (pin.LogicalPin == null) continue;
+                owners[pin.LogicalPin.IDInFlow] = compVm.Name;
+                owners[pin.LogicalPin.IDOutFlow] = compVm.Name;
+                if (isCoupler && pin.LogicalPin.MatterType == MatterType.Light)
+                {
+                    couplerPinIds.Add(pin.LogicalPin.IDInFlow);
+                    couplerPinIds.Add(pin.LogicalPin.IDOutFlow);
+                }
+            }
+        }
+        return new TransitiveClosureContext
+        {
+            PinOwnerNames = owners,
+            ExternallyObservablePinIds = couplerPinIds.Count > 0 ? couplerPinIds : null,
+        };
+    }
+
+    /// <summary>
+    /// Collects the light-pin flow ids of every coupler whose laser is switched OFF
+    /// (#690). These pins are the design's true outputs: they listen without emitting.
+    /// Both flow directions are included so the set matches trace keys regardless of
+    /// which flow id the simulator keys a trace by.
+    /// </summary>
+    /// <param name="canvas">Canvas providing components.</param>
+    public static HashSet<Guid> CollectOutputCouplerPinIds(DesignCanvasViewModel canvas)
+    {
+        var pinIds = new HashSet<Guid>();
+        foreach (var compVm in canvas.Components)
+        {
+            if (!compVm.IsLaserOff) continue;
+            foreach (var pin in compVm.Component.PhysicalPins)
+            {
+                if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
+                pinIds.Add(pin.LogicalPin.IDInFlow);
+                pinIds.Add(pin.LogicalPin.IDOutFlow);
+            }
+        }
+        return pinIds;
+    }
+
+    /// <summary>
+    /// Registers a light source on every light pin of each input coupler.
+    /// Couplers whose laser is switched off (#690) are skipped — they act as outputs.
+    /// </summary>
     private static void ConfigureLightSources(
         DesignCanvasViewModel canvas, PhysicalExternalPortManager portManager)
     {
         foreach (var compVm in canvas.Components)
         {
             if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (compVm.IsLaserOff) continue;
 
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
+            var laserType = SimulationService.GetLaserTypeForWavelength(
+                laserConfig?.WavelengthNm ?? StandardWaveLengths.RedNM);
 
             foreach (var pin in compVm.Component.PhysicalPins)
             {

@@ -33,6 +33,12 @@ public class VerticalSliceConventionTests
                 Path.Combine("CAP.Avalonia", "ViewModels", "Export"),
                 Path.Combine("UnitTests", "Export"),
             },
+            ["ComponentRegistry"] = new[]
+            {
+                Path.Combine("Connect-A-Pic-Core", "ComponentRegistry"),
+                Path.Combine("CAP.Avalonia", "ViewModels", "ComponentRegistry"),
+                Path.Combine("UnitTests", "ComponentRegistry"),
+            },
         };
 
     /// <summary>
@@ -44,6 +50,11 @@ public class VerticalSliceConventionTests
         {
             ["Analysis"] = new[] { "CAP_Core.Analysis", "CAP.Avalonia.ViewModels.Analysis" },
             ["Export"]   = new[] { "CAP_Core.Export",   "CAP.Avalonia.ViewModels.Export"   },
+            ["ComponentRegistry"] = new[]
+            {
+                "CAP_Core.ComponentRegistry",
+                "CAP.Avalonia.ViewModels.ComponentRegistry",
+            },
         };
 
     /// <summary>
@@ -86,6 +97,7 @@ public class VerticalSliceConventionTests
     [Theory]
     [InlineData("Analysis")]
     [InlineData("Export")]
+    [InlineData("ComponentRegistry")]
     public void Feature_OnlyReferencesItsOwnNamespaceOrSharedKernel(string featureName)
     {
         var repoRoot = FindRepoRoot();

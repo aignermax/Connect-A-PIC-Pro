@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-dialog-requested-size.png",
+    "caption": "The Rename dialog as it should always appear: its full requested 340x130 size with prompt, text box and buttons visible."
+  },
+  {
+    "file": "02-dialog-collapsed-bug.png",
+    "caption": "Without the guard, the X11 race collapses the same dialog on every other opening, clipping the text box and buttons away."
+  },
+  {
+    "file": "03-dialog-restored-by-guard.png",
+    "caption": "DialogSizeGuard detects the collapse right after opening and restores the requested size, so the dialog is fully usable again."
+  }
+]

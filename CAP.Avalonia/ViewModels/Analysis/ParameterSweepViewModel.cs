@@ -8,6 +8,8 @@ using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.ExternalPorts;
 using CAP_Core.Grid;
 using CAP_Core.LightCalculation;
+using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -83,7 +85,7 @@ public partial class ParameterSweepViewModel : ObservableObject
 
         if (IsSweeping) return;
         IsSweeping = true;
-        StatusText = "Running sweep...";
+        StatusText = LocalizationService.Instance.Translate("Analysis.Sweep.Running");
         ResultText = "";
 
         try
@@ -102,7 +104,8 @@ public partial class ParameterSweepViewModel : ObservableObject
             {
                 for (int i = 0; i < stepValues.Length; i++)
                 {
-                    StatusText = $"Sweep step {i + 1}/{stepValues.Length}...";
+                    StatusText = string.Format(
+                        LocalizationService.Instance.Translate("Analysis.Sweep.Step"), i + 1, stepValues.Length);
                     slider.Value = stepValues[i];
 
                     var fieldResults = await RunSingleSimulation();
@@ -127,12 +130,14 @@ public partial class ParameterSweepViewModel : ObservableObject
 
             // Format results as text table
             ResultText = FormatResultsTable(_lastResult, pinNameMap);
-            StatusText = $"Sweep complete: {dataPoints.Count} points";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Sweep.Complete"), dataPoints.Count);
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _errorConsole?.LogError($"Parameter sweep failed: {ex.Message}", ex);
-            StatusText = $"Sweep failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Sweep.Failed"), ex.Message);
         }
         finally
         {
@@ -161,17 +166,19 @@ public partial class ParameterSweepViewModel : ObservableObject
 
             if (path == null)
             {
-                StatusText = "Export cancelled";
+                StatusText = LocalizationService.Instance.Translate("Analysis.Common.ExportCancelled");
                 return;
             }
 
             await File.WriteAllTextAsync(path, csv);
-            StatusText = $"Exported to {Path.GetFileName(path)}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportedTo"), Path.GetFileName(path));
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError($"Failed to export sweep results: {ex.Message}", ex);
-            StatusText = $"Export failed: {ex.Message}";
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("Analysis.Common.ExportFailed"), ex.Message);
         }
     }
 
@@ -217,13 +224,13 @@ public partial class ParameterSweepViewModel : ObservableObject
         {
             if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
 
+            // Laser off = output coupler (listen-only, #690) — inject no light.
+            if (compVm.IsLaserOff) continue;
+
             var laserConfig = compVm.LaserConfig;
             double power = laserConfig?.InputPower ?? 1.0;
-            var laserType = laserConfig?.WavelengthNm == StandardWaveLengths.GreenNM
-                ? LaserType.Green
-                : laserConfig?.WavelengthNm == StandardWaveLengths.BlueNM
-                    ? LaserType.Blue
-                    : LaserType.Red;
+            var laserType = SimulationService.GetLaserTypeForWavelength(
+                laserConfig?.WavelengthNm ?? StandardWaveLengths.RedNM);
 
             foreach (var pin in compVm.Component.PhysicalPins)
             {
@@ -258,7 +265,8 @@ public partial class ParameterSweepViewModel : ObservableObject
 
     private string FormatResultsTable(SweepResult result, Dictionary<Guid, string> pinNameMap)
     {
-        if (result.DataPoints.Count == 0) return "No data points";
+        if (result.DataPoints.Count == 0)
+            return LocalizationService.Instance.Translate("Analysis.Sweep.NoDataPoints");
 
         // Only show pins that have non-zero power in at least one step
         var activePins = result.MonitoredPinIds
@@ -267,7 +275,8 @@ public partial class ParameterSweepViewModel : ObservableObject
             .Take(6) // Limit columns for readability
             .ToList();
 
-        if (activePins.Count == 0) return "No signal detected";
+        if (activePins.Count == 0)
+            return LocalizationService.Instance.Translate("Analysis.Sweep.NoSignal");
 
         var sb = new StringBuilder();
 

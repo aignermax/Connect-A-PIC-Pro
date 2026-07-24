@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
+using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -42,8 +43,7 @@ public partial class ProcessManagementViewModel
 
         if (active == null)
         {
-            StatusText = "No process selected yet. Pick one at startup or via File \u2192 New Design; " +
-                         "this dialog then shows that process's layer stack, materials and design rules.";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.NoProcessSelected");
             return;
         }
 
@@ -51,8 +51,7 @@ public partial class ProcessManagementViewModel
         {
             IsPlaygroundState = true;
             ProcessName = active.DisplayName;
-            StatusText = "Playground \u2014 the design has no single fabrication process and is not " +
-                         "manufacturable. Pick a real process via File \u2192 New Design to see its details here.";
+            StatusText = LocalizationService.Instance.Translate("ProcessMgmt.Status.PlaygroundBanner");
             return;
         }
 
@@ -65,7 +64,7 @@ public partial class ProcessManagementViewModel
         FingerprintSummary = FormatFingerprint(active.Fingerprint);
         MemberPdksText = active.MemberPdkNames.Count > 0
             ? string.Join(", ", active.MemberPdkNames)
-            : "(none loaded)";
+            : LocalizationService.Instance.Translate("ProcessMgmt.MemberPdks.NoneLoaded");
 
         // Keep the member drafts so edits (e.g. a metal cross-section, #682) can be persisted
         // back to their PDK JSON via SaveProcess.
@@ -86,10 +85,9 @@ public partial class ProcessManagementViewModel
         HasProcess = true;
 
         StatusText = definitions.Count > 0
-            ? $"Active process for this design. Layer stack, cross-sections and materials merged from " +
-              $"{definitions.Count} member PDK(s)."
-            : "Active process for this design. Its member PDKs declare no detailed process block \u2014 " +
-              "showing the fingerprint only; data can be imported or entered below.";
+            ? string.Format(
+                LocalizationService.Instance.Translate("ProcessMgmt.Status.ActiveMerged"), definitions.Count)
+            : LocalizationService.Instance.Translate("ProcessMgmt.Status.ActiveNoDetail");
     }
 
     private static IReadOnlyList<PdkDraft> MemberDrafts(
@@ -103,14 +101,16 @@ public partial class ProcessManagementViewModel
     private static string FormatFingerprint(ProcessFingerprint? fp)
     {
         if (fp == null)
-            return "No fingerprint declared by the member PDKs.";
+            return LocalizationService.Instance.Translate("ProcessMgmt.Fingerprint.None");
 
         var core = fp.CoreMaterial ?? "?";
         var thickness = fp.CoreThicknessNm.HasValue
             ? fp.CoreThicknessNm.Value.ToString("0.#", CultureInfo.InvariantCulture) + " nm"
             : "? nm";
         var cladding = fp.Cladding ?? "?";
-        return $"Core {core} \u00b7 {thickness} \u00b7 cladding {cladding} \u00b7 \u03bb {fp.DesignWavelengthNm} nm";
+        return string.Format(
+            LocalizationService.Instance.Translate("ProcessMgmt.Fingerprint.Summary"),
+            core, thickness, cladding, fp.DesignWavelengthNm);
     }
 
     private void ResetState()

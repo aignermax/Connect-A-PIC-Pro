@@ -11,6 +11,7 @@ namespace UnitTests.Routing;
 /// Integration tests for WaveguideRouter with ComponentGroup obstacles.
 /// Tests the full routing workflow from pin to pin through grouped components.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GroupRoutingIntegrationTests
 {
     /// <summary>
