@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-design-locked-to-soi.png",
+    "caption": "The design is locked to process \u0027SOI 220\u0027 via ONE shared PlacementPolicyContext that manual placement, paste, and the AI assistant all consult."
+  },
+  {
+    "file": "02-member-pdk-allowed.png",
+    "caption": "A component from member PDK \u0027Demo\u0027 passes the shared context\u0027s CheckPlacement and lands on the canvas."
+  },
+  {
+    "file": "03-foreign-pdk-blocked.png",
+    "caption": "Placing a component from foreign PDK \u0027HHI-InP\u0027 is rejected by the same shared context and the block reason appears in the status line."
+  },
+  {
+    "file": "04-tool-pdk-allowed.png",
+    "caption": "A process-agnostic tool PDK (\u0027Analysis Tools\u0027) stays placeable because the shared context carries the agnostic-PDK list for every consumer."
+  },
+  {
+    "file": "05-paste-blocked.png",
+    "caption": "Pasting clipboard content from a foreign PDK is blocked, naming the active process read live from the shared context (PlacementContext.ActiveProcess)."
+  }
+]

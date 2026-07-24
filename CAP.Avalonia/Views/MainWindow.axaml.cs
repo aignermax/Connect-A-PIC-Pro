@@ -910,7 +910,7 @@ public partial class MainWindow : Window
             return;
 
         var conflictedCount = vm.Canvas.Components.Count(c =>
-            (c.TemplatePdkSource ?? vm.CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component))
+            (c.TemplatePdkSource ?? vm.CanvasInteraction.PlacementContext.ResolveComponentPdkSource(c.Component))
             == pdkInfo.Name);
         if (conflictedCount == 0)
             return;
@@ -1153,7 +1153,7 @@ public partial class MainWindow : Window
             ? null
             : CanvasComponentTemplateResolver.ResolveEditable(
                 compVm, vm.LeftPanel.AllTemplates,
-                vm.CanvasInteraction.ResolveComponentPdkSource,
+                vm.CanvasInteraction.PlacementContext.ResolveComponentPdkSource,
                 vm.LeftPanel.CanEditTemplate);
         if (template is not null)
         {

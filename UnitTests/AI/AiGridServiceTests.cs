@@ -132,12 +132,14 @@ public class AiGridServiceTests
 
         var liveCalls = 0;
         var agnosticCalls = 0;
-        _svc.GetActiveProcess = () => CAP_Core.Components.Process.ActiveProcessSelection.ForGroup(
-            new CAP_Core.Components.Process.ProcessGroup(
-                "SOI 220", new CAP_Core.Components.Process.ProcessFingerprint("Si", 220, "SiO2", 1550, "SOI 220"),
-                new[] { "Demo" }));
-        _svc.GetProcessAgnosticPdkNames = () => { agnosticCalls++; return Array.Empty<string>(); };
-        _svc.GetLiveMemberPdkNames = () => { liveCalls++; return new[] { "MyLib" }; };
+        _svc.PlacementContext = new CAP_Core.Components.Process.PlacementPolicyContext(
+            getActiveProcess: () => CAP_Core.Components.Process.ActiveProcessSelection.ForGroup(
+                new CAP_Core.Components.Process.ProcessGroup(
+                    "SOI 220", new CAP_Core.Components.Process.ProcessFingerprint("Si", 220, "SiO2", 1550, "SOI 220"),
+                    new[] { "Demo" })),
+            getProcessAgnosticPdkNames: () => { agnosticCalls++; return Array.Empty<string>(); },
+            resolveComponentPdkSource: _ => null,
+            resolveLiveMemberPdkNames: () => { liveCalls++; return new[] { "MyLib" }; });
 
         var types = _svc.GetAvailableComponentTypes();
 

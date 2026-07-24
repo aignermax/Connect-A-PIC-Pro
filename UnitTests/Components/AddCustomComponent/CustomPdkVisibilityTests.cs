@@ -44,9 +44,11 @@ public class CustomPdkVisibilityTests : IDisposable
     private CanvasInteractionViewModel CreatePlacementInteraction(ActiveProcessSelection active)
     {
         var interaction = new CanvasInteractionViewModel(_canvas, new CommandManager());
-        interaction.GetActiveProcess = () => active;
-        interaction.GetProcessAgnosticPdkNames = () => _leftPanel.GetProcessAgnosticPdkNames();
-        interaction.GetLiveMemberPdkNames = () => _leftPanel.ResolveLiveMemberPdkNames(active);
+        interaction.PlacementContext = new CAP_Core.Components.Process.PlacementPolicyContext(
+            getActiveProcess: () => active,
+            getProcessAgnosticPdkNames: () => _leftPanel.GetProcessAgnosticPdkNames(),
+            resolveComponentPdkSource: _ => null,
+            resolveLiveMemberPdkNames: () => _leftPanel.ResolveLiveMemberPdkNames(active));
         return interaction;
     }
 

@@ -394,28 +394,27 @@ public partial class MainViewModel : ObservableObject
         // and new placements pick up the saved values without a restart.
         PdkOffsetEditor.UserPdkSaved = LeftPanel.RefreshRegisteredPdkAfterExternalSave;
 
-        // Single-process enforcement (issues #570/#653): every placement surface — manual
-        // placement/paste, saved group templates, and the AI assistant — consults the
-        // same active process, the same process-agnostic tool PDKs, and the same
-        // library-based PDK-source resolver (groups/pasted copies carry no source of
-        // their own, so children are resolved against the loaded library).
-        Func<ActiveProcessSelection?> getActiveProcess = () => FileOperations.ActiveProcess;
-        Func<IReadOnlyCollection<string>> getAgnosticPdkNames = () => LeftPanel.GetProcessAgnosticPdkNames();
-        Func<CAP_Core.Components.Core.Component, string?> resolvePdkSource = component =>
-            ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates);
+        // Single-process enforcement (issues #570/#653/#737): every placement surface —
+        // manual placement/paste, saved group templates, and the AI assistant — shares ONE
+        // policy context, so the active process, the process-agnostic tool PDKs, and the
+        // library-based PDK-source resolver (groups/pasted copies carry no source of their
+        // own, so children are resolved against the loaded library) can never diverge.
+        var placementContext = new PlacementPolicyContext(
+            getActiveProcess: () => FileOperations.ActiveProcess,
+            getProcessAgnosticPdkNames: () => LeftPanel.GetProcessAgnosticPdkNames(),
+            resolveComponentPdkSource: component =>
+                ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, LeftPanel.AllTemplates),
+            resolveLiveMemberPdkNames: () =>
+                FileOperations.ActiveProcess is { } activeProcess
+                    ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess)
+                    : null);
 
-        CanvasInteraction.GetActiveProcess = getActiveProcess;
-        CanvasInteraction.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
-        CanvasInteraction.GetLiveMemberPdkNames = getLiveMemberPdkNames;
-        CanvasInteraction.ResolveComponentPdkSource = resolvePdkSource;
-        _canvas.Clipboard.PdkSourceResolver = resolvePdkSource;
+        CanvasInteraction.PlacementContext = placementContext;
+        _canvas.Clipboard.PdkSourceResolver = placementContext.ResolveComponentPdkSource;
 
         if (aiGridService is Services.AiGridService aiGrid)
         {
-            aiGrid.GetActiveProcess = getActiveProcess;
-            aiGrid.GetProcessAgnosticPdkNames = getAgnosticPdkNames;
-            aiGrid.GetLiveMemberPdkNames = getLiveMemberPdkNames;
-            aiGrid.ResolveComponentPdkSource = resolvePdkSource;
+            aiGrid.PlacementContext = placementContext;
         }
 
         // Feed the design's active process (#570) into the registry browser so
@@ -1101,7 +1100,7 @@ public partial class MainViewModel : ObservableObject
         // though the already-placed components themselves are never touched or deleted.
         var pdkSourceByComponent = Canvas.Components.ToDictionary(
             c => c.Component,
-            c => c.TemplatePdkSource ?? CanvasInteraction.ResolveComponentPdkSource?.Invoke(c.Component));
+            c => c.TemplatePdkSource ?? CanvasInteraction.PlacementContext.ResolveComponentPdkSource(c.Component));
 
         // Under a real process lock the allowed set is the lock-derived membership; without one
         // (Playground/no selection) nothing is locked, so GetProcessCompatiblePdkNames() equals
