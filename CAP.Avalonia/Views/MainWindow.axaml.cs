@@ -821,7 +821,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void PdkEditProcess_Click(object? sender, RoutedEventArgs e)
     {
-        if (sender is not Button { DataContext: PdkInfoViewModel pdk } || pdk.IsBundled)
+        if (sender is not Button { DataContext: PdkInfoViewModel pdk })
             return;
         if (DataContext is not MainViewModel vm)
             return;
@@ -873,6 +873,10 @@ public partial class MainWindow : Window
             vm.LeftPanel.ReapplyActiveProcessAfterPdkChange();
             await WarnIfSavedProcessDivergedFromDesign(vm, pdk);
         };
+        // A first save on a bundled PDK implicitly wrote a fork — swap the library entry to it
+        // (same name, so the active process keeps resolving by value).
+        processVm.BundledPdkForkSaved += (_, args) =>
+            vm.LeftPanel.RegisterSavedPdkFork(args.PdkName, args.ForkPath);
 
         var processWindow = new ProcessManagementWindow
         {

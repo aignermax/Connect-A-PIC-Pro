@@ -773,10 +773,11 @@
                                                 <TextBlock FontSize="9" Foreground="Gray" Margin="0,0,5,0">
                                                     <Run Text="{Binding ComponentCount}"/><Run Text=" "/><Run Text="{loc:Localize LeftPanel.ComponentsSuffix}"/>
                                                 </TextBlock>
-                                                <!-- Edits this custom PDK's own fabrication process (layer
-                                                     stack, cross-sections, materials) — issue #726 follow-up.
-                                                     Bundled PDKs are read-only and have no Edit button. -->
-                                                <Button Content="✏" IsVisible="{Binding !IsBundled}"
+                                                <!-- Edits this PDK's own fabrication process (layer
+                                                     stack, cross-sections, materials). Bundled PDKs stay
+                                                     read-only: saving there implicitly writes a custom
+                                                     fork copy instead of touching the bundled file. -->
+                                                <Button Content="✏"
                                                         Click="PdkEditProcess_Click"
                                                         FontSize="11" Padding="5,1" MinWidth="0" Background="#3d3d3d" Foreground="#c9c9c9"
                                                         ToolTip.Tip="{loc:Localize LeftPanel.EditPdkTip}"/>
