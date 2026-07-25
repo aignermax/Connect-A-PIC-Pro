@@ -507,6 +507,7 @@
   "NewComponent.Backend": "后端：",
   "NewComponent.ClickToEnlarge": "点击放大",
   "NewComponent.ComputeTip": "渲染几何图形（如有需要）并通过 FDTD 求解器计算 S 矩阵——“保存更改”会将其存入组件定义中（可选）",
+  "NewComponent.ComputeWithBackend": "计算 S 矩阵（{0}）…",
   "NewComponent.ComputeWithMeep": "使用 Meep 计算",
   "NewComponent.EditModeDescription": "此处的更改会重写该组件在其 PDK 中的定义，并应用于所有当前和未来的放置实例。若只想调整画布上的单个实例，请改用该组件的“组件设置…”。",
   "NewComponent.EditModeHeader": "正在编辑组件定义 — 影响所有放置实例",

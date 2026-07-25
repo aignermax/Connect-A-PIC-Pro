@@ -17,8 +17,11 @@ public static class NewComponentWindowLauncher
     {
         var processes = loadedPdks.Where(d => d.Process != null).Select(d => d.Process!).ToList();
         var vm = new NewComponentViewModel(deps.Extractor, deps.Fdtd, deps.UserPdkStore, processes,
-            deps.ErrorConsole);
+            deps.ErrorConsole, deps.BackendRegistry, deps.UrlLauncher);
         vm.Saved += (_, _) => OnSaved(vm, pdkLoader, register, removeMigratedTemplate);
+        // Probe the selected backend upfront so a known-bad state (Docker down, no
+        // API key) disables the compute button and shows the hint before the first click.
+        _ = vm.RefreshBackendAvailabilityAsync();
         return vm;
     }
 

@@ -507,6 +507,7 @@
   "NewComponent.Backend": "バックエンド:",
   "NewComponent.ClickToEnlarge": "クリックで拡大",
   "NewComponent.ComputeTip": "ジオメトリをレンダリングし（必要な場合）、FDTD ソルバーで S-matrix を計算します — 「変更を保存」でコンポーネント定義に格納します（任意）",
+  "NewComponent.ComputeWithBackend": "S-matrix を計算（{0}）…",
   "NewComponent.ComputeWithMeep": "Meep で計算",
   "NewComponent.EditModeDescription": "ここでの変更は PDK 内のコンポーネントを書き換え、現在および将来のすべての配置に適用されます。キャンバス上の 1 つの配置だけを調整するには、そのコンポーネントの「コンポーネント設定…」を使用してください。",
   "NewComponent.EditModeHeader": "コンポーネント定義を編集中 — すべての配置に影響します",

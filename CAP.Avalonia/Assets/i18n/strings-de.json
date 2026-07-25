@@ -507,6 +507,7 @@
   "NewComponent.Backend": "Backend:",
   "NewComponent.ClickToEnlarge": "Zum Vergrößern klicken",
   "NewComponent.ComputeTip": "Rendert die Geometrie (falls nötig) und berechnet die S-Matrix über den FDTD-Solver — „Änderungen speichern“ legt sie in der Komponentendefinition ab (optional)",
+  "NewComponent.ComputeWithBackend": "S-Matrix berechnen ({0})…",
   "NewComponent.ComputeWithMeep": "Mit Meep berechnen",
   "NewComponent.EditModeDescription": "Änderungen hier überschreiben die Komponente in ihrem PDK und gelten für alle aktuellen und zukünftigen Platzierungen. Um nur eine Platzierung auf der Arbeitsfläche anzupassen, verwende stattdessen „Komponenteneinstellungen…“ für diese Komponente.",
   "NewComponent.EditModeHeader": "Komponentendefinition wird bearbeitet — betrifft jede Platzierung",

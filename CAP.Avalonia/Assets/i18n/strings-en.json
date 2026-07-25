@@ -507,6 +507,7 @@
   "NewComponent.Backend": "Backend:",
   "NewComponent.ClickToEnlarge": "Click to enlarge",
   "NewComponent.ComputeTip": "Renders the geometry (if needed) and computes the S-matrix via the FDTD solver — \"Save changes\" stores it in the component definition (optional)",
+  "NewComponent.ComputeWithBackend": "Compute S-matrix ({0})…",
   "NewComponent.ComputeWithMeep": "Compute with Meep",
   "NewComponent.EditModeDescription": "Changes here rewrite the component in its PDK and apply to all current and future placements. To tweak only one placement on the canvas, use “Component Settings…” on that component instead.",
   "NewComponent.EditModeHeader": "Editing the component definition — affects every placement",

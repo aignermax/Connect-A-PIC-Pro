@@ -69,13 +69,16 @@ public partial class NewComponentViewModel : ObservableObject
         IFdtdSMatrixService? fdtd,
         UserPdkStore store,
         IReadOnlyList<ProcessDefinition> processes,
-        CAP_Core.ErrorConsoleService? errorConsole = null)
+        CAP_Core.ErrorConsoleService? errorConsole = null,
+        Services.Solvers.FdtdBackendRegistry? fdtdBackendRegistry = null,
+        Services.IUrlLauncher? urlLauncher = null)
     {
         _extractor = extractor;
         _fdtd = fdtd;
         _store = store;
         _errorConsole = errorConsole;
         Processes = processes;
+        InitFdtdBackendSelection(fdtdBackendRegistry, urlLauncher);
 
         RefreshPdkChoices();
         if (AvailableCustomPdks.Count > 0)

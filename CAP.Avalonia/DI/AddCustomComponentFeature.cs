@@ -1,4 +1,6 @@
+using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Solvers;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -27,7 +29,9 @@ internal static class AddCustomComponentFeature
             sp.GetRequiredService<ComponentGeometryExtractor>(),
             sp.GetRequiredService<IFdtdSMatrixService>(),
             sp.GetRequiredService<UserPdkStore>(),
-            sp.GetService<CAP_Core.ErrorConsoleService>()));
+            sp.GetService<CAP_Core.ErrorConsoleService>(),
+            sp.GetService<FdtdBackendRegistry>(),
+            sp.GetService<IUrlLauncher>()));
         return services;
     }
 }

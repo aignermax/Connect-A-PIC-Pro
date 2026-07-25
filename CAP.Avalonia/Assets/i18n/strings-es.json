@@ -507,6 +507,7 @@
   "NewComponent.Backend": "Backend:",
   "NewComponent.ClickToEnlarge": "Clic para ampliar",
   "NewComponent.ComputeTip": "Renderiza la geometría (si es necesario) y calcula la matriz S mediante el solucionador FDTD — «Guardar cambios» la almacena en la definición del componente (opcional)",
+  "NewComponent.ComputeWithBackend": "Calcular matriz S ({0})…",
   "NewComponent.ComputeWithMeep": "Calcular con Meep",
   "NewComponent.EditModeDescription": "Los cambios aquí reescriben el componente en su PDK y se aplican a todas las instancias actuales y futuras. Para ajustar solo una instancia en el lienzo, usa «Configuración del componente…» en ese componente.",
   "NewComponent.EditModeHeader": "Editando la definición del componente — afecta a todas las instancias",
