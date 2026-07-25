@@ -43,6 +43,11 @@ public class Issue737WalkthroughScreenshotTests
     [AvaloniaFact]
     public void CaptureIssue737Walkthrough()
     {
+        // Opt-in like UiScreenshotTests/Issue776: full-size headless frame captures do not
+        // reliably materialize on loaded CI runners, so this runs only when screenshots
+        // are explicitly requested via UI_SHOT_DIR.
+        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UI_SHOT_DIR")))
+            return;
         var dir = ResolveOutputDirectory();
         Directory.CreateDirectory(dir);
         foreach (var stale in Directory.GetFiles(dir, "*.png"))
