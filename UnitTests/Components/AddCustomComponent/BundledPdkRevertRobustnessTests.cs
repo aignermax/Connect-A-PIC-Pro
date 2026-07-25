@@ -179,6 +179,33 @@ public class BundledPdkRevertRobustnessTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreTemplateToBundledOriginal_revertsTheForkComponent_withoutDeleteIntent()
+    {
+        var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
+        await CreateShadowingForkAsync(leftPanel, store);
+        var customized = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+
+        leftPanel.RestoreTemplateToBundledOriginal(customized).ShouldBeTrue();
+
+        var forkPath = store.ResolveNamedPath(BundledPdkName);
+        var fork = new PdkLoader().LoadFromFileForEditing(forkPath);
+        fork.Components.Single(c => c.Name == "Bundled Coupler").RawCode.ShouldBe(Code);
+        leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler").RawCode.ShouldBe(Code);
+    }
+
+    [Fact]
+    public void RestoreTemplateToBundledOriginal_onTheBundledTemplateItself_returnsFalse()
+    {
+        var (leftPanel, _, _) = CreateLeftPanelWithBundledPdk();
+        var bundled = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+
+        leftPanel.RestoreTemplateToBundledOriginal(bundled).ShouldBeFalse();
+    }
+
+    [Fact]
     public void ReplaceComponent_missingFile_returnsFalse_andWritesNothing()
     {
         var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());

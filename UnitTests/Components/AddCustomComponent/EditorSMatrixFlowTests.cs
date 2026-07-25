@@ -174,6 +174,33 @@ public class EditorSMatrixFlowTests : IDisposable
     }
 
     [Fact]
+    public async Task SavedComputedMatrix_isWhatNewInstancesUse_afterAFullReloadFromDisk()
+    {
+        // Restart simulation: no in-memory state is reused — the template is rebuilt
+        // from the JSON on disk, exactly like the app-start PDK load does it.
+        var (vm, _, _, _) = Build();
+
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(vm.SavedFilePath!);
+        var comp = reloaded.Components.Single(c => c.Name == "My Comp");
+        comp.SMatrix!.SourceNote.ShouldBe("FDTD Meep 2D");
+        DateTimeOffset.TryParse(comp.SMatrix.SourceTimestampUtc, out _).ShouldBeTrue();
+
+        var template = CAP.Avalonia.Services.PdkTemplateConverter.ConvertToTemplate(
+            comp, reloaded.Name, reloaded.NazcaModuleName, reloaded.GdsFactoryRoutingCrossSection);
+        var instance = CAP.Avalonia.ViewModels.Library.ComponentTemplates.CreateFromTemplate(template, 0, 0);
+
+        instance.WaveLengthToSMatrixMap.ShouldContainKey(1550);
+        var matrix = instance.WaveLengthToSMatrixMap[1550];
+        var o1 = instance.PhysicalPins.Select(p => p.LogicalPin!).Single(p => p.Name == "o1");
+        var o2 = instance.PhysicalPins.Select(p => p.LogicalPin!).Single(p => p.Name == "o2");
+        var transfer = matrix.SMat[matrix.PinReference[o2.IDOutFlow], matrix.PinReference[o1.IDInFlow]];
+        transfer.Magnitude.ShouldBe(0.95, 1e-6);
+    }
+
+    [Fact]
     public async Task EditSave_withoutRecompute_keepsTheStoredSMatrixOfTheDefinition()
     {
         var (vm, _, _, store) = Build();

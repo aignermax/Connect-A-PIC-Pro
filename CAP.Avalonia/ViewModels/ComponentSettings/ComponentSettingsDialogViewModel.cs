@@ -32,6 +32,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private IReadOnlyList<Pin>? _effectivePins;
     private IReadOnlyList<string>? _availablePinNames;
     private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
+    private readonly Func<Task<Library.ComponentTemplate?>>? _resetToPdkOriginal;
+    private string? _draftSourceNote;
 
     [ObservableProperty]
     private string _title = LocalizationService.Instance.Translate("CompSettings.DefaultTitle");
@@ -61,7 +63,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
         INotificationService? notificationService = null,
         Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null,
-        Solvers.FdtdBackendSelectionViewModel? backendSelection = null)
+        Solvers.FdtdBackendSelectionViewModel? backendSelection = null,
+        Func<Task<Library.ComponentTemplate?>>? resetToPdkOriginal = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -70,6 +73,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
         _dockerSetupDialog = dockerSetupDialog;
+        _resetToPdkOriginal = resetToPdkOriginal;
         SetBackendSelection(backendSelection);
         _importers = importers ?? new ISParameterImporter[]
         {
@@ -90,7 +94,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IReadOnlyList<Pin>? effectivePins = null,
         IReadOnlyList<string>? availablePinNames = null,
         Func<string>? smatrixKeyResolver = null,
-        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
+        Library.ComponentTemplate? template = null)
     {
         _smatrixKey = smatrixKey;
         _propagateToTemplate = propagateToTemplate;
@@ -102,6 +107,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _effectiveSMatrices = effectiveSMatrices;
         _effectivePins = effectivePins;
         _availablePinNames = availablePinNames;
+        _draftSourceNote = template?.SourceDraft?.SMatrix?.SourceNote;
         Title = isUserGlobalScope
             ? string.Format(LocalizationService.Instance.Translate("CompSettings.TitleGlobal"), displayName)
             : string.Format(LocalizationService.Instance.Translate("CompSettings.TitleScoped"), displayName);

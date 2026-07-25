@@ -121,6 +121,14 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
 
         [JsonPropertyName("parameters")]
         public List<ParameterDefinitionDraft>? Parameters { get; set; }
+
+        // Provenance of a user-computed/imported matrix (e.g. "FDTD Tidy3D Cloud 2D").
+        // Absent in older files = bundled/PDK original.
+        [JsonPropertyName("sourceNote")]
+        public string? SourceNote { get; set; }
+
+        [JsonPropertyName("sourceTimestampUtc")]
+        public string? SourceTimestampUtc { get; set; }
     }
 
     public class WavelengthSMatrixEntry

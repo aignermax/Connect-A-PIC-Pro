@@ -67,7 +67,7 @@ public class FdtdBackendSelectionViewModelTests : IDisposable
 
         vm.CurrentService.ShouldBeSameAs(_tidy3d.Object);
         vm.CurrentBackendCostsCredits.ShouldBeTrue();
-        vm.CurrentSolverLabel.ShouldBe("Tidy3D Cloud");
+        vm.CurrentSolverLabel.ShouldBe("Tidy3D");
         vm.BackendItems[1].IsSelected.ShouldBeTrue();
         vm.BackendItems[0].IsSelected.ShouldBeFalse();
 
@@ -163,5 +163,27 @@ public class FdtdBackendSelectionViewModelTests : IDisposable
         vm.IsCurrentBackendUnavailable.ShouldBeTrue();
         vm.AvailabilityHint.ShouldContain("API key");
         vm.ShowMissingKeyLink.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task OpenTidy3dSettings_InvokesTheInjectedRoute_AndGatesTheLinkVisibility()
+    {
+        _tidy3d.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Unavailable("No Tidy3D API key configured."));
+        var vm = NewViewModel();
+        vm.SelectedBackend = FdtdBackendType.Tidy3D;
+        await vm.CheckAvailabilityAsync();
+        vm.ShowOpenSettingsLink.ShouldBeFalse("no settings route injected");
+
+        var opened = 0;
+        vm.OpenTidy3dSettingsPage = () => opened++;
+        vm.ShowOpenSettingsLink.ShouldBeTrue();
+
+        vm.OpenTidy3dSettingsCommand.Execute(null);
+        opened.ShouldBe(1);
+
+        // Without a delegate the command is a harmless no-op (test/headless wiring).
+        var unwired = NewViewModel();
+        Should.NotThrow(() => unwired.OpenTidy3dSettingsCommand.Execute(null));
     }
 }

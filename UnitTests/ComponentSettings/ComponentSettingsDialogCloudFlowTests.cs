@@ -195,12 +195,12 @@ public class ComponentSettingsDialogCloudFlowTests : IDisposable
         selection.SelectedBackend = FdtdBackendType.Tidy3D;
         var (vm, store) = NewDialog(meep.Object, selection);
 
-        vm.RecalculateButtonLabel.ShouldContain("Tidy3D Cloud");
+        vm.RecalculateButtonLabel.ShouldContain("Tidy3D");
         await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
         await vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
 
         store.ShouldContainKey("comp");
-        store["comp"].SourceNote.ShouldBe("FDTD Tidy3D Cloud 3D");
+        store["comp"].SourceNote.ShouldBe("FDTD Tidy3D 3D");
         tidy3d.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
         meep.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
     }

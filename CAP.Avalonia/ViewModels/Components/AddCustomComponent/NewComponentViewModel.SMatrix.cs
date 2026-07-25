@@ -57,6 +57,7 @@ public partial class NewComponentViewModel
             if (resolved is null) return;
 
             _computedModel = SParameterConverter.ToComponentSMatrixData(resolved);
+            _computedModel.SourceNote = LocalizationService.Instance.Translate("NewComp.SMatrixImportedNote");
             RefreshSMatrixEntries();
             var remapNote = _portsMappedByPosition
                 ? LocalizationService.Instance.Translate("NewComp.PortsAutoMapped")

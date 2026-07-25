@@ -254,6 +254,22 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
+    /// Reverts a fork component to the bundled foundry definition (same mechanism as
+    /// the library's delete-as-revert, but callable without the delete intent — e.g.
+    /// the component-settings "Reset to PDK original"). Returns false when this is
+    /// not a revert case or the revert could not run.
+    /// </summary>
+    public bool RestoreTemplateToBundledOriginal(ComponentTemplate template)
+    {
+        var pdkInfo = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource);
+        var userPdkStore = _addCustomComponentDeps?.UserPdkStore;
+        if (pdkInfo is null || pdkInfo.IsBundled || pdkInfo.FilePath is null || userPdkStore is null)
+            return false;
+
+        return TryRevertComponentToBundled(pdkInfo, userPdkStore, template);
+    }
+
+    /// <summary>
     /// Cached per session — bundled JSONs are read-only. Read failures are logged and NOT
     /// cached, so a transient file lock can recover.
     /// </summary>

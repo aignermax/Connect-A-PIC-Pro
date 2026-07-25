@@ -27,10 +27,25 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(HasAvailabilityHint))]
     [NotifyPropertyChangedFor(nameof(ShowMissingKeyLink))]
+    [NotifyPropertyChangedFor(nameof(ShowOpenSettingsLink))]
     private string _availabilityHint = string.Empty;
 
     [ObservableProperty]
     private bool _isCurrentBackendUnavailable;
+
+    private Action? _openTidy3dSettingsPage;
+
+    // Route to Lunima's own Settings window (Tidy3D Cloud page), injected by the
+    // host window — the selection VM stays free of view dependencies.
+    public Action? OpenTidy3dSettingsPage
+    {
+        get => _openTidy3dSettingsPage;
+        set
+        {
+            _openTidy3dSettingsPage = value;
+            OnPropertyChanged(nameof(ShowOpenSettingsLink));
+        }
+    }
 
     public FdtdBackendSelectionViewModel(FdtdBackendRegistry registry, IUrlLauncher? urlLauncher = null)
     {
@@ -51,6 +66,8 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
     public bool HasAvailabilityHint => !string.IsNullOrWhiteSpace(AvailabilityHint);
 
     public bool ShowMissingKeyLink => HasAvailabilityHint && CurrentBackendCostsCredits;
+
+    public bool ShowOpenSettingsLink => ShowMissingKeyLink && OpenTidy3dSettingsPage != null;
 
     partial void OnSelectedBackendChanged(FdtdBackendType value)
     {
@@ -88,6 +105,9 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
 
     [RelayCommand]
     private void OpenTidy3dPortal() => _urlLauncher?.Open(Tidy3dPortalUrl);
+
+    [RelayCommand]
+    private void OpenTidy3dSettings() => OpenTidy3dSettingsPage?.Invoke();
 }
 
 public partial class FdtdBackendItemViewModel : ObservableObject

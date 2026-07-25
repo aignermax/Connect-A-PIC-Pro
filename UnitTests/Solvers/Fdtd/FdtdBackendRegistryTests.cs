@@ -121,7 +121,7 @@ public class FdtdBackendRegistryTests : IDisposable
 
     [Theory]
     [InlineData(FdtdBackendType.MeepDocker, "Meep (local Docker)", "Meep")]
-    [InlineData(FdtdBackendType.Tidy3D, "Tidy3D (cloud, FlexCredits)", "Tidy3D Cloud")]
+    [InlineData(FdtdBackendType.Tidy3D, "Tidy3D (cloud, FlexCredits)", "Tidy3D")]
     public void DisplayNameAndSolverLabel_ComeFromStringTables(
         FdtdBackendType backend, string displayName, string label)
     {

@@ -1018,6 +1018,13 @@ public partial class MainWindow : Window
     /// </summary>
     private void WireNewComponentEditorHooks(NewComponentViewModel newComponentVm, NewComponentWindow window, MainViewModel vm)
     {
+        // Deep-link for the missing-key hint: opens Settings on the Tidy3D Cloud page.
+        if (newComponentVm.BackendSelection != null)
+        {
+            newComponentVm.BackendSelection.OpenTidy3dSettingsPage = () =>
+                _ = vm.ShowSettingsWindowAsync?.Invoke(
+                    typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage));
+        }
         // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the view model
         // only knows the file's already-read contents (PickPyFile's contract), never a path,
         // so it can't own a FileDialogService itself.
@@ -1242,6 +1249,23 @@ public partial class MainWindow : Window
             backendSelection = new CAP.Avalonia.ViewModels.Solvers.FdtdBackendSelectionViewModel(
                 fdtdBackendRegistry,
                 App.Services.GetService(typeof(IUrlLauncher)) as IUrlLauncher);
+            // Deep-link for the missing-key hint: opens Settings on the Tidy3D Cloud page.
+            backendSelection.OpenTidy3dSettingsPage = () =>
+                _ = vm.ShowSettingsWindowAsync?.Invoke(
+                    typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage));
+        }
+
+        // Reset affordance for user-sourced draft matrices (e.g. an FDTD-computed
+        // fork component): reverts to the bundled foundry definition via the same
+        // mechanism as the library's per-component restore.
+        Func<Task<ComponentTemplate?>>? resetToPdkOriginal = null;
+        if (templateForDefaults != null && vm.LeftPanel.IsComponentRevertToBundled(templateForDefaults))
+        {
+            resetToPdkOriginal = () => Task.FromResult(
+                vm.LeftPanel.RestoreTemplateToBundledOriginal(templateForDefaults)
+                    ? vm.LeftPanel.AllTemplates.FirstOrDefault(t =>
+                        t.Name == templateForDefaults.Name && t.PdkSource == templateForDefaults.PdkSource)
+                    : null);
         }
 
         var dialogVm = new ComponentSettingsDialogViewModel(
@@ -1253,7 +1277,8 @@ public partial class MainWindow : Window
             fdtdRequestFactory: fdtdRequestFactory,
             notificationService: notificationService,
             dockerSetupDialog: dockerSetupDialog,
-            backendSelection: backendSelection);
+            backendSelection: backendSelection,
+            resetToPdkOriginal: resetToPdkOriginal);
 
         bool isTemplateMode = liveComponent == null && userStore != null;
         var store = isTemplateMode
@@ -1354,7 +1379,8 @@ public partial class MainWindow : Window
             effectivePins: effectivePins,
             availablePinNames: availablePinNames,
             smatrixKeyResolver: smatrixKeyResolver,
-            propagateToTemplate: propagateToTemplate);
+            propagateToTemplate: propagateToTemplate,
+            template: templateForDefaults);
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         _openComponentSettingsDialogs[entityKey] = dialog;

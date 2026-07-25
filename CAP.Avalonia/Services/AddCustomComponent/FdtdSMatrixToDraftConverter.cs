@@ -56,7 +56,9 @@ public static class FdtdSMatrixToDraftConverter
         return new PdkSMatrixDraft
         {
             WavelengthNm = entries[0].WavelengthNm,
-            WavelengthData = entries
+            WavelengthData = entries,
+            SourceNote = data.SourceNote,
+            SourceTimestampUtc = DateTime.UtcNow.ToString("o", CultureInfo.InvariantCulture),
         };
     }
 

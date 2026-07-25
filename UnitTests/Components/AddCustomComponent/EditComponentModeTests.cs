@@ -408,11 +408,11 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
-    public void LoadForEdit_siepicKlayoutOnlyCell_opensWithEmptyCode_insteadOfBrokenAttributeCode()
+    public void LoadForEdit_siepicKlayoutOnlyCell_opensWithExplanatoryNote_insteadOfBrokenAttributeCode()
     {
         // The few SiEPIC cells without a ubcpdk registry equivalent are KLayout fixed cells —
-        // there is no runnable editor code for them. An empty editor with the "no stored code"
-        // status is honest; synthesized attribute code would only reproduce the AttributeError.
+        // there is no runnable editor code for them. An explanatory note plus the "no stored
+        // code" status is honest; synthesized attribute code would only reproduce the AttributeError.
         var (vm, _, _) = BuildWithSeededPdk();
         var template = new ComponentTemplate
         {
@@ -423,7 +423,7 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(template);
 
-        vm.Code.ShouldBe(string.Empty);
+        vm.Code.ShouldContain("KLayout cell");
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
     }
 
@@ -524,7 +524,7 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
-    public void LoadForEdit_withNoStoredCode_setsCodeEmpty_andReportsStatus()
+    public void LoadForEdit_withNoStoredCode_showsExplanatoryNote_andReportsStatus()
     {
         var (vm, _, _) = BuildWithSeededPdk();
         var template = BuildTemplate(null!);
@@ -532,7 +532,7 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(template);
 
-        vm.Code.ShouldBe(string.Empty);
+        vm.Code.ShouldContain("KLayout cell");
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
     }
 

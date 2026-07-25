@@ -121,16 +121,28 @@
                                Foreground="#ccaa66"
                                FontSize="10"
                                TextWrapping="Wrap"/>
-                    <Button Content="{loc:Localize CompSettings.Tidy3dGetKeyLink}"
-                            Command="{Binding OpenTidy3dPortalCommand}"
-                            Padding="0"
-                            Background="Transparent"
-                            BorderThickness="0"
-                            Foreground="#7faaff"
-                            FontSize="10"
-                            HorizontalAlignment="Left"
-                            Cursor="Hand"
-                            IsVisible="{Binding ShowMissingKeyLink}"/>
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button Content="{loc:Localize CompSettings.Tidy3dGetKeyLink}"
+                                Command="{Binding OpenTidy3dPortalCommand}"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="#7faaff"
+                                FontSize="10"
+                                HorizontalAlignment="Left"
+                                Cursor="Hand"
+                                IsVisible="{Binding ShowMissingKeyLink}"/>
+                        <Button Content="{loc:Localize CompSettings.OpenTidy3dSettings}"
+                                Command="{Binding OpenTidy3dSettingsCommand}"
+                                Padding="0"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Foreground="#7faaff"
+                                FontSize="10"
+                                HorizontalAlignment="Left"
+                                Cursor="Hand"
+                                IsVisible="{Binding ShowOpenSettingsLink}"/>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 
@@ -183,13 +195,29 @@
                    TextWrapping="Wrap"
                    IsVisible="{Binding HasSMatrices, Converter={x:Static BoolConverters.Not}}"/>
 
-        <TextBlock DockPanel.Dock="Top"
-                   Text="{loc:Localize ComponentSettings.EffectiveSMatrix}"
-                   Foreground="#aaaacc"
-                   FontSize="11"
-                   FontWeight="SemiBold"
-                   Margin="0,0,0,4"
-                   IsVisible="{Binding HasEffectiveEntries}"/>
+        <StackPanel DockPanel.Dock="Top"
+                    Orientation="Horizontal"
+                    Spacing="10"
+                    Margin="0,0,0,4"
+                    IsVisible="{Binding HasEffectiveEntries}">
+            <TextBlock Text="{loc:Localize ComponentSettings.EffectiveSMatrix}"
+                       Foreground="#aaaacc"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding EffectiveProvenanceText}"
+                       Foreground="#88ccaa"
+                       FontSize="10"
+                       VerticalAlignment="Center"
+                       IsVisible="{Binding EffectiveProvenanceText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            <Button Content="{loc:Localize CompSettings.ResetToPdkOriginal}"
+                    Command="{Binding ResetToPdkOriginalCommand}"
+                    Padding="8,1"
+                    FontSize="10"
+                    Background="#5d4330"
+                    VerticalAlignment="Center"
+                    IsVisible="{Binding CanResetToPdkOriginal}"/>
+        </StackPanel>
         <Border DockPanel.Dock="Top"
                 Background="#161616"
                 CornerRadius="4"

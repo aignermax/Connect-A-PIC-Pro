@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Persistence.PIR;
 using Shouldly;
 using Xunit;
@@ -92,6 +93,43 @@ public class FdtdSMatrixToDraftConverterTests
     public void BlackBox_is_null_so_the_component_has_no_model()
     {
         FdtdSMatrixToDraftConverter.BlackBox().ShouldBeNull();
+    }
+
+    [Fact]
+    public void FromFdtd_stamps_the_provenance_onto_the_draft()
+    {
+        var data = new ComponentSMatrixData
+        {
+            SourceNote = "FDTD Tidy3D Cloud 2D",
+            Wavelengths = new()
+            {
+                ["1550"] = new SMatrixWavelengthEntry
+                {
+                    Rows = 2, Cols = 2,
+                    Real = new() { 0, 1, 1, 0 },
+                    Imag = new() { 0, 0, 0, 0 },
+                    PortNames = new() { "o1", "o2" }
+                }
+            }
+        };
+
+        var draft = FdtdSMatrixToDraftConverter.FromFdtd(data)!;
+
+        draft.SourceNote.ShouldBe("FDTD Tidy3D Cloud 2D");
+        DateTimeOffset.TryParse(draft.SourceTimestampUtc, out _).ShouldBeTrue(
+            "the timestamp must round-trip as an ISO 8601 UTC value");
+    }
+
+    [Fact]
+    public void PdkSMatrixDraft_without_provenance_fields_deserializes_as_original()
+    {
+        // Backward compat: PDK files written before provenance existed must load
+        // as "bundled/PDK original" (null), never crash or invent a source.
+        var draft = System.Text.Json.JsonSerializer.Deserialize<PdkSMatrixDraft>(
+            "{\"wavelengthNm\":1550,\"connections\":[]}")!;
+
+        draft.SourceNote.ShouldBeNull();
+        draft.SourceTimestampUtc.ShouldBeNull();
     }
 
     [Fact]

@@ -125,14 +125,14 @@ public class NewComponentBackendSelectionTests : IDisposable
         var (vm, selection) = Build(meep.Object, tidy3d.Object);
         selection.SelectedBackend = FdtdBackendType.Tidy3D;
 
-        vm.ComputeButtonLabel.ShouldContain("Tidy3D Cloud");
+        vm.ComputeButtonLabel.ShouldContain("Tidy3D");
         await vm.RunPreviewCommand.ExecuteAsync(null);
         await vm.ComputeSMatrixCommand.ExecuteAsync(null);
         await vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
 
         tidy3d.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
         meep.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Never);
-        vm.SMatrixEntries.ShouldContain(e => e.SourceNote == "FDTD Tidy3D Cloud 2D");
+        vm.SMatrixEntries.ShouldContain(e => e.SourceNote == "FDTD Tidy3D 2D");
     }
 
     [Fact]
