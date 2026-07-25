@@ -119,6 +119,8 @@ public partial class NewComponentViewModel
             }
             else
             {
+                code = "# This component exists only as a KLayout cell — there is no editable code.\n"
+                     + "# Its geometry renders on the canvas; the code editor cannot execute KLayout cells.";
                 StatusText = LocalizationService.Instance.Translate("NewComp.NoStoredCode");
             }
         }
