@@ -55,20 +55,31 @@ public class ComponentSettingsDialogSolverStatusTests
 
             vm.SolverStatus.ShouldBe(DockerHint);
 
-            var statusText = window.GetVisualDescendants()
-                .OfType<TextBlock>()
-                .Single(t => t.Text == DockerHint);
+            // The status bar's visibility flips with the status text; on a loaded headless
+            // box the re-measure can lag a job cycle behind (CI flake — bounds were 0).
+            TextBlock? statusText = null;
+            for (var i = 0; i < 10 && statusText?.Bounds.Height is not > 0; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                statusText = window.GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .Single(t => t.Text == DockerHint);
+                if (statusText.Bounds.Height > 0)
+                    break;
+                await Task.Delay(50);
+            }
 
             // With the broken StackPanel layout the TextBlock measured ~1200px
             // wide and ran past the 620px window; wrapped it stays inside.
-            var rightEdgeInWindow = statusText
-                .TranslatePoint(new Point(statusText.Bounds.Width, 0), window)!
+            var measured = statusText!;
+            var rightEdgeInWindow = measured
+                .TranslatePoint(new Point(measured.Bounds.Width, 0), window)!
                 .Value.X;
             rightEdgeInWindow.ShouldBeLessThanOrEqualTo(window.ClientSize.Width);
 
             // Wrapping must actually engage: the message needs more than one line.
-            var oneLineHeight = statusText.FontSize * 2;
-            statusText.Bounds.Height.ShouldBeGreaterThan(oneLineHeight,
+            var oneLineHeight = measured.FontSize * 2;
+            measured.Bounds.Height.ShouldBeGreaterThan(oneLineHeight,
                 "the long Docker hint should wrap onto multiple lines");
         }
         finally
