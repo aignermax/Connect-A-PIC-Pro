@@ -108,6 +108,35 @@ public class FdtdBackendRegistryTests : IDisposable
     }
 
     [Fact]
+    public void SelectedBackendChanged_FiresAfterSuccessfulWrite()
+    {
+        var registry = NewRegistry(NewPrefs(), out _, out _);
+        var fired = 0;
+        registry.SelectedBackendChanged += (_, _) => fired++;
+
+        registry.SelectedBackend = FdtdBackendType.Tidy3D;
+
+        fired.ShouldBe(1);
+    }
+
+    [Fact]
+    public void SelectedBackendChanged_DoesNotFireWhenWriteThrows()
+    {
+        var meepOnly = new FdtdBackendRegistry(
+            new Dictionary<FdtdBackendType, IFdtdSMatrixService>
+            {
+                [FdtdBackendType.MeepDocker] = Mock.Of<IFdtdSMatrixService>(),
+            },
+            NewPrefs());
+        var fired = 0;
+        meepOnly.SelectedBackendChanged += (_, _) => fired++;
+
+        Should.Throw<ArgumentOutOfRangeException>(
+            () => meepOnly.SelectedBackend = FdtdBackendType.Tidy3D);
+        fired.ShouldBe(0);
+    }
+
+    [Fact]
     public void UnparseableSavedBackend_FallsBackToMeepDocker()
     {
         var prefs = NewPrefs();

@@ -14,7 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
-public partial class NewComponentViewModel : ObservableObject
+public partial class NewComponentViewModel : ObservableObject, IDisposable
 {
     private const int PreviewBitmapPixels = 512;
 

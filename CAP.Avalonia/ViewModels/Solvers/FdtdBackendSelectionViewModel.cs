@@ -10,7 +10,10 @@ namespace CAP.Avalonia.ViewModels.Solvers;
 // FdtdBackendRegistry, and surfaces an actionable hint when the selected backend
 // can't run (Docker down, tidy3d missing, no API key). Enum-bound — no display-name
 // round-trip. Shared by every flow that recomputes S-matrices.
-public partial class FdtdBackendSelectionViewModel : ObservableObject
+// Implements IDisposable: every instance subscribes to the singleton registry's
+// SelectedBackendChanged (cross-window sync), so hosts must Dispose it on window
+// close or the registry keeps probing availability for dead windows.
+public partial class FdtdBackendSelectionViewModel : ObservableObject, IDisposable
 {
     public const string Tidy3dPortalUrl = "https://tidy3d.simulation.cloud";
 
@@ -55,6 +58,8 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
         BackendItems = AvailableBackends.Select(b => new FdtdBackendItemViewModel(b, this)).ToList();
         _selectedBackend = registry.SelectedBackend;
         SyncItemSelection();
+        // Follow backend changes made in another window's picker (shared singleton registry).
+        _registry.SelectedBackendChanged += OnRegistrySelectedBackendChanged;
     }
 
     public IFdtdSMatrixService CurrentService => _registry.GetService(SelectedBackend);
@@ -71,7 +76,11 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
 
     partial void OnSelectedBackendChanged(FdtdBackendType value)
     {
-        _registry.SelectedBackend = value;
+        // Guard against echo: when this change came FROM the registry (another window's
+        // picker via OnRegistrySelectedBackendChanged), the value is already persisted —
+        // writing it again would fire SelectedBackendChanged a second time.
+        if (_registry.SelectedBackend != value)
+            _registry.SelectedBackend = value;
         AvailabilityHint = string.Empty;
         IsCurrentBackendUnavailable = false;
         SyncItemSelection();
@@ -88,6 +97,17 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
         foreach (var item in BackendItems)
             item.IsSelected = item.Backend == SelectedBackend;
     }
+
+    // The registry is a DI singleton shared by all open pickers (component settings,
+    // NewComponent editor): when the backend is switched elsewhere, mirror it here.
+    private void OnRegistrySelectedBackendChanged(object? sender, EventArgs e)
+    {
+        if (SelectedBackend != _registry.SelectedBackend)
+            SelectedBackend = _registry.SelectedBackend;
+    }
+
+    /// <summary>Unsubscribes from the singleton registry. Hosts call this on window close.</summary>
+    public void Dispose() => _registry.SelectedBackendChanged -= OnRegistrySelectedBackendChanged;
 
     public async Task<FdtdAvailability> CheckAvailabilityAsync(CancellationToken ct = default)
     {

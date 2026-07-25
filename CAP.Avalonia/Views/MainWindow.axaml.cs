@@ -139,6 +139,9 @@ public partial class MainWindow : Window
                             && !existingVm.HasUnsavedEditChanges)
                         {
                             WireNewComponentEditorHooks(newComponentVm, existingComponentWindow, vm);
+                            // The replaced view model is dropped here — release its registry
+                            // subscription or it keeps probing availability for a dead editor.
+                            existingVm.Dispose();
                             existingComponentWindow.DataContext = newComponentVm;
                         }
                         // Un-minimize first: Activate() alone leaves a minimized window
@@ -153,9 +156,17 @@ public partial class MainWindow : Window
                     window.DataContext = newComponentVm;
                     // Closing the window (via Save, the titlebar X, or Alt+F4) always cancels
                     // any Meep compute still running so it doesn't keep burning CPU/Docker
-                    // resources after the user has moved on. Wired against the CURRENT
-                    // DataContext because the dedup above may swap in a fresh view model.
-                    window.Closing += (_, _) => (window.DataContext as NewComponentViewModel)?.CancelCompute();
+                    // resources after the user has moved on, and releases the backend picker's
+                    // registry subscription. Wired against the CURRENT DataContext because the
+                    // dedup above may swap in a fresh view model.
+                    window.Closing += (_, _) =>
+                    {
+                        if (window.DataContext is NewComponentViewModel editorVm)
+                        {
+                            editorVm.CancelCompute();
+                            editorVm.Dispose();
+                        }
+                    };
                     if (editKey is not null)
                     {
                         _openComponentEditWindows[editKey] = window;
@@ -1384,7 +1395,12 @@ public partial class MainWindow : Window
 
         var dialog = new ComponentSettingsDialog { DataContext = dialogVm };
         _openComponentSettingsDialogs[entityKey] = dialog;
-        dialog.Closed += (_, _) => _openComponentSettingsDialogs.Remove(entityKey);
+        dialog.Closed += (_, _) =>
+        {
+            _openComponentSettingsDialogs.Remove(entityKey);
+            // Release the picker's subscription to the singleton backend registry.
+            backendSelection?.Dispose();
+        };
         // Probe the selected backend upfront so a known-bad state (Docker down, no
         // API key) disables the run button and shows the hint before the first click.
         _ = dialogVm.RefreshBackendAvailabilityAsync();

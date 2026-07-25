@@ -38,8 +38,13 @@ public class FdtdBackendRegistry
             if (!_services.ContainsKey(value))
                 throw new ArgumentOutOfRangeException(nameof(value), $"Backend {value} is not registered.");
             _preferences.SetFdtdBackend(value);
+            SelectedBackendChanged?.Invoke(this, EventArgs.Empty);
         }
     }
+
+    // Raised after every successful SelectedBackend write, so picker VMs in other
+    // windows can sync their displayed selection to a change made elsewhere.
+    public event EventHandler? SelectedBackendChanged;
 
     public IFdtdSMatrixService CurrentService => _services[SelectedBackend];
 

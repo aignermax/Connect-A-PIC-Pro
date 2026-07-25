@@ -32,13 +32,15 @@ public class FdtdBackendSelectionViewModelTests : IDisposable
             FdtdSMatrixRequest request, CancellationToken ct = default);
     }
 
-    private FdtdBackendSelectionViewModel NewViewModel() => new(new FdtdBackendRegistry(
+    private FdtdBackendRegistry NewRegistry() => new(
         new Dictionary<FdtdBackendType, IFdtdSMatrixService>
         {
             [FdtdBackendType.MeepDocker] = _meep.Object,
             [FdtdBackendType.Tidy3D] = _tidy3d.Object,
         },
-        new UserPreferencesService(_prefsPath)));
+        new UserPreferencesService(_prefsPath));
+
+    private FdtdBackendSelectionViewModel NewViewModel() => new(NewRegistry());
 
     public void Dispose()
     {
@@ -83,6 +85,51 @@ public class FdtdBackendSelectionViewModelTests : IDisposable
         vm.BackendItems[1].SelectCommand.Execute(null);
 
         vm.SelectedBackend.ShouldBe(FdtdBackendType.Tidy3D);
+    }
+
+    [Fact]
+    public void PickerInSecondWindow_FollowsBackendChangeMadeElsewhere()
+    {
+        // Two windows (e.g. component settings + NewComponent editor) share the singleton registry.
+        var registry = NewRegistry();
+        var vmA = new FdtdBackendSelectionViewModel(registry);
+        var vmB = new FdtdBackendSelectionViewModel(registry);
+
+        vmA.SelectedBackend = FdtdBackendType.Tidy3D;
+
+        vmB.SelectedBackend.ShouldBe(FdtdBackendType.Tidy3D);
+        vmB.BackendItems[1].IsSelected.ShouldBeTrue();
+        vmB.BackendItems[0].IsSelected.ShouldBeFalse();
+        vmB.CurrentSolverLabel.ShouldBe("Tidy3D");
+    }
+
+    [Fact]
+    public void ChangeFromOnePicker_RaisesTheRegistryEventExactlyOnce()
+    {
+        // The synced picker must not echo the same value back into the registry —
+        // one user change, one event.
+        var registry = NewRegistry();
+        var vmA = new FdtdBackendSelectionViewModel(registry);
+        var vmB = new FdtdBackendSelectionViewModel(registry);
+        var eventCount = 0;
+        registry.SelectedBackendChanged += (_, _) => eventCount++;
+
+        vmA.SelectedBackend = FdtdBackendType.Tidy3D;
+
+        eventCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public void DisposedPicker_NoLongerFollowsRegistryChanges()
+    {
+        var registry = NewRegistry();
+        var vmA = new FdtdBackendSelectionViewModel(registry);
+        var vmB = new FdtdBackendSelectionViewModel(registry);
+        vmB.Dispose();
+
+        vmA.SelectedBackend = FdtdBackendType.Tidy3D;
+
+        vmB.SelectedBackend.ShouldBe(FdtdBackendType.MeepDocker);
     }
 
     [Fact]

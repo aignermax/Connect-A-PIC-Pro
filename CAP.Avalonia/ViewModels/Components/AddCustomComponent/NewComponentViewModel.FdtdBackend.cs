@@ -59,6 +59,9 @@ public partial class NewComponentViewModel
         };
     }
 
+    /// <summary>Releases the backend picker's registry subscription (host calls this on window close).</summary>
+    public void Dispose() => BackendSelection?.Dispose();
+
     /// <summary>
     /// Probes the selected backend so a known-bad state (Docker down, no API key)
     /// disables the compute button and shows the hint before the user clicks.
