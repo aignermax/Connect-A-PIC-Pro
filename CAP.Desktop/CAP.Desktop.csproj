@@ -68,5 +68,13 @@
              Link="scripts\fdtd\Dockerfile"
              CopyToOutputDirectory="PreserveNewest"
              CopyToPublishDirectory="PreserveNewest" />
+    <!-- Tidy3D cloud FDTD bridge (issue #692): Tidy3dSMatrixService resolves it via
+         PythonResolution.FindScript("tidy3d_sparams.py") at `<baseDir>/scripts/` —
+         without this entry the whole cloud backend fails with "bridge script not
+         found" on every installed build. -->
+    <Content Include="..\scripts\tidy3d_sparams.py"
+             Link="scripts\tidy3d_sparams.py"
+             CopyToOutputDirectory="PreserveNewest"
+             CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
