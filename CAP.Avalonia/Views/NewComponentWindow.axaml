@@ -139,10 +139,10 @@
                         <!-- Split button: compute with the selected backend; ▼ picks the backend. -->
                         <StackPanel Orientation="Horizontal" Spacing="0">
                             <Button Content="{Binding ComputeButtonLabel}" Command="{Binding ComputeSMatrixCommand}"
-                                    Padding="12,2" Background="#3d4d6d"
+                                    Padding="12,2" Height="26" Background="#3d4d6d"
                                     ToolTip.Tip="{loc:Localize NewComponent.ComputeTip}"/>
                             <Button Content="▼"
-                                    Padding="8,2"
+                                    Padding="8,2" Height="26"
                                     FontSize="9"
                                     Background="#2d3d5d"
                                     VerticalContentAlignment="Center"

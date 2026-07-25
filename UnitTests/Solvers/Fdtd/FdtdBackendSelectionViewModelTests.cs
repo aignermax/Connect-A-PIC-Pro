@@ -147,4 +147,21 @@ public class FdtdBackendSelectionViewModelTests : IDisposable
         vm.HasAvailabilityHint.ShouldBeTrue();
         vm.ShowMissingKeyLink.ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task SelectingBackend_ProbesImmediately_WithoutComputeClick()
+    {
+        _tidy3d.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+               .ReturnsAsync(FdtdAvailability.Unavailable("No Tidy3D API key configured."));
+        var vm = NewViewModel();
+
+        vm.SelectedBackend = FdtdBackendType.Tidy3D;
+
+        // The setter fires the probe fire-and-forget; wait for it to land.
+        for (var i = 0; i < 100 && !vm.IsCurrentBackendUnavailable; i++)
+            await Task.Delay(20);
+        vm.IsCurrentBackendUnavailable.ShouldBeTrue();
+        vm.AvailabilityHint.ShouldContain("API key");
+        vm.ShowMissingKeyLink.ShouldBeTrue();
+    }
 }

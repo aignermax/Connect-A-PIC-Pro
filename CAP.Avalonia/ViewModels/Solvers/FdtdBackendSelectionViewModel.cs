@@ -61,6 +61,9 @@ public partial class FdtdBackendSelectionViewModel : ObservableObject
         OnPropertyChanged(nameof(CurrentService));
         OnPropertyChanged(nameof(CurrentBackendCostsCredits));
         OnPropertyChanged(nameof(CurrentSolverLabel));
+        // Probe right away so a known-bad pick (e.g. Tidy3D without API key) warns immediately,
+        // not only when the user clicks compute.
+        _ = CheckAvailabilityAsync();
     }
 
     private void SyncItemSelection()
