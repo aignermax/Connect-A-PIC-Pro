@@ -204,24 +204,35 @@ public class Issue705WalkthroughScreenshotTests
             Content = scene,
         };
         window.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        var bitmap = window.CaptureRenderedFrame();
-        window.Close();
-        Dispatcher.UIThread.RunJobs();
-        bitmap.ShouldNotBeNull($"CaptureRenderedFrame returned null for {filename}");
-
-        var path = Path.Combine(dir, filename);
-        int distinctColors;
-        using (bitmap)
+        try
         {
-            distinctColors = CountDistinctSampledColors(bitmap);
-            bitmap.Save(path);
-        }
+            // Headless compositor timing (CI): the first frame may not be ready yet —
+            // retry like Issue776/Issue574.
+            global::Avalonia.Media.Imaging.WriteableBitmap? bitmap = null;
+            for (var attempt = 0; attempt < 3 && bitmap == null; attempt++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                bitmap = window.CaptureRenderedFrame();
+            }
+            bitmap.ShouldNotBeNull($"CaptureRenderedFrame returned null for {filename}");
 
-        distinctColors.ShouldBeGreaterThan(MinDistinctSampledColors,
-            $"Near-blank render — only {distinctColors} distinct sampled colors in {filename}.");
-        manifest.Add(new ManifestEntry(filename, caption));
+            var path = Path.Combine(dir, filename);
+            int distinctColors;
+            using (bitmap)
+            {
+                distinctColors = CountDistinctSampledColors(bitmap);
+                bitmap.Save(path);
+            }
+
+            distinctColors.ShouldBeGreaterThan(MinDistinctSampledColors,
+                $"Near-blank render — only {distinctColors} distinct sampled colors in {filename}.");
+            manifest.Add(new ManifestEntry(filename, caption));
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
     }
 
     /// <summary>Samples a grid of pixels and counts distinct ARGB values (blank-frame guard).</summary>

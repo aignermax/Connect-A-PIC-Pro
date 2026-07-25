@@ -44,16 +44,16 @@ public class ComponentSettingsDialogSolverStatusTests
         vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
             liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
 
+        // Drive the recompute BEFORE showing the window: the status bar is visible from
+        // the very first layout pass then — its collapsed→visible transition does not
+        // reliably re-arrange on headless CI (flake: bounds stayed 0 there).
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+        vm.SolverStatus.ShouldBe(DockerHint);
+
         var window = new ComponentSettingsDialog { DataContext = vm };
         try
         {
             window.Show();
-            Dispatcher.UIThread.RunJobs();
-
-            await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
-            Dispatcher.UIThread.RunJobs();
-
-            vm.SolverStatus.ShouldBe(DockerHint);
 
             // The status bar's visibility flips with the status text; on a loaded headless
             // box the re-measure can lag a job cycle behind (CI flake — bounds were 0).

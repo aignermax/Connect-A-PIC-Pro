@@ -238,7 +238,14 @@ public class Issue737WalkthroughScreenshotTests
     private static void Capture(
         Window window, string dir, string filename, string caption, List<ManifestEntry> manifest)
     {
-        var bitmap = window.CaptureRenderedFrame();
+        // Headless compositor timing (CI): the first frame may not be ready yet —
+        // retry like Issue776/Issue574.
+        WriteableBitmap? bitmap = null;
+        for (var attempt = 0; attempt < 3 && bitmap == null; attempt++)
+        {
+            Dispatcher.UIThread.RunJobs();
+            bitmap = window.CaptureRenderedFrame();
+        }
         bitmap.ShouldNotBeNull($"CaptureRenderedFrame returned null for {filename}");
 
         var path = Path.Combine(dir, filename);
