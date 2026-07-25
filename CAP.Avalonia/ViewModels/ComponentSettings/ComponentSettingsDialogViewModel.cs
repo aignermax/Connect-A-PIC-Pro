@@ -54,6 +54,15 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
 
     public ObservableCollection<EffectiveSMatrixEntryViewModel> EffectiveEntries { get; } = new();
 
+    /// <summary>
+    /// Creates the dialog VM. All service parameters are optional so tests/legacy
+    /// wiring can construct a file-import-only dialog.
+    /// </summary>
+    /// <param name="backendSelection">
+    /// Shared FDTD backend picker shown in the recompute row. The CALLER owns its
+    /// disposal — MainWindow disposes it when the dialog closes; this dialog only
+    /// reads it and never unsubscribes its registry/localization handlers.
+    /// </param>
     public ComponentSettingsDialogViewModel(
         IFileDialogService fileDialogService,
         ErrorConsoleService? errorConsole = null,
@@ -120,7 +129,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         RecalculateSMatrixCommand.NotifyCanExecuteChanged();
     }
 
-    [RelayCommand]
+    // Importing while a cloud run awaits cost confirmation would replace the stored
+    // matrix underneath the pending submit — gate the button like the recompute one.
+    private bool CanRunLoadFromFile => !IsAwaitingCloudConfirmation;
+
+    [RelayCommand(CanExecute = nameof(CanRunLoadFromFile))]
     private async Task LoadFromFile()
     {
         if (_storedSMatrices == null)

@@ -16,6 +16,10 @@ public partial class NewComponentViewModel
     private FdtdSMatrixRequest? _pendingCloudRequest;
     private IFdtdSMatrixService? _pendingCloudService;
 
+    // Solver label captured at ESTIMATE time next to the pending service: a backend
+    // switch in another window between estimate and confirm must not relabel the run.
+    private string? _pendingCloudLabel;
+
     /// <summary>
     /// FDTD backend picker (Meep local / Tidy3D cloud). Null when the editor was
     /// created without a backend registry (tests / legacy wiring) — the picker UI
@@ -72,8 +76,11 @@ public partial class NewComponentViewModel
             await BackendSelection.CheckAvailabilityAsync(ct);
     }
 
-    partial void OnIsAwaitingCloudConfirmationChanged(bool value) =>
+    partial void OnIsAwaitingCloudConfirmationChanged(bool value)
+    {
         ComputeSMatrixCommand.NotifyCanExecuteChanged();
+        SaveCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// Estimates the cloud cost of <paramref name="request"/> and switches the editor
@@ -95,6 +102,7 @@ public partial class NewComponentViewModel
 
         _pendingCloudRequest = request;
         _pendingCloudService = (IFdtdSMatrixService)estimator;
+        _pendingCloudLabel = SolverLabel;
         StatusText = string.Format(
             LocalizationService.Instance.Translate("CompSettings.CloudConfirmPrompt"), SolverLabel);
         IsAwaitingCloudConfirmation = true;
@@ -105,6 +113,7 @@ public partial class NewComponentViewModel
     {
         var service = _pendingCloudService;
         var request = _pendingCloudRequest;
+        var cloudLabel = _pendingCloudLabel;
         ClearPendingCloudJob();
         if (service == null || request == null)
             return;
@@ -113,12 +122,25 @@ public partial class NewComponentViewModel
         _computeCts = new CancellationTokenSource();
         try
         {
-            await ExecuteSolveAsync(service, request, _computeCts.Token);
+            await ExecuteSolveAsync(service, request, _computeCts.Token, cloudLabel);
         }
         catch (OperationCanceledException)
         {
             _computedModel = null;
-            StatusText = LocalizationService.Instance.Translate("NewComp.SMatrixComputationCancelled");
+            // A cancelled CLOUD wait can leave a submitted job running and billing —
+            // say so instead of claiming nothing happened.
+            StatusText = LocalizationService.Instance.Translate(
+                service is IFdtdCostEstimator
+                    ? "NewComp.SMatrixComputationCancelledCloud"
+                    : "NewComp.SMatrixComputationCancelled");
+        }
+        catch (Exception ex)
+        {
+            // Mirror the settings dialog's twin: without this the AsyncRelayCommand
+            // swallows the fault and the submit looks like it did nothing.
+            _computedModel = null;
+            StatusText = string.Format(LocalizationService.Instance.Translate("CompSettings.FdtdError"), ex.Message);
+            _errorConsole?.LogError($"FDTD cloud submit crashed for '{ComponentName}': {ex.Message}", ex);
         }
         finally
         {
@@ -140,6 +162,7 @@ public partial class NewComponentViewModel
     {
         _pendingCloudRequest = null;
         _pendingCloudService = null;
+        _pendingCloudLabel = null;
         IsAwaitingCloudConfirmation = false;
     }
 }

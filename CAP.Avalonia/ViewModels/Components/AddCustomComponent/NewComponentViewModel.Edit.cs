@@ -119,8 +119,13 @@ public partial class NewComponentViewModel
             }
             else
             {
-                code = "# This component exists only as a KLayout cell — there is no editable code.\n"
-                     + "# Its geometry renders on the canvas; the code editor cannot execute KLayout cells.";
+                // No stored code and no synthesis path: the SiEPIC cells without a ubcpdk
+                // mapping are KLayout fixed cells (own note); everything else gets the
+                // generic one.
+                code = LocalizationService.Instance.Translate(
+                    FoundryEditCodeSynthesis.IsKLayoutOnlyCell(template.NazcaModuleName, template.NazcaFunctionName)
+                        ? "NewComponent.KLayoutOnlyCellNote"
+                        : "NewComponent.NoEditableCodeNote");
                 StatusText = LocalizationService.Instance.Translate("NewComp.NoStoredCode");
             }
         }

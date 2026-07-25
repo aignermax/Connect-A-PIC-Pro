@@ -92,7 +92,8 @@ public class NewComponentBackendSelectionTests : IDisposable
     }
 
     private (NewComponentViewModel Vm, FdtdBackendSelectionViewModel Selection) Build(
-        IFdtdSMatrixService meep, IFdtdSMatrixService tidy3d)
+        IFdtdSMatrixService meep, IFdtdSMatrixService tidy3d,
+        CAP_Core.ErrorConsoleService? errorConsole = null)
     {
         var nazca = new Mock<IComponentPreviewRenderer>();
         var gds = new Mock<IComponentPreviewRenderer>();
@@ -110,7 +111,7 @@ public class NewComponentBackendSelectionTests : IDisposable
             new UserPreferencesService(_prefsPath));
         var vm = new NewComponentViewModel(
             extractor, meep, store, new List<ProcessDefinition> { process },
-            fdtdBackendRegistry: registry);
+            errorConsole, fdtdBackendRegistry: registry);
         vm.ComponentName = "My Comp";
         vm.SelectedBackend = GeometryBackend.GdsFactory;
         vm.Code = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
@@ -161,7 +162,8 @@ public class NewComponentBackendSelectionTests : IDisposable
         var tidy3d = ReadyCloudService();
         tidy3d.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
               .ReturnsAsync(FdtdAvailability.Unavailable(
-                  "No Tidy3D API key configured. Enter it in Settings → Tidy3D Cloud."));
+                  "No Tidy3D API key configured. Enter it in Settings → Tidy3D Cloud.",
+                  FdtdUnavailableReason.MissingApiKey));
         var (vm, selection) = Build(meep.Object, tidy3d.Object);
         selection.SelectedBackend = FdtdBackendType.Tidy3D;
 
@@ -233,6 +235,93 @@ public class NewComponentBackendSelectionTests : IDisposable
 
         tidy3d.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
         vm.StatusText.ShouldContain("computed");
+    }
+
+    [Fact]
+    public async Task Compute_WithCloudBackend_DisablesSave_UntilThePendingRunIsResolved()
+    {
+        // Saving mid-confirmation would write a black box while the user is still
+        // deciding about the paid run — the Save button stays gated like Compute.
+        var tidy3d = ReadyCloudService();
+        var (vm, selection) = Build(new Mock<IFdtdSMatrixService>().Object, tidy3d.Object);
+        selection.SelectedBackend = FdtdBackendType.Tidy3D;
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+
+        vm.IsAwaitingCloudConfirmation.ShouldBeTrue();
+        vm.SaveCommand.CanExecute(null).ShouldBeFalse();
+
+        vm.CancelCloudSubmitCommand.Execute(null);
+        vm.SaveCommand.CanExecute(null).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ConfirmCloudSubmit_NamesTheEstimateTimeBackend_InTheProvenanceNote()
+    {
+        // The estimate captured Tidy3D; switching the shared registry to Meep before
+        // confirming must not relabel the stored note — the run still went to Tidy3D.
+        var meep = new Mock<IFdtdSMatrixService>();
+        meep.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FdtdAvailability.Available("ready"));
+        var tidy3d = ReadyCloudService();
+        var (vm, selection) = Build(meep.Object, tidy3d.Object);
+        selection.SelectedBackend = FdtdBackendType.Tidy3D;
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+        vm.IsAwaitingCloudConfirmation.ShouldBeTrue();
+
+        selection.SelectedBackend = FdtdBackendType.MeepDocker; // switched AFTER the estimate
+        await vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
+
+        tidy3d.Verify(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()), Times.Once);
+        vm.SMatrixEntries.ShouldContain(e => e.SourceNote == "FDTD Tidy3D 2D");
+    }
+
+    [Fact]
+    public async Task ConfirmCloudSubmit_WhenTheCloudSolveThrows_SurfacesStatusAndLogsToErrorConsole()
+    {
+        // Without the generic catch the AsyncRelayCommand would swallow the fault and
+        // the submit would look like it silently did nothing.
+        var tidy3d = ReadyCloudService();
+        tidy3d.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+              .ThrowsAsync(new InvalidOperationException("bridge exploded"));
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var (vm, selection) = Build(new Mock<IFdtdSMatrixService>().Object, tidy3d.Object, errorConsole);
+        selection.SelectedBackend = FdtdBackendType.Tidy3D;
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+
+        await vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
+
+        vm.IsBusy.ShouldBeFalse();
+        vm.StatusText.ShouldContain("bridge exploded");
+        errorConsole.Entries.ShouldContain(e => e.Message.Contains("FDTD cloud submit crashed"));
+    }
+
+    [Fact]
+    public async Task ConfirmCloudSubmit_WhenCancelled_SaysTheCloudJobMayStillBeBilling()
+    {
+        // Cancelling the local WAIT does not cancel an already submitted cloud job —
+        // the user must hear "may still be running and billing", not a clean cancel.
+        var tidy3d = ReadyCloudService();
+        tidy3d.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+              .Returns<FdtdSMatrixRequest, IProgress<string>?, CancellationToken>(async (_, _, ct) =>
+              {
+                  await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                  return SuccessResult();
+              });
+        var (vm, selection) = Build(new Mock<IFdtdSMatrixService>().Object, tidy3d.Object);
+        selection.SelectedBackend = FdtdBackendType.Tidy3D;
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.ComputeSMatrixCommand.ExecuteAsync(null);
+
+        var confirm = vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
+        vm.CancelCompute();
+        await confirm;
+
+        vm.StatusText.ShouldBe(LocalizationService.Instance.Translate("NewComp.SMatrixComputationCancelledCloud"));
     }
 
     public void Dispose()

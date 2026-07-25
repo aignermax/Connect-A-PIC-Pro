@@ -55,6 +55,18 @@ public static class FoundryEditCodeSynthesis
     }
 
     /// <summary>
+    /// True when the component is a SiEPIC module cell without a ubcpdk registry
+    /// equivalent — it exists only as a KLayout fixed cell, so the editor shows the
+    /// KLayout-only note instead of the generic "no editable code stored" one.
+    /// </summary>
+    /// <param name="nazcaModuleName">The PDK's module name from its JSON (e.g. "siepic_ebeam_pdk").</param>
+    /// <param name="nazcaFunctionName">The component's PDK cell/function name.</param>
+    public static bool IsKLayoutOnlyCell(string? nazcaModuleName, string? nazcaFunctionName) =>
+        !string.IsNullOrWhiteSpace(nazcaFunctionName)
+        && IsSiepicModule(nazcaModuleName)
+        && UbcPdkCellMap.MapToUbcPdkCell(nazcaFunctionName) is null;
+
+    /// <summary>
     /// True for the SiEPIC EBeam PDK module — mirrors the render script's
     /// <c>_looks_like_siepic</c> predicate so both sides route the same components.
     /// </summary>

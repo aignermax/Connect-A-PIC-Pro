@@ -1,6 +1,7 @@
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Solvers;
 
@@ -9,6 +10,7 @@ namespace CAP.Avalonia.ViewModels.Solvers;
 public partial class Tidy3dSettingsViewModel : ObservableObject
 {
     private readonly UserPreferencesService _preferences;
+    private readonly IUrlLauncher? _urlLauncher;
 
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(IsApiKeySet))]
@@ -19,9 +21,10 @@ public partial class Tidy3dSettingsViewModel : ObservableObject
 
     public bool IsApiKeySet => !string.IsNullOrWhiteSpace(ApiKey);
 
-    public Tidy3dSettingsViewModel(UserPreferencesService preferences)
+    public Tidy3dSettingsViewModel(UserPreferencesService preferences, IUrlLauncher? urlLauncher = null)
     {
         _preferences = preferences ?? throw new ArgumentNullException(nameof(preferences));
+        _urlLauncher = urlLauncher;
         _apiKey = preferences.GetTidy3dApiKey();
     }
 
@@ -31,4 +34,8 @@ public partial class Tidy3dSettingsViewModel : ObservableObject
         StatusText = LocalizationService.Instance.Translate(
             string.IsNullOrWhiteSpace(value) ? "Settings.Tidy3d.KeyCleared" : "Settings.Tidy3d.KeySaved");
     }
+
+    /// <summary>Opens the Tidy3D web portal (account / API-key management) in the browser.</summary>
+    [RelayCommand]
+    private void OpenPortal() => _urlLauncher?.Open(FdtdBackendSelectionViewModel.Tidy3dPortalUrl);
 }

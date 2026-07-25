@@ -121,7 +121,7 @@
   "CompSettings.AppliedWavelengths": " {0} 個の波長を適用しました。",
   "CompSettings.BackendPickerTip": "FDTD ソルバーのバックエンドを選択します。",
   "CompSettings.CannotImportPortCount": "インポートできません: ファイルには {0} 個のポートがありますが、'{1}' には {2} 個のピンがあります。",
-  "CompSettings.CheckingFdtd": "FDTD ソルバーを確認中（Docker）…",
+  "CompSettings.CheckingFdtd": "{0} ソルバーを確認中…",
   "CompSettings.ChooseFdtdBackend": "FDTD バックエンド",
   "CompSettings.CloudConfirmPrompt": "{0} はクラウドで実行されクレジットを消費します — 見積もりを確認して送信してください。",
   "CompSettings.CloudCostEstimate": "推定コスト: {0:F2} FlexCredits（{1} 件のクラウドシミュレーション、ポートごとに 1 件）。",
@@ -181,7 +181,6 @@
   "ComponentSettings.NoCustomSMatrix": "このコンポーネントにはまだカスタム S-matrix がありません — PDK の S-matrix を使用しています。下で読み込むか再計算して上書きしてください。",
   "ComponentSettings.OverriddenTip": "上書き（ファイルインポートまたは FDTD 再計算）がこの波長の PDK デフォルトを置き換えました",
   "ComponentSettings.PdkDefaultTip": "PDK 定義に由来します。ユーザーによる上書きはありません",
-  "ComponentSettings.Recalculate": "S-matrix を再計算 (FDTD)…",
   "ComponentSettings.RemoveEntryTip": "この波長エントリを削除",
   "ComponentSettings.Size": "サイズ",
   "ComponentSettings.StrongestCouplings": "最も強い結合",
@@ -512,8 +511,7 @@
   "NewComponent.Backend": "バックエンド:",
   "NewComponent.ClickToEnlarge": "クリックで拡大",
   "NewComponent.ComputeTip": "ジオメトリをレンダリングし（必要な場合）、FDTD ソルバーで S-matrix を計算します — 「変更を保存」でコンポーネント定義に格納します（任意）",
-  "NewComponent.ComputeWithBackend": "再計算（{0}）…",
-  "NewComponent.ComputeWithMeep": "Meep で計算",
+  "NewComponent.ComputeWithBackend": "計算（{0}）…",
   "NewComponent.EditModeDescription": "ここでの変更は PDK 内のコンポーネントを書き換え、現在および将来のすべての配置に適用されます。キャンバス上の 1 つの配置だけを調整するには、そのコンポーネントの「コンポーネント設定…」を使用してください。",
   "NewComponent.EditModeHeader": "コンポーネント定義を編集中 — すべての配置に影響します",
   "NewComponent.FabricationProcess": "製造プロセス",
@@ -1034,5 +1032,9 @@
   "Waveguide.SetTargetToCurrent": "目標を現在値に設定",
   "Waveguide.TargetLength": "目標長さ (µm):",
   "Waveguide.Title": "導波路長:",
-  "Waveguide.Tolerance": "公差 (µm):"
+  "Waveguide.Tolerance": "公差 (µm):",
+  "NewComponent.KLayoutOnlyCellNote": "# このコンポーネントは KLayout セルとしてのみ存在します — 編集可能なコードはありません。\n# ジオメトリはキャンバスに描画されますが、コードエディターは KLayout セルを実行できません。",
+  "NewComponent.NoEditableCodeNote": "# このコンポーネントには編集可能なコードが保存されていません。\n# ジオメトリはキャンバスに描画されますが、コードエディターで実行できるものはありません。",
+  "CompSettings.RecomputeCancelledCloud": "ローカルの待機をキャンセルしました — 送信済みの Tidy3D クラウドジョブが実行を続け、クレジットが課金される場合があります。Tidy3D ダッシュボードを確認してください。",
+  "NewComp.SMatrixComputationCancelledCloud": "ローカルの待機をキャンセルしました — 送信済みの Tidy3D クラウドジョブが実行を続け、クレジットが課金される場合があります。Tidy3D ダッシュボードを確認してください。"
 }

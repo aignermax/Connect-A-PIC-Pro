@@ -139,10 +139,19 @@ public partial class MainWindow : Window
                             && !existingVm.HasUnsavedEditChanges)
                         {
                             WireNewComponentEditorHooks(newComponentVm, existingComponentWindow, vm);
-                            // The replaced view model is dropped here — release its registry
-                            // subscription or it keeps probing availability for a dead editor.
+                            // The replaced view model is dropped here — cancel any Meep compute
+                            // it is still burning CPU on and release its registry subscription,
+                            // or it keeps solving/probing availability for a dead editor.
+                            existingVm.CancelCompute();
                             existingVm.Dispose();
                             existingComponentWindow.DataContext = newComponentVm;
+                        }
+                        else
+                        {
+                            // The dirty editor keeps its view model — the freshly built one is
+                            // dropped, so release its registry subscription or it keeps firing
+                            // phantom availability probes forever.
+                            newComponentVm.Dispose();
                         }
                         // Un-minimize first: Activate() alone leaves a minimized window
                         // minimized, which looks like the ✏ button silently did nothing.
@@ -1033,8 +1042,9 @@ public partial class MainWindow : Window
         if (newComponentVm.BackendSelection != null)
         {
             newComponentVm.BackendSelection.OpenTidy3dSettingsPage = () =>
-                _ = vm.ShowSettingsWindowAsync?.Invoke(
-                    typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage));
+                LogSettingsNavigationFaults(
+                    vm.ShowSettingsWindowAsync?.Invoke(
+                        typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage)), vm);
         }
         // Own-code mode's "Load from .py…" button (#custom-component-rawcode): the view model
         // only knows the file's already-read contents (PickPyFile's contract), never a path,
@@ -1079,6 +1089,22 @@ public partial class MainWindow : Window
             var userPdkStore = App.Services.GetService(typeof(UserPdkStore)) as UserPdkStore;
             return userPdkStore?.ListCustomPdks().FirstOrDefault(i => i.FilePath == createdPath);
         };
+    }
+
+    /// <summary>
+    /// Fire-and-forget Settings navigation with fault logging: the Tidy3D deep-link
+    /// must surface a navigation crash in the error console instead of dropping it
+    /// into an unobserved task fault.
+    /// </summary>
+    private static void LogSettingsNavigationFaults(Task? navigation, MainViewModel vm)
+    {
+        if (navigation is null)
+            return;
+        navigation.ContinueWith(
+            t => vm.ErrorConsole.LogError(
+                $"Opening the Tidy3D settings page failed: {t.Exception?.GetBaseException().Message}",
+                t.Exception?.GetBaseException()),
+            TaskContinuationOptions.OnlyOnFaulted);
     }
 
     /// <summary>
@@ -1262,18 +1288,21 @@ public partial class MainWindow : Window
                 App.Services.GetService(typeof(IUrlLauncher)) as IUrlLauncher);
             // Deep-link for the missing-key hint: opens Settings on the Tidy3D Cloud page.
             backendSelection.OpenTidy3dSettingsPage = () =>
-                _ = vm.ShowSettingsWindowAsync?.Invoke(
-                    typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage));
+                LogSettingsNavigationFaults(
+                    vm.ShowSettingsWindowAsync?.Invoke(
+                        typeof(CAP.Avalonia.ViewModels.Settings.Tidy3dSettingsPage)), vm);
         }
 
         // Reset affordance for user-sourced draft matrices (e.g. an FDTD-computed
         // fork component): reverts to the bundled foundry definition via the same
-        // mechanism as the library's per-component restore.
+        // mechanism as the library's per-component restore. Only an ACTUAL revert
+        // yields the fresh template — a failed rewrite must not show "restored".
         Func<Task<ComponentTemplate?>>? resetToPdkOriginal = null;
         if (templateForDefaults != null && vm.LeftPanel.IsComponentRevertToBundled(templateForDefaults))
         {
             resetToPdkOriginal = () => Task.FromResult(
                 vm.LeftPanel.RestoreTemplateToBundledOriginal(templateForDefaults)
+                    == ViewModels.Panels.BundledRevertResult.Reverted
                     ? vm.LeftPanel.AllTemplates.FirstOrDefault(t =>
                         t.Name == templateForDefaults.Name && t.PdkSource == templateForDefaults.PdkSource)
                     : null);

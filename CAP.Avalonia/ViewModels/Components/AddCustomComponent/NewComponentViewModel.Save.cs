@@ -16,7 +16,7 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    private bool CanSave => !IsBusy && SelectedCustomPdk is not null;
+    private bool CanSave => !IsBusy && !IsAwaitingCloudConfirmation && SelectedCustomPdk is not null;
 
     partial void OnIsBusyChanged(bool value)
     {
@@ -92,8 +92,14 @@ public partial class NewComponentViewModel
     /// Runs the solver and stores the result as the pending S-matrix — the shared
     /// tail of both the local path and the confirmed cloud path.
     /// </summary>
+    /// <param name="provenanceLabel">
+    /// Solver label captured at estimate time for a confirmed cloud run — the
+    /// provenance note must name the backend the run was estimated/submitted on,
+    /// not whatever is selected by the time it finishes. Null = use the live label.
+    /// </param>
     private async Task ExecuteSolveAsync(
-        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct)
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct,
+        string? provenanceLabel = null)
     {
         var result = await RunSolveWithLiveStatusAsync(service, request, ct);
         if (!result.Success)
@@ -105,7 +111,7 @@ public partial class NewComponentViewModel
 
         var note = string.Format(
             LocalizationService.Instance.Translate("CompSettings.FdtdProvenance"),
-            SolverLabel, result.Is3D ? "3D" : "2D");
+            provenanceLabel ?? SolverLabel, result.Is3D ? "3D" : "2D");
         _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, note);
         StatusText = string.Format(
             LocalizationService.Instance.Translate("NewComp.SMatrixComputed"),

@@ -115,6 +115,9 @@ public partial class LeftPanelViewModel
         if (!loaded)
         {
             // Never show a half-initialized window — surface LoadForEdit's reason instead.
+            // The dropped view model still holds the backend picker's registry
+            // subscription; release it or it keeps probing availability forever.
+            vm.Dispose();
             _errorConsole?.LogError($"Cannot edit component '{template.Name}': {vm.StatusText}");
             UpdateStatus?.Invoke(vm.StatusText);
             return;

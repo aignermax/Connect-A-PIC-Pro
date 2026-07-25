@@ -212,7 +212,8 @@ public class ComponentSettingsDialogCloudFlowTests : IDisposable
         var tidy3d = ReadyCloudService();
         tidy3d.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
               .ReturnsAsync(FdtdAvailability.Unavailable(
-                  "No Tidy3D API key configured. Enter it in Settings → Tidy3D Cloud."));
+                  "No Tidy3D API key configured. Enter it in Settings → Tidy3D Cloud.",
+                  FdtdUnavailableReason.MissingApiKey));
         var selection = NewSelection(meep.Object, tidy3d.Object);
         selection.SelectedBackend = FdtdBackendType.Tidy3D;
         var (vm, _) = NewDialog(meep.Object, selection);
@@ -280,5 +281,68 @@ public class ComponentSettingsDialogCloudFlowTests : IDisposable
         store.ShouldContainKey("comp");
         selection.IsCurrentBackendUnavailable.ShouldBeFalse();
         vm.RecalculateSMatrixCommand.CanExecute(null).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Recalculate_WithCloudBackend_GatesLoadFromFile_UntilThePendingRunIsResolved()
+    {
+        // Importing a file mid-confirmation would replace the stored matrix
+        // underneath the pending cloud submit — gate it like the recompute button.
+        var service = ReadyCloudService();
+        var (vm, _) = NewDialog(service.Object);
+        vm.LoadFromFileCommand.CanExecute(null).ShouldBeTrue();
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        vm.IsAwaitingCloudConfirmation.ShouldBeTrue();
+        vm.LoadFromFileCommand.CanExecute(null).ShouldBeFalse();
+
+        vm.CancelCloudSubmitCommand.Execute(null);
+        vm.LoadFromFileCommand.CanExecute(null).ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task ConfirmCloudSubmit_NamesTheEstimateTimeBackend_InTheProvenanceNote()
+    {
+        // The estimate captured Tidy3D; switching the shared registry to Meep before
+        // confirming must not relabel the stored note — the run still went to Tidy3D.
+        var meep = new Mock<IFdtdSMatrixService>();
+        meep.Setup(s => s.CheckAvailabilityAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(FdtdAvailability.Available("ready"));
+        var tidy3d = ReadyCloudService();
+        var selection = NewSelection(meep.Object, tidy3d.Object);
+        selection.SelectedBackend = FdtdBackendType.Tidy3D;
+        var (vm, store) = NewDialog(meep.Object, selection);
+
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+        vm.IsAwaitingCloudConfirmation.ShouldBeTrue();
+
+        selection.SelectedBackend = FdtdBackendType.MeepDocker; // switched AFTER the estimate
+        await vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
+
+        store.ShouldContainKey("comp");
+        store["comp"].SourceNote.ShouldBe("FDTD Tidy3D 3D");
+    }
+
+    [Fact]
+    public async Task ConfirmCloudSubmit_WhenCancelled_SaysTheCloudJobMayStillBeBilling()
+    {
+        // Cancelling the local WAIT does not cancel an already submitted cloud job —
+        // the user must hear "may still be running and billing", not a clean cancel.
+        var service = ReadyCloudService();
+        service.Setup(s => s.SolveAsync(It.IsAny<FdtdSMatrixRequest>(), It.IsAny<IProgress<string>?>(), It.IsAny<CancellationToken>()))
+               .Returns<FdtdSMatrixRequest, IProgress<string>?, CancellationToken>(async (_, _, ct) =>
+               {
+                   await Task.Delay(Timeout.InfiniteTimeSpan, ct);
+                   return SuccessResult();
+               });
+        var (vm, _) = NewDialog(service.Object);
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+
+        var confirm = vm.ConfirmCloudSubmitCommand.ExecuteAsync(null);
+        vm.CancelRecalculate();
+        await confirm;
+
+        vm.SolverStatus.ShouldBe(LocalizationService.Instance.Translate("CompSettings.RecomputeCancelledCloud"));
     }
 }

@@ -15,6 +15,10 @@ public partial class ComponentSettingsDialogViewModel
     private FdtdSMatrixRequest? _pendingCloudRequest;
     private IFdtdSMatrixService? _pendingCloudService;
 
+    // Solver label captured at ESTIMATE time next to the pending service: a backend
+    // switch in another window between estimate and confirm must not relabel the run.
+    private string? _pendingCloudLabel;
+
     /// <summary>
     /// True while the dialog shows the "this run costs credits — submit?" panel.
     /// The recompute button stays disabled until confirmed or dismissed.
@@ -29,8 +33,11 @@ public partial class ComponentSettingsDialogViewModel
     [ObservableProperty]
     private string _cloudCostText = string.Empty;
 
-    partial void OnIsAwaitingCloudConfirmationChanged(bool value) =>
+    partial void OnIsAwaitingCloudConfirmationChanged(bool value)
+    {
         RecalculateSMatrixCommand.NotifyCanExecuteChanged();
+        LoadFromFileCommand.NotifyCanExecuteChanged();
+    }
 
     /// <summary>
     /// Estimates the cloud cost of <paramref name="request"/> and switches the
@@ -52,6 +59,7 @@ public partial class ComponentSettingsDialogViewModel
 
         _pendingCloudRequest = request;
         _pendingCloudService = (IFdtdSMatrixService)estimator;
+        _pendingCloudLabel = SolverLabel;
         SolverStatus = string.Format(
             LocalizationService.Instance.Translate("CompSettings.CloudConfirmPrompt"), SolverLabel);
         IsAwaitingCloudConfirmation = true;
@@ -65,6 +73,7 @@ public partial class ComponentSettingsDialogViewModel
     {
         var service = _pendingCloudService;
         var request = _pendingCloudRequest;
+        var cloudLabel = _pendingCloudLabel;
         ClearPendingCloudJob();
         if (service == null || request == null || _storedSMatrices == null || _liveComponent == null)
             return;
@@ -73,11 +82,16 @@ public partial class ComponentSettingsDialogViewModel
         _recalcCts = new CancellationTokenSource();
         try
         {
-            await ExecuteSolveAsync(service, request, _recalcCts.Token);
+            await ExecuteSolveAsync(service, request, _recalcCts.Token, cloudLabel);
         }
         catch (OperationCanceledException)
         {
-            SolverStatus = LocalizationService.Instance.Translate("CompSettings.RecomputeCancelled");
+            // A cancelled CLOUD wait can leave a submitted job running and billing —
+            // say so instead of claiming nothing happened.
+            SolverStatus = LocalizationService.Instance.Translate(
+                service is IFdtdCostEstimator
+                    ? "CompSettings.RecomputeCancelledCloud"
+                    : "CompSettings.RecomputeCancelled");
             NotifyCancelled();
         }
         catch (Exception ex)
@@ -108,6 +122,7 @@ public partial class ComponentSettingsDialogViewModel
     {
         _pendingCloudRequest = null;
         _pendingCloudService = null;
+        _pendingCloudLabel = null;
         IsAwaitingCloudConfirmation = false;
     }
 }

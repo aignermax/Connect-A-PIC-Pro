@@ -423,7 +423,7 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(template);
 
-        vm.Code.ShouldContain("KLayout cell");
+        vm.Code.ShouldBe(LocalizationService.Instance.Translate("NewComponent.KLayoutOnlyCellNote"));
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
     }
 
@@ -532,7 +532,8 @@ public class EditComponentModeTests : IDisposable
 
         vm.LoadForEdit(template);
 
-        vm.Code.ShouldContain("KLayout cell");
+        // No KLayout cell here — the generic "nothing editable stored" note applies.
+        vm.Code.ShouldBe(LocalizationService.Instance.Translate("NewComponent.NoEditableCodeNote"));
         vm.StatusText.ShouldNotBeNullOrWhiteSpace();
     }
 

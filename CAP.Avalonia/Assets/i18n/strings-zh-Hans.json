@@ -121,7 +121,7 @@
   "CompSettings.AppliedWavelengths": " 已应用 {0} 个波长。",
   "CompSettings.BackendPickerTip": "选择 FDTD 求解器后端。",
   "CompSettings.CannotImportPortCount": "无法导入：文件有 {0} 个端口，但 '{1}' 有 {2} 个引脚。",
-  "CompSettings.CheckingFdtd": "正在检查 FDTD 求解器（Docker）…",
+  "CompSettings.CheckingFdtd": "正在检查 {0} 求解器…",
   "CompSettings.ChooseFdtdBackend": "FDTD 后端",
   "CompSettings.CloudConfirmPrompt": "{0} 在云端运行并消耗积分 — 请查看估算后提交。",
   "CompSettings.CloudCostEstimate": "预计费用：{0:F2} FlexCredits（{1} 个云端仿真，每个端口一个）。",
@@ -181,7 +181,6 @@
   "ComponentSettings.NoCustomSMatrix": "此组件尚无自定义 S 矩阵——它使用其 PDK 的 S 矩阵。在下方加载或重新计算以覆盖它。",
   "ComponentSettings.OverriddenTip": "覆盖值（文件导入或 FDTD 重新计算）已替换此波长的 PDK 默认值",
   "ComponentSettings.PdkDefaultTip": "来自 PDK 定义；无用户覆盖",
-  "ComponentSettings.Recalculate": "重新计算 S 矩阵（FDTD）…",
   "ComponentSettings.RemoveEntryTip": "移除此波长条目",
   "ComponentSettings.Size": "尺寸",
   "ComponentSettings.StrongestCouplings": "最强耦合",
@@ -512,8 +511,7 @@
   "NewComponent.Backend": "后端：",
   "NewComponent.ClickToEnlarge": "点击放大",
   "NewComponent.ComputeTip": "渲染几何图形（如有需要）并通过 FDTD 求解器计算 S 矩阵——“保存更改”会将其存入组件定义中（可选）",
-  "NewComponent.ComputeWithBackend": "重新计算（{0}）…",
-  "NewComponent.ComputeWithMeep": "使用 Meep 计算",
+  "NewComponent.ComputeWithBackend": "计算（{0}）…",
   "NewComponent.EditModeDescription": "此处的更改会重写该组件在其 PDK 中的定义，并应用于所有当前和未来的放置实例。若只想调整画布上的单个实例，请改用该组件的“组件设置…”。",
   "NewComponent.EditModeHeader": "正在编辑组件定义 — 影响所有放置实例",
   "NewComponent.FabricationProcess": "制造工艺",
@@ -1034,5 +1032,9 @@
   "Waveguide.SetTargetToCurrent": "将目标设为当前长度",
   "Waveguide.TargetLength": "目标长度 (µm)：",
   "Waveguide.Title": "波导长度：",
-  "Waveguide.Tolerance": "容差 (µm)："
+  "Waveguide.Tolerance": "容差 (µm)：",
+  "NewComponent.KLayoutOnlyCellNote": "# 此组件仅以 KLayout 单元形式存在 — 没有可编辑的代码。\n# 其几何图形会渲染到画布上；代码编辑器无法执行 KLayout 单元。",
+  "NewComponent.NoEditableCodeNote": "# 此组件没有保存可编辑的代码。\n# 其几何图形会渲染到画布上，但代码编辑器没有可执行的内容。",
+  "CompSettings.RecomputeCancelledCloud": "已取消本地等待 — 已提交的 Tidy3D 云端作业可能仍在运行并消耗积分；请查看您的 Tidy3D 仪表板。",
+  "NewComp.SMatrixComputationCancelledCloud": "已取消本地等待 — 已提交的 Tidy3D 云端作业可能仍在运行并消耗积分；请查看您的 Tidy3D 仪表板。"
 }

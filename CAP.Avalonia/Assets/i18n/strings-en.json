@@ -121,7 +121,7 @@
   "CompSettings.AppliedWavelengths": " Applied {0} wavelength(s).",
   "CompSettings.BackendPickerTip": "Choose the FDTD solver backend.",
   "CompSettings.CannotImportPortCount": "Cannot import: file has {0} port(s), but '{1}' has {2} pin(s).",
-  "CompSettings.CheckingFdtd": "Checking the FDTD solver (Docker)…",
+  "CompSettings.CheckingFdtd": "Checking the {0} solver…",
   "CompSettings.ChooseFdtdBackend": "FDTD backend",
   "CompSettings.CloudConfirmPrompt": "{0} runs in the cloud and consumes credits — review the estimate and submit.",
   "CompSettings.CloudCostEstimate": "Estimated cost: {0:F2} FlexCredits ({1} cloud simulation(s), one per port).",
@@ -181,7 +181,6 @@
   "ComponentSettings.NoCustomSMatrix": "No custom S-matrix for this component yet — it uses its PDK S-matrix. Load or recalculate one below to override it.",
   "ComponentSettings.OverriddenTip": "An override (file import or FDTD recompute) has replaced the PDK default for this wavelength",
   "ComponentSettings.PdkDefaultTip": "Comes from the PDK definition; no user override",
-  "ComponentSettings.Recalculate": "Recalculate S-matrix (FDTD)…",
   "ComponentSettings.RemoveEntryTip": "Remove this wavelength entry",
   "ComponentSettings.Size": "Size",
   "ComponentSettings.StrongestCouplings": "Strongest couplings",
@@ -512,8 +511,7 @@
   "NewComponent.Backend": "Backend:",
   "NewComponent.ClickToEnlarge": "Click to enlarge",
   "NewComponent.ComputeTip": "Renders the geometry (if needed) and computes the S-matrix via the FDTD solver — \"Save changes\" stores it in the component definition (optional)",
-  "NewComponent.ComputeWithBackend": "Recalculate ({0})…",
-  "NewComponent.ComputeWithMeep": "Compute with Meep",
+  "NewComponent.ComputeWithBackend": "Compute ({0})…",
   "NewComponent.EditModeDescription": "Changes here rewrite the component in its PDK and apply to all current and future placements. To tweak only one placement on the canvas, use “Component Settings…” on that component instead.",
   "NewComponent.EditModeHeader": "Editing the component definition — affects every placement",
   "NewComponent.FabricationProcess": "Fabrication process",
@@ -1034,5 +1032,9 @@
   "Waveguide.SetTargetToCurrent": "Set Target to Current",
   "Waveguide.TargetLength": "Target Length (µm):",
   "Waveguide.Title": "Waveguide Length:",
-  "Waveguide.Tolerance": "Tolerance (µm):"
+  "Waveguide.Tolerance": "Tolerance (µm):",
+  "NewComponent.KLayoutOnlyCellNote": "# This component exists only as a KLayout cell — there is no editable code.\n# Its geometry renders on the canvas; the code editor cannot execute KLayout cells.",
+  "NewComponent.NoEditableCodeNote": "# No editable code is stored for this component.\n# Its geometry renders on the canvas, but the code editor has nothing to execute.",
+  "CompSettings.RecomputeCancelledCloud": "Local wait cancelled — an already submitted Tidy3D cloud job may still be running and billing credits; check your Tidy3D dashboard.",
+  "NewComp.SMatrixComputationCancelledCloud": "Local wait cancelled — an already submitted Tidy3D cloud job may still be running and billing credits; check your Tidy3D dashboard."
 }

@@ -1,5 +1,6 @@
 using CAP.Avalonia;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
+using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Properties;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
@@ -27,6 +28,7 @@ public class AppDiContainerTests
     {
         var services = new ServiceCollection();
         App.ConfigureServices(services);
+        OverrideUserPreferencesWithTempFile(services);
         using var sp = services.BuildServiceProvider();
 
         sp.GetRequiredService<IFdtdSMatrixService>().ShouldNotBeNull();
@@ -41,6 +43,7 @@ public class AppDiContainerTests
     {
         var services = new ServiceCollection();
         App.ConfigureServices(services);
+        OverrideUserPreferencesWithTempFile(services);
         using var sp = services.BuildServiceProvider();
 
         // The NewComponent editor path keeps the local/free backend.
@@ -54,4 +57,12 @@ public class AppDiContainerTests
         registry.GetService(FdtdBackendType.Tidy3D)
             .ShouldBeOfType<CAP.Avalonia.Services.Solvers.Tidy3dSMatrixService>();
     }
+
+    // Resolving the FDTD services constructs the production UserPreferencesService,
+    // whose default path is the REAL user profile (creates directories / may rename
+    // the real prefs file). Re-register it against a throwaway temp file — the last
+    // registration wins for single-service resolution.
+    private static void OverrideUserPreferencesWithTempFile(IServiceCollection services) =>
+        services.AddSingleton(new UserPreferencesService(
+            Path.Combine(Path.GetTempPath(), $"lunima-di-test-{Guid.NewGuid():N}.json")));
 }

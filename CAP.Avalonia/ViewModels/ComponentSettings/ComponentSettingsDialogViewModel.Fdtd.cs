@@ -125,7 +125,8 @@ public partial class ComponentSettingsDialogViewModel
         {
             // Fail fast with an actionable message if the backend isn't ready, before
             // exporting geometry / building images / contacting the cloud.
-            SolverStatus = LocalizationService.Instance.Translate("CompSettings.CheckingFdtd");
+            SolverStatus = string.Format(
+                LocalizationService.Instance.Translate("CompSettings.CheckingFdtd"), SolverLabel);
             var availability = BackendSelection != null
                 ? await BackendSelection.CheckAvailabilityAsync(_recalcCts.Token)
                 : await service.CheckAvailabilityAsync(_recalcCts.Token);
@@ -203,8 +204,14 @@ public partial class ComponentSettingsDialogViewModel
     /// Runs the solver and applies the result to the stored/live S-matrices — the
     /// shared tail of both the local path and the confirmed cloud path.
     /// </summary>
+    /// <param name="provenanceLabel">
+    /// Solver label captured at estimate time for a confirmed cloud run — the
+    /// provenance note must name the backend the run was estimated/submitted on,
+    /// not whatever is selected by the time it finishes. Null = use the live label.
+    /// </param>
     private async Task ExecuteSolveAsync(
-        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct)
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct,
+        string? provenanceLabel = null)
     {
         var result = await RunWithLiveStatusAsync(service, request, ct);
 
@@ -231,7 +238,7 @@ public partial class ComponentSettingsDialogViewModel
 
         var note = string.Format(
             LocalizationService.Instance.Translate("CompSettings.FdtdProvenance"),
-            SolverLabel, result.Is3D ? "3D" : "2D");
+            provenanceLabel ?? SolverLabel, result.Is3D ? "3D" : "2D");
         var data = FdtdSMatrixConverter.ToComponentSMatrixData(result, note);
         _storedSMatrices![_smatrixKey] = data;
 
