@@ -30,8 +30,9 @@ internal static class FdtdFeatureExtensions
                 "lunima-meep:1", dockerfile, buildContext,
                 launchFactory: sp.GetRequiredService<ProcessLaunchFactory>());
         });
-        // The NewComponent editor path binds IFdtdSMatrixService directly and keeps
-        // the local/free backend; selectable flows go through FdtdBackendRegistry.
+        // The NewComponent editor goes through the registry picker too; the bare
+        // IFdtdSMatrixService (Meep) is only its fallback when no registry is
+        // supplied (tests/legacy construction — DI always registers the registry).
         services.AddSingleton<IFdtdSMatrixService>(sp => sp.GetRequiredService<DockerFdtdSMatrixService>());
         services.AddSingleton<Tidy3dSMatrixService>(sp =>
         {

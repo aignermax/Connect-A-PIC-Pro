@@ -100,4 +100,97 @@ public class Tidy3dJsonContractTests
         result.Success.ShouldBeFalse();
         result.Error.ShouldContain("no result");
     }
+
+    [Fact]
+    public void ParseCheck_OldTidy3dVersion_SurfacesUpgradeGuidance()
+    {
+        // scripts/tidy3d_sparams.py gates on tidy3d >= 2.10 (ModalComponentModeler).
+        var result = Tidy3dJsonContract.ParseCheck(
+            """{"success": false, "error": "tidy3d >= 2.10 required (found 2.7.0). Upgrade with: pip install -U tidy3d", "missing_backend": "tidy3d"}""");
+
+        result.IsAvailable.ShouldBeFalse();
+        result.Message.ShouldContain("2.10");
+        result.Message.ShouldContain("pip install -U tidy3d");
+    }
+
+    [Fact]
+    public void ParseCheck_MissingApiKeyFlag_MapsToReason()
+    {
+        var result = Tidy3dJsonContract.ParseCheck(
+            """{"success": false, "error": "No Tidy3D API key configured.", "missing_backend": null, "missing_api_key": true}""");
+
+        result.IsAvailable.ShouldBeFalse();
+        result.Reason.ShouldBe(FdtdUnavailableReason.MissingApiKey);
+    }
+
+    [Fact]
+    public void ParseCheck_WithoutMissingApiKeyFlag_KeepsReasonNone()
+    {
+        var result = Tidy3dJsonContract.ParseCheck(
+            """{"success": false, "error": "tidy3d is not installed.", "missing_backend": "tidy3d"}""");
+
+        result.IsAvailable.ShouldBeFalse();
+        result.Reason.ShouldBe(FdtdUnavailableReason.None);
+    }
+
+    [Theory]
+    // Wrong-typed values throw InvalidOperationException from GetBoolean()/GetString()
+    // — the probe must degrade to unavailable, never crash.
+    [InlineData("""{"success": "yes"}""")]
+    [InlineData("""{"success": true, "tidy3d_version": 42}""")]
+    [InlineData("""{"success": false, "error": 123}""")]
+    public void ParseCheck_WrongTypedJson_FailsGracefully(string stdout)
+    {
+        var result = Tidy3dJsonContract.ParseCheck(stdout);
+
+        result.IsAvailable.ShouldBeFalse();
+        result.Message.ShouldContain("Could not parse");
+    }
+
+    [Theory]
+    [InlineData("""{"success": "yes"}""")]
+    [InlineData("""{"success": true, "estimated_credits": "a lot"}""")]
+    [InlineData("""{"success": true, "estimated_credits": 1.2, "simulation_count": "two"}""")]
+    public void ParseEstimate_WrongTypedJson_FailsGracefully(string stdout)
+    {
+        var result = Tidy3dJsonContract.ParseEstimate(stdout);
+
+        result.Success.ShouldBeFalse();
+        result.Error.ShouldContain("Could not parse");
+    }
+
+    [Fact]
+    public void ParseOutput_FailureWithTrace_AppendsTraceToDiagnostics()
+    {
+        const string json =
+            """{"success": false, "error": "cloud run failed", "trace": "Traceback (most recent call last): boom"}""";
+
+        var result = FdtdJsonContract.ParseOutput(json, stderr: "solver stderr");
+
+        result.Success.ShouldBeFalse();
+        result.RawStderr.ShouldContain("solver stderr");
+        result.RawStderr.ShouldContain("Traceback (most recent call last): boom");
+    }
+
+    [Fact]
+    public void ParseOutput_FailureWithTraceOnly_UsesTraceAsDiagnostics()
+    {
+        const string json = """{"success": false, "error": "boom", "trace": "File \"x.py\", line 1"}""";
+
+        var result = FdtdJsonContract.ParseOutput(json);
+
+        result.Success.ShouldBeFalse();
+        result.RawStderr.ShouldContain("x.py");
+    }
+
+    [Fact]
+    public void ParseOutput_FailureWithoutTrace_KeepsStderrUnchanged()
+    {
+        const string json = """{"success": false, "error": "boom"}""";
+
+        var result = FdtdJsonContract.ParseOutput(json, stderr: "plain stderr");
+
+        result.Success.ShouldBeFalse();
+        result.RawStderr.ShouldBe("plain stderr");
+    }
 }

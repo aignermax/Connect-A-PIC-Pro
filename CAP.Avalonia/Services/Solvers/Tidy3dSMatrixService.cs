@@ -17,6 +17,10 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
 
     public const string ApiKeyEnvVar = "SIMCLOUD_APIKEY";
 
+    // Live status lines from the bridge carry this prefix on stderr; anything
+    // else on stderr is library noise that must not reach the status line.
+    internal const string ProgressPrefix = "LUNIMA_PROGRESS:";
+
     private readonly Func<string> _pythonExecutableResolver;
     private readonly string _scriptPath;
     private readonly Func<string?> _apiKeyProvider;
@@ -52,7 +56,7 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
             return FdtdSMatrixResult.Fail("No geometry supplied: provide either a GDS file or polygons.");
 
         if (MissingPrerequisite() is { } missing)
-            return FdtdSMatrixResult.Fail(missing, missingDependency: "tidy3d");
+            return FdtdSMatrixResult.Fail(missing.Message, missingDependency: "tidy3d");
 
         var python = _pythonExecutableResolver();
         var run = await RunScriptAsync(
@@ -64,8 +68,15 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
             SubprocessJsonRunner.Outcome.StartFailed =>
                 FdtdSMatrixResult.Fail($"Could not start Python '{python}': {run.StartError}",
                     missingDependency: "python"),
-            SubprocessJsonRunner.Outcome.Cancelled => FdtdSMatrixResult.Fail("Tidy3D solve was cancelled."),
-            SubprocessJsonRunner.Outcome.TimedOut => FdtdSMatrixResult.Fail("Tidy3D solve timed out."),
+            // Cancel/timeout only kills the local Python client: an already-submitted
+            // cloud batch keeps running and billing. Follow-up: abort the batch
+            // server-side (web.Batch.delete / real_cost) before reporting cancel.
+            SubprocessJsonRunner.Outcome.Cancelled => FdtdSMatrixResult.Fail(
+                "Tidy3D solve was cancelled locally — the cloud batch may still be running " +
+                "and billed. Check the Tidy3D dashboard."),
+            SubprocessJsonRunner.Outcome.TimedOut => FdtdSMatrixResult.Fail(
+                "Tidy3D solve timed out locally — the cloud batch may still be running " +
+                "and billed. Check the Tidy3D dashboard."),
             _ => FdtdJsonContract.ParseOutput(run.Stdout, run.Stderr),
         };
     }
@@ -74,7 +85,7 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
         FdtdSMatrixRequest request, CancellationToken ct = default)
     {
         if (MissingPrerequisite() is { } missing)
-            return FdtdCostEstimate.Fail(missing);
+            return FdtdCostEstimate.Fail(missing.Message);
 
         var python = _pythonExecutableResolver();
         var run = await RunScriptAsync(
@@ -94,7 +105,7 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
     public async Task<FdtdAvailability> CheckAvailabilityAsync(CancellationToken ct = default)
     {
         if (MissingPrerequisite() is { } missing)
-            return FdtdAvailability.Unavailable(missing);
+            return FdtdAvailability.Unavailable(missing.Message, missing.Reason);
 
         var python = _pythonExecutableResolver();
         var run = await RunScriptAsync(python, "{\"mode\":\"check\"}", CheckTimeout, ct);
@@ -110,14 +121,15 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
     }
 
     // Fast local gate shared by all entry points: bridge script present and an API
-    // key configured. Returns an actionable message, or null when a run is possible.
-    private string? MissingPrerequisite()
+    // key configured. Returns an actionable message plus a machine-readable reason,
+    // or null when a run is possible.
+    private (string Message, FdtdUnavailableReason Reason)? MissingPrerequisite()
     {
         if (!File.Exists(_scriptPath))
-            return $"Tidy3D bridge script not found: {_scriptPath}";
+            return ($"Tidy3D bridge script not found: {_scriptPath}", FdtdUnavailableReason.None);
         if (string.IsNullOrWhiteSpace(_apiKeyProvider()))
-            return "No Tidy3D API key configured. Get one at https://tidy3d.simulation.cloud " +
-                   "and enter it in Settings → Tidy3D Cloud.";
+            return ("No Tidy3D API key configured. Get one at https://tidy3d.simulation.cloud " +
+                    "and enter it in Settings → Tidy3D Cloud.", FdtdUnavailableReason.MissingApiKey);
         return null;
     }
 
@@ -127,11 +139,38 @@ public class Tidy3dSMatrixService : IFdtdSMatrixService, IFdtdCostEstimator
     {
         var env = new Dictionary<string, string> { [ApiKeyEnvVar] = _apiKeyProvider() ?? string.Empty };
         var args = new[] { _scriptPath };
-        if (!_launchFactory.TryBuild(pythonExecutable, args, null, env, out var si, out var error))
-            return new SubprocessJsonRunner.RunResult(
-                SubprocessJsonRunner.Outcome.StartFailed, -1, string.Empty, string.Empty, error);
+        // The tidy3d web API writes batch/task hdf5 files into the process CWD —
+        // run from a per-run writable temp dir (the app install dir is read-only
+        // under %ProgramFiles%, and dev bin dirs should not fill up with batch*.hdf5).
+        var workDir = Path.Combine(Path.GetTempPath(), "lunima-tidy3d-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(workDir);
+        try
+        {
+            if (!_launchFactory.TryBuild(pythonExecutable, args, workDir, env, out var si, out var error))
+                return new SubprocessJsonRunner.RunResult(
+                    SubprocessJsonRunner.Outcome.StartFailed, -1, string.Empty, string.Empty, error);
 
-        return await SubprocessJsonRunner.RunAsync(si, stdinJson, timeout, ct,
-            onStderrLine: progress == null ? null : line => progress.Report(line));
+            return await SubprocessJsonRunner.RunAsync(si, stdinJson, timeout, ct,
+                onStderrLine: progress == null ? null
+                    : line => { if (TryGetProgressText(line, out var text)) progress.Report(text); });
+        }
+        finally
+        {
+            try { Directory.Delete(workDir, recursive: true); }
+            catch { /* best-effort: leftover temp files are harmless */ }
+        }
+    }
+
+    // Only bridge lines carrying ProgressPrefix describe run progress; the rest of
+    // stderr is tidy3d/library noise (same filtering idea as the Docker service).
+    internal static bool TryGetProgressText(string line, out string text)
+    {
+        if (line.StartsWith(ProgressPrefix, StringComparison.Ordinal))
+        {
+            text = line[ProgressPrefix.Length..].Trim();
+            return text.Length > 0;
+        }
+        text = string.Empty;
+        return false;
     }
 }

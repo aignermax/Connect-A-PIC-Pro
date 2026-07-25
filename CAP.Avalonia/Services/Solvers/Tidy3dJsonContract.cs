@@ -42,9 +42,13 @@ public static class Tidy3dJsonContract
             }
 
             var error = root.TryGetProperty("error", out var ep) ? ep.GetString() : null;
-            return FdtdAvailability.Unavailable(error ?? "Tidy3D is not available.");
+            var noKey = root.TryGetProperty("missing_api_key", out var kp) && kp.GetBoolean();
+            return FdtdAvailability.Unavailable(error ?? "Tidy3D is not available.",
+                noKey ? FdtdUnavailableReason.MissingApiKey : FdtdUnavailableReason.None);
         }
-        catch (JsonException ex)
+        // Wrong-typed values throw InvalidOperationException, not just JsonException —
+        // a probe must report unavailable, never crash (same bar as FdtdJsonContract).
+        catch (Exception ex)
         {
             return FdtdAvailability.Unavailable($"Could not parse Tidy3D check output: {ex.Message}");
         }
@@ -74,7 +78,7 @@ public static class Tidy3dJsonContract
             var error = root.TryGetProperty("error", out var ep) ? ep.GetString() : null;
             return FdtdCostEstimate.Fail(error ?? "Unknown Tidy3D estimation error.");
         }
-        catch (JsonException ex)
+        catch (Exception ex)
         {
             return FdtdCostEstimate.Fail($"Could not parse Tidy3D estimate output: {ex.Message}");
         }
