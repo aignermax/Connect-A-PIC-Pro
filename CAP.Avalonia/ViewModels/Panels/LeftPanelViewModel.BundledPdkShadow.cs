@@ -254,6 +254,25 @@ public partial class LeftPanelViewModel
     }
 
     /// <summary>
+    /// Reverts a fork component to the bundled foundry definition (same mechanism as
+    /// the library's delete-as-revert, but callable without the delete intent — e.g.
+    /// the component-settings "Reset to PDK original"). Returns <see cref="BundledRevertResult.Reverted"/>
+    /// only when the fork file was actually rewritten and the library swapped back —
+    /// <see cref="BundledRevertResult.NotARevertCase"/> when there is nothing to revert
+    /// and <see cref="BundledRevertResult.Failed"/> when the rewrite failed, so callers
+    /// never report "restored" for a component that is still the user's edited copy.
+    /// </summary>
+    public BundledRevertResult RestoreTemplateToBundledOriginal(ComponentTemplate template)
+    {
+        var pdkInfo = PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource);
+        var userPdkStore = _addCustomComponentDeps?.UserPdkStore;
+        if (pdkInfo is null || pdkInfo.IsBundled || pdkInfo.FilePath is null || userPdkStore is null)
+            return BundledRevertResult.NotARevertCase;
+
+        return RevertComponentToBundled(pdkInfo, userPdkStore, template);
+    }
+
+    /// <summary>
     /// Cached per session — bundled JSONs are read-only. Read failures are logged and NOT
     /// cached, so a transient file lock can recover.
     /// </summary>
@@ -284,17 +303,27 @@ public partial class LeftPanelViewModel
     /// <summary>
     /// Delete on a forked component that still exists in the bundled original = revert that one
     /// component to the foundry definition inside the fork (with a full backup in .trash).
-    /// Returns false when this is not a revert case (caller deletes normally). Returns true even
-    /// when the rewrite fails, so a failed revert never degrades into a delete.
+    /// Returns false ONLY when this is not a revert case (caller deletes normally). Returns true
+    /// even when the rewrite fails, so a failed revert never degrades into a delete.
     /// </summary>
     private bool TryRevertComponentToBundled(
+        PdkInfoViewModel pdkInfo, CAP_DataAccess.Components.AddCustomComponent.UserPdkStore store, ComponentTemplate template) =>
+        RevertComponentToBundled(pdkInfo, store, template) != BundledRevertResult.NotARevertCase;
+
+    /// <summary>
+    /// The tri-state core of <see cref="TryRevertComponentToBundled"/>: distinguishes a
+    /// genuinely rewritten fork (<see cref="BundledRevertResult.Reverted"/>) from a failed
+    /// rewrite (<see cref="BundledRevertResult.Failed"/>), which the delete flow deliberately
+    /// collapses into one "handled, do not delete" answer.
+    /// </summary>
+    private BundledRevertResult RevertComponentToBundled(
         PdkInfoViewModel pdkInfo, CAP_DataAccess.Components.AddCustomComponent.UserPdkStore store, ComponentTemplate template)
     {
         if (pdkInfo.FilePath is null)
-            return false;
+            return BundledRevertResult.NotARevertCase;
         var counterpart = FindBundledCounterpart(pdkInfo.Name, template.Name);
         if (counterpart is null)
-            return false;
+            return BundledRevertResult.NotARevertCase;
 
         try
         {
@@ -303,14 +332,14 @@ public partial class LeftPanelViewModel
             {
                 _errorConsole?.LogError(
                     $"Failed to restore the built-in definition of '{template.Name}': the fork file '{pdkInfo.FilePath}' no longer exists.");
-                return true;
+                return BundledRevertResult.Failed;
             }
         }
         catch (Exception ex)
         {
             _errorConsole?.LogError(
                 $"Failed to restore the built-in definition of '{template.Name}' in '{pdkInfo.Name}': {ex.Message}", ex);
-            return true;
+            return BundledRevertResult.Failed;
         }
 
         ReplaceLibraryTemplateWithBundledDefinition(pdkInfo, template, counterpart);
@@ -319,7 +348,7 @@ public partial class LeftPanelViewModel
         // A revert changes physics like an editor save: placed instances must adopt the restored
         // foundry definition now, not keep the edited fork's S-matrix until restart.
         NotifyTemplateDefinitionSaved(pdkInfo.Name, template.Name);
-        return true;
+        return BundledRevertResult.Reverted;
     }
 
     private void ReplaceLibraryTemplateWithBundledDefinition(

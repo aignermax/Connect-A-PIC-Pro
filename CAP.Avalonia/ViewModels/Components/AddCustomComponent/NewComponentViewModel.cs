@@ -14,7 +14,7 @@ using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 
-public partial class NewComponentViewModel : ObservableObject
+public partial class NewComponentViewModel : ObservableObject, IDisposable
 {
     private const int PreviewBitmapPixels = 512;
 
@@ -69,13 +69,16 @@ public partial class NewComponentViewModel : ObservableObject
         IFdtdSMatrixService? fdtd,
         UserPdkStore store,
         IReadOnlyList<ProcessDefinition> processes,
-        CAP_Core.ErrorConsoleService? errorConsole = null)
+        CAP_Core.ErrorConsoleService? errorConsole = null,
+        Services.Solvers.FdtdBackendRegistry? fdtdBackendRegistry = null,
+        Services.IUrlLauncher? urlLauncher = null)
     {
         _extractor = extractor;
         _fdtd = fdtd;
         _store = store;
         _errorConsole = errorConsole;
         Processes = processes;
+        InitFdtdBackendSelection(fdtdBackendRegistry, urlLauncher);
 
         RefreshPdkChoices();
         if (AvailableCustomPdks.Count > 0)

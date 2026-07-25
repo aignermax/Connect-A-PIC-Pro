@@ -14,10 +14,14 @@ public partial class NewComponentViewModel
 
     public void CancelCompute() => _computeCts?.Cancel();
 
-    private async Task<FdtdSMatrixResult> RunSolveWithLiveStatusAsync(FdtdSMatrixRequest request, CancellationToken ct)
+    private async Task<FdtdSMatrixResult> RunSolveWithLiveStatusAsync(
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct)
     {
         var stopwatch = Stopwatch.StartNew();
-        var baseMessage = LocalizationService.Instance.Translate("NewComp.FdtdBaseMessage");
+        var baseMessage = service is IFdtdCostEstimator
+            ? string.Format(
+                LocalizationService.Instance.Translate("CompSettings.FdtdRunBaseMessageCloud"), SolverLabel)
+            : LocalizationService.Instance.Translate("NewComp.FdtdBaseMessage");
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         timer.Tick += (_, _) => StatusText = string.Format(
@@ -32,7 +36,7 @@ public partial class NewComponentViewModel
                 stopwatch.Elapsed.ToString(@"m\:ss"), Shorten(line)));
         try
         {
-            return await _fdtd!.SolveAsync(request, progress, ct);
+            return await service.SolveAsync(request, progress, ct);
         }
         finally
         {

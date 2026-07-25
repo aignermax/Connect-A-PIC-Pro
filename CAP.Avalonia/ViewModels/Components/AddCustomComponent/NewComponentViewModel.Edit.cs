@@ -119,6 +119,13 @@ public partial class NewComponentViewModel
             }
             else
             {
+                // No stored code and no synthesis path: the SiEPIC cells without a ubcpdk
+                // mapping are KLayout fixed cells (own note); everything else gets the
+                // generic one.
+                code = LocalizationService.Instance.Translate(
+                    FoundryEditCodeSynthesis.IsKLayoutOnlyCell(template.NazcaModuleName, template.NazcaFunctionName)
+                        ? "NewComponent.KLayoutOnlyCellNote"
+                        : "NewComponent.NoEditableCodeNote");
                 StatusText = LocalizationService.Instance.Translate("NewComp.NoStoredCode");
             }
         }

@@ -16,6 +16,9 @@ namespace UnitTests.UI.Flows;
 /// pipeline. The hierarchy panel must mirror the selection and the undo must restore both.
 /// </summary>
 [Trait("Category", "UiFlows")]
+// Boots the real MainWindow through the input pipeline — too heavy for local default
+// runs (CI covers it, the local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 [Collection("LocalizationSingleton")]
 public class UiFlowBoxSelectDeleteUndoTests
 {

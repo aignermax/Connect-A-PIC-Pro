@@ -32,6 +32,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
     private IReadOnlyList<Pin>? _effectivePins;
     private IReadOnlyList<string>? _availablePinNames;
     private Func<ComponentSMatrixData, bool>? _propagateToTemplate;
+    private readonly Func<Task<Library.ComponentTemplate?>>? _resetToPdkOriginal;
+    private string? _draftSourceNote;
 
     [ObservableProperty]
     private string _title = LocalizationService.Instance.Translate("CompSettings.DefaultTitle");
@@ -52,6 +54,15 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
 
     public ObservableCollection<EffectiveSMatrixEntryViewModel> EffectiveEntries { get; } = new();
 
+    /// <summary>
+    /// Creates the dialog VM. All service parameters are optional so tests/legacy
+    /// wiring can construct a file-import-only dialog.
+    /// </summary>
+    /// <param name="backendSelection">
+    /// Shared FDTD backend picker shown in the recompute row. The CALLER owns its
+    /// disposal — MainWindow disposes it when the dialog closes; this dialog only
+    /// reads it and never unsubscribes its registry/localization handlers.
+    /// </param>
     public ComponentSettingsDialogViewModel(
         IFileDialogService fileDialogService,
         ErrorConsoleService? errorConsole = null,
@@ -60,7 +71,9 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IFdtdSMatrixService? fdtdService = null,
         Func<Component, CancellationToken, Task<FdtdSMatrixRequest?>>? fdtdRequestFactory = null,
         INotificationService? notificationService = null,
-        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null)
+        Services.Solvers.IDockerSetupDialogService? dockerSetupDialog = null,
+        Solvers.FdtdBackendSelectionViewModel? backendSelection = null,
+        Func<Task<Library.ComponentTemplate?>>? resetToPdkOriginal = null)
     {
         _fileDialogService = fileDialogService;
         _errorConsole = errorConsole;
@@ -69,6 +82,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _fdtdService = fdtdService;
         _fdtdRequestFactory = fdtdRequestFactory;
         _dockerSetupDialog = dockerSetupDialog;
+        _resetToPdkOriginal = resetToPdkOriginal;
+        SetBackendSelection(backendSelection);
         _importers = importers ?? new ISParameterImporter[]
         {
             new LumericalSParameterImporter(),
@@ -88,7 +103,8 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         IReadOnlyList<Pin>? effectivePins = null,
         IReadOnlyList<string>? availablePinNames = null,
         Func<string>? smatrixKeyResolver = null,
-        Func<ComponentSMatrixData, bool>? propagateToTemplate = null)
+        Func<ComponentSMatrixData, bool>? propagateToTemplate = null,
+        Library.ComponentTemplate? template = null)
     {
         _smatrixKey = smatrixKey;
         _propagateToTemplate = propagateToTemplate;
@@ -100,6 +116,7 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         _effectiveSMatrices = effectiveSMatrices;
         _effectivePins = effectivePins;
         _availablePinNames = availablePinNames;
+        _draftSourceNote = template?.SourceDraft?.SMatrix?.SourceNote;
         Title = isUserGlobalScope
             ? string.Format(LocalizationService.Instance.Translate("CompSettings.TitleGlobal"), displayName)
             : string.Format(LocalizationService.Instance.Translate("CompSettings.TitleScoped"), displayName);
@@ -112,7 +129,11 @@ public partial class ComponentSettingsDialogViewModel : ObservableObject
         RecalculateSMatrixCommand.NotifyCanExecuteChanged();
     }
 
-    [RelayCommand]
+    // Importing while a cloud run awaits cost confirmation would replace the stored
+    // matrix underneath the pending submit — gate the button like the recompute one.
+    private bool CanRunLoadFromFile => !IsAwaitingCloudConfirmation;
+
+    [RelayCommand(CanExecute = nameof(CanRunLoadFromFile))]
     private async Task LoadFromFile()
     {
         if (_storedSMatrices == null)

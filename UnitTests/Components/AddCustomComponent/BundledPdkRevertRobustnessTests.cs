@@ -179,6 +179,53 @@ public class BundledPdkRevertRobustnessTests : IDisposable
     }
 
     [Fact]
+    public async Task RestoreTemplateToBundledOriginal_revertsTheForkComponent_withoutDeleteIntent()
+    {
+        var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
+        await CreateShadowingForkAsync(leftPanel, store);
+        var customized = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+
+        leftPanel.RestoreTemplateToBundledOriginal(customized).ShouldBe(BundledRevertResult.Reverted);
+
+        var forkPath = store.ResolveNamedPath(BundledPdkName);
+        var fork = new PdkLoader().LoadFromFileForEditing(forkPath);
+        fork.Components.Single(c => c.Name == "Bundled Coupler").RawCode.ShouldBe(Code);
+        leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler").RawCode.ShouldBe(Code);
+    }
+
+    [Fact]
+    public void RestoreTemplateToBundledOriginal_onTheBundledTemplateItself_isNotARevertCase()
+    {
+        var (leftPanel, _, _) = CreateLeftPanelWithBundledPdk();
+        var bundled = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+
+        leftPanel.RestoreTemplateToBundledOriginal(bundled).ShouldBe(BundledRevertResult.NotARevertCase);
+    }
+
+    [Fact]
+    public async Task RestoreTemplateToBundledOriginal_whenTheForkFileVanishes_reportsFailed_notSuccess()
+    {
+        // A failed revert must NOT report success: the settings dialog would otherwise
+        // show "PDK original restored" although the fork still holds the user's edit.
+        var (leftPanel, store, _) = CreateLeftPanelWithBundledPdk();
+        await CreateShadowingForkAsync(leftPanel, store);
+        var forkPath = store.ResolveNamedPath(BundledPdkName);
+        var customized = leftPanel.AllTemplates.Single(
+            t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler");
+        File.Delete(forkPath); // simulate external damage underneath the open library
+
+        leftPanel.RestoreTemplateToBundledOriginal(customized).ShouldBe(BundledRevertResult.Failed);
+
+        leftPanel.AllTemplates.Single(
+                t => t.PdkSource == BundledPdkName && t.Name == "Bundled Coupler")
+            .RawCode.ShouldContain("# user tweak"); // nothing was reverted — the library keeps the fork's edit
+        _errorConsole.Entries.ShouldContain(e => e.Message.Contains("Failed to restore the built-in definition"));
+    }
+
+    [Fact]
     public void ReplaceComponent_missingFile_returnsFalse_andWritesNothing()
     {
         var store = new UserPdkStore(_userPdkRoot, new PdkJsonSaver(), new PdkLoader());

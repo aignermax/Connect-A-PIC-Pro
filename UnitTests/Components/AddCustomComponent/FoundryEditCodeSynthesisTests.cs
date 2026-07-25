@@ -87,6 +87,31 @@ public class FoundryEditCodeSynthesisTests
             .ShouldBeNull();
     }
 
+    // ── IsKLayoutOnlyCell (drives the editor's explanatory note) ────────────
+
+    [Fact]
+    public void IsKLayoutOnlyCell_SiepicCellWithoutUbcPdkEquivalent_IsTrue()
+    {
+        FoundryEditCodeSynthesis.IsKLayoutOnlyCell("siepic_ebeam_pdk", "contra_directional_coupler")
+            .ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsKLayoutOnlyCell_SiepicCellWithUbcPdkEquivalent_IsFalse()
+    {
+        // Mappable cells get synthesized ubcpdk registry code, not the KLayout-only note.
+        FoundryEditCodeSynthesis.IsKLayoutOnlyCell("siepic_ebeam_pdk", "ebeam_adiabatic_te1550")
+            .ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsKLayoutOnlyCell_NonSiepicOrMissingReference_IsFalse()
+    {
+        FoundryEditCodeSynthesis.IsKLayoutOnlyCell("nazca.demofab", "mmi2x2_dp").ShouldBeFalse();
+        FoundryEditCodeSynthesis.IsKLayoutOnlyCell(null, null).ShouldBeFalse();
+        FoundryEditCodeSynthesis.IsKLayoutOnlyCell("siepic_ebeam_pdk", null).ShouldBeFalse();
+    }
+
     // ── demo PDK (nazca) regression ─────────────────────────────────────────
 
     [Fact]

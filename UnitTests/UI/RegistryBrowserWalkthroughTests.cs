@@ -20,6 +20,9 @@ namespace UnitTests.UI;
 /// Run with: <c>dotnet test UnitTests/UnitTests.csproj --filter Category=UiWalkthrough</c>
 /// </remarks>
 [Trait("Category", "UiWalkthrough")]
+// Renders the full registry browser window as Skia PNGs — CI-only (local runners
+// exclude Category=Slow; run explicitly via --filter Category=UiWalkthrough).
+[Trait("Category", "Slow")]
 [Collection("LocalizationSingleton")]
 public class RegistryBrowserWalkthroughTests
 {

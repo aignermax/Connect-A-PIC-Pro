@@ -11,6 +11,7 @@ using CAP_DataAccess.Persistence.PIR;
 using Moq;
 using Shouldly;
 using UnitTests.Helpers;
+using Xunit;
 
 namespace UnitTests.UI;
 
@@ -21,6 +22,8 @@ namespace UnitTests.UI;
 /// its children with infinite width — TextWrapping never engaged and the
 /// message was cut off at the window edge.
 /// </summary>
+// Renders the real dialog window — CI-only (local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 public class ComponentSettingsDialogSolverStatusTests
 {
     private const string DockerHint =
@@ -41,31 +44,42 @@ public class ComponentSettingsDialogSolverStatusTests
         vm.Configure("comp", "comp", "Comp", new Dictionary<string, ComponentSMatrixData>(),
             liveComponent: TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins());
 
+        // Drive the recompute BEFORE showing the window: the status bar is visible from
+        // the very first layout pass then — its collapsed→visible transition does not
+        // reliably re-arrange on headless CI (flake: bounds stayed 0 there).
+        await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
+        vm.SolverStatus.ShouldBe(DockerHint);
+
         var window = new ComponentSettingsDialog { DataContext = vm };
         try
         {
             window.Show();
-            Dispatcher.UIThread.RunJobs();
 
-            await vm.RecalculateSMatrixCommand.ExecuteAsync(null);
-            Dispatcher.UIThread.RunJobs();
-
-            vm.SolverStatus.ShouldBe(DockerHint);
-
-            var statusText = window.GetVisualDescendants()
-                .OfType<TextBlock>()
-                .Single(t => t.Text == DockerHint);
+            // The status bar's visibility flips with the status text; on a loaded headless
+            // box the re-measure can lag a job cycle behind (CI flake — bounds were 0).
+            TextBlock? statusText = null;
+            for (var i = 0; i < 10 && statusText?.Bounds.Height is not > 0; i++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                statusText = window.GetVisualDescendants()
+                    .OfType<TextBlock>()
+                    .Single(t => t.Text == DockerHint);
+                if (statusText.Bounds.Height > 0)
+                    break;
+                await Task.Delay(50);
+            }
 
             // With the broken StackPanel layout the TextBlock measured ~1200px
             // wide and ran past the 620px window; wrapped it stays inside.
-            var rightEdgeInWindow = statusText
-                .TranslatePoint(new Point(statusText.Bounds.Width, 0), window)!
+            var measured = statusText!;
+            var rightEdgeInWindow = measured
+                .TranslatePoint(new Point(measured.Bounds.Width, 0), window)!
                 .Value.X;
             rightEdgeInWindow.ShouldBeLessThanOrEqualTo(window.ClientSize.Width);
 
             // Wrapping must actually engage: the message needs more than one line.
-            var oneLineHeight = statusText.FontSize * 2;
-            statusText.Bounds.Height.ShouldBeGreaterThan(oneLineHeight,
+            var oneLineHeight = measured.FontSize * 2;
+            measured.Bounds.Height.ShouldBeGreaterThan(oneLineHeight,
                 "the long Docker hint should wrap onto multiple lines");
         }
         finally

@@ -29,7 +29,7 @@ public class SiepicRealGeometryExportTests
     [SkippableFact]
     public async Task NazcaExport_EbeamDirectionalCoupler_RendersRealGeometry_NotStubBox()
     {
-        var python = FindSiepicPython();
+        var python = await FindSiepicPythonAsync();
         Skip.If(python == null, "No Lunima managed env with siepic_ebeam_pdk (expected on CI).");
 
         var script = new SimpleNazcaExporter().Export(EbeamCanvas());
@@ -44,7 +44,7 @@ public class SiepicRealGeometryExportTests
     [SkippableFact]
     public async Task MixedBackendNazcaPartial_EbeamComponent_RendersRealGeometry_NotStubBox()
     {
-        var python = FindSiepicPython();
+        var python = await FindSiepicPythonAsync();
         Skip.If(python == null, "No Lunima managed env with siepic_ebeam_pdk (expected on CI).");
 
         // The mixed-backend export renders its nazca-native group through the same
@@ -107,7 +107,7 @@ public class SiepicRealGeometryExportTests
     [SkippableFact]
     public async Task NazcaExport_UnresolvableSiepicCell_FallsBackToStub_WithWarning()
     {
-        var python = FindSiepicPython();
+        var python = await FindSiepicPythonAsync();
         Skip.If(python == null, "No Lunima managed env with siepic_ebeam_pdk (expected on CI).");
 
         // A cell that resolves neither as fixed-cell nor PCell must never break the
@@ -209,9 +209,11 @@ public class SiepicRealGeometryExportTests
     /// <summary>
     /// Locates a Python with klayout + siepic_ebeam_pdk + nazca + gdsfactory: first a
     /// Lunima managed env (%LOCALAPPDATA%/Lunima/envs/*), then python/python3 on PATH
-    /// (CI installs the packages into setup-python).
+    /// (CI installs the packages into setup-python). Async all the way — a blocking
+    /// GetAwaiter().GetResult() here pins a pool thread for the whole probe chain and,
+    /// with several probe tests overlapping, starves the pool.
     /// </summary>
-    internal static string? FindSiepicPython()
+    internal static async Task<string?> FindSiepicPythonAsync()
     {
         var envs = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "envs");
@@ -222,7 +224,7 @@ public class SiepicRealGeometryExportTests
                 foreach (var rel in new[] { Path.Combine("Scripts", "python.exe"), Path.Combine("bin", "python") })
                 {
                     var py = Path.Combine(root, rel);
-                    if (File.Exists(py) && ProbeSiepic(py).GetAwaiter().GetResult())
+                    if (File.Exists(py) && await ProbeSiepic(py))
                         return py;
                 }
             }
@@ -230,7 +232,7 @@ public class SiepicRealGeometryExportTests
 
         foreach (var candidate in new[] { "python", "python3" })
         {
-            if (ProbeSiepic(candidate).GetAwaiter().GetResult())
+            if (await ProbeSiepic(candidate))
                 return candidate;
         }
         return null;

@@ -23,7 +23,7 @@ public class MixedBackendMergeIntegrationTests
     [SkippableFact]
     public async Task MixedBackendExport_RunBothScripts_MergedGdsContainsBothGroups()
     {
-        var python = SiepicRealGeometryExportTests.FindSiepicPython();
+        var python = await SiepicRealGeometryExportTests.FindSiepicPythonAsync();
         Skip.If(python == null,
             "No Python with klayout+siepic_ebeam_pdk+nazca+gdsfactory (expected on CI without the full env).");
 
@@ -75,7 +75,7 @@ public class MixedBackendMergeIntegrationTests
     {
         // The whole-layout path must also work with an empty gdsfactory group: a pure
         // demo-PDK design renders real demofab cells via the partial — no stubs.
-        var python = SiepicRealGeometryExportTests.FindSiepicPython();
+        var python = await SiepicRealGeometryExportTests.FindSiepicPythonAsync();
         Skip.If(python == null,
             "No Python with klayout+siepic_ebeam_pdk+nazca+gdsfactory (expected on CI without the full env).");
 

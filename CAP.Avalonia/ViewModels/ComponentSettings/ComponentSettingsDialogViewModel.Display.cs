@@ -1,6 +1,10 @@
 using System.Globalization;
 using System.Linq;
+using CAP.Avalonia.Services.Localization;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Persistence.PIR;
+using CommunityToolkit.Mvvm.ComponentModel;
+using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.ComponentSettings;
 
@@ -11,6 +15,14 @@ namespace CAP.Avalonia.ViewModels.ComponentSettings;
 /// </summary>
 public partial class ComponentSettingsDialogViewModel
 {
+    /// <summary>Provenance line under the effective section ("Source: FDTD Tidy3D Cloud 2D"); empty for plain PDK originals.</summary>
+    [ObservableProperty]
+    private string _effectiveProvenanceText = string.Empty;
+
+    /// <summary>True when the shown draft matrix is user-sourced and a bundled original can be restored.</summary>
+    [ObservableProperty]
+    private bool _canResetToPdkOriginal;
+
     private void RefreshEntries(bool notifyChanged)
     {
         SMatrixEntries.Clear();
@@ -43,6 +55,8 @@ public partial class ComponentSettingsDialogViewModel
         if (_effectiveSMatrices == null || _effectivePins == null)
         {
             HasEffectiveEntries = false;
+            EffectiveProvenanceText = string.Empty;
+            CanResetToPdkOriginal = false;
             return;
         }
 
@@ -63,5 +77,39 @@ public partial class ComponentSettingsDialogViewModel
         }
 
         HasEffectiveEntries = EffectiveEntries.Count > 0;
+
+        // The matrix is user-sourced when an override store entry carries a note
+        // (per-instance/template override) or the underlying draft does (computed/
+        // imported into a user PDK) — a bundled original has no note to show.
+        var provenance = overrideData?.SourceNote ?? _draftSourceNote;
+        EffectiveProvenanceText = HasEffectiveEntries && !string.IsNullOrWhiteSpace(provenance)
+            ? string.Format(LocalizationService.Instance.Translate("CompSettings.EffectiveSource"), provenance)
+            : string.Empty;
+        CanResetToPdkOriginal = _resetToPdkOriginal != null && _draftSourceNote != null;
+    }
+
+    /// <summary>
+    /// Restores the bundled foundry definition behind a user-PDK draft (same
+    /// mechanism as the library's per-component restore) and refreshes the
+    /// effective view from the restored template.
+    /// </summary>
+    [RelayCommand]
+    private async Task ResetToPdkOriginal()
+    {
+        if (_resetToPdkOriginal == null)
+            return;
+        var fresh = await _resetToPdkOriginal();
+        if (fresh == null)
+            return;
+
+        _draftSourceNote = fresh.SourceDraft?.SMatrix?.SourceNote;
+        var tempInstance = ComponentTemplates.CreateFromTemplate(fresh, 0, 0);
+        _effectiveSMatrices = tempInstance.WaveLengthToSMatrixMap;
+        _effectivePins = tempInstance.PhysicalPins
+            .Where(pp => pp.LogicalPin != null)
+            .Select(pp => pp.LogicalPin!)
+            .ToList();
+        StatusText = LocalizationService.Instance.Translate("CompSettings.ResetToPdkOriginalDone");
+        RefreshEntries(notifyChanged: true);
     }
 }

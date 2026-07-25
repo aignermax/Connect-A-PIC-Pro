@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Solvers;
 using CAP_Core;
 using CAP_Core.Solvers.Fdtd;
 using CAP_DataAccess.Components.AddCustomComponent;
@@ -10,4 +11,5 @@ namespace CAP.Avalonia.Services.AddCustomComponent;
 /// </summary>
 public sealed record AddCustomComponentDependencies(
     ComponentGeometryExtractor Extractor, IFdtdSMatrixService? Fdtd, UserPdkStore UserPdkStore,
-    ErrorConsoleService? ErrorConsole = null);
+    ErrorConsoleService? ErrorConsole = null,
+    FdtdBackendRegistry? BackendRegistry = null, IUrlLauncher? UrlLauncher = null);

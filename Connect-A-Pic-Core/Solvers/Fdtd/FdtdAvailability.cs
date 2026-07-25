@@ -22,6 +22,9 @@ public enum FdtdUnavailableReason
     /// logging out and back in). "Start the engine" would be wrong guidance.
     /// </summary>
     PermissionDenied,
+
+    /// <summary>No API key is configured for a cloud backend (e.g. Tidy3D).</summary>
+    MissingApiKey,
 }
 
 /// <summary>

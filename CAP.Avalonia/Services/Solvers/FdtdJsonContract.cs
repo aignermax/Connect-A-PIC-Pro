@@ -68,7 +68,13 @@ public static class FdtdJsonContract
             {
                 var error = root.TryGetProperty("error", out var ep) ? ep.GetString() : null;
                 var missing = root.TryGetProperty("missing_backend", out var mb) ? mb.GetString() : null;
-                return FdtdSMatrixResult.Fail(error ?? "Unknown FDTD solver error", stderr, missing);
+                // The bridges attach the python traceback as "trace" on failure — append it
+                // to the diagnostics so cloud-side failures stay debuggable from the UI.
+                var trace = root.TryGetProperty("trace", out var tp) ? tp.GetString() : null;
+                var diagnostics = string.IsNullOrWhiteSpace(trace) ? stderr
+                    : string.IsNullOrWhiteSpace(stderr) ? trace
+                    : stderr + "\n" + trace;
+                return FdtdSMatrixResult.Fail(error ?? "Unknown FDTD solver error", diagnostics, missing);
             }
 
             return new FdtdSMatrixResult

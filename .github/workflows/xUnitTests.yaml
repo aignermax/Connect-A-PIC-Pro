@@ -12,6 +12,9 @@ jobs:
   nunit_tests:
     name: 🔍 xUnit Tests
     runs-on: ubuntu-latest
+    # Safety net: the suite takes ~8 min when healthy; anything beyond 30 min is a
+    # hang (previously it burned the full 6h default timeout).
+    timeout-minutes: 30
 
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
@@ -104,3 +107,12 @@ jobs:
           MPLBACKEND: Agg
           QT_QPA_PLATFORM: offscreen
         run: dotnet test --no-restore
+
+      - name: 📎 Upload TestResults (hang diagnostics)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: testresults
+          path: UnitTests/TestResults/
+          if-no-files-found: ignore
+          retention-days: 7

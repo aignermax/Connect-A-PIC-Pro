@@ -16,11 +16,15 @@ public partial class NewComponentViewModel
 {
     private ComponentSMatrixData? _computedModel;
 
-    private bool CanSave => !IsBusy && SelectedCustomPdk is not null;
+    private bool CanSave => !IsBusy && !IsAwaitingCloudConfirmation && SelectedCustomPdk is not null;
 
-    partial void OnIsBusyChanged(bool value) => SaveCommand.NotifyCanExecuteChanged();
+    partial void OnIsBusyChanged(bool value)
+    {
+        SaveCommand.NotifyCanExecuteChanged();
+        ComputeSMatrixCommand.NotifyCanExecuteChanged();
+    }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanRunCompute))]
     private async Task ComputeSMatrix()
     {
         if (IsBusy) return;
@@ -29,7 +33,8 @@ public partial class NewComponentViewModel
             StatusText = LocalizationService.Instance.Translate("NewComp.SelectPdkBeforeCompute");
             return;
         }
-        if (_fdtd is null)
+        var service = ActiveFdtdService;
+        if (service is null)
         {
             StatusText = LocalizationService.Instance.Translate("NewComp.FdtdNotConfigured");
             return;
@@ -46,7 +51,9 @@ public partial class NewComponentViewModel
                 return;
             }
 
-            var availability = await _fdtd.CheckAvailabilityAsync(_computeCts.Token);
+            var availability = BackendSelection != null
+                ? await BackendSelection.CheckAvailabilityAsync(_computeCts.Token)
+                : await service.CheckAvailabilityAsync(_computeCts.Token);
             if (!availability.IsAvailable)
             {
                 _computedModel = null;
@@ -56,18 +63,16 @@ public partial class NewComponentViewModel
 
             var portNames = preview.Pins.Select(p => p.Name).ToList();
             var request = ComponentFdtdRequestFactory.BuildFromPreview(preview.Raw, portNames);
-            var result = await RunSolveWithLiveStatusAsync(request, _computeCts.Token);
-            if (!result.Success)
+
+            // Cloud backends cost credits: estimate first and wait for an explicit
+            // confirmation. The solve continues via ConfirmCloudSubmitCommand.
+            if (service is IFdtdCostEstimator estimator)
             {
-                _computedModel = null;
-                StatusText = result.Error ?? LocalizationService.Instance.Translate("NewComp.FdtdSolveFailed");
+                await PrepareCloudConfirmationAsync(estimator, request, _computeCts.Token);
                 return;
             }
 
-            _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, "FDTD Meep");
-            StatusText = string.Format(
-                LocalizationService.Instance.Translate("NewComp.SMatrixComputed"),
-                result.Wavelengths.Count, SaveButtonLabel);
+            await ExecuteSolveAsync(service, request, _computeCts.Token);
         }
         catch (OperationCanceledException)
         {
@@ -81,6 +86,36 @@ public partial class NewComponentViewModel
             _computeCts = null;
             RefreshSMatrixEntries();
         }
+    }
+
+    /// <summary>
+    /// Runs the solver and stores the result as the pending S-matrix — the shared
+    /// tail of both the local path and the confirmed cloud path.
+    /// </summary>
+    /// <param name="provenanceLabel">
+    /// Solver label captured at estimate time for a confirmed cloud run — the
+    /// provenance note must name the backend the run was estimated/submitted on,
+    /// not whatever is selected by the time it finishes. Null = use the live label.
+    /// </param>
+    private async Task ExecuteSolveAsync(
+        IFdtdSMatrixService service, FdtdSMatrixRequest request, CancellationToken ct,
+        string? provenanceLabel = null)
+    {
+        var result = await RunSolveWithLiveStatusAsync(service, request, ct);
+        if (!result.Success)
+        {
+            _computedModel = null;
+            StatusText = result.Error ?? LocalizationService.Instance.Translate("NewComp.FdtdSolveFailed");
+            return;
+        }
+
+        var note = string.Format(
+            LocalizationService.Instance.Translate("CompSettings.FdtdProvenance"),
+            provenanceLabel ?? SolverLabel, result.Is3D ? "3D" : "2D");
+        _computedModel = FdtdSMatrixConverter.ToComponentSMatrixData(result, note);
+        StatusText = string.Format(
+            LocalizationService.Instance.Translate("NewComp.SMatrixComputed"),
+            result.Wavelengths.Count, SaveButtonLabel);
     }
 
     [RelayCommand(CanExecute = nameof(CanSave))]

@@ -9,9 +9,15 @@
     <IsTestProject>true</IsTestProject>
 
     <!-- Disable parallel test execution for Avalonia headless tests -->
-    <!-- (Avalonia uses singleton app instance with static state) -->
+    <!-- (Avalonia uses singleton app instance with static state). NOTE: this
+         MSTest property is a no-op for xUnit — the real switch is
+         xunit.runner.json (parallelizeTestCollections=false), copied below. -->
     <ParallelizeAssembly>false</ParallelizeAssembly>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- Avalonia 11.3.13 packages pinned to resolve the version conflict:
