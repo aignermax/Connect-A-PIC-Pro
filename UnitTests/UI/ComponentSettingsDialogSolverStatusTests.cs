@@ -11,6 +11,7 @@ using CAP_DataAccess.Persistence.PIR;
 using Moq;
 using Shouldly;
 using UnitTests.Helpers;
+using Xunit;
 
 namespace UnitTests.UI;
 
@@ -21,6 +22,8 @@ namespace UnitTests.UI;
 /// its children with infinite width — TextWrapping never engaged and the
 /// message was cut off at the window edge.
 /// </summary>
+// Renders the real dialog window — CI-only (local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 public class ComponentSettingsDialogSolverStatusTests
 {
     private const string DockerHint =

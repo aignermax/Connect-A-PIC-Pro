@@ -21,6 +21,9 @@ namespace UnitTests.UI.Flows;
 /// escapes, and the user sees the guard's message.
 /// </summary>
 [Trait("Category", "UiFlows")]
+// Boots the real MainWindow through the input pipeline — too heavy for local default
+// runs (CI covers it, the local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 [Collection("LocalizationSingleton")]
 public class UiFlowPlaceNonPassiveGroupTests
 {

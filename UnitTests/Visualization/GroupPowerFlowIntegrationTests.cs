@@ -16,6 +16,7 @@ namespace UnitTests.Visualization;
 /// Integration tests verifying that power flow visualization works correctly
 /// for frozen paths inside component groups.
 /// </summary>
+[Trait("Category", "Slow")]
 public class GroupPowerFlowIntegrationTests
 {
     /// <summary>

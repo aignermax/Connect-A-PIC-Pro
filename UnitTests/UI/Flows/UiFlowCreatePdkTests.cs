@@ -15,6 +15,9 @@ namespace UnitTests.UI.Flows;
 /// appears in the PDK-Management list with its file in the (temp) user-pdks root.
 /// </summary>
 [Trait("Category", "UiFlows")]
+// Boots the real MainWindow through the input pipeline — too heavy for local default
+// runs (CI covers it, the local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 [Collection("LocalizationSingleton")]
 public class UiFlowCreatePdkTests
 {

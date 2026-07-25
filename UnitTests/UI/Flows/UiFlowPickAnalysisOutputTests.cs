@@ -16,6 +16,9 @@ namespace UnitTests.UI.Flows;
 /// so the click silently did nothing.
 /// </summary>
 [Trait("Category", "UiFlows")]
+// Boots the real MainWindow through the input pipeline — too heavy for local default
+// runs (CI covers it, the local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 [Collection("LocalizationSingleton")]
 public class UiFlowPickAnalysisOutputTests
 {
