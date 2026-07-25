@@ -31,6 +31,9 @@ namespace UnitTests.UI;
 /// Uses the same Skia headless harness as <see cref="UiScreenshotTests"/>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
+// Renders five Skia walkthrough PNGs — too heavy for local default runs (CI covers it,
+// the local runners exclude Category=Slow).
+[Trait("Category", "Slow")]
 public class Issue737WalkthroughScreenshotTests
 {
     private const int MinDistinctSampledColors = 10;
@@ -40,11 +43,6 @@ public class Issue737WalkthroughScreenshotTests
     [AvaloniaFact]
     public void CaptureIssue737Walkthrough()
     {
-        // Opt-in like UiScreenshotTests: a full headless Avalonia render is heavy enough
-        // to destabilise a desktop session, so this runs only when screenshots are
-        // explicitly requested via UI_SHOT_DIR.
-        if (string.IsNullOrEmpty(Environment.GetEnvironmentVariable("UI_SHOT_DIR")))
-            return;
         var dir = ResolveOutputDirectory();
         Directory.CreateDirectory(dir);
         foreach (var stale in Directory.GetFiles(dir, "*.png"))
