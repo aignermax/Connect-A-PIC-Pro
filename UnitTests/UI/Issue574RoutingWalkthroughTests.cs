@@ -100,19 +100,30 @@ public class Issue574RoutingWalkthroughTests
     private static void CaptureWindow(Window window, string outputDir, string filename)
     {
         window.Show();
-        Dispatcher.UIThread.RunJobs();
-
-        var bitmap = window.CaptureRenderedFrame();
-        window.Close();
-        Dispatcher.UIThread.RunJobs();
-
-        bitmap.ShouldNotBeNull($"CaptureRenderedFrame returned null for {filename}");
-        var path = Path.Combine(outputDir, filename);
-        using (bitmap)
+        try
         {
-            CountDistinctSampledColors(bitmap).ShouldBeGreaterThan(MinDistinctSampledColors,
-                $"Near-blank render for {filename} — likely a missing Skia setup.");
-            bitmap.Save(path);
+            // CaptureRenderedFrame can return null when the headless compositor has not
+            // delivered a frame yet (CI timing) — retry like Issue776MixedBackendScreenshotTests.
+            global::Avalonia.Media.Imaging.WriteableBitmap? bitmap = null;
+            for (var attempt = 0; attempt < 3 && bitmap == null; attempt++)
+            {
+                Dispatcher.UIThread.RunJobs();
+                bitmap = window.CaptureRenderedFrame();
+            }
+
+            bitmap.ShouldNotBeNull($"CaptureRenderedFrame stayed null after 3 attempts for {filename}");
+            var path = Path.Combine(outputDir, filename);
+            using (bitmap)
+            {
+                CountDistinctSampledColors(bitmap).ShouldBeGreaterThan(MinDistinctSampledColors,
+                    $"Near-blank render for {filename} — likely a missing Skia setup.");
+                bitmap.Save(path);
+            }
+        }
+        finally
+        {
+            window.Close();
+            Dispatcher.UIThread.RunJobs();
         }
     }
 
