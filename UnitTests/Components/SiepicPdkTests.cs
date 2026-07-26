@@ -213,7 +213,9 @@ public class SiepicPdkTests
         );
 
         var result = SimpleNazcaExporter.GetNazcaFunction(component);
-        result.ShouldBe("ebeam_dc_te1550(gap=200e-9)");
+        // Parameterized placements call the parameter-specific stub (parameters hash
+        // in the name, issue #783) so distinct parameter sets get distinct cells.
+        result.ShouldBe("ebeam_dc_te1550_0e52a6(gap=200e-9)");
     }
 
     [Fact]

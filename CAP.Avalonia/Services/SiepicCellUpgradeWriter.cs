@@ -16,9 +16,10 @@ namespace CAP.Avalonia.Services;
 /// deep-copies the real geometry into the stub cell, keeping the cell name so
 /// placed instances stay put. Any failure (klayout or PDK missing, cell unknown)
 /// downgrades to a stderr warning and keeps the stub — the export never breaks.
-/// Components sharing a function name with different parameters share one cell
-/// (the stub generator dedupes by name); the script warns on stderr when that
-/// happens rather than silently rendering one variant for all.
+/// Parameterized components get a parameters hash in their stub cell name
+/// (<see cref="NazcaStubNaming"/>, issue #783), so the map keys each variant's
+/// cell to ITS OWN function name + parameters; a residual stderr warning covers
+/// only a hash collision (two parameter sets, same stub name).
 /// </summary>
 public static class SiepicCellUpgradeWriter
 {
@@ -38,8 +39,11 @@ public static class SiepicCellUpgradeWriter
         if (cells.Count == 0)
             return;
 
+        // stub cell name → (real PDK function name, parameters): the GDS cell to
+        // patch is the hash-suffixed stub (#783), the library lookup needs the
+        // original function name with THIS variant's parameters.
         var mapLiteral = string.Join(", ", cells.Select(
-            kv => $"'{Escape(kv.Key)}': '{Escape(kv.Value)}'"));
+            kv => $"'{Escape(kv.Key)}': ('{Escape(kv.Value.FuncName)}', '{Escape(kv.Value.Params)}')"));
 
         sb.AppendLine();
         sb.AppendLine("# --- Lunima: upgrade SiEPIC stub boxes to real foundry geometry (klayout) ---");
@@ -47,15 +51,16 @@ public static class SiepicCellUpgradeWriter
         sb.AppendLine($"_lunima_upgrade_siepic_cells(gds_filename, {{{mapLiteral}}})");
         foreach (var collision in FindParamCollisions(canvas, include))
             sb.AppendLine(
-                $"print(\"[Lunima] WARN: multiple parameter sets for SiEPIC cell '{Escape(collision)}' " +
-                "— one shared cell is used for all instances; check geometry against the PDK.\", file=sys.stderr)");
+                $"print(\"[Lunima] WARN: SiEPIC stub cell '{Escape(collision)}' maps to multiple parameter sets " +
+                "(parameters-hash collision) — one shared cell is used for all instances; check geometry against the PDK.\", file=sys.stderr)");
         sb.AppendLine();
     }
 
     /// <summary>
-    /// Function names placed with more than one parameter set. The stub generator dedupes
-    /// by function name, so such components share one cell — flag it in the script output
-    /// instead of silently rendering one variant for all.
+    /// Stub cell names that more than one parameter set hashes to. Distinct parameter
+    /// sets get distinct cells via the name hash (#783), so this fires only on an
+    /// actual parameters-hash collision — flag it in the script output instead of
+    /// silently rendering one variant for all.
     /// </summary>
     private static IEnumerable<string> FindParamCollisions(
         DesignCanvasViewModel canvas, Func<Component, bool>? include)
@@ -88,25 +93,30 @@ public static class SiepicCellUpgradeWriter
         if (include != null && !include(comp)) return null;
         var funcName = comp.NazcaFunctionName;
         if (string.IsNullOrEmpty(funcName)) return null;
+        if (!NazcaCoordinateMapper.IsPdkFunction(funcName)) return null;
         if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) != true) return null;
         var parameters = comp.NazcaFunctionParameters ?? string.Empty;
-        if (seen.TryGetValue(funcName, out var existing))
-            return existing != parameters ? funcName : null;
-        seen[funcName] = parameters;
+        // Key on the stub cell name — the same key the stub generator dedupes by,
+        // so only a genuine parameters-hash collision reports here.
+        var stubName = NazcaStubNaming.StubName(funcName, parameters);
+        if (seen.TryGetValue(stubName, out var existing))
+            return existing != parameters ? stubName : null;
+        seen[stubName] = parameters;
         return null;
     }
 
     /// <summary>
-    /// Unique SiEPIC stub cells of the design: function name → parameter string.
-    /// Same enumeration as the stub generator (groups flattened, analysis tools
-    /// skipped, <paramref name="include"/> honoured). Parametric straights are
+    /// Unique SiEPIC stub cells of the design: stub cell name (parameters-hash
+    /// suffixed, <see cref="NazcaStubNaming"/>) → (real function name, parameter
+    /// string). Same enumeration as the stub generator (groups flattened, analysis
+    /// tools skipped, <paramref name="include"/> honoured). Parametric straights are
     /// excluded — their stub cell name embeds the instance length, so a
     /// per-function content swap cannot target them.
     /// </summary>
-    private static IReadOnlyDictionary<string, string> CollectSiepicStubCells(
+    private static IReadOnlyDictionary<string, (string FuncName, string Params)> CollectSiepicStubCells(
         DesignCanvasViewModel canvas, Func<Component, bool>? include)
     {
-        var cells = new Dictionary<string, string>(StringComparer.Ordinal);
+        var cells = new Dictionary<string, (string FuncName, string Params)>(StringComparer.Ordinal);
         foreach (var compVm in canvas.Components)
         {
             var comp = compVm.Component;
@@ -125,7 +135,7 @@ public static class SiepicCellUpgradeWriter
     }
 
     private static void AddIfSiepic(
-        IDictionary<string, string> cells, Component comp, Func<Component, bool>? include)
+        IDictionary<string, (string FuncName, string Params)> cells, Component comp, Func<Component, bool>? include)
     {
         if (comp.IsAnalysisTool) return;
         if (include != null && !include(comp)) return;
@@ -136,7 +146,10 @@ public static class SiepicCellUpgradeWriter
         // Cheap routing predicate — anything starting with 'siepic' resolves through
         // the EBeam* KLayout libraries (same split as the editor preview).
         if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) != true) return;
-        cells.TryAdd(funcName, comp.NazcaFunctionParameters ?? string.Empty);
+        // The GDS cell to patch is the hash-suffixed stub (#783); the EBeam library
+        // lookup still needs the original function name with this variant's parameters.
+        var parameters = comp.NazcaFunctionParameters ?? string.Empty;
+        cells.TryAdd(NazcaStubNaming.StubName(funcName, parameters), (funcName, parameters));
     }
 
     private static string Escape(string value) =>
@@ -196,8 +209,8 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
         _out = _kdb.Layout()
         _out.read(gds_path)
         _upgraded = 0
-        for _func_name, _params in cells.items():
-            _stub = _out.cell(_func_name)
+        for _stub_name, (_func_name, _params) in cells.items():
+            _stub = _out.cell(_stub_name)
             if _stub is None:
                 continue
             try:

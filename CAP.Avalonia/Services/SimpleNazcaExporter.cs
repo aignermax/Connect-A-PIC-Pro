@@ -118,8 +118,9 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Generates standalone Nazca cell definitions for PDK components.
-    /// Each unique PDK function used in the design gets a stub cell
-    /// with correct dimensions and pin positions — no external PDK install needed.
+    /// Each unique PDK function AND parameter set used in the design gets a stub cell
+    /// with correct dimensions and pin positions — no external PDK install needed
+    /// (parameterized names carry a hash, <see cref="NazcaStubNaming"/>, issue #783).
     /// ComponentGroups are flattened — stubs are generated for all child components.
     /// SiEPIC stubs are placeholders only: after <c>nd.export_gds()</c> the script's
     /// klayout post-pass (<see cref="SiepicCellUpgradeWriter"/>) swaps their content
@@ -154,6 +155,9 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Generates a PDK stub for a single component if required.
+    /// Dedupes by STUB name, not function name: parameterized components carry a
+    /// parameters hash in the name (issue #783), so each distinct parameter set
+    /// generates its own stub while identical placements still share one.
     /// </summary>
     private static void AppendComponentStub(
         StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci)
@@ -161,13 +165,14 @@ public class SimpleNazcaExporter
         var funcName = comp.NazcaFunctionName;
         if (string.IsNullOrEmpty(funcName) || !RequiresStub(funcName))
             return;
-        if (!generated.Add(funcName))
+        var stubName = NazcaStubNaming.StubName(funcName, comp.NazcaFunctionParameters);
+        if (!generated.Add(stubName))
             return;
 
         if (NazcaCoordinateMapper.IsParametricStraight(funcName, comp.NazcaFunctionParameters))
             AppendParametricStraightStub(sb, funcName, comp, ci);
         else
-            AppendStandardComponentStub(sb, funcName, comp, ci);
+            AppendStandardComponentStub(sb, funcName, stubName, comp, ci);
     }
 
     /// <summary>
@@ -247,18 +252,23 @@ public class SimpleNazcaExporter
     /// (<see cref="SiepicCellUpgradeWriter"/>) fills with real foundry geometry
     /// for SiEPIC cells — same cell name, so instances keep their placement.
     /// </summary>
+    /// <param name="stubName">
+    /// Cell/function name to emit: <paramref name="funcName"/> plus the parameters
+    /// hash for parameterized components (<see cref="NazcaStubNaming"/>, issue #783),
+    /// so two parameter sets never share one cell.
+    /// </param>
     private static void AppendStandardComponentStub(
-        StringBuilder sb, string funcName, Component comp, CultureInfo ci)
+        StringBuilder sb, string funcName, string stubName, Component comp, CultureInfo ci)
     {
         var w = comp.WidthMicrometers;
         var h = comp.HeightMicrometers;
 
-        // Sanitize function name for valid Python identifier (replace non-alphanumeric/underscore chars)
-        var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(funcName, @"[^a-zA-Z0-9_]", "_");
+        // Sanitize stub name for valid Python identifier (replace non-alphanumeric/underscore chars)
+        var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(stubName, @"[^a-zA-Z0-9_]", "_");
 
         // Define cell once, return cached instance on each call
-        sb.AppendLine($"with nd.Cell(name='{funcName}') as _{pythonFuncName}_cell:");
-        sb.AppendLine($"    \"\"\"Auto-generated stub for {funcName} ({comp.WidthMicrometers}x{comp.HeightMicrometers} µm).\"\"\"");
+        sb.AppendLine($"with nd.Cell(name='{stubName}') as _{pythonFuncName}_cell:");
+        sb.AppendLine($"    \"\"\"Auto-generated stub for {funcName} ({comp.WidthMicrometers.ToString(ci)}x{comp.HeightMicrometers.ToString(ci)} µm).\"\"\"");
 
         // Stubs are only generated for PDK-named components (see RequiresStub), whose
         // placement always uses the calibrated origin offset — (0,0) means org at the
@@ -913,8 +923,12 @@ public class SimpleNazcaExporter
         var funcName = comp.NazcaFunctionName;
         if (!string.IsNullOrEmpty(funcName) && NazcaCoordinateMapper.IsPdkFunction(funcName))
         {
-            // Keep dots (for module attribute access like demo.mmi2x2_dp), replace other invalid chars
-            var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(funcName, @"[^a-zA-Z0-9_.]", "_");
+            // Keep dots (for module attribute access like demo.mmi2x2_dp), replace other invalid chars.
+            // The placement calls the parameter-specific stub (issue #783): StubName appends
+            // the parameters hash exactly when the stub generator did — dotted names bypass
+            // stubs (real module call) and parametric straights embed the length already.
+            var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(
+                NazcaStubNaming.StubName(funcName, comp.NazcaFunctionParameters), @"[^a-zA-Z0-9_.]", "_");
 
             // Forward stored parameters verbatim — the caller (component model)
             // is responsible for ensuring they match the target PDK function's signature.

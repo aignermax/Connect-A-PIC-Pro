@@ -62,10 +62,13 @@ public class SiepicRealGeometryExportTests
     public void NazcaExport_SiepicComponent_EmitsUpgradeBlockWithSafeFallback()
     {
         // Env-independent pins: the post-pass exists, is fully guarded (any failure keeps
-        // the stub and only warns), and writes the GDS atomically.
+        // the stub and only warns), and writes the GDS atomically. The map keys the
+        // hash-suffixed stub cell (#783) to its real function name + parameters.
         var script = new SimpleNazcaExporter().Export(EbeamCanvas());
 
-        script.ShouldContain("_lunima_upgrade_siepic_cells(gds_filename, {'ebeam_dc_te1550': 'gap=200E-9'})");
+        script.ShouldContain(
+            "_lunima_upgrade_siepic_cells(gds_filename, " +
+            "{'ebeam_dc_te1550_7f986c': ('ebeam_dc_te1550', 'gap=200E-9')})");
         script.ShouldContain("try:");
         script.ShouldContain("except Exception");
         script.ShouldContain("[Lunima] WARN: real SiEPIC cell");
@@ -83,10 +86,14 @@ public class SiepicRealGeometryExportTests
     }
 
     [Fact]
-    public void NazcaExport_ParamCollision_WarnsInScript()
+    public void NazcaExport_DistinctParameterSets_GetDistinctStubCells()
     {
-        // Two placements of the same SiEPIC function with different parameters share one
-        // cell (the stub generator dedupes by name) — the script must say so on stderr.
+        // Regression guard for #783: two placements of the same SiEPIC function with
+        // different parameters must NOT share one stub cell — each parameter set gets
+        // its own cell (parameters hash in the name), each placement calls its own
+        // stub, and the klayout upgrade maps each cell to ITS parameters. The old
+        // "multiple parameter sets" stderr warning is gone: the collision it covered
+        // no longer exists.
         var canvas = EbeamCanvas();
         var second = TestComponentFactory.CreateBasicComponent();
         second.Identifier = "DC2";
@@ -101,7 +108,21 @@ public class SiepicRealGeometryExportTests
 
         var script = new SimpleNazcaExporter().Export(canvas);
 
-        script.ShouldContain("multiple parameter sets for SiEPIC cell 'ebeam_dc_te1550'");
+        // Two distinct stub cells, each with its own variant's dimensions (pre-fix the
+        // first placement's 22.02 µm box won for both).
+        script.ShouldContain("with nd.Cell(name='ebeam_dc_te1550_7f986c')");
+        script.ShouldContain("Auto-generated stub for ebeam_dc_te1550 (22.02x6.2 µm)");
+        script.ShouldContain("with nd.Cell(name='ebeam_dc_te1550_200fdc')");
+        script.ShouldContain("Auto-generated stub for ebeam_dc_te1550 (12.02x6.2 µm)");
+
+        // Each placement references its own parameter-specific stub.
+        script.ShouldContain("comp_0 = ebeam_dc_te1550_7f986c(gap=200E-9).put(");
+        script.ShouldContain("comp_1 = ebeam_dc_te1550_200fdc(gap=200E-9,Lc=5E-6).put(");
+
+        // The upgrade block upgrades EACH variant with ITS parameters.
+        script.ShouldContain("'ebeam_dc_te1550_7f986c': ('ebeam_dc_te1550', 'gap=200E-9')");
+        script.ShouldContain("'ebeam_dc_te1550_200fdc': ('ebeam_dc_te1550', 'gap=200E-9,Lc=5E-6')");
+        script.ShouldNotContain("multiple parameter sets");
     }
 
     [SkippableFact]

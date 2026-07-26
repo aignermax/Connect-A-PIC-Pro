@@ -429,7 +429,9 @@ public class SimpleNazcaExporterTests
 
         var result = SimpleNazcaExporter.GetNazcaFunction(comp);
 
-        result.ShouldBe("ebeam_y_1550(wg_width=0.5)");
+        // Parameterized placements call the parameter-specific stub: the parameters
+        // hash in the name gives each parameter set its own cell (issue #783).
+        result.ShouldBe("ebeam_y_1550_712b11(wg_width=0.5)");
     }
 
     [Fact]
