@@ -58,8 +58,10 @@ public class MixedBackendMergeIntegrationTests
             var counts = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, int>>(probe.StdOut.Trim())!;
 
             counts.ShouldContainKey(MixedBackendGdsOrchestrator.NazcaPartialTopCellName);
-            counts.ShouldContainKey("ebeam_dc_te1550");
-            counts["ebeam_dc_te1550"].ShouldBeGreaterThan(1,
+            // Parameterized stub cell name (issue #783): function name + parameters hash.
+            var dcStub = CAP.Avalonia.Services.NazcaStubNaming.StubName("ebeam_dc_te1550", "gap=200E-9");
+            counts.ShouldContainKey(dcStub);
+            counts[dcStub].ShouldBeGreaterThan(1,
                 "the merged GDS must carry the upgraded real SiEPIC cell, not the 1-polygon stub");
             counts.Values.Count(v => v > 0).ShouldBeGreaterThan(1,
                 "geometry from both backend groups must be present in the merged GDS");

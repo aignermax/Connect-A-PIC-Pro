@@ -88,7 +88,7 @@ public class NazcaExportAllComponentsTests
         pdk.Components.Count.ShouldBeGreaterThan(0, "SiEPIC PDK should have components");
 
         double xOffset = 0;
-        var expectedFunctions = new List<string>();
+        var expectedFunctions = new List<(string FuncName, string? Parameters)>();
 
         foreach (var pdkComp in pdk.Components)
         {
@@ -99,21 +99,25 @@ public class NazcaExportAllComponentsTests
 
             // Track expected function names
             if (!string.IsNullOrEmpty(pdkComp.NazcaFunction))
-                expectedFunctions.Add(pdkComp.NazcaFunction);
+                expectedFunctions.Add((pdkComp.NazcaFunction, pdkComp.NazcaParameters));
         }
 
         var exporter = new SimpleNazcaExporter();
         var result = exporter.Export(canvas);
 
-        // Every PDK function should have a stub definition and be called in the design
-        // Function names are sanitized to valid Python identifiers (non-alphanumeric/underscore chars replaced with _)
-        foreach (var funcName in expectedFunctions)
+        // Every PDK function should have a stub definition and be called in the design.
+        // Function names are sanitized to valid Python identifiers (non-alphanumeric/underscore
+        // chars replaced with _); parameterized components get the parameters hash appended
+        // (issue #783) — the two "Directional Coupler TE 1550" variants of the shipped PDK
+        // must NOT collapse into one stub.
+        foreach (var (funcName, parameters) in expectedFunctions)
         {
-            var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(funcName, @"[^a-zA-Z0-9_.]", "_");
+            var stubName = NazcaStubNaming.StubName(funcName, parameters);
+            var pythonFuncName = System.Text.RegularExpressions.Regex.Replace(stubName, @"[^a-zA-Z0-9_.]", "_");
             result.ShouldContain($"def {pythonFuncName}(**kwargs):",
-                customMessage: $"Stub definition for '{funcName}' (sanitized: '{pythonFuncName}') not found in export");
+                customMessage: $"Stub definition for '{funcName}' (stub: '{pythonFuncName}') not found in export");
             result.ShouldContain($"{pythonFuncName}(",
-                customMessage: $"PDK function call '{funcName}' (sanitized: '{pythonFuncName}') not found in export");
+                customMessage: $"PDK function call '{funcName}' (stub: '{pythonFuncName}') not found in export");
         }
 
         // Every component should have a comp_N variable
@@ -184,8 +188,10 @@ public class NazcaExportAllComponentsTests
         var exporter = new SimpleNazcaExporter();
         var result = exporter.Export(canvas);
 
-        // Function should include parameters
-        result.ShouldContain($"{compWithParams.NazcaFunction}({compWithParams.NazcaParameters})",
+        // Function call should include the parameters — placed on the parameter-specific
+        // stub (parameters hash in the name, issue #783).
+        var stubName = NazcaStubNaming.StubName(compWithParams.NazcaFunction, compWithParams.NazcaParameters);
+        result.ShouldContain($"{stubName}({compWithParams.NazcaParameters})",
             customMessage: $"Parameters missing for {compWithParams.NazcaFunction}");
     }
 
