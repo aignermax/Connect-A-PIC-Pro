@@ -111,7 +111,14 @@ public class AStarPathfinder
             // Check if we reached the goal
             if (IsGoalReached(current, endX, endY, endDirection))
             {
-                return ReconstructPath(current);
+                var path = ReconstructPath(current);
+
+                // A waveguide cannot cross itself (no optical model for that): discard
+                // looping arrivals — e.g. a full 360° circle at the start pin — and keep
+                // searching for a loop-free alternative.
+                if (!PathLoopDetector.IsSelfIntersecting(path))
+                    return path;
+                continue;
             }
 
             // Expand neighbors
