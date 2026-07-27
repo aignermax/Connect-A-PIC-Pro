@@ -56,6 +56,13 @@ public class CanvasInteractionState
     public int ActiveBendIndex { get; set; } = -1;
     public bool ActiveBendClamped { get; set; }
 
+    // In-canvas segment parallel-shift handle state (issue #791): straight index of the segment
+    // whose midpoint handle is being dragged (-1 when none), whether the last requested shift
+    // was rejected (clamped), and the live shift delta (µm) shown next to the handle.
+    public int ActiveShiftStraightIndex { get; set; } = -1;
+    public bool ActiveShiftClamped { get; set; }
+    public double ActiveShiftDeltaMicrometers { get; set; }
+
     // ComponentGroup hover state
     public ComponentGroup? HoveredGroup { get; set; }
 

@@ -1330,6 +1330,9 @@ public class ConnectionData
 
     /// <summary>Manual per-bend radius overrides (bend index → radius µm); null = none.</summary>
     public Dictionary<int, double>? BendRadiusOverrides { get; set; }
+
+    /// <summary>Manual straight-segment shifts (straight index → offset µm, issue #791); null = none.</summary>
+    public Dictionary<int, double>? StraightShiftOffsets { get; set; }
 }
 
 /// <summary>

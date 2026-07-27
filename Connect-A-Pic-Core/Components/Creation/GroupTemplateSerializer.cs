@@ -324,7 +324,8 @@ public static class GroupTemplateSerializer
             WidthMicrometers = path.WidthMicrometers,
             IsRouteFrozen = path.IsRouteFrozen,
             PropagationLossDbPerCm = path.PropagationLossDbPerCm,
-            BendRadiusOverrides = new Dictionary<int, double>(path.BendRadiusOverrides)
+            BendRadiusOverrides = new Dictionary<int, double>(path.BendRadiusOverrides),
+            StraightShiftOffsets = new Dictionary<int, double>(path.StraightShiftOffsets)
         };
     }
 
@@ -408,6 +409,11 @@ public static class GroupTemplateSerializer
         {
             foreach (var (bendIndex, radius) in dto.BendRadiusOverrides)
                 frozenPath.BendRadiusOverrides[bendIndex] = radius;
+        }
+        if (dto.StraightShiftOffsets != null)
+        {
+            foreach (var (straightIndex, offset) in dto.StraightShiftOffsets)
+                frozenPath.StraightShiftOffsets[straightIndex] = offset;
         }
     }
 
@@ -622,6 +628,12 @@ public class FrozenPathDto
     /// Null in old templates — loads empty.
     /// </summary>
     public Dictionary<int, double>? BendRadiusOverrides { get; set; }
+
+    /// <summary>
+    /// Manual straight-segment shift offsets keyed by straight-segment index (issue #791).
+    /// Null in old templates — loads empty.
+    /// </summary>
+    public Dictionary<int, double>? StraightShiftOffsets { get; set; }
 }
 
 /// <summary>
