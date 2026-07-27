@@ -268,10 +268,10 @@
 
 <header>
   <div class="wrap nav">
-    <a class="wordmark" href="#top">LUNIMA<span class="v">v0.12.0</span></a>
+    <a class="wordmark" href="#top">LUNIMA<span class="v" data-release-version>v0.13.0</span></a>
     <nav class="nav-links" aria-label="Main">
       <a class="gh-txt" href="https://github.com/aignermax/Lunima">GitHub</a>
-      <a class="gh-txt" href="https://github.com/aignermax/Lunima/releases/tag/v0.12.0">Release notes</a>
+      <a class="gh-txt" data-release-notes href="https://github.com/aignermax/Lunima/releases/tag/v0.13.0">Release notes</a>
       <a class="btn-sm" href="#download">Download</a>
     </nav>
   </div>
@@ -291,7 +291,7 @@
         with you in open formats.
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="https://github.com/aignermax/Lunima/releases/tag/v0.12.0">Download v0.12.0</a>
+        <a class="btn btn-primary" data-release-cta href="https://github.com/aignermax/Lunima/releases/tag/v0.13.0">Download v0.13.0</a>
         <a class="btn btn-ghost" href="https://github.com/aignermax/Lunima">View on GitHub</a>
       </div>
       <p class="platforms">Windows · Linux · macOS — MIT licensed</p>
@@ -576,7 +576,7 @@
   <!-- ================= DOWNLOAD ================= -->
   <section class="download wrap" id="download">
     <p class="eyebrow">Get Lunima</p>
-    <h2>Download v0.12.0</h2>
+    <h2 data-release-heading>Download v0.13.0</h2>
     <p class="sub">
       Free and MIT-licensed. Once installed, Lunima updates itself in place —
       download, swap, relaunch — on all three platforms.
@@ -585,21 +585,21 @@
       <div class="dl-card">
         <h3>Windows</h3>
         <p class="arch">x64</p>
-        <a class="asset" href="https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-Setup-0.12.0.msi">Lunima-Setup-0.12.0.msi</a>
-        <a class="asset" href="https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-win-x64.zip">Lunima-0.12.0-win-x64.zip</a>
+        <a class="asset" data-release-asset="msi" href="https://github.com/aignermax/Lunima/releases/download/v0.13.0/Lunima-Setup-0.13.0.msi">Lunima-Setup-0.13.0.msi</a>
+        <a class="asset" data-release-asset="win-zip" href="https://github.com/aignermax/Lunima/releases/download/v0.13.0/Lunima-0.13.0-win-x64.zip">Lunima-0.13.0-win-x64.zip</a>
         <p class="note">Installer, or portable zip — unzip and run.</p>
       </div>
       <div class="dl-card">
         <h3>Linux</h3>
         <p class="arch">x64</p>
-        <a class="asset" href="https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-linux-x64.tar.gz">Lunima-0.12.0-linux-x64.tar.gz</a>
+        <a class="asset" data-release-asset="linux-tar" href="https://github.com/aignermax/Lunima/releases/download/v0.13.0/Lunima-0.13.0-linux-x64.tar.gz">Lunima-0.13.0-linux-x64.tar.gz</a>
         <p class="note">Extract into its own folder and run.</p>
       </div>
       <div class="dl-card">
         <h3>macOS</h3>
         <p class="arch">Apple Silicon · Intel</p>
-        <a class="asset" href="https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-osx-arm64.dmg">Lunima-0.12.0-osx-arm64.dmg</a>
-        <a class="asset" href="https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-osx-x64.dmg">Lunima-0.12.0-osx-x64.dmg</a>
+        <a class="asset" data-release-asset="osx-arm" href="https://github.com/aignermax/Lunima/releases/download/v0.13.0/Lunima-0.13.0-osx-arm64.dmg">Lunima-0.13.0-osx-arm64.dmg</a>
+        <a class="asset" data-release-asset="osx-x64" href="https://github.com/aignermax/Lunima/releases/download/v0.13.0/Lunima-0.13.0-osx-x64.dmg">Lunima-0.13.0-osx-x64.dmg</a>
         <p class="note">Unsigned build — see the first-launch note below.</p>
       </div>
     </div>
@@ -618,7 +618,7 @@
       <a class="wordmark" href="#top">LUNIMA</a>
       <nav class="foot-links" aria-label="Footer">
         <a href="https://github.com/aignermax/Lunima">GitHub</a>
-        <a href="https://github.com/aignermax/Lunima/releases/tag/v0.12.0">Release notes</a>
+        <a data-release-notes href="https://github.com/aignermax/Lunima/releases/tag/v0.13.0">Release notes</a>
         <a href="https://github.com/aignermax/Lunima/blob/main/docs/PDK_JSON_FORMAT.md">PDK format</a>
         <a href="https://www.akhetonics.com/">Akhetonics</a>
         <a href="https://akhetonics.com/impressum">Imprint</a>
@@ -647,6 +647,79 @@
     the page; see the <a href="https://docs.github.com/site-policy/privacy-policies/github-privacy-statement">GitHub Privacy Statement</a> for details.
   </p>
 </section>
+
+<!-- ================= DYNAMIC RELEASE INFO ================= -->
+<!-- Keeps the static v0.13.0 fallback above in sync with the latest GitHub
+     release. Anonymous, unauthenticated API read only — no tracking, no
+     storage, matching the privacy promise above. Any failure (offline, rate
+     limit, missing asset) leaves the static markup exactly as it is. -->
+<script>
+(function () {
+  "use strict";
+
+  var API_URL = "https://api.github.com/repos/aignermax/Lunima/releases/latest";
+
+  var ASSET_SUFFIXES = {
+    "msi": ".msi",
+    "win-zip": "-win-x64.zip",
+    "linux-tar": "-linux-x64.tar.gz",
+    "osx-arm": "-osx-arm64.dmg",
+    "osx-x64": "-osx-x64.dmg"
+  };
+
+  function setText(selector, text) {
+    document.querySelectorAll(selector).forEach(function (el) {
+      el.textContent = text;
+    });
+  }
+
+  function setHref(selector, href) {
+    document.querySelectorAll(selector).forEach(function (el) {
+      el.setAttribute("href", href);
+    });
+  }
+
+  function applyVersionLabels(tagName) {
+    setText("[data-release-version]", tagName);
+    setText("[data-release-heading]", "Download " + tagName);
+    setText("[data-release-cta]", "Download " + tagName);
+
+    var notesUrl = "https://github.com/aignermax/Lunima/releases/tag/" + tagName;
+    setHref("[data-release-notes]", notesUrl);
+    setHref("[data-release-cta]", notesUrl);
+  }
+
+  function applyAsset(kind, asset) {
+    var selector = '[data-release-asset="' + kind + '"]';
+    setHref(selector, asset.browser_download_url);
+    setText(selector, asset.name);
+  }
+
+  function applyAssets(assets) {
+    Object.keys(ASSET_SUFFIXES).forEach(function (kind) {
+      var suffix = ASSET_SUFFIXES[kind];
+      var match = assets.find(function (asset) {
+        return typeof asset.name === "string" && asset.name.endsWith(suffix);
+      });
+      if (match) applyAsset(kind, match);
+    });
+  }
+
+  function applyRelease(release) {
+    if (!release || typeof release.tag_name !== "string") return;
+    applyVersionLabels(release.tag_name);
+    if (Array.isArray(release.assets)) applyAssets(release.assets);
+  }
+
+  fetch(API_URL, { headers: { "Accept": "application/vnd.github+json" } })
+    .then(function (response) { return response.ok ? response.json() : null; })
+    .then(applyRelease)
+    .catch(function () {
+      // Offline, rate-limited, or malformed response — the static v0.13.0
+      // fallback markup above stays exactly as authored.
+    });
+})();
+</script>
 
 </body>
 </html>
