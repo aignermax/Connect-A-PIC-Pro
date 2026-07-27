@@ -134,13 +134,13 @@ public class PinStraightAutoCollapseTests
     }
 
     /// <summary>
-    /// [1] The collapse acceptance replicates the router's pin-corridor clearing, then runs the
-    /// UNCHANGED component check. A bend hugging its pin (inside the cleared corridor) is allowed,
-    /// but a path swinging deep into the endpoint component body (beyond the corridor) is a real
-    /// collision — it is NOT exempted just because the component owns the pin.
+    /// [1] The shared own-pin predicate tolerates ONLY the padding band around the connection's
+    /// own pins. A bend hugging its pin sweeps that band and is allowed; a path cutting through
+    /// the unpadded body rectangle of the own endpoint component is a real collision — it is
+    /// NOT exempted just because the component owns the pin.
     /// </summary>
     [Fact]
-    public void PinClearanceCheck_AllowsPinHug_ButFlagsBodyPenetration()
+    public void ConnectionCollisionCheck_AllowsOwnPinHug_ButFlagsOwnBodyPenetration()
     {
         var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
         var start = CreateTestComponent(0, 0);
@@ -150,17 +150,53 @@ public class PinStraightAutoCollapseTests
         var startPin = Pin(start, 50, 25, 0); // right edge, facing east
         var endPin = Pin(end, 50, 25, 0);
 
-        // A short bend hugging the pin, entirely within the outward (east) corridor.
+        // A short bend hugging the pin, entirely within the own padding band and free space.
         var hug = new RoutedPath();
         hug.Segments.Add(new BendSegment(50, 35, Radius, 0, 90)); // starts at (50,25), swings to (60,35)
-        router.IsPathBlockedByComponentsWithPinClearances(hug.Segments, startPin, endPin, Radius)
-            .ShouldBeFalse("a bend that begins on its pin, inside the routing corridor, is not a collision");
+        router.IsPathBlockedByComponentsForConnection(hug.Segments, startPin, endPin, Radius)
+            .ShouldBeFalse("a bend that begins on its pin, inside the own padding band, is not a collision");
 
         // A straight cutting west, deep through the start component body (x from 50 into 0).
         var throughBody = new RoutedPath();
         throughBody.Segments.Add(new StraightSegment(50, 25, 5, 25, 180));
-        router.IsPathBlockedByComponentsWithPinClearances(throughBody.Segments, startPin, endPin, Radius)
-            .ShouldBeTrue("a swing deep into the own component body, past the corridor, is a collision");
+        router.IsPathBlockedByComponentsForConnection(throughBody.Segments, startPin, endPin, Radius)
+            .ShouldBeTrue("a swing into the own component body is a collision even near the own pin");
+    }
+
+    /// <summary>
+    /// [2] Group-internal frozen waveguides (grid state 3) are NEVER tolerated, not even inside
+    /// the own-pin allowance: a connection docking at an external group pin must not sweep over
+    /// the group's internal connections.
+    /// </summary>
+    [Fact]
+    public void ConnectionCollisionCheck_BlocksGroupInternalFrozenWaveguide_EvenNearOwnPin()
+    {
+        var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
+        var childA = CreateTestComponent(0, 0);
+        var childB = CreateTestComponent(0, 100);
+        var group = new ComponentGroup("group");
+        group.AddChild(childA);
+        group.AddChild(childB);
+
+        // Internal frozen waveguide running vertically just outside child A's east edge,
+        // right through the allowance circle of the external pin at (50, 25).
+        var internalPath = new RoutedPath();
+        internalPath.Segments.Add(new StraightSegment(58, 10, 58, 40, 90));
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            Path = internalPath,
+            StartPin = Pin(childA, 50, 10, 0),
+            EndPin = Pin(childA, 50, 40, 0),
+        });
+        router.InitializePathfindingGrid(-100, -100, 500, 500, new Component[] { group });
+
+        var startPin = Pin(childA, 50, 25, 0);
+        var endPin = Pin(childB, 50, 25, 0);
+        var trial = new RoutedPath();
+        trial.Segments.Add(new StraightSegment(50, 25, 80, 25, 0));
+
+        router.IsPathBlockedByComponentsForConnection(trial.Segments, startPin, endPin, Radius)
+            .ShouldBeTrue("a group-internal frozen waveguide blocks even within the own-pin allowance");
     }
 
     /// <summary>

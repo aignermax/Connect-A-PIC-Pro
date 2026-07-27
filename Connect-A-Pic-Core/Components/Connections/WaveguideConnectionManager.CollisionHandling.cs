@@ -14,7 +14,10 @@ public partial class WaveguideConnectionManager
     /// found, treats it like an endpoint move: the route is unfrozen and the manual bend
     /// overrides are discarded so the connection is re-routed around the component.
     /// Uses the true arc geometry against component obstacles only, so the verdict does
-    /// not depend on which sibling waveguides are currently registered in the grid.
+    /// not depend on which sibling waveguides are currently registered in the grid — and
+    /// via the shared own-pin predicate, so a bend hugging its OWN pin (a collapsed lead)
+    /// never counts as a collision: unfreezing on it would let the next recalculation
+    /// silently destroy the user's manual edits.
     /// Styled routes (Type != Auto) are never unfrozen here — their shape is forced and a
     /// collision is surfaced via <see cref="RoutedPath.PassesThroughComponent"/> instead.
     /// </summary>
@@ -25,7 +28,9 @@ public partial class WaveguideConnectionManager
             return false;
         if (!connection.FrozenPathStillMatchesPins())
             return false; // Endpoint moved: RecalculateTransmission already unfreezes.
-        if (!router.IsPathBlockedByComponents(connection.RoutedPath!.Segments))
+        if (!router.IsPathBlockedByComponentsForConnection(
+                connection.RoutedPath!.Segments, connection.StartPin, connection.EndPin,
+                connection.RoutedBendRadiusMicrometers(router.ProcessMinBendRadiusMicrometers)))
             return false;
 
         connection.IsRouteFrozen = false;

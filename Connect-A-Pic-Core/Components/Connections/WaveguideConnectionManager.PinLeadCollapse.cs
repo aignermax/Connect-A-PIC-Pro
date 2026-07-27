@@ -10,9 +10,11 @@ namespace CAP_Core.Components.Connections;
 /// user has to shift it away by hand after every re-route. It runs once, after every route is
 /// final and registered, so each collapse is validated against ALL sibling routes at their final
 /// positions — the reason it lives here and not inside a single-route <see cref="WaveguideRouter"/>
-/// attempt, which cannot see routes computed later. Every trial is checked against exactly the
-/// obstacle geometry the router allowed the route to occupy (identical pin-corridor clearings);
-/// a rejected trial simply leaves a residual lead, which is correct.
+/// attempt, which cannot see routes computed later. Every trial is checked with the shared,
+/// read-only own-pin predicate (<see cref="WaveguideRouter.IsPathBlockedByComponentsForConnection"/>)
+/// that also decides route validation, unfreezing and shift collision — so an accepted collapse
+/// is by construction a route the next pass keeps. A rejected trial simply leaves a residual
+/// lead, which is correct.
 /// </summary>
 public partial class WaveguideConnectionManager
 {
@@ -27,10 +29,6 @@ public partial class WaveguideConnectionManager
     /// <summary>A shift moves geometry by |delta|/|dot|; a 45° diagonal outer straight makes that
     /// √2 × the collapsed lead, so the worst-case point movement is scaled by this factor.</summary>
     private const double DiagonalShiftFactor = 1.41421356237; // √2
-
-    /// <summary>Total path length (µm) below which a route samples to fewer than two points and
-    /// its distance to another route cannot be measured reliably.</summary>
-    private const double DegenerateSiblingLengthMicrometers = 0.1;
 
     private readonly record struct BoundingBox(double MinX, double MinY, double MaxX, double MaxY);
 
@@ -58,14 +56,14 @@ public partial class WaveguideConnectionManager
                 continue;
 
             var original = connection.RoutedPath!;
-            if (!TryCollectNearSiblings(connection, connections, original, boxCache,
-                    out var nearSiblings, out var clearanceBefore))
-                continue; // already touches (or a degenerate) neighbour — leave it be
+            var siblingConstraints =
+                CollectSiblingConstraints(connection, connections, original, boxCache);
 
-            double radius = EffectiveRadiusOf(connection);
+            double radius = connection.RoutedBendRadiusMicrometers(
+                _router.ProcessMinBendRadiusMicrometers);
             var working = original.DeepCopy();
             PinStraightCollapser.Collapse(working,
-                trial => IsCollapseAcceptable(trial, connection, radius, nearSiblings, clearanceBefore));
+                trial => IsCollapseAcceptable(trial, connection, radius, siblingConstraints));
 
             if (PathsEquivalent(working, original))
                 continue;
@@ -74,11 +72,6 @@ public partial class WaveguideConnectionManager
             grid.AddWaveguideObstacle(connection.Id, working.Segments, WaveguideWidthMicrometers);
         }
     }
-
-    /// <summary>The bend radius a connection is routed with: its own radius raised to the process
-    /// floor, matching <see cref="WaveguideRouter.Route"/>.</summary>
-    private double EffectiveRadiusOf(WaveguideConnection connection) =>
-        Math.Max(connection.BendRadiusMicrometers, _router.ProcessMinBendRadiusMicrometers);
 
     /// <summary>True for a route the collapse pass may edit: an auto route with a clean,
     /// unfrozen, non-fallback path.</summary>
@@ -90,20 +83,16 @@ public partial class WaveguideConnectionManager
         && path.Segments.Count > 0;
 
     /// <summary>
-    /// Gathers the siblings close enough that a collapse of <paramref name="original"/> could
-    /// affect their clearance, with each one's pre-collapse distance. Blocked-fallback siblings
-    /// count — they are rendered and registered obstacles. Returns false when the route already
-    /// touches a neighbour, or a nearby neighbour is degenerate (unmeasurable), so the caller
-    /// skips it: a collapse must never add or worsen a crossing.
+    /// Captures a <see cref="CollapseSiblingConstraint"/> for every sibling close enough that a
+    /// collapse of <paramref name="original"/> could affect it. Blocked-fallback siblings count —
+    /// they are rendered and registered obstacles. Nothing is a blanket veto here: degenerate
+    /// and already-touching neighbours get their own criteria inside the constraint.
     /// </summary>
-    private bool TryCollectNearSiblings(WaveguideConnection connection,
-        IReadOnlyList<WaveguideConnection> connections, RoutedPath original,
-        Dictionary<RoutedPath, BoundingBox> boxCache,
-        out List<RoutedPath> nearSiblings, out List<double> clearanceBefore)
+    private List<CollapseSiblingConstraint> CollectSiblingConstraints(
+        WaveguideConnection connection, IReadOnlyList<WaveguideConnection> connections,
+        RoutedPath original, Dictionary<RoutedPath, BoundingBox> boxCache)
     {
-        nearSiblings = new List<RoutedPath>();
-        clearanceBefore = new List<double>();
-
+        var constraints = new List<CollapseSiblingConstraint>();
         double reach = LeadSum(original) * DiagonalShiftFactor
             + _router.MinWaveguideSpacingMicrometers + CollapseSearchMarginMicrometers;
         var box = BoxFor(original, boxCache);
@@ -115,39 +104,26 @@ public partial class WaveguideConnectionManager
             if (BoxGap(box, BoxFor(sibling, boxCache)) > reach)
                 continue; // too far for this collapse to move within touching range
 
-            if (sibling.TotalLengthMicrometers < DegenerateSiblingLengthMicrometers)
-                return false; // a degenerate neighbour nearby: cannot measure clearance — do not risk it
-
-            double distance = PathIntersectionDetector.MinimumDistance(original, sibling);
-            if (distance < SiblingTouchToleranceMicrometers)
-                return false;
-            nearSiblings.Add(sibling);
-            clearanceBefore.Add(distance);
+            constraints.Add(CollapseSiblingConstraint.For(original, sibling,
+                _router.MinWaveguideSpacingMicrometers, SiblingTouchToleranceMicrometers));
         }
-        return true;
+        return constraints;
     }
 
     /// <summary>
-    /// Accepts a collapse trial only when it stays simple, clears every component/frozen-group
-    /// obstacle within the same pin corridors the router opened for this route, and comes no
-    /// closer to any nearby sibling than the pre-collapse geometry did.
+    /// Accepts a collapse trial only when it stays simple, passes the shared own-pin component
+    /// predicate (padding band at the own pins tolerated, bodies and frozen group cells never),
+    /// and does not worsen any nearby sibling's situation.
     /// </summary>
-    private bool IsCollapseAcceptable(RoutedPath trial, WaveguideConnection connection, double radius,
-        IReadOnlyList<RoutedPath> nearSiblings, IReadOnlyList<double> clearanceBefore)
+    private bool IsCollapseAcceptable(RoutedPath trial, WaveguideConnection connection,
+        double radius, IReadOnlyList<CollapseSiblingConstraint> siblingConstraints)
     {
         if (PathIntersectionDetector.HasSelfIntersection(trial))
             return false;
-        if (_router.IsPathBlockedByComponentsWithPinClearances(
+        if (_router.IsPathBlockedByComponentsForConnection(
                 trial.Segments, connection.StartPin, connection.EndPin, radius))
             return false;
-
-        for (int i = 0; i < nearSiblings.Count; i++)
-        {
-            if (PathIntersectionDetector.MinimumDistance(trial, nearSiblings[i])
-                < clearanceBefore[i] - SiblingTouchToleranceMicrometers)
-                return false;
-        }
-        return true;
+        return siblingConstraints.All(constraint => constraint.IsSatisfiedBy(trial));
     }
 
     /// <summary>Combined length of the two pin-side straight leads (0 for a lead that is a bend).</summary>

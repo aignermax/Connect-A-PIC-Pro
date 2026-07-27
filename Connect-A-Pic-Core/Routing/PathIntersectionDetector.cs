@@ -58,6 +58,107 @@ public static class PathIntersectionDetector
     }
 
     /// <summary>
+    /// Minimum distance (µm) from a point to the path's sampled polyline. Works for any
+    /// path length, including a path that degenerates to a single sample point — unlike
+    /// <see cref="MinimumDistance"/>, which needs two samplable polylines and reports 0
+    /// for a degenerate partner regardless of the real separation.
+    /// </summary>
+    /// <param name="path">The path whose polyline is measured.</param>
+    /// <param name="x">X coordinate of the point in micrometers.</param>
+    /// <param name="y">Y coordinate of the point in micrometers.</param>
+    public static double DistanceToPoint(RoutedPath path, double x, double y)
+    {
+        var points = SamplePolyline(path);
+        if (points.Count == 0)
+            return double.MaxValue;
+
+        double min = Distance(points[0], (x, y));
+        for (int i = 0; i < points.Count - 1; i++)
+            min = Math.Min(min, PointToSegment((x, y), points[i], points[i + 1]));
+        return min;
+    }
+
+    /// <summary>
+    /// Number of proper polyline crossings between the two paths. Touching endpoints and
+    /// collinear overlaps do not count (<see cref="HaveCollinearOverlap"/> covers the
+    /// latter). Used to verify that an automated edit does not add crossings to geometry
+    /// that legitimately crosses already (e.g. a blocked-fallback sibling).
+    /// </summary>
+    /// <param name="first">First path.</param>
+    /// <param name="second">Second path.</param>
+    public static int CrossingCount(RoutedPath first, RoutedPath second)
+    {
+        var a = SamplePolyline(first);
+        var b = SamplePolyline(second);
+        if (a.Count < 2 || b.Count < 2 || !BoundsOverlap(a, b))
+            return 0;
+
+        int count = 0;
+        for (int i = 0; i < a.Count - 1; i++)
+        {
+            for (int j = 0; j < b.Count - 1; j++)
+            {
+                if (SegmentsIntersect(a[i], a[i + 1], b[j], b[j + 1]))
+                    count++;
+            }
+        }
+        return count;
+    }
+
+    /// <summary>
+    /// True when a polyline segment of one path runs collinearly on top of a segment of
+    /// the other over more than the joint tolerance. Proper crossings are not overlaps;
+    /// this catches routes sliding onto each other, which the strict-sign intersection
+    /// test cannot see.
+    /// </summary>
+    /// <param name="first">First path.</param>
+    /// <param name="second">Second path.</param>
+    public static bool HaveCollinearOverlap(RoutedPath first, RoutedPath second)
+    {
+        var a = SamplePolyline(first);
+        var b = SamplePolyline(second);
+        if (a.Count < 2 || b.Count < 2 || !BoundsOverlap(a, b))
+            return false;
+
+        for (int i = 0; i < a.Count - 1; i++)
+        {
+            for (int j = 0; j < b.Count - 1; j++)
+            {
+                if (SegmentsOverlapCollinearly(a[i], a[i + 1], b[j], b[j + 1]))
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Maximum perpendicular deviation (µm) for two segments to count as collinear.</summary>
+    private const double CollinearDeviationToleranceMicrometers = 0.01;
+
+    /// <summary>
+    /// True when segment q lies on the carrier line of segment p (within tolerance) and
+    /// their projections onto that line share an interval longer than the joint tolerance.
+    /// </summary>
+    private static bool SegmentsOverlapCollinearly(
+        (double X, double Y) p1, (double X, double Y) p2,
+        (double X, double Y) q1, (double X, double Y) q2)
+    {
+        double length = Distance(p1, p2);
+        if (length < JointToleranceMicrometers)
+            return false;
+        if (Math.Abs(Cross(p1, p2, q1)) / length > CollinearDeviationToleranceMicrometers ||
+            Math.Abs(Cross(p1, p2, q2)) / length > CollinearDeviationToleranceMicrometers)
+            return false;
+
+        double dx = (p2.X - p1.X) / length;
+        double dy = (p2.Y - p1.Y) / length;
+        double t1 = (q1.X - p1.X) * dx + (q1.Y - p1.Y) * dy;
+        double t2 = (q2.X - p1.X) * dx + (q2.Y - p1.Y) * dy;
+        double overlapStart = Math.Max(0, Math.Min(t1, t2));
+        double overlapEnd = Math.Min(length, Math.Max(t1, t2));
+        return overlapEnd - overlapStart > JointToleranceMicrometers;
+    }
+
+    /// <summary>
     /// Returns true when the two paths properly cross each other. Cheaper than
     /// <see cref="MinimumDistance"/> for the common non-crossing case: disjoint
     /// bounding boxes are rejected first and no distances are computed. Touching

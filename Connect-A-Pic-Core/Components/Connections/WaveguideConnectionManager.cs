@@ -565,15 +565,13 @@ public partial class WaveguideConnectionManager
         if (startDist > EndpointToleranceMicrometers || endDist > EndpointToleranceMicrometers)
             return false;
 
-        // Check path doesn't pass through component obstacles. The pin corridors are opened
-        // exactly as during routing (corridor only — no component/group exemption); at this point
-        // all waveguide obstacles are cleared, so this is the unchanged component check plus that
-        // narrow clearing. Without it a collapsed pin lead — whose bend legitimately begins on the
-        // pin, inside its component's padding — would be re-routed on every incremental pass.
-        double radius = Math.Max(
-            connection.BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
-        return !router.IsPathBlockedByComponentsWithPinClearances(
-            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin, radius);
+        // Check path doesn't pass through component obstacles — via the shared own-pin
+        // predicate, so a collapsed pin lead (its bend legitimately begins on the pin, inside
+        // the own padding band) is kept instead of re-routed on every pass, while foreign and
+        // own component bodies still invalidate the route exactly as before the collapse pass.
+        return !router.IsPathBlockedByComponentsForConnection(
+            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin,
+            connection.RoutedBendRadiusMicrometers(router.ProcessMinBendRadiusMicrometers));
     }
 
     private static double Distance(double x1, double y1, double x2, double y2)

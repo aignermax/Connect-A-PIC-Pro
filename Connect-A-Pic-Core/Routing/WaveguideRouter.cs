@@ -315,51 +315,6 @@ public partial class WaveguideRouter
         return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponent);
     }
 
-    /// <summary>
-    /// Component-collision verdict for a path, evaluated with the SAME temporary pin-corridor and
-    /// fan-out clearings <see cref="TryRouteAStar"/> applies for this connection. Semantics of the
-    /// underlying <see cref="IsPathBlockedByComponents"/> are unchanged (component padding and
-    /// frozen group cells still count, no exemption); only the pin corridors are opened, so a bend
-    /// that legitimately begins on its pin is not read as a collision, while a swing into the
-    /// component body beyond the corridor still is. Used to validate a pin-lead collapse against
-    /// exactly the geometry the route was allowed to occupy when it was created.
-    /// </summary>
-    /// <param name="segments">The path to test.</param>
-    /// <param name="startPin">Start pin (its outward corridor is cleared).</param>
-    /// <param name="endPin">End pin (its approach and terminal corridors are cleared).</param>
-    /// <param name="bendRadius">Bend radius the connection was routed with; sizes the corridors.</param>
-    public bool IsPathBlockedByComponentsWithPinClearances(
-        IEnumerable<PathSegment> segments, PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
-    {
-        if (PathfindingGrid == null) return false;
-
-        var (startX, startY) = startPin.GetAbsolutePosition();
-        var (endX, endY) = endPin.GetAbsolutePosition();
-        double startAngle = startPin.GetAbsoluteAngle();
-        double endInputAngle = AngleUtilities.NormalizeAngle(endPin.GetAbsoluteAngle() + 180);
-        double endFacingAngle = AngleUtilities.NormalizeAngle(endInputAngle + 180);
-        double corridorLength = bendRadius * 3;
-        double corridorWidth = bendRadius;
-
-        var cleared = new List<Dictionary<(int x, int y), byte>>
-        {
-            PathfindingGrid.ClearPinCorridor(startX, startY, startAngle, corridorLength, corridorWidth),
-            PathfindingGrid.ClearPinCorridor(endX, endY, endFacingAngle, corridorLength, corridorWidth),
-            PathfindingGrid.ClearPinCorridor(endX, endY, endInputAngle, corridorLength, corridorWidth),
-            PathfindingGrid.ClearPinFanoutWaveguideCells(startX, startY, startAngle, corridorLength),
-            PathfindingGrid.ClearPinFanoutWaveguideCells(endX, endY, endFacingAngle, corridorLength),
-        };
-        try
-        {
-            return IsPathBlockedByComponents(segments);
-        }
-        finally
-        {
-            foreach (var cells in cleared)
-                PathfindingGrid.RestoreCells(cells);
-        }
-    }
-
     /// <summary>Checks all segments against the given cell-blocked predicate.</summary>
     private bool IsPathBlocked(IEnumerable<PathSegment> segments, Func<int, int, bool> isCellBlocked)
     {
