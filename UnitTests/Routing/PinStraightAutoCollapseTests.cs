@@ -19,6 +19,9 @@ namespace UnitTests.Routing;
 /// </summary>
 public class PinStraightAutoCollapseTests
 {
+    /// <summary>Bend radius (µm) at which A* routes the U-turn with quantization leads that the
+    /// collapse pass must remove. The collapsed arc traverses the own padding band inside the
+    /// persistent pin corridor, so it passes the unchanged component check.</summary>
     private const double Radius = 10.0;
 
     /// <summary>Residual tolerance for a "collapsed to the pin" lead (floating-point noise).</summary>
@@ -26,13 +29,17 @@ public class PinStraightAutoCollapseTests
 
     /// <summary>
     /// U-turn layout (both pins face east): the route leaves east, turns north, and returns west.
-    /// The east departure and the west arrival straights are pure detour — the collapse pass must
-    /// drive BOTH to zero, so the first and last bends begin/end exactly at the pins.
+    /// The east departure and the west arrival straights are pure detour — after the pass BOTH
+    /// pin leads must be zero, so the first and last bends begin/end exactly at the pins.
+    /// At r=10 A* leaves quantization leads and the collapse removes them; at the default r=50
+    /// the pipeline yields the CSC arc directly at the pin, leaving nothing to collapse.
     /// </summary>
-    [Fact]
-    public void AutoRoute_CollapsesBothPinLeads_OnSymmetricUTurn()
+    [Theory]
+    [InlineData(10.0)]
+    [InlineData(50.0)]
+    public void AutoRoute_CollapsesBothPinLeads_OnSymmetricUTurn(double radius)
     {
-        var (_, connection, startPin, endPin) = RouteUTurn(300);
+        var (_, connection, startPin, endPin) = RouteUTurn(radius, 300);
 
         var path = connection.RoutedPath!;
         connection.IsPathValid.ShouldBeTrue();
@@ -46,8 +53,8 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapseIsDeterministic()
     {
-        var (_, connectionA, _, _) = RouteUTurn(300);
-        var (_, connectionB, _, _) = RouteUTurn(300);
+        var (_, connectionA, _, _) = RouteUTurn(Radius, 300);
+        var (_, connectionB, _, _) = RouteUTurn(Radius, 300);
 
         var a = connectionA.RoutedPath!;
         var b = connectionB.RoutedPath!;
@@ -68,7 +75,7 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsedFirstBend_StaysTangentialToThePin()
     {
-        var (_, connection, startPin, _) = RouteUTurn(300);
+        var (_, connection, startPin, _) = RouteUTurn(Radius, 300);
 
         var firstBend = connection.RoutedPath!.Segments.OfType<BendSegment>().First();
         NormalizeAngle(firstBend.StartAngleDegrees).ShouldBe(0, 1e-6);
@@ -85,7 +92,7 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsedPath_StaysConnectedAndSimple()
     {
-        var (_, connection, _, _) = RouteUTurn(300);
+        var (_, connection, _, _) = RouteUTurn(Radius, 300);
 
         var path = connection.RoutedPath!;
         path.IsValid.ShouldBeTrue();
@@ -100,7 +107,7 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsePublishesNewInstance_WithoutMutatingThePrevious()
     {
-        var (manager, connection, _, _) = RouteUTurn(300);
+        var (manager, connection, _, _) = RouteUTurn(Radius, 300);
         var published = connection.RoutedPath!;
         var snapshot = published.DeepCopy();
 
@@ -121,10 +128,12 @@ public class PinStraightAutoCollapseTests
     /// pass, so it is KEPT rather than re-routed forever. A second recalculation with nothing
     /// changed leaves the very same path instance in place.
     /// </summary>
-    [Fact]
-    public void AutoRoute_CollapsedRoute_SurvivesTheNextRecalc_Unchanged()
+    [Theory]
+    [InlineData(10.0)]
+    [InlineData(50.0)]
+    public void AutoRoute_CollapsedRoute_SurvivesTheNextRecalc_Unchanged(double radius)
     {
-        var (manager, connection, _, _) = RouteUTurn(300);
+        var (manager, connection, _, _) = RouteUTurn(radius, 300);
         var afterFirst = connection.RoutedPath!;
 
         manager.RecalculateAllTransmissions();
@@ -134,91 +143,32 @@ public class PinStraightAutoCollapseTests
     }
 
     /// <summary>
-    /// [1] The shared own-pin predicate tolerates ONLY the padding band around the connection's
-    /// own pins. A bend hugging its pin sweeps that band and is allowed; a path cutting through
-    /// the unpadded body rectangle of the own endpoint component is a real collision — it is
-    /// NOT exempted just because the component owns the pin.
-    /// </summary>
-    [Fact]
-    public void ConnectionCollisionCheck_AllowsOwnPinHug_ButFlagsOwnBodyPenetration()
-    {
-        var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
-        var start = CreateTestComponent(0, 0);
-        var end = CreateTestComponent(0, 275);
-        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end });
-
-        var startPin = Pin(start, 50, 25, 0); // right edge, facing east
-        var endPin = Pin(end, 50, 25, 0);
-
-        // A short bend hugging the pin, entirely within the own padding band and free space.
-        var hug = new RoutedPath();
-        hug.Segments.Add(new BendSegment(50, 35, Radius, 0, 90)); // starts at (50,25), swings to (60,35)
-        router.IsPathBlockedByComponentsForConnection(hug.Segments, startPin, endPin, Radius)
-            .ShouldBeFalse("a bend that begins on its pin, inside the own padding band, is not a collision");
-
-        // A straight cutting west, deep through the start component body (x from 50 into 0).
-        var throughBody = new RoutedPath();
-        throughBody.Segments.Add(new StraightSegment(50, 25, 5, 25, 180));
-        router.IsPathBlockedByComponentsForConnection(throughBody.Segments, startPin, endPin, Radius)
-            .ShouldBeTrue("a swing into the own component body is a collision even near the own pin");
-    }
-
-    /// <summary>
-    /// [2] Group-internal frozen waveguides (grid state 3) are NEVER tolerated, not even inside
-    /// the own-pin allowance: a connection docking at an external group pin must not sweep over
-    /// the group's internal connections.
-    /// </summary>
-    [Fact]
-    public void ConnectionCollisionCheck_BlocksGroupInternalFrozenWaveguide_EvenNearOwnPin()
-    {
-        var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
-        var childA = CreateTestComponent(0, 0);
-        var childB = CreateTestComponent(0, 100);
-        var group = new ComponentGroup("group");
-        group.AddChild(childA);
-        group.AddChild(childB);
-
-        // Internal frozen waveguide running vertically just outside child A's east edge,
-        // right through the allowance circle of the external pin at (50, 25).
-        var internalPath = new RoutedPath();
-        internalPath.Segments.Add(new StraightSegment(58, 10, 58, 40, 90));
-        group.AddInternalPath(new FrozenWaveguidePath
-        {
-            Path = internalPath,
-            StartPin = Pin(childA, 50, 10, 0),
-            EndPin = Pin(childA, 50, 40, 0),
-        });
-        router.InitializePathfindingGrid(-100, -100, 500, 500, new Component[] { group });
-
-        var startPin = Pin(childA, 50, 25, 0);
-        var endPin = Pin(childB, 50, 25, 0);
-        var trial = new RoutedPath();
-        trial.Segments.Add(new StraightSegment(50, 25, 80, 25, 0));
-
-        router.IsPathBlockedByComponentsForConnection(trial.Segments, startPin, endPin, Radius)
-            .ShouldBeTrue("a group-internal frozen waveguide blocks even within the own-pin allowance");
-    }
-
-    /// <summary>
     /// [2] The collapse must never bring two routes into a crossing. Two nested U-turns are routed
     /// together; after the collapse pass no pair of routes may touch or cross.
     /// </summary>
     [Fact]
     public void AutoRoute_CollapseNeverIntroducesASiblingCrossing()
     {
+        const double nestedRadius = 10.0; // nested pins sit 10 µm apart — needs a tight radius
         var router = new WaveguideRouter
         {
-            MinBendRadiusMicrometers = Radius,
+            MinBendRadiusMicrometers = nestedRadius,
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
         };
         var start = CreateTestComponent(0, 0);
         var end = CreateTestComponent(0, 275);
+        var innerStart = Pin(start, 50, 20, 0);
+        var innerEnd = Pin(end, 50, 20, 0);
+        var outerStart = Pin(start, 50, 30, 0);
+        var outerEnd = Pin(end, 50, 30, 0);
+        start.PhysicalPins.AddRange(new[] { innerStart, outerStart });
+        end.PhysicalPins.AddRange(new[] { innerEnd, outerEnd });
         router.InitializePathfindingGrid(-200, -200, 700, 700, new[] { start, end });
 
         var manager = new WaveguideConnectionManager(router);
-        var inner = new WaveguideConnection { StartPin = Pin(start, 50, 20, 0), EndPin = Pin(end, 50, 20, 0) };
-        var outer = new WaveguideConnection { StartPin = Pin(start, 50, 30, 0), EndPin = Pin(end, 50, 30, 0) };
+        var inner = new WaveguideConnection { StartPin = innerStart, EndPin = innerEnd, BendRadiusMicrometers = nestedRadius };
+        var outer = new WaveguideConnection { StartPin = outerStart, EndPin = outerEnd, BendRadiusMicrometers = nestedRadius };
         manager.AddExistingConnection(inner);
         manager.AddExistingConnection(outer);
         manager.RecalculateAllTransmissions();
@@ -254,23 +204,32 @@ public class PinStraightAutoCollapseTests
     }
 
     private static (WaveguideConnectionManager Manager, WaveguideConnection Connection,
-        PhysicalPin StartPin, PhysicalPin EndPin) RouteUTurn(double pinSeparationY)
+        PhysicalPin StartPin, PhysicalPin EndPin) RouteUTurn(double radius, double pinSeparationY)
     {
         var router = new WaveguideRouter
         {
-            MinBendRadiusMicrometers = Radius,
+            MinBendRadiusMicrometers = radius,
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
         };
         var start = CreateTestComponent(0, 0);
         var end = CreateTestComponent(0, pinSeparationY - 25);
-        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end });
-
         var startPin = Pin(start, 50, 25, 0);
         var endPin = Pin(end, 50, 25, 0);
+        // Registered pins carve the persistent pin corridors during the grid rebuild,
+        // exactly like every real component — the corridor is what lets a collapsed
+        // bend hug its pin without touching component padding.
+        start.PhysicalPins.Add(startPin);
+        end.PhysicalPins.Add(endPin);
+        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end });
 
         var manager = new WaveguideConnectionManager(router);
-        var connection = new WaveguideConnection { StartPin = startPin, EndPin = endPin };
+        var connection = new WaveguideConnection
+        {
+            StartPin = startPin,
+            EndPin = endPin,
+            BendRadiusMicrometers = radius,
+        };
         manager.AddExistingConnection(connection);
         manager.RecalculateAllTransmissions();
         return (manager, connection, startPin, endPin);

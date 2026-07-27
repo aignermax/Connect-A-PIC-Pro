@@ -71,9 +71,7 @@ public static class SegmentShiftEditor
     /// Re-runs the router's component collision check on the connection's current path and
     /// records the result on <see cref="RoutedPath.PassesThroughComponent"/>, so a shift into
     /// an obstacle is flagged through the existing design-issue pipeline instead of silently
-    /// producing an invalid route. Call after a drop and after undo/redo. Uses the shared
-    /// own-pin predicate: a collapsed pin lead, whose bend legitimately begins on the pin
-    /// inside the own padding band, must not raise a false collision on every shift drag.
+    /// producing an invalid route. Call after a drop and after undo/redo.
     /// </summary>
     /// <param name="connection">The connection whose path was edited.</param>
     /// <param name="router">The router owning the pathfinding grid.</param>
@@ -82,9 +80,7 @@ public static class SegmentShiftEditor
         if (connection.RoutedPath == null)
             return;
         connection.RoutedPath.PassesThroughComponent =
-            router.IsPathBlockedByComponentsForConnection(
-                connection.RoutedPath.Segments, connection.StartPin, connection.EndPin,
-                connection.RoutedBendRadiusMicrometers(router.ProcessMinBendRadiusMicrometers));
+            router.IsPathBlockedByComponents(connection.RoutedPath.Segments);
     }
 
     /// <summary>Returns the segment index of the n-th straight segment, or -1 when out of range.</summary>

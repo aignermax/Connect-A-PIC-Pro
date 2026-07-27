@@ -8,9 +8,11 @@ namespace CAP_Core.Routing.InterconnectRouting.SegmentShift;
 /// lead is removed by sliding the adjacent shiftable straight, never by inventing new geometry.
 /// A shift is kept only when it strictly reduces the combined pin-lead length and passes a
 /// caller-supplied acceptance predicate (self-intersection, component and foreign-waveguide
-/// collision); otherwise it is fully reverted, so the result is never worse than the smoothed
-/// input. Intended only for auto-routed paths; frozen or manually edited routes are the domain
-/// of <see cref="SegmentShiftEditor"/> and never reach this pass.
+/// collision). When the full collapse is rejected, the lead collapses PARTIALLY to the largest
+/// accepted shift (binary search) as long as that still removes a meaningful amount; otherwise
+/// everything is reverted, so the result is never worse than the smoothed input. Intended only
+/// for auto-routed paths; frozen or manually edited routes are the domain of
+/// <see cref="SegmentShiftEditor"/> and never reach this pass.
 /// </summary>
 public static class PinStraightCollapser
 {
@@ -21,6 +23,16 @@ public static class PinStraightCollapser
 
     /// <summary>Segment index of the shiftable straight adjacent to the start-pin lead.</summary>
     private const int StartShiftableIndex = 2;
+
+    /// <summary>Bisection steps when searching the largest accepted partial collapse; the
+    /// remaining gap to the acceptance boundary is at most lead/2^steps.</summary>
+    private const int PartialCollapseSearchSteps = 8;
+
+    /// <summary>Minimum total-lead reduction (µm) for keeping a PARTIAL collapse. A full collapse
+    /// is always kept when accepted; partial results below this threshold are discarded so
+    /// follow-up routing passes converge (the leftover bisection gap of a previous pass is
+    /// always below this) instead of shaving invisible slivers forever.</summary>
+    private const double MinPartialLeadReductionMicrometers = 0.5;
 
     /// <summary>
     /// Collapses the first and last straight segments of <paramref name="path"/> toward their
@@ -80,9 +92,12 @@ public static class PinStraightCollapser
     }
 
     /// <summary>
-    /// Shifts the shiftable straight at <paramref name="shiftableIndex"/> by exactly the offset
-    /// that drives its neighbouring pin lead to zero length, keeping the change only when the
-    /// combined pin lead strictly shrinks and <paramref name="isAcceptable"/> still holds.
+    /// Shifts the shiftable straight at <paramref name="shiftableIndex"/> by the offset that
+    /// drives its neighbouring pin lead to zero length. When the full collapse is rejected, the
+    /// largest accepted fraction of that shift is applied instead (bisection, assuming the
+    /// acceptance shrinks monotonically with the shift), provided it still removes a meaningful
+    /// amount of lead. A change is kept only when the combined pin lead strictly shrinks and
+    /// <paramref name="isAcceptable"/> holds.
     /// </summary>
     /// <param name="leadBeforeShiftable">True to collapse the lead two segments before the
     /// shiftable straight (start pin), false for the lead two segments after it (end pin).</param>
@@ -103,12 +118,75 @@ public static class PinStraightCollapser
             return;
 
         double totalLeadBefore = TotalPinLead(path);
-        var snapshot = path.DeepCopy();
-        if (!SegmentShiftEditor.TryShiftStraightSegment(segments, shiftableIndex, delta, out _))
-            return; // clamp rejected the shift; segments are untouched, nothing to restore
+        if (TryShiftAndKeepIfAccepted(path, shiftableIndex, delta, isAcceptable,
+                totalLeadBefore, minReduction: Epsilon))
+            return; // full collapse kept
 
-        if (!isAcceptable(path) || TotalPinLead(path) > totalLeadBefore - Epsilon)
-            Restore(path, snapshot);
+        double accepted = LargestAcceptedFraction(path, shiftableIndex, delta, isAcceptable, totalLeadBefore);
+        if (accepted > 0)
+        {
+            TryShiftAndKeepIfAccepted(path, shiftableIndex, delta * accepted, isAcceptable,
+                totalLeadBefore, MinPartialLeadReductionMicrometers);
+        }
+    }
+
+    /// <summary>
+    /// Bisects for the largest fraction of <paramref name="fullDelta"/> whose trial passes the
+    /// acceptance and lead gate. Every probe is fully reverted; 0 means nothing was accepted.
+    /// </summary>
+    private static double LargestAcceptedFraction(RoutedPath path, int shiftableIndex,
+        double fullDelta, Func<RoutedPath, bool> isAcceptable, double totalLeadBefore)
+    {
+        double accepted = 0, low = 0, high = 1;
+        for (int i = 0; i < PartialCollapseSearchSteps; i++)
+        {
+            double mid = (low + high) / 2;
+            if (ProbeShiftAccepted(path, shiftableIndex, fullDelta * mid, isAcceptable, totalLeadBefore))
+            {
+                accepted = mid;
+                low = mid;
+            }
+            else
+            {
+                high = mid;
+            }
+        }
+        return accepted;
+    }
+
+    /// <summary>Applies a trial shift, evaluates it, and always reverts. The backup is taken
+    /// fresh per probe: restoring re-uses the backup's segment objects, so a second probe on a
+    /// shared snapshot would corrupt it.</summary>
+    private static bool ProbeShiftAccepted(RoutedPath path, int shiftableIndex, double delta,
+        Func<RoutedPath, bool> isAcceptable, double totalLeadBefore)
+    {
+        var backup = path.DeepCopy();
+        if (!SegmentShiftEditor.TryShiftStraightSegment(path.Segments, shiftableIndex, delta, out _))
+            return false; // clamp rejected; segments are untouched
+
+        bool accepted = isAcceptable(path) && TotalPinLead(path) < totalLeadBefore - Epsilon;
+        Restore(path, backup);
+        return accepted;
+    }
+
+    /// <summary>
+    /// Applies the shift and keeps it only when the acceptance holds and the combined pin lead
+    /// shrinks by at least <paramref name="minReduction"/>; otherwise everything is reverted.
+    /// </summary>
+    private static bool TryShiftAndKeepIfAccepted(RoutedPath path, int shiftableIndex, double delta,
+        Func<RoutedPath, bool> isAcceptable, double totalLeadBefore, double minReduction)
+    {
+        var backup = path.DeepCopy();
+        if (!SegmentShiftEditor.TryShiftStraightSegment(path.Segments, shiftableIndex, delta, out _))
+            return false; // clamp rejected; segments are untouched
+
+        double reduction = totalLeadBefore - TotalPinLead(path);
+        if (!isAcceptable(path) || reduction < minReduction)
+        {
+            Restore(path, backup);
+            return false;
+        }
+        return true;
     }
 
     /// <summary>

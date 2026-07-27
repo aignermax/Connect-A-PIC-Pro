@@ -497,39 +497,6 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
-    /// Checks if a cell holds a frozen group waveguide (permanent obstacle, state 3).
-    /// These cells block routing and validation unconditionally — no pin corridor or
-    /// own-pin allowance may ever tolerate them.
-    /// </summary>
-    public bool IsFrozenPathCell(int gridX, int gridY)
-    {
-        return IsInBounds(gridX, gridY) && _cells[gridX, gridY] == 3;
-    }
-
-    /// <summary>
-    /// Read-only snapshot of the unpadded body rectangles (µm) of all registered
-    /// components. Groups contribute their child components (each is registered
-    /// individually), never the group bounding box, so the space between grouped
-    /// children stays free. Taken under the component lock; no grid state is modified.
-    /// </summary>
-    public List<(double MinX, double MinY, double MaxX, double MaxY)> GetComponentBodyRectangles()
-    {
-        lock (_componentCellsLock)
-        {
-            var rectangles = new List<(double, double, double, double)>(_componentCells.Count);
-            foreach (var component in _componentCells.Keys)
-            {
-                if (component is ComponentGroup)
-                    continue;
-                rectangles.Add((component.PhysicalX, component.PhysicalY,
-                    component.PhysicalX + component.WidthMicrometers,
-                    component.PhysicalY + component.HeightMicrometers));
-            }
-            return rectangles;
-        }
-    }
-
-    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>

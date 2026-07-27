@@ -54,6 +54,22 @@ public class PinStraightCollapserTests
     }
 
     [Fact]
+    public void Collapse_WhenOnlyPartOfTheShiftIsAccepted_KeepsTheLargestAcceptedPartialCollapse()
+    {
+        // Acceptance emulates an obstacle boundary: the start lead may not drop below 10 µm.
+        // The full collapse is rejected, so the bisection must settle on the largest accepted
+        // partial shift instead of giving up entirely.
+        var path = UTurnPath();
+
+        PinStraightCollapser.Collapse(path,
+            trial => ((StraightSegment)trial.Segments[0]).LengthMicrometers >= 10.0 - 1e-9);
+
+        path.IsValid.ShouldBeTrue();
+        ((StraightSegment)path.Segments[0]).LengthMicrometers.ShouldBe(10.0, 0.1);
+        ((StraightSegment)path.Segments[^1]).LengthMicrometers.ShouldBe(10.0, 0.1);
+    }
+
+    [Fact]
     public void Collapse_WhenAcceptanceRejects_LeavesThePathUntouched()
     {
         var path = ZPath();

@@ -241,20 +241,6 @@ namespace CAP_Core.Components.Connections
         }
 
         /// <summary>
-        /// The bend radius the current route was actually built with: the process floor raises
-        /// the connection radius, except when the router had to fall back below the floor — the
-        /// route is then marked <see cref="RoutedPath.ViolatesProcessMinBendRadius"/> and built
-        /// at the raw connection radius. Geometry checks that derive pin allowances from the
-        /// radius must use this value, not the floor, or they judge a floor-violating route
-        /// against arcs it does not have.
-        /// </summary>
-        /// <param name="processMinBendRadiusMicrometers">The active process bend-radius floor.</param>
-        public double RoutedBendRadiusMicrometers(double processMinBendRadiusMicrometers) =>
-            RoutedPath is { ViolatesProcessMinBendRadius: true }
-                ? BendRadiusMicrometers
-                : Math.Max(BendRadiusMicrometers, processMinBendRadiusMicrometers);
-
-        /// <summary>
         /// Atomically replaces <see cref="RoutedPath"/> with a new instance and refreshes the
         /// loss. Background post-processing (e.g. the pin-lead collapse) computes on a private
         /// copy and publishes the finished result through this single reference assignment, so

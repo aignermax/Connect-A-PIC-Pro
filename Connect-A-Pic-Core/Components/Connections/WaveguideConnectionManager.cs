@@ -565,13 +565,8 @@ public partial class WaveguideConnectionManager
         if (startDist > EndpointToleranceMicrometers || endDist > EndpointToleranceMicrometers)
             return false;
 
-        // Check path doesn't pass through component obstacles — via the shared own-pin
-        // predicate, so a collapsed pin lead (its bend legitimately begins on the pin, inside
-        // the own padding band) is kept instead of re-routed on every pass, while foreign and
-        // own component bodies still invalidate the route exactly as before the collapse pass.
-        return !router.IsPathBlockedByComponentsForConnection(
-            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin,
-            connection.RoutedBendRadiusMicrometers(router.ProcessMinBendRadiusMicrometers));
+        // Check path doesn't pass through component obstacles
+        return !router.IsPathBlocked(connection.RoutedPath.Segments);
     }
 
     private static double Distance(double x1, double y1, double x2, double y2)
