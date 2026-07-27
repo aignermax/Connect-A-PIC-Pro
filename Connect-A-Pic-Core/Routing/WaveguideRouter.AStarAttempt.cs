@@ -168,6 +168,36 @@ public partial class WaveguideRouter
             var smoother = new PathSmoother(PathfindingGrid, bendRadius, AllowedRadiiIncluding(bendRadius));
             var smoothedPath = smoother.ConvertToSegments(gridPath, startPin, endPin);
 
+            // Close-approach retry: when the geometric terminal approach collides with a
+            // blocked cell (e.g. a neighboring waveguide near the pin), re-plan with the
+            // search extending almost all the way to the pin, so the approach becomes part
+            // of the collision-checked A* body instead of unchecked smoother geometry.
+            if (smoothedPath.IsInvalidGeometry && !cancellationToken.IsCancellationRequested)
+            {
+                CostCalculator.MinPinEscapeCells = scaledEscape;
+                CostCalculator.MinStraightRunCells = scaledStraightRun;
+                var closeApproach = new AStarPathfinder.AStarPathfinder(PathfindingGrid, CostCalculator)
+                {
+                    MaxNodesExpanded = Phase1MaxNodes,
+                    UseDiagonals = UseDiagonalRouting,
+                    GoalTolerance = CloseApproachGoalToleranceCells
+                };
+                var closePath = closeApproach.FindPath(gridStartX, gridStartY, startDir,
+                                                       gridEndX, gridEndY, endDir, cancellationToken);
+                CostCalculator.MinPinEscapeCells = originalEscapeCells;
+                CostCalculator.MinStraightRunCells = originalStraightRun;
+
+                if (closePath != null && closePath.Count >= 2)
+                {
+                    var reSmoothed = smoother.ConvertToSegments(closePath, startPin, endPin);
+                    if (!reSmoothed.IsInvalidGeometry)
+                    {
+                        smoothedPath = reSmoothed;
+                        gridPath = closePath;
+                    }
+                }
+            }
+
             path.Segments.AddRange(smoothedPath.Segments);
             path.IsInvalidGeometry = smoothedPath.IsInvalidGeometry;
             path.DebugGridPath = gridPath;

@@ -4,9 +4,9 @@ namespace CAP_Core.Routing.AStarPathfinder;
 /// Samples physical path segments against the pathfinding grid to detect
 /// collisions with blocked cells (components or other waveguides). Used to
 /// validate geometry that is constructed outside the collision-checked A*
-/// search — e.g. the path smoother's terminal approach, which was previously
-/// built purely geometrically and could cut through a neighboring waveguide
-/// near the pin (issue #704, bug 3).
+/// search — e.g. the path smoother's terminal approach, which is built purely
+/// geometrically and could otherwise cut through a neighboring waveguide near
+/// the pin.
 /// </summary>
 public class SegmentCollisionChecker
 {
@@ -30,7 +30,7 @@ public class SegmentCollisionChecker
     /// route's own endpoint components. A terminal approach necessarily enters the
     /// component of the pin it lands on (its pins can sit deep inside the body), so
     /// those cells are not real collisions; only foreign components and waveguides
-    /// count (issue #704 review — fixes terminal-approach false positives).
+    /// count.
     /// </summary>
     public SegmentCollisionChecker(PathfindingGrid grid, HashSet<(int x, int y)>? excludedCells)
     {
