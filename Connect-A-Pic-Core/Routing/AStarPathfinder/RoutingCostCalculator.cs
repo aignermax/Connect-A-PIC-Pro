@@ -35,8 +35,10 @@ public class RoutingCostCalculator
     /// Minimum "escape distance" from start pin before allowing turns.
     /// This forces waveguides to exit components in the pin direction
     /// before routing toward the destination.
-    /// Typically 3-5x bend radius to ensure clean exit.
-    /// REDUCED to 15 to avoid blocking in tight spaces.
+    /// <see cref="CAP_Core.Routing.WaveguideRouter"/> overrides this per routing attempt
+    /// with the radius-derived tangent escape (bend radius rounded up past the next whole
+    /// cell), so the first bend can begin directly at the pin — the default below only
+    /// applies to direct users of the calculator.
     /// </summary>
     public int MinPinEscapeCells { get; set; } = 15;
 

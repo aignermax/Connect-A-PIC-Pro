@@ -77,13 +77,18 @@ public class AStarPathfinder
         var visited = new Dictionary<(int, int, GridDirection, int), AStarNode>();
         var distanceFromStart = new Dictionary<(int, int, GridDirection, int), int>();
 
-        // Create start node
-        // StraightRunLength = 0 forces the path to go straight first before turning
-        // This ensures waveguides exit components properly before bending
+        // Create start node.
+        // A pin start needs room for only ONE arc tangent before the first turn (the
+        // upcoming bend), while interior turns need two — the previous and the next arc —
+        // which is what MinStraightRunCells (≈ 2 × bend radius) encodes. Granting the start
+        // node half that run makes the first turn legal one tangent from the pin, so the
+        // first bend can begin directly at the pin (pin-lead-stub field finding). The -1
+        // keeps the first apex strictly beyond the tangent, so a short pin-side straight
+        // survives smoothing for the in-canvas shift handles.
         var startNode = new AStarNode(startX, startY, startDirection)
         {
             GCost = 0,
-            StraightRunLength = 0
+            StraightRunLength = Math.Max(0, (_costCalculator.MinStraightRunCells - 1) / 2)
         };
         startNode.HCost = _costCalculator.CalculateHeuristic(
             startX, startY, startDirection, endX, endY, endDirection);
