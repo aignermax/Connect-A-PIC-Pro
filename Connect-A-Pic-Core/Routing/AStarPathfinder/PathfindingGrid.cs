@@ -47,6 +47,12 @@ public partial class PathfindingGrid
     private readonly HashSet<(int x, int y)> _pinZoneCells = new();
     private readonly object _pinZoneLock = new();
 
+    // Per-component pin-zone bookkeeping so RemoveComponentObstacle can unmark a
+    // component's zones without erasing zones that overlapping components still need —
+    // otherwise a dissolved crossing leaves stale soft penalties on the grid.
+    private readonly Dictionary<Component, HashSet<(int x, int y)>> _componentPinZones = new();
+    private readonly Dictionary<(int x, int y), int> _pinZoneRefCounts = new();
+
     /// <summary>
     /// Callback invoked when waveguide cells are added (for distance transform updates).
     /// </summary>
@@ -288,11 +294,13 @@ public partial class PathfindingGrid
         // Mark pin reservation zones — soft penalty area around each pin.
         // Routes can pass through but A* prefers to avoid them.
         double pinZoneRadius = 15.0; // µm around each pin
+        var zoneCells = new HashSet<(int x, int y)>();
         foreach (var pin in component.PhysicalPins)
         {
             var (pinX, pinY) = pin.GetAbsolutePosition();
-            MarkPinReservationZone(pinX, pinY, pinZoneRadius);
+            CollectPinReservationZoneCells(pinX, pinY, pinZoneRadius, zoneCells);
         }
+        RegisterPinZones(component, zoneCells);
     }
 
     /// <summary>
@@ -326,6 +334,7 @@ public partial class PathfindingGrid
                 }
             }
         }
+        UnregisterPinZones(component);
     }
 
     /// <summary>
@@ -361,6 +370,7 @@ public partial class PathfindingGrid
                         }
                     }
                 }
+                UnregisterPinZones(child);
             }
         }
 
@@ -497,6 +507,27 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
+    /// Collects the obstacle cells occupied by the given components as a snapshot copy
+    /// (safe to read without holding the grid lock). Used by the terminal-approach
+    /// collision check to exclude a route's own endpoint components — a waveguide
+    /// legitimately enters the components of the two pins it connects, so those cells
+    /// must not count as collisions.
+    /// </summary>
+    public HashSet<(int x, int y)> CollectComponentCells(IEnumerable<Component> components)
+    {
+        var result = new HashSet<(int x, int y)>();
+        lock (_componentCellsLock)
+        {
+            foreach (var component in components)
+            {
+                if (component != null && _componentCells.TryGetValue(component, out var cells))
+                    result.UnionWith(cells);
+            }
+        }
+        return result;
+    }
+
+    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>
@@ -543,6 +574,8 @@ public partial class PathfindingGrid
         lock (_pinZoneLock)
         {
             _pinZoneCells.Clear();
+            _componentPinZones.Clear();
+            _pinZoneRefCounts.Clear();
         }
 
         foreach (var component in components)
@@ -720,29 +753,76 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
-    /// Marks a circular zone around a pin position as a reservation zone.
-    /// Only marks cells that are currently free (state=0) — doesn't mark obstacles.
+    /// Collects the cells of a circular reservation zone around a pin position into
+    /// <paramref name="cells"/>. Registration into the grid happens in <see cref="RegisterPinZones"/>.
     /// </summary>
-    private void MarkPinReservationZone(double pinX, double pinY, double radiusMicrometers)
+    private void CollectPinReservationZoneCells(
+        double pinX, double pinY, double radiusMicrometers, HashSet<(int x, int y)> cells)
     {
         var (gcx, gcy) = PhysicalToGrid(pinX, pinY);
         int gridRadius = (int)Math.Ceiling(radiusMicrometers / CellSizeMicrometers);
 
+        for (int gx = gcx - gridRadius; gx <= gcx + gridRadius; gx++)
+        {
+            for (int gy = gcy - gridRadius; gy <= gcy + gridRadius; gy++)
+            {
+                if (!IsInBounds(gx, gy)) continue;
+
+                var (px, py) = GridToPhysical(gx, gy);
+                double dist = Math.Sqrt((px - pinX) * (px - pinX) + (py - pinY) * (py - pinY));
+                if (dist <= radiusMicrometers)
+                {
+                    cells.Add((gx, gy));
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Registers a component's pin-zone cells with reference counting, so zones shared
+    /// with another component's pins survive this component's later removal.
+    /// </summary>
+    private void RegisterPinZones(Component component, HashSet<(int x, int y)> cells)
+    {
         lock (_pinZoneLock)
         {
-            for (int gx = gcx - gridRadius; gx <= gcx + gridRadius; gx++)
+            UnregisterPinZonesLocked(component);
+            _componentPinZones[component] = cells;
+            foreach (var cell in cells)
             {
-                for (int gy = gcy - gridRadius; gy <= gcy + gridRadius; gy++)
-                {
-                    if (!IsInBounds(gx, gy)) continue;
+                _pinZoneRefCounts.TryGetValue(cell, out int count);
+                _pinZoneRefCounts[cell] = count + 1;
+                _pinZoneCells.Add(cell);
+            }
+        }
+    }
 
-                    var (px, py) = GridToPhysical(gx, gy);
-                    double dist = Math.Sqrt((px - pinX) * (px - pinX) + (py - pinY) * (py - pinY));
-                    if (dist <= radiusMicrometers)
-                    {
-                        _pinZoneCells.Add((gx, gy));
-                    }
-                }
+    /// <summary>
+    /// Unmarks a component's pin reservation zones; cells still referenced by another
+    /// component's pins stay marked, so dissolving a crossing leaves no stale penalties.
+    /// </summary>
+    private void UnregisterPinZones(Component component)
+    {
+        lock (_pinZoneLock)
+        {
+            UnregisterPinZonesLocked(component);
+        }
+    }
+
+    private void UnregisterPinZonesLocked(Component component)
+    {
+        if (!_componentPinZones.Remove(component, out var cells)) return;
+        foreach (var cell in cells)
+        {
+            if (!_pinZoneRefCounts.TryGetValue(cell, out int count)) continue;
+            if (count <= 1)
+            {
+                _pinZoneRefCounts.Remove(cell);
+                _pinZoneCells.Remove(cell);
+            }
+            else
+            {
+                _pinZoneRefCounts[cell] = count - 1;
             }
         }
     }
