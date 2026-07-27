@@ -8,7 +8,7 @@ using CAP_Core.Tiles;
 namespace UnitTests.Routing;
 
 /// <summary>
-/// Builds the component blocks of the issue #704 repro designs
+/// Builds the component blocks of the routing repro designs
 /// (overlappingwaveguides.lun / Kreisverbindung.lun): MZI-shaped blocks with
 /// right-edge pins o2/o3 and a Taper with a left-edge pin, matching the
 /// CornerStone SiN geometry of the original files. Also provides geometric

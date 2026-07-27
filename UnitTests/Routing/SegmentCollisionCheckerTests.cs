@@ -7,8 +7,8 @@ namespace UnitTests.Routing;
 
 /// <summary>
 /// Tests for <see cref="SegmentCollisionChecker"/>, which validates the path
-/// smoother's geometrically constructed terminal approach against the grid
-/// (issue #704, bug 3: unchecked approach bends cut through foreign waveguides).
+/// smoother's geometrically constructed terminal approach against the grid,
+/// so an unchecked approach bend cannot cut through a foreign waveguide.
 /// </summary>
 public class SegmentCollisionCheckerTests
 {
@@ -66,7 +66,7 @@ public class SegmentCollisionCheckerTests
         var checker = new SegmentCollisionChecker(grid);
 
         // Quarter bend from heading 270° (up) to 180° (west) whose arc sweeps
-        // across the y=100 waveguide line — the exact geometry of the bug-3
+        // across the y=100 waveguide line — the exact geometry of the overlap
         // repro's terminal approach.
         var bend = new BendSegment(centerX: 105, centerY: 105, radius: 10,
             startAngle: 270, sweepAngle: -90);
@@ -93,7 +93,7 @@ public class SegmentCollisionCheckerTests
         // A terminal approach necessarily enters the component of the pin it lands on
         // (pins can sit deep inside the body), so those cells must not count as
         // collisions — otherwise every route into a pin gets flagged and A* is
-        // needlessly discarded for the blind Manhattan fallback (#704 review).
+        // needlessly discarded for the blind Manhattan fallback.
         var grid = new PathfindingGrid(0, 0, 200, 200, cellSize: 4.0);
 
         // Block the exact cells the vertical crossing will sample, and remember them.
@@ -117,7 +117,7 @@ public class SegmentCollisionCheckerTests
     public void Exclusion_StillDetectsForeignObstacles()
     {
         // Excluding the endpoint's own cells must NOT blind the checker to a real
-        // foreign waveguide crossing near the pin (#704 bug 3 must still be caught).
+        // foreign waveguide crossing near the pin — that must still be caught.
         var grid = CreateGridWithHorizontalWaveguide();
         var crossing = new StraightSegment(100, 50, 100, 150, 90);
 

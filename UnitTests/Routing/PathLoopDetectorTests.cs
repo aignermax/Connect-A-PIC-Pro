@@ -5,9 +5,9 @@ using Xunit;
 namespace UnitTests.Routing;
 
 /// <summary>
-/// Regression tests for issue #704 (bug 2): the A* pathfinder must never
-/// return a self-intersecting path (e.g. a full 360° loop at the start pin) —
-/// a waveguide crossing itself has no valid optical model.
+/// Regression tests ensuring the A* pathfinder never returns a self-intersecting
+/// path (e.g. a full 360° loop at the start pin) — a waveguide crossing itself
+/// has no valid optical model.
 /// </summary>
 public class PathLoopDetectorTests
 {
@@ -29,7 +29,7 @@ public class PathLoopDetectorTests
     [Fact]
     public void FullLoopRevisitingCell_IsSelfIntersecting()
     {
-        // A 360° box that returns onto its own first cell (the bug-2 symptom).
+        // A 360° box that returns onto its own first cell (the self-loop symptom).
         var path = MakePath(
             (0, 0), (1, 0), (2, 0),
             (2, 1), (2, 2),
@@ -59,7 +59,7 @@ public class PathLoopDetectorTests
     public void FindPath_PinPointingAwayFromGoal_ReturnsLoopFreePath()
     {
         // Start pin points East while the goal lies West: the search must make
-        // a U-turn, never a 360° self-crossing circle (issue #704, bug 2).
+        // a U-turn, never a 360° self-crossing circle.
         var grid = new PathfindingGrid(0, 0, 200, 200, cellSize: 1.0);
         var costCalculator = new RoutingCostCalculator
         {

@@ -7,10 +7,10 @@ using Xunit;
 namespace UnitTests.Routing;
 
 /// <summary>
-/// Integration regression tests for issue #704, replaying the geometry of the
-/// original repro designs (overlappingwaveguides.lun / Kreisverbindung.lun).
-/// Bug 3: routed waveguides of neighboring ports must never silently overlap;
-/// bug 2: no routed path may cross itself (360° loop at the start pin).
+/// Integration regression tests replaying the geometry of the original repro
+/// designs (overlappingwaveguides.lun / Kreisverbindung.lun): routed waveguides
+/// of neighboring ports must never silently overlap, and no routed path may
+/// cross itself (a 360° loop at the start pin).
 /// </summary>
 public class Issue704ReproRoutingTests
 {
@@ -26,9 +26,9 @@ public class Issue704ReproRoutingTests
     [Fact]
     public void OverlappingWaveguidesRepro_NeighboringPortRoutes_DoNotSilentlyOverlap()
     {
-        // Geometry of overlappingwaveguides.lun (issue #704, bug 3): the Taper
-        // pin sits 5.9 µm below MZI_9.o2's entry axis, so the second route's
-        // terminal approach used to cut straight through the first waveguide.
+        // Geometry of overlappingwaveguides.lun: the Taper pin sits 5.9 µm below
+        // MZI_9.o2's entry axis, so the second route's terminal approach used to
+        // cut straight through the first waveguide.
         var mzi8 = Issue704ReproCircuit.CreateMzi("MZI_8", 374.34455820950575, 218.3565233418277);
         var mzi9 = Issue704ReproCircuit.CreateMzi("MZI_9", 236.5708507637589, 649.767215289101);
         var taper = Issue704ReproCircuit.CreateTaper("Taper_5", TaperPinX, TaperPinY);
@@ -45,9 +45,9 @@ public class Issue704ReproRoutingTests
     [Fact]
     public void KreisverbindungRepro_NoRouteIsSelfIntersecting()
     {
-        // Geometry of Kreisverbindung.lun (issue #704, bug 2): the start pin
-        // points away from the goal and the A* search used to return a full
-        // 360° circle crossing itself at the start pin.
+        // Geometry of Kreisverbindung.lun: the start pin points away from the goal
+        // and the A* search used to return a full 360° circle crossing itself at
+        // the start pin.
         var mzi8 = Issue704ReproCircuit.CreateMzi("MZI_8", 382.34332648799983, 368.7961620369691);
         var mzi9 = Issue704ReproCircuit.CreateMzi("MZI_9", 154.34028802348783, 772.173225746585);
         var taper = Issue704ReproCircuit.CreateTaper("Taper_5", TaperPinX, TaperPinY);
@@ -63,7 +63,7 @@ public class Issue704ReproRoutingTests
             var gridPath = connection.RoutedPath?.DebugGridPath;
             if (gridPath == null) continue;
             PathLoopDetector.IsSelfIntersecting(gridPath).ShouldBeFalse(
-                $"route {connection} must never cross itself (issue #704, bug 2)");
+                $"route {connection} must never cross itself");
         }
     }
 
@@ -85,7 +85,7 @@ public class Issue704ReproRoutingTests
     }
 
     /// <summary>
-    /// Asserts the bug-3 invariant: two independently routed waveguides either
+    /// Asserts the no-silent-overlap invariant: two independently routed waveguides either
     /// keep a physical clearance, or the collision is explicitly flagged
     /// (blocked fallback / invalid geometry) — never a silent overlap.
     /// </summary>
@@ -104,6 +104,6 @@ public class Issue704ReproRoutingTests
             Issue704ReproCircuit.SamplePath(a.RoutedPath),
             Issue704ReproCircuit.SamplePath(b.RoutedPath));
         minDistance.ShouldBeGreaterThan(MinClearanceMicrometers,
-            "unflagged waveguides must not run through each other (issue #704, bug 3)");
+            "unflagged waveguides must not run through each other");
     }
 }
