@@ -77,13 +77,18 @@ public class AStarPathfinder
         var visited = new Dictionary<(int, int, GridDirection, int), AStarNode>();
         var distanceFromStart = new Dictionary<(int, int, GridDirection, int), int>();
 
-        // Create start node
-        // StraightRunLength = 0 forces the path to go straight first before turning
-        // This ensures waveguides exit components properly before bending
+        // Create start node.
+        // A pin start needs room for only ONE arc tangent before the first turn (the
+        // upcoming bend), while interior turns need two — the previous and the next arc —
+        // which is what MinStraightRunCells (≈ 2 × bend radius) encodes. Granting the start
+        // node half that run makes the first turn legal one tangent from the pin, so the
+        // first bend can begin directly at the pin (pin-lead-stub field finding). The -1
+        // keeps the first apex strictly beyond the tangent, so a short pin-side straight
+        // survives smoothing for the in-canvas shift handles.
         var startNode = new AStarNode(startX, startY, startDirection)
         {
             GCost = 0,
-            StraightRunLength = 0
+            StraightRunLength = Math.Max(0, (_costCalculator.MinStraightRunCells - 1) / 2)
         };
         startNode.HCost = _costCalculator.CalculateHeuristic(
             startX, startY, startDirection, endX, endY, endDirection);
@@ -220,6 +225,12 @@ public class AStarPathfinder
 
             // CRITICAL: Force pin arrival - must approach goal in the correct direction
             // for the last N cells. This ensures clean arrival at the end pin.
+            // `<=` deliberately holds the last corner ONE cell further from the pin than
+            // the departure check above (distanceFromStart < N) holds the first corner:
+            // relaxing it to `<` lets the smoothed arrival arc clip obstacles registered
+            // right next to the goal corridor (frozen sibling paths). The resulting
+            // asymmetry is bounded by a single grid cell — quantization noise, unlike the
+            // old distance-scaled escape (pin-lead-stub field finding).
             int distanceToGoal = Math.Abs(newX - goalX) + Math.Abs(newY - goalY);
             if (distanceToGoal <= _costCalculator.MinPinEscapeCells)
             {

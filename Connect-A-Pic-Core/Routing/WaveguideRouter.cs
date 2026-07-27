@@ -268,9 +268,11 @@ public partial class WaveguideRouter
         double endX, double endY, double endInputAngle, double bendRadius)
     {
         var path = new RoutedPath();
-        // Use small lead-in/lead-out for smoother transitions (15% of bend radius)
-        double leadLength = bendRadius * 0.15;
-        var manhattan = new ManhattanRouter(bendRadius, leadOut: leadLength, leadIn: leadLength);
+        // No lead-in/lead-out: the CSC route is tangential at both pins by construction,
+        // so the first arc may begin directly at the start pin and the last arc may end
+        // directly at the end pin. The old 15%-of-radius lead was a cosmetic relic that
+        // forced a straight stub at every fallback pin (pin-lead-stub field finding).
+        var manhattan = new ManhattanRouter(bendRadius);
         manhattan.Route(startX, startY, startAngle, endX, endY, endInputAngle, path);
         return path;
     }

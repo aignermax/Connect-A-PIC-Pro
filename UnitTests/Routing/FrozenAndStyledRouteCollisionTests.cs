@@ -4,6 +4,7 @@ using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
 using CAP_Core.Routing.InterconnectRouting;
+using CAP_Core.Routing.InterconnectRouting.SegmentShift;
 using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
@@ -162,9 +163,15 @@ public class FrozenAndStyledRouteCollisionTests
         return (manager, router, connection, components);
     }
 
-    /// <summary>Applies the biggest fitting handle radius to the first resizable bend.</summary>
+    /// <summary>
+    /// Applies the biggest fitting handle radius to the first resizable bend. Routes now hug
+    /// the pins by default (pin-lead-stub fix: the first bend begins one tangent from the
+    /// pin), so the pin-side straight is first LENGTHENED via the segment-shift editor —
+    /// the canonical way to make room for a big radius — before the override is applied.
+    /// </summary>
     private static double ApplyBigRadius(WaveguideConnection connection)
     {
+        MakeRoomAtStartPin(connection, BigHandleRadius + 10);
         var corners = BendRadiusEditor.GetBendCorners(connection.GetPathSegments());
         corners.ShouldNotBeEmpty("the auto corner route must expose a resizable bend");
         foreach (var radius in new[] { BigHandleRadius, 100.0, 60.0, 40.0 })
@@ -173,6 +180,24 @@ public class FrozenAndStyledRouteCollisionTests
                 return radius;
         }
         throw new InvalidOperationException("No handle radius fits the route.");
+    }
+
+    /// <summary>
+    /// Extends the straight between the start pin and the first bend by
+    /// <paramref name="roomMicrometers"/> by shifting the middle straight along its normal
+    /// (the adjoining bends slide along the outer straights, exactly like the in-canvas drag).
+    /// </summary>
+    private static void MakeRoomAtStartPin(WaveguideConnection connection, double roomMicrometers)
+    {
+        var segments = connection.RoutedPath!.Segments;
+        var lead = (StraightSegment)segments[0];
+        var handle = SegmentShiftGeometry.GetHandles(segments)
+            .First(h => h.StraightIndex == 1);
+        // An offset o extends the lead by o / dot(leadDirection, normal); choosing
+        // o = room · dot yields an extension of exactly `room` for either sign of dot.
+        double dot = SegmentShiftGeometry.Dot(SegmentShiftGeometry.DirectionOf(lead), handle.Normal);
+        SegmentShiftEditor.TryApplyShift(connection, 1, roomMicrometers * dot, out var error)
+            .ShouldBeTrue(error);
     }
 
     /// <summary>Midpoint of the first (edited) arc along the path.</summary>

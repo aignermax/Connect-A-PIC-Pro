@@ -64,11 +64,13 @@ public partial class WaveguideRouter
 
             int originalEscapeCells = CostCalculator.MinPinEscapeCells;
 
-            // Scale escape distance based on pin separation.
-            // Both start escape + end approach must fit within the total distance,
-            // with room left for turns. Use 1/6 of distance, minimum 2 cells.
+            // The forced straight run at a pin only needs to fit the first arc's tangent
+            // length (r·tan(sweep/2), at most the bend radius for a 90° turn) — NOT the old
+            // distance-scaled escape (up to 15 cells), which forced visibly different pin
+            // clearances per connection. Close pins still degrade to 2 cells, as before.
             int gridDistance = Math.Abs(gridEndX - gridStartX) + Math.Abs(gridEndY - gridStartY);
-            int scaledEscape = Math.Min(originalEscapeCells, Math.Max(2, gridDistance / 6));
+            int scaledEscape = Math.Min(PinTangentEscapeCells(bendRadius),
+                                        Math.Max(2, gridDistance / 6));
             CostCalculator.MinPinEscapeCells = scaledEscape;
 
             // Also scale MinStraightRunCells for close pins to allow tighter turns
@@ -182,6 +184,16 @@ public partial class WaveguideRouter
             PathfindingGrid.RestoreCells(clearedEndFanout);
         }
     }
+
+    /// <summary>
+    /// Grid cells a route must run straight from a pin before the first turn, so the first
+    /// (or last) arc fits between the pin and the turn apex: the 90° tangent length (= the
+    /// bend radius) rounded up past the next whole cell. The extra cell keeps a short
+    /// pin-side straight in the smoothed path — the segment-shift handles can collapse it
+    /// to exactly zero, putting the bend directly at the pin (pin-lead-stub field finding).
+    /// </summary>
+    private int PinTangentEscapeCells(double bendRadius) =>
+        Math.Max(2, (int)(bendRadius / PathfindingGrid!.CellSizeMicrometers) + 1);
 
     /// <summary>
     /// The allowed bend radii extended with the current attempt's radius, so the smoother
