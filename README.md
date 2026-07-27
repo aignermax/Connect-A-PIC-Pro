@@ -6,7 +6,7 @@
 
 *The staged Mach-Zehnder chip wiring itself up: the production router connects component after component (diagonal routing, hand-styled bends), DC probe and bond pads get golden metal traces — then a live CW simulation lights up the power flow on every waveguide. Built from the bundled Demo and SiEPIC PDKs; click for the [full-resolution still](docs/media/v0.12/hero-canvas.png).*
 
-[**Download v0.12.0**](https://github.com/aignermax/Lunima/releases/tag/v0.12.0) · [Landing page](https://aignermax.github.io/Lunima/) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
+[![Latest release](https://img.shields.io/github/v/release/aignermax/Lunima?label=Download&color=2ea44f)](https://github.com/aignermax/Lunima/releases/latest) · [Landing page](https://aignermax.github.io/Lunima/) · [Changelog](CHANGELOG.md) · [Architecture](ARCHITECTURE.md)
 
 ---
 
@@ -94,13 +94,13 @@ The UI ships in five languages — **English, Deutsch, Español, 简体中文, �
 
 ## Download
 
-Get **[Lunima v0.12.0](https://github.com/aignermax/Lunima/releases/tag/v0.12.0)** — or browse [all releases](https://github.com/aignermax/Lunima/releases).
+Get the **[latest Lunima release](https://github.com/aignermax/Lunima/releases/latest)** — or browse [all releases](https://github.com/aignermax/Lunima/releases).
 
 | Platform | Package | Notes |
 |----------|---------|-------|
-| **Windows** (x64) | [`Lunima-Setup-0.12.0.msi`](https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-Setup-0.12.0.msi) · [portable `.zip`](https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-win-x64.zip) | Installer or unzip-and-run |
-| **Linux** (x64) | [`Lunima-0.12.0-linux-x64.tar.gz`](https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-linux-x64.tar.gz) | Extract into its own folder and run |
-| **macOS** (Apple Silicon / Intel) | [`osx-arm64.dmg`](https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-osx-arm64.dmg) · [`osx-x64.dmg`](https://github.com/aignermax/Lunima/releases/download/v0.12.0/Lunima-0.12.0-osx-x64.dmg) | Unsigned — see note below |
+| **Windows** (x64) | [`Lunima-Setup-<version>.msi`](https://github.com/aignermax/Lunima/releases/latest) · [portable `.zip`](https://github.com/aignermax/Lunima/releases/latest) | Installer or unzip-and-run |
+| **Linux** (x64) | [`Lunima-<version>-linux-x64.tar.gz`](https://github.com/aignermax/Lunima/releases/latest) | Extract into its own folder and run |
+| **macOS** (Apple Silicon / Intel) | [`Lunima-<version>-osx-arm64.dmg`](https://github.com/aignermax/Lunima/releases/latest) · [`Lunima-<version>-osx-x64.dmg`](https://github.com/aignermax/Lunima/releases/latest) | Unsigned — see note below |
 
 macOS release builds ship as an **unsigned** `.dmg`; on first launch, remove the quarantine flag with `xattr -dr com.apple.quarantine /Applications/Lunima.app`.
 
