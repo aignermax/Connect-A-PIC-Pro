@@ -1,9 +1,6 @@
-using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
-using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
-using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
 
@@ -156,12 +153,12 @@ public class PinStraightAutoCollapseTests
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
         };
-        var start = CreateTestComponent(0, 0);
-        var end = CreateTestComponent(0, 275);
-        var innerStart = Pin(start, 50, 20, 0);
-        var innerEnd = Pin(end, 50, 20, 0);
-        var outerStart = Pin(start, 50, 30, 0);
-        var outerEnd = Pin(end, 50, 30, 0);
+        var start = TestComponentFactory.CreatePinlessComponent(0, 0);
+        var end = TestComponentFactory.CreatePinlessComponent(0, 275);
+        var innerStart = TestComponentFactory.CreateRoutingPin(start, 50, 20, 0);
+        var innerEnd = TestComponentFactory.CreateRoutingPin(end, 50, 20, 0);
+        var outerStart = TestComponentFactory.CreateRoutingPin(start, 50, 30, 0);
+        var outerEnd = TestComponentFactory.CreateRoutingPin(end, 50, 30, 0);
         start.PhysicalPins.AddRange(new[] { innerStart, outerStart });
         end.PhysicalPins.AddRange(new[] { innerEnd, outerEnd });
         router.InitializePathfindingGrid(-200, -200, 700, 700, new[] { start, end });
@@ -212,10 +209,10 @@ public class PinStraightAutoCollapseTests
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
         };
-        var start = CreateTestComponent(0, 0);
-        var end = CreateTestComponent(0, pinSeparationY - 25);
-        var startPin = Pin(start, 50, 25, 0);
-        var endPin = Pin(end, 50, 25, 0);
+        var start = TestComponentFactory.CreatePinlessComponent(0, 0);
+        var end = TestComponentFactory.CreatePinlessComponent(0, pinSeparationY - 25);
+        var startPin = TestComponentFactory.CreateRoutingPin(start, 50, 25, 0);
+        var endPin = TestComponentFactory.CreateRoutingPin(end, 50, 25, 0);
         // Registered pins carve the persistent pin corridors during the grid rebuild,
         // exactly like every real component — the corridor is what lets a collapsed
         // bend hug its pin without touching component padding.
@@ -235,33 +232,4 @@ public class PinStraightAutoCollapseTests
         return (manager, connection, startPin, endPin);
     }
 
-    private static PhysicalPin Pin(Component parent, double offsetX, double offsetY, double angle) => new()
-    {
-        Name = $"pin_{offsetX}_{offsetY}",
-        OffsetXMicrometers = offsetX,
-        OffsetYMicrometers = offsetY,
-        AngleDegrees = angle,
-        ParentComponent = parent,
-    };
-
-    private static Component CreateTestComponent(double x, double y)
-    {
-        var parts = new Part[1, 1];
-        parts[0, 0] = new Part(new List<Pin>());
-        return new Component(
-            laserWaveLengthToSMatrixMap: new Dictionary<int, SMatrix>(),
-            sliders: new List<Slider>(),
-            nazcaFunctionName: "test",
-            nazcaFunctionParams: "",
-            parts: parts,
-            typeNumber: 0,
-            identifier: $"TestComponent_{x}_{y}",
-            rotationCounterClock: DiscreteRotation.R0)
-        {
-            WidthMicrometers = 50,
-            HeightMicrometers = 50,
-            PhysicalX = x,
-            PhysicalY = y,
-        };
-    }
 }

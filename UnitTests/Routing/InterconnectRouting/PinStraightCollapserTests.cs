@@ -70,6 +70,28 @@ public class PinStraightCollapserTests
     }
 
     [Fact]
+    public void Collapse_LeadSteeperThan45Degrees_IsLeftUntouched()
+    {
+        // A lead steeper than 45° against the shiftable straight's normal would translate
+        // geometry by more than √2 × the collapsed lead — beyond the sibling-scan reach the
+        // manager derives from that factor — so the collapse must skip it entirely.
+        var path = UTurnPath();
+        ((StraightSegment)path.Segments[0]).StartAngleDegrees = 60;
+        var before = Snapshot(path);
+
+        PinStraightCollapser.Collapse(path, _ => true);
+
+        var after = Snapshot(path);
+        for (int i = 0; i < before.Count; i++)
+        {
+            after[i].sx.ShouldBe(before[i].sx, Tolerance);
+            after[i].sy.ShouldBe(before[i].sy, Tolerance);
+            after[i].ex.ShouldBe(before[i].ex, Tolerance);
+            after[i].ey.ShouldBe(before[i].ey, Tolerance);
+        }
+    }
+
+    [Fact]
     public void Collapse_WhenAcceptanceRejects_LeavesThePathUntouched()
     {
         var path = ZPath();

@@ -1,10 +1,7 @@
-using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
-using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
 using CAP_Core.Routing.InterconnectRouting.SegmentShift;
-using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
 
@@ -16,8 +13,8 @@ namespace UnitTests.Routing;
 /// still invalidates it, a collapsed pin hug — which lives entirely inside the persistent pin
 /// corridor — never unfreezes a manual edit or raises a false collision flag, a small radius
 /// whose arc would cut the padding corner collapses only partially, and the sibling rules veto
-/// conservatively: an existing touch/crossing prevents the collapse, while a far-away degenerate
-/// neighbour does not.
+/// conservatively: an existing touch/crossing prevents the collapse, while degenerate
+/// neighbours are measured for real (both endpoints, no-worsening) instead of blanket-vetoing.
 /// </summary>
 public class PinLeadCollapseHardeningTests
 {
@@ -30,29 +27,30 @@ public class PinLeadCollapseHardeningTests
     /// <summary>Residual tolerance for a "collapsed to the pin" lead (floating-point noise).</summary>
     private const double CollapsedTolerance = 1e-3;
 
-    /// <summary>Pin-lead length (µm) of the manually built U-turn fixtures.</summary>
+    /// <summary>Default pin-lead length (µm) of the manually built U-turn fixtures.</summary>
     private const double ManualLeadMicrometers = 20.0;
 
     /// <summary>
-    /// A foreign, unconnected component whose body overlaps the collapsed departure bend must
-    /// invalidate the route on the next pass — the collapse introduces no exemption anywhere,
-    /// so the pre-collapse-feature behavior applies unchanged.
+    /// A foreign, unconnected component whose body lands INSIDE the persistent pin-corridor
+    /// zone overwrites the carved corridor cells with component state; the collapsed departure
+    /// bend then samples blocked cells and the route must be invalidated on the next pass —
+    /// pure grid-state detection, no exemption anywhere.
     /// </summary>
     [Fact]
-    public void ForeignComponentOnCollapsedRoute_InvalidatesTheRoute_AndReroutes()
+    public void ForeignComponentInPinCorridorZone_InvalidatesTheCollapsedRoute_AndReroutes()
     {
         var (manager, router, connection, startPin, _) = RouteUTurn();
         var collapsed = connection.RoutedPath!;
         StartPinLead(collapsed, startPin).ShouldBe(0, CollapsedTolerance,
             "precondition: the departure lead is collapsed onto the pin");
 
-        var foreign = CreateTestComponent(66, 26, width: 10, height: 10);
+        var foreign = TestComponentFactory.CreatePinlessComponent(53, 23, width: 17, height: 4);
         router.AddComponentObstacle(foreign);
 
         manager.RecalculateAllTransmissions();
 
         connection.RoutedPath.ShouldNotBeSameAs(collapsed,
-            "a foreign component body on the collapsed route must invalidate it");
+            "a foreign body over the pin corridor must invalidate the collapsed route");
         connection.IsPathValid.ShouldBeTrue();
     }
 
@@ -128,30 +126,90 @@ public class PinLeadCollapseHardeningTests
     }
 
     /// <summary>
+    /// A 400 µm lead exceeds what a fixed bisection depth could pin down to the keep threshold.
+    /// The dynamic gap criterion must still deliver a converged partial collapse: the second
+    /// pass keeps the very same path instance instead of shaving a few more micrometers.
+    /// </summary>
+    [Fact]
+    public void LongLeadPartialCollapse_IsIdempotentOnTheSecondPass()
+    {
+        // Padded blocker band across the shifted straight's travel: the full collapse (x=60)
+        // and every position below x≈236 is blocked, so the collapse must stop mid-lead.
+        var blocker = TestComponentFactory.CreatePinlessComponent(55, 95, width: 175, height: 110);
+        var (manager, _, connection, startPin, endPin) =
+            SetUpManualUTurn(10.0, leadMicrometers: 400.0, blocker);
+
+        manager.RecalculateAllTransmissions();
+
+        var afterFirst = connection.RoutedPath!;
+        StartPinLead(afterFirst, startPin).ShouldBe(176.0, 0.5,
+            "the lead must collapse exactly to the blocker's padded boundary");
+        EndPinLead(afterFirst, endPin).ShouldBe(176.0, 0.5);
+
+        manager.RecalculateAllTransmissions();
+        connection.RoutedPath.ShouldBeSameAs(afterFirst,
+            "long leads must converge on the first pass — no per-pass micro-shaving");
+    }
+
+    /// <summary>
     /// A zero-length sibling 50 µm away is unmeasurable as a polyline, but its REAL distance
     /// is far above the waveguide spacing — it must not veto the collapse.
     /// </summary>
     [Fact]
     public void DegenerateSiblingWithinReach_ButFarAway_DoesNotVetoTheCollapse()
     {
-        var anchor = CreateTestComponent(300, 140);
+        var anchor = TestComponentFactory.CreatePinlessComponent(300, 140);
         var (manager, _, connection, startPin, endPin) = SetUpManualUTurn(10.0, anchor);
-
-        var degenerate = new WaveguideConnection
-        {
-            StartPin = Pin(anchor, -170, 10, 0),
-            EndPin = Pin(anchor, -170, 10, 180),
-            IsRouteFrozen = true,
-        };
-        var point = new RoutedPath();
-        point.Segments.Add(new StraightSegment(130, 150, 130, 150, 0));
-        degenerate.RestoreCachedPath(point);
-        manager.AddExistingConnection(degenerate);
+        AddDegenerateSibling(manager, anchor, (130, 150), (130, 150));
 
         manager.RecalculateAllTransmissions();
 
         StartPinLead(connection.RoutedPath!, startPin).ShouldBe(0, CollapsedTolerance,
             "a degenerate sibling far above the spacing must not block the collapse");
+        EndPinLead(connection.RoutedPath!, endPin).ShouldBe(0, CollapsedTolerance);
+    }
+
+    /// <summary>
+    /// A degenerate sibling is measured at BOTH polyline endpoints: here the first endpoint
+    /// would pass the spacing check but the second would not — the collapse must stop at the
+    /// spacing boundary of the NEAR endpoint instead of collapsing fully.
+    /// </summary>
+    [Fact]
+    public void DegenerateSibling_IsMeasuredAtBothEndpoints()
+    {
+        var anchor = TestComponentFactory.CreatePinlessComponent(300, 140);
+        var (manager, router, connection, startPin, _) = SetUpManualUTurn(10.0, anchor);
+        // 0.09 µm long degenerate west of the straight's travel. The straight approaches from
+        // the east, so the END endpoint (x=62.05) is the near one — measuring only the START
+        // endpoint would let the collapse slide 0.09 µm below the 2 µm spacing.
+        AddDegenerateSibling(manager, anchor, (61.96, 150), (62.05, 150));
+
+        manager.RecalculateAllTransmissions();
+
+        var path = connection.RoutedPath!;
+        StartPinLead(path, startPin).ShouldBe(4.0, 0.5,
+            "the collapse must stop at the spacing boundary of the NEAR degenerate endpoint");
+        PathIntersectionDetector.DistanceToPoint(path, 62.05, 150)
+            .ShouldBeGreaterThanOrEqualTo(router.MinWaveguideSpacingMicrometers - CollapsedTolerance);
+    }
+
+    /// <summary>
+    /// A degenerate sibling exactly at the spacing boundary of the FULLY collapsed position is
+    /// no veto: the no-worsening rule accepts a trial that keeps the spacing, instead of
+    /// demanding the (much larger) pre-collapse distance like a blanket veto would.
+    /// </summary>
+    [Fact]
+    public void DegenerateSiblingExactlyAtSpacing_DoesNotVetoTheFullCollapse()
+    {
+        var anchor = TestComponentFactory.CreatePinlessComponent(300, 140);
+        var (manager, _, connection, startPin, endPin) = SetUpManualUTurn(10.0, anchor);
+        // Exactly MinWaveguideSpacing (2 µm) west of the fully collapsed straight at x=60.
+        AddDegenerateSibling(manager, anchor, (58, 150), (58, 150));
+
+        manager.RecalculateAllTransmissions();
+
+        StartPinLead(connection.RoutedPath!, startPin).ShouldBe(0, CollapsedTolerance,
+            "keeping the spacing is enough — the pre-collapse distance is not a requirement");
         EndPinLead(connection.RoutedPath!, endPin).ShouldBe(0, CollapsedTolerance);
     }
 
@@ -163,14 +221,14 @@ public class PinLeadCollapseHardeningTests
     [Fact]
     public void SiblingAlreadyCrossing_ConservativelyPreventsTheCollapse()
     {
-        var anchor = CreateTestComponent(400, 0);
+        var anchor = TestComponentFactory.CreatePinlessComponent(400, 0);
         var (manager, _, connection, startPin, endPin) = SetUpManualUTurn(10.0, anchor);
         var original = connection.RoutedPath!;
 
         var fallback = new WaveguideConnection
         {
-            StartPin = Pin(anchor, -380, 150, 0),
-            EndPin = Pin(anchor, -250, 150, 180),
+            StartPin = TestComponentFactory.CreateRoutingPin(anchor, -380, 150, 0),
+            EndPin = TestComponentFactory.CreateRoutingPin(anchor, -250, 150, 180),
             IsRouteFrozen = true,
         };
         var line = new RoutedPath { IsBlockedFallback = true };
@@ -184,6 +242,25 @@ public class PinLeadCollapseHardeningTests
             "an already-crossing route is left untouched by the collapse pass");
         StartPinLead(original, startPin).ShouldBe(ManualLeadMicrometers, CollapsedTolerance);
         EndPinLead(original, endPin).ShouldBe(ManualLeadMicrometers, CollapsedTolerance);
+    }
+
+    /// <summary>Registers a frozen degenerate (point-like) sibling whose cached path runs from
+    /// <paramref name="start"/> to <paramref name="end"/>, anchored on far-away pins.</summary>
+    private static void AddDegenerateSibling(WaveguideConnectionManager manager, Component anchor,
+        (double X, double Y) start, (double X, double Y) end)
+    {
+        var degenerate = new WaveguideConnection
+        {
+            StartPin = TestComponentFactory.CreateRoutingPin(
+                anchor, start.X - anchor.PhysicalX, start.Y - anchor.PhysicalY, 0),
+            EndPin = TestComponentFactory.CreateRoutingPin(
+                anchor, end.X - anchor.PhysicalX, end.Y - anchor.PhysicalY, 180),
+            IsRouteFrozen = true,
+        };
+        var point = new RoutedPath();
+        point.Segments.Add(new StraightSegment(start.X, start.Y, end.X, end.Y, 0));
+        degenerate.RestoreCachedPath(point);
+        manager.AddExistingConnection(degenerate);
     }
 
     /// <summary>Shifts the first shiftable straight, trying both normal directions so the
@@ -220,13 +297,14 @@ public class PinLeadCollapseHardeningTests
     }
 
     /// <summary>
-    /// The same U-turn layout, but with a pre-built cached path (20 µm pin leads, middle
-    /// straight at x = 70 + radius) instead of running A*, so the pre-collapse geometry is
-    /// exact and the collapse decisions are evaluated against known distances.
+    /// The same U-turn layout, but with a pre-built cached path (pin leads of the given length,
+    /// middle straight at x = 50 + lead + radius) instead of running A*, so the pre-collapse
+    /// geometry is exact and the collapse decisions are evaluated against known distances.
     /// </summary>
     private static (WaveguideConnectionManager Manager, WaveguideRouter Router,
         WaveguideConnection Connection, PhysicalPin StartPin, PhysicalPin EndPin)
-        SetUpManualUTurn(double bendRadius, params Component[] extraComponents)
+        SetUpManualUTurn(double bendRadius, double leadMicrometers,
+            params Component[] extraComponents)
     {
         var (router, startPin, endPin) = CreateUTurnLayout(bendRadius, 700, extraComponents);
         var manager = new WaveguideConnectionManager(router);
@@ -236,10 +314,15 @@ public class PinLeadCollapseHardeningTests
             EndPin = endPin,
             BendRadiusMicrometers = bendRadius,
         };
-        connection.RestoreCachedPath(ManualUTurnPath(bendRadius));
+        connection.RestoreCachedPath(ManualUTurnPath(bendRadius, leadMicrometers));
         manager.AddExistingConnection(connection);
         return (manager, router, connection, startPin, endPin);
     }
+
+    private static (WaveguideConnectionManager Manager, WaveguideRouter Router,
+        WaveguideConnection Connection, PhysicalPin StartPin, PhysicalPin EndPin)
+        SetUpManualUTurn(double bendRadius, params Component[] extraComponents)
+        => SetUpManualUTurn(bendRadius, ManualLeadMicrometers, extraComponents);
 
     private static (WaveguideRouter Router, PhysicalPin StartPin, PhysicalPin EndPin)
         CreateUTurnLayout(double bendRadius, double gridSize, params Component[] extraComponents)
@@ -250,10 +333,10 @@ public class PinLeadCollapseHardeningTests
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
         };
-        var start = CreateTestComponent(0, 0);
-        var end = CreateTestComponent(0, 275);
-        var startPin = Pin(start, 50, 25, 0);
-        var endPin = Pin(end, 50, 25, 0);
+        var start = TestComponentFactory.CreatePinlessComponent(0, 0);
+        var end = TestComponentFactory.CreatePinlessComponent(0, 275);
+        var startPin = TestComponentFactory.CreateRoutingPin(start, 50, 25, 0);
+        var endPin = TestComponentFactory.CreateRoutingPin(end, 50, 25, 0);
         // Registered pins carve the persistent pin corridors during the grid rebuild,
         // exactly like every real component — the corridor is what lets a collapsed
         // bend hug its pin without touching component padding.
@@ -265,17 +348,18 @@ public class PinLeadCollapseHardeningTests
         return (router, startPin, endPin);
     }
 
-    /// <summary>U-turn with 20 µm pin leads: east lead, up (radius), north straight at
-    /// x = 70 + radius, up to heading west, west arrival lead — both leads are pure detour,
-    /// one shift zeroes both.</summary>
-    private static RoutedPath ManualUTurnPath(double radius)
+    /// <summary>U-turn with configurable pin leads: east lead, up (radius), north straight at
+    /// x = 50 + lead + radius, up to heading west, west arrival lead — both leads are pure
+    /// detour, one shift zeroes both.</summary>
+    private static RoutedPath ManualUTurnPath(double radius, double lead)
     {
+        double bendX = 50 + lead;
         var path = new RoutedPath();
-        path.Segments.Add(new StraightSegment(50, 25, 70, 25, 0));
-        path.Segments.Add(new BendSegment(70, 25 + radius, radius, 0, 90));
-        path.Segments.Add(new StraightSegment(70 + radius, 25 + radius, 70 + radius, 300 - radius, 90));
-        path.Segments.Add(new BendSegment(70, 300 - radius, radius, 90, 90));
-        path.Segments.Add(new StraightSegment(70, 300, 50, 300, 180));
+        path.Segments.Add(new StraightSegment(50, 25, bendX, 25, 0));
+        path.Segments.Add(new BendSegment(bendX, 25 + radius, radius, 0, 90));
+        path.Segments.Add(new StraightSegment(bendX + radius, 25 + radius, bendX + radius, 300 - radius, 90));
+        path.Segments.Add(new BendSegment(bendX, 300 - radius, radius, 90, 90));
+        path.Segments.Add(new StraightSegment(bendX, 300, 50, 300, 180));
         return path;
     }
 
@@ -295,35 +379,4 @@ public class PinLeadCollapseHardeningTests
 
     private static double Distance(double x1, double y1, double x2, double y2)
         => Math.Sqrt((x2 - x1) * (x2 - x1) + (y2 - y1) * (y2 - y1));
-
-    private static PhysicalPin Pin(Component parent, double offsetX, double offsetY, double angle) => new()
-    {
-        Name = $"pin_{offsetX}_{offsetY}_{angle}",
-        OffsetXMicrometers = offsetX,
-        OffsetYMicrometers = offsetY,
-        AngleDegrees = angle,
-        ParentComponent = parent,
-    };
-
-    private static Component CreateTestComponent(
-        double x, double y, double width = 50, double height = 50)
-    {
-        var parts = new Part[1, 1];
-        parts[0, 0] = new Part(new List<Pin>());
-        return new Component(
-            laserWaveLengthToSMatrixMap: new Dictionary<int, SMatrix>(),
-            sliders: new List<Slider>(),
-            nazcaFunctionName: "test",
-            nazcaFunctionParams: "",
-            parts: parts,
-            typeNumber: 0,
-            identifier: $"TestComponent_{x}_{y}",
-            rotationCounterClock: DiscreteRotation.R0)
-        {
-            WidthMicrometers = width,
-            HeightMicrometers = height,
-            PhysicalX = x,
-            PhysicalY = y,
-        };
-    }
 }

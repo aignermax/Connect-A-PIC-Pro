@@ -38,9 +38,12 @@ public partial class WaveguideConnectionManager
 
     private readonly record struct BoundingBox(double MinX, double MinY, double MaxX, double MaxY);
 
-    /// <summary>Pre-collapse guard for a degenerate (point-like) sibling: the trial must keep
-    /// at least <see cref="RequiredClearance"/> from <see cref="Point"/>.</summary>
-    private readonly record struct DegenerateSiblingGuard((double X, double Y) Point, double RequiredClearance);
+    /// <summary>Pre-collapse guard for a degenerate (point-like) sibling: the trial's distance
+    /// to it must not fall below <see cref="RequiredClearance"/>. Both polyline endpoints are
+    /// measured — a degenerate can still be up to the degenerate threshold long, and either
+    /// end may be the near one.</summary>
+    private readonly record struct DegenerateSiblingGuard(
+        (double X, double Y) Start, (double X, double Y) End, double RequiredClearance);
 
     /// <summary>
     /// Collapses the pin leads of every auto-routed, non-frozen, cleanly routed connection.
@@ -109,7 +112,7 @@ public partial class WaveguideConnectionManager
         clearanceBefore = new List<double>();
         degenerateGuards = new List<DegenerateSiblingGuard>();
 
-        double reach = LeadSum(original) * DiagonalShiftFactor
+        double reach = PinStraightCollapser.TotalPinLead(original) * DiagonalShiftFactor
             + _router.MinWaveguideSpacingMicrometers + CollapseSearchMarginMicrometers;
         var box = BoxFor(original, boxCache);
 
@@ -122,10 +125,13 @@ public partial class WaveguideConnectionManager
 
             if (sibling.TotalLengthMicrometers < DegenerateSiblingLengthMicrometers)
             {
-                var point = sibling.Segments[0].StartPoint;
-                double before = PathIntersectionDetector.DistanceToPoint(original, point.X, point.Y);
-                degenerateGuards.Add(new DegenerateSiblingGuard(point,
-                    Math.Max(_router.MinWaveguideSpacingMicrometers, before)));
+                var start = sibling.Segments[0].StartPoint;
+                var end = sibling.Segments[^1].EndPoint;
+                double before = DistanceToDegenerate(original, start, end);
+                // No-worsening, consistent with real siblings: a route already inside the
+                // spacing only must not get closer; one outside must not drop below it.
+                degenerateGuards.Add(new DegenerateSiblingGuard(start, end,
+                    Math.Min(_router.MinWaveguideSpacingMicrometers, before)));
                 continue;
             }
 
@@ -143,7 +149,7 @@ public partial class WaveguideConnectionManager
     /// (the same verdict incremental route validation applies once waveguide obstacles are
     /// cleared), comes no closer to any nearby sibling than the pre-collapse geometry did, and
     /// keeps every degenerate neighbour at least the waveguide spacing (or its previous
-    /// distance, whichever is larger) away.
+    /// distance, whichever is smaller — no-worsening) away.
     /// </summary>
     private bool IsCollapseAcceptable(RoutedPath trial,
         IReadOnlyList<RoutedPath> nearSiblings, IReadOnlyList<double> clearanceBefore,
@@ -162,23 +168,20 @@ public partial class WaveguideConnectionManager
         }
         foreach (var guard in degenerateGuards)
         {
-            if (PathIntersectionDetector.DistanceToPoint(trial, guard.Point.X, guard.Point.Y)
+            if (DistanceToDegenerate(trial, guard.Start, guard.End)
                 < guard.RequiredClearance - SiblingTouchToleranceMicrometers)
                 return false;
         }
         return true;
     }
 
-    /// <summary>Combined length of the two pin-side straight leads (0 for a lead that is a bend).</summary>
-    private static double LeadSum(RoutedPath path)
-    {
-        double sum = 0;
-        if (path.Segments[0] is StraightSegment first)
-            sum += first.LengthMicrometers;
-        if (path.Segments[^1] is StraightSegment last)
-            sum += last.LengthMicrometers;
-        return sum;
-    }
+    /// <summary>Distance from a path to a degenerate sibling, measured against both of the
+    /// sibling's polyline endpoints.</summary>
+    private static double DistanceToDegenerate(
+        RoutedPath path, (double X, double Y) start, (double X, double Y) end)
+        => Math.Min(
+            PathIntersectionDetector.DistanceToPoint(path, start.X, start.Y),
+            PathIntersectionDetector.DistanceToPoint(path, end.X, end.Y));
 
     /// <summary>True when the two paths have the same segment count and matching endpoints.</summary>
     private static bool PathsEquivalent(RoutedPath a, RoutedPath b)

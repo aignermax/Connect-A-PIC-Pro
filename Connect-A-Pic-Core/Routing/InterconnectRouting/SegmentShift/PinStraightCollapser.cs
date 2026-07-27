@@ -24,15 +24,24 @@ public static class PinStraightCollapser
     /// <summary>Segment index of the shiftable straight adjacent to the start-pin lead.</summary>
     private const int StartShiftableIndex = 2;
 
-    /// <summary>Bisection steps when searching the largest accepted partial collapse; the
-    /// remaining gap to the acceptance boundary is at most lead/2^steps.</summary>
-    private const int PartialCollapseSearchSteps = 8;
+    /// <summary>Hard cap on bisection steps when searching the largest accepted partial
+    /// collapse — a backstop against a pathological loop; the gap criterion in
+    /// <see cref="LargestAcceptedFraction"/> normally terminates far earlier.</summary>
+    private const int MaxPartialCollapseSearchSteps = 32;
 
     /// <summary>Minimum total-lead reduction (µm) for keeping a PARTIAL collapse. A full collapse
-    /// is always kept when accepted; partial results below this threshold are discarded so
-    /// follow-up routing passes converge (the leftover bisection gap of a previous pass is
-    /// always below this) instead of shaving invisible slivers forever.</summary>
+    /// is always kept when accepted; partial results below this threshold are discarded, and the
+    /// bisection runs until its unexplored gap can no longer hide this much reduction — so a
+    /// follow-up pass finds nothing keepable and the result is reference-stable for any lead
+    /// length instead of shaving invisible slivers forever.</summary>
     private const double MinPartialLeadReductionMicrometers = 0.5;
+
+    /// <summary>Minimum |projection| of each outer straight onto the shiftable straight's
+    /// normal (cos 45°). Today's routed geometry is axis/45°-quantised, so real routes always
+    /// satisfy this; anything steeper would translate geometry by more than √2 × the collapsed
+    /// lead and could move the route beyond the sibling-scan reach the manager derives from
+    /// that factor — such leads are conservatively not collapsed at all.</summary>
+    private const double MinOuterNormalAlignment = 0.7;
 
     /// <summary>
     /// Collapses the first and last straight segments of <paramref name="path"/> toward their
@@ -107,6 +116,8 @@ public static class PinStraightCollapser
         var segments = path.Segments;
         if (!SegmentShiftGeometry.IsShiftable(segments, shiftableIndex))
             return;
+        if (!OuterStraightsAlignedWithShift(segments, shiftableIndex))
+            return; // steeper than 45°: the shift could move geometry beyond the sibling scan
 
         int leadIndex = leadBeforeShiftable ? shiftableIndex - 2 : shiftableIndex + 2;
         double leadLength = ((StraightSegment)segments[leadIndex]).LengthMicrometers;
@@ -118,30 +129,54 @@ public static class PinStraightCollapser
             return;
 
         double totalLeadBefore = TotalPinLead(path);
-        if (TryShiftAndKeepIfAccepted(path, shiftableIndex, delta, isAcceptable,
-                totalLeadBefore, minReduction: Epsilon))
+        if (TryShiftTrial(path, shiftableIndex, delta, isAcceptable, totalLeadBefore,
+                minReduction: Epsilon, keepWhenAccepted: true))
             return; // full collapse kept
 
         double accepted = LargestAcceptedFraction(path, shiftableIndex, delta, isAcceptable, totalLeadBefore);
         if (accepted > 0)
         {
-            TryShiftAndKeepIfAccepted(path, shiftableIndex, delta * accepted, isAcceptable,
-                totalLeadBefore, MinPartialLeadReductionMicrometers);
+            TryShiftTrial(path, shiftableIndex, delta * accepted, isAcceptable, totalLeadBefore,
+                MinPartialLeadReductionMicrometers, keepWhenAccepted: true);
         }
     }
 
+    /// <summary>True when both outer straights project onto the shiftable straight's normal
+    /// with at least <see cref="MinOuterNormalAlignment"/> — the shift then moves no point by
+    /// more than √2 × the collapsed lead, matching the manager's sibling-scan reach.</summary>
+    private static bool OuterStraightsAlignedWithShift(
+        IReadOnlyList<PathSegment> segments, int shiftableIndex)
+    {
+        var normal = SegmentShiftGeometry.NormalOf((StraightSegment)segments[shiftableIndex]);
+        return AlignedWith(normal, (StraightSegment)segments[shiftableIndex - 2])
+            && AlignedWith(normal, (StraightSegment)segments[shiftableIndex + 2]);
+    }
+
+    private static bool AlignedWith((double X, double Y) normal, StraightSegment outer)
+        => Math.Abs(SegmentShiftGeometry.Dot(
+               SegmentShiftGeometry.UnitVector(outer.StartAngleDegrees), normal))
+           >= MinOuterNormalAlignment;
+
     /// <summary>
     /// Bisects for the largest fraction of <paramref name="fullDelta"/> whose trial passes the
-    /// acceptance and lead gate. Every probe is fully reverted; 0 means nothing was accepted.
+    /// acceptance and lead gate; 0 means nothing was accepted. The reduction is linear in the
+    /// shift and can never exceed the total lead, so the loop runs until the unexplored gap can
+    /// no longer hide a keepable reduction — a follow-up pass then finds nothing above the keep
+    /// threshold and the result is reference-stable for any lead length. This also exits
+    /// immediately (no probes, no copies) when even the whole lead is below the threshold.
     /// </summary>
     private static double LargestAcceptedFraction(RoutedPath path, int shiftableIndex,
         double fullDelta, Func<RoutedPath, bool> isAcceptable, double totalLeadBefore)
     {
         double accepted = 0, low = 0, high = 1;
-        for (int i = 0; i < PartialCollapseSearchSteps; i++)
+        for (int step = 0;
+             step < MaxPartialCollapseSearchSteps
+             && (high - low) * totalLeadBefore >= MinPartialLeadReductionMicrometers;
+             step++)
         {
             double mid = (low + high) / 2;
-            if (ProbeShiftAccepted(path, shiftableIndex, fullDelta * mid, isAcceptable, totalLeadBefore))
+            if (TryShiftTrial(path, shiftableIndex, fullDelta * mid, isAcceptable, totalLeadBefore,
+                    minReduction: Epsilon, keepWhenAccepted: false))
             {
                 accepted = mid;
                 low = mid;
@@ -154,39 +189,26 @@ public static class PinStraightCollapser
         return accepted;
     }
 
-    /// <summary>Applies a trial shift, evaluates it, and always reverts. The backup is taken
-    /// fresh per probe: restoring re-uses the backup's segment objects, so a second probe on a
-    /// shared snapshot would corrupt it.</summary>
-    private static bool ProbeShiftAccepted(RoutedPath path, int shiftableIndex, double delta,
-        Func<RoutedPath, bool> isAcceptable, double totalLeadBefore)
-    {
-        var backup = path.DeepCopy();
-        if (!SegmentShiftEditor.TryShiftStraightSegment(path.Segments, shiftableIndex, delta, out _))
-            return false; // clamp rejected; segments are untouched
-
-        bool accepted = isAcceptable(path) && TotalPinLead(path) < totalLeadBefore - Epsilon;
-        Restore(path, backup);
-        return accepted;
-    }
-
     /// <summary>
-    /// Applies the shift and keeps it only when the acceptance holds and the combined pin lead
-    /// shrinks by at least <paramref name="minReduction"/>; otherwise everything is reverted.
+    /// Applies a trial shift and evaluates the acceptance plus the required lead reduction.
+    /// The path is restored — from a backup taken fresh in THIS call — unless the trial is
+    /// accepted and <paramref name="keepWhenAccepted"/> is true. The restore moves the backup's
+    /// segment objects into the live path, so a snapshot shared across probes would be mutated
+    /// by the next probe; never hoist the backup out of this method.
     /// </summary>
-    private static bool TryShiftAndKeepIfAccepted(RoutedPath path, int shiftableIndex, double delta,
-        Func<RoutedPath, bool> isAcceptable, double totalLeadBefore, double minReduction)
+    private static bool TryShiftTrial(RoutedPath path, int shiftableIndex, double delta,
+        Func<RoutedPath, bool> isAcceptable, double totalLeadBefore, double minReduction,
+        bool keepWhenAccepted)
     {
         var backup = path.DeepCopy();
         if (!SegmentShiftEditor.TryShiftStraightSegment(path.Segments, shiftableIndex, delta, out _))
             return false; // clamp rejected; segments are untouched
 
-        double reduction = totalLeadBefore - TotalPinLead(path);
-        if (!isAcceptable(path) || reduction < minReduction)
-        {
+        bool accepted = isAcceptable(path)
+            && totalLeadBefore - TotalPinLead(path) >= minReduction;
+        if (!accepted || !keepWhenAccepted)
             Restore(path, backup);
-            return false;
-        }
-        return true;
+        return accepted;
     }
 
     /// <summary>
@@ -210,8 +232,13 @@ public static class PinStraightCollapser
         return leadBeforeShiftable ? -leadLength * dot : leadLength * dot;
     }
 
-    /// <summary>Combined length of the two pin-side straight leads (0 for a lead that is a bend).</summary>
-    private static double TotalPinLead(RoutedPath path)
+    /// <summary>
+    /// Combined length (µm) of the two pin-side straight leads (0 for a lead that is a bend).
+    /// Shared with the manager's collapse pass, which sizes its sibling-scan reach from the
+    /// maximum lead movement.
+    /// </summary>
+    /// <param name="path">The routed path to measure.</param>
+    public static double TotalPinLead(RoutedPath path)
     {
         var segments = path.Segments;
         double total = 0;
