@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Canvas.CrossingInsertion;
 using CAP.Avalonia.ViewModels.Library;
@@ -24,9 +25,21 @@ internal static class CrossingInsertionFeatureExtensions
     /// </summary>
     public static IServiceCollection AddCrossingInsertionFeature(this IServiceCollection services)
     {
-        services.AddSingleton(sp => new CrossingInsertionCanvasBinder(
-            sp.GetRequiredService<DesignCanvasViewModel>(),
-            () => CreateCrossingInstance(sp)));
+        services.AddSingleton(sp =>
+        {
+            var binder = new CrossingInsertionCanvasBinder(
+                sp.GetRequiredService<DesignCanvasViewModel>(),
+                () => CreateCrossingInstance(sp));
+
+            // Restore the user's last choice, then persist any further toggle (Settings →
+            // Routing → Crossings) — the checkbox otherwise silently reverted to off on
+            // every app restart.
+            var preferences = sp.GetRequiredService<UserPreferencesService>();
+            binder.IsEnabled = preferences.GetCrossingInsertionEnabled();
+            binder.EnabledChanged += preferences.SetCrossingInsertionEnabled;
+
+            return binder;
+        });
         return services;
     }
 

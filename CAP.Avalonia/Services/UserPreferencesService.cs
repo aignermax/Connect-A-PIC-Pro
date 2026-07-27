@@ -373,6 +373,36 @@ public partial class UserPreferencesService
         return _preferences.SkipTodayDate == null
             || _preferences.SkipTodayDate.Value.Date < DateTime.UtcNow.Date;
     }
+
+    /// <summary>
+    /// Gets whether adaptive crossing insertion (Issue #553) is enabled for routing.
+    /// Off by default — new features default to opt-in.
+    /// </summary>
+    public bool GetCrossingInsertionEnabled() => _preferences.CrossingInsertionEnabled;
+
+    /// <summary>
+    /// Sets whether adaptive crossing insertion is enabled and saves preferences.
+    /// </summary>
+    public void SetCrossingInsertionEnabled(bool enabled)
+    {
+        _preferences.CrossingInsertionEnabled = enabled;
+        Save();
+    }
+
+    /// <summary>
+    /// Gets whether diagonal (45°) waveguide routing is enabled. Off by default —
+    /// classic Manhattan-only routing is the baseline.
+    /// </summary>
+    public bool GetUseDiagonalRouting() => _preferences.UseDiagonalRouting;
+
+    /// <summary>
+    /// Sets whether diagonal waveguide routing is enabled and saves preferences.
+    /// </summary>
+    public void SetUseDiagonalRouting(bool enabled)
+    {
+        _preferences.UseDiagonalRouting = enabled;
+        Save();
+    }
 }
 
 /// <summary>
@@ -486,4 +516,15 @@ public class UserPreferences
     /// </summary>
     public string UiLanguage { get; set; } = "system";
 
+    /// <summary>
+    /// Whether adaptive crossing insertion (Issue #553) is enabled for routing.
+    /// Off by default — a design that inserts crossings changes insertion loss.
+    /// </summary>
+    public bool CrossingInsertionEnabled { get; set; }
+
+    /// <summary>
+    /// Whether diagonal (45°) waveguide routing is enabled. Off by default —
+    /// classic Manhattan-only routing is the baseline.
+    /// </summary>
+    public bool UseDiagonalRouting { get; set; }
 }

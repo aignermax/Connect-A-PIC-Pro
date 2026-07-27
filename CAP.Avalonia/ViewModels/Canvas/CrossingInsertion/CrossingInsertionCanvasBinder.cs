@@ -71,8 +71,16 @@ public class CrossingInsertionCanvasBinder
             _canvas.ConnectionManager.CrossingInsertion = value ? Service : null;
             if (value)
                 RebuildRecordsForExistingCrossings();
+            EnabledChanged?.Invoke(value);
         }
     }
+
+    /// <summary>
+    /// Raised whenever <see cref="IsEnabled"/> is set. Lets the composition root persist
+    /// the user's choice (Settings → Routing → Crossings) without the binder itself taking
+    /// a dependency on preferences storage.
+    /// </summary>
+    public event Action<bool>? EnabledChanged;
 
     /// <summary>
     /// Rebuilds dissolution records for auto-inserted crossings that exist on the
