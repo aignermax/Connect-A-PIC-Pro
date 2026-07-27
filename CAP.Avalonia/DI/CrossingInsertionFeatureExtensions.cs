@@ -19,9 +19,10 @@ internal static class CrossingInsertionFeatureExtensions
     private const string CrossingNazcaFunction = "ebeam_crossing4";
 
     /// <summary>
-    /// Adds the crossing-insertion binder. The binder is activated by
-    /// <see cref="ViewModels.MainViewModel"/> so the wiring exists as soon as
-    /// the application composes its root view-model.
+    /// Adds the crossing-insertion binder, restored to the user's last saved choice and
+    /// wired to persist further toggles. The binder must be materialized once at startup —
+    /// see <see cref="App.ActivateStartupSingletons"/>, which resolves it explicitly instead
+    /// of relying on some other constructor to reference it incidentally.
     /// </summary>
     public static IServiceCollection AddCrossingInsertionFeature(this IServiceCollection services)
     {
@@ -32,11 +33,16 @@ internal static class CrossingInsertionFeatureExtensions
                 () => CreateCrossingInstance(sp));
 
             // Restore the user's last choice, then persist any further toggle (Settings →
-            // Routing → Crossings) — the checkbox otherwise silently reverted to off on
-            // every app restart.
+            // Routing → Crossings) via the same PropertyChanged convention used for the
+            // canvas' other Routing-settings flags (see AddCanvasAndPanels) — the checkbox
+            // otherwise silently reverted to off on every app restart.
             var preferences = sp.GetRequiredService<UserPreferencesService>();
             binder.IsEnabled = preferences.GetCrossingInsertionEnabled();
-            binder.EnabledChanged += preferences.SetCrossingInsertionEnabled;
+            binder.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(CrossingInsertionCanvasBinder.IsEnabled))
+                    preferences.SetCrossingInsertionEnabled(binder.IsEnabled);
+            };
 
             return binder;
         });

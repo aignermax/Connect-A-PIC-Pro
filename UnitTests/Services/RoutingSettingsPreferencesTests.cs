@@ -6,8 +6,7 @@ namespace UnitTests.Services;
 
 /// <summary>
 /// Tests persistence of the Routing settings page flags — adaptive crossing insertion
-/// (Issue #553) and diagonal routing — in user preferences. Both flags previously lived
-/// only in memory (<see cref="CAP.Avalonia.ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder.IsEnabled"/>
+/// and diagonal routing — in user preferences. Both flags previously lived only in memory (<see cref="CAP.Avalonia.ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder.IsEnabled"/>
 /// and <see cref="CAP.Avalonia.ViewModels.Canvas.DesignCanvasViewModel.UseDiagonalRouting"/>), so a
 /// toggle enabled by the user was silently forgotten on the next app start.
 /// </summary>

@@ -54,6 +54,21 @@ public partial class App : Application
         services.AddSingleton<MainViewModel>();
     }
 
+    /// <summary>
+    /// Eagerly resolves DI singletons whose only job is a side effect wired up by their
+    /// constructor, with no other code path holding a reference to them — so nothing else
+    /// in the graph guarantees they get built. Extracted from
+    /// <see cref="OnFrameworkInitializationCompleted"/> so a headless test can assert the
+    /// guarantee without needing the full Avalonia application lifecycle.
+    /// </summary>
+    public static void ActivateStartupSingletons(IServiceProvider services)
+    {
+        // Restores the persisted Settings → Routing → Crossings toggle and wires the
+        // crossing-insertion service into the canvas — must happen before the first
+        // routing pass, independent of whether any ViewModel happens to reference it.
+        services.GetRequiredService<ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder>();
+    }
+
     public override void OnFrameworkInitializationCompleted()
     {
         // Issue #697: re-enforce requested dialog sizes after open (Linux/X11 collapse).
@@ -62,6 +77,7 @@ public partial class App : Application
         var services = new ServiceCollection();
         ConfigureServices(services);
         Services = services.BuildServiceProvider();
+        ActivateStartupSingletons(Services);
 
         // Error-console entries are bound to the UI, but simulations/renders log from
         // worker threads — marshal every append through the UI dispatcher.

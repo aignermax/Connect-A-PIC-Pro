@@ -375,7 +375,7 @@ public partial class UserPreferencesService
     }
 
     /// <summary>
-    /// Gets whether adaptive crossing insertion (Issue #553) is enabled for routing.
+    /// Gets whether adaptive crossing insertion is enabled for routing.
     /// Off by default — new features default to opt-in.
     /// </summary>
     public bool GetCrossingInsertionEnabled() => _preferences.CrossingInsertionEnabled;
