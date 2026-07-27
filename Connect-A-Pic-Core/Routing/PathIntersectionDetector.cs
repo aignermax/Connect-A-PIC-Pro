@@ -58,6 +58,27 @@ public static class PathIntersectionDetector
     }
 
     /// <summary>
+    /// Minimum distance (µm) from a point to the path's sampled polyline. Works for any
+    /// path length, including a path that degenerates to a single sample point — unlike
+    /// <see cref="MinimumDistance"/>, which needs two samplable polylines and reports 0
+    /// for a degenerate partner regardless of the real separation.
+    /// </summary>
+    /// <param name="path">The path whose polyline is measured.</param>
+    /// <param name="x">X coordinate of the point in micrometers.</param>
+    /// <param name="y">Y coordinate of the point in micrometers.</param>
+    public static double DistanceToPoint(RoutedPath path, double x, double y)
+    {
+        var points = SamplePolyline(path);
+        if (points.Count == 0)
+            return double.MaxValue;
+
+        double min = Distance(points[0], (x, y));
+        for (int i = 0; i < points.Count - 1; i++)
+            min = Math.Min(min, PointToSegment((x, y), points[i], points[i + 1]));
+        return min;
+    }
+
+    /// <summary>
     /// Returns true when the two paths properly cross each other. Cheaper than
     /// <see cref="MinimumDistance"/> for the common non-crossing case: disjoint
     /// bounding boxes are rejected first and no distances are computed. Touching

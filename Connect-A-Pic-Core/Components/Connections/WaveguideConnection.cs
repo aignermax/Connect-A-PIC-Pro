@@ -241,6 +241,19 @@ namespace CAP_Core.Components.Connections
         }
 
         /// <summary>
+        /// Atomically replaces <see cref="RoutedPath"/> with a new instance and refreshes the
+        /// loss. Background post-processing (e.g. the pin-lead collapse) computes on a private
+        /// copy and publishes the finished result through this single reference assignment, so
+        /// the UI thread never observes half-mutated segments of the live path.
+        /// </summary>
+        /// <param name="path">The finished replacement path (a fresh instance, not the live one).</param>
+        public void ReplaceRoutedPath(RoutedPath path)
+        {
+            RoutedPath = path;
+            UpdateLossFromPath();
+        }
+
+        /// <summary>
         /// Recalculates <see cref="TotalLossDb"/> and <see cref="TransmissionCoefficient"/>
         /// from the current <see cref="RoutedPath"/> geometry.
         /// </summary>
