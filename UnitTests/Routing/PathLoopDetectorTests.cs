@@ -78,6 +78,41 @@ public class PathLoopDetectorTests
             "the returned path must never cross itself");
     }
 
+    /// <summary>Node budget of the bounded search — small enough that wasted expansion matters.</summary>
+    private const int BoundedSearchNodeBudget = 8000;
+
+    [Fact]
+    public void FindPath_CheapestGoalArrivalLoops_StillFindsLoopFreePathWithinBudget()
+    {
+        // The cheapest arrival at the goal state self-intersects here. When the guard
+        // discards that looping arrival it must also forget its grid state — otherwise
+        // the stale (cheaper) visited-map entry keeps rejecting the loop-free arrival,
+        // and the search only reaches it after far more expansion. Under a bounded node
+        // budget (as the router runs) that wasted work is the difference between finding
+        // the path and giving up: without the cleanup this scene exhausts the budget and
+        // returns null.
+        var grid = new PathfindingGrid(0, 0, 40, 40, cellSize: 1.0);
+        var costCalculator = new RoutingCostCalculator
+        {
+            CellSizeMicrometers = 1.0,
+            MinStraightRunCells = 3,
+            MinPinEscapeCells = 3,
+        };
+        var pathfinder = new AStarPathfinder(grid, costCalculator)
+        {
+            MaxNodesExpanded = BoundedSearchNodeBudget,
+            UseDiagonals = false,
+        };
+
+        var path = pathfinder.FindPath(
+            20, 20, GridDirection.West,
+            14, 17, GridDirection.West);
+
+        path.ShouldNotBeNull("a loop-free path exists and must be found within the budget");
+        PathLoopDetector.IsSelfIntersecting(path).ShouldBeFalse(
+            "the returned path must not cross itself");
+    }
+
     private static List<AStarNode> MakePath(params (int X, int Y)[] cells) =>
         cells.Select(c => new AStarNode(c.X, c.Y, GridDirection.East)).ToList();
 }

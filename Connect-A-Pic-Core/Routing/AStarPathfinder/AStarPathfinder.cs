@@ -118,6 +118,17 @@ public class AStarPathfinder
                 // searching for a loop-free alternative.
                 if (!PathLoopDetector.IsSelfIntersecting(path))
                     return path;
+
+                // Forget this looping arrival's grid state, otherwise its (cheaper) entry
+                // stays in the visited map and rejects a later, more expensive but loop-free
+                // arrival at the same state key — making the search report "no path" even
+                // though one exists. Only drop the entry if it is still this very node.
+                var loopingKey = StateKey(current);
+                if (visited.TryGetValue(loopingKey, out var stored) && ReferenceEquals(stored, current))
+                {
+                    visited.Remove(loopingKey);
+                    distanceFromStart.Remove(loopingKey);
+                }
                 continue;
             }
 
