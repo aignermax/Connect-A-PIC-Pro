@@ -13,7 +13,10 @@ namespace CAP.Avalonia.ViewModels.Canvas.CrossingInsertion;
 /// inserted or dissolved — so rendering, export and hierarchy see the crossing
 /// like a normally placed component.
 /// </summary>
-public class CrossingInsertionCanvasBinder
+// System.ComponentModel isn't `using`-imported here: its Component type collides with
+// CAP_Core.Components.Core.Component, which this file uses throughout — so
+// INotifyPropertyChanged/PropertyChangedEventHandler/-Args below are fully qualified.
+public class CrossingInsertionCanvasBinder : System.ComponentModel.INotifyPropertyChanged
 {
     private readonly DesignCanvasViewModel _canvas;
     private readonly Func<CrossingComponentInstance?> _crossingFactory;
@@ -68,11 +71,22 @@ public class CrossingInsertionCanvasBinder
         get => _canvas.ConnectionManager.CrossingInsertion != null;
         set
         {
+            if (value == IsEnabled) return;
             _canvas.ConnectionManager.CrossingInsertion = value ? Service : null;
             if (value)
                 RebuildRecordsForExistingCrossings();
+            PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsEnabled)));
         }
     }
+
+    /// <summary>
+    /// Raised when <see cref="IsEnabled"/> changes. The composition root subscribes to
+    /// persist the user's choice, using the same INotifyPropertyChanged convention as the
+    /// canvas' other Routing-settings flags (e.g.
+    /// <see cref="DesignCanvasViewModel.UseDiagonalRouting"/>) — so the next Routing
+    /// settings flag has one clear pattern to follow, not two.
+    /// </summary>
+    public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
     /// <summary>
     /// Rebuilds dissolution records for auto-inserted crossings that exist on the

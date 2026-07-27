@@ -1,12 +1,12 @@
 using CAP.Avalonia;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
-using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Properties;
 using CAP_Core.Export;
 using CAP_Core.Solvers.Fdtd;
 using CAP_Core.Solvers.ModeSolver;
 using Microsoft.Extensions.DependencyInjection;
 using Shouldly;
+using UnitTests.Helpers;
 using Xunit;
 
 namespace UnitTests.Architecture;
@@ -15,21 +15,23 @@ namespace UnitTests.Architecture;
 /// Builds the real production DI container (<see cref="App.ConfigureServices"/>) and
 /// resolves the services that the vertical-slice refactor moved into per-feature
 /// extension methods. A missing or misplaced registration would otherwise only surface
-/// as a crash on app start — no other test exercises the production container
-/// (UiScreenshotTests deliberately use a test-only app + VM helper).
+/// as a crash on app start. Other tests exercise the same container via
+/// <see cref="ProductionContainerTestHelper"/> for narrower composition-root guarantees
+/// (e.g. <c>RoutingSettingsPersistenceTests</c>); <c>UiScreenshotTests</c> deliberately use
+/// a test-only app + VM helper instead.
 ///
 /// Only POCO/solver/preview services are resolved here: they have no Avalonia-runtime
 /// dependency, so they construct cleanly in a headless test.
 /// </summary>
 public class AppDiContainerTests
 {
+    private static string NewTempPreferencesPath() =>
+        Path.Combine(Path.GetTempPath(), $"lunima-di-test-{Guid.NewGuid():N}.json");
+
     [Fact]
     public void Container_ResolvesRedistributedSolverAndPreviewServices()
     {
-        var services = new ServiceCollection();
-        App.ConfigureServices(services);
-        OverrideUserPreferencesWithTempFile(services);
-        using var sp = services.BuildServiceProvider();
+        using var sp = ProductionContainerTestHelper.BuildWithTempPreferences(NewTempPreferencesPath());
 
         sp.GetRequiredService<IFdtdSMatrixService>().ShouldNotBeNull();
         sp.GetRequiredService<IModeSolverService>().ShouldNotBeNull();
@@ -41,10 +43,7 @@ public class AppDiContainerTests
     [Fact]
     public void Container_ResolvesFdtdBackendsAndRegistry()
     {
-        var services = new ServiceCollection();
-        App.ConfigureServices(services);
-        OverrideUserPreferencesWithTempFile(services);
-        using var sp = services.BuildServiceProvider();
+        using var sp = ProductionContainerTestHelper.BuildWithTempPreferences(NewTempPreferencesPath());
 
         // The NewComponent editor path keeps the local/free backend.
         sp.GetRequiredService<IFdtdSMatrixService>()
@@ -57,12 +56,4 @@ public class AppDiContainerTests
         registry.GetService(FdtdBackendType.Tidy3D)
             .ShouldBeOfType<CAP.Avalonia.Services.Solvers.Tidy3dSMatrixService>();
     }
-
-    // Resolving the FDTD services constructs the production UserPreferencesService,
-    // whose default path is the REAL user profile (creates directories / may rename
-    // the real prefs file). Re-register it against a throwaway temp file — the last
-    // registration wins for single-service resolution.
-    private static void OverrideUserPreferencesWithTempFile(IServiceCollection services) =>
-        services.AddSingleton(new UserPreferencesService(
-            Path.Combine(Path.GetTempPath(), $"lunima-di-test-{Guid.NewGuid():N}.json")));
 }

@@ -1,4 +1,5 @@
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
+using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
@@ -26,7 +27,23 @@ internal static class CanvasAndPanelExtensions
     /// </summary>
     public static IServiceCollection AddCanvasAndPanels(this IServiceCollection services)
     {
-        services.AddSingleton<DesignCanvasViewModel>();
+        services.AddSingleton(sp =>
+        {
+            var canvas = new DesignCanvasViewModel();
+
+            // Restore the user's last choice, then persist any further toggle (Settings →
+            // Routing → Enable Diagonal) — the checkbox otherwise silently reverted to off
+            // on every app restart.
+            var preferences = sp.GetRequiredService<UserPreferencesService>();
+            canvas.UseDiagonalRouting = preferences.GetUseDiagonalRouting();
+            canvas.PropertyChanged += (_, e) =>
+            {
+                if (e.PropertyName == nameof(DesignCanvasViewModel.UseDiagonalRouting))
+                    preferences.SetUseDiagonalRouting(canvas.UseDiagonalRouting);
+            };
+
+            return canvas;
+        });
         services.AddSingleton<ViewportControlViewModel>();
 
         // GDS preview render service — shared by the canvas overlay and the
