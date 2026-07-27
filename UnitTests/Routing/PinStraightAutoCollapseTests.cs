@@ -134,34 +134,33 @@ public class PinStraightAutoCollapseTests
     }
 
     /// <summary>
-    /// [1] The collapse acceptance must see EVERY component (grid obstacle), not just the two
-    /// endpoint bodies: a route may hug its own endpoint component's padded pin cells, but a path
-    /// through an unconnected component is a real collision.
+    /// [1] The collapse acceptance replicates the router's pin-corridor clearing, then runs the
+    /// UNCHANGED component check. A bend hugging its pin (inside the cleared corridor) is allowed,
+    /// but a path swinging deep into the endpoint component body (beyond the corridor) is a real
+    /// collision — it is NOT exempted just because the component owns the pin.
     /// </summary>
     [Fact]
-    public void ForeignComponentCheck_ExemptsOwnPins_ButFlagsUnconnectedComponents()
+    public void PinClearanceCheck_AllowsPinHug_ButFlagsBodyPenetration()
     {
         var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
         var start = CreateTestComponent(0, 0);
         var end = CreateTestComponent(0, 275);
-        var blocker = CreateTestComponent(200, 130);
-        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end, blocker });
+        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end });
 
-        var startPin = Pin(start, 50, 25, 0);
+        var startPin = Pin(start, 50, 25, 0); // right edge, facing east
         var endPin = Pin(end, 50, 25, 0);
 
-        // A segment running through the start component's own padded cells (x in [50,55]) is the
-        // pin-hug the collapse produces — it must be exempt.
-        var hugsOwnPin = new RoutedPath();
-        hugsOwnPin.Segments.Add(new StraightSegment(52, 5, 52, 45, 90));
-        router.IsPathBlockedByForeignComponents(hugsOwnPin.Segments, startPin, endPin)
-            .ShouldBeFalse("a route may touch its own endpoint component near the pin");
+        // A short bend hugging the pin, entirely within the outward (east) corridor.
+        var hug = new RoutedPath();
+        hug.Segments.Add(new BendSegment(50, 35, Radius, 0, 90)); // starts at (50,25), swings to (60,35)
+        router.IsPathBlockedByComponentsWithPinClearances(hug.Segments, startPin, endPin, Radius)
+            .ShouldBeFalse("a bend that begins on its pin, inside the routing corridor, is not a collision");
 
-        // A segment cutting through the unconnected blocker body is a real collision.
-        var throughBlocker = new RoutedPath();
-        throughBlocker.Segments.Add(new StraightSegment(200, 130, 250, 180, 45));
-        router.IsPathBlockedByForeignComponents(throughBlocker.Segments, startPin, endPin)
-            .ShouldBeTrue("a route through an unconnected component must be flagged");
+        // A straight cutting west, deep through the start component body (x from 50 into 0).
+        var throughBody = new RoutedPath();
+        throughBody.Segments.Add(new StraightSegment(50, 25, 5, 25, 180));
+        router.IsPathBlockedByComponentsWithPinClearances(throughBody.Segments, startPin, endPin, Radius)
+            .ShouldBeTrue("a swing deep into the own component body, past the corridor, is a collision");
     }
 
     /// <summary>

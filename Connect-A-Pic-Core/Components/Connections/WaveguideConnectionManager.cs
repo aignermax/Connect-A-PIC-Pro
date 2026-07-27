@@ -338,9 +338,11 @@ public partial class WaveguideConnectionManager
             !cancellationToken.IsCancellationRequested)
         {
             // Pull auto routes onto their pins now that every sibling is final, then flag any
-            // crossing that even the collapse could not keep clear (there should be none).
+            // crossing that even the collapse could not keep clear (there should be none). The
+            // crossing scan must not run on a half-collapsed state if cancellation interrupted it.
             CollapseAutoRoutePinLeads(cancellationToken);
-            MarkUnresolvedSiblingCrossings();
+            if (!cancellationToken.IsCancellationRequested)
+                MarkUnresolvedSiblingCrossings();
         }
     }
 
@@ -563,11 +565,15 @@ public partial class WaveguideConnectionManager
         if (startDist > EndpointToleranceMicrometers || endDist > EndpointToleranceMicrometers)
             return false;
 
-        // Check path doesn't pass through a FOREIGN component. The route legitimately hugs its
-        // own endpoint components where its pins sit (a collapsed pin lead puts the bend on the
-        // padded pin cell); flagging that would re-route every collapsed route on each pass.
-        return !router.IsPathBlockedByForeignComponents(
-            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin);
+        // Check path doesn't pass through component obstacles. The pin corridors are opened
+        // exactly as during routing (corridor only — no component/group exemption); at this point
+        // all waveguide obstacles are cleared, so this is the unchanged component check plus that
+        // narrow clearing. Without it a collapsed pin lead — whose bend legitimately begins on the
+        // pin, inside its component's padding — would be re-routed on every incremental pass.
+        double radius = Math.Max(
+            connection.BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
+        return !router.IsPathBlockedByComponentsWithPinClearances(
+            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin, radius);
     }
 
     private static double Distance(double x1, double y1, double x2, double y2)
