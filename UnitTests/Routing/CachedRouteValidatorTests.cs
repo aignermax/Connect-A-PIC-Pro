@@ -50,6 +50,25 @@ public class CachedRouteValidatorTests
     }
 
     [Fact]
+    public void CollapsedPinLead_DegenerateFirstSegment_StillDetectsFlippedStartPin()
+    {
+        // A collapsed pin lead leaves a zero-length straight on the pin; its geometric direction
+        // is undefined. The check must look past it to the real launch bend, or the pin-direction
+        // safety net passes vacuously for every collapsed route.
+        var (startPin, endPin) = CreatePinPair(startAngle: 180, endAngle: 0);
+        var (sx, sy) = startPin.GetAbsolutePosition();
+        var (ex, ey) = endPin.GetAbsolutePosition();
+
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(sx, sy, sx, sy, 0));     // degenerate collapsed lead
+        path.Segments.Add(new BendSegment(sx, sy + 10, 10, 0, 90));    // launches east (0°), against the 180° pin
+        path.Segments.Add(new StraightSegment(sx + 10, sy + 10, ex, ey, 0));
+
+        var (startMatches, _) = CachedRouteValidator.CheckPinDirections(startPin, endPin, path);
+        startMatches.ShouldBeFalse("a degenerate collapsed lead must not hide the pin-direction mismatch");
+    }
+
+    [Fact]
     public void BlockedFallbackPaths_AreExemptFromTheCheck()
     {
         var (startPin, endPin) = CreatePinPair(startAngle: 180, endAngle: 0);

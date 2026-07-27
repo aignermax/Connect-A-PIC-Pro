@@ -49,6 +49,21 @@ public static class PinStraightCollapser
     }
 
     /// <summary>
+    /// True when the path has a pin-side straight lead adjacent to a shiftable straight, i.e.
+    /// something this pass could collapse. A cheap structural pre-check so callers can skip the
+    /// expensive sibling-clearance scan for routes that cannot be shortened anyway.
+    /// </summary>
+    /// <param name="path">The routed path to inspect.</param>
+    public static bool HasCollapsibleLead(RoutedPath path)
+    {
+        var segments = path.Segments;
+        if (segments.Count < MinCollapsibleSegments)
+            return false;
+        return SegmentShiftGeometry.IsShiftable(segments, StartShiftableIndex)
+            || SegmentShiftGeometry.IsShiftable(segments, segments.Count - 3);
+    }
+
+    /// <summary>
     /// Handles the five-segment path whose single middle straight is shared by both pin leads.
     /// Collapsing the shorter lead is the largest feasible shift; when the outer straights are
     /// antiparallel (a U-turn) it drives the longer lead down too, and the total-lead gate in
@@ -89,12 +104,11 @@ public static class PinStraightCollapser
 
         double totalLeadBefore = TotalPinLead(path);
         var snapshot = path.DeepCopy();
-        if (!SegmentShiftEditor.TryShiftStraightSegment(segments, shiftableIndex, delta, out _)
-            || !isAcceptable(path)
-            || TotalPinLead(path) > totalLeadBefore - Epsilon)
-        {
+        if (!SegmentShiftEditor.TryShiftStraightSegment(segments, shiftableIndex, delta, out _))
+            return; // clamp rejected the shift; segments are untouched, nothing to restore
+
+        if (!isAcceptable(path) || TotalPinLead(path) > totalLeadBefore - Epsilon)
             Restore(path, snapshot);
-        }
     }
 
     /// <summary>

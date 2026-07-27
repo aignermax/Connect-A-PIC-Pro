@@ -334,19 +334,12 @@ public partial class WaveguideConnectionManager
         RouteAllConnections(progressCallback, cancellationToken);
         RunCrossingInsertionPass(cancellationToken);
 
-        if (!cancellationToken.IsCancellationRequested)
-        {
-            // Pull auto routes onto their pins now that every sibling is final, then flag any
-            // crossing that even the collapse could not keep clear (there should be none).
-            CollapseAutoRoutePinLeads();
-        }
-
-        // Any crossing that survived routing, the ordering cascade AND crossing insertion
-        // is unavoidable in the current layout: degrade it visibly instead of drawing a
-        // silent crossing.
         if (UseSequentialRouting && _router.PathfindingGrid != null &&
             !cancellationToken.IsCancellationRequested)
         {
+            // Pull auto routes onto their pins now that every sibling is final, then flag any
+            // crossing that even the collapse could not keep clear (there should be none).
+            CollapseAutoRoutePinLeads(cancellationToken);
             MarkUnresolvedSiblingCrossings();
         }
     }
@@ -570,8 +563,11 @@ public partial class WaveguideConnectionManager
         if (startDist > EndpointToleranceMicrometers || endDist > EndpointToleranceMicrometers)
             return false;
 
-        // Check path doesn't pass through component obstacles
-        return !router.IsPathBlocked(connection.RoutedPath.Segments);
+        // Check path doesn't pass through a FOREIGN component. The route legitimately hugs its
+        // own endpoint components where its pins sit (a collapsed pin lead puts the bend on the
+        // padded pin cell); flagging that would re-route every collapsed route on each pass.
+        return !router.IsPathBlockedByForeignComponents(
+            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin);
     }
 
     private static double Distance(double x1, double y1, double x2, double y2)

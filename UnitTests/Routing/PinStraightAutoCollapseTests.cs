@@ -10,12 +10,12 @@ using Xunit;
 namespace UnitTests.Routing;
 
 /// <summary>
-/// Field finding (follow-up to #792/#793): after the A* escape and grid quantization were made
-/// length-independent, autorouted paths still kept a short FORCED straight between a pin and the
-/// first/last bend — the product owner had to shift it away by hand after every re-route. The
-/// manager now runs an automatic collapse pass (<see cref="PinStraightCollapser"/> via
-/// <c>CollapseAutoRoutePinLeads</c>) that pulls the bend onto the pin whenever it stays clear of
-/// siblings and component bodies. These tests pin that contract on real routed connections.
+/// The A* escape and grid quantization leave a short forced straight between a pin and the
+/// first/last bend. The manager's collapse pass (<see cref="PinStraightCollapser"/> via
+/// <c>CollapseAutoRoutePinLeads</c>) pulls the bend onto the pin whenever it stays clear of
+/// siblings and component bodies. These tests pin that contract on real routed connections:
+/// the lead collapses to zero where geometry allows, deterministically, without introducing a
+/// collision or self-intersection.
 /// </summary>
 public class PinStraightAutoCollapseTests
 {
@@ -32,7 +32,7 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsesBothPinLeads_OnSymmetricUTurn()
     {
-        var (connection, startPin, endPin) = RouteUTurn(300);
+        var (_, connection, startPin, endPin) = RouteUTurn(300);
 
         var path = connection.RoutedPath!;
         connection.IsPathValid.ShouldBeTrue();
@@ -46,8 +46,8 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapseIsDeterministic()
     {
-        var (connectionA, _, _) = RouteUTurn(300);
-        var (connectionB, _, _) = RouteUTurn(300);
+        var (_, connectionA, _, _) = RouteUTurn(300);
+        var (_, connectionB, _, _) = RouteUTurn(300);
 
         var a = connectionA.RoutedPath!;
         var b = connectionB.RoutedPath!;
@@ -68,7 +68,7 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsedFirstBend_StaysTangentialToThePin()
     {
-        var (connection, startPin, _) = RouteUTurn(300);
+        var (_, connection, startPin, _) = RouteUTurn(300);
 
         var firstBend = connection.RoutedPath!.Segments.OfType<BendSegment>().First();
         NormalizeAngle(firstBend.StartAngleDegrees).ShouldBe(0, 1e-6);
@@ -85,11 +85,113 @@ public class PinStraightAutoCollapseTests
     [Fact]
     public void AutoRoute_CollapsedPath_StaysConnectedAndSimple()
     {
-        var (connection, _, _) = RouteUTurn(300);
+        var (_, connection, _, _) = RouteUTurn(300);
 
         var path = connection.RoutedPath!;
         path.IsValid.ShouldBeTrue();
         PathIntersectionDetector.HasSelfIntersection(path).ShouldBeFalse();
+    }
+
+    /// <summary>
+    /// [0] The collapse must publish a fresh path instance, never mutate the live one the UI
+    /// thread may be enumerating. After a re-route the previously published path is left byte-for-
+    /// byte intact and the connection points at a different instance.
+    /// </summary>
+    [Fact]
+    public void AutoRoute_CollapsePublishesNewInstance_WithoutMutatingThePrevious()
+    {
+        var (manager, connection, _, _) = RouteUTurn(300);
+        var published = connection.RoutedPath!;
+        var snapshot = published.DeepCopy();
+
+        connection.InvalidateRoute();
+        manager.RecalculateAllTransmissions();
+
+        connection.RoutedPath.ShouldNotBeSameAs(published, "the collapse must swap in a new instance");
+        published.Segments.Count.ShouldBe(snapshot.Segments.Count);
+        for (int i = 0; i < snapshot.Segments.Count; i++)
+        {
+            published.Segments[i].StartPoint.ShouldBe(snapshot.Segments[i].StartPoint);
+            published.Segments[i].EndPoint.ShouldBe(snapshot.Segments[i].EndPoint);
+        }
+    }
+
+    /// <summary>
+    /// [4] A collapsed route must satisfy the exact check the incremental router applies next
+    /// pass, so it is KEPT rather than re-routed forever. A second recalculation with nothing
+    /// changed leaves the very same path instance in place.
+    /// </summary>
+    [Fact]
+    public void AutoRoute_CollapsedRoute_SurvivesTheNextRecalc_Unchanged()
+    {
+        var (manager, connection, _, _) = RouteUTurn(300);
+        var afterFirst = connection.RoutedPath!;
+
+        manager.RecalculateAllTransmissions();
+
+        connection.RoutedPath.ShouldBeSameAs(afterFirst,
+            "the collapsed route must be kept by incremental routing, not re-routed and re-collapsed");
+    }
+
+    /// <summary>
+    /// [1] The collapse acceptance must see EVERY component (grid obstacle), not just the two
+    /// endpoint bodies: a route may hug its own endpoint component's padded pin cells, but a path
+    /// through an unconnected component is a real collision.
+    /// </summary>
+    [Fact]
+    public void ForeignComponentCheck_ExemptsOwnPins_ButFlagsUnconnectedComponents()
+    {
+        var router = new WaveguideRouter { MinBendRadiusMicrometers = Radius };
+        var start = CreateTestComponent(0, 0);
+        var end = CreateTestComponent(0, 275);
+        var blocker = CreateTestComponent(200, 130);
+        router.InitializePathfindingGrid(-100, -100, 500, 500, new[] { start, end, blocker });
+
+        var startPin = Pin(start, 50, 25, 0);
+        var endPin = Pin(end, 50, 25, 0);
+
+        // A segment running through the start component's own padded cells (x in [50,55]) is the
+        // pin-hug the collapse produces — it must be exempt.
+        var hugsOwnPin = new RoutedPath();
+        hugsOwnPin.Segments.Add(new StraightSegment(52, 5, 52, 45, 90));
+        router.IsPathBlockedByForeignComponents(hugsOwnPin.Segments, startPin, endPin)
+            .ShouldBeFalse("a route may touch its own endpoint component near the pin");
+
+        // A segment cutting through the unconnected blocker body is a real collision.
+        var throughBlocker = new RoutedPath();
+        throughBlocker.Segments.Add(new StraightSegment(200, 130, 250, 180, 45));
+        router.IsPathBlockedByForeignComponents(throughBlocker.Segments, startPin, endPin)
+            .ShouldBeTrue("a route through an unconnected component must be flagged");
+    }
+
+    /// <summary>
+    /// [2] The collapse must never bring two routes into a crossing. Two nested U-turns are routed
+    /// together; after the collapse pass no pair of routes may touch or cross.
+    /// </summary>
+    [Fact]
+    public void AutoRoute_CollapseNeverIntroducesASiblingCrossing()
+    {
+        var router = new WaveguideRouter
+        {
+            MinBendRadiusMicrometers = Radius,
+            MinWaveguideSpacingMicrometers = 2.0,
+            UseDiagonalRouting = false,
+        };
+        var start = CreateTestComponent(0, 0);
+        var end = CreateTestComponent(0, 275);
+        router.InitializePathfindingGrid(-200, -200, 700, 700, new[] { start, end });
+
+        var manager = new WaveguideConnectionManager(router);
+        var inner = new WaveguideConnection { StartPin = Pin(start, 50, 20, 0), EndPin = Pin(end, 50, 20, 0) };
+        var outer = new WaveguideConnection { StartPin = Pin(start, 50, 30, 0), EndPin = Pin(end, 50, 30, 0) };
+        manager.AddExistingConnection(inner);
+        manager.AddExistingConnection(outer);
+        manager.RecalculateAllTransmissions();
+
+        inner.IsPathValid.ShouldBeTrue();
+        outer.IsPathValid.ShouldBeTrue();
+        PathIntersectionDetector.MinimumDistance(inner.RoutedPath!, outer.RoutedPath!)
+            .ShouldBeGreaterThan(0.0, "the collapse must not pull the two routes into a crossing");
     }
 
     private static double StartPinLead(RoutedPath path, PhysicalPin startPin)
@@ -116,8 +218,8 @@ public class PinStraightAutoCollapseTests
         return a;
     }
 
-    private static (WaveguideConnection Connection, PhysicalPin StartPin, PhysicalPin EndPin) RouteUTurn(
-        double pinSeparationY)
+    private static (WaveguideConnectionManager Manager, WaveguideConnection Connection,
+        PhysicalPin StartPin, PhysicalPin EndPin) RouteUTurn(double pinSeparationY)
     {
         var router = new WaveguideRouter
         {
@@ -136,7 +238,7 @@ public class PinStraightAutoCollapseTests
         var connection = new WaveguideConnection { StartPin = startPin, EndPin = endPin };
         manager.AddExistingConnection(connection);
         manager.RecalculateAllTransmissions();
-        return (connection, startPin, endPin);
+        return (manager, connection, startPin, endPin);
     }
 
     private static PhysicalPin Pin(Component parent, double offsetX, double offsetY, double angle) => new()

@@ -497,6 +497,22 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
+    /// The obstacle cells occupied by <paramref name="component"/> (body plus padding), or an
+    /// empty set when it has none registered. A route legitimately touches the padded cells of
+    /// its own endpoint components where its pins sit, so callers can exempt those cells from a
+    /// component-collision check.
+    /// </summary>
+    public IReadOnlyCollection<(int x, int y)> GetComponentCells(Component component)
+    {
+        lock (_componentCellsLock)
+        {
+            return _componentCells.TryGetValue(component, out var cells)
+                ? new HashSet<(int, int)>(cells)
+                : new HashSet<(int, int)>();
+        }
+    }
+
+    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>

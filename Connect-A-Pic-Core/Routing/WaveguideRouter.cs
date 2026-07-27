@@ -315,6 +315,33 @@ public partial class WaveguideRouter
         return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponent);
     }
 
+    /// <summary>
+    /// Like <see cref="IsPathBlockedByComponents"/>, but exempts the cells of the two endpoint
+    /// components: a route legitimately hugs its own pins (which sit inside their component's
+    /// padded cells), while every other component body and frozen group path stays an obstacle.
+    /// This is the collision verdict the incremental router applies when deciding to keep a
+    /// route, so a collapsed pin-lead validated with it survives the next recalculation instead
+    /// of being re-routed forever.
+    /// </summary>
+    /// <param name="segments">The path to test.</param>
+    /// <param name="startPin">Start pin whose parent component is exempt.</param>
+    /// <param name="endPin">End pin whose parent component is exempt.</param>
+    public bool IsPathBlockedByForeignComponents(
+        IEnumerable<PathSegment> segments, PhysicalPin startPin, PhysicalPin endPin)
+    {
+        if (PathfindingGrid == null) return false;
+
+        var ownCells = new HashSet<(int x, int y)>();
+        foreach (var pin in new[] { startPin, endPin })
+        {
+            if (pin?.ParentComponent is { } component)
+                ownCells.UnionWith(PathfindingGrid.GetComponentCells(component));
+        }
+
+        return IsPathBlocked(segments,
+            (x, y) => PathfindingGrid.IsBlockedByComponent(x, y) && !ownCells.Contains((x, y)));
+    }
+
     /// <summary>Checks all segments against the given cell-blocked predicate.</summary>
     private bool IsPathBlocked(IEnumerable<PathSegment> segments, Func<int, int, bool> isCellBlocked)
     {
