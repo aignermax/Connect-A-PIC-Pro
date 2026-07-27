@@ -116,28 +116,8 @@ public class PathSmoother
         }
 
         // GEOMETRIC TERMINAL APPROACH - STRICT VALIDATION
-        int terminalStartIndex = routedPath.Segments.Count;
         bool terminalSuccess = AppendTerminalApproach(
             routedPath, ref x, ref y, ref currentAngle, endX, endY, endEntryAngle);
-
-        // The terminal approach is constructed purely geometrically, outside the
-        // collision-checked A* search. Verify it does not cut through blocked cells
-        // (e.g. a neighboring waveguide near the pin) — an unchecked overlap has no
-        // optical model.
-        if (terminalSuccess && terminalStartIndex < routedPath.Segments.Count)
-        {
-            // A terminal approach necessarily enters the component of the pin it lands
-            // on (pins can sit deep inside the body), so those cells are not real
-            // collisions — only foreign components and neighboring waveguides count.
-            var ownComponents = new[] { startPin?.ParentComponent, endPin?.ParentComponent }
-                .Where(c => c != null)
-                .Select(c => c!)
-                .ToList();
-            var excludedCells = _grid.CollectComponentCells(ownComponents);
-            var collisionChecker = new SegmentCollisionChecker(_grid, excludedCells);
-            terminalSuccess = !collisionChecker.IsAnyBlocked(
-                routedPath.Segments.Skip(terminalStartIndex));
-        }
 
         if (!terminalSuccess)
         {

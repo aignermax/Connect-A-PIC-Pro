@@ -57,14 +57,6 @@ public partial class WaveguideRouter
     private HierarchicalPathfinder? _hierarchicalPathfinder;
 
     /// <summary>
-    /// Goal tolerance (in cells) for the close-approach retry: when the smoother's
-    /// terminal approach collides with an obstacle, the search is re-run planning to
-    /// within one cell of the pin, so nearly the entire approach is collision-checked
-    /// by A* itself instead of by unchecked smoother geometry.
-    /// </summary>
-    private const int CloseApproachGoalToleranceCells = 1;
-
-    /// <summary>
     /// Grid cell size in micrometers for A* pathfinding.
     /// Larger values = faster routing but less precise obstacle avoidance.
     /// Recommended: 3-5µm for most designs.

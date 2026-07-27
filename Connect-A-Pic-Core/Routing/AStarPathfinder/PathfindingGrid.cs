@@ -507,27 +507,6 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
-    /// Collects the obstacle cells occupied by the given components as a snapshot copy
-    /// (safe to read without holding the grid lock). Used by the terminal-approach
-    /// collision check to exclude a route's own endpoint components — a waveguide
-    /// legitimately enters the components of the two pins it connects, so those cells
-    /// must not count as collisions.
-    /// </summary>
-    public HashSet<(int x, int y)> CollectComponentCells(IEnumerable<Component> components)
-    {
-        var result = new HashSet<(int x, int y)>();
-        lock (_componentCellsLock)
-        {
-            foreach (var component in components)
-            {
-                if (component != null && _componentCells.TryGetValue(component, out var cells))
-                    result.UnionWith(cells);
-            }
-        }
-        return result;
-    }
-
-    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>
