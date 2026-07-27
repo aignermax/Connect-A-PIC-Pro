@@ -176,6 +176,12 @@ public class FrozenPathDto
     /// Null in old design files — loads empty.
     /// </summary>
     public Dictionary<int, double>? BendRadiusOverrides { get; set; }
+
+    /// <summary>
+    /// Manual straight-segment shift offsets keyed by straight-segment index (issue #791).
+    /// Null in old design files — loads empty.
+    /// </summary>
+    public Dictionary<int, double>? StraightShiftOffsets { get; set; }
 }
 
 /// <summary>

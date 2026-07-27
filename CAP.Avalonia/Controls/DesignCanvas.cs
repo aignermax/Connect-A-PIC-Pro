@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using CAP.Avalonia.Controls.Canvas.AnalysisOutput;
 using CAP.Avalonia.Controls.Canvas.BendHandles;
+using CAP.Avalonia.Controls.Canvas.SegmentShiftHandles;
 using CAP.Avalonia.Controls.Handlers;
 using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.Gestures;
@@ -72,6 +73,7 @@ public class DesignCanvas : Control
     private readonly PathfindingOverlayRenderer _pathfindingOverlayRenderer;
     private readonly WaveguideConnectionRenderer _waveguideConnectionRenderer;
     private readonly BendHandleRenderer _bendHandleRenderer;
+    private readonly SegmentShiftHandleRenderer _segmentShiftHandleRenderer;
     private readonly ComponentRenderer _componentRenderer;
     private readonly AnalysisOutputOverlayRenderer _analysisOutputRenderer;
     private readonly PreviewRenderer _previewRenderer;
@@ -102,6 +104,7 @@ public class DesignCanvas : Control
         _pathfindingOverlayRenderer = new PathfindingOverlayRenderer();
         _waveguideConnectionRenderer = new WaveguideConnectionRenderer();
         _bendHandleRenderer = new BendHandleRenderer();
+        _segmentShiftHandleRenderer = new SegmentShiftHandleRenderer();
         _componentRenderer = new ComponentRenderer();
         _analysisOutputRenderer = new AnalysisOutputOverlayRenderer();
         _previewRenderer = new PreviewRenderer();
@@ -166,7 +169,9 @@ public class DesignCanvas : Control
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
-            // Bend-radius handles draw last so they sit on top of the routed path and components.
+            // Handles draw last so they sit on top of the routed path and components; segment
+            // midpoint handles go under the bend handles, matching the gesture priority (#791).
+            _segmentShiftHandleRenderer.Render(context, rc);
             _bendHandleRenderer.Render(context, rc);
         }
 
@@ -285,6 +290,9 @@ public class DesignCanvas : Control
         [
             // First: a bend-radius handle grab must win over selection / component drag (#574).
             new BendHandleGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
+            // Segment midpoint handles rank right below bend handles (#791): a bend grab wins
+            // when the two handles overlap, but both win over selection / component drag.
+            new SegmentShiftGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PanGestureRecognizer(_interactionState, InvalidateVisual),
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),

@@ -66,9 +66,15 @@ public class FrozenWaveguidePath : ICloneable
     public Dictionary<int, double> BendRadiusOverrides { get; } = new();
 
     /// <summary>
+    /// Manual straight-segment shift offsets of the original connection, keyed by the index
+    /// of the segment among the path's straight segments (issue #791).
+    /// </summary>
+    public Dictionary<int, double> StraightShiftOffsets { get; } = new();
+
+    /// <summary>
     /// Captures the per-connection routing settings (style, radius, width, freeze
-    /// flag, bend overrides, propagation loss) from a live connection so they
-    /// survive while the connection only exists as a frozen path inside a group.
+    /// flag, bend overrides, segment shifts, propagation loss) from a live connection
+    /// so they survive while the connection only exists as a frozen path inside a group.
     /// </summary>
     /// <param name="connection">The live connection to capture settings from.</param>
     public void CaptureSettingsFrom(WaveguideConnection connection)
@@ -81,6 +87,9 @@ public class FrozenWaveguidePath : ICloneable
         BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in connection.BendRadiusOverrides)
             BendRadiusOverrides[bendIndex] = radius;
+        StraightShiftOffsets.Clear();
+        foreach (var (straightIndex, offset) in connection.StraightShiftOffsets)
+            StraightShiftOffsets[straightIndex] = offset;
     }
 
     /// <summary>
@@ -98,6 +107,9 @@ public class FrozenWaveguidePath : ICloneable
         connection.BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in BendRadiusOverrides)
             connection.BendRadiusOverrides[bendIndex] = radius;
+        connection.StraightShiftOffsets.Clear();
+        foreach (var (straightIndex, offset) in StraightShiftOffsets)
+            connection.StraightShiftOffsets[straightIndex] = offset;
     }
 
     /// <summary>
@@ -115,6 +127,9 @@ public class FrozenWaveguidePath : ICloneable
         BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in source.BendRadiusOverrides)
             BendRadiusOverrides[bendIndex] = radius;
+        StraightShiftOffsets.Clear();
+        foreach (var (straightIndex, offset) in source.StraightShiftOffsets)
+            StraightShiftOffsets[straightIndex] = offset;
     }
 
     /// <summary>

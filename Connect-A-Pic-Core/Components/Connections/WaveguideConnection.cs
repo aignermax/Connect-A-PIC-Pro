@@ -46,6 +46,20 @@ namespace CAP_Core.Components.Connections
         public Dictionary<int, double> BendRadiusOverrides { get; } = new();
 
         /// <summary>
+        /// Manual perpendicular shifts of straight segments in micrometers, keyed by the index
+        /// of the segment among the path's straight segments (0 = first straight along the
+        /// path). Recorded by <c>SegmentShiftEditor</c>; cleared together with
+        /// <see cref="BendRadiusOverrides"/> whenever the connection is re-routed from scratch.
+        /// </summary>
+        public Dictionary<int, double> StraightShiftOffsets { get; } = new();
+
+        /// <summary>
+        /// True when the routed path carries manual in-canvas edits (bend radius overrides or
+        /// straight segment shifts) that must survive recalculation while the endpoints match.
+        /// </summary>
+        public bool HasManualPathEdits => BendRadiusOverrides.Count > 0 || StraightShiftOffsets.Count > 0;
+
+        /// <summary>
         /// Tolerance in micrometers for deciding whether a frozen path still matches
         /// the current pin positions.
         /// </summary>
@@ -145,7 +159,7 @@ namespace CAP_Core.Components.Connections
                 // recorded in BendRadiusOverrides) is sacred: keep it as long as its endpoints
                 // still match the pins, only refreshing the losses. Rebuilding here would
                 // silently wipe the manual edit on every unrelated recalculation.
-                if (BendRadiusOverrides.Count > 0 && FrozenPathStillMatchesPins())
+                if (HasManualPathEdits && FrozenPathStillMatchesPins())
                 {
                     UpdateLossFromPath(wavelengthNm);
                     return;
@@ -158,6 +172,7 @@ namespace CAP_Core.Components.Connections
                 // routing and the exporter treat it as a fixed route and never replace it with
                 // the A* result.
                 BendRadiusOverrides.Clear();
+                StraightShiftOffsets.Clear();
                 var styledPath = ConnectionStyleRouteBuilder.Build(StartPin, EndPin, Type, effectiveBendRadius);
                 if (styledPath != null)
                 {
@@ -183,9 +198,10 @@ namespace CAP_Core.Components.Connections
                     return;
                 }
 
-                // An endpoint moved: unfreeze and discard manual bend edits.
+                // An endpoint moved: unfreeze and discard manual bend and segment-shift edits.
                 IsRouteFrozen = false;
                 BendRadiusOverrides.Clear();
+                StraightShiftOffsets.Clear();
             }
 
             // Update router settings. The router owns the process floor: it first attempts

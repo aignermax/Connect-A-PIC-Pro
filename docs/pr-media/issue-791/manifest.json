@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-handle-on-selected-connection.png",
+    "caption": "Selecting a connection shows a diamond midpoint handle on each shiftable straight segment \u2014 same visual language as the bend-radius handles, but diamond-shaped so the two edits are distinguishable."
+  },
+  {
+    "file": "02-live-perpendicular-drag.png",
+    "caption": "Dragging moves the segment parallel to itself (only the perpendicular pointer component counts); the adjoining bends re-fit live and the handle shows the running \u0394 \u00B5m offset."
+  },
+  {
+    "file": "03-clamped-at-collapse-limit.png",
+    "caption": "Dragging past the point where a neighbour segment would collapse clamps the edit: the geometry keeps the last valid shape and the handle turns red."
+  },
+  {
+    "file": "04-undo-restores-route.png",
+    "caption": "The whole drag is one undoable command: Ctrl\u002BZ returns the segment and both bends exactly to the pre-drag route."
+  }
+]

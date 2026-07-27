@@ -202,7 +202,8 @@ public static class ComponentGroupSerializer
             WidthMicrometers = frozenPath.WidthMicrometers,
             IsRouteFrozen = frozenPath.IsRouteFrozen,
             PropagationLossDbPerCm = frozenPath.PropagationLossDbPerCm,
-            BendRadiusOverrides = new Dictionary<int, double>(frozenPath.BendRadiusOverrides)
+            BendRadiusOverrides = new Dictionary<int, double>(frozenPath.BendRadiusOverrides),
+            StraightShiftOffsets = new Dictionary<int, double>(frozenPath.StraightShiftOffsets)
         };
 
         // Serialize path segments
@@ -294,6 +295,11 @@ public static class ComponentGroupSerializer
         {
             foreach (var (bendIndex, radius) in dto.BendRadiusOverrides)
                 frozenPath.BendRadiusOverrides[bendIndex] = radius;
+        }
+        if (dto.StraightShiftOffsets != null)
+        {
+            foreach (var (straightIndex, offset) in dto.StraightShiftOffsets)
+                frozenPath.StraightShiftOffsets[straightIndex] = offset;
         }
     }
 

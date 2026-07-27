@@ -30,6 +30,7 @@ public partial class WaveguideConnectionManager
 
         connection.IsRouteFrozen = false;
         connection.BendRadiusOverrides.Clear();
+        connection.StraightShiftOffsets.Clear();
         return true;
     }
 

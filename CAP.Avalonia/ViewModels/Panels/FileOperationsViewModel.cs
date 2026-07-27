@@ -385,6 +385,9 @@ public partial class FileOperationsViewModel : ObservableObject
                         IsRouteFrozen = c.Connection.IsRouteFrozen ? true : null,
                         BendRadiusOverrides = c.Connection.BendRadiusOverrides.Count > 0
                             ? new Dictionary<int, double>(c.Connection.BendRadiusOverrides)
+                            : null,
+                        StraightShiftOffsets = c.Connection.StraightShiftOffsets.Count > 0
+                            ? new Dictionary<int, double>(c.Connection.StraightShiftOffsets)
                             : null
                     };
                 }).ToList()
@@ -1505,6 +1508,11 @@ public partial class FileOperationsViewModel : ObservableObject
         {
             foreach (var (bendIndex, radius) in connData.BendRadiusOverrides)
                 connection.BendRadiusOverrides[bendIndex] = radius;
+        }
+        if (keepFrozenGeometry && connData.StraightShiftOffsets != null)
+        {
+            foreach (var (straightIndex, offset) in connData.StraightShiftOffsets)
+                connection.StraightShiftOffsets[straightIndex] = offset;
         }
     }
 
