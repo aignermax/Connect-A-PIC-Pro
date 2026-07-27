@@ -92,6 +92,10 @@ public sealed class KeyboardHandler
                 HandlePKey(mainVm);
                 e.Handled = true;
                 break;
+            case Key.X when !ctrl:
+                mainVm.SetCutModeCommand.Execute(null);
+                e.Handled = true;
+                break;
             case Key.L when ctrl:
                 mainVm.BottomPanel.ElementLock.ToggleSelectedComponentsCommand.Execute(null);
                 e.Handled = true;

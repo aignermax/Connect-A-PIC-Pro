@@ -5,6 +5,7 @@ using Avalonia.Interactivity;
 using Avalonia.Media;
 using CAP.Avalonia.Controls.Canvas.AnalysisOutput;
 using CAP.Avalonia.Controls.Canvas.BendHandles;
+using CAP.Avalonia.Controls.Canvas.CutTool;
 using CAP.Avalonia.Controls.Canvas.SegmentShiftHandles;
 using CAP.Avalonia.Controls.Handlers;
 using CAP.Avalonia.Controls.Rendering;
@@ -67,6 +68,9 @@ public class DesignCanvas : Control
     /// <summary>Gets the last canvas position tracked by pointer movement. Used for paste-at-cursor.</summary>
     public Point LastCanvasPosition => _interactionState.LastCanvasPosition;
 
+    /// <summary>Gets the shared per-canvas interaction state (renderers and gestures read/write it).</summary>
+    public CanvasInteractionState InteractionState => _interactionState;
+
     // ── Renderers ──────────────────────────────────────────────────────────
 
     private readonly GridRenderer _gridRenderer;
@@ -77,6 +81,7 @@ public class DesignCanvas : Control
     private readonly ComponentRenderer _componentRenderer;
     private readonly AnalysisOutputOverlayRenderer _analysisOutputRenderer;
     private readonly PreviewRenderer _previewRenderer;
+    private readonly CutToolOverlayRenderer _cutToolOverlayRenderer;
     private readonly CanvasOverlayRenderer _overlayRenderer;
 
     // ── Input Handlers ─────────────────────────────────────────────────────
@@ -108,6 +113,7 @@ public class DesignCanvas : Control
         _componentRenderer = new ComponentRenderer();
         _analysisOutputRenderer = new AnalysisOutputOverlayRenderer();
         _previewRenderer = new PreviewRenderer();
+        _cutToolOverlayRenderer = new CutToolOverlayRenderer();
         _overlayRenderer = new CanvasOverlayRenderer();
         _keyboardHandler = new KeyboardHandler(() => ViewModel, () => MainViewModel, () => Bounds);
 
@@ -169,6 +175,9 @@ public class DesignCanvas : Control
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
+            // Cut tool overlay (#798): guide lines and insertion candidates sit above
+            // components and waveguides so the clickable markers are never obscured.
+            _cutToolOverlayRenderer.Render(context, rc);
             // Handles draw last so they sit on top of the routed path and components; segment
             // midpoint handles go under the bend handles, matching the gesture priority (#791).
             _segmentShiftHandleRenderer.Render(context, rc);
@@ -294,6 +303,7 @@ public class DesignCanvas : Control
             // when the two handles overlap, but both win over selection / component drag.
             new SegmentShiftGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PanGestureRecognizer(_interactionState, InvalidateVisual),
+            new CutToolGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),

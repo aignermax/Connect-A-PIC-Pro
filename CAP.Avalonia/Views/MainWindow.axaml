@@ -81,6 +81,13 @@
                     <PathIcon Data="M6.5,2 A4.5,4.5 0 1 0 6.5,11 A4.5,4.5 0 1 0 6.5,2 Z M6.5,3.5 A3,3 0 1 1 6.5,9.5 A3,3 0 1 1 6.5,3.5 Z M10.2,10.2 L14,14 L12.9,15.1 L9.1,11.3 Z M4.5,6.5 Q5.5,5 6.5,6.5 Q7.5,8 8.5,6.5"
                               Width="16" Height="16" Foreground="#8FD3A7"/>
                 </Button>
+                <Button Command="{Binding SetCutModeCommand}"
+                        Width="36" Margin="2" Background="#3d3d3d"
+                        ToolTip.Tip="{loc:Localize Toolbar.CutModeTip}">
+                    <!-- scissors icon -->
+                    <PathIcon Data="M4,2.5 A1.8,1.8 0 1 0 4,6.1 A1.8,1.8 0 1 0 4,2.5 Z M4,3.6 A0.7,0.7 0 1 1 4,5 A0.7,0.7 0 1 1 4,3.6 Z M4,9.9 A1.8,1.8 0 1 0 4,13.5 A1.8,1.8 0 1 0 4,9.9 Z M4,11 A0.7,0.7 0 1 1 4,12.4 A0.7,0.7 0 1 1 4,11 Z M5.6,5.6 L13.5,12.2 L12.2,13 L7,9.2 Z M5.6,10.4 L13.5,3.8 L12.2,3 L7,6.8 Z"
+                              Width="16" Height="16" Foreground="Gold"/>
+                </Button>
 
                 <Separator Width="1" Background="Gray" Margin="10,5"/>
 

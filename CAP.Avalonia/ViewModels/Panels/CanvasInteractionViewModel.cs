@@ -30,7 +30,13 @@ public enum InteractionMode
     /// Eyedropper-style picker (#754): the next click on a coupler designates it as
     /// THE analysis output for the Eye/BER and Transient tabs.
     /// </summary>
-    PickAnalysisOutput
+    PickAnalysisOutput,
+
+    /// <summary>
+    /// Cut tool (#798): guide lines extend from component pins; clicking a highlighted
+    /// guide-line/waveguide intersection inserts a crossing component there.
+    /// </summary>
+    Cut
 }
 
 /// <summary>
@@ -219,6 +225,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
             InteractionMode.Probe => "Probe mode: Click a waveguide or coupler to inspect its mode slice",
             InteractionMode.PickAnalysisOutput =>
                 Services.Localization.LocalizationService.Instance.Translate("Analysis.Output.PickPrompt"),
+            InteractionMode.Cut =>
+                Services.Localization.LocalizationService.Instance.Translate("Status.CutModePrompt"),
             _ => "Ready"
         };
 
@@ -811,6 +819,19 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private void SetPickAnalysisOutputMode()
     {
         CurrentMode = InteractionMode.PickAnalysisOutput;
+        SelectedTemplate = null;
+        SelectedGroupTemplate = null;
+        _connectionStartPin = null;
+    }
+
+    /// <summary>
+    /// Activates the Cut tool (#798): pin guide lines and crossing-insertion
+    /// candidates are shown; clicking a candidate inserts a crossing component.
+    /// </summary>
+    [RelayCommand]
+    private void SetCutMode()
+    {
+        CurrentMode = InteractionMode.Cut;
         SelectedTemplate = null;
         SelectedGroupTemplate = null;
         _connectionStartPin = null;
