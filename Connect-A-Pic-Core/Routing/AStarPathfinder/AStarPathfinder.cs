@@ -225,6 +225,12 @@ public class AStarPathfinder
 
             // CRITICAL: Force pin arrival - must approach goal in the correct direction
             // for the last N cells. This ensures clean arrival at the end pin.
+            // `<=` deliberately holds the last corner ONE cell further from the pin than
+            // the departure check above (distanceFromStart < N) holds the first corner:
+            // relaxing it to `<` lets the smoothed arrival arc clip obstacles registered
+            // right next to the goal corridor (frozen sibling paths). The resulting
+            // asymmetry is bounded by a single grid cell — quantization noise, unlike the
+            // old distance-scaled escape (pin-lead-stub field finding).
             int distanceToGoal = Math.Abs(newX - goalX) + Math.Abs(newY - goalY);
             if (distanceToGoal <= _costCalculator.MinPinEscapeCells)
             {

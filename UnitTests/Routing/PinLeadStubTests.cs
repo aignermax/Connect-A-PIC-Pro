@@ -79,6 +79,12 @@ public class PinLeadStubTests
         NormalizeAngle(firstBend.StartAngleDegrees).ShouldBe(0, 1e-6);
     }
 
+    /// <summary>
+    /// Field precision: the forced straight was observed at the ARRIVAL side — the route's
+    /// final straight before the end pin. The arrival must get exactly the same
+    /// radius-derived bound as the departure (the A* goal lock used to hold the last corner
+    /// one cell further out than the start escape held the first).
+    /// </summary>
     [Fact]
     public void AutoRoute_LastBendEndsNearEndPin()
     {
@@ -88,11 +94,30 @@ public class PinLeadStubTests
 
         path.IsValid.ShouldBeTrue();
         double lead = EndPinLeadLength(path, endPin);
-        // The arrival side gets the same radius-derived escape; the A* goal tolerance adds
-        // up to 3 cells, so the bound is looser than at the start but still far below the
-        // old distance-scaled escape (48 µm for this layout).
-        lead.ShouldBeLessThanOrEqualTo(5 * router.AStarCellSize,
-            $"forced straight lead at the end pin must stay near the bend tangent (was {lead:F1} µm)");
+        lead.ShouldBeLessThanOrEqualTo(MaxLead(router),
+            $"forced straight lead at the end pin must not exceed grid quantization (was {lead:F1} µm)");
+    }
+
+    /// <summary>
+    /// Field hypothesis check: the direction of the connection must NOT decide which end
+    /// keeps a stub. Routing the same U-turn in both directions yields the same small
+    /// departure AND arrival leads on both ends.
+    /// </summary>
+    [Fact]
+    public void AutoRoute_DepartureAndArrivalLeads_AreSymmetric_RegardlessOfDirection()
+    {
+        var (router, pinA, pinB) = UTurnSetup(300);
+
+        var forward = router.Route(pinA, pinB);
+        var backward = router.Route(pinB, pinA);
+
+        forward.IsValid.ShouldBeTrue();
+        backward.IsValid.ShouldBeTrue();
+        double bound = MaxLead(router);
+        StartPinLeadLength(forward, pinA).ShouldBeLessThanOrEqualTo(bound, "A→B departure lead");
+        EndPinLeadLength(forward, pinB).ShouldBeLessThanOrEqualTo(bound, "A→B arrival lead");
+        StartPinLeadLength(backward, pinB).ShouldBeLessThanOrEqualTo(bound, "B→A departure lead");
+        EndPinLeadLength(backward, pinA).ShouldBeLessThanOrEqualTo(bound, "B→A arrival lead");
     }
 
     [Fact]
