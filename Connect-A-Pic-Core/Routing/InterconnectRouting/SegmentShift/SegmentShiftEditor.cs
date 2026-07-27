@@ -58,7 +58,7 @@ public static class SegmentShiftEditor
         if (Math.Abs(delta) < Epsilon)
             return true;
 
-        if (!TryShiftGeometry(segments, segmentIndex, delta, out error))
+        if (!TryShiftStraightSegment(segments, segmentIndex, delta, out error))
             return false;
 
         connection.StraightShiftOffsets[straightIndex] = offsetMicrometers;
@@ -101,10 +101,20 @@ public static class SegmentShiftEditor
     /// Translates the straight at <paramref name="segmentIndex"/> by <paramref name="delta"/>
     /// along its normal. Each adjoining bend translates rigidly along its outer straight's
     /// direction by the amount whose perpendicular component equals the shift, so tangency is
-    /// preserved by construction. All clamps are validated before anything is mutated.
+    /// preserved by construction. All clamps are validated before anything is mutated — the
+    /// honest clamp rejects a shift that would collapse (invert) any of the three straights.
+    /// Operates directly on the segment list without touching connection state, so it is
+    /// reusable by automated passes (e.g. <see cref="PinStraightCollapser"/>) as well as by
+    /// <see cref="TryApplyShift"/>.
     /// </summary>
-    private static bool TryShiftGeometry(IReadOnlyList<PathSegment> segments, int segmentIndex,
-                                         double delta, out string? error)
+    /// <param name="segments">The path segments to mutate in place.</param>
+    /// <param name="segmentIndex">Index of the shiftable straight (pattern straight–bend–straight
+    /// –bend–straight around it).</param>
+    /// <param name="delta">Perpendicular shift in micrometers along the straight's normal.</param>
+    /// <param name="error">Human-readable reason when the shift is rejected.</param>
+    /// <returns>True when the shift was applied; false (segments untouched) when clamped.</returns>
+    public static bool TryShiftStraightSegment(IReadOnlyList<PathSegment> segments, int segmentIndex,
+                                               double delta, out string? error)
     {
         error = null;
         var straight = (StraightSegment)segments[segmentIndex];

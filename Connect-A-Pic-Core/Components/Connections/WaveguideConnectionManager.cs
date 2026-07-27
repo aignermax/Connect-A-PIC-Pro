@@ -334,6 +334,13 @@ public partial class WaveguideConnectionManager
         RouteAllConnections(progressCallback, cancellationToken);
         RunCrossingInsertionPass(cancellationToken);
 
+        if (!cancellationToken.IsCancellationRequested)
+        {
+            // Pull auto routes onto their pins now that every sibling is final, then flag any
+            // crossing that even the collapse could not keep clear (there should be none).
+            CollapseAutoRoutePinLeads();
+        }
+
         // Any crossing that survived routing, the ordering cascade AND crossing insertion
         // is unavoidable in the current layout: degrade it visibly instead of drawing a
         // silent crossing.
