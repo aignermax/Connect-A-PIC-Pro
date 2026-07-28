@@ -174,6 +174,17 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             _errorConsole?.LogWarning(mixedProcessWarning);
         }
 
+        // Connections whose route is missing, blocked, or invalid never render as GDS
+        // geometry (field report: unroutable tight layouts otherwise leak a red/dashed
+        // path into the fab file) — the export still proceeds, but the user must be told
+        // which connections were left out.
+        var skippedConnectionsWarning = BuildSkippedConnectionsWarning();
+        if (skippedConnectionsWarning != null)
+        {
+            StatusText = skippedConnectionsWarning;
+            _errorConsole?.LogWarning(skippedConnectionsWarning);
+        }
+
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to gdsfactory Python", "py", "Python Files|*.py|All Files|*.*");
         if (filePath == null)
@@ -188,7 +199,24 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        await RunExportAsync(filePath, mixedProcessWarning, hasNazcaNative ? library : null);
+        await RunExportAsync(
+            filePath, mixedProcessWarning, hasNazcaNative ? library : null, skippedConnectionsWarning);
+    }
+
+    /// <summary>
+    /// Builds the localized "N connections skipped" warning for the connections
+    /// <see cref="SkippedConnectionReporter"/> reports as blocked/invalid/routeless, or
+    /// null when every connection exports cleanly.
+    /// </summary>
+    private string? BuildSkippedConnectionsWarning()
+    {
+        var skipped = SkippedConnectionReporter.CollectSkipped(_canvas);
+        if (skipped.Count == 0)
+            return null;
+
+        return string.Format(
+            LocalizationService.Instance.Translate("Export.SkippedConnections.Warning"),
+            skipped.Count, string.Join("; ", skipped.Select(SkippedConnectionReporter.Describe)));
     }
 
     /// <summary>
@@ -199,7 +227,8 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// </summary>
     private async Task RunExportAsync(
         string filePath, string? mixedProcessWarning = null,
-        IReadOnlyList<ComponentTemplate>? mixedBackendLibrary = null)
+        IReadOnlyList<ComponentTemplate>? mixedBackendLibrary = null,
+        string? skippedConnectionsWarning = null)
     {
         IsExporting = true;
         try
@@ -233,12 +262,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 }
             }
 
-            // Keep the mixed-process warning visible next to the final result — it must not
-            // be scrolled away by the success line (field round 4).
+            // Keep the mixed-process and skipped-connections warnings visible next to the
+            // final result — they must not be scrolled away by the success line (field round 4).
             var status = DescribeResult(filePath, result);
-            StatusText = mixedProcessWarning == null
-                ? status
-                : mixedProcessWarning + Environment.NewLine + status;
+            var leadingWarnings = new[] { mixedProcessWarning, skippedConnectionsWarning }
+                .Where(w => w != null);
+            StatusText = string.Join(Environment.NewLine, leadingWarnings.Append(status));
             if (result.Success && result.GdsPath != null)
                 TryOpenGds(result.GdsPath);
         }

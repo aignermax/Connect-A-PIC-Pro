@@ -1600,6 +1600,14 @@ public partial class FileOperationsViewModel : ObservableObject
                     _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
+                // Connections whose route is missing, blocked, or invalid never render as GDS
+                // geometry (field report: unroutable tight layouts otherwise leak a red/dashed
+                // path into the fab file) — the export still proceeds, but the user must be
+                // told which connections were left out.
+                var skippedConnectionsWarning = BuildSkippedConnectionsWarning();
+                if (skippedConnectionsWarning != null)
+                    _errorConsole?.LogWarning(skippedConnectionsWarning);
+
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.
                 if (GdsExport.GenerateGdsEnabled && !GdsExport.IsEnvironmentReady)
@@ -1608,7 +1616,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 var decision = await GdsExport.PreflightGdsAsync(MessageBoxService);
                 if (decision != Export.GdsPreflightDecision.Proceed)
                 {
-                    await HandleSkippedGdsAsync(decision, filePath);
+                    await HandleSkippedGdsAsync(decision, filePath, skippedConnectionsWarning);
                     return;
                 }
 
@@ -1617,7 +1625,9 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 if (result.Success && result.GdsPath != null)
                 {
-                    UpdateStatus?.Invoke($"Exported {Path.GetFileName(filePath)} and {Path.GetFileName(result.GdsPath)}");
+                    UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
+                        $"Exported {Path.GetFileName(filePath)} and {Path.GetFileName(result.GdsPath)}",
+                        skippedConnectionsWarning));
 
                     // Try to open the generated GDS file in the default viewer (KLayout etc.) —
                     // this is a content launch, not a file-manager open, so it stays useful even
@@ -1626,13 +1636,16 @@ public partial class FileOperationsViewModel : ObservableObject
                 }
                 else if (result.Success)
                 {
-                    UpdateStatus?.Invoke($"Exported to {Path.GetFileName(filePath)}");
+                    UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
+                        $"Exported to {Path.GetFileName(filePath)}", skippedConnectionsWarning));
                 }
                 else
                 {
                     // Log full Python error to Error Console for visibility
                     _errorConsole?.LogError($"GDS generation failed: {result.ErrorMessage}");
-                    UpdateStatus?.Invoke($"Exported {Path.GetFileName(filePath)} (GDS generation failed: {result.ErrorMessage})");
+                    UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
+                        $"Exported {Path.GetFileName(filePath)} (GDS generation failed: {result.ErrorMessage})",
+                        skippedConnectionsWarning));
                 }
             }
             catch (Exception ex)
@@ -1648,14 +1661,17 @@ public partial class FileOperationsViewModel : ObservableObject
     /// only the GDS step is skipped. Install/settings choices open the Settings window on
     /// the Python-Environments page (the install progress is visible there).
     /// </summary>
-    private async Task HandleSkippedGdsAsync(Export.GdsPreflightDecision decision, string scriptPath)
+    private async Task HandleSkippedGdsAsync(
+        Export.GdsPreflightDecision decision, string scriptPath, string? skippedConnectionsWarning = null)
     {
         if (decision == Export.GdsPreflightDecision.InstallRequested)
         {
             GdsExport.InstallNazcaCommand.Execute(null);
             if (ShowSettingsWindow != null)
                 await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
-            UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)");
+            UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
+                $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)",
+                skippedConnectionsWarning));
             return;
         }
 
@@ -1663,8 +1679,31 @@ public partial class FileOperationsViewModel : ObservableObject
             && ShowSettingsWindow != null)
             await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
 
-        UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)");
+        UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
+            $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)",
+            skippedConnectionsWarning));
     }
+
+    /// <summary>
+    /// Builds the localized "N connections skipped" warning for the connections
+    /// <see cref="SkippedConnectionReporter"/> reports as blocked/invalid/routeless, or
+    /// null when every connection exports cleanly.
+    /// </summary>
+    private string? BuildSkippedConnectionsWarning()
+    {
+        var skipped = SkippedConnectionReporter.CollectSkipped(_canvas);
+        if (skipped.Count == 0)
+            return null;
+
+        return string.Format(
+            Services.Localization.LocalizationService.Instance.Translate("Export.SkippedConnections.Warning"),
+            skipped.Count, string.Join("; ", skipped.Select(SkippedConnectionReporter.Describe)));
+    }
+
+    /// <summary>Prefixes a status line with the skipped-connections warning, when present,
+    /// so it survives next to the final result instead of being scrolled away.</summary>
+    private static string WithSkippedConnectionsWarning(string status, string? skippedConnectionsWarning) =>
+        skippedConnectionsWarning == null ? status : skippedConnectionsWarning + Environment.NewLine + status;
 
     /// <summary>
     /// Exports the current design to a SAX/Simphony-compatible Python

@@ -472,6 +472,11 @@ public class SimpleNazcaExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // A blocked/invalid/routeless connection must never render as geometry (field
+            // report: unroutable tight layouts otherwise leak a red/dashed path straight into
+            // the GDS) — the design still exports, just without this connection's geometry.
+            if (!conn.IsExportable()) continue;
+
             // Electrical connections are metal traces, not optical waveguides — emit them on
             // the process metal layer/width instead of the waveguide layer (issue #682). A
             // connection is metal only when BOTH pins are electrical; a mixed optical+electrical

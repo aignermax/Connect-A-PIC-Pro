@@ -47,11 +47,19 @@ public class ElectricalConnectionExportTests
         var b = MakeComponentWithPin("B", 200, "p_b", endKind ?? startKind);
         canvas.Components.Add(new ComponentViewModel(a));
         canvas.Components.Add(new ComponentViewModel(b));
-        canvas.Connections.Add(new WaveguideConnectionViewModel(new WaveguideConnection
+        var connection = new WaveguideConnection
         {
             StartPin = a.PhysicalPins.First(p => p.Name == "p_a"),
             EndPin = b.PhysicalPins.First(p => p.Name == "p_b"),
-        }));
+        };
+        // A routed connection is required for its geometry to be export-eligible (a
+        // blocked/invalid/routeless connection is skipped from export); the single
+        // straight segment renders identically to the old pin-to-pin fallback, since
+        // both formatters read the pin positions directly rather than the segment.
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(0, 0, 1, 0, 0));
+        connection.RestoreCachedPath(path);
+        canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
         return canvas;
     }
 
@@ -110,7 +118,7 @@ public class ElectricalConnectionExportTests
         var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
-        script.ShouldContain("ic.sbend_p2p");
+        script.ShouldContain("nd.strt(");
     }
 
     [Fact]
@@ -124,7 +132,7 @@ public class ElectricalConnectionExportTests
         var script = new SimpleNazcaExporter().Export(canvas, metalSpec: MetalRoutingSpec.Default);
 
         script.ShouldNotContain("layer=(11, 0)");
-        script.ShouldContain("ic.sbend_p2p");
+        script.ShouldContain("nd.strt(");
     }
 
     [Fact]

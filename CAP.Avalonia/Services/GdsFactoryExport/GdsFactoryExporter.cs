@@ -387,6 +387,11 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
+            // A blocked/invalid/routeless connection must never render as geometry (field
+            // report: unroutable tight layouts otherwise leak a red/dashed path straight into
+            // the GDS) — the design still exports, just without this connection's geometry.
+            if (!conn.IsExportable()) continue;
+
             // Electrical connections are metal traces, not optical waveguides — draw them as a
             // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
             // connection is metal only when BOTH pins are electrical; a mixed or all-optical

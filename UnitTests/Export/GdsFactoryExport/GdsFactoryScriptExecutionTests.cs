@@ -73,12 +73,18 @@ public class GdsFactoryScriptExecutionTests
         var b = CreateSinComponent("B", "cspdk.sin300.straight", 60, 0);
         canvas.AddComponent(a, "SiN A");
         canvas.AddComponent(b, "SiN B");
-        canvas.Connections.Add(new CAP.Avalonia.ViewModels.Canvas.WaveguideConnectionViewModel(
-            new CAP_Core.Components.Connections.WaveguideConnection
-            {
-                StartPin = a.PhysicalPins[0],
-                EndPin = b.PhysicalPins[0],
-            }));
+        var connection = new CAP_Core.Components.Connections.WaveguideConnection
+        {
+            StartPin = a.PhysicalPins[0],
+            EndPin = b.PhysicalPins[0],
+        };
+        // A blocked/invalid/routeless connection is skipped from export — give it a real
+        // routed path so the generated script actually contains the waveguide connection
+        // this test's name promises.
+        var path = new CAP_Core.Routing.RoutedPath();
+        path.Segments.Add(new CAP_Core.Routing.StraightSegment(0, 0, 1, 0, 0));
+        connection.RestoreCachedPath(path);
+        canvas.Connections.Add(new CAP.Avalonia.ViewModels.Canvas.WaveguideConnectionViewModel(connection));
         return canvas;
     }
 

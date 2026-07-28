@@ -70,8 +70,6 @@ public class NazcaExportInterconnectSettingsTests
         // the arc appears as an nd.bend segment line, never as one styled primitive line.
         var canvas = CreateCanvasWithConnection(
             WaveguideType.Bend, endOffsetY: 30, endPinAngleDegrees: 270);
-        var conn = canvas.Connections[0].Connection;
-        conn.RecalculateTransmission(new CAP_Core.Routing.WaveguideRouter());
 
         var result = new SimpleNazcaExporter().Export(canvas);
 
@@ -120,6 +118,10 @@ public class NazcaExportInterconnectSettingsTests
                 ParentComponent = compB,
             },
         };
+        // A real routing pass gives the connection a non-null RoutedPath — required for
+        // its geometry to be export-eligible (blocked/invalid/routeless routes are
+        // skipped from export) — regardless of which style ends up rendering it.
+        conn.RecalculateTransmission(new CAP_Core.Routing.WaveguideRouter());
         canvas.Connections.Add(new WaveguideConnectionViewModel(conn));
         return canvas;
     }

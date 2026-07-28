@@ -2,7 +2,10 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
+using CAP_Core.Components.Connections;
+using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_Core.Routing;
 using Shouldly;
 using Xunit;
 
@@ -393,5 +396,94 @@ public class GdsFactoryExportViewModelTests
         vm.RefreshUnmappedComponents();
 
         vm.UnmappedComponents.ShouldBe(new[] { "ebeam_dc_te1550" });
+    }
+
+    /// <summary>Two components joined by a connection whose route is blocked (drawn
+    /// through an obstacle) — export must still succeed but leave that geometry out.
+    /// Both components carry a (bare) gdsfactory function so the export takes the
+    /// plain single-script path rather than the nazca-native two-script merge.</summary>
+    private static DesignCanvasViewModel CanvasWithBlockedConnection()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var a = TestComponentFactory.CreateBasicComponent();
+        a.Identifier = "CompA";
+        a.NazcaFunctionName = "";
+        a.GdsFactoryFunction = "mmi2x2";
+        a.PhysicalPins.Add(new PhysicalPin { Name = "p0", ParentComponent = a });
+        var b = TestComponentFactory.CreateBasicComponent();
+        b.Identifier = "CompB";
+        b.NazcaFunctionName = "";
+        b.GdsFactoryFunction = "mmi2x2";
+        b.PhysicalX = 200;
+        b.PhysicalPins.Add(new PhysicalPin { Name = "p0", ParentComponent = b });
+        canvas.AddComponent(a, "MMI A");
+        canvas.AddComponent(b, "MMI B");
+
+        var connection = new WaveguideConnection { StartPin = a.PhysicalPins[0], EndPin = b.PhysicalPins[0] };
+        var path = new RoutedPath { IsBlockedFallback = true };
+        path.Segments.Add(new StraightSegment(0, 0, 1, 0, 0));
+        connection.RestoreCachedPath(path);
+        canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
+        return canvas;
+    }
+
+    [Fact]
+    public async Task Export_BlockedConnection_WarnsAndOmitsItFromTheGds()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                CanvasWithBlockedConnection(), new StubSuccessExportService(), errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            File.Exists(scriptPath).ShouldBeTrue();   // export still ran
+            (await File.ReadAllTextAsync(scriptPath)).ShouldNotContain("gf.components.straight(");
+            vm.StatusText.ShouldContain("1 connection(s)");
+            vm.StatusText.ShouldContain("CompA.p0");
+            vm.StatusText.ShouldContain("CompB.p0");
+            errorConsole.Entries.ShouldContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn
+                && e.Message.Contains("CompA.p0")
+                && e.Message.Contains("CompB.p0"));
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
+    }
+
+    [Fact]
+    public async Task Export_AllConnectionsValid_NoSkippedConnectionsWarning()
+    {
+        var canvas = CanvasWithBlockedConnection();
+        // Replace the blocked path with a valid one so nothing is skipped.
+        var connection = canvas.Connections[0].Connection;
+        connection.RestoreCachedPath(new RoutedPath { Segments = { new StraightSegment(0, 0, 1, 0, 0) } });
+
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var vm = new GdsFactoryExportViewModel(
+                canvas, new StubSuccessExportService(), errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            vm.StatusText.ShouldNotContain("connection(s)");
+            errorConsole.Entries.ShouldBeEmpty();
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+        }
     }
 }
