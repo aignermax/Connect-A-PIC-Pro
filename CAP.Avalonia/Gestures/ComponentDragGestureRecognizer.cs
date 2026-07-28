@@ -146,6 +146,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         var prevGroup = _state.HoveredGroup;
         var prevLabel = _state.HoveredGroupLabel;
         var prevLock = _state.HoveredGroupLockIcon;
+        var prevComponent = _state.HoveredComponent;
 
         var lockIcon = DesignCanvasHitTesting.HitTestGroupLockIcon(canvasPoint, canvas);
         _state.HoveredGroupLockIcon = lockIcon;
@@ -154,6 +155,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         {
             _state.HoveredGroup = lockIcon;
             _state.HoveredGroupLabel = null;
+            _state.HoveredComponent = null;
             _setCursor(new Cursor(StandardCursorType.Hand));
         }
         else
@@ -163,6 +165,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
             if (label != null)
             {
                 _state.HoveredGroup = label;
+                _state.HoveredComponent = null;
                 _setCursor(new Cursor(StandardCursorType.Hand));
             }
             else
@@ -171,11 +174,15 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
                 _state.HoveredGroup = comp?.Component.ParentGroup != null
                     ? GetTopLevelGroup(comp.Component)
                     : comp?.Component as ComponentGroup;
+                // Only a plain (non-group) component claims name-label hover priority; a group
+                // hit is tracked separately above and its label uses its own hover state.
+                _state.HoveredComponent = comp?.Component is ComponentGroup ? null : comp;
                 _setCursor(Cursor.Default);
             }
         }
 
-        if (_state.HoveredGroup != prevGroup || _state.HoveredGroupLabel != prevLabel || _state.HoveredGroupLockIcon != prevLock)
+        if (_state.HoveredGroup != prevGroup || _state.HoveredGroupLabel != prevLabel
+            || _state.HoveredGroupLockIcon != prevLock || _state.HoveredComponent != prevComponent)
             _invalidate();
     }
 

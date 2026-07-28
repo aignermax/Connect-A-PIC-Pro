@@ -64,6 +64,10 @@ public class CanvasInteractionState
     public bool ActiveShiftClamped { get; set; }
     public double ActiveShiftDeltaMicrometers { get; set; }
 
+    // Simple (non-group) component hover state, used to prioritize its name label over
+    // unhovered components' labels when they overlap (label-declutter overlap resolution).
+    public ComponentViewModel? HoveredComponent { get; set; }
+
     // ComponentGroup hover state
     public ComponentGroup? HoveredGroup { get; set; }
 

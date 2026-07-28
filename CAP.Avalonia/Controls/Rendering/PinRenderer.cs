@@ -17,6 +17,13 @@ internal sealed class PinRenderer
     private static readonly Color ElectricalPinColor = Color.FromRgb(218, 165, 32);
 
     /// <summary>
+    /// World-space font size for a component's name label before the <see cref="PinScreenSize"/>
+    /// screen-space cap is applied. Shared with <see cref="LabelDeclutter.ComponentNameLabelComputer"/>
+    /// so the overlap-resolution pass measures text at exactly the size actually drawn.
+    /// </summary>
+    internal const double NameLabelFontSizeWorld = 12.0;
+
+    /// <summary>
     /// Renders all physical pins of a component.
     /// </summary>
     public void DrawComponentPins(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc, bool isDimmed = false)
@@ -66,17 +73,26 @@ internal sealed class PinRenderer
     }
 
     /// <summary>
-    /// Renders the component name label at the top-left of the component.
+    /// Renders the component name label at the top-left of the component. The font size is
+    /// capped in screen pixels (<see cref="PinScreenSize.CapWorldFontSize"/>) so it stops
+    /// growing at high zoom, and the label is skipped entirely once it would shrink below
+    /// <see cref="PinScreenSize.MinLabelFontSizePx"/> at low zoom — callers should already have
+    /// excluded such labels via <see cref="LabelDeclutter.ComponentNameLabelComputer"/>, but the
+    /// check here keeps this method correct on its own.
     /// </summary>
-    public void DrawComponentName(DrawingContext context, ComponentViewModel comp, bool isDimmed = false)
+    public void DrawComponentName(DrawingContext context, ComponentViewModel comp, double zoom, bool isDimmed = false)
     {
+        if (!PinScreenSize.IsLabelReadable(NameLabelFontSizeWorld, zoom))
+            return;
+
         byte alpha = (byte)(isDimmed ? 128 : 255);
+        double fontSize = PinScreenSize.CapWorldFontSize(NameLabelFontSizeWorld, zoom);
         var text = new FormattedText(
             comp.Name,
             System.Globalization.CultureInfo.CurrentCulture,
             FlowDirection.LeftToRight,
             new Typeface("Arial"),
-            12,
+            fontSize,
             new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
         context.DrawText(text, new Point(comp.X + 5, comp.Y + 5));
     }
