@@ -18,7 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="MathNet.Numerics" Version="5.0.0" />
-    <PackageReference Include="NCalcSync" Version="5.7.0" />
+    <PackageReference Include="NCalcSync" Version="6.1.1" />
     <PackageReference Include="System.Linq.Dynamic.Core" Version="1.6.7" />
     <PackageReference Include="YamlDotNet" Version="16.3.0" />
   </ItemGroup>

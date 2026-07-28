@@ -33,7 +33,7 @@ namespace CAP_Core.Components.Parametric
             // identically regardless of where the app runs.
             var expression = new Expression(formula, ExpressionOptions.None, CultureInfo.InvariantCulture);
 
-            expression.EvaluateParameter += (string name, ParameterArgs args) =>
+            expression.EvaluateParameter += (string name, ParameterEventArgs args) =>
             {
                 if (name.Equals(PiConstantName, StringComparison.OrdinalIgnoreCase))
                 {
