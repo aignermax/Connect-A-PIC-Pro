@@ -1,3 +1,4 @@
+using System.Numerics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using Avalonia;
@@ -8,6 +9,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Routing;
 using Shouldly;
@@ -22,10 +24,10 @@ namespace UnitTests.UI;
 /// Visual walkthrough for canvas label declutter: renders three tightly-spaced pairs of
 /// terminal components (so each pair's name labels are guaranteed to overlap) connected by
 /// routed waveguides, then captures the production <see cref="CAP.Avalonia.Controls.Rendering.WaveguideConnectionRenderer"/>
-/// and <see cref="CAP.Avalonia.Controls.Rendering.ComponentRenderer"/> output in four states —
-/// zoomed-out overview, zoomed-in (font cap), hover (length reveal), and selection (name-overlap
-/// priority) — as step-ordered PNGs + manifest.json in
-/// <c>artifacts/ui-screenshots/canvas-label-declutter/</c>.
+/// and <see cref="CAP.Avalonia.Controls.Rendering.ComponentRenderer"/> output in five states —
+/// zoomed-out overview, zoomed-in (font clamp), hover (length reveal), selection (name-overlap
+/// priority), and power-flow-on (always-on readout + style badge, PR-review regression check) —
+/// as step-ordered PNGs + manifest.json in <c>artifacts/ui-screenshots/canvas-label-declutter/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
 [Collection("LocalizationSingleton")]
@@ -40,7 +42,7 @@ public class CanvasLabelDeclutterWalkthroughTests
     private static readonly Rect OverviewViewport = new(-20, -25, 640, 90);
 
     /// <summary>Close-up on the middle pair only, near the app's zoom clamp (10x, see
-    /// <c>DesignCanvas.OnPointerWheelChanged</c>) to stress-test the font-size cap.</summary>
+    /// <c>DesignCanvas.OnPointerWheelChanged</c>) to stress-test the font-size clamp.</summary>
     private static readonly Rect ZoomedInViewport = new(200, -15, 120, 60);
 
     [AvaloniaFact]
@@ -75,15 +77,15 @@ public class CanvasLabelDeclutterWalkthroughTests
         });
 
         // Step 2: zoomed in close on the middle pair, near the app's zoom clamp. Without a
-        // screen-space cap the 12-14pt world-space font would balloon to ~100+ screen pixels;
-        // capped, it stays a small, legible, screen-constant size.
-        Capture(canvas, state, ZoomedInViewport, dir, "02-zoomed-in-font-capped.png");
+        // screen-space clamp the 12pt world-space font would balloon to ~100+ screen pixels;
+        // clamped, it stays a small, legible, screen-constant size.
+        Capture(canvas, state, ZoomedInViewport, dir, "02-zoomed-in-font-clamped.png");
         manifest.Add(new
         {
-            file = "02-zoomed-in-font-capped.png",
+            file = "02-zoomed-in-font-clamped.png",
             caption = "Zoomed in close on the middle pair (~8x, near the app's 10x zoom clamp). "
                 + "Name labels stay a small, legible, screen-constant size instead of ballooning "
-                + "with zoom — PinScreenSize.CapWorldFontSize applied to label text.",
+                + "with zoom — PinScreenSize.ClampWorldFontSize applied to label text.",
         });
 
         // Step 3: hovering a connection reveals its length/loss label on demand — the detail
@@ -99,17 +101,40 @@ public class CanvasLabelDeclutterWalkthroughTests
         });
         state.HoveredConnection = null;
 
-        // Step 4: selecting the pair-1 component that LOST the overlap tie-break in step 1
-        // ("SourceLaserInput") now wins over its unselected partner — selected outranks the
-        // deterministic ordinal tie-break, and both hovered and selected outrank plain "rest".
-        scene.SourceLaserInput.IsSelected = true;
+        // Step 4: selecting the pair-1 component that LOST the overlap tie-break in step 1 now
+        // wins over its unselected partner — selected outranks the deterministic Guid tie-break,
+        // and both hovered and selected outrank plain "rest". The loser is determined by the
+        // same ascending-Id ordering LabelOverlapResolver itself uses, not hardcoded, since
+        // component identity (Component.Id) is a runtime Guid.
+        scene.Pair1TieBreakLoser.IsSelected = true;
         Capture(canvas, state, OverviewViewport, dir, "04-selection-wins-name-overlap.png");
         manifest.Add(new
         {
             file = "04-selection-wins-name-overlap.png",
-            caption = "Selecting 'SourceLaserInput' — the name that lost pair 1's overlap "
-                + "tie-break in step 1 — now shows it instead of 'PhotoDetectorOutput': "
+            caption = $"Selecting '{scene.Pair1TieBreakLoser.Name}' — the name that lost pair "
+                + "1's overlap tie-break in step 1 — now shows it instead of its partner: "
                 + "selected always outranks hovered, which always outranks the rest.",
+        });
+        scene.Pair1TieBreakLoser.IsSelected = false;
+
+        // Step 5: PR-review regression check — turning on power-flow visualization (equivalent
+        // to a completed simulation run) must show every connection's dB/% readout WITHOUT
+        // hovering anything, and a manually-styled connection's badge must stay visible too.
+        // A prior version of this feature wrapped the hover/selection gate around the entire
+        // connection text-overlay draw call, which silently hid both of these as well —
+        // the fix scopes the gate to exactly the length/loss label (WaveguideConnectionRenderer.
+        // ShouldShowLengthLossLabel).
+        ApplyPowerFlow(canvas, scene);
+        scene.Pair1Connection.Connection.Type = WaveguideType.Cobra;
+        Capture(canvas, state, OverviewViewport, dir, "05-power-flow-and-badge-always-on.png");
+        manifest.Add(new
+        {
+            file = "05-power-flow-and-badge-always-on.png",
+            caption = "Power-flow visualization on (as after a completed simulation run) shows "
+                + "every connection's dB/% readout with nothing hovered or selected — the "
+                + "length/loss label is the ONLY overlay hover/selection gates. Pair 1's "
+                + "connection also carries a manually-styled (non-Auto, 'Cobra') badge, "
+                + "likewise always-on.",
         });
 
         File.WriteAllText(
@@ -121,7 +146,10 @@ public class CanvasLabelDeclutterWalkthroughTests
     /// and 170+ µm apart from the next pair (no cross-pair overlap), each pair joined by a
     /// straight routed waveguide built from the pins' own absolute positions so the route is
     /// never flagged stale.</summary>
-    private sealed record Scene(ComponentViewModel SourceLaserInput, WaveguideConnectionViewModel Pair1Connection);
+    private sealed record Scene(
+        ComponentViewModel Pair1TieBreakLoser,
+        WaveguideConnectionViewModel Pair1Connection,
+        IReadOnlyList<(CrossingTestCircuit.Terminal Left, CrossingTestCircuit.Terminal Right)> Pairs);
 
     private static Scene BuildScene(DesignCanvasViewModel canvas)
     {
@@ -136,8 +164,33 @@ public class CanvasLabelDeclutterWalkthroughTests
         ConnectStraight(canvas, c, d);
         ConnectStraight(canvas, e, f);
 
-        var sourceLaserInputVm = canvas.Components.Single(vm => vm.Component == a.Component);
-        return new Scene(sourceLaserInputVm, pair1Connection);
+        // The tie-break winner is whichever component LabelOverlapResolver's ascending-Id
+        // ordering would accept first (smaller Component.Id) — the loser is the other one.
+        var aVm = canvas.Components.Single(vm => vm.Component == a.Component);
+        var bVm = canvas.Components.Single(vm => vm.Component == b.Component);
+        var pair1Loser = a.Component.Id.CompareTo(b.Component.Id) < 0 ? bVm : aVm;
+
+        var pairs = new[] { (a, b), (c, d), (e, f) };
+        return new Scene(pair1Loser, pair1Connection, pairs);
+    }
+
+    /// <summary>Populates real power-flow data (0 dB in, ~1 dB loss out) for every pair's
+    /// connection via the same <see cref="CAP.Avalonia.Visualization.PowerFlowVisualizer.UpdateFromSimulation"/>
+    /// entry point a completed simulation run uses — not a rendering-only shortcut.</summary>
+    private static void ApplyPowerFlow(DesignCanvasViewModel canvas, Scene scene)
+    {
+        var fieldResults = new Dictionary<Guid, Complex>();
+        foreach (var (left, right) in scene.Pairs)
+        {
+            fieldResults[left.LogicalPin.IDOutFlow] = new Complex(1.0, 0);
+            fieldResults[right.LogicalPin.IDInFlow] = new Complex(0.9, 0);
+        }
+
+        canvas.PowerFlowVisualizer.UpdateFromSimulation(
+            canvas.Connections.Select(c => c.Connection).ToList(),
+            canvas.Components.Select(c => c.Component).ToList(),
+            fieldResults);
+        canvas.ShowPowerFlow = true;
     }
 
     /// <summary>Builds a straight cached route between two terminals' own pin positions, so the
