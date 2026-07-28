@@ -67,12 +67,51 @@ public class Issue704ReproRoutingTests
         }
     }
 
+    [Fact]
+    public void CouplerStraightBackConnections_NoRouteSelfIntersects()
+    {
+        // Two coupler_straight instances stacked almost on top of each other
+        // (Δx ≈ 1.2 µm, Δy ≈ 13.1 µm) with three back-connections whose pins face
+        // away from their target. These pathologically tight U-turns made the router
+        // emit self-crossing loops that were flagged invalid yet still exported.
+        var coupler1 = Issue704ReproCircuit.CreateCouplerStraight("Coupler_Straight_1", 345.698, -497.001);
+        var coupler2 = Issue704ReproCircuit.CreateCouplerStraight("Coupler_Straight_2", 344.483, -483.894);
+
+        var manager = CreateRoutedManager(
+            out _, minX: 200, minY: -640, maxX: 520, maxY: -340, coupler1, coupler2);
+        manager.AddConnection(
+            Issue704ReproCircuit.Pin(coupler2, "o4"), Issue704ReproCircuit.Pin(coupler1, "o3"));
+        manager.AddConnection(
+            Issue704ReproCircuit.Pin(coupler1, "o4"), Issue704ReproCircuit.Pin(coupler2, "o3"));
+        manager.AddConnection(
+            Issue704ReproCircuit.Pin(coupler2, "o1"), Issue704ReproCircuit.Pin(coupler1, "o2"));
+
+        foreach (var connection in manager.Connections)
+        {
+            var path = connection.RoutedPath;
+            path.ShouldNotBeNull();
+            PathIntersectionDetector.HasSelfIntersection(path).ShouldBeFalse(
+                $"route {connection} must never cross itself");
+            path.IsInvalidGeometry.ShouldBeFalse(
+                $"route {connection} must not be left as invalid geometry");
+        }
+    }
+
     /// <summary>
     /// Creates a router + connection manager over the repro components, using
     /// the same 4-direction routing configuration as the original designs.
     /// </summary>
     private static WaveguideConnectionManager CreateRoutedManager(
-        out WaveguideRouter router, params CAP_Core.Components.Core.Component[] components)
+        out WaveguideRouter router, params CAP_Core.Components.Core.Component[] components) =>
+        CreateRoutedManager(out router, 0, 0, 1200, 1000, components);
+
+    /// <summary>
+    /// Creates a router + connection manager with an explicit grid extent, so layouts
+    /// placed at negative coordinates (exported netlist positions) are covered.
+    /// </summary>
+    private static WaveguideConnectionManager CreateRoutedManager(
+        out WaveguideRouter router, double minX, double minY, double maxX, double maxY,
+        params CAP_Core.Components.Core.Component[] components)
     {
         router = new WaveguideRouter
         {
@@ -80,7 +119,7 @@ public class Issue704ReproRoutingTests
             AStarCellSize = 4.0,
             UseDiagonalRouting = false,
         };
-        router.InitializePathfindingGrid(0, 0, 1200, 1000, components.ToList());
+        router.InitializePathfindingGrid(minX, minY, maxX, maxY, components.ToList());
         return new WaveguideConnectionManager(router);
     }
 

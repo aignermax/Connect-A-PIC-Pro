@@ -43,6 +43,25 @@ public static class Issue704ReproCircuit
     public static Component CreateTaper(string name, double pinX, double pinY) =>
         CreateBlock(name, pinX, pinY - 0.6, 46.0, 1.2, ("o1", 0, 0.6, 180));
 
+    /// <summary>Width of the bundled cspdk.sin300.coupler_straight template (µm).</summary>
+    public const double CouplerStraightWidth = 20.0;
+
+    /// <summary>Height of the bundled cspdk.sin300.coupler_straight template (µm).</summary>
+    public const double CouplerStraightHeight = 2.636;
+
+    /// <summary>
+    /// Creates a component with the exact pin geometry of the bundled
+    /// cspdk.sin300.coupler_straight template: left-edge pins o1/o2 facing west,
+    /// right-edge pins o3/o4 facing east. Origin (<paramref name="x"/>,<paramref name="y"/>)
+    /// is the component's placement position, matching an exported netlist placement.
+    /// </summary>
+    public static Component CreateCouplerStraight(string name, double x, double y) =>
+        CreateBlock(name, x, y, CouplerStraightWidth, CouplerStraightHeight,
+            ("o1", 0.0, 2.036, 180),
+            ("o2", 0.0, 0.6, 180),
+            ("o4", CouplerStraightWidth, 2.036, 0),
+            ("o3", CouplerStraightWidth, 0.6, 0));
+
     /// <summary>Finds a physical pin by name.</summary>
     public static PhysicalPin Pin(Component component, string name) =>
         component.PhysicalPins.Single(p => p.Name == name);

@@ -254,12 +254,31 @@ public partial class WaveguideRouter
             if (IsCleanFallback(relaxed)) return relaxed;
 
             // Both radii failed — keep the tighter (shorter, less loop-prone) geometry.
-            relaxed.IsBlockedFallback = true;
-            return relaxed;
+            return DegradeToBlockedFallback(relaxed, startX, startY, endX, endY);
         }
 
-        path.IsBlockedFallback = true;
-        return path;
+        return DegradeToBlockedFallback(path, startX, startY, endX, endY);
+    }
+
+    /// <summary>
+    /// Flags a fallback path as blocked. A fallback that merely grazes an obstacle keeps its
+    /// geometry, but a self-crossing one (the loop/teardrop the CSC router produces for pins
+    /// that face away from each other in tight quarters) has no optical model and must never
+    /// reach export — it is replaced by an honest straight line between the pins, still flagged
+    /// blocked so the connection is surfaced as unroutable rather than drawn as a valid loop.
+    /// </summary>
+    private static RoutedPath DegradeToBlockedFallback(
+        RoutedPath candidate, double startX, double startY, double endX, double endY)
+    {
+        if (PathIntersectionDetector.HasSelfIntersection(candidate))
+        {
+            double headingDegrees = AngleUtilities.NormalizeAngle(
+                Math.Atan2(endY - startY, endX - startX) * 180.0 / Math.PI);
+            candidate = new RoutedPath();
+            candidate.Segments.Add(new StraightSegment(startX, startY, endX, endY, headingDegrees));
+        }
+        candidate.IsBlockedFallback = true;
+        return candidate;
     }
 
     /// <summary>Runs the Manhattan (CSC) router at the given bend radius.</summary>
