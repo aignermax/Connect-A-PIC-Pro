@@ -9,10 +9,14 @@
   },
   {
     "file": "03-crossing-inserted.png",
-    "caption": "Clicking inserts the PDK crossing (ebeam_crossing4) centered on the intersection; the waveguide splits into two connections docked onto the crossing\u0027s through ports. The crossing is user intent \u2014 the adaptive pass never dissolves it."
+    "caption": "Clicking inserts the PDK crossing (ebeam_crossing4) centered on the intersection; the waveguide splits into two connections docked onto the crossing's through ports. The crossing is user intent — the adaptive pass never dissolves it."
   },
   {
     "file": "04-undo-restores-connection.png",
-    "caption": "The insertion is one undoable command: Ctrl\u002BZ removes the crossing and restores the original connection with all fine-tuning settings preserved."
+    "caption": "The insertion is one undoable command: Ctrl+Z removes the crossing and restores the original connection with all fine-tuning settings preserved."
+  },
+  {
+    "file": "05-free-cut-candidate.png",
+    "caption": "Away from any guide intersection, the pointer still finds a cuttable straight run: the free-cut candidate renders hollow and dashed — distinct from the solid snap marker — so clicking here cuts exactly at the pointer instead of a precise guide intersection."
   }
 ]
