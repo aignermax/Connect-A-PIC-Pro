@@ -25,14 +25,15 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         foreach (var conn in vm.Connections)
         {
             if (!WaveguideFilteringHelper.IsConnectionInternalToAnyGroup(conn.Connection, allGroups))
-                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered));
+                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered), rc.Zoom);
         }
 
         if (vm.ShowPowerFlow && rc.InteractionState.HoveredConnection != null)
             DrawPowerHoverLabel(context, rc.InteractionState.HoveredConnection, vm);
     }
 
-    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm, bool isHovered)
+    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn,
+        DesignCanvasViewModel vm, bool isHovered, double zoom)
     {
         var segments = conn.Connection.GetPathSegments();
         var pen = CreateWaveguidePen(conn, vm, isHovered);
@@ -45,7 +46,12 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
 
         DrawPathSegments(context, pen, segments);
-        DrawConnectionLabel(context, conn, vm);
+
+        // Length/loss is detail info the design already conveys via width/thickness/colour, so
+        // an unselected, unhovered connection stays label-free and only reveals its numbers
+        // on demand.
+        if (isHovered || conn.IsSelected)
+            DrawConnectionLabel(context, conn, vm, zoom);
     }
 
     /// <summary>Copper/gold marking electrical (metal) connections, matching the electrical
@@ -161,8 +167,17 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
     }
 
-    private static void DrawConnectionLabel(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
+    /// <summary>World-space font size for the length/loss label, before the screen-space cap.</summary>
+    private const double LabelFontSizeWorld = 10.0;
+
+    /// <summary>World-space font size for the manual-style badge, before the screen-space cap.</summary>
+    private const double BadgeFontSizeWorld = 9.0;
+
+    private static void DrawConnectionLabel(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm, double zoom)
     {
+        if (!PinScreenSize.IsLabelReadable(LabelFontSizeWorld, zoom))
+            return;
+
         var midX = (conn.StartX + conn.EndX) / 2;
         var midY = (conn.StartY + conn.EndY) / 2;
         string labelText;
@@ -197,21 +212,24 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
             labelBrush = Brushes.LightGray;
         }
 
+        double labelFontSize = PinScreenSize.CapWorldFontSize(LabelFontSizeWorld, zoom);
         context.DrawText(
             new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight, new Typeface("Arial"), 10, labelBrush),
+                FlowDirection.LeftToRight, new Typeface("Arial"), labelFontSize, labelBrush),
             new Point(midX, midY - 15));
 
         // Badge for a manually styled connection (Type != Auto): shows the Nazca style name
         // above the label so it's obvious at a glance that the autorouter no longer owns this
         // route. Style names are Nazca terms and stay untranslated, like the picker entries.
-        if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto)
+        if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto
+            && PinScreenSize.IsLabelReadable(BadgeFontSizeWorld, zoom))
         {
+            double badgeFontSize = PinScreenSize.CapWorldFontSize(BadgeFontSizeWorld, zoom);
             context.DrawText(
                 new FormattedText(conn.Connection.Type.ToString(),
                     System.Globalization.CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
-                    new Typeface("Arial", FontStyle.Normal, FontWeight.Bold), 9, Brushes.Orange),
+                    new Typeface("Arial", FontStyle.Normal, FontWeight.Bold), badgeFontSize, Brushes.Orange),
                 new Point(midX, midY - 28));
         }
     }
