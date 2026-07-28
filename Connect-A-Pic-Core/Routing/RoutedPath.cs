@@ -76,7 +76,16 @@ public class RoutedPath
     /// (bend-radius handles mutate segments in place) silently corrupt the stored
     /// original. <c>DebugGridPath</c> is not copied — it is diagnostic-only.
     /// </summary>
-    public RoutedPath DeepCopy()
+    public RoutedPath DeepCopy() => TranslatedCopy(0, 0);
+
+    /// <summary>
+    /// Creates an independent deep copy with every segment shifted by (dx, dy).
+    /// A pure translation leaves angles, radii and sweeps untouched, so the exact
+    /// shape — including manually edited bend radii — is preserved.
+    /// </summary>
+    /// <param name="dx">Shift along X in micrometers.</param>
+    /// <param name="dy">Shift along Y in micrometers.</param>
+    public RoutedPath TranslatedCopy(double dx, double dy)
     {
         var copy = new RoutedPath
         {
@@ -93,18 +102,18 @@ public class RoutedPath
             {
                 case BendSegment bend:
                     copy.Segments.Add(new BendSegment(
-                        bend.Center.X,
-                        bend.Center.Y,
+                        bend.Center.X + dx,
+                        bend.Center.Y + dy,
                         bend.RadiusMicrometers,
                         bend.StartAngleDegrees,
                         bend.SweepAngleDegrees));
                     break;
                 case StraightSegment straight:
                     copy.Segments.Add(new StraightSegment(
-                        straight.StartPoint.X,
-                        straight.StartPoint.Y,
-                        straight.EndPoint.X,
-                        straight.EndPoint.Y,
+                        straight.StartPoint.X + dx,
+                        straight.StartPoint.Y + dy,
+                        straight.EndPoint.X + dx,
+                        straight.EndPoint.Y + dy,
                         straight.StartAngleDegrees));
                     break;
             }
