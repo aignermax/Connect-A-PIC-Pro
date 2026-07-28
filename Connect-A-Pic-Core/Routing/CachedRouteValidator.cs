@@ -41,15 +41,37 @@ public static class CachedRouteValidator
 
         // Straight segments derive their direction from the geometry instead of the
         // stored angle: legacy files may carry a defaulted 0° angle field, and the
-        // launch/entry segment of a routed path is a straight in practice.
-        var startDirection = SegmentStartDirection(path.Segments[0]);
-        var endDirection = SegmentEndDirection(path.Segments[^1]);
+        // launch/entry segment of a routed path is a straight in practice. A collapsed
+        // pin lead leaves a zero-length straight whose geometric direction is undefined;
+        // skipping it keeps the check anchored on the real launch/entry segment so the
+        // pin-direction safety net still fires.
+        var startDirection = FirstDefinedDirection(path.Segments, SegmentStartDirection);
+        var endDirection = FirstDefinedDirection(Reversed(path.Segments), SegmentEndDirection);
 
         bool startMatches = startDirection is not { } start ||
             AngleDifference(start, startPin.GetAbsoluteAngle()) <= DockingAngleToleranceDegrees;
         bool endMatches = endDirection is not { } end ||
             AngleDifference(end, endPin.GetAbsoluteAngle() + 180.0) <= DockingAngleToleranceDegrees;
         return (startMatches, endMatches);
+    }
+
+    /// <summary>First non-null direction produced by <paramref name="direction"/> over the
+    /// segments in order, skipping degenerate zero-length straights; null when none is defined.</summary>
+    private static double? FirstDefinedDirection(
+        IEnumerable<PathSegment> segments, Func<PathSegment, double?> direction)
+    {
+        foreach (var segment in segments)
+        {
+            if (direction(segment) is { } value)
+                return value;
+        }
+        return null;
+    }
+
+    private static IEnumerable<PathSegment> Reversed(IReadOnlyList<PathSegment> segments)
+    {
+        for (int i = segments.Count - 1; i >= 0; i--)
+            yield return segments[i];
     }
 
     private static double? SegmentStartDirection(PathSegment segment) => segment switch

@@ -202,6 +202,46 @@ namespace UnitTests
         }
 
         /// <summary>
+        /// Creates a pinless rectangular component for routing-obstacle tests. Register any
+        /// pins created via <see cref="CreateRoutingPin"/> in <see cref="Component.PhysicalPins"/>
+        /// BEFORE the pathfinding grid is (re)built, so the grid carves the persistent pin
+        /// corridors exactly like for every real component.
+        /// </summary>
+        public static Component CreatePinlessComponent(
+            double x, double y, double width = 50, double height = 50)
+        {
+            var parts = new Part[1, 1];
+            parts[0, 0] = new Part(new List<Pin>());
+            return new Component(
+                new Dictionary<int, SMatrix>(), new(), "test", "",
+                parts, 0, $"TestComponent_{x}_{y}", DiscreteRotation.R0)
+            {
+                WidthMicrometers = width,
+                HeightMicrometers = height,
+                PhysicalX = x,
+                PhysicalY = y,
+            };
+        }
+
+        /// <summary>
+        /// Creates a physical pin at a component-relative offset and heading. The pin is NOT
+        /// added to the parent's pin list — callers decide whether it participates in the
+        /// grid's pin-corridor carving.
+        /// </summary>
+        public static PhysicalPin CreateRoutingPin(
+            Component parent, double offsetX, double offsetY, double angleDegrees)
+        {
+            return new PhysicalPin
+            {
+                Name = $"pin_{offsetX}_{offsetY}_{angleDegrees}",
+                OffsetXMicrometers = offsetX,
+                OffsetYMicrometers = offsetY,
+                AngleDegrees = angleDegrees,
+                ParentComponent = parent,
+            };
+        }
+
+        /// <summary>
         /// Creates a basic component for testing (uses CreateStraightWaveGuide).
         /// </summary>
         public static Component CreateBasicComponent()
