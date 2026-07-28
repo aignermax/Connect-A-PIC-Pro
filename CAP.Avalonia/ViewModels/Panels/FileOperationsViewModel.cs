@@ -378,6 +378,11 @@ public partial class FileOperationsViewModel : ObservableObject
                             ? PathSegmentConverter.ToDtoList(c.Connection.RoutedPath.Segments)
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
+                        IsInvalidGeometry = c.Connection.RoutedPath?.IsInvalidGeometry == true ? true : null,
+                        // Written as an explicit true/false whenever a route exists (never
+                        // omitted for false) so a reload can tell "explicitly false" apart
+                        // from "file predates this field" — see ConnectionData's doc comment.
+                        IsPlaceholderGeometry = c.Connection.RoutedPath?.IsPlaceholderGeometry,
                         IsLocked = c.Connection.IsLocked ? true : null,
                         RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
                         WidthMicrometers = c.Connection.WidthMicrometers,
@@ -1421,7 +1426,8 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
 
         var cachedPath = PathSegmentConverter.ToRoutedPath(
-            connData.CachedSegments, connData.IsBlockedFallback ?? false);
+            connData.CachedSegments, connData.IsBlockedFallback ?? false,
+            connData.IsInvalidGeometry ?? false, connData.IsPlaceholderGeometry);
 
         // Pin-calibration migration (round-5 review [2]): when a PDK release corrected a
         // component's pin ANGLES (positions unchanged), the saved geometry still touches
@@ -1595,10 +1601,27 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script (metal spec: process-derived electrical routing, #682)
+                // Collected by the exporter as a side effect of writing the script below —
+                // connections/frozen paths whose route is a placeholder or invalid never render
+                // as GDS geometry (a self-crossing fallback has no optical model; invalid
+                // geometry violates the bend radius); connections whose sibling-crossing flag no
+                // bridge marker resolves still render but deserve a second look. Reading both
+                // AFTER the write (rather than recomputing from a live canvas snapshot
+                // beforehand) guarantees the report matches exactly what landed in the script,
+                // even while background routing is still in flight.
+                var skippedConnectionsList = new List<string>();
+                var unresolvedCrossingsList = new List<string>();
                 var nazcaCode = _nazcaExporter.Export(
-                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
+                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke(),
+                    skippedConnections: skippedConnectionsList, unresolvedCrossings: unresolvedCrossingsList);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
+
+                var skippedConnectionsWarning = ExportWarningMessages.BuildSkipped(skippedConnectionsList);
+                var unresolvedCrossingsWarning = ExportWarningMessages.BuildUnresolvedCrossings(unresolvedCrossingsList);
+                if (skippedConnectionsWarning != null)
+                    _errorConsole?.LogWarning(skippedConnectionsWarning);
+                if (unresolvedCrossingsWarning != null)
+                    _errorConsole?.LogWarning(unresolvedCrossingsWarning);
 
                 // GDS pre-flight: refresh a stale "not ready" verdict once, then ask the
                 // user how to proceed when Nazca is genuinely unavailable.
@@ -1608,7 +1631,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 var decision = await GdsExport.PreflightGdsAsync(MessageBoxService);
                 if (decision != Export.GdsPreflightDecision.Proceed)
                 {
-                    await HandleSkippedGdsAsync(decision, filePath);
+                    await HandleSkippedGdsAsync(
+                        decision, filePath, skippedConnectionsWarning, unresolvedCrossingsWarning);
                     return;
                 }
 
@@ -1617,7 +1641,9 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 if (result.Success && result.GdsPath != null)
                 {
-                    UpdateStatus?.Invoke($"Exported {Path.GetFileName(filePath)} and {Path.GetFileName(result.GdsPath)}");
+                    UpdateStatus?.Invoke(WithWarnings(
+                        $"Exported {Path.GetFileName(filePath)} and {Path.GetFileName(result.GdsPath)}",
+                        skippedConnectionsWarning, unresolvedCrossingsWarning));
 
                     // Try to open the generated GDS file in the default viewer (KLayout etc.) —
                     // this is a content launch, not a file-manager open, so it stays useful even
@@ -1626,13 +1652,17 @@ public partial class FileOperationsViewModel : ObservableObject
                 }
                 else if (result.Success)
                 {
-                    UpdateStatus?.Invoke($"Exported to {Path.GetFileName(filePath)}");
+                    UpdateStatus?.Invoke(WithWarnings(
+                        $"Exported to {Path.GetFileName(filePath)}",
+                        skippedConnectionsWarning, unresolvedCrossingsWarning));
                 }
                 else
                 {
                     // Log full Python error to Error Console for visibility
                     _errorConsole?.LogError($"GDS generation failed: {result.ErrorMessage}");
-                    UpdateStatus?.Invoke($"Exported {Path.GetFileName(filePath)} (GDS generation failed: {result.ErrorMessage})");
+                    UpdateStatus?.Invoke(WithWarnings(
+                        $"Exported {Path.GetFileName(filePath)} (GDS generation failed: {result.ErrorMessage})",
+                        skippedConnectionsWarning, unresolvedCrossingsWarning));
                 }
             }
             catch (Exception ex)
@@ -1648,14 +1678,18 @@ public partial class FileOperationsViewModel : ObservableObject
     /// only the GDS step is skipped. Install/settings choices open the Settings window on
     /// the Python-Environments page (the install progress is visible there).
     /// </summary>
-    private async Task HandleSkippedGdsAsync(Export.GdsPreflightDecision decision, string scriptPath)
+    private async Task HandleSkippedGdsAsync(
+        Export.GdsPreflightDecision decision, string scriptPath,
+        string? skippedConnectionsWarning = null, string? unresolvedCrossingsWarning = null)
     {
         if (decision == Export.GdsPreflightDecision.InstallRequested)
         {
             GdsExport.InstallNazcaCommand.Execute(null);
             if (ShowSettingsWindow != null)
                 await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
-            UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)");
+            UpdateStatus?.Invoke(WithWarnings(
+                $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)",
+                skippedConnectionsWarning, unresolvedCrossingsWarning));
             return;
         }
 
@@ -1663,7 +1697,17 @@ public partial class FileOperationsViewModel : ObservableObject
             && ShowSettingsWindow != null)
             await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
 
-        UpdateStatus?.Invoke($"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)");
+        UpdateStatus?.Invoke(WithWarnings(
+            $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)",
+            skippedConnectionsWarning, unresolvedCrossingsWarning));
+    }
+
+    /// <summary>Prefixes a status line with any non-null warnings, in order, so they survive
+    /// next to the final result instead of being scrolled away.</summary>
+    private static string WithWarnings(string status, params string?[] warnings)
+    {
+        var lines = warnings.Where(w => w != null).Append(status);
+        return string.Join(Environment.NewLine, lines);
     }
 
     /// <summary>

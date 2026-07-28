@@ -16,7 +16,7 @@ namespace CAP.Avalonia.Services.GdsFactoryExport;
 /// Y-up), delegated to <see cref="NazcaCoordinateMapper"/>. The script writes its GDS
 /// next to itself (same convention as Nazca), so the existing script-runner finds it.
 /// </summary>
-public class GdsFactoryExporter
+public partial class GdsFactoryExporter
 {
     /// <summary>Exports the design to a gdsfactory Python script.</summary>
     /// <param name="canvas">The design canvas to export.</param>
@@ -35,11 +35,28 @@ public class GdsFactoryExporter
     /// Optional file name (relative to the script) of a nazca-rendered partial GDS to merge
     /// into the design cell via <c>gf.import_gds()</c> before writing the output.
     /// </param>
+    /// <param name="skippedConnections">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// connection or frozen group path left out of the geometry because its route is a
+    /// placeholder or invalid (<see cref="ExportableConnections.IsExportable(RoutedPath?)"/>).
+    /// Populated as a side effect of THIS write, so the caller's post-export report always
+    /// matches what actually landed in the script — a separately recomputed snapshot could
+    /// diverge if routing is still running in the background.
+    /// </param>
+    /// <param name="unresolvedCrossings">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// EXPORTED optical connection <c>WaveguideConnectionManager</c>'s sibling-crossing pass
+    /// flagged (<see cref="RoutedPath.IsBlockedFallback"/>) and that a bridge marker does not
+    /// resolve — the geometry is rendered (a real, non-placeholder crossing is not a reason to
+    /// omit it), but the layout still deserves a second look.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
         MetalRoutingSpec? metalSpec = null,
         Func<Component, bool>? include = null,
-        string? mergeGdsFileName = null)
+        string? mergeGdsFileName = null,
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
@@ -59,7 +76,8 @@ public class GdsFactoryExporter
         sb.AppendLine();
         var routingOwner = SelectRoutingCrossSectionOwner(canvas, options, include);
         AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal);
+        AppendConnections(
+            sb, canvas, RoutingWaveguideKwarg(routingOwner), metal, skippedConnections, unresolvedCrossings);
         if (mergeGdsFileName != null)
             AppendMixedBackendMerge(sb, mergeGdsFileName);
         AppendFooter(sb);
@@ -372,108 +390,6 @@ public class GdsFactoryExporter
         && !string.IsNullOrEmpty(comp.NazcaFunctionParameters)
             ? comp.NazcaFunctionParameters
             : string.Empty;
-
-    private static void AppendConnections(
-        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metalSpec)
-    {
-        sb.AppendLine("# Waveguide connections");
-        var metalStyle = metalSpec.ToTraceStyle();
-        var opticalPaths = new List<IReadOnlyList<PathSegment>>();
-        var electrical = new List<CAP_Core.Components.Connections.WaveguideConnection>();
-
-        foreach (var connVm in canvas.Connections)
-        {
-            var conn = connVm.Connection;
-            if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
-            if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
-
-            // Electrical connections are metal traces, not optical waveguides — draw them as a
-            // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
-            // connection is metal only when BOTH pins are electrical; a mixed or all-optical
-            // connection stays a waveguide (issue #686 review). Metal connections are
-            // remembered so bridge markers can be placed where they cross optical paths.
-            var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
-            if (metal != null)
-                electrical.Add(conn);
-
-            var segments = conn.GetPathSegments();
-            if (segments.Count > 0)
-            {
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
-                if (metal == null)
-                    opticalPaths.Add(segments);
-            }
-            else if (conn.StartPin != null && conn.EndPin != null)
-            {
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
-            }
-        }
-
-        foreach (var compVm in canvas.Components)
-        {
-            if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle, opticalPaths);
-        }
-
-        AppendBridgeMarkers(sb, electrical, opticalPaths, metalSpec);
-        sb.AppendLine();
-    }
-
-    /// <summary>
-    /// Emits bridge markers where electrical metal traces cross optical waveguide
-    /// paths, when the active process requires bridges (#682). The trace geometry
-    /// itself is emitted inline by the connection loop above.
-    /// </summary>
-    private static void AppendBridgeMarkers(
-        StringBuilder sb,
-        IReadOnlyList<CAP_Core.Components.Connections.WaveguideConnection> electrical,
-        IReadOnlyList<IReadOnlyList<PathSegment>> opticalPaths,
-        MetalRoutingSpec metalSpec)
-    {
-        if (metalSpec.CrossingPolicy != ElectricalCrossingPolicy.BridgeRequired || electrical.Count == 0)
-            return;
-
-        sb.AppendLine();
-        sb.AppendLine("# Electrical bridge markers (metal over waveguide)");
-        foreach (var conn in electrical)
-        {
-            var segments = conn.GetPathSegments();
-            if (segments.Count == 0)
-                continue;
-
-            var crossings = WaveguideCrossingDetector.FindCrossings(segments, opticalPaths);
-            GdsFactoryMetalTraceWriter.AppendBridges(sb, crossings, metalSpec);
-        }
-    }
-
-    /// <summary>
-    /// Exports frozen waveguide paths from a ComponentGroup (and nested groups). A frozen path
-    /// between two electrical pins is a metal trace, not a waveguide — mirrors the live
-    /// connection loop above (issue #686 review). Frozen optical paths are collected as
-    /// crossable geometry for bridge detection.
-    /// </summary>
-    private static void AppendGroupFrozenPaths(
-        StringBuilder sb, ComponentGroup group, string waveguideKwarg,
-        MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths)
-    {
-        foreach (var frozenPath in group.InternalPaths)
-        {
-            if (frozenPath?.Path?.Segments?.Count > 0)
-            {
-                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
-                GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
-                if (metal == null)
-                    opticalPaths.Add(frozenPath.Path.Segments);
-            }
-        }
-
-        foreach (var child in group.ChildComponents)
-        {
-            if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle, opticalPaths);
-        }
-    }
 
     private static void AppendFooter(StringBuilder sb)
     {

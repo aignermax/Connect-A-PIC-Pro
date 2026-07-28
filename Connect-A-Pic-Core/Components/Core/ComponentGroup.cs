@@ -677,7 +677,8 @@ public class ComponentGroup : Component, INotifyPropertyChanged
         var cloned = new RoutedPath
         {
             IsBlockedFallback = source.IsBlockedFallback,
-            IsInvalidGeometry = source.IsInvalidGeometry
+            IsInvalidGeometry = source.IsInvalidGeometry,
+            IsPlaceholderGeometry = source.IsPlaceholderGeometry
         };
 
         foreach (var segment in source.Segments)

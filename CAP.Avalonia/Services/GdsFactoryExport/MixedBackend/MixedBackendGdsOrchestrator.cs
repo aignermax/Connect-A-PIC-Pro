@@ -93,12 +93,26 @@ public class MixedBackendGdsOrchestrator
     /// <param name="metalSpec">Process-derived metal routing parameters, or null for defaults.</param>
     /// <param name="library">The loaded component library (raw-code backend lookup).</param>
     /// <param name="mainScriptPath">The user-chosen main export script path.</param>
+    /// <param name="skippedConnections">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// connection or frozen group path left out because its route is a placeholder or
+    /// invalid. All routed connections are owned by the gdsfactory script (the nazca
+    /// partial only renders nazca-native placements), so this mirrors
+    /// <see cref="GdsFactoryExporter.Export"/>'s own parameter.
+    /// </param>
+    /// <param name="unresolvedCrossings">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// exported connection flagged by an unresolved sibling crossing that no bridge marker
+    /// resolves. Mirrors <see cref="GdsFactoryExporter.Export"/>'s own parameter.
+    /// </param>
     public MixedBackendScriptSet BuildScripts(
         DesignCanvasViewModel canvas,
         GdsFactoryExportOptions options,
         MetalRoutingSpec? metalSpec,
         IEnumerable<ComponentTemplate> library,
-        string mainScriptPath)
+        string mainScriptPath,
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var templates = library.ToList();
         bool IsNazcaNative(Component c) =>
@@ -112,7 +126,9 @@ public class MixedBackendGdsOrchestrator
         var gdsFactoryScript = _gdsFactoryExporter.Export(
             canvas, options, metalSpec,
             include: c => !IsNazcaNative(c),
-            mergeGdsFileName: partialGdsFileName);
+            mergeGdsFileName: partialGdsFileName,
+            skippedConnections: skippedConnections,
+            unresolvedCrossings: unresolvedCrossings);
 
         // An all-nazca design is two-script but not "mixed" — the header should say what
         // it is, not claim a backend mix that isn't there.

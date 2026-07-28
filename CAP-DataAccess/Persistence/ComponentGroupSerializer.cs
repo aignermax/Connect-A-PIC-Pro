@@ -197,6 +197,7 @@ public static class ComponentGroupSerializer
             EndPinName = frozenPath.EndPin.Name,
             IsBlockedFallback = frozenPath.Path.IsBlockedFallback,
             IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry,
+            IsPlaceholderGeometry = frozenPath.Path.IsPlaceholderGeometry,
             ConnectionType = frozenPath.ConnectionType.ToString(),
             BendRadiusMicrometers = frozenPath.BendRadiusMicrometers,
             WidthMicrometers = frozenPath.WidthMicrometers,
@@ -253,13 +254,18 @@ public static class ComponentGroupSerializer
         var path = new RoutedPath
         {
             IsBlockedFallback = dto.IsBlockedFallback,
-            IsInvalidGeometry = dto.IsInvalidGeometry
+            IsInvalidGeometry = dto.IsInvalidGeometry,
         };
 
         foreach (var segmentDto in dto.Segments)
         {
             path.Segments.Add(FromPathSegmentDto(segmentDto));
         }
+
+        // Null means the file predates this field — infer it from the route's shape
+        // instead of trusting a bare false (see ComponentGroupDto's doc comment).
+        path.IsPlaceholderGeometry = dto.IsPlaceholderGeometry ??
+            RoutedPathLegacyMigration.InferPlaceholderGeometry(dto.IsBlockedFallback, path.Segments);
 
         var frozenPath = new FrozenWaveguidePath
         {

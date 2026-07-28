@@ -22,6 +22,20 @@ public class RoutedPath
     public bool IsInvalidGeometry { get; set; } = false;
 
     /// <summary>
+    /// True when these segments are an honest placeholder rather than a real route: the router
+    /// gave up on a self-crossing fallback (no optical model) and replaced it with a straight
+    /// line between the pins, purely so the connection has SOME geometry to flag as unroutable
+    /// (see <see cref="WaveguideRouter"/>'s degrade-to-blocked-fallback step). Distinct from
+    /// <see cref="IsBlockedFallback"/>, which also covers two cases that ARE real, exportable
+    /// geometry: a fallback that merely grazes an obstacle without looping, and the crossing
+    /// diagnostic <c>WaveguideConnectionManager</c> stamps on an unresolved sibling overlap
+    /// (including a metal/optical crossing legitimately resolved by a bridge marker). Export
+    /// eligibility must key off this flag (and <see cref="IsInvalidGeometry"/>), never off
+    /// <see cref="IsBlockedFallback"/> alone.
+    /// </summary>
+    public bool IsPlaceholderGeometry { get; set; } = false;
+
+    /// <summary>
     /// True when the path could only be routed with a bend radius below the active
     /// fabrication process' minimum (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>).
     /// The geometry itself is clean, but the design violates the process rule; the
@@ -68,6 +82,7 @@ public class RoutedPath
         {
             IsBlockedFallback = IsBlockedFallback,
             IsInvalidGeometry = IsInvalidGeometry,
+            IsPlaceholderGeometry = IsPlaceholderGeometry,
             ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
             PassesThroughComponent = PassesThroughComponent
         };
