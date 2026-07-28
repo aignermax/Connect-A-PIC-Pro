@@ -100,13 +100,19 @@ public class MixedBackendGdsOrchestrator
     /// partial only renders nazca-native placements), so this mirrors
     /// <see cref="GdsFactoryExporter.Export"/>'s own parameter.
     /// </param>
+    /// <param name="unresolvedCrossings">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// exported connection flagged by an unresolved sibling crossing that no bridge marker
+    /// resolves. Mirrors <see cref="GdsFactoryExporter.Export"/>'s own parameter.
+    /// </param>
     public MixedBackendScriptSet BuildScripts(
         DesignCanvasViewModel canvas,
         GdsFactoryExportOptions options,
         MetalRoutingSpec? metalSpec,
         IEnumerable<ComponentTemplate> library,
         string mainScriptPath,
-        List<string>? skippedConnections = null)
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var templates = library.ToList();
         bool IsNazcaNative(Component c) =>
@@ -121,7 +127,8 @@ public class MixedBackendGdsOrchestrator
             canvas, options, metalSpec,
             include: c => !IsNazcaNative(c),
             mergeGdsFileName: partialGdsFileName,
-            skippedConnections: skippedConnections);
+            skippedConnections: skippedConnections,
+            unresolvedCrossings: unresolvedCrossings);
 
         // An all-nazca design is two-script but not "mixed" — the header should say what
         // it is, not claim a backend mix that isn't there.

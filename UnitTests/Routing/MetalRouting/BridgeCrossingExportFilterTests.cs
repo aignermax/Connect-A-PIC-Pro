@@ -23,7 +23,7 @@ namespace UnitTests.Routing.MetalRouting;
 /// <c>NazcaMetalExportTests</c>/<c>GdsFactoryMetalExportTests</c> already prove crosses under
 /// BridgeRequired, stamps the crossing connection <c>IsBlockedFallback</c> the way the manager's
 /// pass would, and asserts BOTH sides still export with the bridge marker present — and that
-/// nothing is reported as skipped.
+/// nothing is reported as skipped OR as an unresolved crossing (the bridge marker resolves it).
 /// </summary>
 public class BridgeCrossingExportFilterTests
 {
@@ -43,18 +43,23 @@ public class BridgeCrossingExportFilterTests
         var spec = MetalRoutingSpec.Default with { CrossingPolicy = ElectricalCrossingPolicy.BridgeRequired };
 
         var nazcaSkipped = new List<string>();
-        var nazcaScript = new SimpleNazcaExporter().Export(canvas, metalSpec: spec, skippedConnections: nazcaSkipped);
+        var nazcaUnresolved = new List<string>();
+        var nazcaScript = new SimpleNazcaExporter().Export(
+            canvas, metalSpec: spec, skippedConnections: nazcaSkipped, unresolvedCrossings: nazcaUnresolved);
         nazcaSkipped.ShouldBeEmpty();
+        nazcaUnresolved.ShouldBeEmpty("a crossing the bridge marker resolves must not also be reported as unresolved");
         nazcaScript.ShouldContain("layer=(11, 0)");     // metal trace still rendered
         nazcaScript.ShouldContain("nd.strt(");          // optical waveguide still rendered
         nazcaScript.ShouldContain("# BRIDGE:");         // bridge marker at the crossing
         nazcaScript.ShouldContain("layer=BRIDGE_LAYER");
 
         var gdsSkipped = new List<string>();
+        var gdsUnresolved = new List<string>();
         var gdsScript = new GdsFactoryExporter().Export(
             canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
-            metalSpec: spec, skippedConnections: gdsSkipped);
+            metalSpec: spec, skippedConnections: gdsSkipped, unresolvedCrossings: gdsUnresolved);
         gdsSkipped.ShouldBeEmpty();
+        gdsUnresolved.ShouldBeEmpty("a crossing the bridge marker resolves must not also be reported as unresolved");
         gdsScript.ShouldContain("layer=(11, 0)");
         gdsScript.ShouldContain("gf.components.straight(");
         gdsScript.ShouldContain("# BRIDGE:");
@@ -62,23 +67,56 @@ public class BridgeCrossingExportFilterTests
     }
 
     /// <summary>
+    /// Same crossing geometry, but WITHOUT a metal connection to bridge over it (the crossing
+    /// partner is another optical connection, so <see cref="ElectricalCrossingPolicy"/> never
+    /// applies) — <c>WaveguideConnectionManager</c>'s sibling-crossing pass would still stamp
+    /// <see cref="RoutedPath.IsBlockedFallback"/> on it, but there is no bridge to resolve it.
+    /// The connection must still export (the geometry is real, not a placeholder) but must be
+    /// reported through <c>unresolvedCrossings</c> so the layout gets a second look.
+    /// </summary>
+    [Fact]
+    public void CrossingOpticalSiblings_NoMetalInvolved_ExportsButReportsUnresolvedCrossing()
+    {
+        var (canvas, other, optical) = CreateCanvasWithCrossingConnections(secondConnectionIsElectrical: false);
+
+        PathIntersectionDetector.Crosses(other.RoutedPath!, optical.RoutedPath!).ShouldBeTrue(
+            "the two optical routes must genuinely cross for this test to be meaningful");
+        optical.RoutedPath!.IsBlockedFallback = true;
+        optical.RoutedPath!.IsPlaceholderGeometry.ShouldBeFalse();
+        optical.RoutedPath!.IsInvalidGeometry.ShouldBeFalse();
+
+        var nazcaUnresolved = new List<string>();
+        var nazcaScript = new SimpleNazcaExporter().Export(canvas, unresolvedCrossings: nazcaUnresolved);
+        nazcaUnresolved.ShouldHaveSingleItem();
+        nazcaScript.ShouldContain("nd.strt("); // geometry is still exported, not skipped
+
+        var gdsUnresolved = new List<string>();
+        var gdsScript = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
+            unresolvedCrossings: gdsUnresolved);
+        gdsUnresolved.ShouldHaveSingleItem();
+        gdsScript.ShouldContain("gf.components.straight(");
+    }
+
+    /// <summary>
     /// Same crossing layout as <c>NazcaMetalExportTests</c>/<c>GdsFactoryMetalExportTests</c>'
-    /// <c>CreateCanvasWithCrossingConnections</c>: a horizontal electrical trace at y≈45 and a
-    /// diagonal optical route from (60,10) to (120,125) that crosses it. Each connection is
-    /// routed standalone (own <see cref="WaveguideRouter"/>) purely to obtain real, valid,
-    /// crossing geometry — this test's point is the EXPORT filter, not the router's own
-    /// crossing-detection pass.
+    /// <c>CreateCanvasWithCrossingConnections</c>: a horizontal trace at y≈45 and a diagonal
+    /// optical route from (60,10) to (120,125) that crosses it. Each connection is routed
+    /// standalone (own <see cref="WaveguideRouter"/>) purely to obtain real, valid, crossing
+    /// geometry — this test's point is the EXPORT filter, not the router's own crossing-detection
+    /// pass. <paramref name="secondConnectionIsElectrical"/> selects whether the horizontal trace
+    /// is electrical (metal, bridgeable) or optical (no bridge policy applies).
     /// </summary>
     private static (DesignCanvasViewModel Canvas, WaveguideConnection Electrical, WaveguideConnection Optical)
-        CreateCanvasWithCrossingConnections()
+        CreateCanvasWithCrossingConnections(bool secondConnectionIsElectrical = true)
     {
         var canvas = new DesignCanvasViewModel();
 
         var compA = CreateComponent("demo_pdk.pad_a", "A", x: 0, y: 40, width: 10, height: 10);
-        var pinA = CreatePin(compA, "e1", 10, 5, 0, electrical: true);
+        var pinA = CreatePin(compA, "e1", 10, 5, 0, electrical: secondConnectionIsElectrical);
         compA.PhysicalPins.Add(pinA);
         var compB = CreateComponent("demo_pdk.pad_b", "B", x: 200, y: 40, width: 10, height: 10);
-        var pinB = CreatePin(compB, "e1", 0, 5, 180, electrical: true);
+        var pinB = CreatePin(compB, "e1", 0, 5, 180, electrical: secondConnectionIsElectrical);
         compB.PhysicalPins.Add(pinB);
         canvas.Components.Add(new ComponentViewModel(compA));
         canvas.Components.Add(new ComponentViewModel(compB));

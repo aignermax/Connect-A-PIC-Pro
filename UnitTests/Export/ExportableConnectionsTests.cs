@@ -74,65 +74,62 @@ public class ExportableConnectionsTests
     }
 
     [Fact]
-    public void WhereExportable_MixOfValidRoutelessAndPlaceholder_KeepsEverythingButThePlaceholder()
+    public void TryRecordSkip_ExportableRoute_ReturnsFalse_RecordsNothing()
     {
-        var valid = CreateConnection();
-        valid.RestoreCachedPath(CreateStraightPath());
+        var connection = CreateConnection();
+        connection.RestoreCachedPath(CreateStraightPath());
+        var skipped = new List<string>();
 
-        var placeholder = CreateConnection();
-        var placeholderPath = CreateStraightPath();
-        placeholderPath.IsPlaceholderGeometry = true;
-        placeholder.RestoreCachedPath(placeholderPath);
+        var wasSkipped = ExportableConnections.TryRecordSkip(
+            connection.RoutedPath, connection.StartPin, connection.EndPin, skipped);
 
-        // A missing route falls back to the pin-to-pin straight — it stays exportable.
-        var routeless = CreateConnection();
-
-        var result = new[] { valid, placeholder, routeless }.WhereExportable().ToList();
-
-        result.ShouldBe(new[] { valid, routeless });
+        wasSkipped.ShouldBeFalse();
+        skipped.ShouldBeEmpty();
     }
 
     [Fact]
-    public void CollectSkipped_MixOfValidAndBroken_ReturnsOnlyPlaceholderAndInvalid()
+    public void TryRecordSkip_PlaceholderRoute_ReturnsTrue_RecordsDescription()
     {
-        var valid = CreateConnection();
-        valid.RestoreCachedPath(CreateStraightPath());
+        var connection = CreateConnection();
+        var path = CreateStraightPath();
+        path.IsPlaceholderGeometry = true;
+        connection.RestoreCachedPath(path);
+        var skipped = new List<string>();
 
-        var invalid = CreateConnection();
-        var invalidPath = CreateStraightPath();
-        invalidPath.IsInvalidGeometry = true;
-        invalid.RestoreCachedPath(invalidPath);
+        var wasSkipped = ExportableConnections.TryRecordSkip(
+            connection.RoutedPath, connection.StartPin, connection.EndPin, skipped);
 
-        var placeholder = CreateConnection();
-        var placeholderPath = CreateStraightPath();
-        placeholderPath.IsPlaceholderGeometry = true;
-        placeholder.RestoreCachedPath(placeholderPath);
-
-        // Routeless and blocked-fallback-only connections are NOT skipped.
-        var routeless = CreateConnection();
-        var blocked = CreateConnection();
-        var blockedPath = CreateStraightPath();
-        blockedPath.IsBlockedFallback = true;
-        blocked.RestoreCachedPath(blockedPath);
-
-        var result = new[] { valid, invalid, placeholder, routeless, blocked }.CollectSkipped();
-
-        result.Count.ShouldBe(2);
-        result.ShouldContain(invalid);
-        result.ShouldContain(placeholder);
+        wasSkipped.ShouldBeTrue();
+        skipped.ShouldHaveSingleItem();
+        skipped[0].ShouldBe(ExportableConnections.Describe(connection.StartPin, connection.EndPin));
     }
 
     [Fact]
-    public void CollectSkipped_AllValid_ReturnsEmpty()
+    public void TryRecordSkip_InvalidGeometry_ReturnsTrue_RecordsDescription()
     {
-        var a = CreateConnection();
-        a.RestoreCachedPath(CreateStraightPath());
-        var b = CreateConnection();
-        b.RestoreCachedPath(CreateStraightPath());
+        var connection = CreateConnection();
+        var path = CreateStraightPath();
+        path.IsInvalidGeometry = true;
+        connection.RestoreCachedPath(path);
+        var skipped = new List<string>();
 
-        var result = new[] { a, b }.CollectSkipped();
+        var wasSkipped = ExportableConnections.TryRecordSkip(
+            connection.RoutedPath, connection.StartPin, connection.EndPin, skipped);
 
-        result.ShouldBeEmpty();
+        wasSkipped.ShouldBeTrue();
+        skipped.ShouldHaveSingleItem();
+    }
+
+    [Fact]
+    public void TryRecordSkip_NoCollector_StillReportsSkipViaReturnValue_NoException()
+    {
+        var connection = CreateConnection();
+        var path = CreateStraightPath();
+        path.IsPlaceholderGeometry = true;
+        connection.RestoreCachedPath(path);
+
+        Should.NotThrow(() => ExportableConnections.TryRecordSkip(
+            connection.RoutedPath, connection.StartPin, connection.EndPin, null)).ShouldBeTrue();
     }
 
     [Fact]

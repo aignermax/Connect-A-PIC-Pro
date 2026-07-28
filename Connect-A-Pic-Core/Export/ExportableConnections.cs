@@ -35,19 +35,22 @@ public static class ExportableConnections
         connection.RoutedPath.IsExportable();
 
     /// <summary>
-    /// Filters a connection sequence down to the ones whose geometry may be exported.
+    /// The single skip-and-describe check shared by both exporters' live-connection and
+    /// frozen-group-path loops: when <paramref name="routedPath"/> is not exportable, appends
+    /// its endpoint description to <paramref name="skippedConnections"/> (when the caller
+    /// collects one) and returns true so the caller can <c>continue</c> past it. One shared
+    /// method means the skip condition and its report can never drift apart across the four
+    /// call sites (Nazca/gdsfactory × live/frozen).
     /// </summary>
-    public static IEnumerable<WaveguideConnection> WhereExportable(
-        this IEnumerable<WaveguideConnection> connections) =>
-        connections.Where(IsExportable);
-
-    /// <summary>
-    /// The connections skipped because their route is a placeholder or invalid, in the
-    /// source order — used to build the post-export "N connections omitted" report.
-    /// </summary>
-    public static IReadOnlyList<WaveguideConnection> CollectSkipped(
-        this IEnumerable<WaveguideConnection> connections) =>
-        connections.Where(c => !c.IsExportable()).ToList();
+    public static bool TryRecordSkip(
+        RoutedPath? routedPath, PhysicalPin? startPin, PhysicalPin? endPin,
+        List<string>? skippedConnections)
+    {
+        if (routedPath.IsExportable())
+            return false;
+        skippedConnections?.Add(Describe(startPin, endPin));
+        return true;
+    }
 
     /// <summary>
     /// Formats a skipped connection/frozen-path endpoint pair as "Start.Pin → End.Pin" for the

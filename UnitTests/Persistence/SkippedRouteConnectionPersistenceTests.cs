@@ -142,6 +142,56 @@ public class SkippedRouteConnectionPersistenceTests
         }
     }
 
+    [Fact]
+    public async Task Load_PreMigrationFileFixture_BlockedSingleStraightWithNoPlaceholderField_SkippedAndReportedOnExport()
+    {
+        // A real .lun file saved between the router's self-crossing degrade-to-blocked-
+        // fallback step shipping and IsPlaceholderGeometry being introduced: IsBlockedFallback
+        // is true, the cached route is a single straight segment, and the JSON has no
+        // IsPlaceholderGeometry key at all (simulated below by stripping it after a normal
+        // save, since this build always writes it). Loading such a file must still skip and
+        // report the placeholder connection on export, not silently re-export it.
+        var tempFile = Path.Combine(Path.GetTempPath(), $"skip_persist_fixture_{Guid.NewGuid():N}.lun");
+        try
+        {
+            var (saveVm, saveCanvas, _) = CreateSetup();
+            var (comp1, comp2) = PlaceFacingMmis(saveCanvas);
+            var startPin = comp1.PhysicalPins.First(p => p.Name == "out1");
+            var endPin = comp2.PhysicalPins.First(p => p.Name == "in");
+
+            var (sx, sy) = startPin.GetAbsolutePosition();
+            var (ex, ey) = endPin.GetAbsolutePosition();
+            var placeholderPath = new RoutedPath { IsBlockedFallback = true, IsPlaceholderGeometry = true };
+            placeholderPath.Segments.Add(new StraightSegment(sx, sy, ex, ey, 0));
+            saveCanvas.ConnectPinsWithCachedRoute(startPin, endPin, placeholderPath);
+            await SaveToFile(saveVm, tempFile);
+
+            // Downgrade the freshly-saved file to the pre-migration shape: remove the
+            // IsPlaceholderGeometry key entirely (a real old file never wrote it).
+            var json = await File.ReadAllTextAsync(tempFile);
+            var root = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+            root["Connections"]![0]!.AsObject().Remove("IsPlaceholderGeometry");
+            await File.WriteAllTextAsync(tempFile, root.ToJsonString());
+
+            var (loadVm, loadCanvas, _) = CreateSetup();
+            await LoadFromFile(loadVm, tempFile);
+
+            var loaded = loadCanvas.Connections.ShouldHaveSingleItem().Connection;
+            loaded.RoutedPath!.IsPlaceholderGeometry.ShouldBeTrue(
+                "the pre-migration shape (blocked, one straight segment) must be inferred as a placeholder");
+
+            var skipped = new List<string>();
+            var script = new SimpleNazcaExporter().Export(loadCanvas, skippedConnections: skipped);
+
+            script.ShouldNotContain("nd.strt(");
+            skipped.Count.ShouldBe(1);
+        }
+        finally
+        {
+            if (File.Exists(tempFile)) File.Delete(tempFile);
+        }
+    }
+
     // ── Helpers (mirrors PinCalibrationMigrationTests / ComprehensiveRoundtripTests) ──────
 
     private (Component Component1, Component Component2) PlaceFacingMmis(DesignCanvasViewModel canvas)

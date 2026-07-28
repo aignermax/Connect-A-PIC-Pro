@@ -205,28 +205,50 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         try
         {
             // Collected by the exporter(s) as a side effect of writing the script(s) below —
-            // connections/frozen paths whose route is a placeholder or invalid never render
-            // as GDS geometry (a self-crossing fallback has no optical model; invalid geometry
-            // violates the bend radius). Reading it AFTER the write (rather than recomputing
-            // from a live canvas snapshot beforehand) guarantees the report matches exactly
-            // what landed in the script, even while background routing is still in flight.
+            // connections/frozen paths whose route is a placeholder or invalid never render as
+            // GDS geometry (a self-crossing fallback has no optical model; invalid geometry
+            // violates the bend radius); connections whose sibling-crossing flag no bridge
+            // marker resolves still render but deserve a second look. Reading both AFTER the
+            // write (rather than recomputing from a live canvas snapshot beforehand) guarantees
+            // the report matches exactly what landed in the script(s), even while background
+            // routing is still in flight.
             var skippedConnections = new List<string>();
+            var unresolvedCrossings = new List<string>();
+            string? mixedBackendFailureMessage = null;
+
             if (mixedBackendLibrary != null)
             {
-                if (!await WriteAndRunMixedBackendPartAsync(filePath, mixedBackendLibrary, skippedConnections))
-                    return;
+                var mixedResult = await WriteAndRunMixedBackendPartAsync(
+                    filePath, mixedBackendLibrary, skippedConnections, unresolvedCrossings);
+                mixedBackendFailureMessage = mixedResult.FailureMessage;
             }
             else
             {
                 // Always ubcpdk-where-available with stub fallback — no geometry question.
                 await File.WriteAllTextAsync(filePath,
                     _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                        MetalRoutingSpecProvider?.Invoke(), skippedConnections: skippedConnections));
+                        MetalRoutingSpecProvider?.Invoke(),
+                        skippedConnections: skippedConnections, unresolvedCrossings: unresolvedCrossings));
             }
 
-            var skippedConnectionsWarning = SkippedConnectionsMessage.Build(skippedConnections);
+            // Both lists are fully populated by now regardless of the branch above (the
+            // mixed-backend scripts are written before the nazca partial even runs), so the
+            // warnings must be built and surfaced even when the partial run failed next —
+            // otherwise they would silently vanish along with the early return.
+            var skippedConnectionsWarning = ExportWarningMessages.BuildSkipped(skippedConnections);
+            var unresolvedCrossingsWarning = ExportWarningMessages.BuildUnresolvedCrossings(unresolvedCrossings);
             if (skippedConnectionsWarning != null)
                 _errorConsole?.LogWarning(skippedConnectionsWarning);
+            if (unresolvedCrossingsWarning != null)
+                _errorConsole?.LogWarning(unresolvedCrossingsWarning);
+
+            if (mixedBackendFailureMessage != null)
+            {
+                StatusText = WithWarnings(
+                    mixedBackendFailureMessage, mixedProcessWarning,
+                    skippedConnectionsWarning, unresolvedCrossingsWarning);
+                return;
+            }
 
             StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Running");
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
@@ -244,12 +266,10 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 }
             }
 
-            // Keep the mixed-process and skipped-connections warnings visible next to the
-            // final result — they must not be scrolled away by the success line (field round 4).
+            // Keep every warning visible next to the final result — they must not be scrolled
+            // away by the success line (field round 4).
             var status = DescribeResult(filePath, result);
-            var leadingWarnings = new[] { mixedProcessWarning, skippedConnectionsWarning }
-                .Where(w => w != null);
-            StatusText = string.Join(Environment.NewLine, leadingWarnings.Append(status));
+            StatusText = WithWarnings(status, mixedProcessWarning, skippedConnectionsWarning, unresolvedCrossingsWarning);
             if (result.Success && result.GdsPath != null)
                 TryOpenGds(result.GdsPath);
         }
@@ -265,19 +285,30 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         }
     }
 
+    /// <summary>Prefixes a status line with any non-null warnings, in order, so they survive
+    /// next to the final result instead of being scrolled away.</summary>
+    private static string WithWarnings(string status, params string?[] warnings)
+    {
+        var lines = warnings.Where(w => w != null).Append(status);
+        return string.Join(Environment.NewLine, lines);
+    }
+
     /// <summary>
     /// Mixed-backend export: writes both scripts (nazca partial next to the main
     /// script) and runs the nazca partial so its GDS exists before the main script merges it.
-    /// Returns false — with a dialog status and an Error Console entry — when the nazca
-    /// render fails; the main script is not run against a stale/missing partial.
+    /// Returns a failure message — with an Error Console entry — when the nazca render fails;
+    /// the main script is not run against a stale/missing partial. The scripts (and therefore
+    /// <paramref name="skippedConnections"/>/<paramref name="unresolvedCrossings"/>) are
+    /// written BEFORE the partial runs, so the caller can still report them on failure.
     /// </summary>
-    private async Task<bool> WriteAndRunMixedBackendPartAsync(
-        string filePath, IReadOnlyList<ComponentTemplate> library, List<string> skippedConnections)
+    private async Task<(bool Success, string? FailureMessage)> WriteAndRunMixedBackendPartAsync(
+        string filePath, IReadOnlyList<ComponentTemplate> library,
+        List<string> skippedConnections, List<string> unresolvedCrossings)
     {
         var orchestrator = new MixedBackendGdsOrchestrator(NazcaExporterProvider?.Invoke());
         var scripts = orchestrator.BuildScripts(
             _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-            MetalRoutingSpecProvider?.Invoke(), library, filePath, skippedConnections);
+            MetalRoutingSpecProvider?.Invoke(), library, filePath, skippedConnections, unresolvedCrossings);
 
         var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(filePath);
         await File.WriteAllTextAsync(partialPath, scripts.NazcaPartialScript);
@@ -286,13 +317,13 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.MixedBackendRunningNazca");
         var partialResult = await _exportService.ExportToGdsAsync(partialPath, generateGds: true);
         if (partialResult.Success)
-            return true;
+            return (true, null);
 
         _errorConsole?.LogError($"Mixed-backend nazca partial failed: {partialResult.ErrorMessage}");
-        StatusText = string.Format(
+        var failureMessage = string.Format(
             LocalizationService.Instance.Translate("Export.GdsFactory.MixedBackendNazcaFailed"),
             Path.GetFileName(partialPath));
-        return false;
+        return (false, failureMessage);
     }
 
     private static bool IsGdsFactoryMissing(string? errorMessage) =>

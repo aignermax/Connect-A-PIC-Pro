@@ -51,12 +51,20 @@ public class SimpleNazcaExporter
     /// matches what actually landed in the script — a separately recomputed snapshot could
     /// diverge if routing is still running in the background.
     /// </param>
+    /// <param name="unresolvedCrossings">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// EXPORTED optical connection <c>WaveguideConnectionManager</c>'s sibling-crossing pass
+    /// flagged (<see cref="RoutedPath.IsBlockedFallback"/>) and that a bridge marker does not
+    /// resolve — the geometry is rendered (a real, non-placeholder crossing is not a reason to
+    /// omit it), but the layout still deserves a second look.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         bool emitVerification = false,
         MetalRoutingSpec? metalSpec = null,
-        List<string>? skippedConnections = null)
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
@@ -65,7 +73,9 @@ public class SimpleNazcaExporter
         AppendHeader(sb, interconnectSettings, metal);
         AppendPdkComponentStubs(sb, canvas);
         var componentNames = AppendComponents(sb, canvas, emitVerification);
-        AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer, skippedConnections);
+        AppendConnections(
+            sb, canvas, componentNames, metal, interconnectSettings.GdsLayer,
+            skippedConnections, unresolvedCrossings);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas);
         if (emitVerification)
@@ -464,7 +474,8 @@ public class SimpleNazcaExporter
         Dictionary<Component, string> componentNames,
         MetalRoutingSpec metalSpec,
         int? gdsLayer = null,
-        List<string>? skippedConnections = null)
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -474,6 +485,7 @@ public class SimpleNazcaExporter
 
         var metalStyle = metalSpec.ToTraceStyle();
         var metalConnections = new List<WaveguideConnection>();
+        var unresolvedCrossingCandidates = new List<WaveguideConnection>();
         foreach (var connVm in canvas.Connections)
         {
             var conn = connVm.Connection;
@@ -486,11 +498,8 @@ public class SimpleNazcaExporter
             // (bend radius violation) route must never render as geometry — the design
             // still exports, just without this connection's geometry. A missing route is
             // NOT skipped: it falls back to the pin-to-pin straight below, same as before.
-            if (!conn.IsExportable())
-            {
-                skippedConnections?.Add(ExportableConnections.Describe(conn.StartPin, conn.EndPin));
+            if (ExportableConnections.TryRecordSkip(conn.RoutedPath, conn.StartPin, conn.EndPin, skippedConnections))
                 continue;
-            }
 
             // Electrical connections are metal traces, not optical waveguides — emit them on
             // the process metal layer/width instead of the waveguide layer (issue #682). A
@@ -502,6 +511,11 @@ public class SimpleNazcaExporter
             var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
             if (metal != null)
                 metalConnections.Add(conn);
+            else if (conn.IsBlockedFallback)
+                // Real (non-placeholder) geometry that WaveguideConnectionManager's sibling-
+                // crossing pass still flagged — it renders (below), but the layout deserves a
+                // second look unless a bridge marker actually resolves the crossing.
+                unresolvedCrossingCandidates.Add(conn);
 
             // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
             // point-to-point styles export a single Nazca primitive (strt/sinebend/cobra)
@@ -528,19 +542,49 @@ public class SimpleNazcaExporter
             if (segments.Count > 0)
                 AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin, metal);
             else
-                AppendFallbackExport(sb, conn, componentNames, metal);
+                AppendFallbackExport(sb, conn.StartPin, conn.EndPin, componentNames, metal);
         }
 
         // Export frozen waveguide paths from ComponentGroups
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, metalStyle, skippedConnections);
+                AppendGroupFrozenPaths(sb, group, metalStyle, componentNames, skippedConnections);
         }
 
         AppendBridgeMarkers(sb, canvas, metalConnections, metalSpec);
+        CollectUnresolvedCrossings(unresolvedCrossingCandidates, metalConnections, metalSpec, unresolvedCrossings);
 
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Reports the flagged connections a bridge marker does NOT resolve: a crossing is
+    /// bridge-resolved only when it is a metal↔optical pair under
+    /// <see cref="ElectricalCrossingPolicy.BridgeRequired"/> — exactly the condition
+    /// <see cref="AppendBridgeMarkers"/> uses to decide whether to draw a marker at all, so a
+    /// candidate that crosses no exported metal trace (an optical×optical crossing, or any
+    /// crossing under a policy that never draws a marker) is genuinely unresolved.
+    /// </summary>
+    private static void CollectUnresolvedCrossings(
+        IReadOnlyList<WaveguideConnection> candidates,
+        IReadOnlyList<WaveguideConnection> metalConnections,
+        MetalRoutingSpec metalSpec,
+        List<string>? unresolvedCrossings)
+    {
+        if (unresolvedCrossings == null || candidates.Count == 0)
+            return;
+
+        var bridgesCrossings = metalSpec.CrossingPolicy == ElectricalCrossingPolicy.BridgeRequired;
+        foreach (var candidate in candidates)
+        {
+            bool resolvedByBridge = bridgesCrossings && candidate.RoutedPath != null
+                && metalConnections.Any(metalConn =>
+                    metalConn.RoutedPath != null
+                    && PathIntersectionDetector.Crosses(candidate.RoutedPath, metalConn.RoutedPath));
+            if (!resolvedByBridge)
+                unresolvedCrossings.Add(ExportableConnections.Describe(candidate.StartPin, candidate.EndPin));
+        }
     }
 
     /// <summary>
@@ -589,6 +633,10 @@ public class SimpleNazcaExporter
             if (IsMetalConnection(conn.StartPin, conn.EndPin)) continue;
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
+            // A placeholder/invalid route never reaches export — it must not count as
+            // crossable geometry either, or a metal trace would get a bridge marker over
+            // a waveguide that isn't actually drawn.
+            if (!conn.IsExportable()) continue;
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
                 paths.Add(segments);
@@ -607,7 +655,7 @@ public class SimpleNazcaExporter
     {
         foreach (var frozenPath in group.InternalPaths)
         {
-            if (frozenPath?.Path?.Segments?.Count > 0)
+            if (frozenPath?.Path?.Segments?.Count > 0 && frozenPath.Path.IsExportable())
                 paths.Add(frozenPath.Path.Segments);
         }
         foreach (var child in group.ChildComponents)
@@ -624,30 +672,37 @@ public class SimpleNazcaExporter
     /// review: this frozen-group path used to call <see cref="AppendSegmentExport"/> without the
     /// metal style at all, so a frozen electrical route always rendered as a waveguide). A
     /// frozen path with placeholder or invalid geometry is left out just like a live
-    /// connection — freezing (grouping) a connection must not bypass the export filter.
+    /// connection — freezing (grouping) a connection must not bypass the export filter. A
+    /// frozen path with NO route at all (a connection frozen before it was ever routed keeps
+    /// an empty <c>RoutedPath</c>, not null) renders the same pin-to-pin fallback a routeless
+    /// live connection gets, instead of silently vanishing.
     /// </summary>
     private static void AppendGroupFrozenPaths(
         StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle,
-        List<string>? skippedConnections = null)
+        Dictionary<Component, string> componentNames, List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
-            if (frozenPath?.Path?.Segments?.Count > 0)
+            if (frozenPath == null) continue;
+
+            var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+            var segments = frozenPath.Path?.Segments;
+            if (segments == null || segments.Count == 0)
             {
-                if (!frozenPath.Path.IsExportable())
-                {
-                    skippedConnections?.Add(ExportableConnections.Describe(frozenPath.StartPin, frozenPath.EndPin));
-                    continue;
-                }
-                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
-                AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, metal);
+                AppendFallbackExport(sb, frozenPath.StartPin, frozenPath.EndPin, componentNames, metal);
+                continue;
             }
+
+            if (ExportableConnections.TryRecordSkip(
+                    frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
+                continue;
+            AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal);
         }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
-                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle, skippedConnections);
+                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle, componentNames, skippedConnections);
         }
     }
 
@@ -881,22 +936,32 @@ public class SimpleNazcaExporter
         return $"        nd.bend(radius={radius}, angle={sweepAngle}).put()";
     }
 
+    /// <summary>
+    /// Appends the pin-to-pin fallback for a connection/frozen path with no routed geometry
+    /// (null or empty). Shared by live connections and zero-segment frozen paths (a group can
+    /// freeze a connection that was never routed) so both render identically instead of a
+    /// frozen path silently vanishing where a live one would fall back.
+    /// </summary>
     private static void AppendFallbackExport(
         StringBuilder sb,
-        WaveguideConnection conn,
+        PhysicalPin? startPin,
+        PhysicalPin? endPin,
         Dictionary<Component, string> componentNames,
         MetalTraceStyle? metal = null)
     {
+        if (startPin == null || endPin == null)
+            return;
+
         // A routeless electrical connection is a direct metal straight between both pins on the
         // metal layer — the optical sbend interconnect (ic) would draw it as a waveguide (#682).
-        if (metal != null && conn.StartPin != null && conn.EndPin != null)
+        if (metal != null)
         {
-            sb.AppendLine(FormatStraightSegmentFromPins(conn.StartPin, conn.EndPin, metal));
+            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal));
             return;
         }
 
-        var startRef = BuildEndpointReference(conn.StartPin, componentNames);
-        var endRef = BuildEndpointReference(conn.EndPin, componentNames);
+        var startRef = BuildEndpointReference(startPin, componentNames);
+        var endRef = BuildEndpointReference(endPin, componentNames);
 
         if (startRef != null && endRef != null)
             sb.AppendLine($"        ic.sbend_p2p({startRef}, {endRef}).put()");

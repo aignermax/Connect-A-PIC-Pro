@@ -43,12 +43,20 @@ public class GdsFactoryExporter
     /// matches what actually landed in the script — a separately recomputed snapshot could
     /// diverge if routing is still running in the background.
     /// </param>
+    /// <param name="unresolvedCrossings">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// EXPORTED optical connection <c>WaveguideConnectionManager</c>'s sibling-crossing pass
+    /// flagged (<see cref="RoutedPath.IsBlockedFallback"/>) and that a bridge marker does not
+    /// resolve — the geometry is rendered (a real, non-placeholder crossing is not a reason to
+    /// omit it), but the layout still deserves a second look.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
         MetalRoutingSpec? metalSpec = null,
         Func<Component, bool>? include = null,
         string? mergeGdsFileName = null,
-        List<string>? skippedConnections = null)
+        List<string>? skippedConnections = null,
+        List<string>? unresolvedCrossings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
@@ -68,7 +76,8 @@ public class GdsFactoryExporter
         sb.AppendLine();
         var routingOwner = SelectRoutingCrossSectionOwner(canvas, options, include);
         AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal, skippedConnections);
+        AppendConnections(
+            sb, canvas, RoutingWaveguideKwarg(routingOwner), metal, skippedConnections, unresolvedCrossings);
         if (mergeGdsFileName != null)
             AppendMixedBackendMerge(sb, mergeGdsFileName);
         AppendFooter(sb);
@@ -384,12 +393,13 @@ public class GdsFactoryExporter
 
     private static void AppendConnections(
         StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metalSpec,
-        List<string>? skippedConnections = null)
+        List<string>? skippedConnections = null, List<string>? unresolvedCrossings = null)
     {
         sb.AppendLine("# Waveguide connections");
         var metalStyle = metalSpec.ToTraceStyle();
         var opticalPaths = new List<IReadOnlyList<PathSegment>>();
         var electrical = new List<CAP_Core.Components.Connections.WaveguideConnection>();
+        var unresolvedCrossingCandidates = new List<CAP_Core.Components.Connections.WaveguideConnection>();
 
         foreach (var connVm in canvas.Connections)
         {
@@ -401,11 +411,8 @@ public class GdsFactoryExporter
             // (bend radius violation) route must never render as geometry — the design
             // still exports, just without this connection's geometry. A missing route is
             // NOT skipped: it falls back to the pin-to-pin straight below, same as before.
-            if (!conn.IsExportable())
-            {
-                skippedConnections?.Add(ExportableConnections.Describe(conn.StartPin, conn.EndPin));
+            if (ExportableConnections.TryRecordSkip(conn.RoutedPath, conn.StartPin, conn.EndPin, skippedConnections))
                 continue;
-            }
 
             // Electrical connections are metal traces, not optical waveguides — draw them as a
             // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
@@ -415,6 +422,11 @@ public class GdsFactoryExporter
             var metal = IsMetalConnection(conn.StartPin, conn.EndPin) ? metalStyle : null;
             if (metal != null)
                 electrical.Add(conn);
+            else if (conn.IsBlockedFallback)
+                // Real (non-placeholder) geometry that WaveguideConnectionManager's sibling-
+                // crossing pass still flagged — it renders (below), but the layout deserves a
+                // second look unless a bridge marker actually resolves the crossing.
+                unresolvedCrossingCandidates.Add(conn);
 
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
@@ -436,7 +448,37 @@ public class GdsFactoryExporter
         }
 
         AppendBridgeMarkers(sb, electrical, opticalPaths, metalSpec);
+        CollectUnresolvedCrossings(unresolvedCrossingCandidates, electrical, metalSpec, unresolvedCrossings);
         sb.AppendLine();
+    }
+
+    /// <summary>
+    /// Reports the flagged connections a bridge marker does NOT resolve: a crossing is
+    /// bridge-resolved only when it is a metal↔optical pair under
+    /// <see cref="ElectricalCrossingPolicy.BridgeRequired"/> — exactly the condition
+    /// <see cref="AppendBridgeMarkers"/> uses to decide whether to draw a marker at all, so a
+    /// candidate that crosses no exported metal trace (an optical×optical crossing, or any
+    /// crossing under a policy that never draws a marker) is genuinely unresolved.
+    /// </summary>
+    private static void CollectUnresolvedCrossings(
+        IReadOnlyList<CAP_Core.Components.Connections.WaveguideConnection> candidates,
+        IReadOnlyList<CAP_Core.Components.Connections.WaveguideConnection> metalConnections,
+        MetalRoutingSpec metalSpec,
+        List<string>? unresolvedCrossings)
+    {
+        if (unresolvedCrossings == null || candidates.Count == 0)
+            return;
+
+        var bridgesCrossings = metalSpec.CrossingPolicy == ElectricalCrossingPolicy.BridgeRequired;
+        foreach (var candidate in candidates)
+        {
+            bool resolvedByBridge = bridgesCrossings && candidate.RoutedPath != null
+                && metalConnections.Any(metalConn =>
+                    metalConn.RoutedPath != null
+                    && PathIntersectionDetector.Crosses(candidate.RoutedPath, metalConn.RoutedPath));
+            if (!resolvedByBridge)
+                unresolvedCrossings.Add(ExportableConnections.Describe(candidate.StartPin, candidate.EndPin));
+        }
     }
 
     /// <summary>
@@ -472,7 +514,10 @@ public class GdsFactoryExporter
     /// connection loop above (issue #686 review). Frozen optical paths are collected as
     /// crossable geometry for bridge detection. A frozen path with placeholder or invalid
     /// geometry is left out just like a live connection — freezing (grouping) a connection
-    /// must not bypass the export filter.
+    /// must not bypass the export filter. A frozen path with NO route at all (a connection
+    /// frozen before it was ever routed keeps an empty <c>RoutedPath</c>, not null) renders
+    /// the same pin-to-pin fallback a routeless live connection gets, instead of silently
+    /// vanishing.
     /// </summary>
     private static void AppendGroupFrozenPaths(
         StringBuilder sb, ComponentGroup group, string waveguideKwarg,
@@ -481,19 +526,24 @@ public class GdsFactoryExporter
     {
         foreach (var frozenPath in group.InternalPaths)
         {
-            if (frozenPath?.Path?.Segments?.Count > 0)
+            if (frozenPath == null) continue;
+
+            var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+            var segments = frozenPath.Path?.Segments;
+            if (segments == null || segments.Count == 0)
             {
-                if (!frozenPath.Path.IsExportable())
-                {
-                    skippedConnections?.Add(ExportableConnections.Describe(frozenPath.StartPin, frozenPath.EndPin));
-                    continue;
-                }
-                var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
-                GdsFactorySegmentWriter.AppendSegments(
-                    sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
-                if (metal == null)
-                    opticalPaths.Add(frozenPath.Path.Segments);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(
+                    sb, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+                continue;
             }
+
+            if (ExportableConnections.TryRecordSkip(
+                    frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
+                continue;
+            GdsFactorySegmentWriter.AppendSegments(
+                sb, segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            if (metal == null)
+                opticalPaths.Add(segments);
         }
 
         foreach (var child in group.ChildComponents)

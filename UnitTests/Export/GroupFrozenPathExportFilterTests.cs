@@ -63,6 +63,55 @@ public class GroupFrozenPathExportFilterTests
         group.InternalPaths.Count.ShouldBe(2);
     }
 
+    [Fact]
+    public void NazcaExport_GroupWithZeroSegmentFrozenPath_ExportsPinToPinFallback()
+    {
+        // CreateGroupCommand freezes a connection that was never routed as `new RoutedPath()`
+        // (0 segments, not null) — must render the same pin-to-pin fallback an ungrouped
+        // routeless connection gets, not vanish silently.
+        var canvas = CanvasWithZeroSegmentFrozenPath();
+
+        var skipped = new List<string>();
+        var script = new SimpleNazcaExporter().Export(canvas, skippedConnections: skipped);
+
+        script.ShouldContain("ic.sbend_p2p");
+        skipped.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void GdsFactoryExport_GroupWithZeroSegmentFrozenPath_ExportsPinToPinFallback()
+    {
+        var canvas = CanvasWithZeroSegmentFrozenPath();
+
+        var skipped = new List<string>();
+        var script = new GdsFactoryExporter().Export(
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
+            skippedConnections: skipped);
+
+        script.ShouldContain("# routeless connection: direct pin-to-pin straight");
+        skipped.ShouldBeEmpty();
+    }
+
+    private static DesignCanvasViewModel CanvasWithZeroSegmentFrozenPath()
+    {
+        var group = new ComponentGroup("Group");
+        var child1 = ChildAt("Child1", 0, "out");
+        var child2 = ChildAt("Child2", 200, "in");
+        group.AddChild(child1);
+        group.AddChild(child2);
+
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            Path = new RoutedPath(),
+            StartPin = child1.PhysicalPins.Single(),
+            EndPin = child2.PhysicalPins.Single(),
+        });
+
+        var canvas = new DesignCanvasViewModel();
+        canvas.Components.Add(new ComponentViewModel(group));
+        return canvas;
+    }
+
     /// <summary>
     /// A group with 4 children and two frozen internal paths: Child1→Child2 (valid, pins
     /// 200µm apart) and Child3→Child4 (placeholder by default, pins 300µm apart) — distinct
