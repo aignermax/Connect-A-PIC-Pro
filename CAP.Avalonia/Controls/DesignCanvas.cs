@@ -227,6 +227,20 @@ public class DesignCanvas : Control
         _interactionState.LastPointerPosition = point;
     }
 
+    /// <summary>
+    /// Clears the simple-component hover once the pointer leaves the canvas entirely — without
+    /// this, the last-hovered component would keep winning its name-label overlap priority (and
+    /// a stale reference would linger in <see cref="CanvasInteractionState"/>) until the pointer
+    /// re-entered and moved again.
+    /// </summary>
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_interactionState.HoveredComponent == null) return;
+        _interactionState.HoveredComponent = null;
+        InvalidateVisual();
+    }
+
     /// <inheritdoc/>
     protected override void OnPointerReleased(PointerReleasedEventArgs e)
     {

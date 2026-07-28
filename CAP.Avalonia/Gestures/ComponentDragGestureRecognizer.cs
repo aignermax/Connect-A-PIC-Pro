@@ -146,7 +146,12 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         var prevGroup = _state.HoveredGroup;
         var prevLabel = _state.HoveredGroupLabel;
         var prevLock = _state.HoveredGroupLockIcon;
-        var prevComponent = _state.HoveredComponent;
+        // Compare by Component.Id, not object reference: in group-edit mode,
+        // DesignCanvasHitTesting.HitTestGroupChildren fabricates a brand-new ComponentViewModel
+        // wrapper on every call for a child that isn't in the top-level Components list, so a
+        // reference comparison here would see a "change" (and force an invalidate/repaint) on
+        // every single pointer move even while hovering the exact same component.
+        var prevComponentId = _state.HoveredComponent?.Component.Id;
 
         var lockIcon = DesignCanvasHitTesting.HitTestGroupLockIcon(canvasPoint, canvas);
         _state.HoveredGroupLockIcon = lockIcon;
@@ -181,8 +186,9 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
             }
         }
 
+        var newComponentId = _state.HoveredComponent?.Component.Id;
         if (_state.HoveredGroup != prevGroup || _state.HoveredGroupLabel != prevLabel
-            || _state.HoveredGroupLockIcon != prevLock || _state.HoveredComponent != prevComponent)
+            || _state.HoveredGroupLockIcon != prevLock || newComponentId != prevComponentId)
             _invalidate();
     }
 
