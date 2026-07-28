@@ -15,9 +15,6 @@ namespace CAP.Avalonia.DI;
 /// </summary>
 internal static class CrossingInsertionFeatureExtensions
 {
-    /// <summary>Nazca function name of the PDK crossing component used for insertion.</summary>
-    private const string CrossingNazcaFunction = "ebeam_crossing4";
-
     /// <summary>
     /// Adds the crossing-insertion binder, restored to the user's last saved choice and
     /// wired to persist further toggles. The binder must be materialized once at startup —
@@ -50,19 +47,13 @@ internal static class CrossingInsertionFeatureExtensions
     }
 
     /// <summary>
-    /// Instantiates a fresh crossing component through the production PDK path
-    /// (PDK JSON → <see cref="ComponentTemplate"/> → <see cref="ComponentTemplates.CreateFromTemplate"/>).
+    /// Instantiates a fresh crossing component through the production PDK path.
     /// Returns null while no crossing template is loaded (e.g. PDK disabled) —
     /// the crossing pass then keeps detours instead of guessing.
     /// </summary>
     private static CrossingComponentInstance? CreateCrossingInstance(IServiceProvider sp)
     {
-        var templates = sp.GetRequiredService<LeftPanelViewModel>().AllTemplates;
-        var template = templates.FirstOrDefault(t => string.Equals(
-            t.NazcaFunctionName, CrossingNazcaFunction, StringComparison.OrdinalIgnoreCase));
-        if (template == null) return null;
-
-        var component = ComponentTemplates.CreateFromTemplate(template, 0, 0);
-        return new CrossingComponentInstance(component, template.Name, template.PdkSource);
+        return CrossingComponentInstance.CreateFromTemplates(
+            sp.GetRequiredService<LeftPanelViewModel>().AllTemplates);
     }
 }

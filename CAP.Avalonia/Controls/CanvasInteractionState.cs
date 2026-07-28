@@ -4,6 +4,7 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 
 namespace CAP.Avalonia.Controls;
 
@@ -75,6 +76,12 @@ public class CanvasInteractionState
     // Laser on/off icon hover state (#690)
     public ComponentViewModel? HoveredLaserIconComponent { get; set; }
 
+    // Cut tool state: guide lines from visible pins, insertion candidates on
+    // perpendicular waveguide segments, and the candidate currently under the pointer.
+    public IReadOnlyList<PinGuideLine> CutGuideLines { get; set; } = Array.Empty<PinGuideLine>();
+    public IReadOnlyList<ManualCrossingCandidate> CutCandidates { get; set; } = Array.Empty<ManualCrossingCandidate>();
+    public ManualCrossingCandidate? HoveredCutCandidate { get; set; }
+
     // Double-click detection state
     public DateTime LastClickTime { get; set; } = DateTime.MinValue;
     public ComponentViewModel? LastClickedComponent { get; set; }
@@ -115,5 +122,15 @@ public class CanvasInteractionState
     {
         ShowGroupTemplatePlacementPreview = false;
         GroupTemplatePlacementPreview = null;
+    }
+
+    /// <summary>
+    /// Resets all Cut-tool state, e.g. when leaving Cut mode.
+    /// </summary>
+    public void ResetCutTool()
+    {
+        CutGuideLines = Array.Empty<PinGuideLine>();
+        CutCandidates = Array.Empty<ManualCrossingCandidate>();
+        HoveredCutCandidate = null;
     }
 }

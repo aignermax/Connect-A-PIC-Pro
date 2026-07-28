@@ -31,6 +31,7 @@ public sealed class CanvasOverlayRenderer : ICanvasRenderer
             InteractionMode.PlaceComponent => $"[P] {loc.Translate("Canvas.Mode.Place")}",
             InteractionMode.Connect => $"[C] {loc.Translate("Canvas.Mode.Connect")}",
             InteractionMode.Delete => $"[D] {loc.Translate("Canvas.Mode.Delete")}",
+            InteractionMode.Cut => $"[X] {loc.Translate("Canvas.Mode.Cut")}",
             _ => ""
         };
 
@@ -40,6 +41,7 @@ public sealed class CanvasOverlayRenderer : ICanvasRenderer
             InteractionMode.PlaceComponent => Brushes.LightGreen,
             InteractionMode.Connect => Brushes.Orange,
             InteractionMode.Delete => Brushes.Red,
+            InteractionMode.Cut => Brushes.Gold,
             _ => Brushes.White
         };
 
