@@ -12,9 +12,9 @@ namespace UnitTests.Export;
 
 /// <summary>
 /// The plain Nazca export (<c>FileOperationsViewModel.ExportNazcaCommand</c>) must skip
-/// blocked/invalid/routeless connections from the generated script and warn the user with
-/// the count and affected pins — the gdsfactory export side of this contract is covered by
-/// <c>GdsFactoryExportViewModelTests.Export_BlockedConnection_WarnsAndOmitsItFromTheGds</c>.
+/// placeholder/invalid connections from the generated script and warn the user with the
+/// count and affected pins — the gdsfactory export side of this contract is covered by
+/// <c>GdsFactoryExportViewModelTests.Export_PlaceholderConnection_WarnsAndOmitsItFromTheGds</c>.
 /// </summary>
 public class NazcaExportSkipsBrokenConnectionsTests
 {
@@ -37,9 +37,9 @@ public class NazcaExportSkipsBrokenConnectionsTests
             Task.FromResult<string?>(null);
     }
 
-    /// <summary>Two components joined by one blocked connection — the script generation
+    /// <summary>Two components joined by one placeholder connection — the script generation
     /// step never touches Python, so <c>GenerateGdsEnabled = false</c> keeps this fast.</summary>
-    private static DesignCanvasViewModel CanvasWithBlockedConnection()
+    private static DesignCanvasViewModel CanvasWithPlaceholderConnection()
     {
         var canvas = new DesignCanvasViewModel();
         var a = TestComponentFactory.CreateBasicComponent();
@@ -53,7 +53,7 @@ public class NazcaExportSkipsBrokenConnectionsTests
         canvas.AddComponent(b, "MMI B");
 
         var connection = new WaveguideConnection { StartPin = a.PhysicalPins[0], EndPin = b.PhysicalPins[0] };
-        var path = new RoutedPath { IsBlockedFallback = true };
+        var path = new RoutedPath { IsPlaceholderGeometry = true };
         path.Segments.Add(new StraightSegment(0, 0, 1, 0, 0));
         connection.RestoreCachedPath(path);
         canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
@@ -61,12 +61,12 @@ public class NazcaExportSkipsBrokenConnectionsTests
     }
 
     [Fact]
-    public async Task ExportNazca_BlockedConnection_WarnsAndOmitsItFromTheScript()
+    public async Task ExportNazca_PlaceholderConnection_WarnsAndOmitsItFromTheScript()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"lunima-nazca-{Guid.NewGuid():N}.py");
         try
         {
-            var main = MainViewModelTestHelper.CreateMainViewModel(canvas: CanvasWithBlockedConnection());
+            var main = MainViewModelTestHelper.CreateMainViewModel(canvas: CanvasWithPlaceholderConnection());
             var fileOps = main.FileOperations;
             fileOps.FileDialogService = new FixedPathFileDialog(scriptPath);
             fileOps.GdsExport.GenerateGdsEnabled = false;   // script-only, deterministic and fast
@@ -95,7 +95,7 @@ public class NazcaExportSkipsBrokenConnectionsTests
     [Fact]
     public async Task ExportNazca_AllConnectionsValid_NoSkippedConnectionsWarning()
     {
-        var canvas = CanvasWithBlockedConnection();
+        var canvas = CanvasWithPlaceholderConnection();
         var connection = canvas.Connections[0].Connection;
         connection.RestoreCachedPath(new RoutedPath { Segments = { new StraightSegment(0, 0, 1, 0, 0) } });
 
@@ -119,5 +119,22 @@ public class NazcaExportSkipsBrokenConnectionsTests
         {
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
         }
+    }
+
+    [Fact]
+    public async Task ExportNazca_ExportCancelled_NoSkippedConnectionsWarning()
+    {
+        // Cancel (Save dialog dismissed) means no script is ever written — the skip report
+        // must not be computed/logged for a design snapshot that was never exported.
+        var main = MainViewModelTestHelper.CreateMainViewModel(canvas: CanvasWithPlaceholderConnection());
+        var fileOps = main.FileOperations;
+        fileOps.FileDialogService = new FixedPathFileDialog(null!);
+        string? lastStatus = null;
+        fileOps.UpdateStatus = s => lastStatus = s;
+
+        await fileOps.ExportNazcaCommand.ExecuteAsync(null);
+
+        lastStatus.ShouldBeNull();
+        main.ErrorConsole.Entries.ShouldBeEmpty();
     }
 }

@@ -398,11 +398,12 @@ public class GdsFactoryExportViewModelTests
         vm.UnmappedComponents.ShouldBe(new[] { "ebeam_dc_te1550" });
     }
 
-    /// <summary>Two components joined by a connection whose route is blocked (drawn
-    /// through an obstacle) — export must still succeed but leave that geometry out.
-    /// Both components carry a (bare) gdsfactory function so the export takes the
-    /// plain single-script path rather than the nazca-native two-script merge.</summary>
-    private static DesignCanvasViewModel CanvasWithBlockedConnection()
+    /// <summary>Two components joined by a connection whose route is an honest placeholder
+    /// (the router's replacement for a self-crossing fallback with no optical model) — export
+    /// must still succeed but leave that geometry out. Both components carry a (bare)
+    /// gdsfactory function so the export takes the plain single-script path rather than the
+    /// nazca-native two-script merge.</summary>
+    private static DesignCanvasViewModel CanvasWithPlaceholderConnection()
     {
         var canvas = new DesignCanvasViewModel();
         var a = TestComponentFactory.CreateBasicComponent();
@@ -420,7 +421,7 @@ public class GdsFactoryExportViewModelTests
         canvas.AddComponent(b, "MMI B");
 
         var connection = new WaveguideConnection { StartPin = a.PhysicalPins[0], EndPin = b.PhysicalPins[0] };
-        var path = new RoutedPath { IsBlockedFallback = true };
+        var path = new RoutedPath { IsPlaceholderGeometry = true };
         path.Segments.Add(new StraightSegment(0, 0, 1, 0, 0));
         connection.RestoreCachedPath(path);
         canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
@@ -428,14 +429,14 @@ public class GdsFactoryExportViewModelTests
     }
 
     [Fact]
-    public async Task Export_BlockedConnection_WarnsAndOmitsItFromTheGds()
+    public async Task Export_PlaceholderConnection_WarnsAndOmitsItFromTheGds()
     {
         var scriptPath = Path.Combine(Path.GetTempPath(), $"gfvm-{Guid.NewGuid():N}.py");
         try
         {
             var errorConsole = new CAP_Core.ErrorConsoleService();
             var vm = new GdsFactoryExportViewModel(
-                CanvasWithBlockedConnection(), new StubSuccessExportService(), errorConsole: errorConsole)
+                CanvasWithPlaceholderConnection(), new StubSuccessExportService(), errorConsole: errorConsole)
             {
                 FileDialogService = new FixedPathFileDialog(scriptPath),
             };
@@ -461,8 +462,8 @@ public class GdsFactoryExportViewModelTests
     [Fact]
     public async Task Export_AllConnectionsValid_NoSkippedConnectionsWarning()
     {
-        var canvas = CanvasWithBlockedConnection();
-        // Replace the blocked path with a valid one so nothing is skipped.
+        var canvas = CanvasWithPlaceholderConnection();
+        // Replace the placeholder path with a valid one so nothing is skipped.
         var connection = canvas.Connections[0].Connection;
         connection.RestoreCachedPath(new RoutedPath { Segments = { new StraightSegment(0, 0, 1, 0, 0) } });
 
@@ -485,5 +486,23 @@ public class GdsFactoryExportViewModelTests
         {
             if (File.Exists(scriptPath)) File.Delete(scriptPath);
         }
+    }
+
+    [Fact]
+    public async Task Export_Cancelled_NoSkippedConnectionsWarning()
+    {
+        // Cancel (Save dialog dismissed) means no script is ever written — the skip report
+        // must not be computed/logged for a design snapshot that was never exported.
+        var errorConsole = new CAP_Core.ErrorConsoleService();
+        var vm = new GdsFactoryExportViewModel(
+            CanvasWithPlaceholderConnection(), new StubSuccessExportService(), errorConsole: errorConsole)
+        {
+            FileDialogService = new FixedPathFileDialog(null),
+        };
+
+        await vm.ExportCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldNotContain("connection(s)");
+        errorConsole.Entries.ShouldBeEmpty();
     }
 }

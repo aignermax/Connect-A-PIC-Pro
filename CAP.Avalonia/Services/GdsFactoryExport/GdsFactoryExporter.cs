@@ -35,11 +35,20 @@ public class GdsFactoryExporter
     /// Optional file name (relative to the script) of a nazca-rendered partial GDS to merge
     /// into the design cell via <c>gf.import_gds()</c> before writing the output.
     /// </param>
+    /// <param name="skippedConnections">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// connection or frozen group path left out of the geometry because its route is a
+    /// placeholder or invalid (<see cref="ExportableConnections.IsExportable(RoutedPath?)"/>).
+    /// Populated as a side effect of THIS write, so the caller's post-export report always
+    /// matches what actually landed in the script — a separately recomputed snapshot could
+    /// diverge if routing is still running in the background.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
         MetalRoutingSpec? metalSpec = null,
         Func<Component, bool>? include = null,
-        string? mergeGdsFileName = null)
+        string? mergeGdsFileName = null,
+        List<string>? skippedConnections = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
@@ -59,7 +68,7 @@ public class GdsFactoryExporter
         sb.AppendLine();
         var routingOwner = SelectRoutingCrossSectionOwner(canvas, options, include);
         AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
-        AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal);
+        AppendConnections(sb, canvas, RoutingWaveguideKwarg(routingOwner), metal, skippedConnections);
         if (mergeGdsFileName != null)
             AppendMixedBackendMerge(sb, mergeGdsFileName);
         AppendFooter(sb);
@@ -374,7 +383,8 @@ public class GdsFactoryExporter
             : string.Empty;
 
     private static void AppendConnections(
-        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metalSpec)
+        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metalSpec,
+        List<string>? skippedConnections = null)
     {
         sb.AppendLine("# Waveguide connections");
         var metalStyle = metalSpec.ToTraceStyle();
@@ -387,10 +397,15 @@ public class GdsFactoryExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
-            // A blocked/invalid/routeless connection must never render as geometry (field
-            // report: unroutable tight layouts otherwise leak a red/dashed path straight into
-            // the GDS) — the design still exports, just without this connection's geometry.
-            if (!conn.IsExportable()) continue;
+            // A placeholder (self-crossing fallback with no optical model) or invalid
+            // (bend radius violation) route must never render as geometry — the design
+            // still exports, just without this connection's geometry. A missing route is
+            // NOT skipped: it falls back to the pin-to-pin straight below, same as before.
+            if (!conn.IsExportable())
+            {
+                skippedConnections?.Add(ExportableConnections.Describe(conn.StartPin, conn.EndPin));
+                continue;
+            }
 
             // Electrical connections are metal traces, not optical waveguides — draw them as a
             // polygon on the metal layer instead of a routed waveguide cell (issue #682). A
@@ -417,7 +432,7 @@ public class GdsFactoryExporter
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle, opticalPaths);
+                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
         }
 
         AppendBridgeMarkers(sb, electrical, opticalPaths, metalSpec);
@@ -455,16 +470,24 @@ public class GdsFactoryExporter
     /// Exports frozen waveguide paths from a ComponentGroup (and nested groups). A frozen path
     /// between two electrical pins is a metal trace, not a waveguide — mirrors the live
     /// connection loop above (issue #686 review). Frozen optical paths are collected as
-    /// crossable geometry for bridge detection.
+    /// crossable geometry for bridge detection. A frozen path with placeholder or invalid
+    /// geometry is left out just like a live connection — freezing (grouping) a connection
+    /// must not bypass the export filter.
     /// </summary>
     private static void AppendGroupFrozenPaths(
         StringBuilder sb, ComponentGroup group, string waveguideKwarg,
-        MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths)
+        MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths,
+        List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
             {
+                if (!frozenPath.Path.IsExportable())
+                {
+                    skippedConnections?.Add(ExportableConnections.Describe(frozenPath.StartPin, frozenPath.EndPin));
+                    continue;
+                }
                 var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
                 GdsFactorySegmentWriter.AppendSegments(
                     sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
@@ -476,7 +499,7 @@ public class GdsFactoryExporter
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle, opticalPaths);
+                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
         }
     }
 

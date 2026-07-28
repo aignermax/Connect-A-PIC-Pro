@@ -9,27 +9,45 @@ namespace UnitTests.Export;
 
 /// <summary>
 /// Unit tests for <see cref="ExportableConnections"/> — the single, shared definition of
-/// which routed connections may render as GDS geometry. A connection with no computed
-/// route, a blocked fallback (drawn through an obstacle), or invalid geometry (e.g. a
-/// bend radius violation) must never be considered exportable, regardless of which
-/// backend (Nazca or gdsfactory) asks.
+/// which routed connections may render as GDS geometry. Only a placeholder route (the
+/// router's honest stand-in for a self-crossing fallback with no optical model) or invalid
+/// geometry (e.g. a bend radius violation) is excluded. A missing route is NOT excluded — it
+/// is the long-standing routeless state both exporters draw as a direct pin-to-pin fallback.
+/// <see cref="RoutedPath.IsBlockedFallback"/> alone does NOT exclude either: besides the
+/// placeholder case it also covers a fallback that merely grazes an obstacle (real,
+/// exportable geometry) and the crossing diagnostic stamped on an unresolved sibling overlap
+/// — including one a bridge marker legitimately resolves.
 /// </summary>
 public class ExportableConnectionsTests
 {
     [Fact]
-    public void IsExportable_NoRoutedPath_ReturnsFalse()
+    public void IsExportable_NoRoutedPath_ReturnsTrue()
     {
         var connection = CreateConnection();
 
-        connection.IsExportable().ShouldBeFalse();
+        connection.IsExportable().ShouldBeTrue();
     }
 
     [Fact]
-    public void IsExportable_BlockedFallback_ReturnsFalse()
+    public void IsExportable_BlockedFallbackAlone_ReturnsTrue()
     {
+        // A fallback that merely grazes an obstacle, or the crossing diagnostic on an
+        // unresolved sibling overlap (e.g. a bridge-resolved metal/optical crossing) — both
+        // are real, exportable geometry and must not be excluded.
         var connection = CreateConnection();
         var path = CreateStraightPath();
         path.IsBlockedFallback = true;
+        connection.RestoreCachedPath(path);
+
+        connection.IsExportable().ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsExportable_PlaceholderGeometry_ReturnsFalse()
+    {
+        var connection = CreateConnection();
+        var path = CreateStraightPath();
+        path.IsPlaceholderGeometry = true;
         connection.RestoreCachedPath(path);
 
         connection.IsExportable().ShouldBeFalse();
@@ -56,25 +74,26 @@ public class ExportableConnectionsTests
     }
 
     [Fact]
-    public void WhereExportable_MixOfValidAndBroken_KeepsOnlyValid()
+    public void WhereExportable_MixOfValidRoutelessAndPlaceholder_KeepsEverythingButThePlaceholder()
     {
         var valid = CreateConnection();
         valid.RestoreCachedPath(CreateStraightPath());
 
-        var blocked = CreateConnection();
-        var blockedPath = CreateStraightPath();
-        blockedPath.IsBlockedFallback = true;
-        blocked.RestoreCachedPath(blockedPath);
+        var placeholder = CreateConnection();
+        var placeholderPath = CreateStraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
 
+        // A missing route falls back to the pin-to-pin straight — it stays exportable.
         var routeless = CreateConnection();
 
-        var result = new[] { valid, blocked, routeless }.WhereExportable().ToList();
+        var result = new[] { valid, placeholder, routeless }.WhereExportable().ToList();
 
-        result.ShouldBe(new[] { valid });
+        result.ShouldBe(new[] { valid, routeless });
     }
 
     [Fact]
-    public void CollectSkipped_MixOfValidAndBroken_ReturnsOnlyBroken()
+    public void CollectSkipped_MixOfValidAndBroken_ReturnsOnlyPlaceholderAndInvalid()
     {
         var valid = CreateConnection();
         valid.RestoreCachedPath(CreateStraightPath());
@@ -84,13 +103,23 @@ public class ExportableConnectionsTests
         invalidPath.IsInvalidGeometry = true;
         invalid.RestoreCachedPath(invalidPath);
 
-        var routeless = CreateConnection();
+        var placeholder = CreateConnection();
+        var placeholderPath = CreateStraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
 
-        var result = new[] { valid, invalid, routeless }.CollectSkipped();
+        // Routeless and blocked-fallback-only connections are NOT skipped.
+        var routeless = CreateConnection();
+        var blocked = CreateConnection();
+        var blockedPath = CreateStraightPath();
+        blockedPath.IsBlockedFallback = true;
+        blocked.RestoreCachedPath(blockedPath);
+
+        var result = new[] { valid, invalid, placeholder, routeless, blocked }.CollectSkipped();
 
         result.Count.ShouldBe(2);
         result.ShouldContain(invalid);
-        result.ShouldContain(routeless);
+        result.ShouldContain(placeholder);
     }
 
     [Fact]
@@ -104,6 +133,30 @@ public class ExportableConnectionsTests
         var result = new[] { a, b }.CollectSkipped();
 
         result.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Describe_BothPinsPresent_FormatsStartArrowEnd()
+    {
+        var connection = CreateConnection();
+
+        var expected = $"{connection.StartPin.ParentComponent!.Identifier}.{connection.StartPin.Name} → " +
+                       $"{connection.EndPin.ParentComponent!.Identifier}.{connection.EndPin.Name}";
+        ExportableConnections.Describe(connection.StartPin, connection.EndPin).ShouldBe(expected);
+    }
+
+    [Fact]
+    public void Describe_NullPin_FallsBackToQuestionMark_NoException()
+    {
+        Should.NotThrow(() => ExportableConnections.Describe(null, null)).ShouldBe("? → ?");
+    }
+
+    [Fact]
+    public void Describe_PinWithoutParentComponent_FallsBackToQuestionMarkForThatEndpoint()
+    {
+        var orphanPin = new PhysicalPin { Name = "dangling", ParentComponent = null! };
+
+        Should.NotThrow(() => ExportableConnections.Describe(orphanPin, null)).ShouldBe("?.dangling → ?");
     }
 
     private static WaveguideConnection CreateConnection()

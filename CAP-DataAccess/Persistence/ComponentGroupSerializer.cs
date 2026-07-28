@@ -197,6 +197,7 @@ public static class ComponentGroupSerializer
             EndPinName = frozenPath.EndPin.Name,
             IsBlockedFallback = frozenPath.Path.IsBlockedFallback,
             IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry,
+            IsPlaceholderGeometry = frozenPath.Path.IsPlaceholderGeometry,
             ConnectionType = frozenPath.ConnectionType.ToString(),
             BendRadiusMicrometers = frozenPath.BendRadiusMicrometers,
             WidthMicrometers = frozenPath.WidthMicrometers,
@@ -253,7 +254,8 @@ public static class ComponentGroupSerializer
         var path = new RoutedPath
         {
             IsBlockedFallback = dto.IsBlockedFallback,
-            IsInvalidGeometry = dto.IsInvalidGeometry
+            IsInvalidGeometry = dto.IsInvalidGeometry,
+            IsPlaceholderGeometry = dto.IsPlaceholderGeometry
         };
 
         foreach (var segmentDto in dto.Segments)

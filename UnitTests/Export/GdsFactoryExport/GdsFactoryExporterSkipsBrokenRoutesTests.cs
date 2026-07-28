@@ -10,28 +10,49 @@ using Xunit;
 namespace UnitTests.Export.GdsFactoryExport;
 
 /// <summary>
-/// A blocked/invalid/routeless connection must never render as geometry in the gdsfactory
-/// export — the design still exports, but that connection's geometry is left out (field
-/// report: unroutable tight layouts otherwise leak a red/dashed path straight into the
-/// GDS). Mirrors <c>SimpleNazcaExporterSkipsBrokenRoutesTests</c> so both backends are
-/// pinned to the exact same contract.
+/// A placeholder (self-crossing fallback with no optical model) or invalid (bend radius
+/// violation) route must never render as geometry in the gdsfactory export — the design
+/// still exports, but that connection's geometry is left out (field report: unroutable
+/// tight layouts otherwise leaked a self-crossing line straight into the GDS). A missing
+/// route or a merely blocked-fallback route is NOT skipped — see
+/// <c>BridgeCrossingExportFilterTests</c> for why <see cref="RoutedPath.IsBlockedFallback"/>
+/// alone must never exclude a connection. Mirrors
+/// <c>SimpleNazcaExporterSkipsBrokenRoutesTests</c> so both backends share the exact contract.
 /// </summary>
 public class GdsFactoryExporterSkipsBrokenRoutesTests
 {
     [Fact]
-    public void Export_OneBlockedOneValidConnection_OnlyValidConnectionRenders()
+    public void Export_OnePlaceholderOneValidConnection_OnlyValidConnectionRenders()
     {
         var canvas = new DesignCanvasViewModel();
-        var (valid, blocked) = AddTwoConnections(canvas);
+        var (valid, placeholder) = AddTwoConnections(canvas);
         valid.RestoreCachedPath(StraightPath());
-        var blockedPath = StraightPath();
-        blockedPath.IsBlockedFallback = true;
-        blocked.RestoreCachedPath(blockedPath);
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
 
         var script = ExportStandalone(canvas);
 
         script.ShouldContain("gf.components.straight(length=200.00");
         script.ShouldNotContain("gf.components.straight(length=300.00");
+    }
+
+    [Fact]
+    public void Export_BlockedFallbackAlone_DoesNotSkip()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (first, second) = AddTwoConnections(canvas);
+        first.RestoreCachedPath(StraightPath());
+        var blockedPath = StraightPath();
+        blockedPath.IsBlockedFallback = true;
+        second.RestoreCachedPath(blockedPath);
+
+        var skipped = new List<string>();
+        var script = ExportStandalone(canvas, skipped);
+
+        script.ShouldContain("gf.components.straight(length=200.00");
+        script.ShouldContain("gf.components.straight(length=300.00");
+        skipped.ShouldBeEmpty();
     }
 
     [Fact]
@@ -53,9 +74,9 @@ public class GdsFactoryExporterSkipsBrokenRoutesTests
     {
         var canvas = new DesignCanvasViewModel();
         var (first, second) = AddTwoConnections(canvas);
-        var blockedPath = StraightPath();
-        blockedPath.IsBlockedFallback = true;
-        first.RestoreCachedPath(blockedPath);
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        first.RestoreCachedPath(placeholderPath);
         var invalidPath = StraightPath();
         invalidPath.IsInvalidGeometry = true;
         second.RestoreCachedPath(invalidPath);
@@ -70,9 +91,27 @@ public class GdsFactoryExporterSkipsBrokenRoutesTests
         script.ShouldNotContain("gf.components.straight(length=300.00");
     }
 
-    private static string ExportStandalone(DesignCanvasViewModel canvas) =>
+    [Fact]
+    public void Export_SkippedConnectionsCollector_ListsCountAndPinNames()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (valid, placeholder) = AddTwoConnections(canvas);
+        valid.RestoreCachedPath(StraightPath());
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
+
+        var skipped = new List<string>();
+        ExportStandalone(canvas, skipped);
+
+        skipped.Count.ShouldBe(1);
+        skipped[0].ShouldBe("CompC.p0 → CompD.p0");
+    }
+
+    private static string ExportStandalone(DesignCanvasViewModel canvas, List<string>? skipped = null) =>
         new GdsFactoryExporter().Export(
-            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs));
+            canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.StandaloneStubs),
+            skippedConnections: skipped);
 
     /// <summary>
     /// Places four components (A, B at x=0/200; C, D at x=1000/1300) and connects A→B and

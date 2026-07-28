@@ -9,28 +9,31 @@ using Xunit;
 namespace UnitTests.Services;
 
 /// <summary>
-/// A blocked/invalid/routeless connection must never render as geometry in the Nazca
-/// export — the design still exports, but that connection's geometry is left out
-/// (field report: unroutable tight layouts otherwise leak a red/dashed path straight
-/// into the GDS). Netlist export is intentionally unaffected — a blocked connection is
-/// still part of the circuit topology.
+/// A placeholder (self-crossing fallback with no optical model) or invalid (bend radius
+/// violation) route must never render as geometry in the Nazca export — the design still
+/// exports, but that connection's geometry is left out (field report: unroutable tight
+/// layouts otherwise leaked a self-crossing line straight into the GDS). A missing route or
+/// a merely blocked-fallback route is NOT skipped — see <c>BridgeCrossingExportFilterTests</c>
+/// for why <see cref="RoutedPath.IsBlockedFallback"/> alone must never exclude a connection.
+/// Netlist export is intentionally unaffected — a blocked connection is still part of the
+/// circuit topology.
 /// </summary>
 public class SimpleNazcaExporterSkipsBrokenRoutesTests
 {
     [Fact]
-    public void Export_OneBlockedOneValidConnection_OnlyValidConnectionRenders()
+    public void Export_OnePlaceholderOneValidConnection_OnlyValidConnectionRenders()
     {
         var canvas = new DesignCanvasViewModel();
-        var (valid, blocked) = AddTwoConnections(canvas);
+        var (valid, placeholder) = AddTwoConnections(canvas);
         valid.RestoreCachedPath(StraightPath());
-        var blockedPath = StraightPath();
-        blockedPath.IsBlockedFallback = true;
-        blocked.RestoreCachedPath(blockedPath);
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
 
         var script = new SimpleNazcaExporter().Export(canvas);
 
         script.ShouldContain("nd.strt(length=200.00");     // valid A→B connection
-        script.ShouldNotContain("nd.strt(length=300.00");  // blocked C→D connection
+        script.ShouldNotContain("nd.strt(length=300.00");  // placeholder C→D connection
     }
 
     [Fact]
@@ -50,6 +53,26 @@ public class SimpleNazcaExporterSkipsBrokenRoutesTests
     }
 
     [Fact]
+    public void Export_BlockedFallbackAlone_DoesNotSkip()
+    {
+        // A blocked fallback that merely grazes an obstacle (or the crossing diagnostic on
+        // an unresolved sibling overlap) is real, exportable geometry.
+        var canvas = new DesignCanvasViewModel();
+        var (first, second) = AddTwoConnections(canvas);
+        first.RestoreCachedPath(StraightPath());
+        var blockedPath = StraightPath();
+        blockedPath.IsBlockedFallback = true;
+        second.RestoreCachedPath(blockedPath);
+
+        var skipped = new List<string>();
+        var script = new SimpleNazcaExporter().Export(canvas, skippedConnections: skipped);
+
+        script.ShouldContain("nd.strt(length=200.00");
+        script.ShouldContain("nd.strt(length=300.00");
+        skipped.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void Export_RouteAllConnectionsValid_NoConnectionIsOmitted()
     {
         var canvas = new DesignCanvasViewModel();
@@ -64,13 +87,13 @@ public class SimpleNazcaExporterSkipsBrokenRoutesTests
     }
 
     [Fact]
-    public void Export_AllConnectionsBlocked_StillExportsComponentsButNoConnectionGeometry()
+    public void Export_AllConnectionsBroken_StillExportsComponentsButNoConnectionGeometry()
     {
         var canvas = new DesignCanvasViewModel();
         var (first, second) = AddTwoConnections(canvas);
-        var blockedPath = StraightPath();
-        blockedPath.IsBlockedFallback = true;
-        first.RestoreCachedPath(blockedPath);
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        first.RestoreCachedPath(placeholderPath);
         var invalidPath = StraightPath();
         invalidPath.IsInvalidGeometry = true;
         second.RestoreCachedPath(invalidPath);
@@ -84,6 +107,23 @@ public class SimpleNazcaExporterSkipsBrokenRoutesTests
         script.ShouldContain("comp_3 =");
         script.ShouldNotContain("nd.strt(length=200.00");
         script.ShouldNotContain("nd.strt(length=300.00");
+    }
+
+    [Fact]
+    public void Export_SkippedConnectionsCollector_ListsCountAndPinNames()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (valid, placeholder) = AddTwoConnections(canvas);
+        valid.RestoreCachedPath(StraightPath());
+        var placeholderPath = StraightPath();
+        placeholderPath.IsPlaceholderGeometry = true;
+        placeholder.RestoreCachedPath(placeholderPath);
+
+        var skipped = new List<string>();
+        new SimpleNazcaExporter().Export(canvas, skippedConnections: skipped);
+
+        skipped.Count.ShouldBe(1);
+        skipped[0].ShouldBe("C.p0 → D.p0");
     }
 
     /// <summary>

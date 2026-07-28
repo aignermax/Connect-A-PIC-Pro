@@ -174,17 +174,6 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             _errorConsole?.LogWarning(mixedProcessWarning);
         }
 
-        // Connections whose route is missing, blocked, or invalid never render as GDS
-        // geometry (field report: unroutable tight layouts otherwise leak a red/dashed
-        // path into the fab file) — the export still proceeds, but the user must be told
-        // which connections were left out.
-        var skippedConnectionsWarning = BuildSkippedConnectionsWarning();
-        if (skippedConnectionsWarning != null)
-        {
-            StatusText = skippedConnectionsWarning;
-            _errorConsole?.LogWarning(skippedConnectionsWarning);
-        }
-
         var filePath = await FileDialogService.ShowSaveFileDialogAsync(
             "Export to gdsfactory Python", "py", "Python Files|*.py|All Files|*.*");
         if (filePath == null)
@@ -199,24 +188,7 @@ public partial class GdsFactoryExportViewModel : ObservableObject
             return;
         }
 
-        await RunExportAsync(
-            filePath, mixedProcessWarning, hasNazcaNative ? library : null, skippedConnectionsWarning);
-    }
-
-    /// <summary>
-    /// Builds the localized "N connections skipped" warning for the connections
-    /// <see cref="SkippedConnectionReporter"/> reports as blocked/invalid/routeless, or
-    /// null when every connection exports cleanly.
-    /// </summary>
-    private string? BuildSkippedConnectionsWarning()
-    {
-        var skipped = SkippedConnectionReporter.CollectSkipped(_canvas);
-        if (skipped.Count == 0)
-            return null;
-
-        return string.Format(
-            LocalizationService.Instance.Translate("Export.SkippedConnections.Warning"),
-            skipped.Count, string.Join("; ", skipped.Select(SkippedConnectionReporter.Describe)));
+        await RunExportAsync(filePath, mixedProcessWarning, hasNazcaNative ? library : null);
     }
 
     /// <summary>
@@ -227,15 +199,21 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// </summary>
     private async Task RunExportAsync(
         string filePath, string? mixedProcessWarning = null,
-        IReadOnlyList<ComponentTemplate>? mixedBackendLibrary = null,
-        string? skippedConnectionsWarning = null)
+        IReadOnlyList<ComponentTemplate>? mixedBackendLibrary = null)
     {
         IsExporting = true;
         try
         {
+            // Collected by the exporter(s) as a side effect of writing the script(s) below —
+            // connections/frozen paths whose route is a placeholder or invalid never render
+            // as GDS geometry (a self-crossing fallback has no optical model; invalid geometry
+            // violates the bend radius). Reading it AFTER the write (rather than recomputing
+            // from a live canvas snapshot beforehand) guarantees the report matches exactly
+            // what landed in the script, even while background routing is still in flight.
+            var skippedConnections = new List<string>();
             if (mixedBackendLibrary != null)
             {
-                if (!await WriteAndRunMixedBackendPartAsync(filePath, mixedBackendLibrary))
+                if (!await WriteAndRunMixedBackendPartAsync(filePath, mixedBackendLibrary, skippedConnections))
                     return;
             }
             else
@@ -243,8 +221,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
                 // Always ubcpdk-where-available with stub fallback — no geometry question.
                 await File.WriteAllTextAsync(filePath,
                     _exporter.Export(_canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-                        MetalRoutingSpecProvider?.Invoke()));
+                        MetalRoutingSpecProvider?.Invoke(), skippedConnections: skippedConnections));
             }
+
+            var skippedConnectionsWarning = SkippedConnectionsMessage.Build(skippedConnections);
+            if (skippedConnectionsWarning != null)
+                _errorConsole?.LogWarning(skippedConnectionsWarning);
 
             StatusText = LocalizationService.Instance.Translate("Export.GdsFactory.Running");
             var result = await _exportService.ExportToGdsAsync(filePath, generateGds: true);
@@ -290,12 +272,12 @@ public partial class GdsFactoryExportViewModel : ObservableObject
     /// render fails; the main script is not run against a stale/missing partial.
     /// </summary>
     private async Task<bool> WriteAndRunMixedBackendPartAsync(
-        string filePath, IReadOnlyList<ComponentTemplate> library)
+        string filePath, IReadOnlyList<ComponentTemplate> library, List<string> skippedConnections)
     {
         var orchestrator = new MixedBackendGdsOrchestrator(NazcaExporterProvider?.Invoke());
         var scripts = orchestrator.BuildScripts(
             _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-            MetalRoutingSpecProvider?.Invoke(), library, filePath);
+            MetalRoutingSpecProvider?.Invoke(), library, filePath, skippedConnections);
 
         var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(filePath);
         await File.WriteAllTextAsync(partialPath, scripts.NazcaPartialScript);

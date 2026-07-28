@@ -43,11 +43,20 @@ public class SimpleNazcaExporter
     /// connections are emitted as metal on that layer instead of as optical waveguides.
     /// Null uses <see cref="MetalRoutingSpec.Default"/>.
     /// </param>
+    /// <param name="skippedConnections">
+    /// Optional collector: appended with an "Start.Pin → End.Pin" description for every
+    /// connection or frozen group path left out of the geometry because its route is a
+    /// placeholder or invalid (<see cref="ExportableConnections.IsExportable(RoutedPath?)"/>).
+    /// Populated as a side effect of THIS write, so the caller's post-export report always
+    /// matches what actually landed in the script — a separately recomputed snapshot could
+    /// diverge if routing is still running in the background.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         bool emitVerification = false,
-        MetalRoutingSpec? metalSpec = null)
+        MetalRoutingSpec? metalSpec = null,
+        List<string>? skippedConnections = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
@@ -56,7 +65,7 @@ public class SimpleNazcaExporter
         AppendHeader(sb, interconnectSettings, metal);
         AppendPdkComponentStubs(sb, canvas);
         var componentNames = AppendComponents(sb, canvas, emitVerification);
-        AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer);
+        AppendConnections(sb, canvas, componentNames, metal, interconnectSettings.GdsLayer, skippedConnections);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas);
         if (emitVerification)
@@ -454,7 +463,8 @@ public class SimpleNazcaExporter
         DesignCanvasViewModel canvas,
         Dictionary<Component, string> componentNames,
         MetalRoutingSpec metalSpec,
-        int? gdsLayer = null)
+        int? gdsLayer = null,
+        List<string>? skippedConnections = null)
     {
         var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
@@ -472,10 +482,15 @@ public class SimpleNazcaExporter
             if (conn.StartPin?.ParentComponent?.IsAnalysisTool == true) continue;
             if (conn.EndPin?.ParentComponent?.IsAnalysisTool == true) continue;
 
-            // A blocked/invalid/routeless connection must never render as geometry (field
-            // report: unroutable tight layouts otherwise leak a red/dashed path straight into
-            // the GDS) — the design still exports, just without this connection's geometry.
-            if (!conn.IsExportable()) continue;
+            // A placeholder (self-crossing fallback with no optical model) or invalid
+            // (bend radius violation) route must never render as geometry — the design
+            // still exports, just without this connection's geometry. A missing route is
+            // NOT skipped: it falls back to the pin-to-pin straight below, same as before.
+            if (!conn.IsExportable())
+            {
+                skippedConnections?.Add(ExportableConnections.Describe(conn.StartPin, conn.EndPin));
+                continue;
+            }
 
             // Electrical connections are metal traces, not optical waveguides — emit them on
             // the process metal layer/width instead of the waveguide layer (issue #682). A
@@ -520,7 +535,7 @@ public class SimpleNazcaExporter
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, metalStyle);
+                AppendGroupFrozenPaths(sb, group, metalStyle, skippedConnections);
         }
 
         AppendBridgeMarkers(sb, canvas, metalConnections, metalSpec);
@@ -607,14 +622,23 @@ public class SimpleNazcaExporter
     /// segments. A frozen path between two electrical pins is a metal trace, not an optical
     /// waveguide — the same classification the live connection loop above applies (issue #686
     /// review: this frozen-group path used to call <see cref="AppendSegmentExport"/> without the
-    /// metal style at all, so a frozen electrical route always rendered as a waveguide).
+    /// metal style at all, so a frozen electrical route always rendered as a waveguide). A
+    /// frozen path with placeholder or invalid geometry is left out just like a live
+    /// connection — freezing (grouping) a connection must not bypass the export filter.
     /// </summary>
-    private static void AppendGroupFrozenPaths(StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle)
+    private static void AppendGroupFrozenPaths(
+        StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle,
+        List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
         {
             if (frozenPath?.Path?.Segments?.Count > 0)
             {
+                if (!frozenPath.Path.IsExportable())
+                {
+                    skippedConnections?.Add(ExportableConnections.Describe(frozenPath.StartPin, frozenPath.EndPin));
+                    continue;
+                }
                 var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
                 AppendSegmentExport(sb, frozenPath.Path.Segments, frozenPath.StartPin, frozenPath.EndPin, metal);
             }
@@ -623,7 +647,7 @@ public class SimpleNazcaExporter
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
-                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle);
+                AppendGroupFrozenPaths(sb, nestedGroup, metalStyle, skippedConnections);
         }
     }
 

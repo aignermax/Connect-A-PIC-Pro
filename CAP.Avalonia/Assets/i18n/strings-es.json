@@ -327,6 +327,7 @@
   "Export.GdsFactory.Shadows": "'{0}' oculta el módulo de Python '{1}': elija un nombre de archivo diferente (p. ej., chip1.py).",
   "Export.NotAvailable": "Exportación no disponible",
   "Export.PyEnv.ManagedText": "Gestionado · {0} · {1} · {2} · {3} · {4}",
+  "Export.SkippedConnections.AndMore": "… y {0} más",
   "Export.SkippedConnections.Warning": "Se omitieron {0} conexión(es) con ruta bloqueada o inválida — NO están incluidas en el GDS exportado: {1}",
   "Export.VerilogA.AccessDenied": "✗ Acceso denegado: {0}",
   "Export.VerilogA.ExportFailed": "✗ Error de exportación: {0}",

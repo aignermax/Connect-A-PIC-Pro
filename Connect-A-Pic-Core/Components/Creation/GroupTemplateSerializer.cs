@@ -318,6 +318,7 @@ public static class GroupTemplateSerializer
             EndPinName = path.EndPin.Name,
             IsBlockedFallback = path.Path.IsBlockedFallback,
             IsInvalidGeometry = path.Path.IsInvalidGeometry,
+            IsPlaceholderGeometry = path.Path.IsPlaceholderGeometry,
             Segments = segments,
             ConnectionType = path.ConnectionType.ToString(),
             BendRadiusMicrometers = path.BendRadiusMicrometers,
@@ -353,7 +354,8 @@ public static class GroupTemplateSerializer
         var routedPath = new RoutedPath
         {
             IsBlockedFallback = dto.IsBlockedFallback,
-            IsInvalidGeometry = dto.IsInvalidGeometry
+            IsInvalidGeometry = dto.IsInvalidGeometry,
+            IsPlaceholderGeometry = dto.IsPlaceholderGeometry
         };
 
         foreach (var seg in dto.Segments)
@@ -592,6 +594,14 @@ public class FrozenPathDto
     public string EndPinName { get; set; } = "";
     public bool IsBlockedFallback { get; set; }
     public bool IsInvalidGeometry { get; set; }
+
+    /// <summary>
+    /// Whether the path is an honest placeholder rather than real geometry (the router
+    /// replaced a self-crossing fallback with a straight line). Defaults to false for
+    /// templates saved before this field existed, matching their pre-existing behavior.
+    /// </summary>
+    public bool IsPlaceholderGeometry { get; set; }
+
     public List<SegmentDto> Segments { get; set; } = new();
 
     /// <summary>

@@ -32,6 +32,7 @@ public static class RoutedPathSerializer
             IsValid = path.IsValid,
             IsBlockedFallback = path.IsBlockedFallback,
             IsInvalidGeometry = path.IsInvalidGeometry,
+            IsPlaceholderGeometry = path.IsPlaceholderGeometry,
             TotalLengthMicrometers = path.TotalLengthMicrometers,
             TotalEquivalent90DegreeBends = path.TotalEquivalent90DegreeBends,
         };
@@ -116,6 +117,11 @@ public class RoutedPathDto
     /// Whether the path has geometry violations.
     /// </summary>
     public bool IsInvalidGeometry { get; set; }
+
+    /// <summary>
+    /// Whether the path is an honest placeholder rather than real geometry.
+    /// </summary>
+    public bool IsPlaceholderGeometry { get; set; }
 
     /// <summary>
     /// Total path length in micrometers.

@@ -100,6 +100,38 @@ public class RouteSegmentCacheTests
     }
 
     [Fact]
+    public void PathSegmentConverter_ToRoutedPath_SetsIsInvalidGeometryAndIsPlaceholderGeometry()
+    {
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(
+            dtos, isBlockedFallback: false, isInvalidGeometry: true, isPlaceholderGeometry: true);
+
+        result.ShouldNotBeNull();
+        result!.IsInvalidGeometry.ShouldBeTrue();
+        result.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_DefaultsIsInvalidGeometryAndIsPlaceholderGeometryToFalse()
+    {
+        // Old files predating these fields must load as if neither flag had ever been set.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: false);
+
+        result.ShouldNotBeNull();
+        result!.IsInvalidGeometry.ShouldBeFalse();
+        result.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
     public void PathSegmentConverter_MixedSegments_RoundTrip()
     {
         var segments = new List<PathSegment>
@@ -186,6 +218,8 @@ public class RouteSegmentCacheTests
         connData.ShouldNotBeNull();
         connData!.CachedSegments.ShouldBeNull();
         connData.IsBlockedFallback.ShouldBeNull();
+        connData.IsInvalidGeometry.ShouldBeNull();
+        connData.IsPlaceholderGeometry.ShouldBeNull();
     }
 
     [Fact]
@@ -246,6 +280,33 @@ public class RouteSegmentCacheTests
         restored.CachedSegments[1].Type.ShouldBe("Bend");
         restored.CachedSegments[1].RadiusMicrometers.ShouldBe(10);
         restored.CachedSegments[1].SweepAngleDegrees.ShouldBe(90);
+    }
+
+    [Fact]
+    public void ConnectionData_JsonRoundTrip_PreservesIsInvalidGeometryAndIsPlaceholderGeometry()
+    {
+        var original = new ConnectionData
+        {
+            StartComponentIndex = 0,
+            StartPinName = "output",
+            EndComponentIndex = 1,
+            EndPinName = "input",
+            CachedSegments = new List<PathSegmentData>
+            {
+                new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 1, EndY = 0, StartAngleDegrees = 0 }
+            },
+            IsBlockedFallback = true,
+            IsInvalidGeometry = true,
+            IsPlaceholderGeometry = true,
+        };
+
+        var json = JsonSerializer.Serialize(original);
+        var restored = JsonSerializer.Deserialize<ConnectionData>(json);
+
+        restored.ShouldNotBeNull();
+        restored!.IsBlockedFallback.ShouldBe(true);
+        restored.IsInvalidGeometry.ShouldBe(true);
+        restored.IsPlaceholderGeometry.ShouldBe(true);
     }
 
     [Fact]

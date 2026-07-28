@@ -378,6 +378,8 @@ public partial class FileOperationsViewModel : ObservableObject
                             ? PathSegmentConverter.ToDtoList(c.Connection.RoutedPath.Segments)
                             : null,
                         IsBlockedFallback = c.Connection.IsBlockedFallback ? true : null,
+                        IsInvalidGeometry = c.Connection.RoutedPath?.IsInvalidGeometry == true ? true : null,
+                        IsPlaceholderGeometry = c.Connection.RoutedPath?.IsPlaceholderGeometry == true ? true : null,
                         IsLocked = c.Connection.IsLocked ? true : null,
                         RoutingStyle = c.Connection.Type != WaveguideType.Auto ? c.Connection.Type.ToString() : null,
                         WidthMicrometers = c.Connection.WidthMicrometers,
@@ -1421,7 +1423,8 @@ public partial class FileOperationsViewModel : ObservableObject
             return;
 
         var cachedPath = PathSegmentConverter.ToRoutedPath(
-            connData.CachedSegments, connData.IsBlockedFallback ?? false);
+            connData.CachedSegments, connData.IsBlockedFallback ?? false,
+            connData.IsInvalidGeometry ?? false, connData.IsPlaceholderGeometry ?? false);
 
         // Pin-calibration migration (round-5 review [2]): when a PDK release corrected a
         // component's pin ANGLES (positions unchanged), the saved geometry still touches
@@ -1595,16 +1598,20 @@ public partial class FileOperationsViewModel : ObservableObject
 
             try
             {
-                // Export Python script (metal spec: process-derived electrical routing, #682)
+                // Collected by the exporter as a side effect of writing the script below —
+                // connections/frozen paths whose route is a placeholder or invalid never render
+                // as GDS geometry (a self-crossing fallback has no optical model; invalid
+                // geometry violates the bend radius). Reading it AFTER the write (rather than
+                // recomputing from a live canvas snapshot beforehand) guarantees the report
+                // matches exactly what landed in the script, even while background routing is
+                // still in flight.
+                var skippedConnectionsList = new List<string>();
                 var nazcaCode = _nazcaExporter.Export(
-                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke());
+                    _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke(),
+                    skippedConnections: skippedConnectionsList);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
-                // Connections whose route is missing, blocked, or invalid never render as GDS
-                // geometry (field report: unroutable tight layouts otherwise leak a red/dashed
-                // path into the fab file) — the export still proceeds, but the user must be
-                // told which connections were left out.
-                var skippedConnectionsWarning = BuildSkippedConnectionsWarning();
+                var skippedConnectionsWarning = SkippedConnectionsMessage.Build(skippedConnectionsList);
                 if (skippedConnectionsWarning != null)
                     _errorConsole?.LogWarning(skippedConnectionsWarning);
 
@@ -1682,22 +1689,6 @@ public partial class FileOperationsViewModel : ObservableObject
         UpdateStatus?.Invoke(WithSkippedConnectionsWarning(
             $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)",
             skippedConnectionsWarning));
-    }
-
-    /// <summary>
-    /// Builds the localized "N connections skipped" warning for the connections
-    /// <see cref="SkippedConnectionReporter"/> reports as blocked/invalid/routeless, or
-    /// null when every connection exports cleanly.
-    /// </summary>
-    private string? BuildSkippedConnectionsWarning()
-    {
-        var skipped = SkippedConnectionReporter.CollectSkipped(_canvas);
-        if (skipped.Count == 0)
-            return null;
-
-        return string.Format(
-            Services.Localization.LocalizationService.Instance.Translate("Export.SkippedConnections.Warning"),
-            skipped.Count, string.Join("; ", skipped.Select(SkippedConnectionReporter.Describe)));
     }
 
     /// <summary>Prefixes a status line with the skipped-connections warning, when present,

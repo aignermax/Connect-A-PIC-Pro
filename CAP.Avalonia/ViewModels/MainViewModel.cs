@@ -1317,6 +1317,21 @@ public class ConnectionData
 
     public List<PathSegmentData>? CachedSegments { get; set; }
     public bool? IsBlockedFallback { get; set; }
+
+    /// <summary>
+    /// True when the cached route violates a physical constraint (e.g. bend radius). Null in
+    /// old files (predates this field) — treated as false, matching their pre-existing behavior.
+    /// </summary>
+    public bool? IsInvalidGeometry { get; set; }
+
+    /// <summary>
+    /// True when the cached route is an honest placeholder rather than real geometry (the
+    /// router replaced a self-crossing fallback with a straight line — see
+    /// <see cref="CAP_Core.Routing.RoutedPath.IsPlaceholderGeometry"/>). Null in old files
+    /// (predates this field) — treated as false, matching their pre-existing behavior.
+    /// </summary>
+    public bool? IsPlaceholderGeometry { get; set; }
+
     public bool? IsLocked { get; set; }
 
     /// <summary>Routing style name (WaveguideType); null = Auto (issue #574).</summary>

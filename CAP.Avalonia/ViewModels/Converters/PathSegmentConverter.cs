@@ -64,12 +64,29 @@ public static class PathSegmentConverter
     /// Reconstructs a RoutedPath from serialized segment DTOs.
     /// Returns null if input is null, empty, or contains only unknown segment types.
     /// </summary>
-    public static RoutedPath? ToRoutedPath(List<PathSegmentData>? segmentDtos, bool isBlockedFallback)
+    /// <param name="segmentDtos">Serialized segment geometry.</param>
+    /// <param name="isBlockedFallback">Whether the cached route was flagged blocked.</param>
+    /// <param name="isInvalidGeometry">
+    /// Whether the cached route violates a physical constraint (bend radius); false for
+    /// files saved before this field existed, matching their pre-existing behavior.
+    /// </param>
+    /// <param name="isPlaceholderGeometry">
+    /// Whether the cached route is an honest placeholder rather than real geometry; false
+    /// for files saved before this field existed, matching their pre-existing behavior.
+    /// </param>
+    public static RoutedPath? ToRoutedPath(
+        List<PathSegmentData>? segmentDtos, bool isBlockedFallback,
+        bool isInvalidGeometry = false, bool isPlaceholderGeometry = false)
     {
         if (segmentDtos == null || segmentDtos.Count == 0)
             return null;
 
-        var routedPath = new RoutedPath { IsBlockedFallback = isBlockedFallback };
+        var routedPath = new RoutedPath
+        {
+            IsBlockedFallback = isBlockedFallback,
+            IsInvalidGeometry = isInvalidGeometry,
+            IsPlaceholderGeometry = isPlaceholderGeometry,
+        };
 
         foreach (var dto in segmentDtos)
         {
