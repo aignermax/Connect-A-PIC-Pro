@@ -25,7 +25,7 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         foreach (var conn in vm.Connections)
         {
             if (!WaveguideFilteringHelper.IsConnectionInternalToAnyGroup(conn.Connection, allGroups))
-                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered), rc.Zoom);
+                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered), rc.Zoom, rc.Labels);
         }
 
         if (vm.ShowPowerFlow && rc.InteractionState.HoveredConnection != null)
@@ -33,7 +33,7 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
     }
 
     private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn,
-        DesignCanvasViewModel vm, bool isHovered, double zoom)
+        DesignCanvasViewModel vm, bool isHovered, double zoom, DeferredLabelLayer labels)
     {
         var segments = conn.Connection.GetPathSegments();
         var pen = CreateWaveguidePen(conn, vm, isHovered);
@@ -46,7 +46,7 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
 
         DrawPathSegments(context, pen, segments);
-        DrawConnectionOverlays(context, conn, vm, isHovered, zoom);
+        DrawConnectionOverlays(context, conn, vm, isHovered, zoom, labels);
     }
 
     /// <summary>
@@ -60,9 +60,12 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
     ///   glance — always-on while active, never hover-gated.
     /// - Manual-style badge (Type != Auto): an at-a-glance signal that the autorouter no longer
     ///   owns this route — always-on, independent of both of the above.
+    /// The two plain-text readouts go to the deferred topmost <paramref name="labels"/> queue
+    /// so a component body can never paint over them; the badge is drawn inline because it is
+    /// a compact style tag anchored to the line itself, not a free-floating label.
     /// </summary>
     private static void DrawConnectionOverlays(DrawingContext context, WaveguideConnectionViewModel conn,
-        DesignCanvasViewModel vm, bool isHovered, double zoom)
+        DesignCanvasViewModel vm, bool isHovered, double zoom, DeferredLabelLayer labels)
     {
         var midX = (conn.StartX + conn.EndX) / 2;
         var midY = (conn.StartY + conn.EndY) / 2;
@@ -73,9 +76,9 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         bool showsPowerFlow = !isElectrical && vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null;
 
         if (showsPowerFlow)
-            DrawPowerFlowReadout(context, conn, vm, midX, midY, zoom);
+            DrawPowerFlowReadout(labels, conn, vm, midX, midY, zoom);
         else if (ShouldShowLengthLossLabel(isHovered, conn.IsSelected))
-            DrawLengthLossLabel(context, conn, isElectrical, midX, midY, zoom);
+            DrawLengthLossLabel(labels, conn, isElectrical, midX, midY, zoom);
 
         if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto)
             DrawStyleBadge(context, conn, midX, midY, zoom);
@@ -210,7 +213,7 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
 
     /// <summary>Hover/selection-gated length/loss label — see <see cref="DrawConnectionOverlays"/>
     /// for why this is the only overlay of the three that is ever hidden.</summary>
-    private static void DrawLengthLossLabel(DrawingContext context, WaveguideConnectionViewModel conn,
+    private static void DrawLengthLossLabel(DeferredLabelLayer labels, WaveguideConnectionViewModel conn,
         bool isElectrical, double midX, double midY, double zoom)
     {
         // Metal traces carry no optical loss figure — label them with their length only, in the
@@ -219,15 +222,16 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         IBrush labelBrush = isElectrical ? new SolidColorBrush(ElectricalTraceColor) : Brushes.LightGray;
 
         double fontSize = PinScreenSize.ClampWorldFontSize(LabelFontSizeWorld, zoom);
-        context.DrawText(
+        labels.Enqueue(
             new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight, new Typeface("Arial"), fontSize, labelBrush),
+            labelBrush,
             new Point(midX, midY - 15));
     }
 
     /// <summary>Always-on power-flow readout (dB/% or "no signal") while <c>ShowPowerFlow</c> is
     /// active — see <see cref="DrawConnectionOverlays"/> for why hover never gates this.</summary>
-    private static void DrawPowerFlowReadout(DrawingContext context, WaveguideConnectionViewModel conn,
+    private static void DrawPowerFlowReadout(DeferredLabelLayer labels, WaveguideConnectionViewModel conn,
         DesignCanvasViewModel vm, double midX, double midY, double zoom)
     {
         var flow = vm.PowerFlowVisualizer.GetFlowForConnection(conn.Connection.Id);
@@ -246,9 +250,10 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
 
         double fontSize = PinScreenSize.ClampWorldFontSize(LabelFontSizeWorld, zoom);
-        context.DrawText(
+        labels.Enqueue(
             new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
                 FlowDirection.LeftToRight, new Typeface("Arial"), fontSize, labelBrush),
+            labelBrush,
             new Point(midX, midY - 15));
     }
 

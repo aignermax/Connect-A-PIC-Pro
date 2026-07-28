@@ -171,6 +171,11 @@ public class DesignCanvas : Control
             _pathfindingOverlayRenderer.Render(context, rc);
             _waveguideConnectionRenderer.Render(context, rc);
             _componentRenderer.Render(context, rc);
+            // Deferred text labels (component/pin names, connection readouts) flush AFTER all
+            // component bodies and connection lines, so no geometry can ever paint over a
+            // label — but BEFORE the interaction overlays/handles below, which the user
+            // manipulates and which must keep winning against labels.
+            rc.Labels.Flush(context, Zoom);
             // Analysis-output overlay (#754) sits on top of components so the candidate
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);

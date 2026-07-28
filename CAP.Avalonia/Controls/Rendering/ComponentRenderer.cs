@@ -76,7 +76,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
         // rather than drawn as illegible overlapping text.
         if (visibleNameIds.Contains(comp.Component.Id)
             && _nameLabels.TryGetLabelText(comp.Component.Id) is { } labelText)
-            _pinRenderer.DrawComponentName(context, comp, labelText, isDimmed);
+            _pinRenderer.DrawComponentName(rc.Labels, comp, labelText, isDimmed);
 
         if (comp.IsLocked)
             DrawLockIcon(context, comp);
@@ -114,10 +114,13 @@ public sealed class ComponentRenderer : ICanvasRenderer
                 new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers));
 
             var displayName = child.HumanReadableName ?? child.Identifier;
-            context.DrawText(
+            // Deferred to the topmost label pass like every other name label: a top-level
+            // component drawn after this group must never paint over a child name.
+            var nameBrush = new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
+            rc.Labels.Enqueue(
                 new FormattedText(displayName, System.Globalization.CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight, new Typeface("Arial"), 10,
-                    new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255))),
+                    FlowDirection.LeftToRight, new Typeface("Arial"), 10, nameBrush),
+                nameBrush,
                 new Point(child.PhysicalX + 3, child.PhysicalY + 3));
         }
 
@@ -139,10 +142,10 @@ public sealed class ComponentRenderer : ICanvasRenderer
             ComponentGroupRenderer.RenderGroupLockIcon(context, group, isLockIconHovered);
         }
 
-        RenderGroupPins(context, group, isCurrentEditGroup, isHovered, vm);
+        RenderGroupPins(context, group, isCurrentEditGroup, isHovered, vm, rc.Labels);
     }
 
-    private static void RenderGroupPins(DrawingContext context, ComponentGroup group, bool isCurrentEditGroup, bool isHovered, DesignCanvasViewModel vm)
+    private static void RenderGroupPins(DrawingContext context, ComponentGroup group, bool isCurrentEditGroup, bool isHovered, DesignCanvasViewModel vm, DeferredLabelLayer labels)
     {
         if (!isCurrentEditGroup)
         {
@@ -152,13 +155,13 @@ public sealed class ComponentRenderer : ICanvasRenderer
             foreach (var externalPin in unoccupiedPins)
             {
                 bool isPinHovered = highlightedPin != null && externalPin.InternalPin == highlightedPin;
-                ComponentGroupRenderer.RenderUnoccupiedGroupPin(context, externalPin, group, isPinHovered);
+                ComponentGroupRenderer.RenderUnoccupiedGroupPin(context, externalPin, group, isPinHovered, labels);
             }
         }
         else
         {
             foreach (var externalPin in group.ExternalPins)
-                ComponentGroupRenderer.RenderExternalPin(context, externalPin, group, isHovered);
+                ComponentGroupRenderer.RenderExternalPin(context, externalPin, group, isHovered, labels);
         }
     }
 

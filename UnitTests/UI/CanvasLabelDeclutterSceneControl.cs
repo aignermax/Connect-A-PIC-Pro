@@ -63,8 +63,12 @@ internal sealed class CanvasLabelDeclutterSceneControl : Control
         using var _ = context.PushTransform(
             Matrix.CreateTranslation(-_world.X, -_world.Y) * Matrix.CreateScale(scale, scale));
 
-        // Same draw order as DesignCanvas.Render: waveguides under components.
+        // Same draw order as DesignCanvas.Render: waveguides under components, then the
+        // deferred label flush on top of all geometry (without it no name/length label
+        // would be captured at all — the renderers now enqueue their text instead of
+        // drawing it inline).
         _connectionRenderer.Render(context, rc);
         _componentRenderer.Render(context, rc);
+        rc.Labels.Flush(context, scale);
     }
 }

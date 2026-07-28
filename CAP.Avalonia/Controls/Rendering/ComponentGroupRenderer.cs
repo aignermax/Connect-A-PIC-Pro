@@ -294,8 +294,10 @@ public static class ComponentGroupRenderer
 
     /// <summary>
     /// Renders an external pin for a ComponentGroup.
+    /// The hover pin name is enqueued into <paramref name="labels"/> (deferred topmost pass)
+    /// rather than drawn inline, like every other pin name.
     /// </summary>
-    public static void RenderExternalPin(DrawingContext context, GroupPin pin, ComponentGroup group, bool isHovered)
+    public static void RenderExternalPin(DrawingContext context, GroupPin pin, ComponentGroup group, bool isHovered, DeferredLabelLayer labels)
     {
         // External pins are positioned relative to the group origin
         double pinX = group.PhysicalX + pin.RelativeX;
@@ -325,7 +327,7 @@ public static class ComponentGroupRenderer
                 Brushes.White
             );
 
-            context.DrawText(nameText, new Point(pinX + 8, pinY - 5));
+            labels.Enqueue(nameText, Brushes.White, new Point(pinX + 8, pinY - 5));
         }
     }
 
@@ -337,7 +339,9 @@ public static class ComponentGroupRenderer
     /// <param name="pin">The group pin to render.</param>
     /// <param name="group">The parent component group.</param>
     /// <param name="isHovered">Whether the pin is being hovered.</param>
-    public static void RenderUnoccupiedGroupPin(DrawingContext context, GroupPin pin, ComponentGroup group, bool isHovered)
+    /// <param name="labels">Deferred topmost label layer receiving the hover pin name
+    /// (enqueued, not drawn inline, like every other pin name).</param>
+    public static void RenderUnoccupiedGroupPin(DrawingContext context, GroupPin pin, ComponentGroup group, bool isHovered, DeferredLabelLayer labels)
     {
         // Calculate absolute pin position
         double pinX = group.PhysicalX + pin.RelativeX;
@@ -388,7 +392,7 @@ public static class ComponentGroupRenderer
                 Brushes.White
             );
 
-            context.DrawText(nameText, new Point(pinX + 15, pinY - 15));
+            labels.Enqueue(nameText, Brushes.White, new Point(pinX + 15, pinY - 15));
         }
     }
 

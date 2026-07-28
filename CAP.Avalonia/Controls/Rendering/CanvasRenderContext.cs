@@ -32,4 +32,13 @@ public sealed class CanvasRenderContext
     /// <c>null</c> when the service is not available (e.g. design-time).
     /// </summary>
     public GdsPreviewRenderService? GdsPreviewRenderService { get; init; }
+
+    /// <summary>
+    /// Deferred topmost text layer for this frame: renderers enqueue their free-floating
+    /// labels (component/pin names, connection readouts) here instead of drawing them inline,
+    /// and <see cref="DesignCanvas"/> flushes them after the last geometry pass — see
+    /// <see cref="DeferredLabelLayer"/> for why. A fresh instance per render pass keeps the
+    /// queue lifetime trivially correct.
+    /// </summary>
+    public DeferredLabelLayer Labels { get; } = new();
 }
