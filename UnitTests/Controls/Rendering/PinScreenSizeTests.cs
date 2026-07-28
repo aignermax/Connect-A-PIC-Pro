@@ -53,4 +53,72 @@ public class PinScreenSizeTests
 
         result.ShouldBe(5.0);
     }
+
+    [Theory]
+    [InlineData(10.0, 0.5)]
+    [InlineData(10.0, 1.0)]
+    [InlineData(12.0, 1.0)]
+    public void CapWorldFontSize_BelowCap_ReturnsWorldSizeUnchanged(double worldFontSize, double zoom)
+    {
+        // MaxLabelFontSizePx (14) / zoom exceeds worldFontSize at these combinations, so the
+        // world-space size passes through unchanged — labels still shrink proportionally when
+        // zooming out, exactly like CapWorldRadius.
+        double result = PinScreenSize.CapWorldFontSize(worldFontSize, zoom);
+
+        result.ShouldBe(worldFontSize);
+    }
+
+    [Fact]
+    public void CapWorldFontSize_AtHighZoom_CapsAtMaxLabelFontSizePxDividedByZoom()
+    {
+        const double zoom = 20.0;
+        double result = PinScreenSize.CapWorldFontSize(12.0, zoom);
+
+        result.ShouldBe(PinScreenSize.MaxLabelFontSizePx / zoom, 1e-9);
+        (result * zoom).ShouldBe(PinScreenSize.MaxLabelFontSizePx, 1e-9,
+            "the on-screen font size after the zoom transform must never exceed the cap");
+    }
+
+    [Fact]
+    public void CapWorldFontSize_ScalesProportionally_WhenZoomingOutBelowTheCap()
+    {
+        double atFullZoom = PinScreenSize.CapWorldFontSize(10.0, 1.0);
+        double atLowZoom = PinScreenSize.CapWorldFontSize(10.0, 0.1);
+
+        atLowZoom.ShouldBe(atFullZoom,
+            "zooming out below the cap must not change the world-space size (it still shrinks with the world)");
+    }
+
+    [Fact]
+    public void CapWorldFontSize_TreatsNonPositiveZoomAsOne()
+    {
+        double result = PinScreenSize.CapWorldFontSize(10.0, 0.0);
+
+        result.ShouldBe(10.0);
+    }
+
+    [Theory]
+    [InlineData(12.0, 1.0)]
+    [InlineData(12.0, 0.5)]
+    [InlineData(10.0, 10.0)]
+    public void IsLabelReadable_AtNormalOrHighZoom_ReturnsTrue(double worldFontSize, double zoom)
+    {
+        PinScreenSize.IsLabelReadable(worldFontSize, zoom).ShouldBeTrue();
+    }
+
+    [Fact]
+    public void IsLabelReadable_WhenZoomedFarOut_ReturnsFalse()
+    {
+        // 12 world px * 0.1 zoom = 1.2 screen px, far below MinLabelFontSizePx (6) — the label
+        // has shrunk with the world past legibility and should be hidden, not just capped.
+        PinScreenSize.IsLabelReadable(12.0, 0.1).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void IsLabelReadable_AtExactMinimum_ReturnsTrue()
+    {
+        double zoom = PinScreenSize.MinLabelFontSizePx / 12.0;
+
+        PinScreenSize.IsLabelReadable(12.0, zoom).ShouldBeTrue();
+    }
 }
