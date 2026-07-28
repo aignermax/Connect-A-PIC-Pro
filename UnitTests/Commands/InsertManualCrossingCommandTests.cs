@@ -119,6 +119,35 @@ public class InsertManualCrossingCommandTests
         canvas.ConnectionManager.Connections.ShouldHaveSingleItem().ShouldBeSameAs(original);
     }
 
+    [Fact]
+    public void Execute_OnStaleCandidateAfterAnotherCommandAlreadySplitTheConnection_IsSafeNoOp()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var original = CreateOriginalConnection(canvas);
+        var candidate = CreateCandidate(original);
+        var firstCommand = new InsertManualCrossingCommand(canvas, candidate,
+            new CrossingComponentInstance(CrossingTestCircuit.CreateCrossingComponent(), "Crossing 4-Port", "Test PDK"));
+        var staleCommand = new InsertManualCrossingCommand(canvas, candidate,
+            new CrossingComponentInstance(CrossingTestCircuit.CreateCrossingComponent(), "Crossing 4-Port", "Test PDK"));
+
+        firstCommand.Execute();
+        canvas.Components.Count.ShouldBe(1);
+        canvas.ConnectionManager.Connections.Count.ShouldBe(2);
+
+        // Simulates a double-click: the same (now stale) candidate reaches a second command
+        // before the next render refreshed the candidate list. The original connection it
+        // refers to no longer exists, so this must be a safe no-op, not a second crossing
+        // stacked on the same spot.
+        staleCommand.Execute();
+
+        canvas.Components.Count.ShouldBe(1, "the stale command must not add a second crossing");
+        canvas.ConnectionManager.Connections.Count.ShouldBe(2, "no duplicate connectivity from the stale insert");
+
+        staleCommand.Undo();
+        canvas.Components.Count.ShouldBe(1, "undoing the no-op stale command must not remove the real crossing");
+        canvas.ConnectionManager.Connections.Count.ShouldBe(2);
+    }
+
     private static (DesignCanvasViewModel Canvas, InsertManualCrossingCommand Command,
         WaveguideConnection Original, CrossingComponentInstance Crossing) CreateArrangedCommand()
     {

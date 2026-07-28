@@ -10,8 +10,10 @@ namespace CAP.Avalonia.Controls.Canvas.CutTool;
 /// Draws the Cut tool overlay in the world transform: dashed guide lines
 /// extending from visible pins along their facing axis, and circular markers at each
 /// crossing-insertion candidate. The hovered candidate is drawn larger and filled so
-/// the click target is unmistakable. Sizes are divided by the zoom so they stay
-/// screen-constant. Also triggers the per-frame candidate recomputation.
+/// the click target is unmistakable; a free cut (no guide line, projected onto the
+/// pointer's nearest segment) draws hollow and dashed instead, so the user can tell the two
+/// apart before clicking. Sizes are divided by the zoom so they stay screen-constant. Also
+/// triggers the per-frame candidate recomputation.
 /// </summary>
 public sealed class CutToolOverlayRenderer : ICanvasRenderer
 {
@@ -20,6 +22,8 @@ public sealed class CutToolOverlayRenderer : ICanvasRenderer
     private const double CandidateRadiusPx = 5.0;
     private const double HoveredRadiusPx = 8.0;
     private const double MarkerStrokePx = 1.5;
+    private const double FreeCutStrokePx = 2.0;
+    private const double FreeCutDashPx = 3.0;
 
     private static readonly Color GuideColor = Color.FromArgb(140, 255, 200, 60);
     private static readonly IBrush CandidateFill = new SolidColorBrush(Color.FromArgb(90, 255, 200, 60));
@@ -85,5 +89,23 @@ public sealed class CutToolOverlayRenderer : ICanvasRenderer
             var center = new Point(candidate.IntersectionPoint.X, candidate.IntersectionPoint.Y);
             context.DrawEllipse(hovered ? HoveredFill : CandidateFill, stroke, center, radius, radius);
         }
+
+        // A free-cut candidate is computed live from the pointer position and never appears in
+        // the ambient guide-intersection list above — draw it on its own, hollow and dashed.
+        if (state.HoveredCutCandidate is { IsFreeCut: true } free)
+            DrawFreeCutMarker(context, free, zoom);
+    }
+
+    /// <summary>Hollow, dashed marker for a free-cut candidate — visually distinct from the
+    /// solid snap marker so the user knows this click cuts at the pointer, not a guide intersection.</summary>
+    private static void DrawFreeCutMarker(DrawingContext context, ManualCrossingCandidate free, double zoom)
+    {
+        var pen = new Pen(HoveredFill, FreeCutStrokePx / zoom)
+        {
+            DashStyle = new DashStyle(new[] { FreeCutDashPx, FreeCutDashPx }, 0),
+        };
+        var center = new Point(free.IntersectionPoint.X, free.IntersectionPoint.Y);
+        double radius = HoveredRadiusPx / zoom;
+        context.DrawEllipse(null, pen, center, radius, radius);
     }
 }

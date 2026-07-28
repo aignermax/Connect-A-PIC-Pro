@@ -95,26 +95,83 @@ public class UiFlowCutToolTests
             "a miss keeps the Cut tool armed");
     }
 
-    /// <summary>
-    /// Horizontal waveguide (10,100)→(390,100) with a deterministic straight route, plus a
-    /// guide terminal above it whose south-facing pin ray crosses the waveguide at (200, 100).
-    /// </summary>
+    [AvaloniaFact]
+    public void CutClick_awayFromAnyCandidate_onLongStraight_insertsFreeCrossing()
+    {
+        using var host = new UiFlowTestHost();
+        var vm = host.Vm;
+        var win = host.Window;
+        EnsureCrossingTemplateLoaded(vm);
+        var original = BuildCutScene(vm);
+
+        vm.CanvasInteraction.SetCutModeCommand.Execute(null);
+        UiInput.RunJobs();
+
+        var canvasControl = UiInput.Descendants<DesignCanvas>(win).First();
+        ForceRenderPasses(canvasControl);
+        canvasControl.InteractionState.CutCandidates.ShouldAllBe(
+            c => Math.Abs(c.IntersectionPoint.X - 300) > 20,
+            "the click target below must not coincide with the scene's guide-intersection candidate");
+
+        // Click world (300, 100) — on the same long straight waveguide, far from the guide
+        // candidate at (200, 100), with no guide line reaching there: a free cut.
+        UiInput.ClickAt(win, CanvasPoint(win, canvasControl, 300, 100));
+
+        var crossings = vm.Canvas.Components.Where(
+            c => c.Component.NazcaFunctionName == CrossingComponentInstance.CrossingNazcaFunctionName).ToList();
+        crossings.Count.ShouldBe(1,
+            $"a free cut on the waveguide must insert the crossing (status: {vm.StatusText})");
+        double half = crossings[0].Component.WidthMicrometers / 2.0;
+        (crossings[0].Component.PhysicalX + half).ShouldBe(300.0, 1e-6,
+            "the crossing must center on the projected pointer position, not a guide intersection");
+        vm.Canvas.ConnectionManager.Connections.Count.ShouldBe(2,
+            "the original connection must split into two halves docked at the crossing");
+        vm.Canvas.ConnectionManager.Connections.ShouldNotContain(original);
+    }
+
+    [AvaloniaFact]
+    public void CutClick_twiceRapidlyOnSameCandidate_insertsOnlyOneCrossingAndOneUndoStep()
+    {
+        using var host = new UiFlowTestHost();
+        var vm = host.Vm;
+        var win = host.Window;
+        EnsureCrossingTemplateLoaded(vm);
+        BuildCutScene(vm);
+
+        vm.CanvasInteraction.SetCutModeCommand.Execute(null);
+        UiInput.RunJobs();
+
+        var canvasControl = UiInput.Descendants<DesignCanvas>(win).First();
+        ForceRenderPasses(canvasControl);
+        canvasControl.InteractionState.CutCandidates.ShouldNotBeEmpty();
+
+        int undoCountBefore = vm.CommandManager.UndoCount;
+        var clickPoint = CanvasPoint(win, canvasControl, 200, 100);
+
+        // Two rapid clicks at the same candidate with NO forced render tick in between: the
+        // compositor (and with it CutToolCandidateComputer.Update) only reruns on its own
+        // timer, not on RunJobs, so this reproduces the double-click race where a second
+        // click could still see the just-consumed candidate before the next frame refreshes it.
+        UiInput.ClickAt(win, clickPoint);
+        UiInput.ClickAt(win, clickPoint);
+
+        var crossings = vm.Canvas.Components.Where(
+            c => c.Component.NazcaFunctionName == CrossingComponentInstance.CrossingNazcaFunctionName).ToList();
+        crossings.Count.ShouldBe(1, "the second, stale click must not stack a duplicate crossing");
+        vm.Canvas.ConnectionManager.Connections.Count.ShouldBe(2,
+            "no duplicate connectivity from the stale second click");
+        (vm.CommandManager.UndoCount - undoCountBefore).ShouldBe(1,
+            "the stale click must not push a second entry onto the undo stack");
+    }
+
+    /// <summary>Builds <see cref="CutToolTestScene"/> and pumps the dispatcher so the routed
+    /// connection's view-model is fully wired before the test proceeds.</summary>
     private static CAP_Core.Components.Connections.WaveguideConnection BuildCutScene(
         CAP.Avalonia.ViewModels.MainViewModel vm)
     {
-        var left = CrossingTestCircuit.CreateTerminal("left", 0, 95, pinAngleDegrees: 0);
-        var right = CrossingTestCircuit.CreateTerminal("right", 380, 95, pinAngleDegrees: 180);
-        var guide = CrossingTestCircuit.CreateTerminal("guide", 195, 40, pinAngleDegrees: 90);
-        vm.Canvas.AddComponent(left.Component, "Terminal");
-        vm.Canvas.AddComponent(right.Component, "Terminal");
-        vm.Canvas.AddComponent(guide.Component, "Terminal");
-
-        var route = new RoutedPath();
-        route.Segments.Add(new StraightSegment(10, 100, 390, 100, 0));
-        var connectionVm = vm.Canvas.ConnectPinsWithCachedRoute(
-            left.PhysicalPin, right.PhysicalPin, route);
+        var connection = CutToolTestScene.Build(vm);
         UiInput.RunJobs();
-        return connectionVm!.Connection;
+        return connection;
     }
 
     /// <summary>Loads the bundled SiEPIC crossing template unless the panel already has one.</summary>

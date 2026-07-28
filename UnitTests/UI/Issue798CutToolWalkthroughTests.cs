@@ -8,9 +8,11 @@ using Avalonia.Media.Imaging;
 using Avalonia.Threading;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Controls;
+using CAP.Avalonia.Controls.Canvas.CutTool;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas.CrossingInsertion;
 using CAP_Core.Routing;
+using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 using Shouldly;
 using UnitTests.Helpers;
 using UnitTests.Routing.CrossingInsertion;
@@ -22,9 +24,9 @@ namespace UnitTests.UI;
 /// <summary>
 /// Visual walkthrough for the Cut tool (manual crossing insertion): renders the
 /// production <see cref="CAP.Avalonia.Controls.Canvas.CutTool.CutToolOverlayRenderer"/>
-/// over a waveguide with a pin guide line in four states — armed with guides, hovered
-/// candidate, inserted crossing, and after undo — as step-ordered PNGs + manifest.json in
-/// <c>artifacts/ui-screenshots/issue-798/</c>.
+/// over a waveguide with a pin guide line in five states — armed with guides, hovered
+/// candidate, inserted crossing, after undo, and a free-cut candidate away from any guide —
+/// as step-ordered PNGs + manifest.json in <c>artifacts/ui-screenshots/issue-798/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
 [Collection("LocalizationSingleton")]
@@ -109,26 +111,33 @@ public class Issue798CutToolWalkthroughTests
                 + "restores the original connection with all fine-tuning settings preserved.",
         });
 
+        // Step 5: away from any guide intersection, the pointer still finds a cuttable
+        // straight run — the free-cut candidate renders hollow and dashed, distinct from the
+        // solid snap marker, so the user knows this click cuts at the pointer directly.
+        var template = CrossingComponentInstance.FindCrossingTemplate(vm.LeftPanel.AllTemplates)!;
+        double requiredRun = CutToolCandidateComputer.ComputeRequiredRunMicrometers(template);
+        var segment = (StraightSegment)original.GetPathSegments()[0];
+        state.HoveredCutCandidate = new ManualCrossingCandidateFinder()
+            .TryCreateFreeCandidate(original, segment, (300.0, 100.0), requiredRun);
+        state.HoveredCutCandidate.ShouldNotBeNull();
+        Capture(vm, state, dir, "05-free-cut-candidate.png");
+        manifest.Add(new
+        {
+            file = "05-free-cut-candidate.png",
+            caption = "Away from any guide intersection, the pointer still finds a cuttable "
+                + "straight run: the free-cut candidate renders hollow and dashed — distinct "
+                + "from the solid snap marker — so clicking here cuts exactly at the pointer "
+                + "instead of a precise guide intersection.",
+        });
+
         File.WriteAllText(
             Path.Combine(dir, "manifest.json"),
             JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }));
     }
 
     /// <summary>Horizontal waveguide (10,100)→(390,100) plus a guide terminal above (200,100).</summary>
-    private static CAP_Core.Components.Connections.WaveguideConnection BuildScene(MainViewModel vm)
-    {
-        var left = CrossingTestCircuit.CreateTerminal("left", 0, 95, pinAngleDegrees: 0);
-        var right = CrossingTestCircuit.CreateTerminal("right", 380, 95, pinAngleDegrees: 180);
-        var guide = CrossingTestCircuit.CreateTerminal("guide", 195, 40, pinAngleDegrees: 90);
-        vm.Canvas.AddComponent(left.Component, "Terminal");
-        vm.Canvas.AddComponent(right.Component, "Terminal");
-        vm.Canvas.AddComponent(guide.Component, "Terminal");
-
-        var route = new RoutedPath();
-        route.Segments.Add(new StraightSegment(10, 100, 390, 100, 0));
-        return vm.Canvas.ConnectPinsWithCachedRoute(left.PhysicalPin, right.PhysicalPin, route)!
-            .Connection;
-    }
+    private static CAP_Core.Components.Connections.WaveguideConnection BuildScene(MainViewModel vm) =>
+        CutToolTestScene.Build(vm);
 
     private static void Capture(MainViewModel vm, CanvasInteractionState state,
         string outputDir, string filename)
