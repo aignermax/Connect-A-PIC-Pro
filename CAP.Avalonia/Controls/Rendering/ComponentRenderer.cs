@@ -24,8 +24,9 @@ public sealed class ComponentRenderer : ICanvasRenderer
     public void Render(DrawingContext context, CanvasRenderContext rc)
     {
         var viewport = ComputeViewportWorld(rc);
+        Guid? hoveredComponentId = rc.InteractionState.HoveredComponent?.Component.Id;
         var visibleNameIds = _nameLabels.GetVisibleLabelIds(
-            rc.ViewModel.Components, rc.InteractionState.HoveredComponent, viewport, rc.Zoom);
+            rc.ViewModel.Components, hoveredComponentId, viewport, rc.Zoom);
 
         foreach (var comp in rc.ViewModel.Components)
             DrawComponent(context, comp, rc, visibleNameIds);
@@ -42,7 +43,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
     }
 
     private void DrawComponent(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc,
-        IReadOnlySet<string> visibleNameIds)
+        IReadOnlySet<Guid> visibleNameIds)
     {
         bool isDimmed = IsComponentDimmedInEditMode(comp, rc.ViewModel);
 
@@ -73,8 +74,9 @@ public sealed class ComponentRenderer : ICanvasRenderer
 
         // A name overlapping a higher-priority (selected > hovered > rest) label is skipped
         // rather than drawn as illegible overlapping text.
-        if (visibleNameIds.Contains(comp.Component.Identifier))
-            _pinRenderer.DrawComponentName(context, comp, rc.Zoom, isDimmed);
+        if (visibleNameIds.Contains(comp.Component.Id)
+            && _nameLabels.TryGetLabelText(comp.Component.Id) is { } labelText)
+            _pinRenderer.DrawComponentName(context, comp, labelText, isDimmed);
 
         if (comp.IsLocked)
             DrawLockIcon(context, comp);

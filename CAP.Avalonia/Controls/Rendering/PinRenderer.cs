@@ -73,28 +73,16 @@ internal sealed class PinRenderer
     }
 
     /// <summary>
-    /// Renders the component name label at the top-left of the component. The font size is
-    /// capped in screen pixels (<see cref="PinScreenSize.CapWorldFontSize"/>) so it stops
-    /// growing at high zoom, and the label is skipped entirely once it would shrink below
-    /// <see cref="PinScreenSize.MinLabelFontSizePx"/> at low zoom — callers should already have
-    /// excluded such labels via <see cref="LabelDeclutter.ComponentNameLabelComputer"/>, but the
-    /// check here keeps this method correct on its own.
+    /// Renders the component name label at the top-left of the component, using the
+    /// <see cref="FormattedText"/> <see cref="LabelDeclutter.ComponentNameLabelComputer"/>
+    /// already measured (screen-space font-size clamped, and shared/cached by (name, font size))
+    /// — this method never measures text itself, only applies the current dim brush and draws.
     /// </summary>
-    public void DrawComponentName(DrawingContext context, ComponentViewModel comp, double zoom, bool isDimmed = false)
+    public void DrawComponentName(DrawingContext context, ComponentViewModel comp, FormattedText labelText, bool isDimmed = false)
     {
-        if (!PinScreenSize.IsLabelReadable(NameLabelFontSizeWorld, zoom))
-            return;
-
         byte alpha = (byte)(isDimmed ? 128 : 255);
-        double fontSize = PinScreenSize.CapWorldFontSize(NameLabelFontSizeWorld, zoom);
-        var text = new FormattedText(
-            comp.Name,
-            System.Globalization.CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Arial"),
-            fontSize,
-            new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
-        context.DrawText(text, new Point(comp.X + 5, comp.Y + 5));
+        labelText.SetForegroundBrush(new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
+        context.DrawText(labelText, new Point(comp.X + 5, comp.Y + 5));
     }
 
     /// <summary>
