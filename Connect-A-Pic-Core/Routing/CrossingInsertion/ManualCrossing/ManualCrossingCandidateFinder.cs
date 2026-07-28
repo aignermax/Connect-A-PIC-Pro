@@ -5,7 +5,7 @@ using CAP_Core.Components.PinKinds;
 namespace CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 
 /// <summary>
-/// Computes Cut-tool guide lines and crossing-insertion candidates (issue #798).
+/// Computes Cut-tool guide lines and crossing-insertion candidates.
 /// Guide lines are rays from axis-aligned optical pins; candidates are the
 /// interior intersections of those rays with perpendicular straight waveguide
 /// segments that leave enough straight run to dock a crossing component.

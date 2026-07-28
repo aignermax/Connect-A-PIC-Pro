@@ -12,7 +12,7 @@ using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 namespace CAP.Avalonia.Gestures;
 
 /// <summary>
-/// Handles clicks in Cut mode (issue #798): hovering highlights the nearest
+/// Handles clicks in Cut mode: hovering highlights the nearest
 /// crossing-insertion candidate within a screen-constant radius, and a left click on a
 /// highlighted candidate inserts a crossing component there via the undoable
 /// <see cref="InsertManualCrossingCommand"/>. Clicks on empty canvas are consumed so

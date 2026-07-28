@@ -175,7 +175,7 @@ public class DesignCanvas : Control
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
-            // Cut tool overlay (#798): guide lines and insertion candidates sit above
+            // Cut tool overlay: guide lines and insertion candidates sit above
             // components and waveguides so the clickable markers are never obscured.
             _cutToolOverlayRenderer.Render(context, rc);
             // Handles draw last so they sit on top of the routed path and components; segment

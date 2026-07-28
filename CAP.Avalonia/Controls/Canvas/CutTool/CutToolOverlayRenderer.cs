@@ -7,7 +7,7 @@ using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 namespace CAP.Avalonia.Controls.Canvas.CutTool;
 
 /// <summary>
-/// Draws the Cut tool overlay (issue #798) in the world transform: dashed guide lines
+/// Draws the Cut tool overlay in the world transform: dashed guide lines
 /// extending from visible pins along their facing axis, and circular markers at each
 /// crossing-insertion candidate. The hovered candidate is drawn larger and filled so
 /// the click target is unmistakable. Sizes are divided by the zoom so they stay

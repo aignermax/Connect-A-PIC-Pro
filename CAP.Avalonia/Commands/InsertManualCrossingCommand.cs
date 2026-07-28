@@ -8,10 +8,10 @@ using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 namespace CAP.Avalonia.Commands;
 
 /// <summary>
-/// Inserts a user-placed crossing component at a Cut-tool candidate point (issue #798):
+/// Inserts a user-placed crossing component at a Cut-tool candidate point:
 /// centers the PDK crossing on the intersection, removes the original connection and
-/// docks its two halves onto the crossing's through ports. Unlike adaptive crossings
-/// (issue #553) the component is deliberate user intent: <c>IsInsertedCrossing</c>
+/// docks its two halves onto the crossing's through ports. Unlike adaptive crossings,
+/// the component is deliberate user intent: <c>IsInsertedCrossing</c>
 /// stays false, so the adaptive pass never dissolves or moves it. Undo removes the
 /// crossing and restores the original connection object — its fine-tuning
 /// (bend-radius overrides, segment shifts) survives untouched.

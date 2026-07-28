@@ -10,7 +10,7 @@ using CAP_Core.Routing;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Scene control for the issue #798 walkthrough: draws the placed components and routed
+/// Scene control for the Cut-tool walkthrough: draws the placed components and routed
 /// waveguides of the canvas ViewModel, then invokes the production
 /// <see cref="CutToolOverlayRenderer"/> in the world transform — the same call the
 /// DesignCanvas makes, so guide lines and candidate markers are the shipped pixels

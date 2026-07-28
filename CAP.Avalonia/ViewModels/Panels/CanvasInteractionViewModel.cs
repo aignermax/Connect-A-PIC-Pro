@@ -33,7 +33,7 @@ public enum InteractionMode
     PickAnalysisOutput,
 
     /// <summary>
-    /// Cut tool (#798): guide lines extend from component pins; clicking a highlighted
+    /// Cut tool: guide lines extend from component pins; clicking a highlighted
     /// guide-line/waveguide intersection inserts a crossing component there.
     /// </summary>
     Cut
@@ -825,7 +825,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Activates the Cut tool (#798): pin guide lines and crossing-insertion
+    /// Activates the Cut tool: pin guide lines and crossing-insertion
     /// candidates are shown; clicking a candidate inserts a crossing component.
     /// </summary>
     [RelayCommand]

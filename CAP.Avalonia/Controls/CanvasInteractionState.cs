@@ -76,7 +76,7 @@ public class CanvasInteractionState
     // Laser on/off icon hover state (#690)
     public ComponentViewModel? HoveredLaserIconComponent { get; set; }
 
-    // Cut tool state (issue #798): guide lines from visible pins, insertion candidates on
+    // Cut tool state: guide lines from visible pins, insertion candidates on
     // perpendicular waveguide segments, and the candidate currently under the pointer.
     public IReadOnlyList<PinGuideLine> CutGuideLines { get; set; } = Array.Empty<PinGuideLine>();
     public IReadOnlyList<ManualCrossingCandidate> CutCandidates { get; set; } = Array.Empty<ManualCrossingCandidate>();
@@ -125,7 +125,7 @@ public class CanvasInteractionState
     }
 
     /// <summary>
-    /// Resets all Cut-tool state (issue #798), e.g. when leaving Cut mode.
+    /// Resets all Cut-tool state, e.g. when leaving Cut mode.
     /// </summary>
     public void ResetCutTool()
     {

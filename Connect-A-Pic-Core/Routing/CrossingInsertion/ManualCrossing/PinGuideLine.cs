@@ -3,7 +3,7 @@ using CAP_Core.Components.Core;
 namespace CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 
 /// <summary>
-/// A guide line for the manual Cut tool (issue #798): a ray starting at a
+/// A guide line for the manual Cut tool: a ray starting at a
 /// component pin and extending outward along the pin's facing axis. Where such
 /// a ray crosses a perpendicular waveguide segment, a crossing component can be
 /// inserted so a future connection from the pin can pass straight through.

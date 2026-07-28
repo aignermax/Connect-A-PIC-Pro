@@ -20,7 +20,7 @@ using AvaloniaFactAttribute = Avalonia.Headless.XUnit.AvaloniaFactAttribute;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Visual walkthrough for issue #798 (Cut tool: manual crossing insertion): renders the
+/// Visual walkthrough for the Cut tool (manual crossing insertion): renders the
 /// production <see cref="CAP.Avalonia.Controls.Canvas.CutTool.CutToolOverlayRenderer"/>
 /// over a waveguide with a pin guide line in four states — armed with guides, hovered
 /// candidate, inserted crossing, and after undo — as step-ordered PNGs + manifest.json in

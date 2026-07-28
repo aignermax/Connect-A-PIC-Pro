@@ -8,7 +8,7 @@ using CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 namespace CAP.Avalonia.Controls.Canvas.CutTool;
 
 /// <summary>
-/// Recomputes the Cut tool's guide lines and insertion candidates (issue #798) for the
+/// Recomputes the Cut tool's guide lines and insertion candidates for the
 /// current viewport and writes them into <see cref="CanvasInteractionState"/>, where the
 /// overlay renderer and the gesture recognizer read them. Guide lines originate only from
 /// pins of viewport-visible components, and candidates outside the viewport are dropped,
@@ -62,7 +62,7 @@ public sealed class CutToolCandidateComputer
 
     /// <summary>
     /// Connections the tool may split: sub-connections created by the adaptive crossing
-    /// pass (#553) are skipped — they are transient routing artifacts that the next
+    /// pass are skipped — they are transient routing artifacts that the next
     /// reroute may dissolve, so anchoring a manual crossing to them would be unstable.
     /// </summary>
     private static IEnumerable<CAP_Core.Components.Connections.WaveguideConnection>

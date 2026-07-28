@@ -3,7 +3,7 @@ using CAP_Core.Components.Connections;
 namespace CAP_Core.Routing.CrossingInsertion.ManualCrossing;
 
 /// <summary>
-/// A clickable Cut-tool candidate (issue #798): the point where a pin guide
+/// A clickable Cut-tool candidate: the point where a pin guide
 /// line crosses a perpendicular straight waveguide segment with enough straight
 /// run on both sides to dock a crossing component's ports.
 /// </summary>

@@ -11,7 +11,7 @@ using Xunit;
 namespace UnitTests.Routing.CrossingInsertion.ManualCrossing;
 
 /// <summary>
-/// Tests for the Cut-tool candidate finder (issue #798): guide lines from
+/// Tests for the Cut-tool candidate finder: guide lines from
 /// axis-aligned optical pins and their perpendicular intersections with
 /// straight waveguide segments.
 /// </summary>

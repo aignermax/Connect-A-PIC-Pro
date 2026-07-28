@@ -13,7 +13,7 @@ using Xunit;
 namespace UnitTests.UI.Flows;
 
 /// <summary>
-/// User story for issue #798 (Cut tool): arm Cut mode via the toolbar command, hover the
+/// User story for the Cut tool: arm Cut mode via the toolbar command, hover the
 /// intersection of a pin guide line with a waveguide, CLICK it — a crossing component is
 /// inserted, the connection splits into two halves, and undo restores the original
 /// connection. Clicking empty canvas keeps the tool armed.

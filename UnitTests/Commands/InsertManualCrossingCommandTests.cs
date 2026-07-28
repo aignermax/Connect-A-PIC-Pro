@@ -12,7 +12,7 @@ using Xunit;
 namespace UnitTests.Commands;
 
 /// <summary>
-/// Tests for <see cref="InsertManualCrossingCommand"/> (issue #798): executing
+/// Tests for <see cref="InsertManualCrossingCommand"/>: executing
 /// splits a connection into two halves docked onto a centered crossing, undo
 /// restores the original connection object with its fine-tuning intact.
 /// </summary>
