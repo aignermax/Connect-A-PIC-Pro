@@ -23,9 +23,11 @@ public static class PinScreenSize
     public const double MaxLabelFontSizePx = 14.0;
 
     /// <summary>
-    /// Smallest on-screen font size in pixels still considered legible. Below this, zooming out
-    /// further only produces illegible text, so callers should hide the label entirely — see
-    /// <see cref="IsLabelReadable"/> — rather than keep drawing shrinking noise.
+    /// Smallest on-screen font size in pixels a label is ever drawn at. Below this, zooming out
+    /// further would only produce illegible shrinking text, so <see cref="ClampWorldFontSize"/>
+    /// floors the effective size here instead — the label never disappears (a hovered/selected
+    /// label especially must stay visible; density is instead regulated by overlap-based
+    /// thinning, not by hiding individual labels).
     /// </summary>
     public const double MinLabelFontSizePx = 6.0;
 
@@ -44,34 +46,22 @@ public static class PinScreenSize
     }
 
     /// <summary>
-    /// Caps a world-space font size the same way <see cref="CapWorldRadius"/> caps a pin
-    /// radius: <c>min(worldFontSize, MaxLabelFontSizePx / zoom)</c>. Below the cap the size is
-    /// returned unchanged, so a label still shrinks proportionally with the world when zooming
-    /// out — only zooming in is capped, so text never grows to dominate the screen.
+    /// Clamps a world-space font size so its actual on-screen size — <c>worldFontSize * zoom</c>
+    /// — never leaves <c>[MinLabelFontSizePx, MaxLabelFontSizePx]</c>, then converts the clamped
+    /// screen size back to world units for the caller to pass to <c>FormattedText</c>. Unlike a
+    /// one-sided cap, a label never becomes illegible or invisible at any zoom: it stops growing
+    /// at <see cref="MaxLabelFontSizePx"/> zooming in, and stops shrinking at
+    /// <see cref="MinLabelFontSizePx"/> zooming out instead of vanishing. Canvas-wide clutter at
+    /// low zoom is regulated separately, by overlap-based thinning (see
+    /// <c>LabelDeclutter.LabelOverlapResolver</c>) — a hovered or selected label especially must
+    /// never disappear just because the user zoomed out.
     /// </summary>
     /// <param name="worldFontSize">The label's font size in world units (µm-scaled points).</param>
     /// <param name="zoom">Current canvas zoom factor (screen pixels per world unit).</param>
-    public static double CapWorldFontSize(double worldFontSize, double zoom)
+    public static double ClampWorldFontSize(double worldFontSize, double zoom)
     {
         double safeZoom = zoom <= 0 ? 1.0 : zoom;
-        return Math.Min(worldFontSize, MaxLabelFontSizePx / safeZoom);
-    }
-
-    /// <summary>
-    /// Whether a label at <paramref name="worldFontSize"/> is still legible at
-    /// <paramref name="zoom"/>: its actual on-screen size — <c>worldFontSize</c> capped by
-    /// <see cref="CapWorldFontSize"/>, then scaled back to screen pixels — must reach
-    /// <see cref="MinLabelFontSizePx"/>. The cap only ever shrinks large text, so this still
-    /// correctly goes false once zooming out makes the (uncapped, proportionally shrinking)
-    /// text too small to read. Callers should skip drawing the label entirely rather than
-    /// render illegible text.
-    /// </summary>
-    /// <param name="worldFontSize">The label's font size in world units (µm-scaled points).</param>
-    /// <param name="zoom">Current canvas zoom factor (screen pixels per world unit).</param>
-    public static bool IsLabelReadable(double worldFontSize, double zoom)
-    {
-        double safeZoom = zoom <= 0 ? 1.0 : zoom;
-        double effectiveScreenPx = CapWorldFontSize(worldFontSize, zoom) * safeZoom;
-        return effectiveScreenPx >= MinLabelFontSizePx;
+        double screenPx = Math.Clamp(worldFontSize * safeZoom, MinLabelFontSizePx, MaxLabelFontSizePx);
+        return screenPx / safeZoom;
     }
 }

@@ -46,13 +46,48 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
 
         DrawPathSegments(context, pen, segments);
-
-        // Length/loss is detail info the design already conveys via width/thickness/colour, so
-        // an unselected, unhovered connection stays label-free and only reveals its numbers
-        // on demand.
-        if (isHovered || conn.IsSelected)
-            DrawConnectionLabel(context, conn, vm, zoom);
+        DrawConnectionOverlays(context, conn, vm, isHovered, zoom);
     }
+
+    /// <summary>
+    /// Draws whichever of the three independent text overlays apply, each with its own
+    /// visibility rule — do not fold these back into a single always-on-or-always-off block:
+    /// - Length/loss (or, for an electrical trace, length only): detail info the design already
+    ///   conveys via width/thickness/colour, so it is hover/selection-gated (the actual clutter
+    ///   reduction this feature targets).
+    /// - Power-flow readout (dB/% or "no signal"): a deliberate, already-opt-in visualization
+    ///   mode (ShowPowerFlow) whose entire point is to show every connection's power at a
+    ///   glance — always-on while active, never hover-gated.
+    /// - Manual-style badge (Type != Auto): an at-a-glance signal that the autorouter no longer
+    ///   owns this route — always-on, independent of both of the above.
+    /// </summary>
+    private static void DrawConnectionOverlays(DrawingContext context, WaveguideConnectionViewModel conn,
+        DesignCanvasViewModel vm, bool isHovered, double zoom)
+    {
+        var midX = (conn.StartX + conn.EndX) / 2;
+        var midY = (conn.StartY + conn.EndY) / 2;
+        bool isElectrical = IsElectricalTrace(conn);
+
+        // Electrical traces carry no optical power flow, so they never show the power-flow
+        // readout — their own length-only label takes that slot instead (#682).
+        bool showsPowerFlow = !isElectrical && vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null;
+
+        if (showsPowerFlow)
+            DrawPowerFlowReadout(context, conn, vm, midX, midY, zoom);
+        else if (ShouldShowLengthLossLabel(isHovered, conn.IsSelected))
+            DrawLengthLossLabel(context, conn, isElectrical, midX, midY, zoom);
+
+        if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto)
+            DrawStyleBadge(context, conn, midX, midY, zoom);
+    }
+
+    /// <summary>
+    /// Whether the length/loss label should be drawn: on demand only (hover or selection), the
+    /// only overlay this feature hides by default — extracted as a pure predicate so the gating
+    /// rule itself (as opposed to the power-flow readout and style badge, both always-on) is
+    /// directly unit-testable.
+    /// </summary>
+    internal static bool ShouldShowLengthLossLabel(bool isHovered, bool isSelected) => isHovered || isSelected;
 
     /// <summary>Copper/gold marking electrical (metal) connections, matching the electrical
     /// pin colour in <see cref="PinRenderer"/> (#519/#682).</summary>
@@ -167,71 +202,70 @@ public sealed class WaveguideConnectionRenderer : ICanvasRenderer
         }
     }
 
-    /// <summary>World-space font size for the length/loss label, before the screen-space cap.</summary>
+    /// <summary>World-space font size for the length/loss label, before the screen-space clamp.</summary>
     private const double LabelFontSizeWorld = 10.0;
 
-    /// <summary>World-space font size for the manual-style badge, before the screen-space cap.</summary>
+    /// <summary>World-space font size for the manual-style badge, before the screen-space clamp.</summary>
     private const double BadgeFontSizeWorld = 9.0;
 
-    private static void DrawConnectionLabel(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm, double zoom)
+    /// <summary>Hover/selection-gated length/loss label — see <see cref="DrawConnectionOverlays"/>
+    /// for why this is the only overlay of the three that is ever hidden.</summary>
+    private static void DrawLengthLossLabel(DrawingContext context, WaveguideConnectionViewModel conn,
+        bool isElectrical, double midX, double midY, double zoom)
     {
-        if (!PinScreenSize.IsLabelReadable(LabelFontSizeWorld, zoom))
-            return;
+        // Metal traces carry no optical loss figure — label them with their length only, in the
+        // electrical copper/gold tint (#682).
+        string labelText = isElectrical ? $"{conn.PathLength:F0}µm" : $"{conn.PathLength:F0}µm, {conn.LossDb:F2}dB";
+        IBrush labelBrush = isElectrical ? new SolidColorBrush(ElectricalTraceColor) : Brushes.LightGray;
 
-        var midX = (conn.StartX + conn.EndX) / 2;
-        var midY = (conn.StartY + conn.EndY) / 2;
+        double fontSize = PinScreenSize.ClampWorldFontSize(LabelFontSizeWorld, zoom);
+        context.DrawText(
+            new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight, new Typeface("Arial"), fontSize, labelBrush),
+            new Point(midX, midY - 15));
+    }
+
+    /// <summary>Always-on power-flow readout (dB/% or "no signal") while <c>ShowPowerFlow</c> is
+    /// active — see <see cref="DrawConnectionOverlays"/> for why hover never gates this.</summary>
+    private static void DrawPowerFlowReadout(DrawingContext context, WaveguideConnectionViewModel conn,
+        DesignCanvasViewModel vm, double midX, double midY, double zoom)
+    {
+        var flow = vm.PowerFlowVisualizer.GetFlowForConnection(conn.Connection.Id);
         string labelText;
         IBrush labelBrush;
-
-        // Metal traces carry no optical power, so neither the power-flow figures nor an
-        // optical loss make sense on them — label them with their length only, in the
-        // electrical copper/gold tint (#682).
-        if (IsElectricalTrace(conn))
+        if (flow != null && flow.AveragePower > 0)
         {
-            labelText = $"{conn.PathLength:F0}µm";
-            labelBrush = new SolidColorBrush(ElectricalTraceColor);
-        }
-        else if (vm.ShowPowerFlow && vm.PowerFlowVisualizer.CurrentResult != null)
-        {
-            var flow = vm.PowerFlowVisualizer.GetFlowForConnection(conn.Connection.Id);
-            if (flow != null && flow.AveragePower > 0)
-            {
-                labelText = $"{flow.NormalizedPowerDb:F1}dB ({flow.NormalizedPowerFraction * 100:F0}%)";
-                var fraction = Math.Clamp(flow.NormalizedPowerFraction, 0, 1);
-                labelBrush = new SolidColorBrush(PowerFlowRenderer.InterpolatePowerColor(fraction));
-            }
-            else
-            {
-                labelText = "no signal";
-                labelBrush = new SolidColorBrush(Color.FromArgb(120, 150, 150, 150));
-            }
+            labelText = $"{flow.NormalizedPowerDb:F1}dB ({flow.NormalizedPowerFraction * 100:F0}%)";
+            var fraction = Math.Clamp(flow.NormalizedPowerFraction, 0, 1);
+            labelBrush = new SolidColorBrush(PowerFlowRenderer.InterpolatePowerColor(fraction));
         }
         else
         {
-            labelText = $"{conn.PathLength:F0}µm, {conn.LossDb:F2}dB";
-            labelBrush = Brushes.LightGray;
+            labelText = "no signal";
+            labelBrush = new SolidColorBrush(Color.FromArgb(120, 150, 150, 150));
         }
 
-        double labelFontSize = PinScreenSize.CapWorldFontSize(LabelFontSizeWorld, zoom);
+        double fontSize = PinScreenSize.ClampWorldFontSize(LabelFontSizeWorld, zoom);
         context.DrawText(
             new FormattedText(labelText, System.Globalization.CultureInfo.CurrentCulture,
-                FlowDirection.LeftToRight, new Typeface("Arial"), labelFontSize, labelBrush),
+                FlowDirection.LeftToRight, new Typeface("Arial"), fontSize, labelBrush),
             new Point(midX, midY - 15));
+    }
 
-        // Badge for a manually styled connection (Type != Auto): shows the Nazca style name
-        // above the label so it's obvious at a glance that the autorouter no longer owns this
-        // route. Style names are Nazca terms and stay untranslated, like the picker entries.
-        if (conn.Connection.Type != CAP_Core.Components.Connections.WaveguideType.Auto
-            && PinScreenSize.IsLabelReadable(BadgeFontSizeWorld, zoom))
-        {
-            double badgeFontSize = PinScreenSize.CapWorldFontSize(BadgeFontSizeWorld, zoom);
-            context.DrawText(
-                new FormattedText(conn.Connection.Type.ToString(),
-                    System.Globalization.CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight,
-                    new Typeface("Arial", FontStyle.Normal, FontWeight.Bold), badgeFontSize, Brushes.Orange),
-                new Point(midX, midY - 28));
-        }
+    /// <summary>Always-on badge for a manually styled connection (Type != Auto): shows the Nazca
+    /// style name above the label so it's obvious at a glance that the autorouter no longer owns
+    /// this route — see <see cref="DrawConnectionOverlays"/> for why hover never gates this.
+    /// Style names are Nazca terms and stay untranslated, like the picker entries.</summary>
+    private static void DrawStyleBadge(DrawingContext context, WaveguideConnectionViewModel conn,
+        double midX, double midY, double zoom)
+    {
+        double fontSize = PinScreenSize.ClampWorldFontSize(BadgeFontSizeWorld, zoom);
+        context.DrawText(
+            new FormattedText(conn.Connection.Type.ToString(),
+                System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight,
+                new Typeface("Arial", FontStyle.Normal, FontWeight.Bold), fontSize, Brushes.Orange),
+            new Point(midX, midY - 28));
     }
 
     private static void DrawPowerHoverLabel(DrawingContext context, WaveguideConnectionViewModel conn, DesignCanvasViewModel vm)
