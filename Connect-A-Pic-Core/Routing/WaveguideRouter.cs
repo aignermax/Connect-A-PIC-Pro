@@ -264,8 +264,10 @@ public partial class WaveguideRouter
     /// Flags a fallback path as blocked. A fallback that merely grazes an obstacle keeps its
     /// geometry, but a self-crossing one (the loop/teardrop the CSC router produces for pins
     /// that face away from each other in tight quarters) has no optical model and must never
-    /// reach export — it is replaced by an honest straight line between the pins, still flagged
-    /// blocked so the connection is surfaced as unroutable rather than drawn as a valid loop.
+    /// reach export — it is replaced by an honest straight line between the pins, marked
+    /// <see cref="RoutedPath.IsPlaceholderGeometry"/> so downstream consumers (export, most
+    /// notably) know this is not real geometry, on top of the usual blocked flag that surfaces
+    /// the connection as unroutable rather than drawn as a valid loop.
     /// </summary>
     private static RoutedPath DegradeToBlockedFallback(
         RoutedPath candidate, double startX, double startY, double endX, double endY)
@@ -274,7 +276,7 @@ public partial class WaveguideRouter
         {
             double headingDegrees = AngleUtilities.NormalizeAngle(
                 Math.Atan2(endY - startY, endX - startX) * 180.0 / Math.PI);
-            candidate = new RoutedPath();
+            candidate = new RoutedPath { IsPlaceholderGeometry = true };
             candidate.Segments.Add(new StraightSegment(startX, startY, endX, endY, headingDegrees));
         }
         candidate.IsBlockedFallback = true;

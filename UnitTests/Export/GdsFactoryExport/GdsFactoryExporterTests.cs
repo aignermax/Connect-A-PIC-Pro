@@ -181,7 +181,12 @@ public class GdsFactoryExporterTests
         var b = CreateSinComponent("B", "cspdk.sin300.straight", 50, 0);
         canvas.AddComponent(a, "SiN A");
         canvas.AddComponent(b, "SiN B");
-        canvas.Connections.Add(new WaveguideConnectionViewModel(ConnectDirect(a, b)));
+        canvas.Connections.Add(new WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
 
         var script = ExportStandalone(canvas);
 
@@ -375,28 +380,12 @@ public class GdsFactoryExporterTests
         DesignCanvasViewModel canvas,
         CAP_Core.Components.Core.Component a,
         CAP_Core.Components.Core.Component b) =>
-        canvas.Connections.Add(new WaveguideConnectionViewModel(ConnectDirect(a, b)));
-
-    /// <summary>
-    /// Builds a directly-connected pair with a routed (single straight segment) path — a
-    /// blocked/invalid/routeless connection is skipped from export, so the connection needs
-    /// a real <see cref="RoutedPath"/> to render at all. The single-straight formatters read
-    /// pin positions directly rather than the segment, so the exported geometry is identical
-    /// to the old pin-to-pin fallback.
-    /// </summary>
-    private static CAP_Core.Components.Connections.WaveguideConnection ConnectDirect(
-        CAP_Core.Components.Core.Component a, CAP_Core.Components.Core.Component b)
-    {
-        var connection = new CAP_Core.Components.Connections.WaveguideConnection
-        {
-            StartPin = a.PhysicalPins[0],
-            EndPin = b.PhysicalPins[0],
-        };
-        var path = new RoutedPath();
-        path.Segments.Add(new StraightSegment(0, 0, 1, 0, 0));
-        connection.RestoreCachedPath(path);
-        return connection;
-    }
+        canvas.Connections.Add(new WaveguideConnectionViewModel(
+            new CAP_Core.Components.Connections.WaveguideConnection
+            {
+                StartPin = a.PhysicalPins[0],
+                EndPin = b.PhysicalPins[0],
+            }));
 
     [Fact]
     public void Export_MixedProcessRouting_IsIndependentOfCanvasInsertionOrder()
