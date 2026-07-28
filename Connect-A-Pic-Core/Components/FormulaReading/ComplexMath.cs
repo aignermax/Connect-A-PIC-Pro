@@ -19,52 +19,52 @@ namespace CAP_Core.Grid.FormulaReading
             public static Expression CreateExpressionWithCustomFunctions(string expressionString)
             {
                 var e = new Expression(expressionString);
-                e.EvaluateFunction += delegate (string name, FunctionArgs args)
+                e.EvaluateFunction += delegate (string name, FunctionEventArgs args)
                 {
                     if (name.ToLower() == nameof(ComplexMath.Add).ToLower())
                     {
-                        var a = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var b = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var a = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var b = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.Add(a, b);
                     }
                     if (name.ToLower() == nameof(ComplexMath.Sub).ToLower())
                     {
-                        var a = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var b = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var a = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var b = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.Sub(a, b);
                     }
                     if (name.ToLower() == nameof(ComplexMath.Div).ToLower())
                     {
-                        var a = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var b = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var a = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var b = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.Div(a, b);
                     }
                     if (name.ToLower() == nameof(ComplexMath.Mul).ToLower())
                     {
-                        var a = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var b = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var a = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var b = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.Mul(a, b);
                     }
                     if (name.ToLower() == nameof(ComplexMath.ToComplex).ToLower())
                     {
-                        var real = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var imaginary = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var real = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var imaginary = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.ToComplex(real.Real, imaginary.Real); // if the value was a double, then the phase is 0 so real=magnitude= doubleValue
                     }
                     if (name.ToLower() == nameof(ComplexMath.ToComplexFromPolar).ToLower())
                     {
-                        var magnitude = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var phase = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var magnitude = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var phase = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.ToComplexFromPolar(magnitude.Real, phase.Real);
                     }
                     if (name.ToLower() == nameof(ComplexMath.PhaseShiftFromWGLength).ToLower())
                     {
-                        var wireLength = ConvertToComplex(args.Parameters[0].Evaluate());
-                        var lightWaveLength = ConvertToComplex(args.Parameters[1].Evaluate());
+                        var wireLength = ConvertToComplex(args.Parameters.Evaluate(0));
+                        var lightWaveLength = ConvertToComplex(args.Parameters.Evaluate(1));
                         args.Result = ComplexMath.PhaseShiftFromWGLength(wireLength.Real, lightWaveLength.Real);
                     }
                 };
-                e.EvaluateParameter += (string name, ParameterArgs args) =>
+                e.EvaluateParameter += (string name, ParameterEventArgs args) =>
                 {
                     if (name == "Pi")
                         args.Result = Math.PI;
