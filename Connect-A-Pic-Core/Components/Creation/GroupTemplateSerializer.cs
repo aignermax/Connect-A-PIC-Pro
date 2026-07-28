@@ -355,7 +355,6 @@ public static class GroupTemplateSerializer
         {
             IsBlockedFallback = dto.IsBlockedFallback,
             IsInvalidGeometry = dto.IsInvalidGeometry,
-            IsPlaceholderGeometry = dto.IsPlaceholderGeometry
         };
 
         foreach (var seg in dto.Segments)
@@ -376,6 +375,11 @@ public static class GroupTemplateSerializer
                     seg.StartAngleDegrees));
             }
         }
+
+        // Null means the template predates this field — infer it from the route's shape
+        // instead of trusting a bare false (see FrozenPathDto's doc comment).
+        routedPath.IsPlaceholderGeometry = dto.IsPlaceholderGeometry ??
+            RoutedPathLegacyMigration.InferPlaceholderGeometry(dto.IsBlockedFallback, routedPath.Segments);
 
         var frozenPath = new FrozenWaveguidePath
         {
@@ -597,10 +601,12 @@ public class FrozenPathDto
 
     /// <summary>
     /// Whether the path is an honest placeholder rather than real geometry (the router
-    /// replaced a self-crossing fallback with a straight line). Defaults to false for
-    /// templates saved before this field existed, matching their pre-existing behavior.
+    /// replaced a self-crossing fallback with a straight line). Nullable — always written
+    /// as an explicit true/false when serialized, so null unambiguously means the template
+    /// predates this field; deserialization then infers it from the route's shape instead
+    /// of trusting a bare false.
     /// </summary>
-    public bool IsPlaceholderGeometry { get; set; }
+    public bool? IsPlaceholderGeometry { get; set; }
 
     public List<SegmentDto> Segments { get; set; } = new();
 

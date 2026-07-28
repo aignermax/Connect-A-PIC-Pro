@@ -132,6 +132,62 @@ public class RouteSegmentCacheTests
     }
 
     [Fact]
+    public void PathSegmentConverter_ToRoutedPath_LegacyBlockedSingleStraight_MigratesToPlaceholderGeometry()
+    {
+        // A file saved between the router's self-crossing degrade-to-blocked-fallback step
+        // shipping and IsPlaceholderGeometry being introduced has exactly this shape (blocked,
+        // one straight segment) with no explicit placeholder field — must migrate to true,
+        // not silently load as false and re-export the placeholder line.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: true);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_ExplicitFalsePlaceholder_IsNotOverriddenByMigration()
+    {
+        // A file saved by a version that DOES know about the field, with the flag genuinely
+        // false, must not be reclassified just because it happens to share the legacy shape.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(
+            dtos, isBlockedFallback: true, isPlaceholderGeometry: false);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_LegacyBlockedMultiSegment_IsNotMigrated()
+    {
+        // A blocked fallback with more than one segment does not match the placeholder's
+        // shape (a lone straight line) — it is real (if messy) routed geometry.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 50, EndY = 0, StartAngleDegrees = 0 },
+            new()
+            {
+                Type = "Bend", StartX = 50, StartY = 0, EndX = 60, EndY = 10, StartAngleDegrees = 0,
+                CenterX = 50, CenterY = 10, RadiusMicrometers = 10, SweepAngleDegrees = 90
+            },
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: true);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
     public void PathSegmentConverter_MixedSegments_RoundTrip()
     {
         var segments = new List<PathSegment>

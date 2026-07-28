@@ -1327,8 +1327,11 @@ public class ConnectionData
     /// <summary>
     /// True when the cached route is an honest placeholder rather than real geometry (the
     /// router replaced a self-crossing fallback with a straight line — see
-    /// <see cref="CAP_Core.Routing.RoutedPath.IsPlaceholderGeometry"/>). Null in old files
-    /// (predates this field) — treated as false, matching their pre-existing behavior.
+    /// <see cref="CAP_Core.Routing.RoutedPath.IsPlaceholderGeometry"/>). Written as an
+    /// explicit true/false whenever a route was cached (never omitted just because it is
+    /// false), so null unambiguously means the file predates this field — <see
+    /// cref="CAP.Avalonia.ViewModels.Converters.PathSegmentConverter.ToRoutedPath"/> then
+    /// infers it from the route's shape instead of trusting a bare false.
     /// </summary>
     public bool? IsPlaceholderGeometry { get; set; }
 

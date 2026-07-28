@@ -71,12 +71,16 @@ public static class PathSegmentConverter
     /// files saved before this field existed, matching their pre-existing behavior.
     /// </param>
     /// <param name="isPlaceholderGeometry">
-    /// Whether the cached route is an honest placeholder rather than real geometry; false
-    /// for files saved before this field existed, matching their pre-existing behavior.
+    /// Whether the cached route is an honest placeholder rather than real geometry. Null
+    /// means the file predates this field (never written as an explicit true/false) — the
+    /// flag is then inferred from the route's shape via
+    /// <see cref="RoutedPathLegacyMigration.InferPlaceholderGeometry"/> rather than trusted
+    /// as false, so a self-crossing placeholder saved before the field existed does not
+    /// silently re-export.
     /// </param>
     public static RoutedPath? ToRoutedPath(
         List<PathSegmentData>? segmentDtos, bool isBlockedFallback,
-        bool isInvalidGeometry = false, bool isPlaceholderGeometry = false)
+        bool isInvalidGeometry = false, bool? isPlaceholderGeometry = null)
     {
         if (segmentDtos == null || segmentDtos.Count == 0)
             return null;
@@ -85,7 +89,6 @@ public static class PathSegmentConverter
         {
             IsBlockedFallback = isBlockedFallback,
             IsInvalidGeometry = isInvalidGeometry,
-            IsPlaceholderGeometry = isPlaceholderGeometry,
         };
 
         foreach (var dto in segmentDtos)
@@ -97,6 +100,12 @@ public static class PathSegmentConverter
             }
         }
 
-        return routedPath.Segments.Count > 0 ? routedPath : null;
+        if (routedPath.Segments.Count == 0)
+            return null;
+
+        routedPath.IsPlaceholderGeometry = isPlaceholderGeometry ??
+            RoutedPathLegacyMigration.InferPlaceholderGeometry(isBlockedFallback, routedPath.Segments);
+
+        return routedPath;
     }
 }

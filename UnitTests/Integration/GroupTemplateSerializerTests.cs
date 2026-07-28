@@ -101,6 +101,42 @@ public class GroupTemplateSerializerTests
     }
 
     [Fact]
+    public void Deserialize_LegacyBlockedSingleStraightFrozenPath_MigratesToPlaceholderGeometry()
+    {
+        // A template saved between the router's self-crossing degrade-to-blocked-fallback
+        // step shipping and IsPlaceholderGeometry being introduced has exactly this shape
+        // (blocked, one straight segment) with no IsPlaceholderGeometry field at all — must
+        // migrate to true on load, not silently re-export the placeholder line.
+        var group = CreateGroupWithChildren(2);
+        var comp1 = group.ChildComponents[0];
+        var comp2 = group.ChildComponents[1];
+
+        var routedPath = new RoutedPath { IsBlockedFallback = true };
+        routedPath.Segments.Add(new StraightSegment(50, 0, 100, 0, 0));
+
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            PathId = Guid.NewGuid(),
+            StartPin = comp1.PhysicalPins[1],
+            EndPin = comp2.PhysicalPins[0],
+            Path = routedPath
+        });
+
+        var json = GroupTemplateSerializer.Serialize(group);
+
+        // Simulate a template saved before the field existed: strip it entirely rather than
+        // leaving it "false", so the migration must infer it from the route's shape.
+        var node = System.Text.Json.Nodes.JsonNode.Parse(json)!;
+        node["InternalPaths"]![0]!.AsObject().Remove("IsPlaceholderGeometry");
+        var legacyJson = node.ToJsonString();
+
+        var result = GroupTemplateSerializer.Deserialize(legacyJson);
+
+        result.ShouldNotBeNull();
+        result!.InternalPaths[0].Path.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
     public void SerializeAndDeserialize_WithArcSegment_PreservesGeometry()
     {
         // Arrange
