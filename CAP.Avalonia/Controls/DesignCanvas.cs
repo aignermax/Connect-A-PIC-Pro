@@ -304,7 +304,7 @@ public class DesignCanvas : Control
             new SegmentShiftGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PanGestureRecognizer(_interactionState, InvalidateVisual),
             new CutToolGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
-            new ConnectionGestureRecognizer(_interactionState, InvalidateVisual),
+            new ConnectionGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),
             new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),

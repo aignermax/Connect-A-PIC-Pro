@@ -204,10 +204,17 @@ public class DesignCanvasHitTesting
     /// In group edit mode, only tests pins of child components in the current edit group.
     /// Outside edit mode, also tests unoccupied group pins for external connections.
     /// </summary>
-    public static PhysicalPin? HitTestPin(Point canvasPoint, DesignCanvasViewModel? vm)
+    /// <param name="zoom">
+    /// Current canvas zoom, so the hit radius caps at <see cref="PinScreenSize.MaxRadiusPx"/>
+    /// screen pixels at high zoom — matching the capped pin glyph <see cref="PinRenderer"/>
+    /// draws, so the clickable area never outgrows what's visually shown. Below the cap
+    /// (zoom ≤ 1, the default) the radius is the original world-space constant, unchanged.
+    /// </param>
+    public static PhysicalPin? HitTestPin(Point canvasPoint, DesignCanvasViewModel? vm, double zoom = 1.0)
     {
         if (vm == null) return null;
 
+        double hitRadius = PinScreenSize.CapWorldRadius(PinHitRadius, zoom);
         PhysicalPin? nearest = null;
         double nearestDistance = double.MaxValue;
 
@@ -220,7 +227,7 @@ public class DesignCanvasHitTesting
                 {
                     var (pinX, pinY) = pin.GetAbsolutePosition();
                     var distance = Math.Sqrt(Math.Pow(canvasPoint.X - pinX, 2) + Math.Pow(canvasPoint.Y - pinY, 2));
-                    if (distance < nearestDistance && distance <= PinHitRadius)
+                    if (distance < nearestDistance && distance <= hitRadius)
                     {
                         nearest = pin;
                         nearestDistance = distance;
@@ -237,7 +244,7 @@ public class DesignCanvasHitTesting
                 {
                     var (pinX, pinY) = pin.GetAbsolutePosition();
                     var distance = Math.Sqrt(Math.Pow(canvasPoint.X - pinX, 2) + Math.Pow(canvasPoint.Y - pinY, 2));
-                    if (distance < nearestDistance && distance <= PinHitRadius)
+                    if (distance < nearestDistance && distance <= hitRadius)
                     {
                         nearest = pin;
                         nearestDistance = distance;
@@ -251,7 +258,7 @@ public class DesignCanvasHitTesting
                     if (groupPinHit.Pin != null)
                     {
                         var distance = groupPinHit.Distance;
-                        if (distance < nearestDistance && distance <= PinHitRadius)
+                        if (distance < nearestDistance && distance <= hitRadius)
                         {
                             nearest = groupPinHit.Pin.InternalPin;
                             nearestDistance = distance;

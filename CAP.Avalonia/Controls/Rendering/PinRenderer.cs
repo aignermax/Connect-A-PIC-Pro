@@ -38,18 +38,18 @@ internal sealed class PinRenderer
                 PinConnectionAffordance.IsIncompatibleTarget(dragStartPin, pin);
             byte alpha = isIncompatibleTarget ? (byte)(baseAlpha / 3) : baseAlpha;
 
-            double pinSize = isConnectMode ? 8 : 5;
+            double pinSize = PinScreenSize.CapWorldRadius(isConnectMode ? 8 : 5, rc.Zoom);
             IBrush pinBrush = GetPinBrush(isHighlighted, isConnectMode, pin, alpha);
 
             if (isHighlighted)
             {
-                pinSize = 12;
+                pinSize = PinScreenSize.CapWorldRadius(12, rc.Zoom);
                 var glowBrush = new SolidColorBrush(Color.FromArgb((byte)(100 * alpha / 255), 0, 255, 255));
                 context.DrawEllipse(glowBrush, null, new Point(pinX, pinY), pinSize * 1.5, pinSize * 1.5);
             }
 
             DrawPinShape(context, pin, pinBrush, pinX, pinY, pinSize, alpha);
-            DrawPinDirectionIndicator(context, pin, pinX, pinY, isHighlighted, isDimmed);
+            DrawPinDirectionIndicator(context, pin, pinX, pinY, isHighlighted, isDimmed, rc.Zoom);
 
             if (isHighlighted)
             {
@@ -151,7 +151,9 @@ internal sealed class PinRenderer
         return new SolidColorBrush(Color.FromArgb(alpha, 200, 100, 100));
     }
 
-    private static void DrawPinDirectionIndicator(DrawingContext context, PhysicalPin pin, double pinX, double pinY, bool isHighlighted, bool isDimmed)
+    private static void DrawPinDirectionIndicator(
+        DrawingContext context, PhysicalPin pin, double pinX, double pinY,
+        bool isHighlighted, bool isDimmed, double zoom)
     {
         byte alpha = (byte)(isDimmed ? 128 : 255);
         var dirBrush = isHighlighted
@@ -159,7 +161,7 @@ internal sealed class PinRenderer
             : new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
         var dirPen = new Pen(dirBrush, isHighlighted ? 2 : 1);
         double angle = pin.GetAbsoluteAngle() * Math.PI / 180;
-        double dirLength = isHighlighted ? 20 : 15;
+        double dirLength = PinScreenSize.CapWorldRadius(isHighlighted ? 20 : 15, zoom);
         context.DrawLine(dirPen,
             new Point(pinX, pinY),
             new Point(pinX + Math.Cos(angle) * dirLength, pinY + Math.Sin(angle) * dirLength));
