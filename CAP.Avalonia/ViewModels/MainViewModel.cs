@@ -777,6 +777,9 @@ public partial class MainViewModel : ObservableObject
     private void SetProbeMode() => CanvasInteraction.SetProbeModeCommand.Execute(null);
 
     [RelayCommand]
+    private void SetCutMode() => CanvasInteraction.SetCutModeCommand.Execute(null);
+
+    [RelayCommand]
     private void DeleteSelected() => CanvasInteraction.DeleteSelectedCommand.Execute(null);
 
     [RelayCommand]

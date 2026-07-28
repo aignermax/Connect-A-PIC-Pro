@@ -21,6 +21,11 @@
   <ItemGroup>
     <PackageReference Include="Avalonia.Desktop" Version="11.2.1" />
     <PackageReference Include="Avalonia.Diagnostics" Version="11.2.1" Condition="'$(Configuration)' == 'Debug'" />
+    <!-- Explicit pin: Avalonia.FreeDesktop (via Avalonia.Desktop) still requests
+         Tmds.DBus.Protocol 0.20.0, which carries GHSA-xrw6-gwf8-vvr9 (high severity).
+         0.21.3 is the first patched version; pin it directly until Avalonia bumps
+         its own floor. -->
+    <PackageReference Include="Tmds.DBus.Protocol" Version="0.21.3" />
   </ItemGroup>
 
   <ItemGroup>

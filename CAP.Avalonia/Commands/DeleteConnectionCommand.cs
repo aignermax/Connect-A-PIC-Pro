@@ -57,9 +57,7 @@ public class DeleteConnectionCommand : IUndoableCommand
 
     public void Undo()
     {
-        _canvas.ConnectionManager.AddExistingConnection(_target);
-        if (!_canvas.Connections.Any(c => c.Connection == _target))
-            _canvas.Connections.Add(new WaveguideConnectionViewModel(_target));
+        _canvas.RestoreConnectionAndViewModel(_target);
         _ = _canvas.RecalculateRoutesAsync();
     }
 }

@@ -2,6 +2,7 @@ using Avalonia;
 using Avalonia.Input;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Controls;
+using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
@@ -16,14 +17,20 @@ namespace CAP.Avalonia.Gestures;
 /// </summary>
 public class ConnectionGestureRecognizer : IGestureRecognizer
 {
+    /// <summary>World-space pin snap/hover distance below the screen-space cap (µm),
+    /// matching <see cref="DesignCanvasHitTesting"/>'s click hit radius.</summary>
+    private const double BaseHighlightDistanceMicrometers = 15.0;
+
     private readonly CanvasInteractionState _state;
     private readonly Action _invalidate;
+    private readonly Func<double> _getZoom;
 
     /// <summary>Initializes a new instance of <see cref="ConnectionGestureRecognizer"/>.</summary>
-    public ConnectionGestureRecognizer(CanvasInteractionState state, Action invalidate)
+    public ConnectionGestureRecognizer(CanvasInteractionState state, Action invalidate, Func<double> getZoom)
     {
         _state = state;
         _invalidate = invalidate;
+        _getZoom = getZoom;
     }
 
     /// <inheritdoc/>
@@ -32,7 +39,7 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
         if (mainVm?.CanvasInteraction.CurrentMode != InteractionMode.Connect) return false;
         if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return false;
 
-        var pin = canvas.HighlightedPin?.Pin ?? DesignCanvasHitTesting.HitTestPin(canvasPoint, canvas);
+        var pin = canvas.HighlightedPin?.Pin ?? DesignCanvasHitTesting.HitTestPin(canvasPoint, canvas, _getZoom());
         if (pin != null)
         {
             _state.ConnectionDragStartPin = pin;
@@ -53,6 +60,12 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
     public void UpdatePassiveState(Point canvasPoint, DesignCanvasViewModel canvas, MainViewModel? mainVm)
     {
         if (mainVm?.CanvasInteraction.CurrentMode != InteractionMode.Connect) return;
+
+        // The highlight distance is screen-space capped the same way the hit radius and the
+        // pin glyph itself are — otherwise a hover ring drawn at the capped (small) glyph size
+        // could still snap from a much larger, uncapped world-space distance at high zoom.
+        canvas.PinHighlight.PinHighlightDistance =
+            PinScreenSize.CapWorldRadius(BaseHighlightDistanceMicrometers, _getZoom());
 
         if (_state.ConnectionDragStartPin == null)
         {

@@ -72,6 +72,23 @@ public static class CrossingGeometry
     }
 
     /// <summary>
+    /// True when <paramref name="direction"/> alone is aligned with a cardinal axis within
+    /// tolerance — the single-direction counterpart of <see cref="IsAxisAlignedRightAngle"/>,
+    /// used where there is no second direction to pair against (the Cut tool's free-cut path,
+    /// which projects onto a segment directly instead of a guide/segment intersection).
+    /// </summary>
+    /// <param name="direction">Unit travel direction of the segment.</param>
+    /// <param name="toleranceDegrees">Allowed deviation from the axis in degrees.</param>
+    /// <param name="isHorizontal">True when the direction is the horizontal one.</param>
+    public static bool IsCardinalDirection(
+        (double X, double Y) direction, double toleranceDegrees, out bool isHorizontal)
+    {
+        isHorizontal = IsAxisAligned(direction, horizontal: true, toleranceDegrees);
+        if (isHorizontal) return true;
+        return IsAxisAligned(direction, horizontal: false, toleranceDegrees);
+    }
+
+    /// <summary>
     /// Verifies the segment runs straight for at least <paramref name="requiredRunMicrometers"/>
     /// on both sides of the intersection point, so the crossing ports can dock cleanly.
     /// </summary>
