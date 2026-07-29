@@ -318,6 +318,7 @@ public static class GroupTemplateSerializer
             EndPinName = path.EndPin.Name,
             IsBlockedFallback = path.Path.IsBlockedFallback,
             IsInvalidGeometry = path.Path.IsInvalidGeometry,
+            IsPlaceholderGeometry = path.Path.IsPlaceholderGeometry,
             Segments = segments,
             ConnectionType = path.ConnectionType.ToString(),
             BendRadiusMicrometers = path.BendRadiusMicrometers,
@@ -353,7 +354,7 @@ public static class GroupTemplateSerializer
         var routedPath = new RoutedPath
         {
             IsBlockedFallback = dto.IsBlockedFallback,
-            IsInvalidGeometry = dto.IsInvalidGeometry
+            IsInvalidGeometry = dto.IsInvalidGeometry,
         };
 
         foreach (var seg in dto.Segments)
@@ -374,6 +375,11 @@ public static class GroupTemplateSerializer
                     seg.StartAngleDegrees));
             }
         }
+
+        // Null means the template predates this field — infer it from the route's shape
+        // instead of trusting a bare false (see FrozenPathDto's doc comment).
+        routedPath.IsPlaceholderGeometry = dto.IsPlaceholderGeometry ??
+            RoutedPathLegacyMigration.InferPlaceholderGeometry(dto.IsBlockedFallback, routedPath.Segments);
 
         var frozenPath = new FrozenWaveguidePath
         {
@@ -592,6 +598,16 @@ public class FrozenPathDto
     public string EndPinName { get; set; } = "";
     public bool IsBlockedFallback { get; set; }
     public bool IsInvalidGeometry { get; set; }
+
+    /// <summary>
+    /// Whether the path is an honest placeholder rather than real geometry (the router
+    /// replaced a self-crossing fallback with a straight line). Nullable — always written
+    /// as an explicit true/false when serialized, so null unambiguously means the template
+    /// predates this field; deserialization then infers it from the route's shape instead
+    /// of trusting a bare false.
+    /// </summary>
+    public bool? IsPlaceholderGeometry { get; set; }
+
     public List<SegmentDto> Segments { get; set; } = new();
 
     /// <summary>

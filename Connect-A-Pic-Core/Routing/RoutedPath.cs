@@ -22,6 +22,20 @@ public class RoutedPath
     public bool IsInvalidGeometry { get; set; } = false;
 
     /// <summary>
+    /// True when these segments are an honest placeholder rather than a real route: the router
+    /// gave up on a self-crossing fallback (no optical model) and replaced it with a straight
+    /// line between the pins, purely so the connection has SOME geometry to flag as unroutable
+    /// (see <see cref="WaveguideRouter"/>'s degrade-to-blocked-fallback step). Distinct from
+    /// <see cref="IsBlockedFallback"/>, which also covers two cases that ARE real, exportable
+    /// geometry: a fallback that merely grazes an obstacle without looping, and the crossing
+    /// diagnostic <c>WaveguideConnectionManager</c> stamps on an unresolved sibling overlap
+    /// (including a metal/optical crossing legitimately resolved by a bridge marker). Export
+    /// eligibility must key off this flag (and <see cref="IsInvalidGeometry"/>), never off
+    /// <see cref="IsBlockedFallback"/> alone.
+    /// </summary>
+    public bool IsPlaceholderGeometry { get; set; } = false;
+
+    /// <summary>
     /// True when the path could only be routed with a bend radius below the active
     /// fabrication process' minimum (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>).
     /// The geometry itself is clean, but the design violates the process rule; the
@@ -62,12 +76,22 @@ public class RoutedPath
     /// (bend-radius handles mutate segments in place) silently corrupt the stored
     /// original. <c>DebugGridPath</c> is not copied — it is diagnostic-only.
     /// </summary>
-    public RoutedPath DeepCopy()
+    public RoutedPath DeepCopy() => TranslatedCopy(0, 0);
+
+    /// <summary>
+    /// Creates an independent deep copy with every segment shifted by (dx, dy).
+    /// A pure translation leaves angles, radii and sweeps untouched, so the exact
+    /// shape — including manually edited bend radii — is preserved.
+    /// </summary>
+    /// <param name="dx">Shift along X in micrometers.</param>
+    /// <param name="dy">Shift along Y in micrometers.</param>
+    public RoutedPath TranslatedCopy(double dx, double dy)
     {
         var copy = new RoutedPath
         {
             IsBlockedFallback = IsBlockedFallback,
             IsInvalidGeometry = IsInvalidGeometry,
+            IsPlaceholderGeometry = IsPlaceholderGeometry,
             ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
             PassesThroughComponent = PassesThroughComponent
         };
@@ -78,18 +102,18 @@ public class RoutedPath
             {
                 case BendSegment bend:
                     copy.Segments.Add(new BendSegment(
-                        bend.Center.X,
-                        bend.Center.Y,
+                        bend.Center.X + dx,
+                        bend.Center.Y + dy,
                         bend.RadiusMicrometers,
                         bend.StartAngleDegrees,
                         bend.SweepAngleDegrees));
                     break;
                 case StraightSegment straight:
                     copy.Segments.Add(new StraightSegment(
-                        straight.StartPoint.X,
-                        straight.StartPoint.Y,
-                        straight.EndPoint.X,
-                        straight.EndPoint.Y,
+                        straight.StartPoint.X + dx,
+                        straight.StartPoint.Y + dy,
+                        straight.EndPoint.X + dx,
+                        straight.EndPoint.Y + dy,
                         straight.StartAngleDegrees));
                     break;
             }

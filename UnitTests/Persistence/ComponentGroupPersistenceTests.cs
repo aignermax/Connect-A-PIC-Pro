@@ -218,6 +218,91 @@ public class ComponentGroupPersistenceTests
     }
 
     [Fact]
+    public void FromDto_LegacyBlockedSingleStraightFrozenPath_MigratesToPlaceholderGeometry()
+    {
+        // A design file saved between the router's self-crossing degrade-to-blocked-fallback
+        // step shipping and IsPlaceholderGeometry being introduced has exactly this shape
+        // (blocked, one straight segment) with no IsPlaceholderGeometry field at all — must
+        // migrate to true on load, not silently re-export the placeholder line.
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var comp2 = CreateTestComponent("comp2", 100, 0);
+        var componentLookup = new Dictionary<string, Component> { { "comp1", comp1 }, { "comp2", comp2 } };
+
+        var dto = new ComponentGroupDto
+        {
+            GroupName = "TestGroup",
+            Identifier = "group_test",
+            ChildComponentIds = new List<string> { "comp1", "comp2" },
+            InternalPaths = new List<FrozenPathDto>
+            {
+                new FrozenPathDto
+                {
+                    PathId = Guid.NewGuid().ToString(),
+                    StartComponentId = "comp1",
+                    StartPinName = "o1",
+                    EndComponentId = "comp2",
+                    EndPinName = "o1",
+                    IsBlockedFallback = true,
+                    // IsPlaceholderGeometry intentionally left unset (null) — simulates a
+                    // design file saved before the field existed.
+                    Segments = new List<PathSegmentDto>
+                    {
+                        new PathSegmentDto
+                        {
+                            Type = "straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0,
+                            StartAngleDegrees = 0, EndAngleDegrees = 0
+                        }
+                    }
+                }
+            }
+        };
+
+        var group = ComponentGroupSerializer.FromDto(dto, componentLookup);
+
+        group.InternalPaths[0].Path.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void FromDto_ExplicitFalsePlaceholderFrozenPath_IsNotOverriddenByMigration()
+    {
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var comp2 = CreateTestComponent("comp2", 100, 0);
+        var componentLookup = new Dictionary<string, Component> { { "comp1", comp1 }, { "comp2", comp2 } };
+
+        var dto = new ComponentGroupDto
+        {
+            GroupName = "TestGroup",
+            Identifier = "group_test",
+            ChildComponentIds = new List<string> { "comp1", "comp2" },
+            InternalPaths = new List<FrozenPathDto>
+            {
+                new FrozenPathDto
+                {
+                    PathId = Guid.NewGuid().ToString(),
+                    StartComponentId = "comp1",
+                    StartPinName = "o1",
+                    EndComponentId = "comp2",
+                    EndPinName = "o1",
+                    IsBlockedFallback = true,
+                    IsPlaceholderGeometry = false,
+                    Segments = new List<PathSegmentDto>
+                    {
+                        new PathSegmentDto
+                        {
+                            Type = "straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0,
+                            StartAngleDegrees = 0, EndAngleDegrees = 0
+                        }
+                    }
+                }
+            }
+        };
+
+        var group = ComponentGroupSerializer.FromDto(dto, componentLookup);
+
+        group.InternalPaths[0].Path.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
     public void FromDto_GroupWithExternalPins_ReconstructsPins()
     {
         // Arrange

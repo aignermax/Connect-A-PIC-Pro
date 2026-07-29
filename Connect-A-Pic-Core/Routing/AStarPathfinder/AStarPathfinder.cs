@@ -111,7 +111,25 @@ public class AStarPathfinder
             // Check if we reached the goal
             if (IsGoalReached(current, endX, endY, endDirection))
             {
-                return ReconstructPath(current);
+                var path = ReconstructPath(current);
+
+                // A waveguide cannot cross itself (no optical model for that): discard
+                // looping arrivals — e.g. a full 360° circle at the start pin — and keep
+                // searching for a loop-free alternative.
+                if (!PathLoopDetector.IsSelfIntersecting(path))
+                    return path;
+
+                // Forget this looping arrival's grid state, otherwise its (cheaper) entry
+                // stays in the visited map and rejects a later, more expensive but loop-free
+                // arrival at the same state key — making the search report "no path" even
+                // though one exists. Only drop the entry if it is still this very node.
+                var loopingKey = StateKey(current);
+                if (visited.TryGetValue(loopingKey, out var stored) && ReferenceEquals(stored, current))
+                {
+                    visited.Remove(loopingKey);
+                    distanceFromStart.Remove(loopingKey);
+                }
+                continue;
             }
 
             // Expand neighbors

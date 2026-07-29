@@ -7,6 +7,12 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The BlazorWebAssembly SDK injects this implicit using, but no referenced
+         package provides the Microsoft.Extensions.Configuration assembly. -->
+    <Using Remove="Microsoft.Extensions.Configuration" />
+  </ItemGroup>
+
+  <ItemGroup>
     <PackageReference Include="Avalonia.Browser" Version="11.2.1" />
   </ItemGroup>
 

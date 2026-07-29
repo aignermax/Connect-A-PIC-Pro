@@ -3,7 +3,11 @@ using CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
+using CAP_Core.Components.Connections;
+using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_Core.Routing;
+using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
 
@@ -127,6 +131,94 @@ public class MixedBackendExportViewModelTests
             errorConsole.Entries.ShouldContain(e =>
                 e.Level == CAP_Contracts.Logger.LogLevel.Error
                 && e.Message.Contains("nazca partial failed"));
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
+        }
+    }
+
+    /// <summary>
+    /// Same mixed-backend layout as <see cref="MixedBackendCanvas"/>, plus one routed
+    /// connection between the two components whose <see cref="RoutedPath"/> is an honest
+    /// placeholder (self-crossing fallback, no optical model). All routed connections are
+    /// owned by the gdsfactory script (the nazca partial only renders placements), so this
+    /// connection is collected into <c>skippedConnections</c> while <c>BuildScripts</c> writes
+    /// the main script — BEFORE the nazca partial is even run.
+    /// </summary>
+    private static DesignCanvasViewModel MixedBackendCanvasWithSkippedConnection()
+    {
+        var canvas = new DesignCanvasViewModel();
+
+        var gf = TestComponentFactory.CreateBasicComponent();
+        gf.Identifier = "GF1";
+        gf.NazcaFunctionName = "";
+        gf.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        var gfPin = new PhysicalPin
+        {
+            Name = "east0",
+            ParentComponent = gf,
+            OffsetXMicrometers = gf.WidthMicrometers,
+            OffsetYMicrometers = gf.HeightMicrometers / 2,
+            AngleDegrees = 0,
+            LogicalPin = gf.Parts[0, 0].GetPinAt(RectSide.Right),
+        };
+        gf.PhysicalPins.Add(gfPin);
+        canvas.AddComponent(gf, "SiN MMI");
+
+        var nazca = TestComponentFactory.CreateBasicComponent();
+        nazca.Identifier = "NZ1";
+        nazca.NazcaFunctionName = "ebeam_y_1550";
+        nazca.PhysicalX = gf.WidthMicrometers + 100;
+        var nazcaPin = new PhysicalPin
+        {
+            Name = "west0",
+            ParentComponent = nazca,
+            OffsetXMicrometers = 0,
+            OffsetYMicrometers = nazca.HeightMicrometers / 2,
+            AngleDegrees = 180,
+            LogicalPin = nazca.Parts[0, 0].GetPinAt(RectSide.Left),
+        };
+        nazca.PhysicalPins.Add(nazcaPin);
+        canvas.AddComponent(nazca, "Y-Branch");
+
+        var connection = new WaveguideConnection { StartPin = gfPin, EndPin = nazcaPin };
+        connection.ReplaceRoutedPath(new RoutedPath { IsPlaceholderGeometry = true });
+        canvas.Connections.Add(new WaveguideConnectionViewModel(connection));
+
+        return canvas;
+    }
+
+    /// <summary>
+    /// Finding [4] (Round 3 delta-review): when the nazca partial fails AFTER both scripts
+    /// are already written, the skipped-connection warning must not be lost alongside the
+    /// early return — both the failure message and the warning belong in the same status.
+    /// </summary>
+    [Fact]
+    public async Task Export_NazcaPartialFailsWithSkippedConnection_ReportsBothFailureAndWarning()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfmx-{Guid.NewGuid():N}.py");
+        var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
+        try
+        {
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var service = new RecordingExportService(succeeds: _ => false);
+            var vm = new GdsFactoryExportViewModel(
+                MixedBackendCanvasWithSkippedConnection(), service, errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            service.RunScripts.ShouldBe(new[] { partialPath });
+            vm.StatusText.ShouldContain("nazca part failed");
+            vm.StatusText.ShouldContain("1 connection(s)");
+            vm.StatusText.ShouldContain("GF1"); // one endpoint of the skipped connection
+            errorConsole.Entries.ShouldContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn
+                && e.Message.Contains("1 connection(s)"));
         }
         finally
         {

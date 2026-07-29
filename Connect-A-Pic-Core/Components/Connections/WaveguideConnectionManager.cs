@@ -468,6 +468,12 @@ public partial class WaveguideConnectionManager
             if (cancellationToken.IsCancellationRequested)
                 return (false, 0);
 
+            // A joint drag of BOTH connected components is a pure translation: shift the
+            // existing route (with all manual bend edits) to the new pin positions BEFORE
+            // the validity checks, so collision handling below runs on the translated
+            // geometry and can still force a re-route.
+            JointMoveRouteTranslator.TryTranslateToPins(connection);
+
             if (TryUnfreezeCollidedAutoRoute(connection, router))
             {
                 // A component overlaps the manually edited geometry: treat it like an

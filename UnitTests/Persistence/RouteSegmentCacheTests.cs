@@ -100,6 +100,94 @@ public class RouteSegmentCacheTests
     }
 
     [Fact]
+    public void PathSegmentConverter_ToRoutedPath_SetsIsInvalidGeometryAndIsPlaceholderGeometry()
+    {
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(
+            dtos, isBlockedFallback: false, isInvalidGeometry: true, isPlaceholderGeometry: true);
+
+        result.ShouldNotBeNull();
+        result!.IsInvalidGeometry.ShouldBeTrue();
+        result.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_DefaultsIsInvalidGeometryAndIsPlaceholderGeometryToFalse()
+    {
+        // Old files predating these fields must load as if neither flag had ever been set.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: false);
+
+        result.ShouldNotBeNull();
+        result!.IsInvalidGeometry.ShouldBeFalse();
+        result.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_LegacyBlockedSingleStraight_MigratesToPlaceholderGeometry()
+    {
+        // A file saved between the router's self-crossing degrade-to-blocked-fallback step
+        // shipping and IsPlaceholderGeometry being introduced has exactly this shape (blocked,
+        // one straight segment) with no explicit placeholder field — must migrate to true,
+        // not silently load as false and re-export the placeholder line.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: true);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_ExplicitFalsePlaceholder_IsNotOverriddenByMigration()
+    {
+        // A file saved by a version that DOES know about the field, with the flag genuinely
+        // false, must not be reclassified just because it happens to share the legacy shape.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0, StartAngleDegrees = 0 }
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(
+            dtos, isBlockedFallback: true, isPlaceholderGeometry: false);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void PathSegmentConverter_ToRoutedPath_LegacyBlockedMultiSegment_IsNotMigrated()
+    {
+        // A blocked fallback with more than one segment does not match the placeholder's
+        // shape (a lone straight line) — it is real (if messy) routed geometry.
+        var dtos = new List<PathSegmentData>
+        {
+            new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 50, EndY = 0, StartAngleDegrees = 0 },
+            new()
+            {
+                Type = "Bend", StartX = 50, StartY = 0, EndX = 60, EndY = 10, StartAngleDegrees = 0,
+                CenterX = 50, CenterY = 10, RadiusMicrometers = 10, SweepAngleDegrees = 90
+            },
+        };
+
+        var result = PathSegmentConverter.ToRoutedPath(dtos, isBlockedFallback: true);
+
+        result.ShouldNotBeNull();
+        result!.IsPlaceholderGeometry.ShouldBeFalse();
+    }
+
+    [Fact]
     public void PathSegmentConverter_MixedSegments_RoundTrip()
     {
         var segments = new List<PathSegment>
@@ -186,6 +274,8 @@ public class RouteSegmentCacheTests
         connData.ShouldNotBeNull();
         connData!.CachedSegments.ShouldBeNull();
         connData.IsBlockedFallback.ShouldBeNull();
+        connData.IsInvalidGeometry.ShouldBeNull();
+        connData.IsPlaceholderGeometry.ShouldBeNull();
     }
 
     [Fact]
@@ -246,6 +336,33 @@ public class RouteSegmentCacheTests
         restored.CachedSegments[1].Type.ShouldBe("Bend");
         restored.CachedSegments[1].RadiusMicrometers.ShouldBe(10);
         restored.CachedSegments[1].SweepAngleDegrees.ShouldBe(90);
+    }
+
+    [Fact]
+    public void ConnectionData_JsonRoundTrip_PreservesIsInvalidGeometryAndIsPlaceholderGeometry()
+    {
+        var original = new ConnectionData
+        {
+            StartComponentIndex = 0,
+            StartPinName = "output",
+            EndComponentIndex = 1,
+            EndPinName = "input",
+            CachedSegments = new List<PathSegmentData>
+            {
+                new() { Type = "Straight", StartX = 0, StartY = 0, EndX = 1, EndY = 0, StartAngleDegrees = 0 }
+            },
+            IsBlockedFallback = true,
+            IsInvalidGeometry = true,
+            IsPlaceholderGeometry = true,
+        };
+
+        var json = JsonSerializer.Serialize(original);
+        var restored = JsonSerializer.Deserialize<ConnectionData>(json);
+
+        restored.ShouldNotBeNull();
+        restored!.IsBlockedFallback.ShouldBe(true);
+        restored.IsInvalidGeometry.ShouldBe(true);
+        restored.IsPlaceholderGeometry.ShouldBe(true);
     }
 
     [Fact]

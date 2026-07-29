@@ -143,6 +143,15 @@ public class FrozenPathDto
     public bool IsInvalidGeometry { get; set; }
 
     /// <summary>
+    /// Whether the path is an honest placeholder rather than real geometry (the router
+    /// replaced a self-crossing fallback with a straight line). Nullable — always written
+    /// as an explicit true/false when serialized, so null unambiguously means the file
+    /// predates this field; <see cref="CAP_DataAccess.Persistence.ComponentGroupSerializer"/>
+    /// then infers it from the route's shape instead of trusting a bare false.
+    /// </summary>
+    public bool? IsPlaceholderGeometry { get; set; }
+
+    /// <summary>
     /// Routing style name of the original connection ("Auto", "Bend", "SBend", "Cobra").
     /// Null in design files that predate settings persistence — loads as Auto.
     /// </summary>

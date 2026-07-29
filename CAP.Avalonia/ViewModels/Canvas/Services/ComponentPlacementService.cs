@@ -107,6 +107,32 @@ public class ComponentPlacementService
     }
 
     /// <summary>
+    /// Translates the routed path of every connection whose BOTH endpoints sit on components
+    /// in <paramref name="selection"/> by (<paramref name="deltaX"/>, <paramref name="deltaY"/>),
+    /// so an internal waveguide follows a joint drag of both its components in real time.
+    /// Connections with only one selected endpoint are left untouched — their geometry
+    /// genuinely changes and is re-routed on drop.
+    /// </summary>
+    public void TranslateInternalConnectionRoutes(
+        IEnumerable<ComponentViewModel> selection, double deltaX, double deltaY)
+    {
+        var selected = new HashSet<Component>(
+            selection.Select(c => c.Component).Where(c => !c.IsLocked));
+        foreach (var conn in _connections)
+        {
+            var connection = conn.Connection;
+            if (connection.RoutedPath is not { Segments.Count: > 0 })
+                continue;
+            if (!selected.Contains(connection.StartPin.ParentComponent) ||
+                !selected.Contains(connection.EndPin.ParentComponent))
+                continue;
+
+            connection.ReplaceRoutedPath(connection.RoutedPath.TranslatedCopy(deltaX, deltaY));
+            conn.NotifyPathChanged();
+        }
+    }
+
+    /// <summary>
     /// Checks if a component can be placed without overlapping others and within chip boundaries.
     /// </summary>
     public bool CanPlaceComponent(double x, double y, double width, double height,
