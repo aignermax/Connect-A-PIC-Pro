@@ -17,6 +17,13 @@ internal sealed class PinRenderer
     private static readonly Color ElectricalPinColor = Color.FromRgb(218, 165, 32);
 
     /// <summary>
+    /// World-space font size for a component's name label before the <see cref="PinScreenSize"/>
+    /// screen-space cap is applied. Shared with <see cref="LabelDeclutter.ComponentNameLabelComputer"/>
+    /// so the overlap-resolution pass measures text at exactly the size actually drawn.
+    /// </summary>
+    internal const double NameLabelFontSizeWorld = 12.0;
+
+    /// <summary>
     /// Renders all physical pins of a component.
     /// </summary>
     public void DrawComponentPins(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc, bool isDimmed = false)
@@ -53,32 +60,35 @@ internal sealed class PinRenderer
 
             if (isHighlighted)
             {
+                // Deferred to the topmost label pass: the hover/connect pin name must stay
+                // readable even where a neighboring component's body would paint over it.
+                var nameBrush = new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255));
                 var pinText = new FormattedText(
                     pin.Name,
                     System.Globalization.CultureInfo.CurrentCulture,
                     FlowDirection.LeftToRight,
                     new Typeface("Arial"),
                     10,
-                    new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255)));
-                context.DrawText(pinText, new Point(pinX + 15, pinY - 15));
+                    nameBrush);
+                rc.Labels.Enqueue(pinText, nameBrush, new Point(pinX + 15, pinY - 15));
             }
         }
     }
 
     /// <summary>
-    /// Renders the component name label at the top-left of the component.
+    /// Enqueues the component name label (anchored at the top-left of the component) into the
+    /// deferred topmost pass, using the <see cref="FormattedText"/>
+    /// <see cref="LabelDeclutter.ComponentNameLabelComputer"/> already measured (screen-space
+    /// font-size clamped, and shared/cached by (name, font size)) — this method never measures
+    /// text itself, only attaches the current dim brush and queues. The foreground travels
+    /// with the queue entry because <see cref="FormattedText"/> bakes the brush at creation;
+    /// the flush re-applies it over the halo copy via <see cref="FormattedText.SetForegroundBrush"/>.
     /// </summary>
-    public void DrawComponentName(DrawingContext context, ComponentViewModel comp, bool isDimmed = false)
+    public void DrawComponentName(DeferredLabelLayer labels, ComponentViewModel comp, FormattedText labelText, bool isDimmed = false)
     {
         byte alpha = (byte)(isDimmed ? 128 : 255);
-        var text = new FormattedText(
-            comp.Name,
-            System.Globalization.CultureInfo.CurrentCulture,
-            FlowDirection.LeftToRight,
-            new Typeface("Arial"),
-            12,
-            new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)));
-        context.DrawText(text, new Point(comp.X + 5, comp.Y + 5));
+        labels.Enqueue(labelText, new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255)),
+            new Point(comp.X + 5, comp.Y + 5));
     }
 
     /// <summary>

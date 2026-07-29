@@ -15,6 +15,23 @@ public static class PinScreenSize
     public const double MaxRadiusPx = 16.0;
 
     /// <summary>
+    /// Maximum on-screen label font size in pixels, regardless of zoom — the same
+    /// screen-constant-cap idea as <see cref="MaxRadiusPx"/>, applied to canvas text labels
+    /// (component names, waveguide length/loss labels) so they stop growing once zooming in
+    /// would otherwise let them dominate the canvas.
+    /// </summary>
+    public const double MaxLabelFontSizePx = 14.0;
+
+    /// <summary>
+    /// Smallest on-screen font size in pixels a label is ever drawn at. Below this, zooming out
+    /// further would only produce illegible shrinking text, so <see cref="ClampWorldFontSize"/>
+    /// floors the effective size here instead — the label never disappears (a hovered/selected
+    /// label especially must stay visible; density is instead regulated by overlap-based
+    /// thinning, not by hiding individual labels).
+    /// </summary>
+    public const double MinLabelFontSizePx = 6.0;
+
+    /// <summary>
     /// Caps a world-space size so that, after the canvas' zoom transform, it never exceeds
     /// <see cref="MaxRadiusPx"/> screen pixels: <c>min(worldSize, MaxRadiusPx / zoom)</c>.
     /// Below the cap the size is returned unchanged, so zooming out still shrinks the pin
@@ -26,5 +43,25 @@ public static class PinScreenSize
     {
         double safeZoom = zoom <= 0 ? 1.0 : zoom;
         return Math.Min(worldSize, MaxRadiusPx / safeZoom);
+    }
+
+    /// <summary>
+    /// Clamps a world-space font size so its actual on-screen size — <c>worldFontSize * zoom</c>
+    /// — never leaves <c>[MinLabelFontSizePx, MaxLabelFontSizePx]</c>, then converts the clamped
+    /// screen size back to world units for the caller to pass to <c>FormattedText</c>. Unlike a
+    /// one-sided cap, a label never becomes illegible or invisible at any zoom: it stops growing
+    /// at <see cref="MaxLabelFontSizePx"/> zooming in, and stops shrinking at
+    /// <see cref="MinLabelFontSizePx"/> zooming out instead of vanishing. Canvas-wide clutter at
+    /// low zoom is regulated separately, by overlap-based thinning (see
+    /// <c>LabelDeclutter.LabelOverlapResolver</c>) — a hovered or selected label especially must
+    /// never disappear just because the user zoomed out.
+    /// </summary>
+    /// <param name="worldFontSize">The label's font size in world units (µm-scaled points).</param>
+    /// <param name="zoom">Current canvas zoom factor (screen pixels per world unit).</param>
+    public static double ClampWorldFontSize(double worldFontSize, double zoom)
+    {
+        double safeZoom = zoom <= 0 ? 1.0 : zoom;
+        double screenPx = Math.Clamp(worldFontSize * safeZoom, MinLabelFontSizePx, MaxLabelFontSizePx);
+        return screenPx / safeZoom;
     }
 }

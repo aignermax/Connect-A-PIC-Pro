@@ -171,6 +171,11 @@ public class DesignCanvas : Control
             _pathfindingOverlayRenderer.Render(context, rc);
             _waveguideConnectionRenderer.Render(context, rc);
             _componentRenderer.Render(context, rc);
+            // Deferred text labels (component/pin names, connection readouts) flush AFTER all
+            // component bodies and connection lines, so no geometry can ever paint over a
+            // label — but BEFORE the interaction overlays/handles below, which the user
+            // manipulates and which must keep winning against labels.
+            rc.Labels.Flush(context, Zoom);
             // Analysis-output overlay (#754) sits on top of components so the candidate
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
@@ -225,6 +230,20 @@ public class DesignCanvas : Control
             recognizer.UpdatePassiveState(canvasPoint, vm, MainViewModel);
         _activeGesture?.OnPointerMoved(e, delta, canvasPoint, vm, MainViewModel);
         _interactionState.LastPointerPosition = point;
+    }
+
+    /// <summary>
+    /// Clears the simple-component hover once the pointer leaves the canvas entirely — without
+    /// this, the last-hovered component would keep winning its name-label overlap priority (and
+    /// a stale reference would linger in <see cref="CanvasInteractionState"/>) until the pointer
+    /// re-entered and moved again.
+    /// </summary>
+    protected override void OnPointerExited(PointerEventArgs e)
+    {
+        base.OnPointerExited(e);
+        if (_interactionState.HoveredComponent == null) return;
+        _interactionState.HoveredComponent = null;
+        InvalidateVisual();
     }
 
     /// <inheritdoc/>

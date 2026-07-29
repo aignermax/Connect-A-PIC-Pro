@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-overview-no-length-thinned-names.png",
+    "caption": "Overview: three tightly-spaced component pairs. No connection shows a length/loss label (nothing hovered or selected) and, within each pair whose names would overlap, only the higher-priority name is drawn \u2014 the rest stay hidden rather than turn into illegible overlapping text."
+  },
+  {
+    "file": "02-zoomed-in-font-clamped.png",
+    "caption": "Zoomed in close on the middle pair (~8x, near the app\u0027s 10x zoom clamp). Name labels stay a small, legible, screen-constant size instead of ballooning with zoom \u2014 PinScreenSize.ClampWorldFontSize applied to label text."
+  },
+  {
+    "file": "03-hover-reveals-length.png",
+    "caption": "Hovering the first pair\u0027s connection reveals its length/loss label \u2014 the only connection with a label here, since it is the only one hovered or selected."
+  },
+  {
+    "file": "04-selection-wins-name-overlap.png",
+    "caption": "Selecting \u0027PhotoDetectorOutput\u0027 \u2014 the name that lost pair 1\u0027s overlap tie-break in step 1 \u2014 now shows it instead of its partner: selected always outranks hovered, which always outranks the rest."
+  },
+  {
+    "file": "05-power-flow-and-badge-always-on.png",
+    "caption": "Power-flow visualization on (as after a completed simulation run) shows every connection\u0027s dB/% readout with nothing hovered or selected \u2014 the length/loss label is the ONLY overlay hover/selection gates. Pair 1\u0027s connection also carries a manually-styled (non-Auto, \u0027Cobra\u0027) badge, likewise always-on."
+  }
+]

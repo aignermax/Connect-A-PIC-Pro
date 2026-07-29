@@ -146,6 +146,12 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         var prevGroup = _state.HoveredGroup;
         var prevLabel = _state.HoveredGroupLabel;
         var prevLock = _state.HoveredGroupLockIcon;
+        // Compare by Component.Id, not object reference: in group-edit mode,
+        // DesignCanvasHitTesting.HitTestGroupChildren fabricates a brand-new ComponentViewModel
+        // wrapper on every call for a child that isn't in the top-level Components list, so a
+        // reference comparison here would see a "change" (and force an invalidate/repaint) on
+        // every single pointer move even while hovering the exact same component.
+        var prevComponentId = _state.HoveredComponent?.Component.Id;
 
         var lockIcon = DesignCanvasHitTesting.HitTestGroupLockIcon(canvasPoint, canvas);
         _state.HoveredGroupLockIcon = lockIcon;
@@ -154,6 +160,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         {
             _state.HoveredGroup = lockIcon;
             _state.HoveredGroupLabel = null;
+            _state.HoveredComponent = null;
             _setCursor(new Cursor(StandardCursorType.Hand));
         }
         else
@@ -163,6 +170,7 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
             if (label != null)
             {
                 _state.HoveredGroup = label;
+                _state.HoveredComponent = null;
                 _setCursor(new Cursor(StandardCursorType.Hand));
             }
             else
@@ -171,11 +179,16 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
                 _state.HoveredGroup = comp?.Component.ParentGroup != null
                     ? GetTopLevelGroup(comp.Component)
                     : comp?.Component as ComponentGroup;
+                // Only a plain (non-group) component claims name-label hover priority; a group
+                // hit is tracked separately above and its label uses its own hover state.
+                _state.HoveredComponent = comp?.Component is ComponentGroup ? null : comp;
                 _setCursor(Cursor.Default);
             }
         }
 
-        if (_state.HoveredGroup != prevGroup || _state.HoveredGroupLabel != prevLabel || _state.HoveredGroupLockIcon != prevLock)
+        var newComponentId = _state.HoveredComponent?.Component.Id;
+        if (_state.HoveredGroup != prevGroup || _state.HoveredGroupLabel != prevLabel
+            || _state.HoveredGroupLockIcon != prevLock || newComponentId != prevComponentId)
             _invalidate();
     }
 
