@@ -158,8 +158,10 @@ namespace CAP_Core.Components.Connections
                 // A styled route the user has hand-edited (bend radius via the canvas handles,
                 // recorded in BendRadiusOverrides) is sacred: keep it as long as its endpoints
                 // still match the pins, only refreshing the losses. Rebuilding here would
-                // silently wipe the manual edit on every unrelated recalculation.
-                if (HasManualPathEdits && FrozenPathStillMatchesPins())
+                // silently wipe the manual edit on every unrelated recalculation. A joint move
+                // of both components is a pure translation and keeps the edits too.
+                if (HasManualPathEdits &&
+                    (FrozenPathStillMatchesPins() || JointMoveRouteTranslator.TryTranslateToPins(this)))
                 {
                     UpdateLossFromPath(wavelengthNm);
                     return;
@@ -191,7 +193,9 @@ namespace CAP_Core.Components.Connections
 
             if (IsRouteFrozen)
             {
-                if (FrozenPathStillMatchesPins())
+                // Both endpoints moved by the same delta (joint drag of both components):
+                // translate the frozen geometry instead of unfreezing it.
+                if (FrozenPathStillMatchesPins() || JointMoveRouteTranslator.TryTranslateToPins(this))
                 {
                     // Keep manually edited geometry; just refresh the loss values.
                     UpdateLossFromPath(wavelengthNm);
