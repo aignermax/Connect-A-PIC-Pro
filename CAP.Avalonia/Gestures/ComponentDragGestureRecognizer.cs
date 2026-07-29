@@ -185,7 +185,13 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
         if (_state.DraggingComponent == null) return;
         double dx = delta.X / _getZoom(), dy = delta.Y / _getZoom();
         bool isGroup = canvas.Selection.SelectedComponents.Count > 1;
-        if (isGroup) foreach (var c in canvas.Selection.SelectedComponents) canvas.MoveComponent(c, dx, dy);
+        if (isGroup)
+        {
+            foreach (var c in canvas.Selection.SelectedComponents) canvas.MoveComponent(c, dx, dy);
+            // Both dragged together = pure translation: shift internal waveguides with the
+            // components so they follow the pointer instead of snapping back only on drop.
+            canvas.TranslateInternalConnectionRoutes(canvas.Selection.SelectedComponents, dx, dy);
+        }
         else canvas.MoveComponent(_state.DraggingComponent!, dx, dy);
         if (canvas.AlignmentGuide.IsEnabled) canvas.AlignmentGuide.UpdateAlignments(_state.DraggingComponent!, canvas.Components);
         UpdateDragPreview(canvas, isGroup);

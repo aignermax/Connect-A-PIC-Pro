@@ -1,6 +1,7 @@
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Tiles;
@@ -144,6 +145,40 @@ public class CopyPasteWorkflowTests
 
         canvas.Connections.Count.ShouldBe(initialConnectionCount + 1,
             "Total connections should increase by 1");
+    }
+
+    /// <summary>
+    /// Verifies that pasting a connection carries its routing settings — the connection
+    /// type and the manually chosen bend radius — instead of resetting them to defaults
+    /// (field report: copy/paste of an Auto connection with a 35 µm radius dropped it).
+    /// </summary>
+    [Fact]
+    public void Paste_ConnectedComponents_PreservesConnectionSettings()
+    {
+        var canvas = new DesignCanvasViewModel();
+
+        var comp1 = CreateComponentWithPins(100, 50, 100, 100);
+        var comp2 = CreateComponentWithPins(100, 50, 300, 100);
+        var vm1 = canvas.AddComponent(comp1);
+        var vm2 = canvas.AddComponent(comp2);
+
+        var sourceVm = canvas.ConnectPins(comp1.PhysicalPins[1], comp2.PhysicalPins[0]);
+        sourceVm.ShouldNotBeNull();
+        sourceVm.Connection.Type = WaveguideType.Bend;
+        sourceVm.Connection.BendRadiusMicrometers = 35.0;
+        sourceVm.Connection.WidthMicrometers = 1.25;
+
+        canvas.Clipboard.Copy(new[] { vm1, vm2 }, canvas.Connections);
+        var cmd = new PasteComponentsCommand(canvas, canvas.Clipboard);
+        cmd.Execute();
+
+        cmd.Result.ShouldNotBeNull();
+        cmd.Result.Connections.Count.ShouldBe(1, "Should paste the internal connection");
+
+        var pasted = cmd.Result.Connections[0].Connection;
+        pasted.Type.ShouldBe(WaveguideType.Bend, "Connection type must survive paste");
+        pasted.BendRadiusMicrometers.ShouldBe(35.0, "Manual bend radius must survive paste");
+        pasted.WidthMicrometers.ShouldBe(1.25, "Waveguide width must survive paste");
     }
 
     /// <summary>

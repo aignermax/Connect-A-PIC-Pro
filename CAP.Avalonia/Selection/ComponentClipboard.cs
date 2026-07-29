@@ -2,8 +2,10 @@ using System.Linq;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.Routing;
 
 namespace CAP.Avalonia.Selection;
 
@@ -92,7 +94,8 @@ public class ComponentClipboard
                     startIdx,
                     conn.Connection.StartPin.Name,
                     endIdx,
-                    conn.Connection.EndPin.Name));
+                    conn.Connection.EndPin.Name,
+                    conn.Connection));
             }
         }
     }
@@ -233,13 +236,62 @@ public class ComponentClipboard
 
             if (startPin != null && endPin != null)
             {
-                var connVm = canvas.ConnectPins(startPin, endPin);
+                var connVm = PasteConnection(canvas, conn.Source, startPin, endPin, offsetX, offsetY);
                 if (connVm != null)
                     newConnections.Add(connVm);
             }
         }
 
         return new PasteResult(newComponents, newConnections, pastedIdentifierMap);
+    }
+
+    /// <summary>
+    /// Recreates a copied connection between the pasted pins, carrying its routing settings
+    /// and its exact geometry. The source route is translated by the paste offset so its
+    /// endpoints land on the pasted pins — matching the group-paste behaviour and preserving
+    /// hand-tuned bends that a from-scratch re-route would otherwise discard.
+    /// </summary>
+    private static WaveguideConnectionViewModel? PasteConnection(
+        DesignCanvasViewModel canvas,
+        WaveguideConnection source,
+        PhysicalPin startPin,
+        PhysicalPin endPin,
+        double offsetX,
+        double offsetY)
+    {
+        var sourcePath = source.RoutedPath;
+        var connVm = sourcePath is { Segments.Count: > 0 }
+            ? canvas.ConnectPinsWithCachedRoute(startPin, endPin, sourcePath.TranslatedCopy(offsetX, offsetY))
+            : canvas.ConnectPins(startPin, endPin);
+        if (connVm == null)
+            return null;
+
+        CopyConnectionSettings(source, connVm.Connection);
+        return connVm;
+    }
+
+    /// <summary>
+    /// Copies the user-editable routing and loss settings — plus any manual per-bend/segment
+    /// edits and the freeze flag — from a source connection onto a freshly pasted one.
+    /// </summary>
+    private static void CopyConnectionSettings(WaveguideConnection source, WaveguideConnection target)
+    {
+        target.Type = source.Type;
+        target.BendRadiusMicrometers = source.BendRadiusMicrometers;
+        target.WidthMicrometers = source.WidthMicrometers;
+        target.PropagationLossDbPerCm = source.PropagationLossDbPerCm;
+        target.BendLossDbPer90Deg = source.BendLossDbPer90Deg;
+        target.DispersionModel = source.DispersionModel;
+
+        target.BendRadiusOverrides.Clear();
+        foreach (var (bendIndex, radius) in source.BendRadiusOverrides)
+            target.BendRadiusOverrides[bendIndex] = radius;
+
+        target.StraightShiftOffsets.Clear();
+        foreach (var (straightIndex, shift) in source.StraightShiftOffsets)
+            target.StraightShiftOffsets[straightIndex] = shift;
+
+        target.IsRouteFrozen = source.IsRouteFrozen;
     }
 
     /// <summary>
@@ -375,7 +427,8 @@ public class ComponentClipboard
         int StartComponentIndex,
         string StartPinName,
         int EndComponentIndex,
-        string EndPinName);
+        string EndPinName,
+        WaveguideConnection Source);
 }
 
 /// <summary>

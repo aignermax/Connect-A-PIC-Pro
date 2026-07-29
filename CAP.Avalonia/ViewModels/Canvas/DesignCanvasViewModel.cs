@@ -237,6 +237,14 @@ public partial class DesignCanvasViewModel : ObservableObject
             Groups.IsInGroupEditMode, Groups.CurrentEditGroup,
             Groups.UpdateExternalPinPositions, Routing.RecalculateRoutesAsync);
 
+    /// <summary>
+    /// Shifts the routed geometry of connections internal to <paramref name="selection"/> by
+    /// the given delta, so waveguides follow a live joint drag of both their components.
+    /// </summary>
+    public void TranslateInternalConnectionRoutes(
+        IEnumerable<ComponentViewModel> selection, double deltaX, double deltaY)
+        => Placement.TranslateInternalConnectionRoutes(selection, deltaX, deltaY);
+
     public bool CanPlaceComponent(double x, double y, double width, double height,
         ComponentViewModel? excludeComponent = null)
         => Placement.CanPlaceComponent(x, y, width, height, excludeComponent);
