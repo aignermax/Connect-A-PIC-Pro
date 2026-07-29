@@ -82,10 +82,10 @@ public class UiFlowMultiSelectDragTests
     }
 
     /// <summary>
-    /// Issue #805, through the real input pipeline: dragging BOTH connected components
-    /// together must keep the waveguide glued to the pins and preserve the connection's bend
-    /// radius. Before the fix the route stayed pinned to its old grid spot during the drag and
-    /// was re-routed from scratch on drop, discarding the manual radius.
+    /// Through the real input pipeline: dragging BOTH connected components together must keep
+    /// the waveguide glued to the pins and preserve the connection's bend radius. Before the
+    /// fix the route stayed pinned to its old grid spot during the drag and was re-routed from
+    /// scratch on drop, discarding the manual radius.
     /// </summary>
     [AvaloniaFact]
     public void DraggingBothConnectedComponents_KeepsWaveguideOnPinsAndBendRadius()

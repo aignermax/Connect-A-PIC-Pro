@@ -5,6 +5,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Creation;
+using CAP_Core.LightCalculation.MaterialDispersion;
 using CAP_Core.Routing;
 
 namespace CAP.Avalonia.Selection;
@@ -95,7 +96,7 @@ public class ComponentClipboard
                     conn.Connection.StartPin.Name,
                     endIdx,
                     conn.Connection.EndPin.Name,
-                    conn.Connection));
+                    Snapshot(conn.Connection)));
             }
         }
     }
@@ -236,7 +237,7 @@ public class ComponentClipboard
 
             if (startPin != null && endPin != null)
             {
-                var connVm = PasteConnection(canvas, conn.Source, startPin, endPin, offsetX, offsetY);
+                var connVm = PasteConnection(canvas, conn.Snapshot, startPin, endPin, offsetX, offsetY);
                 if (connVm != null)
                     newConnections.Add(connVm);
             }
@@ -246,35 +247,51 @@ public class ComponentClipboard
     }
 
     /// <summary>
-    /// Recreates a copied connection between the pasted pins, carrying its routing settings
-    /// and its exact geometry. The source route is translated by the paste offset so its
+    /// Snapshots the user-editable routing/loss settings, manual bend/segment edits and a deep
+    /// copy of the routed geometry at COPY time, so later edits or re-routes of the source do
+    /// not leak into a paste. A clipboard entry is an immutable copy, not a live reference.
+    /// </summary>
+    private static ConnectionSnapshot Snapshot(WaveguideConnection source) => new(
+        source.Type,
+        source.BendRadiusMicrometers,
+        source.WidthMicrometers,
+        source.PropagationLossDbPerCm,
+        source.BendLossDbPer90Deg,
+        source.DispersionModel,
+        new Dictionary<int, double>(source.BendRadiusOverrides),
+        new Dictionary<int, double>(source.StraightShiftOffsets),
+        source.IsRouteFrozen,
+        source.RoutedPath is { Segments.Count: > 0 } ? source.RoutedPath.DeepCopy() : null);
+
+    /// <summary>
+    /// Recreates a copied connection between the pasted pins, carrying its snapshotted routing
+    /// settings and exact geometry. The snapshot route is translated by the paste offset so its
     /// endpoints land on the pasted pins — matching the group-paste behaviour and preserving
     /// hand-tuned bends that a from-scratch re-route would otherwise discard.
     /// </summary>
     private static WaveguideConnectionViewModel? PasteConnection(
         DesignCanvasViewModel canvas,
-        WaveguideConnection source,
+        ConnectionSnapshot snapshot,
         PhysicalPin startPin,
         PhysicalPin endPin,
         double offsetX,
         double offsetY)
     {
-        var sourcePath = source.RoutedPath;
-        var connVm = sourcePath is { Segments.Count: > 0 }
-            ? canvas.ConnectPinsWithCachedRoute(startPin, endPin, sourcePath.TranslatedCopy(offsetX, offsetY))
+        var connVm = snapshot.Route is { Segments.Count: > 0 }
+            ? canvas.ConnectPinsWithCachedRoute(startPin, endPin, snapshot.Route.TranslatedCopy(offsetX, offsetY))
             : canvas.ConnectPins(startPin, endPin);
         if (connVm == null)
             return null;
 
-        CopyConnectionSettings(source, connVm.Connection);
+        CopyConnectionSettings(snapshot, connVm.Connection);
         return connVm;
     }
 
     /// <summary>
-    /// Copies the user-editable routing and loss settings — plus any manual per-bend/segment
-    /// edits and the freeze flag — from a source connection onto a freshly pasted one.
+    /// Applies the snapshotted routing/loss settings — plus any manual per-bend/segment edits
+    /// and the freeze flag — onto a freshly pasted connection.
     /// </summary>
-    private static void CopyConnectionSettings(WaveguideConnection source, WaveguideConnection target)
+    private static void CopyConnectionSettings(ConnectionSnapshot source, WaveguideConnection target)
     {
         target.Type = source.Type;
         target.BendRadiusMicrometers = source.BendRadiusMicrometers;
@@ -428,7 +445,24 @@ public class ComponentClipboard
         string StartPinName,
         int EndComponentIndex,
         string EndPinName,
-        WaveguideConnection Source);
+        ConnectionSnapshot Snapshot);
+
+    /// <summary>
+    /// Immutable copy-time snapshot of a connection's user-editable settings and geometry.
+    /// The route is a deep copy; the override maps are fresh copies — nothing aliases the
+    /// live source connection.
+    /// </summary>
+    private sealed record ConnectionSnapshot(
+        WaveguideType Type,
+        double BendRadiusMicrometers,
+        double WidthMicrometers,
+        double PropagationLossDbPerCm,
+        double BendLossDbPer90Deg,
+        IDispersionModel? DispersionModel,
+        Dictionary<int, double> BendRadiusOverrides,
+        Dictionary<int, double> StraightShiftOffsets,
+        bool IsRouteFrozen,
+        RoutedPath? Route);
 }
 
 /// <summary>

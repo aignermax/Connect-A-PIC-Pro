@@ -8,7 +8,7 @@ using Xunit;
 namespace UnitTests.ViewModels.Canvas;
 
 /// <summary>
-/// Tests for issue #805 (live-drag half): while BOTH connected components are dragged
+/// Live-drag half of the joint-move fix: while BOTH connected components are dragged
 /// together, the waveguide between them must follow the pointer instead of staying pinned
 /// to its old grid position until drop. A joint drag is a pure translation, so the route is
 /// shifted by the same per-frame delta — the same behaviour a Ctrl+G group already has.

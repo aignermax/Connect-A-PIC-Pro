@@ -3,6 +3,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
+using CAP_Core.Routing;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Tiles;
 using Shouldly;
@@ -179,6 +180,44 @@ public class CopyPasteWorkflowTests
         pasted.Type.ShouldBe(WaveguideType.Bend, "Connection type must survive paste");
         pasted.BendRadiusMicrometers.ShouldBe(35.0, "Manual bend radius must survive paste");
         pasted.WidthMicrometers.ShouldBe(1.25, "Waveguide width must survive paste");
+    }
+
+    /// <summary>
+    /// The clipboard must snapshot a connection's geometry at copy time. If the source is
+    /// re-routed after the copy, paste must still reproduce the copied route (translated onto
+    /// the pasted pins) — a live reference would translate the source's newer, mismatched
+    /// geometry and quietly fall back to a re-route on the next recalc.
+    /// </summary>
+    [Fact]
+    public void Paste_ConnectedComponents_UsesRouteSnapshotFromCopyTime()
+    {
+        var canvas = new DesignCanvasViewModel();
+
+        var comp1 = CreateComponentWithPins(100, 50, 100, 100);
+        var comp2 = CreateComponentWithPins(100, 50, 300, 100);
+        var vm1 = canvas.AddComponent(comp1);
+        var vm2 = canvas.AddComponent(comp2);
+
+        var copyTimeRoute = new RoutedPath();
+        copyTimeRoute.Segments.Add(new StraightSegment(200, 125, 300, 125, 0));
+        var sourceVm = canvas.ConnectPinsWithCachedRoute(
+            comp1.PhysicalPins[1], comp2.PhysicalPins[0], copyTimeRoute);
+        sourceVm.ShouldNotBeNull();
+
+        canvas.Clipboard.Copy(new[] { vm1, vm2 }, canvas.Connections);
+
+        // Source is re-routed to a very different geometry AFTER the copy.
+        var laterRoute = new RoutedPath();
+        laterRoute.Segments.Add(new StraightSegment(200, 900, 300, 900, 0));
+        sourceVm.Connection.RestoreCachedPath(laterRoute);
+
+        var cmd = new PasteComponentsCommand(canvas, canvas.Clipboard);
+        cmd.Execute();
+
+        var pasted = cmd.Result!.Connections[0].Connection;
+        // 50 µm is the fixed paste offset; the copy-time Y was 125, the later one 900.
+        pasted.RoutedPath!.Segments[0].StartPoint.Y.ShouldBe(175.0, 1e-9,
+            "paste must reproduce the route captured at copy time, not the source's later geometry");
     }
 
     /// <summary>
