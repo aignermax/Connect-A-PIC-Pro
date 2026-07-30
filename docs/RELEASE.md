@@ -52,6 +52,14 @@ When the PR is merged:
    - Changelog with categorized commits
    - Windows and Linux download links
 
+### Step 5: Manual smoke test on a fresh machine
+
+Some things CI cannot catch (first-run provisioning of external tools). On a
+machine/VM without dev tools installed:
+
+- [ ] Install via MSI and launch the app
+- [ ] FDTD solver: availability is detected, and a small simulation runs end-to-end (from #590)
+
 ## Workflow Details
 
 ### 1. Version Change Workflow (`version_change.yaml`)
