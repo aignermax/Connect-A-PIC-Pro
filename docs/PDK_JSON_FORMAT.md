@@ -118,6 +118,7 @@ and never appear in the process picker.
 | `nazcaOriginOffsetX` | Yes* | Nazca cell origin measured from the bounding box **left** edge (µm) = `-XMin` of the Nazca bbox |
 | `nazcaOriginOffsetY` | Yes* | Nazca cell origin measured from the bounding box **top** edge (µm) = `YMax` of the Nazca bbox |
 | `pins` | Yes | List of optical port definitions |
+| `outlinePolygons` | No | Imported GDS outline polygons (see below) — when present, the canvas draws them instead of the plain rectangle body |
 | `sMatrix` | No | S-matrix for optical simulation (omit to skip simulation) |
 
 > \* Required for GDS export on the normal load path. Analysis-tool components
@@ -135,6 +136,39 @@ and never appear in the process picker.
 | `offsetYMicrometers` | Yes | Y position relative to the bounding box **top-left** corner (µm), increasing **down** |
 | `angleDegrees` | Yes | Port direction: `0`=right, `90`=up, `180`=left, `270`=down |
 | `pinKind` | No | Signal domain: `"Optical"` (default when absent) or `"Electrical"`. Electrical pins (heater/modulator contacts, detector anode/cathode, bond pads) can only be connected to other electrical pins — never to optical ports — and are excluded from the optical S-matrix and the optical (Nazca/gdsfactory/photontorch) export. |
+
+### Outline Polygon Fields (`outlinePolygons`)
+
+Optional list of closed outline polygons describing the component's physical
+shape — written automatically by the GDS import, not meant to be authored by
+hand. When present, the canvas renders these polygons instead of the plain
+rectangle body (pins, labels and rotation keep working). Coordinates follow the
+app convention: micrometers, **Y-down**, relative to the **top-left corner** of
+the component's unrotated bounding box. Each polygon's `points` form a closed
+ring — the first point is repeated at the end (GDS convention). `layer` and
+`dataType` record the GDS origin; all layers currently share one style.
+
+```json
+"outlinePolygons": [
+  {
+    "layer": 1,
+    "dataType": 0,
+    "points": [
+      { "x": 0,  "y": 10 },
+      { "x": 20, "y": 10 },
+      { "x": 20, "y": 12 },
+      { "x": 0,  "y": 12 },
+      { "x": 0,  "y": 10 }
+    ]
+  }
+]
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `layer` | Yes | GDS layer number the polygon came from |
+| `dataType` | Yes | GDS datatype the polygon came from |
+| `points` | Yes | Closed ring of vertices (`x`, `y` in µm); first point repeated at the end |
 
 ### S-Matrix Fields
 

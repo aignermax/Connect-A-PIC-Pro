@@ -18,6 +18,7 @@ namespace CAP.Avalonia.Controls.Rendering;
 public sealed class ComponentRenderer : ICanvasRenderer
 {
     private readonly PinRenderer _pinRenderer = new();
+    private readonly ComponentOutlineRenderer _outlineRenderer = new();
     private readonly ComponentNameLabelComputer _nameLabels = new();
 
     /// <inheritdoc/>
@@ -56,19 +57,33 @@ public sealed class ComponentRenderer : ICanvasRenderer
         byte alpha = (byte)(isDimmed ? 128 : 255);
         var rect = new Rect(comp.X, comp.Y, comp.Width, comp.Height);
 
-        var fillBrush = comp.IsSelected
-            ? new SolidColorBrush(Color.FromArgb(alpha, 60, 80, 120))
-            : new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70));
-        context.FillRectangle(fillBrush, rect);
+        bool hasOutlines = comp.Component.OutlinePolygons is { Count: > 0 };
+        if (hasOutlines)
+        {
+            // GDS-imported component: draw its outline polygons instead of the
+            // plain rectangle body. The selection border is kept so a selected
+            // outlined component stays recognisable.
+            _outlineRenderer.Draw(context, comp, comp.Component.OutlinePolygons!, isDimmed);
+        }
+        else
+        {
+            var fillBrush = comp.IsSelected
+                ? new SolidColorBrush(Color.FromArgb(alpha, 60, 80, 120))
+                : new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70));
+            context.FillRectangle(fillBrush, rect);
+        }
 
         var previewData = rc.GdsPreviewRenderService?.TryGetPreview(comp);
         if (previewData != null)
             GdsPolygonRenderer.DrawGdsPreview(context, previewData, comp);
 
-        var borderPen = comp.IsSelected
-            ? new Pen(new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255)), 2)
-            : new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1);
-        context.DrawRectangle(borderPen, rect);
+        if (comp.IsSelected || !hasOutlines)
+        {
+            var borderPen = comp.IsSelected
+                ? new Pen(new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255)), 2)
+                : new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1);
+            context.DrawRectangle(borderPen, rect);
+        }
 
         _pinRenderer.DrawComponentPins(context, comp, rc, isDimmed);
 
