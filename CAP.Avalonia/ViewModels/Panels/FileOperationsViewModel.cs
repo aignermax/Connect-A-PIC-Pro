@@ -1611,10 +1611,17 @@ public partial class FileOperationsViewModel : ObservableObject
                 // even while background routing is still in flight.
                 var skippedConnectionsList = new List<string>();
                 var unresolvedCrossingsList = new List<string>();
+                var exportWarningsList = new List<string>();
                 var nazcaCode = _nazcaExporter.Export(
                     _canvas, metalSpec: MetalRoutingSpecProvider?.Invoke(),
-                    skippedConnections: skippedConnectionsList, unresolvedCrossings: unresolvedCrossingsList);
+                    skippedConnections: skippedConnectionsList, unresolvedCrossings: unresolvedCrossingsList,
+                    library: _componentLibrary, exportWarnings: exportWarningsList);
                 await File.WriteAllTextAsync(filePath, nazcaCode);
+
+                // Raw-code components whose geometry source vanished (a deleted .gds) exported
+                // as placeholder boxes — say so plainly instead of silently shipping the stub.
+                foreach (var exportWarning in exportWarningsList)
+                    _errorConsole?.LogWarning(exportWarning);
 
                 var skippedConnectionsWarning = ExportWarningMessages.BuildSkipped(skippedConnectionsList);
                 var unresolvedCrossingsWarning = ExportWarningMessages.BuildUnresolvedCrossings(unresolvedCrossingsList);

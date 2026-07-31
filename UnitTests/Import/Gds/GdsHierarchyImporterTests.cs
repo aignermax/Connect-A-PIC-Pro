@@ -55,10 +55,13 @@ public class GdsHierarchyImporterTests
         AssertPinsWithinDraftBounds(wgA);
         AssertPinsWithinDraftBounds(result.ImportedCellDrafts[1]);
 
-        // RawCode round-trip snippet with the file-name token.
+        // RawCode round-trip snippet with the file-name token: the loaded cell is
+        // re-anchored to its bbox bottom-left (the app-space top-left origin), and
+        // topcellsonly=False because the imported cell is a SUBcell of TOP.
         wgA.RawCodeBackend.ShouldBe("nazca");
         wgA.RawCode.ShouldContain("def component():");
-        wgA.RawCode.ShouldContain("nd.load_gds(filename=\"{GdsFileName}\", cellname=\"wgA\")");
+        wgA.RawCode.ShouldContain("nd.load_gds(filename=\"{GdsFileName}\", cellname=\"wgA\", topcellsonly=False)");
+        wgA.RawCode.ShouldContain("_loaded.put(-_bb[0], -_bb[1])");
 
         // Two instances at app-space positions.
         result.Instances.Count.ShouldBe(2);

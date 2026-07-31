@@ -306,9 +306,16 @@ public partial class GdsFactoryExportViewModel : ObservableObject
         List<string> skippedConnections, List<string> unresolvedCrossings)
     {
         var orchestrator = new MixedBackendGdsOrchestrator(NazcaExporterProvider?.Invoke());
+        var exportWarnings = new List<string>();
         var scripts = orchestrator.BuildScripts(
             _canvas, new GdsFactoryExportOptions(GdsFactoryComponentMode.UbcPdkCells),
-            MetalRoutingSpecProvider?.Invoke(), library, filePath, skippedConnections, unresolvedCrossings);
+            MetalRoutingSpecProvider?.Invoke(), library, filePath, skippedConnections, unresolvedCrossings,
+            exportWarnings);
+
+        // Raw-code components whose geometry source vanished (a deleted .gds) render as
+        // placeholder boxes in the nazca partial — surface that before the run, not after.
+        foreach (var exportWarning in exportWarnings)
+            _errorConsole?.LogWarning(exportWarning);
 
         var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(filePath);
         await File.WriteAllTextAsync(partialPath, scripts.NazcaPartialScript);

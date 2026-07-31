@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using CAP.Avalonia.Services.MetalRouting;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
@@ -28,8 +29,9 @@ public class SimpleNazcaExporter
     /// (<c>GdsPinDetectionOptions.PortLayers</c>, issue #808). Labels are emitted as
     /// <c>nd.Annotation</c> — <c>nd.text</c> renders stroked POLYGONS, not GDS TEXT
     /// records, so a label-based pin detector would never see it.
+    /// Internal so <see cref="NazcaRawCodeCellWriter"/> labels raw-code pins identically.
     /// </summary>
-    private const string PortLabelLayer = "(1, 10)";
+    internal const string PortLabelLayer = "(1, 10)";
 
     /// <summary>
     /// Optional source of global interconnect settings (waveguide width/bend radius/GDS layer,
@@ -72,21 +74,36 @@ public class SimpleNazcaExporter
     /// resolve — the geometry is rendered (a real, non-placeholder crossing is not a reason to
     /// omit it), but the layout still deserves a second look.
     /// </param>
+    /// <param name="library">
+    /// Optional component library for raw-code inlining (<see cref="NazcaRawCodeCellWriter"/>):
+    /// placed components whose template carries nazca-backend raw code (GDS imports, custom
+    /// Python cells) then export their REAL geometry instead of a box stub / demofab
+    /// heuristic. Null keeps the legacy behavior.
+    /// </param>
+    /// <param name="exportWarnings">
+    /// Optional collector: appended with one description per raw-code component whose
+    /// geometry source is missing (a deleted .gds file) and that therefore exports as a
+    /// placeholder box stub.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         bool emitVerification = false,
         MetalRoutingSpec? metalSpec = null,
         List<string>? skippedConnections = null,
-        List<string>? unresolvedCrossings = null)
+        List<string>? unresolvedCrossings = null,
+        IEnumerable<ComponentTemplate>? library = null,
+        List<string>? exportWarnings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+        var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include: null, library, exportWarnings);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas);
-        var componentNames = AppendComponents(sb, canvas, emitVerification);
+        AppendPdkComponentStubs(sb, canvas, include: null, rawCodePlan);
+        NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
+        var componentNames = AppendComponents(sb, canvas, emitVerification, rawCodePlan: rawCodePlan);
         AppendConnections(
             sb, canvas, componentNames, metal, interconnectSettings.GdsLayer,
             skippedConnections, unresolvedCrossings);
@@ -109,19 +126,29 @@ public class SimpleNazcaExporter
     /// <param name="include">Predicate selecting the components to render.</param>
     /// <param name="topCellName">Name of the partial design's top cell.</param>
     /// <param name="metalSpec">Metal routing parameters; null uses <see cref="MetalRoutingSpec.Default"/>.</param>
+    /// <param name="library">
+    /// Optional component library for raw-code inlining — see <see cref="Export"/>.
+    /// </param>
+    /// <param name="exportWarnings">
+    /// Optional collector for missing-source raw-code fallbacks — see <see cref="Export"/>.
+    /// </param>
     public string ExportPartial(
         DesignCanvasViewModel canvas,
         Func<Component, bool> include,
         string topCellName,
-        MetalRoutingSpec? metalSpec = null)
+        MetalRoutingSpec? metalSpec = null,
+        IEnumerable<ComponentTemplate>? library = null,
+        List<string>? exportWarnings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+        var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include, library, exportWarnings);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas, include);
-        AppendComponents(sb, canvas, emitVerification: false, include, topCellName);
+        AppendPdkComponentStubs(sb, canvas, include, rawCodePlan);
+        NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
+        AppendComponents(sb, canvas, emitVerification: false, include, topCellName, rawCodePlan);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
@@ -160,10 +187,12 @@ public class SimpleNazcaExporter
     /// for the real foundry geometry when the PDK is installed.
     /// </summary>
     private static void AppendPdkComponentStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
+        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null,
+        RawCodeExportPlan? rawCodePlan = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
+        var plan = rawCodePlan ?? RawCodeExportPlan.Empty;
 
         foreach (var compVm in canvas.Components)
         {
@@ -175,13 +204,13 @@ public class SimpleNazcaExporter
                 {
                     if (child.IsAnalysisTool) continue;
                     if (include != null && !include(child)) continue;
-                    AppendComponentStub(sb, child, generated, ci);
+                    AppendComponentStub(sb, child, generated, ci, plan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendComponentStub(sb, comp, generated, ci);
+                AppendComponentStub(sb, comp, generated, ci, plan);
             }
         }
     }
@@ -191,10 +220,25 @@ public class SimpleNazcaExporter
     /// Dedupes by STUB name, not function name: parameterized components carry a
     /// parameters hash in the name (issue #783), so each distinct parameter set
     /// generates its own stub while identical placements still share one.
+    /// A component in the raw-code plan renders its real geometry via
+    /// <see cref="NazcaRawCodeCellWriter"/> instead — no stub — unless it is a
+    /// missing-source fallback, which keeps a box stub under the wrapper's
+    /// function name so the placement call is identical either way.
     /// </summary>
     private static void AppendComponentStub(
-        StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci)
+        StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci,
+        RawCodeExportPlan plan)
     {
+        if (plan.TryGetEntry(comp, out var rawEntry))
+        {
+            if (!rawEntry.IsFallback || !generated.Add(rawEntry.FunctionName))
+                return;
+            AppendStandardComponentStub(
+                sb, rawEntry.Template.Name, rawEntry.FunctionName, comp, ci,
+                NazcaCoordinateMapper.GetStubAnchor(comp));
+            return;
+        }
+
         var funcName = comp.NazcaFunctionName;
         if (string.IsNullOrEmpty(funcName) || !RequiresStub(funcName))
             return;
@@ -300,8 +344,16 @@ public class SimpleNazcaExporter
     /// hash for parameterized components (<see cref="NazcaStubNaming"/>, issue #783),
     /// so two parameter sets never share one cell.
     /// </param>
+    /// <param name="anchorOverride">
+    /// Optional cell anchor replacing the calibrated origin offset: the raw-code
+    /// fallback stub anchors on <see cref="NazcaCoordinateMapper.GetStubAnchor"/>
+    /// (the same value the placement derives its bbox from) because raw-code
+    /// components carry no calibrated offset — the plain (0, 0) default would
+    /// render the box and its pins one cell height below the placed position.
+    /// </param>
     private static void AppendStandardComponentStub(
-        StringBuilder sb, string funcName, string stubName, Component comp, CultureInfo ci)
+        StringBuilder sb, string funcName, string stubName, Component comp, CultureInfo ci,
+        (double X, double Y)? anchorOverride = null)
     {
         var w = comp.WidthMicrometers;
         var h = comp.HeightMicrometers;
@@ -316,8 +368,8 @@ public class SimpleNazcaExporter
         // Stubs are only generated for PDK-named components (see RequiresStub), whose
         // placement always uses the calibrated origin offset — (0,0) means org at the
         // box top-left. Example: GC with offset (0, 9.5), H=19 → polygon (0,-9.5)..(W,9.5).
-        double offsetX = comp.NazcaOriginOffsetX;
-        double offsetY = comp.NazcaOriginOffsetY;
+        double offsetX = anchorOverride?.X ?? comp.NazcaOriginOffsetX;
+        double offsetY = anchorOverride?.Y ?? comp.NazcaOriginOffsetY;
 
         var px0 = NazcaCoordinateMapper.NormalizeZero(-offsetX).ToString("F2", ci);
         var py0 = NazcaCoordinateMapper.NormalizeZero(offsetY - h).ToString("F2", ci);
@@ -355,7 +407,8 @@ public class SimpleNazcaExporter
 
     private static Dictionary<Component, string> AppendComponents(
         StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false,
-        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design")
+        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design",
+        RawCodeExportPlan? rawCodePlan = null)
     {
         sb.AppendLine("def create_design():");
         sb.AppendLine($"    with nd.Cell(name='{topCellName}') as design:");
@@ -364,6 +417,7 @@ public class SimpleNazcaExporter
         var componentNames = new Dictionary<Component, string>();
         int compIndex = 0;
         var ci = CultureInfo.InvariantCulture;
+        var plan = rawCodePlan ?? RawCodeExportPlan.Empty;
 
         foreach (var compVm in canvas.Components)
         {
@@ -384,13 +438,13 @@ public class SimpleNazcaExporter
                     if (child.IsAnalysisTool) continue;
                     if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     if (include != null && !include(child)) continue;
-                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
+                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, plan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci);
+                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci, plan);
             }
         }
 
@@ -444,7 +498,7 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendSingleComponent(
         StringBuilder sb, Component comp, Dictionary<Component, string> componentNames,
-        ref int compIndex, CultureInfo ci)
+        ref int compIndex, CultureInfo ci, RawCodeExportPlan? rawCodePlan = null)
     {
         var varName = $"comp_{compIndex}";
 
@@ -452,7 +506,12 @@ public class SimpleNazcaExporter
         var nazcaX = placement.X.ToString("F2", ci);
         var nazcaY = placement.Y.ToString("F2", ci);
         var rot = placement.RotationDegrees.ToString("F0", ci);
-        var nazcaFunc = GetNazcaFunction(comp);
+        // A raw-code component (GDS import / custom Python cell) calls its inlined
+        // wrapper — same call shape for the real-geometry wrapper and the
+        // missing-source fallback box stub (<see cref="NazcaRawCodeCellWriter"/>).
+        var nazcaFunc = rawCodePlan is not null && rawCodePlan.TryGetEntry(comp, out var rawEntry)
+            ? $"{rawEntry.FunctionName}()"
+            : GetNazcaFunction(comp);
 
         // Diagnostic logging (Issue #334): trace coordinate transform for each component.
         // originOffset is the effective put-position offset relative to the editor
@@ -532,8 +591,9 @@ public class SimpleNazcaExporter
     /// Escapes a name for emission inside a single-quoted Python string literal:
     /// backslashes and single quotes would otherwise break (or inject into) the
     /// generated script, and raw line breaks would split the statement (#808).
+    /// Internal so <see cref="NazcaRawCodeCellWriter"/> escapes pin labels identically.
     /// </summary>
-    private static string EscapePythonString(string value) =>
+    internal static string EscapePythonString(string value) =>
         value.Replace("\\", "\\\\", StringComparison.Ordinal)
              .Replace("'", "\\'", StringComparison.Ordinal)
              .Replace("\r", "\\r", StringComparison.Ordinal)

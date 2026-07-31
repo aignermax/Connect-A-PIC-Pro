@@ -202,15 +202,36 @@ internal sealed class GdsHierarchyImportSession
     private static bool IsHexDigit(char c) =>
         c is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F';
 
+    /// <summary>
+    /// Builds the raw-code snippet whose <c>component()</c> returns the loaded GDS
+    /// cell RE-ANCHORED to the application's origin convention: <c>nd.load_gds</c>
+    /// keeps the GDS cell's own origin, so the cell is wrapped and shifted by
+    /// <c>-bbox.min</c> — afterwards its geometry bounding box starts at (0, 0),
+    /// i.e. the origin sits at the bbox bottom-left (Nazca Y-up), which is the
+    /// app-space bbox top-left the exporter's placement math anchors on
+    /// (<c>NazcaCoordinateMapper</c>'s zero-offset fallback). The wrapper still
+    /// exposes bbox/pins, so the raw-code preview contract
+    /// (<c>render_component_preview.py</c>) is unaffected.
+    /// <c>topcellsonly=False</c> is required: the imported cell is usually a
+    /// SUBcell of the file's top cell, which the default top-cells-only lookup
+    /// refuses to find.
+    /// </summary>
     private static string BuildRawCode(string cellName)
     {
         string escaped = cellName.Replace("\\", "\\\\").Replace("\"", "\\\"");
         return
             "import nazca as nd\n" +
             "\n" +
-            $"# Loads GDS cell \"{escaped}\". {GdsHierarchyImporter.GdsFileNameToken} is a placeholder: the service replaces it\n" +
-            "# with the absolute path of the .gds file copied next to the user-PDK JSON.\n" +
+            $"# Loads GDS cell \"{escaped}\" and re-anchors it to the bbox bottom-left (Nazca Y-up), the\n" +
+            "# app-space bbox top-left the exporter/preview placement math anchors on.\n" +
+            $"# {GdsHierarchyImporter.GdsFileNameToken} is a placeholder: the service replaces it with the absolute\n" +
+            "# path of the .gds file copied next to the user-PDK JSON. topcellsonly=False because the\n" +
+            "# imported cell is usually a SUBcell of the file's top cell.\n" +
             "def component():\n" +
-            $"    return nd.load_gds(filename=\"{GdsHierarchyImporter.GdsFileNameToken}\", cellname=\"{escaped}\")\n";
+            $"    with nd.Cell(name=\"{escaped}_aligned\") as cell:\n" +
+            $"        _loaded = nd.load_gds(filename=\"{GdsHierarchyImporter.GdsFileNameToken}\", cellname=\"{escaped}\", topcellsonly=False)\n" +
+            "        _bb = _loaded.bbox\n" +
+            "        _loaded.put(-_bb[0], -_bb[1])\n" +
+            "    return cell\n";
     }
 }

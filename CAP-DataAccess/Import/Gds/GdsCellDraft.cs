@@ -58,11 +58,15 @@ public sealed record GdsCellDraft
 
     /// <summary>
     /// Nazca raw-code snippet that rebuilds this cell's geometry for preview and
-    /// GDS export round-trip: a <c>component()</c> function returning
-    /// <c>nd.load_gds(...)</c> for this cell, matching the raw-code execution
-    /// contract (the file is imported as a Python module and its
-    /// <c>component()</c> callable must return a Nazca cell). The
-    /// <c>{GdsFileName}</c> token (<see cref="GdsHierarchyImporter.GdsFileNameToken"/>)
+    /// GDS export round-trip: a <c>component()</c> function returning a wrapper
+    /// cell around <c>nd.load_gds(...)</c> for this cell, matching the raw-code
+    /// execution contract (the file is imported as a Python module and its
+    /// <c>component()</c> callable must return a Nazca cell). The wrapper
+    /// re-anchors the loaded cell by <c>-bbox.min</c> (nd.load_gds keeps the GDS
+    /// cell's own origin), so the returned cell's geometry bounding box starts at
+    /// (0, 0) — the bbox bottom-left in Nazca Y-up space is the app-space bbox
+    /// top-left (<see cref="GdsOutlinePoint"/>) the exporter's placement anchors
+    /// on. The <c>{GdsFileName}</c> token (<see cref="GdsHierarchyImporter.GdsFileNameToken"/>)
     /// is a placeholder: the service layer replaces it with the absolute path of
     /// the source .gds after copying it next to the user-PDK JSON. An absolute
     /// path is required because the raw-code executor
