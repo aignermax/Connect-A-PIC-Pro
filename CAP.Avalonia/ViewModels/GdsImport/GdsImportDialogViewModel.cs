@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Import.Gds;
@@ -72,15 +73,21 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private string _waveguideLayersText = "1,0";
 
     /// <summary>
-    /// Auto-connect free pins after placement (experimental). Exposed already so the
-    /// follow-up step can wire it through; the dialog's CheckBox is disabled in v1, so
-    /// this is always false and nothing consumes it yet. When implemented, the flag
-    /// flows from here into <see cref="GdsPlacementExecutor.ExecuteAsync"/> (a pass
-    /// that pairs unconnected pins between the placed instances after the abutment
-    /// connections).
+    /// Auto-connect free pins after placement (experimental). When set, the flag
+    /// flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>: a pass pairs
+    /// unconnected optical pins of the placed instances that face each other
+    /// within <see cref="AutoConnectRadiusText"/> after the abutment connections,
+    /// followed by a validation run whose issues land in the result warnings.
     /// </summary>
     [ObservableProperty]
     private bool _autoConnectRequested;
+
+    /// <summary>
+    /// Pairing radius (µm) for the auto-connect pass, as typed by the user;
+    /// validated at import time (positive number, invariant culture).
+    /// </summary>
+    [ObservableProperty]
+    private string _autoConnectRadiusText = "1000";
 
     /// <summary>True once an import finished successfully; switches the dialog to the result view.</summary>
     [ObservableProperty]
@@ -146,7 +153,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
 
         try
         {
-            var analysis = await _importService.AnalyzeAsync(GdsFilePath, _cts.Token);
+            var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, _cts.Token);
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
                 TopCells.Add(topCell);
@@ -189,6 +196,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
             return;
         }
 
+        if (!TryParseAutoConnectRadius(out var autoConnectRadiusUm))
+        {
+            ErrorText = string.Format(
+                LocalizationService.Instance.Translate("GdsImport.ErrorRadiusSyntax"), AutoConnectRadiusText);
+            HasError = true;
+            return;
+        }
+
         IsBusy = true;
         HasError = false;
         ErrorText = "";
@@ -202,7 +217,8 @@ public partial class GdsImportDialogViewModel : ObservableObject
                 GdsFilePath, SelectedTopCell.CellName, options, progress, _cts.Token);
 
             var plan = GdsPlacementPlan.FromOutcome(outcome);
-            var report = await _placementExecutor.ExecuteAsync(plan, progress, _cts.Token);
+            var report = await _placementExecutor.ExecuteAsync(
+                plan, progress, _cts.Token, AutoConnectRequested, autoConnectRadiusUm);
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);
@@ -214,8 +230,17 @@ public partial class GdsImportDialogViewModel : ObservableObject
             foreach (var skipped in report.SkippedConnections)
                 Warnings.Add(string.Format(
                     LocalizationService.Instance.Translate("GdsImport.SkippedConnectionFormat"), skipped));
+            foreach (var pair in report.AutoConnectedPairs)
+                Warnings.Add(string.Format(
+                    LocalizationService.Instance.Translate("GdsImport.AutoConnectedFormat"), pair));
+            foreach (var skipped in report.SkippedAutoConnect)
+                Warnings.Add(string.Format(
+                    LocalizationService.Instance.Translate("GdsImport.SkippedAutoConnectFormat"), skipped));
+            foreach (var issue in report.ValidationWarnings)
+                Warnings.Add(string.Format(
+                    LocalizationService.Instance.Translate("GdsImport.ValidationWarningFormat"), issue));
 
-            ResultSummaryText = BuildSummary(report);
+            ResultSummaryText = BuildSummary(report, AutoConnectRequested);
             ImportCompleted = true;
             StatusText = "";
         }
@@ -254,17 +279,43 @@ public partial class GdsImportDialogViewModel : ObservableObject
         OnClose?.Invoke();
     }
 
-    private static string BuildSummary(GdsPlacementReport report)
+    private static string BuildSummary(GdsPlacementReport report, bool autoConnectRequested)
     {
         var summary = string.Format(
             LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
             report.PlacedCount, report.ConnectedCount);
+        if (autoConnectRequested)
+        {
+            summary += string.Format(
+                LocalizationService.Instance.Translate("GdsImport.ResultAutoConnectSuffix"),
+                report.AutoConnectedCount);
+        }
         if (report.GroupCreated)
         {
             summary += string.Format(
                 LocalizationService.Instance.Translate("GdsImport.ResultGroupSuffix"), report.GroupName);
         }
         return summary;
+    }
+
+    /// <summary>
+    /// Parses the auto-connect radius field (invariant culture, so the field behaves
+    /// identically on every machine locale). Only consulted when auto-connect is on;
+    /// an unchecked box always yields the default radius.
+    /// </summary>
+    private bool TryParseAutoConnectRadius(out double radiusUm)
+    {
+        radiusUm = GdsPlacementExecutor.DefaultAutoConnectRadiusUm;
+        if (!AutoConnectRequested)
+            return true;
+
+        return double.TryParse(
+                   AutoConnectRadiusText,
+                   NumberStyles.Float,
+                   CultureInfo.InvariantCulture,
+                   out radiusUm)
+               && radiusUm > 0
+               && !double.IsInfinity(radiusUm);
     }
 
     /// <summary>Builds the import options from the mode radio and the layer text fields.</summary>

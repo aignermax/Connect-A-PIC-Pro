@@ -108,11 +108,21 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Auto-connect (experimental, enabled in a follow-up) -->
-                <CheckBox IsChecked="{Binding AutoConnectRequested}" IsEnabled="False"
-                          Content="{loc:Localize GdsImport.AutoConnect}"
-                          ToolTip.Tip="{loc:Localize GdsImport.AutoConnectTip}"
-                          Foreground="Gray" FontSize="11"/>
+                <!-- Auto-connect (experimental) + pairing radius -->
+                <Grid ColumnDefinitions="Auto,12,Auto">
+                    <CheckBox IsChecked="{Binding AutoConnectRequested}"
+                              Content="{loc:Localize GdsImport.AutoConnect}"
+                              ToolTip.Tip="{loc:Localize GdsImport.AutoConnectTip}"
+                              Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
+                                IsVisible="{Binding AutoConnectRequested}"
+                                VerticalAlignment="Center">
+                        <TextBox Text="{Binding AutoConnectRadiusText}" Width="70"
+                                 Background="#2d2d2d" Foreground="White" FontSize="11"
+                                 ToolTip.Tip="{loc:Localize GdsImport.AutoConnectRadiusTip}"/>
+                        <TextBlock Text="µm" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Grid>
             </StackPanel>
 
             <!-- ═══ Result (after successful import) ═══ -->

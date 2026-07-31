@@ -69,6 +69,22 @@ public class GdsImportDialogViewModelTests : IDisposable
         .EndLibrary()
         .ToArray();
 
+    /// <summary>
+    /// Same cells as <see cref="TwoWaveguideLibrary"/> but with an 80 µm gap between
+    /// wgA.out and wgB.in — the pins face each other without abutting, so only the
+    /// auto-connect pass can wire them.
+    /// </summary>
+    private static byte[] TwoWaveguideLibraryWithGap() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("wgA", 0, 0)
+            .SRef("wgB", 90000, 0)
+        .EndCell()
+        .WaveguideCell("wgA")
+        .WaveguideCell("wgB")
+        .EndLibrary()
+        .ToArray();
+
     private string WriteGds(byte[] content, string fileName = "circuit.gds")
     {
         Directory.CreateDirectory(_root);
@@ -239,7 +255,72 @@ public class GdsImportDialogViewModelTests : IDisposable
         var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
 
         vm.AutoConnectRequested.ShouldBeFalse(
-            "the follow-up step wires the flag; v1 keeps it off (disabled CheckBox)");
+            "auto-connect is an opt-in experimental feature; the default import changes nothing");
+    }
+
+    // ── Auto-connect (experimental) ──────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_AutoConnectOn_ConnectsFacingFreePinsAcrossTheGap()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
+        await vm.StartAnalysisAsync();
+        vm.AutoConnectRequested = true;
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeFalse();
+        vm.ImportCompleted.ShouldBeTrue();
+        var group = canvas.Components.ShouldHaveSingleItem().Component
+            .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
+        group.InternalPaths.Count.ShouldBe(2,
+            "the flag reached the executor: wgA.out↔wgB.in across the gap plus the wgA.in↔wgB.out wrap-around");
+    }
+
+    [Fact]
+    public async Task ImportAsync_AutoConnectOff_LeavesGappedPinsUnconnected()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        var group = canvas.Components.ShouldHaveSingleItem().Component
+            .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
+        group.InternalPaths.ShouldBeEmpty("the 80 µm gap is no abutment, and auto-connect is off");
+    }
+
+    [Fact]
+    public async Task ImportAsync_AutoConnectRadiusBelowGap_ConnectsNothing()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
+        await vm.StartAnalysisAsync();
+        vm.AutoConnectRequested = true;
+        vm.AutoConnectRadiusText = "10"; // gap is 80 µm — out of radius
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        var group = canvas.Components.ShouldHaveSingleItem().Component
+            .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
+        group.InternalPaths.ShouldBeEmpty("the radius field flows into the executor's pairing pass");
+    }
+
+    [Fact]
+    public async Task ImportAsync_InvalidAutoConnectRadius_ShowsErrorWithoutImporting()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
+        await vm.StartAnalysisAsync();
+        vm.AutoConnectRequested = true;
+        vm.AutoConnectRadiusText = "bogus";
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeTrue();
+        vm.ErrorText.ShouldContain("bogus");
+        vm.ImportCompleted.ShouldBeFalse();
+        canvas.Components.ShouldBeEmpty("nothing is imported when option validation fails");
     }
 }
 

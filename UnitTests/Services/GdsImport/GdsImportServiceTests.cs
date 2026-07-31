@@ -34,7 +34,7 @@ public class GdsImportServiceTests : IDisposable
     // ── Fixtures ─────────────────────────────────────────────────────────────
 
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>
-    private byte[] TwoWaveguideLibrary() => GdsTestWriter.Create()
+    private static byte[] TwoWaveguideLibrary() => GdsTestWriter.Create()
         .StandardPrologue()
         .BeginCell("TOP")
             .SRef("wgA", 0, 0)
@@ -90,7 +90,7 @@ public class GdsImportServiceTests : IDisposable
     {
         var path = WriteGds(TwoWaveguideLibrary());
 
-        var analysis = await new GdsImportService(Store()).AnalyzeAsync(path);
+        var analysis = await GdsImportService.AnalyzeAsync(path);
 
         analysis.CellCount.ShouldBe(3);
         analysis.TopCellCandidates.ShouldBe(new[] { "TOP" });
@@ -104,7 +104,7 @@ public class GdsImportServiceTests : IDisposable
     {
         var missing = Path.Combine(_root, "nope.gds");
         await Should.ThrowAsync<FileNotFoundException>(
-            () => new GdsImportService(Store()).AnalyzeAsync(missing));
+            () => GdsImportService.AnalyzeAsync(missing));
     }
 
     // ── Happy path ───────────────────────────────────────────────────────────

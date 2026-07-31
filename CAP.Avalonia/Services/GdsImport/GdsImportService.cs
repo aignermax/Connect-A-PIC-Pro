@@ -57,7 +57,7 @@ public sealed class GdsImportService
     /// </summary>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
     /// <exception cref="InvalidDataException">The file is not a readable GDS II stream.</exception>
-    public async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
+    public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
         var library = await ReadLibraryAsync(gdsPath, ct).ConfigureAwait(false);
         var candidates = library.TopCellCandidates;
