@@ -3,6 +3,7 @@ using System.Text;
 using CAP.Avalonia.Services.MetalRouting;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
+using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.PinKinds;
@@ -21,6 +22,16 @@ namespace CAP.Avalonia.Services;
 public class SimpleNazcaExporter
 {
     /// <summary>
+    /// GDS (layer, datatype) pair for pin/port labels (TEXT elements), emitted as a
+    /// Python layer tuple: the gdsfactory port-label convention (1, 10), which is also
+    /// the default our GDS re-import pin detector reads
+    /// (<c>GdsPinDetectionOptions.PortLayers</c>, issue #808). Labels are emitted as
+    /// <c>nd.Annotation</c> — <c>nd.text</c> renders stroked POLYGONS, not GDS TEXT
+    /// records, so a label-based pin detector would never see it.
+    /// </summary>
+    private const string PortLabelLayer = "(1, 10)";
+
+    /// <summary>
     /// Optional source of global interconnect settings (waveguide width/bend radius/GDS layer,
     /// issue #574). When null, the historical export defaults (<see cref="InterconnectSettings"/>)
     /// are used.
@@ -29,6 +40,9 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Exports the full design to a Python/Nazca script.
+    /// Component stub cells carry a TEXT label per optical pin and the design's external
+    /// ports (fiber couplers) carry top-cell labels — both on the gdsfactory port-label
+    /// layer (1, 10) so the GDS re-import detects named pins (issue #808).
     /// </summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="pdkModuleName">Optional PDK module name (e.g., "siepic_ebeam_pdk") for import.</param>
@@ -249,10 +263,17 @@ public class SimpleNazcaExporter
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
 
             // For straight waveguides: input pin at x=0, output pin at x=length.
+            // The label anchors exactly on the pin so re-import detects it there (#808).
             if (uox == 0)
+            {
                 sb.AppendLine($"        nd.Pin('{pin.Name}').put(0, {py}, {pa})");
+                sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(0, {py})");
+            }
             else
+            {
                 sb.AppendLine($"        nd.Pin('{pin.Name}').put(length, {py}, {pa})");
+                sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(length, {py})");
+            }
         }
 
         sb.AppendLine($"    return cell");
@@ -270,6 +291,9 @@ public class SimpleNazcaExporter
     /// The stub box doubles as the anchor the klayout post-pass
     /// (<see cref="SiepicCellUpgradeWriter"/>) fills with real foundry geometry
     /// for SiEPIC cells — same cell name, so instances keep their placement.
+    /// Every optical pin additionally gets a TEXT label on <see cref="PortLabelLayer"/>
+    /// anchored on the pin, so a re-import of the cell detects named pins there
+    /// (issue #808).
     /// </summary>
     /// <param name="stubName">
     /// Cell/function name to emit: <paramref name="funcName"/> plus the parameters
@@ -319,6 +343,8 @@ public class SimpleNazcaExporter
             var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
             sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
+            // Pin label at the same anchor — re-import detects the named pin there (#808).
+            sb.AppendLine($"    nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put({px}, {py})");
         }
 
         sb.AppendLine();
@@ -462,11 +488,56 @@ public class SimpleNazcaExporter
         // and export math both assume.
         sb.AppendLine($"        {varName} = {nazcaFunc}.put('org', {nazcaX}, {nazcaY}, {rot})  # {comp.Identifier}");
 
+        // External ports of the design get a top-cell label on the port-label layer,
+        // so re-imports and label-based tools find the circuit's interface (#808).
+        AppendExternalPortLabels(sb, comp, ci);
+
         // Record the variable only after its put-line was emitted: a half-failed append
         // must not leave a name pointing at a component that was never placed.
         componentNames[comp] = varName;
         compIndex++;
     }
+
+    /// <summary>
+    /// Emits one top-cell port label (GDS TEXT on <see cref="PortLabelLayer"/>) per optical
+    /// pin of a fiber-interface coupler — the design's external ports. What counts as a
+    /// coupler follows <see cref="LightSourceClassifier"/> (grating/edge couplers), the same
+    /// single source of truth the simulation uses to bind external inputs/outputs: both
+    /// laser-enabled input couplers and listen-only output couplers are labeled. The label
+    /// sits at the pin's world position (the same plain-Y-negation transform as every other
+    /// pin coordinate in this script) and is named "{Identifier}_{PinName}" so multiple
+    /// couplers never produce colliding port names. Non-coupler components emit nothing:
+    /// their pins are already labeled inside their stub cells.
+    /// </summary>
+    private static void AppendExternalPortLabels(StringBuilder sb, Component comp, CultureInfo ci)
+    {
+        if (!LightSourceClassifier.IsLightInjectingCoupler(comp))
+            return;
+
+        foreach (var pin in comp.PhysicalPins)
+        {
+            // Optical pins only — an electrical pin (e.g. a detector's contacts) is not
+            // an optical port and must not become one on re-import (#519).
+            if (pin.MatterType != MatterType.Light) continue;
+
+            var (x, y) = NazcaCoordinateMapper.GetPinNazcaPosition(pin);
+            var px = x.ToString("F2", ci);
+            var py = y.ToString("F2", ci);
+            var portName = EscapePythonString($"{comp.Identifier}_{pin.Name}");
+            sb.AppendLine($"        nd.Annotation(text='{portName}', layer={PortLabelLayer}).put({px}, {py})");
+        }
+    }
+
+    /// <summary>
+    /// Escapes a name for emission inside a single-quoted Python string literal:
+    /// backslashes and single quotes would otherwise break (or inject into) the
+    /// generated script, and raw line breaks would split the statement (#808).
+    /// </summary>
+    private static string EscapePythonString(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace("'", "\\'", StringComparison.Ordinal)
+             .Replace("\r", "\\r", StringComparison.Ordinal)
+             .Replace("\n", "\\n", StringComparison.Ordinal);
 
     private static void AppendConnections(
         StringBuilder sb,
