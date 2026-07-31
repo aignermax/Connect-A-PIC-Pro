@@ -117,6 +117,9 @@ public sealed record GdsPlacementPlan
         var registeredByDraftName = outcome.RegisteredComponents
             .ToDictionary(r => r.CellDraftName, r => r.ComponentName, StringComparer.Ordinal);
 
+        if (outcome.Mode == GdsHierarchyImportMode.BlackBox)
+            return BlackBoxPlan(outcome, registeredByDraftName);
+
         var placements = outcome.Instances.Select(instance =>
         {
             string? identifier;
@@ -189,4 +192,37 @@ public sealed record GdsPlacementPlan
         InstanceIndex = endpoint.InstanceIndex,
         PinName = endpoint.PinName,
     };
+
+    /// <summary>
+    /// Black-box imports carry no instances — the whole top cell became one
+    /// registered component. The plan is a single placement of that component at
+    /// the plan-space origin (the imported layout's top-left IS the component's
+    /// bounding box), so the executor drops it onto the canvas like any instance.
+    /// </summary>
+    private static GdsPlacementPlan BlackBoxPlan(
+        GdsImportOutcome outcome, Dictionary<string, string> registeredByDraftName)
+    {
+        var registered = registeredByDraftName.TryGetValue(outcome.TopCellName, out var componentName);
+        return new GdsPlacementPlan
+        {
+            GroupName = outcome.TopCellName,
+            Placements = new[]
+            {
+                new GdsPlacementInstruction
+                {
+                    InstanceName = outcome.TopCellName,
+                    ComponentIdentifier = registered ? componentName : null,
+                    PdkSource = registered ? outcome.UserPdkName : null,
+                    IsImportedDraft = true,
+                    XUm = 0,
+                    YUm = 0,
+                    Warning = registered
+                        ? null
+                        : $"Cell '{outcome.TopCellName}' was not registered; the black-box component cannot be placed.",
+                }
+            },
+            Connections = Array.Empty<GdsConnectionInstruction>(),
+            Warnings = outcome.Warnings,
+        };
+    }
 }

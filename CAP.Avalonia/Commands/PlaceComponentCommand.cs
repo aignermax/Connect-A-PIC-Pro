@@ -24,7 +24,8 @@ public class PlaceComponentCommand : IUndoableCommand
         ComponentTemplate template,
         double x,
         double y,
-        bool isValid)
+        bool isValid,
+        int quarterTurnsCounterClockwise = 0)
     {
         _canvas = canvas;
         _template = template;
@@ -35,6 +36,13 @@ public class PlaceComponentCommand : IUndoableCommand
         if (isValid)
         {
             _component = ComponentTemplates.CreateFromTemplate(template, _x, _y);
+            // Rotate at the model level BEFORE the component is added to the canvas:
+            // rotation keeps the top-left corner invariant, so (x, y) is the top-left
+            // of the already-rotated bounding box. Doing it pre-placement also avoids
+            // the canvas collision guard, which enforces a minimum inter-component
+            // gap that GDS-abutting neighbours legitimately violate.
+            for (var i = 0; i < quarterTurnsCounterClockwise; i++)
+                RotateComponentCommand.ApplyModelRotation90(_component);
         }
     }
 
@@ -60,6 +68,34 @@ public class PlaceComponentCommand : IUndoableCommand
 
         return new PlaceComponentCommand(canvas, template, validPosition.Value.x, validPosition.Value.y, true);
     }
+
+    /// <summary>
+    /// Creates a placement command that puts the component at exactly (x, y) —
+    /// no collision search, no nudging, no chip-bounds clamping. For programmatic
+    /// imports (e.g. GDS) where the source layout's coordinates are authoritative
+    /// and any nudge would silently break abutment between placed instances.
+    /// </summary>
+    /// <param name="canvas">Canvas the component is placed onto.</param>
+    /// <param name="template">PDK template to instantiate.</param>
+    /// <param name="x">Exact X position (µm) of the rotated bounding box's top-left corner.</param>
+    /// <param name="y">Exact Y position (µm) of the rotated bounding box's top-left corner.</param>
+    /// <param name="quarterTurnsCounterClockwise">
+    /// Number of 90° counter-clockwise rotations applied to the component before
+    /// placement (0–3). The position is rotation-invariant (top-left stays fixed).
+    /// </param>
+    public static PlaceComponentCommand CreateExact(
+        DesignCanvasViewModel canvas,
+        ComponentTemplate template,
+        double x,
+        double y,
+        int quarterTurnsCounterClockwise = 0)
+        => new(canvas, template, x, y, true, quarterTurnsCounterClockwise);
+
+    /// <summary>The component instance created by this command (null when invalid).</summary>
+    public Component? PlacedComponent => _component;
+
+    /// <summary>The canvas ViewModel created for the component on <see cref="Execute"/> (null until then).</summary>
+    public ComponentViewModel? CreatedViewModel => _createdViewModel;
 
     public string Description => $"Place {_template.Name}";
 

@@ -149,6 +149,14 @@ public partial class MainViewModel : ObservableObject
     public LeftPanelViewModel LeftPanel { get; }
 
     /// <summary>
+    /// ViewModel behind the library panel's "Import GDS" button (issue #808):
+    /// picks the .gds file and opens the import dialog. Deliberately NOT part of
+    /// <see cref="LeftPanelViewModel"/> — GDS import is a self-contained flow that
+    /// only reads the panel's template list and registration callback.
+    /// </summary>
+    public ViewModels.GdsImport.GdsImportButtonViewModel GdsImport { get; }
+
+    /// <summary>
     /// ViewModel for the right sidebar panel (analysis, diagnostics, validation).
     /// </summary>
     public RightPanelViewModel RightPanel { get; }
@@ -208,6 +216,7 @@ public partial class MainViewModel : ObservableObject
             FileOperations.VerilogAExport.FileDialogService = value;
             GdsFactoryExport.FileDialogService = value;
             LeftPanel.FileDialogService = value;
+            GdsImport.FileDialogService = value;
         }
     }
 
@@ -299,6 +308,8 @@ public partial class MainViewModel : ObservableObject
         BottomPanel = bottomPanel;
         Registry = registryBrowser;
 
+        GdsImport = new ViewModels.GdsImport.GdsImportButtonViewModel(_canvas, commandManager, LeftPanel);
+
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
         var recentProjects = recentProjectsService ?? new Services.RecentProjectsService(preferencesService);
@@ -377,6 +388,7 @@ public partial class MainViewModel : ObservableObject
         FileOperations.UpdateStatus = UpdateStatusText;
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
+        GdsImport.UpdateStatus = UpdateStatusText;
         // Key-preserving sink: lets a live UI language switch re-translate the startup
         // "Loaded N component types" status while it is still showing.
         LeftPanel.UpdateLocalizedStatus = SetLocalizedStatus;

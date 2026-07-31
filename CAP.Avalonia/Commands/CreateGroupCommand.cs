@@ -40,6 +40,9 @@ public class CreateGroupCommand : IUndoableCommand
 
     public string Description => $"Create group from {_components.Count} components";
 
+    /// <summary>The group created by <see cref="Execute"/> (null until the first execution).</summary>
+    public ComponentGroup? CreatedGroup => _createdGroup;
+
     public void Execute()
     {
         if (_components.Count < 2)

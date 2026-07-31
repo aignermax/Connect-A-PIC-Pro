@@ -613,7 +613,7 @@
 
                 <!-- Component Library -->
                 <DockPanel Grid.Row="4">
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="10,6,10,4">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="10,6,10,4">
                         <TextBlock Grid.Column="0" Text="{loc:Localize LeftPanel.ComponentLibrary}"
                                    FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         <!-- Opens the Component Registry browser window (#656) — the online,
@@ -621,7 +621,12 @@
                         <Button Grid.Column="1" Content="🌐" Click="OpenRegistryBrowser_Click"
                                 Padding="6,0" Margin="0,0,4,0" Background="#2a3a4a"
                                 ToolTip.Tip="{loc:Localize Registry.OpenTip}"/>
-                        <Button Grid.Column="2" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
+                        <!-- Imports a GDS layout as canvas components (#808) — the command lives
+                             on MainViewModel.GdsImport, not on LeftPanelViewModel. -->
+                        <Button Grid.Column="2" Content="GDS" Command="{Binding GdsImport.OpenGdsImportDialogCommand}"
+                                Padding="6,0" Margin="0,0,4,0" Background="#3a3a4a" FontSize="10"
+                                ToolTip.Tip="{loc:Localize GdsImport.OpenTip}"/>
+                        <Button Grid.Column="3" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
                                 Padding="8,0" FontWeight="Bold" Background="#2a4a2a"
                                 ToolTip.Tip="{loc:Localize LeftPanel.NewComponentTip}"/>
                     </Grid>

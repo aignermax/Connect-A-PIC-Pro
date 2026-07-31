@@ -1,0 +1,139 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:system="clr-namespace:System;assembly=System.Runtime"
+        xmlns:vm="using:CAP.Avalonia.ViewModels.GdsImport"
+        xmlns:gds="using:CAP.Avalonia.Services.GdsImport"
+        xmlns:loc="using:CAP.Avalonia.Services.Localization"
+        x:Class="CAP.Avalonia.Views.Dialogs.GdsImportDialog"
+        x:DataType="vm:GdsImportDialogViewModel"
+        Title="{loc:Localize GdsImport.WindowTitle}"
+        Width="560" MaxHeight="720"
+        SizeToContent="Height"
+        WindowStartupLocation="CenterOwner"
+        CanResize="False"
+        Background="#1e1e1e"
+        Foreground="White">
+
+    <DockPanel Margin="16">
+
+        <!-- Header -->
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,12">
+            <TextBlock Text="{loc:Localize GdsImport.WindowTitle}" FontSize="17" FontWeight="Bold" Foreground="White"/>
+            <TextBlock Text="{Binding GdsFilePath}" FontSize="10" Foreground="Gray"
+                       TextWrapping="Wrap" Margin="0,4,0,0"/>
+        </StackPanel>
+
+        <!-- Bottom buttons -->
+        <Border DockPanel.Dock="Bottom" Margin="0,14,0,0">
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+                <Button Content="{Binding CloseButtonText}" Command="{Binding CancelCommand}"
+                        Background="#4d3d3d" Foreground="White" Width="90"/>
+                <Button Content="{loc:Localize GdsImport.Retry}" Command="{Binding RetryAnalysisCommand}"
+                        Background="#3d3d5d" Foreground="White" Width="90"
+                        IsVisible="{Binding HasError}"/>
+                <Button Content="{loc:Localize GdsImport.ImportButton}" Command="{Binding ImportCommand}"
+                        Background="#3d5d3d" Foreground="White" Padding="14,4"
+                        IsVisible="{Binding ShowOptions}"/>
+            </StackPanel>
+        </Border>
+
+        <StackPanel Spacing="10">
+
+            <!-- Busy indicator + status -->
+            <ProgressBar IsIndeterminate="True" Height="5"
+                         Foreground="#3d9d5d"
+                         IsVisible="{Binding IsBusy}"/>
+            <TextBlock Text="{Binding StatusText}" Foreground="LightGray"
+                       TextWrapping="Wrap" FontSize="11"
+                       IsVisible="{Binding StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <!-- Error panel -->
+            <Border Background="#3d1515" CornerRadius="4" Padding="10"
+                    IsVisible="{Binding HasError}">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{loc:Localize GdsImport.ErrorTitle}" Foreground="#FF6B6B"
+                               FontWeight="SemiBold" FontSize="11"/>
+                    <TextBlock Text="{Binding ErrorText}" Foreground="#FF9090"
+                               TextWrapping="Wrap" FontFamily="Consolas, Courier New, monospace"
+                               FontSize="10"/>
+                </StackPanel>
+            </Border>
+
+            <!-- ═══ Options (after successful analysis) ═══ -->
+            <StackPanel IsVisible="{Binding ShowOptions}" Spacing="10">
+
+                <!-- Top cell -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{loc:Localize GdsImport.TopCellLabel}" Foreground="LightGray" FontSize="11"/>
+                    <ComboBox ItemsSource="{Binding TopCells}" SelectedItem="{Binding SelectedTopCell}"
+                              Background="#2d2d2d" Foreground="White" HorizontalAlignment="Stretch">
+                        <ComboBox.ItemTemplate>
+                            <DataTemplate x:DataType="gds:GdsTopCellSummary">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="{Binding CellName}" Foreground="White" FontSize="11"/>
+                                    <TextBlock Text="{Binding DirectInstanceCount, StringFormat='({0})'}"
+                                               Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ComboBox.ItemTemplate>
+                    </ComboBox>
+                </StackPanel>
+
+                <!-- Hierarchy mode -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{loc:Localize GdsImport.ModeLabel}" Foreground="LightGray" FontSize="11"/>
+                    <RadioButton GroupName="GdsMode" IsChecked="{Binding IsExplodeMode}"
+                                 Content="{loc:Localize GdsImport.ModeExplode}"
+                                 Foreground="White" FontSize="11"/>
+                    <RadioButton GroupName="GdsMode"
+                                 Content="{loc:Localize GdsImport.ModeBlackBox}"
+                                 Foreground="White" FontSize="11"/>
+                </StackPanel>
+
+                <!-- Pin detection layers -->
+                <Grid ColumnDefinitions="*,12,*">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{loc:Localize GdsImport.PortLayersLabel}" Foreground="LightGray"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding PortLayersText}"
+                                 Background="#2d2d2d" Foreground="White" FontSize="11"
+                                 ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
+                    </StackPanel>
+                    <StackPanel Grid.Column="2" Spacing="4">
+                        <TextBlock Text="{loc:Localize GdsImport.WaveguideLayersLabel}" Foreground="LightGray"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding WaveguideLayersText}"
+                                 Background="#2d2d2d" Foreground="White" FontSize="11"
+                                 ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Auto-connect (experimental, enabled in a follow-up) -->
+                <CheckBox IsChecked="{Binding AutoConnectRequested}" IsEnabled="False"
+                          Content="{loc:Localize GdsImport.AutoConnect}"
+                          ToolTip.Tip="{loc:Localize GdsImport.AutoConnectTip}"
+                          Foreground="Gray" FontSize="11"/>
+            </StackPanel>
+
+            <!-- ═══ Result (after successful import) ═══ -->
+            <StackPanel IsVisible="{Binding ImportCompleted}" Spacing="8">
+                <TextBlock Text="{Binding ResultSummaryText}" Foreground="LightGreen"
+                           FontWeight="SemiBold" FontSize="12" TextWrapping="Wrap"/>
+                <TextBlock Text="{loc:Localize GdsImport.WarningsTitle}" Foreground="#FFB86B"
+                           FontSize="11" FontWeight="SemiBold"
+                           IsVisible="{Binding HasWarnings}"/>
+                <ListBox ItemsSource="{Binding Warnings}" MaxHeight="180"
+                         Background="#252526" BorderThickness="0"
+                         IsVisible="{Binding HasWarnings}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="system:String">
+                            <TextBlock Text="{Binding}" Foreground="#FFCF9E" FontSize="10"
+                                       TextWrapping="Wrap" Margin="4,2"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </StackPanel>
+
+        </StackPanel>
+    </DockPanel>
+</Window>
