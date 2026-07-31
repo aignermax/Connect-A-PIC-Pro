@@ -208,8 +208,8 @@ internal sealed class GdsHierarchyImportSession
         return
             "import nazca as nd\n" +
             "\n" +
-            $"# Loads GDS cell \"{escaped}\". {GdsHierarchyImporter.GdsFileNameToken} is a placeholder: the UI replaces it\n" +
-            "# with the .gds file name copied next to the user-PDK JSON.\n" +
+            $"# Loads GDS cell \"{escaped}\". {GdsHierarchyImporter.GdsFileNameToken} is a placeholder: the service replaces it\n" +
+            "# with the absolute path of the .gds file copied next to the user-PDK JSON.\n" +
             "def component():\n" +
             $"    return nd.load_gds(filename=\"{GdsHierarchyImporter.GdsFileNameToken}\", cellname=\"{escaped}\")\n";
     }

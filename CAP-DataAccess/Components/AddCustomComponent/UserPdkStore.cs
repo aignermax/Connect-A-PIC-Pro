@@ -26,6 +26,9 @@ public sealed class UserPdkStore
 
     public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
 
+    /// <summary>The writable root directory every managed user-PDK file (and its sidecar files, e.g. imported .gds) lives in.</summary>
+    public string RootDirectory => _root;
+
     public string ForkBundledPdk(string bundledFilePath, string pdkName)
     {
         var target = ResolveNamedPath(pdkName);
@@ -197,6 +200,31 @@ public sealed class UserPdkStore
 
         _saver.SaveToFile(pdk, filePath);
         return filePath;
+    }
+
+    /// <summary>
+    /// Adds or replaces <paramref name="component"/> in a named, process-agnostic user PDK
+    /// (created on first use, one load-modify-save per call). Process-agnostic PDKs declare
+    /// no fabrication process, so the library keeps their components placeable under every
+    /// active process — the right shape for geometry-only imports (e.g. GDS) that no
+    /// foundry PDK claims. Returns the PDK file path.
+    /// </summary>
+    public string SaveToProcessAgnosticNamedPdk(string pdkName, PdkComponentDraft component, string backend)
+    {
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var pdk = File.Exists(path)
+            ? _loader.LoadFromFileForEditing(path)
+            : new PdkDraft { Name = pdkName, Backend = backend, Components = new() };
+        pdk.Name = pdkName;
+        pdk.ProcessAgnostic = true;
+
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        _saver.SaveToFile(pdk, path);
+        return path;
     }
 
     private static PdkDraft NewNamedPdk(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection) => new()

@@ -30,8 +30,10 @@ public static class GdsHierarchyImporter
 {
     /// <summary>
     /// Placeholder token inside <see cref="GdsCellDraft.RawCode"/> for the .gds
-    /// file name. The UI layer replaces it with the bare file name after
-    /// copying the source .gds next to the user-PDK JSON.
+    /// file name. The service layer replaces it with the absolute path of the
+    /// source .gds after copying it next to the user-PDK JSON (absolute because
+    /// the raw-code executor runs the snippet from a temp file with an unrelated
+    /// working directory, so a bare relative name would never resolve).
     /// </summary>
     public const string GdsFileNameToken = "{GdsFileName}";
 

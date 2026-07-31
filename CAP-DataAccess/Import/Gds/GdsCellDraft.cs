@@ -63,9 +63,13 @@ public sealed record GdsCellDraft
     /// contract (the file is imported as a Python module and its
     /// <c>component()</c> callable must return a Nazca cell). The
     /// <c>{GdsFileName}</c> token (<see cref="GdsHierarchyImporter.GdsFileNameToken"/>)
-    /// is a placeholder: the UI layer replaces it with the bare .gds file name
-    /// after copying the source file next to the user-PDK JSON, so the exported
-    /// Python resolves it relative to its working directory.
+    /// is a placeholder: the service layer replaces it with the absolute path of
+    /// the source .gds after copying it next to the user-PDK JSON. An absolute
+    /// path is required because the raw-code executor
+    /// (<c>NazcaComponentPreviewService.RenderRawCodeAsync</c>) writes the snippet
+    /// to a temp .py file and runs it with the preview script's directory as the
+    /// working directory — a bare relative name would resolve against neither the
+    /// user-PDK folder nor the .gds copy.
     /// </summary>
     public string RawCode { get; init; } = string.Empty;
 
