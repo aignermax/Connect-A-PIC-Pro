@@ -55,6 +55,7 @@ public static class GdsHierarchyImporter
         ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(topCellName);
         options ??= new GdsHierarchyImportOptions();
+        options.Validate();
 
         if (library.Cells.Count == 0)
             throw new InvalidDataException("The GDS library contains no cells.");
@@ -76,7 +77,7 @@ public static class GdsHierarchyImporter
     {
         ct.ThrowIfCancellationRequested();
         var draft = session.BuildDraft(topCellName);
-        WarnOnPinlessDraft(draft, session.Warnings);
+        WarnOnZeroSizeDraft(draft, session.Warnings);
         return new GdsCircuitImport
         {
             Mode = GdsHierarchyImportMode.BlackBox,
@@ -99,6 +100,10 @@ public static class GdsHierarchyImporter
         var names = new List<string>();
         var pinsPerInstance = new List<IReadOnlyList<GdsAbsolutePin>>();
         var occurrences = new Dictionary<string, int>();
+        // One entry per distinct reference transform (an AREF expands to one
+        // instance per member — identical warnings must collapse into ONE per
+        // reference, with the member count, instead of flooding one per member).
+        var transformNotes = new Dictionary<TransformSignature, (string FirstInstance, int Count)>();
 
         foreach (var gdsInstance in gdsInstances)
         {
@@ -110,7 +115,7 @@ public static class GdsHierarchyImporter
             if (known is null && draftNames.Add(cell))
             {
                 var draft = session.BuildDraft(cell);
-                WarnOnPinlessDraft(draft, session.Warnings);
+                WarnOnZeroSizeDraft(draft, session.Warnings);
                 drafts.Add(draft);
             }
             else if (known is not null)
@@ -124,26 +129,14 @@ public static class GdsHierarchyImporter
 
             double angle = GdsInstancePinProjector.Normalize360(gdsInstance.AngleDegrees);
             double snapped = SnapToCardinal(angle);
-            if (Math.Abs(GdsInstancePinProjector.Normalize180(angle - snapped)) > 1e-9)
+            bool nonCardinal = Math.Abs(GdsInstancePinProjector.Normalize180(angle - snapped)) > 1e-9;
+            bool magnified = Math.Abs(gdsInstance.Magnification - 1.0) > 1e-9;
+            if (nonCardinal || gdsInstance.Reflected || magnified || gdsInstance.Magnification < 0)
             {
-                session.Warnings.Add(
-                    $"Instance '{instanceName}' of cell '{cell}' has a non-cardinal rotation of " +
-                    $"{Fmt(gdsInstance.AngleDegrees)}° — snapped to {Fmt(snapped)}° " +
-                    "(gdsfactory layouts are Manhattan, so this is usually safe).");
-            }
-            if (gdsInstance.Reflected)
-            {
-                session.Warnings.Add(
-                    $"Instance '{instanceName}' of cell '{cell}' is mirrored (GDS STRANS); placed " +
-                    "unreflected (v1 limitation — the core component model has no mirror support). " +
-                    "Pin positions for connection reconstruction use the true reflected transform.");
-            }
-            if (Math.Abs(gdsInstance.Magnification - 1.0) > 1e-9)
-            {
-                session.Warnings.Add(
-                    $"Instance '{instanceName}' of cell '{cell}' has magnification " +
-                    $"×{Fmt(gdsInstance.Magnification)}; placed at 1:1 scale (v1 limitation). " +
-                    "Pin positions for connection reconstruction use the true magnified transform.");
+                var signature = new TransformSignature(
+                    cell, gdsInstance.AngleDegrees, gdsInstance.Reflected, gdsInstance.Magnification);
+                transformNotes.TryGetValue(signature, out var note);
+                transformNotes[signature] = (note.FirstInstance ?? instanceName, note.Count + 1);
             }
 
             var topLeft = GdsInstancePinProjector.ProjectPlacedBoundsTopLeft(gdsInstance, cellBBox, session.TopBBox);
@@ -165,6 +158,8 @@ public static class GdsHierarchyImporter
                 GdsInstancePinProjector.ProjectPins(gdsInstance, cellBBox, cellPins, session.TopBBox));
             names.Add(instanceName);
         }
+
+        WarnOnReferenceTransforms(session, transformNotes);
 
         if (gdsInstances.Count == 0)
         {
@@ -197,13 +192,74 @@ public static class GdsHierarchyImporter
         GdsInstancePinProjector.Normalize360(
             90.0 * Math.Round(angleDegrees / 90.0, MidpointRounding.AwayFromZero));
 
-    private static void WarnOnPinlessDraft(GdsCellDraft draft, List<string> warnings)
+    /// <summary>
+    /// The transform properties that make an instance noteworthy for warnings.
+    /// All expanded members of one AREF share the same signature, so keying the
+    /// warnings on it collapses the per-member flood into one warning per
+    /// reference (with member count).
+    /// </summary>
+    private readonly record struct TransformSignature(
+        string Cell, double AngleDegrees, bool Reflected, double Magnification);
+
+    /// <summary>
+    /// Emits the rotation/reflection/magnification warnings once per distinct
+    /// reference transform, including the member count when an array (or several
+    /// identical references) expanded to more than one instance.
+    /// </summary>
+    private static void WarnOnReferenceTransforms(
+        GdsHierarchyImportSession session,
+        Dictionary<TransformSignature, (string FirstInstance, int Count)> transformNotes)
     {
-        if (draft.Pins.Count == 0)
+        foreach (var (signature, note) in transformNotes)
         {
-            warnings.Add(
-                $"Cell '{draft.CellName}': no pins detected — the component draft needs manual pin editing.");
+            var single = note.Count == 1;
+            var subject = single
+                ? $"Instance '{note.FirstInstance}' of cell '{signature.Cell}'"
+                : $"{note.Count} instances of cell '{signature.Cell}' (first: '{note.FirstInstance}')";
+            var has = single ? "has" : "have";
+            var isAre = single ? "is" : "are";
+
+            double snapped = SnapToCardinal(GdsInstancePinProjector.Normalize360(signature.AngleDegrees));
+            if (Math.Abs(GdsInstancePinProjector.Normalize180(
+                    GdsInstancePinProjector.Normalize360(signature.AngleDegrees) - snapped)) > 1e-9)
+            {
+                session.Warnings.Add(
+                    $"{subject} {has} a non-cardinal rotation of " +
+                    $"{Fmt(signature.AngleDegrees)}° — snapped to {Fmt(snapped)}° " +
+                    "(gdsfactory layouts are Manhattan, so this is usually safe).");
+            }
+            if (signature.Reflected)
+            {
+                session.Warnings.Add(
+                    $"{subject} {isAre} mirrored (GDS STRANS); placed " +
+                    "unreflected (v1 limitation — the core component model has no mirror support). " +
+                    "Pin positions for connection reconstruction use the true reflected transform.");
+            }
+            if (Math.Abs(signature.Magnification - 1.0) > 1e-9)
+            {
+                session.Warnings.Add(
+                    $"{subject} {has} magnification " +
+                    $"×{Fmt(signature.Magnification)}; placed at 1:1 scale (v1 limitation). " +
+                    "Pin positions for connection reconstruction use the true magnified transform.");
+            }
+            if (signature.Magnification < 0)
+            {
+                session.Warnings.Add(
+                    $"{subject} {has} a NEGATIVE magnification (×{Fmt(signature.Magnification)}) — a " +
+                    "negative MAG implies an additional mirror the placement snap does not model, " +
+                    "so the placed rotation can be off by 180°.");
+            }
         }
+    }
+
+    /// <summary>
+    /// Warns on zero-size drafts (unpersistable geometry). A PINLESS draft
+    /// deliberately gets no warning here: the service layer reports the more
+    /// actionable "not registered: no pins" message, and warning in both places
+    /// would double-report the same fact.
+    /// </summary>
+    private static void WarnOnZeroSizeDraft(GdsCellDraft draft, List<string> warnings)
+    {
         if (draft.WidthUm <= 0 || draft.HeightUm <= 0)
         {
             warnings.Add($"Cell '{draft.CellName}' has an empty bounding box; the draft has zero size.");

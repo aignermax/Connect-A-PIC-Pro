@@ -192,6 +192,72 @@ public class GdsCellFlattenerTests
         instances[1].Offset.Y.ShouldBe(5, Tolerance);
     }
 
+    [Fact]
+    public async Task ARef_Reflected_FlipsTheRowLatticeDirection()
+    {
+        // Worked offsets (conventions verified against gdstk): angle 0 with
+        // X-reflection leaves the column lattice alone but mirrors the row
+        // lattice vector about X — origin (1,1), columns (4c, 0), rows (0, −3r).
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .ARef("CHILD", columns: 2, rows: 2, originX: 1000, originY: 1000,
+                    columnSpacingDbUnits: 4000, rowSpacingDbUnits: 3000, reflected: true)
+            .EndCell()
+            .BeginCell("CHILD")
+                .Boundary(1, 0, (0, 0), (500, 0), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+
+        var flattener = await ReadFlattener(gds);
+        var instances = flattener.GetInstanceTree("TOP");
+
+        instances.Count.ShouldBe(4);
+        instances.ShouldAllBe(i => i.Reflected);
+        // Row-major expansion: (c0,r0), (c1,r0), (c0,r1), (c1,r1).
+        instances[0].Offset.ShouldBe(new GdsPoint(1, 1));
+        instances[1].Offset.ShouldBe(new GdsPoint(5, 1));
+        instances[2].Offset.ShouldBe(new GdsPoint(1, -2));
+        instances[3].Offset.ShouldBe(new GdsPoint(5, -2));
+    }
+
+    [Fact]
+    public async Task ARef_Magnified_KeepsLatticeOffsetsAndMagnifiesGeometry()
+    {
+        // Worked example (conventions verified against gdstk): magnification
+        // scales the per-member geometry transform but NOT the array lattice —
+        // member offsets stay origin + (4c, 3r) while the child shape is ×2.
+        // Child segment (0,0)→(1,0) µm: member 0 lands at (1,2)→(3,2),
+        // member 1 (one column over) at (5,2)→(7,2).
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .ARef("CHILD", columns: 2, rows: 1, originX: 1000, originY: 2000,
+                    columnSpacingDbUnits: 4000, rowSpacingDbUnits: 3000, magnification: 2.0)
+            .EndCell()
+            .BeginCell("CHILD")
+                .Boundary(1, 0, (0, 0), (1000, 0), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+
+        var flattener = await ReadFlattener(gds);
+        var instances = flattener.GetInstanceTree("TOP");
+
+        instances.Count.ShouldBe(2);
+        instances.ShouldAllBe(i => i.Magnification == 2.0);
+        instances[0].Offset.ShouldBe(new GdsPoint(1, 2));
+        instances[1].Offset.ShouldBe(new GdsPoint(5, 2));
+
+        var polygons = flattener.Flatten("TOP").Polygons;
+        polygons.Count.ShouldBe(2);
+        polygons[0].Points[0].ShouldBe(new GdsPoint(1, 2));
+        polygons[0].Points[1].ShouldBe(new GdsPoint(3, 2));
+        polygons[1].Points[0].ShouldBe(new GdsPoint(5, 2));
+        polygons[1].Points[1].ShouldBe(new GdsPoint(7, 2));
+    }
+
     // ── Instance tree ────────────────────────────────────────────────────────
 
     [Fact]

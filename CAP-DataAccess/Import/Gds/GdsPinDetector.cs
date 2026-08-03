@@ -62,6 +62,7 @@ public static class GdsPinDetector
     {
         ArgumentNullException.ThrowIfNull(flattened);
         options ??= new GdsPinDetectionOptions();
+        options.Validate();
 
         var result = new List<DetectedPin>();
         if (cellBBox.Width <= 0 || cellBBox.Height <= 0)

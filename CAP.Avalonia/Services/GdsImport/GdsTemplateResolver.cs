@@ -20,20 +20,46 @@ public static class GdsTemplateResolver
     /// shape the importer consumes (offsets are already µm, Y-down, relative to
     /// the component bbox top-left — the same convention). When several
     /// templates share a name (different PDKs), the first in enumeration order
-    /// wins — deterministic.
+    /// wins — deterministic; the pick is recorded in <paramref name="resolutionNotes"/>
+    /// (once per duplicated name) so the cross-PDK collision stays visible to the
+    /// user instead of hiding behind the first-wins rule.
     /// </summary>
+    /// <param name="templates">The currently loaded component templates.</param>
+    /// <param name="resolutionNotes">
+    /// Optional sink (e.g. the import's warning list) receiving a note whenever a
+    /// cell name resolves to one of several same-named templates.
+    /// </param>
     public static Func<string, KnownComponent?> BuildKnownComponentResolver(
-        IEnumerable<ComponentTemplate> templates)
+        IEnumerable<ComponentTemplate> templates,
+        IList<string>? resolutionNotes = null)
     {
         ArgumentNullException.ThrowIfNull(templates);
-        var byName = templates
-            .GroupBy(t => t.Name, StringComparer.Ordinal)
-            .ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var groups = templates.GroupBy(t => t.Name, StringComparer.Ordinal).ToList();
+        var byName = groups.ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var duplicatedPdkSources = groups
+            .Where(g => g.Count() > 1)
+            .ToDictionary(
+                g => g.Key,
+                g => g.Select(t => t.PdkSource).Distinct(StringComparer.Ordinal).ToList(),
+                StringComparer.Ordinal);
+        var noted = new HashSet<string>(StringComparer.Ordinal);
 
         return cellName =>
-            cellName is not null && byName.TryGetValue(cellName, out var template)
-                ? ToKnownComponent(template)
-                : null;
+        {
+            if (cellName is null || !byName.TryGetValue(cellName, out var template))
+                return null;
+
+            if (resolutionNotes is not null
+                && duplicatedPdkSources.TryGetValue(cellName, out var pdkSources)
+                && noted.Add(cellName))
+            {
+                resolutionNotes.Add(
+                    $"Cell name '{cellName}' is provided by {pdkSources.Count} PDKs " +
+                    $"({string.Join(", ", pdkSources.Select(s => $"'{s}'"))}); resolved to the first " +
+                    $"in library order (PDK '{template.PdkSource}').");
+            }
+            return ToKnownComponent(template);
+        };
     }
 
     /// <summary>Converts one library template to the importer's known-component shape.</summary>

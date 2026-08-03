@@ -136,7 +136,8 @@ public class GdsHierarchyImporterTests
         connection.B.PinName.ShouldBe("in");
         connection.XUm.ShouldBe(30, Tolerance);
         connection.YUm.ShouldBe(5, Tolerance);
-        result.Warnings.ShouldBeEmpty();
+        // Resolution visibility: the user sees which library component the cell was bound to.
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'mmi1x2'");
     }
 
     [Fact]
@@ -171,6 +172,8 @@ public class GdsHierarchyImporterTests
         result.Instances[0].KnownComponentIdentifier.ShouldBe("wgA");
         // Connection reconstruction uses the resolver-supplied pins.
         result.Connections.ShouldHaveSingleItem().A.PinName.ShouldBe("out");
+        // Resolution visibility: the binding lands in the warnings/notes channel.
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'wgA'");
     }
 
     [Fact]
@@ -512,6 +515,167 @@ public class GdsHierarchyImporterTests
         result.Connections.ShouldBeEmpty();
         result.Warnings.ShouldContain(w => w.Contains("nothing to explode"));
         result.Warnings.ShouldContain(w => w.Contains("own") && w.Contains("not reconstructed"));
+    }
+
+    // ── Pin-name normalization (blank/duplicate names) ───────────────────────
+
+    [Fact]
+    public async Task Explode_DuplicateAndHeuristicCollidingPinNames_DedupedWithWarnings()
+    {
+        // Two labels with the same text (legal GDS) plus a label literally
+        // named "heur_1" colliding with the heuristic pin: names are made
+        // unique BEFORE connection reconstruction, so pin-by-name resolution
+        // can never mis-wire. Pin order: left edge by app Y (label y=0,
+        // heuristic y=500, label y=1000), then the right-edge label.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dup", 0, 0)
+            .EndCell()
+            .BeginCell("dup")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Text(1, 10, "o1", 0, 1500)
+                .Text(1, 10, "o1", 0, 2500)        // same text twice — legal GDS
+                .Text(1, 10, "heur_1", 10000, 2000) // collides with the heuristic pin name
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Select(p => p.Name).ShouldBe(new[] { "o1", "heur_1", "o1_2", "heur_1_2" });
+        result.Warnings.ShouldContain(w => w.Contains("duplicate pin name 'o1'") && w.Contains("o1_2"));
+        result.Warnings.ShouldContain(w => w.Contains("duplicate pin name 'heur_1'") && w.Contains("heur_1_2"));
+    }
+
+    // ── Warning quality ──────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Explode_ArrayWithNonCardinalRotation_WarnsOncePerReferenceWithMemberCount()
+    {
+        // A 3×3 AREF rotated 45° expands to 9 instances — the snap warning must
+        // collapse into ONE per reference (with member count), not flood nine.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .ARef("wg", columns: 3, rows: 3, originX: 0, originY: 0,
+                    columnSpacingDbUnits: 20000, rowSpacingDbUnits: 10000, angleDegrees: 45.0)
+            .EndCell()
+            .WaveguideCell("wg")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.Instances.Count.ShouldBe(9);
+        var rotationWarnings = result.Warnings.Where(w => w.Contains("non-cardinal")).ToList();
+        var warning = rotationWarnings.ShouldHaveSingleItem(
+            "an AREF must not flood one identical warning per member");
+        warning.ShouldContain("9 instances");
+        warning.ShouldContain("wg#0");
+        warning.ShouldContain("45");
+    }
+
+    [Fact]
+    public async Task Explode_NegativeMagnification_WarnsAbout180DegreeSnapError()
+    {
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wg", 0, 0, magnification: -2.0)
+            .EndCell()
+            .WaveguideCell("wg")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.Warnings.ShouldContain(w => w.Contains("NEGATIVE") && w.Contains("180"));
+    }
+
+    [Fact]
+    public async Task Explode_KnownComponentSizeMismatch_WarnsPinsUnscaledAndConnectionsUncertain()
+    {
+        // PDK says 30×10 µm but the GDS cell measures 60×10 µm: pins are mapped
+        // unscaled onto the GDS bbox, so reconstructed connections may be wrong —
+        // the warning must say exactly that.
+        var known = new KnownComponent(
+            "mmi1x2", "testpdk", 30, 10,
+            new[]
+            {
+                Pin("o1", 0, 5, 180),
+                Pin("o2", 30, 5, 0),
+            });
+
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("mmi1x2", 0, 0)
+            .EndCell()
+            .BeginCell("mmi1x2")
+                .Boundary(1, 0, (0, 0), (60000, 0), (60000, 10000), (0, 10000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(
+            library, "TOP", new GdsHierarchyImportOptions
+            {
+                ResolveKnownComponent = name => name == "mmi1x2" ? known : null,
+            });
+
+        var warning = result.Warnings.First(w => w.Contains("UNSCALED"));
+        warning.ShouldContain("geometrically incorrect");
+    }
+
+    [Fact]
+    public async Task Explode_PinlessDraft_ImporterStaysSilent_ServiceOwnsThatWarning()
+    {
+        // "blob" has no waveguide-layer geometry and no port labels → no pins.
+        // The importer deliberately does NOT warn here: the service reports the
+        // more actionable "not registered: no pins" message — two warnings for
+        // the same fact would be noise.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("blob", 0, 0)
+            .EndCell()
+            .BeginCell("blob")
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().Pins.ShouldBeEmpty();
+        result.Warnings.ShouldNotContain(w => w.Contains("no pins"));
+    }
+
+    [Fact]
+    public async Task Explode_CellNameWithControlCharacters_RawCodeStaysValidPython()
+    {
+        // A GDS STRING may contain control characters (e.g. a newline) — the
+        // emitted Python snippet must not break on them.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("weird\ncell", 0, 0)
+            .EndCell()
+            .BeginCell("weird\ncell")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Text(1, 10, "in", 0, 2000)
+                .Text(1, 10, "out", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.RawCode.ShouldNotContain("weird\ncell");
+        draft.RawCode.ShouldContain("weird_cell");
     }
 
     // ── Fixture helpers ──────────────────────────────────────────────────────

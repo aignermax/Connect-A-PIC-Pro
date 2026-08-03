@@ -66,6 +66,14 @@ internal static class GdsOutlineSimplifier
     private static IReadOnlyList<GdsOutlinePolygon> DropSmallestPolygons(
         IReadOnlyList<GdsOutlinePolygon> polygons, int maxTotalPoints, out int droppedCount)
     {
+        if (polygons.Count == 0)
+        {
+            // Only reachable with a negative point cap (0 points > cap) — nothing
+            // to drop; indexing the sorted list below would throw instead.
+            droppedCount = 0;
+            return polygons;
+        }
+
         var byArea = polygons
             .Select((Polygon, Index) => (Polygon, Index, Area: Math.Abs(SignedArea(Polygon.Points))))
             .OrderByDescending(entry => entry.Area)

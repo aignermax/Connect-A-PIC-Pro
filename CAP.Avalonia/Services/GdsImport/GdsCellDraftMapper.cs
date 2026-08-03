@@ -19,7 +19,12 @@ public static class GdsCellDraftMapper
     public const string ImportCategory = "GDS Import";
 
     /// <summary>
-    /// Converts <paramref name="draft"/> to a PDK component draft.
+    /// Converts <paramref name="draft"/> to a PDK component draft. Pin names are
+    /// normalized first (<see cref="GdsPinNameNormalizer"/>): blank label pins
+    /// (legal GDS) become <c>pin_N</c> and duplicate names get <c>_2</c>,
+    /// <c>_3</c>, … suffixes — the PDK loader rejects blank pin names on load
+    /// (one saved blank pin would poison the whole user-PDK file), and
+    /// connections resolve pins by name, so duplicates would silently mis-wire.
     /// </summary>
     /// <param name="draft">The imported cell draft (app-space pins/outlines).</param>
     /// <param name="gdsFilePathForRawCode">
@@ -32,10 +37,17 @@ public static class GdsCellDraftMapper
     /// (GdsImportService) passes the path of the .gds copy next to the user-PDK
     /// JSON. Backslashes and quotes are escaped for the Python string literal.
     /// </param>
-    public static PdkComponentDraft Map(GdsCellDraft draft, string gdsFilePathForRawCode)
+    /// <param name="warnings">
+    /// Optional warning sink (the import's warning list) receiving one entry per
+    /// renamed pin; null discards the warnings (renames still happen).
+    /// </param>
+    public static PdkComponentDraft Map(GdsCellDraft draft, string gdsFilePathForRawCode, List<string>? warnings = null)
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentException.ThrowIfNullOrEmpty(gdsFilePathForRawCode);
+
+        var pins = GdsPinNameNormalizer.Normalize(
+            draft.Pins, $"Cell '{draft.CellName}'", warnings ?? new List<string>());
 
         return new PdkComponentDraft
         {
@@ -43,7 +55,7 @@ public static class GdsCellDraftMapper
             Category = ImportCategory,
             WidthMicrometers = draft.WidthUm,
             HeightMicrometers = draft.HeightUm,
-            Pins = draft.Pins.Select(p => new PhysicalPinDraft
+            Pins = pins.Select(p => new PhysicalPinDraft
             {
                 Name = p.Name,
                 OffsetXMicrometers = p.XUm,

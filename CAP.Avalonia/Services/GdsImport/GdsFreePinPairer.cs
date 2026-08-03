@@ -3,11 +3,17 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// <summary>
 /// Pure geometry pass behind the GDS import's experimental auto-connect: greedily
 /// pairs free pins by proximity when their absolute angles OPPOSE each other
-/// (180° ± <see cref="GdsFreePinPairer.OpposingAngleToleranceDegrees"/>). Canvas-free
-/// and deterministic — candidates are considered in input order, ties resolve to
-/// the earlier candidate, and a pin gets at most one partner. Pins of the SAME
-/// placed instance never pair with each other: the pass connects pins BETWEEN
-/// instances, not a component's own input to its own output.
+/// (180° ± <see cref="GdsFreePinPairer.OpposingAngleToleranceDegrees"/>) AND the
+/// two pins actually FACE each other — each partner must lie in the direction
+/// the other pin points (strictly positive dot product), so an opposing pin
+/// BEHIND a pin (the wrap-around case) or exactly 90° off-axis never pairs.
+/// Canvas-free and deterministic — candidates are considered in input order and
+/// a pin gets at most one partner. When the two nearest opposing candidates are
+/// nearly equidistant, the pairing is AMBIGUOUS and the pin is skipped (with
+/// <see cref="GdsFreePinSkipReason.AmbiguousNearestPartner"/>) instead of
+/// guessing a partner. Pins of the SAME placed instance never pair with each
+/// other: the pass connects pins BETWEEN instances, not a component's own input
+/// to its own output.
 /// </summary>
 public static class GdsFreePinPairer
 {
@@ -27,11 +33,12 @@ public static class GdsFreePinPairer
     /// <summary>
     /// Pairs the candidates greedily: every candidate (in input order) takes the
     /// nearest still-free opposing candidate of a DIFFERENT owner within
-    /// <paramref name="radiusUm"/> (inclusive), unless no such partner exists or
-    /// the two nearest are within <see cref="AmbiguityDeltaUm"/> of each other.
-    /// An ambiguous pin is reported and marked unavailable for the rest of the
-    /// pass — a reported skip must never end up connected through the back door;
-    /// its contenders stay available for other pins.
+    /// <paramref name="radiusUm"/> (inclusive) that it FACES (and that faces it
+    /// back — see <see cref="PinsFaceEachOther"/>), unless no such partner
+    /// exists or the two nearest are within <see cref="AmbiguityDeltaUm"/> of
+    /// each other. An ambiguous pin is reported and marked unavailable for the
+    /// rest of the pass — a reported skip must never end up connected through
+    /// the back door; its contenders stay available for other pins.
     /// </summary>
     /// <param name="candidates">Free pins in deterministic (placement) order.</param>
     /// <param name="radiusUm">Maximum pin-to-pin distance for a pair, in µm.</param>
@@ -53,6 +60,7 @@ public static class GdsFreePinPairer
             var second = -1;
             var nearestDist = double.MaxValue;
             var secondDist = double.MaxValue;
+            var sawNonFacingOpposing = false;
             for (var j = 0; j < candidates.Count; j++)
             {
                 if (j == i || taken[j]) continue;
@@ -60,6 +68,13 @@ public static class GdsFreePinPairer
                 var dist = DistanceUm(origin, candidates[j]);
                 if (dist > radiusUm) continue;
                 if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
+                if (!PinsFaceEachOther(origin, candidates[j]))
+                {
+                    // Opposing and in radius, but not in the direction the pins
+                    // point (wrap-around) — remembered for the skip reason.
+                    sawNonFacingOpposing = true;
+                    continue;
+                }
 
                 if (dist < nearestDist)
                 {
@@ -77,7 +92,11 @@ public static class GdsFreePinPairer
 
             if (nearest < 0)
             {
-                skipped.Add(new GdsFreePinSkip(i, GdsFreePinSkipReason.NoOpposingPartnerInRadius));
+                skipped.Add(new GdsFreePinSkip(
+                    i,
+                    sawNonFacingOpposing
+                        ? GdsFreePinSkipReason.NotFacingEachOther
+                        : GdsFreePinSkipReason.NoOpposingPartnerInRadius));
                 continue;
             }
             if (second >= 0 && secondDist - nearestDist < AmbiguityDeltaUm)
@@ -101,6 +120,31 @@ public static class GdsFreePinPairer
     /// </summary>
     private static bool AnglesOppose(double firstDegrees, double secondDegrees) =>
         Math.Abs(Normalize180(firstDegrees - secondDegrees)) >= 180.0 - OpposingAngleToleranceDegrees;
+
+    /// <summary>
+    /// True when each pin lies in the direction the OTHER pin points: a pin's
+    /// outward direction is (cos θ, sin θ) in the Y-down app plane (0° = east,
+    /// 90° = down) and both dot products with the pin-to-partner displacement
+    /// must be strictly positive. Angle opposition alone is not enough — two
+    /// outward-facing pins (e.g. the free ends of a waveguide chain) oppose
+    /// 180°-wise but point AWAY from each other; pairing them would produce a
+    /// wrap-around route.
+    /// </summary>
+    private static bool PinsFaceEachOther(GdsFreePinCandidate a, GdsFreePinCandidate b)
+    {
+        var (ax, ay) = OutwardDirection(a.AngleDegrees);
+        var (bx, by) = OutwardDirection(b.AngleDegrees);
+        double dx = b.XUm - a.XUm;
+        double dy = b.YUm - a.YUm;
+        return ax * dx + ay * dy > 0 && bx * -dx + by * -dy > 0;
+    }
+
+    /// <summary>Unit vector of a pin's outward direction (app convention, Y-down plane).</summary>
+    private static (double X, double Y) OutwardDirection(double angleDegrees)
+    {
+        double radians = angleDegrees * Math.PI / 180.0;
+        return (Math.Cos(radians), Math.Sin(radians));
+    }
 
     /// <summary>Normalizes an angle difference to (-180, 180].</summary>
     private static double Normalize180(double degrees)
@@ -136,6 +180,14 @@ public enum GdsFreePinSkipReason
 {
     /// <summary>No opposing free pin of another instance exists within the pairing radius.</summary>
     NoOpposingPartnerInRadius,
+
+    /// <summary>
+    /// Opposing candidate(s) exist within the pairing radius, but none lies in
+    /// the direction this pin points while also pointing back at it — the
+    /// wrap-around case (e.g. the two outward-facing free ends of a waveguide
+    /// chain), which is never auto-connected.
+    /// </summary>
+    NotFacingEachOther,
 
     /// <summary>The two nearest opposing candidates are nearly equidistant, so no partner was chosen.</summary>
     AmbiguousNearestPartner,

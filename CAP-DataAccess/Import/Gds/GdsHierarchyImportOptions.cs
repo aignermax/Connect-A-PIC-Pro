@@ -82,4 +82,33 @@ public sealed record GdsHierarchyImportOptions
     /// cell as unknown (all become drafts).
     /// </summary>
     public Func<string, KnownComponent?>? ResolveKnownComponent { get; init; }
+
+    /// <summary>
+    /// Throws when a tunable is out of range: tolerances and the outline-point
+    /// cap must be non-negative (a negative cap would make the outline
+    /// simplifier drop every polygon). Called by <see cref="GdsHierarchyImporter"/>
+    /// before any work.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">A tolerance or the cap is negative.</exception>
+    public void Validate()
+    {
+        if (AbutmentToleranceUm < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(AbutmentToleranceUm), AbutmentToleranceUm, "The abutment tolerance must be ≥ 0.");
+        }
+        if (OutlineSimplificationToleranceUm < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(OutlineSimplificationToleranceUm), OutlineSimplificationToleranceUm,
+                "The outline simplification tolerance must be ≥ 0.");
+        }
+        if (MaxOutlinePointsPerCell < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(MaxOutlinePointsPerCell), MaxOutlinePointsPerCell,
+                "The outline-point cap must be ≥ 0.");
+        }
+        PinDetection.Validate();
+    }
 }

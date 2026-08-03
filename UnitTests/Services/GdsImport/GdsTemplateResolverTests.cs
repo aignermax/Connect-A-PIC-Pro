@@ -59,6 +59,28 @@ public class GdsTemplateResolverTests
     }
 
     [Fact]
+    public void Resolver_DuplicateTemplateNamesAcrossPdks_FirstWinsAndIsNotedOnce()
+    {
+        // Same component name from two PDKs: first in library order wins, and
+        // the collision is surfaced (once) instead of hiding silently.
+        var second = MmiTemplate();
+        second.PdkSource = "otherpdk";
+        var notes = new List<string>();
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(
+            new[] { MmiTemplate(), second }, notes);
+
+        var known = resolver("mmi1x2");
+        known.ShouldNotBeNull();
+
+        known.PdkSource.ShouldBe("testpdk", "first in enumeration order wins");
+        resolver("mmi1x2"); // resolving again must not repeat the note
+        var note = notes.ShouldHaveSingleItem();
+        note.ShouldContain("mmi1x2");
+        note.ShouldContain("testpdk");
+        note.ShouldContain("otherpdk");
+    }
+
+    [Fact]
     public async Task Resolver_HashSuffixedCellName_ResolvesToBaseTemplate()
     {
         // The importer retries hash-stripped candidates with this resolver:

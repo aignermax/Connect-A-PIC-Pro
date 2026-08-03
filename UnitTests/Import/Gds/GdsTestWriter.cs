@@ -28,6 +28,13 @@ internal sealed class GdsTestWriter
         return this;
     }
 
+    /// <summary>Writes raw bytes verbatim — for malformed-framing fixtures no helper can express.</summary>
+    public GdsTestWriter WriteRawBytes(params byte[] bytes)
+    {
+        _stream.Write(bytes, 0, bytes.Length);
+        return this;
+    }
+
     // ── Library structure ────────────────────────────────────────────────────
 
     public GdsTestWriter Header() =>
@@ -107,11 +114,11 @@ internal sealed class GdsTestWriter
     public GdsTestWriter ARef(
         string cellName, int columns, int rows,
         int originX, int originY, int columnSpacingDbUnits, int rowSpacingDbUnits,
-        double angleDegrees = 0.0, bool reflected = false)
+        double angleDegrees = 0.0, bool reflected = false, double? magnification = null)
     {
         WriteRecord(GdsRecordTypes.ARef, GdsDataTypes.NoData, Array.Empty<byte>())
             .WriteRecord(GdsRecordTypes.SName, GdsDataTypes.AsciiString, StringBytes(cellName));
-        WriteOptionalTransform(angleDegrees, null, reflected, false);
+        WriteOptionalTransform(angleDegrees, magnification, reflected, false);
         WriteRecord(GdsRecordTypes.ColRow, GdsDataTypes.Int2, Int2Bytes(columns, rows));
 
         double radians = angleDegrees * Math.PI / 180.0;
@@ -135,6 +142,10 @@ internal sealed class GdsTestWriter
     /// base-16 mantissa). Scaling by 16 is an exact exponent shift in binary
     /// floating point, so any double round-trips bit-exactly through the decoder.
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's exponent does not fit the 7-bit excess-64 field — the fixture
+    /// is not representable as a GDS real.
+    /// </exception>
     public static byte[] EncodeReal8(double value)
     {
         var bytes = new byte[8];
@@ -146,6 +157,7 @@ internal sealed class GdsTestWriter
         int exponent = 64;
         while (mantissaFraction >= 1.0) { mantissaFraction /= 16.0; exponent++; }
         while (mantissaFraction < 0.0625) { mantissaFraction *= 16.0; exponent--; }
+        GuardExponentRange(exponent, value);
 
         ulong mantissa = (ulong)(mantissaFraction * 72057594037927936.0 /* 2^56 */);
         bytes[0] = (byte)(exponent | (negative ? 0x80 : 0));
@@ -161,6 +173,10 @@ internal sealed class GdsTestWriter
     /// Encodes a double as a GDS 4-byte real. Only exact for values whose
     /// significand fits into 24 bits (small powers of two, small integers).
     /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// The value's exponent does not fit the 7-bit excess-64 field — the fixture
+    /// is not representable as a GDS real.
+    /// </exception>
     public static byte[] EncodeReal4(double value)
     {
         var bytes = new byte[4];
@@ -172,6 +188,7 @@ internal sealed class GdsTestWriter
         int exponent = 64;
         while (mantissaFraction >= 1.0) { mantissaFraction /= 16.0; exponent++; }
         while (mantissaFraction < 0.0625) { mantissaFraction *= 16.0; exponent--; }
+        GuardExponentRange(exponent, value);
 
         uint mantissa = (uint)(mantissaFraction * 16777216.0 /* 2^24 */);
         bytes[0] = (byte)(exponent | (negative ? 0x80 : 0));
@@ -179,6 +196,21 @@ internal sealed class GdsTestWriter
         bytes[2] = (byte)((mantissa >> 8) & 0xFF);
         bytes[3] = (byte)(mantissa & 0xFF);
         return bytes;
+    }
+
+    /// <summary>
+    /// Guards the 7-bit excess-64 exponent field (0…127): an out-of-range
+    /// exponent would silently truncate into a wrong sign/exponent byte, so a
+    /// nonsense fixture fails loudly here instead of writing corrupt bytes.
+    /// </summary>
+    private static void GuardExponentRange(int exponent, double value)
+    {
+        if (exponent is < 0 or > 127)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(value), value,
+                "Value is not representable as a GDS real (exponent outside the 7-bit excess-64 range) — fix the test fixture.");
+        }
     }
 
     /// <summary>Big-endian signed 2-byte integers (values are truncated to 16 bits).</summary>

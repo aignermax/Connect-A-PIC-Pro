@@ -34,4 +34,26 @@ public sealed record GdsPinDetectionOptions
 
     /// <summary>Heuristic pins wider than this (µm) are discarded as slab/boundary contacts. Default: 100.</summary>
     public double MaxPinWidthUm { get; init; } = 100.0;
+
+    /// <summary>
+    /// Throws when the width window is inconsistent (<see cref="MinPinWidthUm"/>
+    /// above <see cref="MaxPinWidthUm"/>) or <see cref="EdgeTouchToleranceUm"/>
+    /// is negative. Called by <see cref="GdsPinDetector"/> before detection.
+    /// </summary>
+    /// <exception cref="ArgumentOutOfRangeException">The edge-touch tolerance is negative.</exception>
+    /// <exception cref="ArgumentException">The pin-width window is inverted.</exception>
+    public void Validate()
+    {
+        if (EdgeTouchToleranceUm < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(EdgeTouchToleranceUm), EdgeTouchToleranceUm, "The edge-touch tolerance must be ≥ 0.");
+        }
+        if (MinPinWidthUm > MaxPinWidthUm)
+        {
+            throw new ArgumentException(
+                $"MinPinWidthUm must not exceed MaxPinWidthUm (got {MinPinWidthUm} > {MaxPinWidthUm}).",
+                nameof(MinPinWidthUm));
+        }
+    }
 }

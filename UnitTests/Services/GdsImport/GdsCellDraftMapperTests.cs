@@ -116,4 +116,80 @@ public class GdsCellDraftMapperTests
     public void Map_NoOutlines_LeavesOutlinePolygonsNull() =>
         GdsCellDraftMapper.Map(Draft(), "/tmp/lib/circuit.gds")
             .OutlinePolygons.ShouldBeNull("null keeps the rectangle-rendering fallback");
+
+    // ── Pin-name normalization ───────────────────────────────────────────────
+
+    [Fact]
+    public void Map_BlankPinName_RenamedToPinNWithWarning()
+    {
+        // An empty label text is legal GDS — but the PDK loader rejects blank
+        // pin names, so the pin must never reach the persisted file as-is.
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin { Name = "out", XUm = 10, YUm = 2, AngleDegrees = 0, Source = DetectedPinSource.Label },
+                new DetectedPin { Name = "", XUm = 0, YUm = 2, AngleDegrees = 180, Source = DetectedPinSource.Label },
+            },
+        };
+        var warnings = new List<string>();
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds", warnings);
+
+        result.Pins.Select(p => p.Name).ShouldBe(new[] { "out", "pin_1" });
+        warnings.ShouldHaveSingleItem().ShouldContain("pin_1");
+    }
+
+    [Fact]
+    public void Map_DuplicatePinNames_DedupedDeterministicallyWithWarning()
+    {
+        // Two labels with the same text (legal GDS): connections resolve pins
+        // by name, so the later pin gets a deterministic _2 suffix.
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin { Name = "o1", XUm = 0, YUm = 1, AngleDegrees = 180, Source = DetectedPinSource.Label },
+                new DetectedPin { Name = "o1", XUm = 0, YUm = 3, AngleDegrees = 180, Source = DetectedPinSource.Label },
+            },
+        };
+        var warnings = new List<string>();
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds", warnings);
+
+        result.Pins.Select(p => p.Name).ShouldBe(new[] { "o1", "o1_2" });
+        warnings.ShouldHaveSingleItem().ShouldContain("o1_2");
+    }
+
+    [Fact]
+    public void Map_HeuristicNameCollidingWithLabel_DedupedDistinct()
+    {
+        // A label literally named "heur_1" colliding with the heuristic pin of
+        // the same name — both survive with distinct names.
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin { Name = "heur_1", XUm = 0, YUm = 2, AngleDegrees = 180, Source = DetectedPinSource.EdgeHeuristic },
+                new DetectedPin { Name = "heur_1", XUm = 10, YUm = 2, AngleDegrees = 0, Source = DetectedPinSource.Label },
+            },
+        };
+        var warnings = new List<string>();
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds", warnings);
+
+        result.Pins.Select(p => p.Name).ShouldBe(new[] { "heur_1", "heur_1_2" });
+        warnings.ShouldHaveSingleItem().ShouldContain("heur_1_2");
+    }
+
+    [Fact]
+    public void Map_CleanPinNames_UntouchedAndNoWarnings()
+    {
+        var warnings = new List<string>();
+
+        var result = GdsCellDraftMapper.Map(Draft(), "/tmp/lib/circuit.gds", warnings);
+
+        result.Pins.Select(p => p.Name).ShouldBe(new[] { "in", "out" });
+        warnings.ShouldBeEmpty();
+    }
 }

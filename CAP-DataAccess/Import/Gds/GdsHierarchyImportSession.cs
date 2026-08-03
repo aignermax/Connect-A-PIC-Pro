@@ -52,7 +52,11 @@ internal sealed class GdsHierarchyImportSession
 
     /// <summary>
     /// The cell's pins in app-space of its own bbox: the cell's OWN port
-    /// labels plus the edge heuristic over the fully flattened geometry.
+    /// labels plus the edge heuristic over the fully flattened geometry. Names
+    /// are normalized (<see cref="GdsPinNameNormalizer"/>) BEFORE caching, so
+    /// the draft pins and the names used for connection reconstruction can
+    /// never diverge (blank/duplicate names would otherwise mis-wire or poison
+    /// the persisted PDK).
     /// </summary>
     public IReadOnlyList<DetectedPin> GetCellPins(string cellName, GdsBoundingBox bbox)
     {
@@ -62,7 +66,10 @@ internal sealed class GdsHierarchyImportSession
         var detectionCell = new FlattenedGdsCell { CellName = cellName };
         detectionCell.Polygons.AddRange(GetFlattened(cellName).Polygons);
         detectionCell.Texts.AddRange(Library.Cells[cellName].Elements.OfType<GdsText>());
-        var pins = GdsPinDetector.Detect(detectionCell, bbox, _options.PinDetection);
+        var pins = GdsPinNameNormalizer.Normalize(
+            GdsPinDetector.Detect(detectionCell, bbox, _options.PinDetection),
+            $"Cell '{cellName}'",
+            Warnings);
         _pins[cellName] = pins;
         return pins;
     }
@@ -159,6 +166,15 @@ internal sealed class GdsHierarchyImportSession
             }
         }
 
+        if (result is not null)
+        {
+            // Resolution visibility: the user must see which library component a
+            // cell was bound to (especially when several PDKs provide the name).
+            Warnings.Add(
+                $"Cell '{cellName}' resolved to existing component '{result.Identifier}' " +
+                $"(PDK {result.PdkSource}).");
+        }
+
         _known[cellName] = result;
         return result;
     }
@@ -173,7 +189,8 @@ internal sealed class GdsHierarchyImportSession
             Warnings.Add(
                 $"Known component '{known.Identifier}' is {GdsHierarchyImporter.Fmt(known.WidthUm)}×{GdsHierarchyImporter.Fmt(known.HeightUm)} µm " +
                 $"but GDS cell '{cellName}' measures {GdsHierarchyImporter.Fmt(cellBBox.Width)}×{GdsHierarchyImporter.Fmt(cellBBox.Height)} µm; " +
-                "pin positions are mapped onto the GDS bounding box.");
+                "pin positions are mapped UNSCALED onto the GDS bounding box — the reconstructed " +
+                "connections may be geometrically incorrect.");
         }
     }
 
@@ -218,7 +235,12 @@ internal sealed class GdsHierarchyImportSession
     /// </summary>
     private static string BuildRawCode(string cellName)
     {
+        // Escape for the double-quoted Python string literal: backslashes and
+        // quotes are backslash-escaped; control characters (legal in a GDS
+        // STRING) are replaced with '_' — a raw newline or NUL would break the
+        // emitted Python source.
         string escaped = cellName.Replace("\\", "\\\\").Replace("\"", "\\\"");
+        escaped = new string(escaped.Select(c => char.IsControl(c) ? '_' : c).ToArray());
         return
             "import nazca as nd\n" +
             "\n" +

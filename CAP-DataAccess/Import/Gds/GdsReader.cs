@@ -21,7 +21,8 @@ public sealed class GdsReader
     /// <summary>STRANS bit 15: reflect about the X axis before rotating.</summary>
     public const int STransReflectionFlag = 0x8000;
 
-    private readonly GdsLibrary _library = new();
+    // Per-read state — reset at the top of every ReadAsync call (see ResetState).
+    private GdsLibrary _library = new();
     private bool _hasUnits;
     private bool _sawEndLib;
 
@@ -46,6 +47,8 @@ public sealed class GdsReader
     /// <summary>
     /// Reads a GDSII stream from <paramref name="stream"/> and returns the parsed library.
     /// The stream is consumed record by record; it is not disposed by this method.
+    /// One reader instance may parse several streams in sequence — all per-read
+    /// state is reset at the start of each call.
     /// </summary>
     /// <param name="stream">Readable, seekable-or-sequential stream positioned at the first record.</param>
     /// <param name="ct">Cancellation token.</param>
@@ -55,6 +58,8 @@ public sealed class GdsReader
     /// </exception>
     public async Task<GdsLibrary> ReadAsync(Stream stream, CancellationToken ct = default)
     {
+        ResetState();
+
         while (true)
         {
             var record = await GdsRecordReader.ReadNextAsync(stream, ct).ConfigureAwait(false);
@@ -75,9 +80,54 @@ public sealed class GdsReader
         return _library;
     }
 
+    /// <summary>
+    /// Resets every piece of per-read state so a second <see cref="ReadAsync"/>
+    /// call on the same instance starts clean — without this it would silently
+    /// return the FIRST stream's library.
+    /// </summary>
+    private void ResetState()
+    {
+        _library = new GdsLibrary();
+        _hasUnits = false;
+        _sawEndLib = false;
+        _currentCell = null;
+        _elementKind = ElementKind.None;
+        _layer = 0;
+        _dataType = 0;
+        _textType = 0;
+        _pathType = 0;
+        _widthDatabaseUnits = 0;
+        _columns = 1;
+        _rows = 1;
+        _transFlags = 0;
+        _magnification = 1.0;
+        _angleDegrees = 0.0;
+        _text = string.Empty;
+        _referencedCellName = string.Empty;
+        _points = null;
+    }
+
     // ── Record dispatch ──────────────────────────────────────────────────────
 
+    /// <summary>
+    /// Dispatches one record, wrapping any decode/structural error with the
+    /// record type name so a malformed file points at the offending record
+    /// (the original exception is kept as the inner exception).
+    /// </summary>
     private void HandleRecord(byte recordType, byte dataType, byte[] payload)
+    {
+        try
+        {
+            DispatchRecord(recordType, dataType, payload);
+        }
+        catch (InvalidDataException ex)
+        {
+            throw new InvalidDataException(
+                $"Invalid GDS {RecordTypeName(recordType)} record: {ex.Message}", ex);
+        }
+    }
+
+    private void DispatchRecord(byte recordType, byte dataType, byte[] payload)
     {
         switch (recordType)
         {
@@ -107,10 +157,20 @@ public sealed class GdsReader
                 if (_currentCell is null)
                     throw new InvalidDataException("STRNAME record outside of a cell definition.");
                 _currentCell.Name = GdsRecordReader.ReadString(payload);
-                _library.Cells[_currentCell.Name] = _currentCell;
+                if (!_library.Cells.TryAdd(_currentCell.Name, _currentCell))
+                {
+                    throw new InvalidDataException(
+                        $"Duplicate GDS cell name '{_currentCell.Name}' — cell names must be unique within a library.");
+                }
                 break;
 
             case GdsRecordTypes.EndStr:
+                if (_elementKind != ElementKind.None)
+                {
+                    throw new InvalidDataException(
+                        $"ENDSTR reached while a {_elementKind} element is still open — " +
+                        "the element is missing its ENDEL record.");
+                }
                 _currentCell = null;
                 break;
 
@@ -163,6 +223,20 @@ public sealed class GdsReader
                     throw new InvalidDataException("Malformed GDS COLROW record — expected two 2-byte integers.");
                 _columns = GdsRecordReader.ReadInt2(payload, 0);
                 _rows = GdsRecordReader.ReadInt2(payload, 2);
+                if (_columns < 1 || _rows < 1)
+                {
+                    throw new InvalidDataException(
+                        $"Malformed GDS COLROW record — columns and rows must be ≥ 1, got {_columns}×{_rows}.");
+                }
+                if ((long)_columns * _rows > 100_000)
+                {
+                    // Sanity cap against hostile/insane AREFs: expansion happens
+                    // eagerly in the flattener, so an absurd array would hang or
+                    // OOM the import instead of failing fast here.
+                    throw new InvalidDataException(
+                        $"GDS AREF declares {_columns}×{_rows} = {(long)_columns * _rows} array members — " +
+                        "above the 100,000-member sanity cap.");
+                }
                 break;
 
             case GdsRecordTypes.STrans:
@@ -227,7 +301,7 @@ public sealed class GdsReader
                 {
                     Layer = _layer,
                     DataType = _dataType,
-                    Points = RequirePoints().Select(p => Scale(p, toMicrometers)).ToList(),
+                    Points = CloseRing(RequirePoints().Select(p => Scale(p, toMicrometers)).ToList()),
                 });
                 break;
 
@@ -308,6 +382,54 @@ public sealed class GdsReader
     }
 
     // ── Small helpers ────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Normalizes a BOUNDARY/BOX point list to a closed ring: the spec asks
+    /// writers to repeat the first point at the end, but not all do — mainstream
+    /// readers (KLayout included) auto-close, and our consumers (the outline
+    /// simplifier) rely on the closed-ring contract, so an unclosed polygon gets
+    /// its first point appended here.
+    /// </summary>
+    private static List<GdsPoint> CloseRing(List<GdsPoint> points)
+    {
+        if (points.Count > 1 && !points[0].Equals(points[^1]))
+            points.Add(points[0]);
+        return points;
+    }
+
+    /// <summary>Display name of a record type for error messages (hex fallback for unknown types).</summary>
+    private static string RecordTypeName(byte recordType) => recordType switch
+    {
+        GdsRecordTypes.Header => "HEADER",
+        GdsRecordTypes.BgnLib => "BGNLIB",
+        GdsRecordTypes.LibName => "LIBNAME",
+        GdsRecordTypes.Units => "UNITS",
+        GdsRecordTypes.EndLib => "ENDLIB",
+        GdsRecordTypes.BgnStr => "BGNSTR",
+        GdsRecordTypes.StrName => "STRNAME",
+        GdsRecordTypes.EndStr => "ENDSTR",
+        GdsRecordTypes.Boundary => "BOUNDARY",
+        GdsRecordTypes.Path => "PATH",
+        GdsRecordTypes.SRef => "SREF",
+        GdsRecordTypes.ARef => "AREF",
+        GdsRecordTypes.Text => "TEXT",
+        GdsRecordTypes.Layer => "LAYER",
+        GdsRecordTypes.DataType => "DATATYPE",
+        GdsRecordTypes.Width => "WIDTH",
+        GdsRecordTypes.XY => "XY",
+        GdsRecordTypes.EndEl => "ENDEL",
+        GdsRecordTypes.SName => "SNAME",
+        GdsRecordTypes.ColRow => "COLROW",
+        GdsRecordTypes.TextType => "TEXTTYPE",
+        GdsRecordTypes.String => "STRING",
+        GdsRecordTypes.STrans => "STRANS",
+        GdsRecordTypes.Mag => "MAG",
+        GdsRecordTypes.Angle => "ANGLE",
+        GdsRecordTypes.PathType => "PATHTYPE",
+        GdsRecordTypes.Box => "BOX",
+        GdsRecordTypes.BoxType => "BOXTYPE",
+        _ => $"0x{recordType:X2}",
+    };
 
     private double RequireUnits() =>
         _hasUnits

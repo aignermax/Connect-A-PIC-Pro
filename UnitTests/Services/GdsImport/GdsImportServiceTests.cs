@@ -222,6 +222,58 @@ public class GdsImportServiceTests : IDisposable
             .ShouldBe(Path.Combine(storeRoot, "circuit.gds"));
     }
 
+    // ── PDK-name slug collisions ─────────────────────────────────────────────
+
+    [Theory]
+    [InlineData("my circuit.gds", "my-circuit.gds", "GDS Import - my circuit", "GDS Import - my-circuit-2")]
+    [InlineData("my-circuit.gds", "my circuit.gds", "GDS Import - my-circuit", "GDS Import - my circuit-2")]
+    public async Task ImportAsync_PdkNamesCollidingOnSlug_SecondImportGetsSuffixedPdk(
+        string firstFile, string secondFile, string expectedFirstPdk, string expectedSecondPdk)
+    {
+        // "GDS Import - my circuit" and "GDS Import - my-circuit" are DIFFERENT
+        // PDK names whose slugs collide (gds-import-my-circuit.json) — the
+        // second import must not merge into the first one's file.
+        var firstPath = WriteGds(TwoWaveguideLibrary(), firstFile);
+        var secondPath = WriteGds(TwoWaveguideLibrary(), secondFile);
+        var service = new GdsImportService(Store());
+
+        var first = await service.ImportAsync(firstPath, "TOP", null, null);
+        var second = await service.ImportAsync(secondPath, "TOP", null, null);
+
+        first.UserPdkName.ShouldBe(expectedFirstPdk);
+        second.UserPdkName.ShouldBe(expectedSecondPdk);
+        second.UserPdkPath.ShouldNotBe(first.UserPdkPath);
+
+        // Both files keep their own PDK — the first import is untouched.
+        new PdkLoader().LoadFromFileForEditing(first.UserPdkPath!).Name.ShouldBe(expectedFirstPdk);
+        var secondPdk = new PdkLoader().LoadFromFileForEditing(second.UserPdkPath!);
+        secondPdk.Name.ShouldBe(expectedSecondPdk);
+        secondPdk.Components.Count.ShouldBe(2);
+    }
+
+    // ── Idempotency ──────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_SameFileTwice_ReplacesComponentsAndKeepsSingleGdsCopy()
+    {
+        var path = WriteGds(TwoWaveguideLibrary());
+        // No template provider: on the second import the cells are detected as
+        // unknown AGAIN and re-persisted (with templates supplied they would
+        // resolve as KNOWN components and skip persistence entirely — see
+        // ImportAsync_KnownTemplateCell_ResolvesInsteadOfRegistering). The
+        // store's replace semantics must keep exactly one component per name.
+        var service = new GdsImportService(Store());
+
+        await service.ImportAsync(path, "TOP", null, null);
+        var second = await service.ImportAsync(path, "TOP", null, null);
+
+        second.GdsFileName.ShouldBe("circuit.gds");
+        Directory.GetFiles(Store().RootDirectory, "*.gds").ShouldHaveSingleItem(
+            "identical content reuses the existing .gds copy");
+        var pdk = new PdkLoader().LoadFromFileForEditing(second.UserPdkPath!);
+        pdk.Components.Count.ShouldBe(2, "components are replaced, not duplicated");
+    }
+
     // ── Errors / edge cases ──────────────────────────────────────────────────
 
     [Fact]
@@ -270,9 +322,46 @@ public class GdsImportServiceTests : IDisposable
         outcome.UserPdkPath.ShouldBeNull();
         outcome.GdsFileName.ShouldBeNull("no draft needs the .gds copy when nothing is registered");
         outcome.Warnings.ShouldContain(w => w.Contains("blob") && w.Contains("not registered"));
+        outcome.Warnings.Count(w => w.Contains("no pins")).ShouldBe(1,
+            "the pinless draft is reported ONCE (by the service), not again by the importer");
         sink.Templates.ShouldBeEmpty();
         Directory.Exists(Store().RootDirectory).ShouldBeFalse(
             "no PDK and no .gds copy — the store root is never created");
+    }
+
+    [Fact]
+    public async Task ImportAsync_BlankPinLabel_PersistsRenamedPinThatReloadsCleanly()
+    {
+        // An empty STRING label is legal GDS. The blank pin name must never
+        // reach the user PDK: the loader rejects blank pin names, so the NEXT
+        // save of the same file would throw mid-import and every later app
+        // start would silently skip the poisoned file.
+        var library = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wg", 0, 0)
+            .EndCell()
+            .BeginCell("wg")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                // Extent rectangle (like WaveguideCell): sizes the bbox beyond the
+                // core stripe so the stripe's long edges are no bbox-edge touches.
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(1, 10, "", 0, 2000)
+                .Text(1, 10, "out", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+        var path = WriteGds(library);
+
+        var outcome = await new GdsImportService(Store()).ImportAsync(path, "TOP", null, null);
+
+        outcome.Warnings.ShouldContain(w => w.Contains("pin_1"));
+        outcome.UserPdkPath.ShouldNotBeNull();
+        // The reload-with-validation path is exactly what the next save (and
+        // every app start) runs — it must not throw.
+        var pdk = new PdkLoader().LoadFromFileForEditing(outcome.UserPdkPath);
+        pdk.Components.ShouldHaveSingleItem().Pins.Select(p => p.Name)
+            .ShouldBe(new[] { "pin_1", "out" });
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

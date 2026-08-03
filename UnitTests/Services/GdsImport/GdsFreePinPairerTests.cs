@@ -170,4 +170,55 @@ public class GdsFreePinPairerTests
         var pair = pairing.Pairs.ShouldHaveSingleItem();
         pair.DistanceUm.ShouldBe(50, 1e-9);
     }
+
+    // ── Facing check (wrap-around guard) ─────────────────────────────────────
+
+    [Fact]
+    public void Pair_PartnerBehindThePin_DoesNotPair()
+    {
+        // b.in opposes a.out angle-wise (180° difference) but lies BEHIND it:
+        // a.out points east while b.in sits to the west — both pins point away
+        // from each other (the free ends of a waveguide chain).
+        var pairing = GdsFreePinPairer.Pair(
+            new[] { Pin("a.out", 0, 0, 0, owner: 0), Pin("b.in", -100, 0, 180, owner: 1) },
+            radiusUm: 1000);
+
+        pairing.Pairs.ShouldBeEmpty();
+        pairing.Skipped.Count.ShouldBe(2);
+        pairing.Skipped.ShouldAllBe(s => s.Reason == GdsFreePinSkipReason.NotFacingEachOther);
+    }
+
+    [Fact]
+    public void Pair_PartnerExactly90DegreesOffAxis_DoesNotPair()
+    {
+        // Displacement perpendicular to the outward direction: the dot product
+        // is exactly 0, and the check requires strictly positive.
+        var pairing = GdsFreePinPairer.Pair(
+            new[] { Pin("a.out", 0, 0, 0, owner: 0), Pin("b.in", 0, 100, 180, owner: 1) },
+            radiusUm: 1000);
+
+        pairing.Pairs.ShouldBeEmpty();
+        pairing.Skipped.Count.ShouldBe(2);
+        pairing.Skipped.ShouldAllBe(s => s.Reason == GdsFreePinSkipReason.NotFacingEachOther);
+    }
+
+    [Fact]
+    public void Pair_FacingCandidateWinsOverNearerBehindCandidate()
+    {
+        // b.in is NEARER than c.in but behind a.out — the facing c.in must pair.
+        var pairing = GdsFreePinPairer.Pair(
+            new[]
+            {
+                Pin("a.out", 0, 0, 0, owner: 0),
+                Pin("b.in", -50, 0, 180, owner: 1),
+                Pin("c.in", 100, 0, 180, owner: 2),
+            },
+            radiusUm: 1000);
+
+        var pair = pairing.Pairs.ShouldHaveSingleItem();
+        (pair.A, pair.B).ShouldBe((0, 2));
+        // b.in's only opposing partner (a.out) is taken by the time it is
+        // considered, so it reports the plain no-partner reason.
+        pairing.Skipped.ShouldHaveSingleItem().Reason.ShouldBe(GdsFreePinSkipReason.NoOpposingPartnerInRadius);
+    }
 }

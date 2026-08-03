@@ -59,7 +59,7 @@ public sealed class GdsImportService
     /// <exception cref="InvalidDataException">The file is not a readable GDS II stream.</exception>
     public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
-        var library = await ReadLibraryAsync(gdsPath, ct).ConfigureAwait(false);
+        var library = await ReadLibraryAsync(gdsPath, ct);
         var candidates = library.TopCellCandidates;
         return new GdsImportAnalysis
         {
@@ -101,20 +101,26 @@ public sealed class GdsImportService
         CancellationToken ct = default)
     {
         progress?.Report($"Reading '{Path.GetFileName(gdsPath)}'…");
-        var library = await ReadLibraryAsync(gdsPath, ct).ConfigureAwait(false);
+        // No ConfigureAwait(false) in this service: the continuations (including
+        // the component-registration callback below) mutate UI-bound
+        // ObservableCollections and must stay on the caller's (UI) context —
+        // the same rule GdsPlacementExecutor documents for the canvas.
+        var library = await ReadLibraryAsync(gdsPath, ct);
         ValidateImportTarget(library, gdsPath, topCellName);
+
+        var warnings = new List<string>();
 
         options ??= new GdsHierarchyImportOptions();
         if (options.ResolveKnownComponent is null)
         {
             var templates = _templateProvider?.Invoke() ?? (IReadOnlyList<ComponentTemplate>)Array.Empty<ComponentTemplate>();
-            options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates) };
+            options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, warnings) };
         }
 
         progress?.Report($"Analyzing hierarchy of '{topCellName}'…");
-        var import = await GdsHierarchyImporter.ImportAsync(library, topCellName, options, ct).ConfigureAwait(false);
+        var import = await GdsHierarchyImporter.ImportAsync(library, topCellName, options, ct);
 
-        var warnings = new List<string>(import.Warnings);
+        warnings.AddRange(import.Warnings);
         var persistable = import.ImportedCellDrafts
             .Where(d => IsPersistable(d, warnings))
             .ToList();
@@ -129,7 +135,8 @@ public sealed class GdsImportService
             progress?.Report("Copying the GDS file into the user component library…");
             ct.ThrowIfCancellationRequested();
             gdsFileName = CopyGdsIntoStoreRoot(gdsPath);
-            pdkName = ImportPdkNamePrefix + Path.GetFileNameWithoutExtension(gdsFileName);
+            pdkName = _userPdkStore.ResolveAvailablePdkName(
+                ImportPdkNamePrefix + Path.GetFileNameWithoutExtension(gdsFileName));
             var gdsCopyPath = Path.Combine(_userPdkStore.RootDirectory, gdsFileName);
 
             progress?.Report($"Saving {persistable.Count} component(s) to '{pdkName}'…");
@@ -138,7 +145,7 @@ public sealed class GdsImportService
             foreach (var cellDraft in persistable)
             {
                 ct.ThrowIfCancellationRequested();
-                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, gdsCopyPath);
+                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, gdsCopyPath, warnings);
                 pdkDraft.Name = DeduplicateName(pdkDraft.Name, cellDraft.CellName, usedNames, warnings);
                 userPdkPath = _userPdkStore.SaveToProcessAgnosticNamedPdk(pdkName, pdkDraft, "nazca");
                 pdkDrafts.Add(pdkDraft);
@@ -183,7 +190,7 @@ public sealed class GdsImportService
             await using var stream = new FileStream(
                 gdsPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 81920, useAsync: true);
-            return await new GdsReader().ReadAsync(stream, ct).ConfigureAwait(false);
+            return await new GdsReader().ReadAsync(stream, ct);
         }
         catch (InvalidDataException ex)
         {
@@ -225,8 +232,18 @@ public sealed class GdsImportService
             var candidatePath = Path.Combine(_userPdkStore.RootDirectory, candidateName);
             if (!File.Exists(candidatePath))
             {
-                File.Copy(gdsPath, candidatePath);
-                return candidateName;
+                try
+                {
+                    File.Copy(gdsPath, candidatePath);
+                    return candidateName;
+                }
+                catch (IOException) when (File.Exists(candidatePath))
+                {
+                    // Lost the race: another writer created the candidate between the
+                    // Exists check and the copy. Fall through to the content compare
+                    // below instead of rethrowing. A copy failure that did NOT
+                    // produce the candidate (e.g. the source vanished) rethrows.
+                }
             }
             if (FilesEqual(gdsPath, candidatePath))
                 return candidateName;
@@ -235,24 +252,33 @@ public sealed class GdsImportService
 
     private static bool FilesEqual(string first, string second)
     {
-        var firstInfo = new FileInfo(first);
-        var secondInfo = new FileInfo(second);
-        if (firstInfo.Length != secondInfo.Length)
-            return false;
-
-        using var a = firstInfo.OpenRead();
-        using var b = secondInfo.OpenRead();
-        var bufferA = new byte[81920];
-        var bufferB = new byte[81920];
-        int read;
-        while ((read = a.Read(bufferA, 0, bufferA.Length)) > 0)
+        try
         {
-            if (b.Read(bufferB, 0, read) != read)
+            var firstInfo = new FileInfo(first);
+            var secondInfo = new FileInfo(second);
+            if (firstInfo.Length != secondInfo.Length)
                 return false;
-            if (!bufferA.AsSpan(0, read).SequenceEqual(bufferB.AsSpan(0, read)))
-                return false;
+
+            using var a = firstInfo.OpenRead();
+            using var b = secondInfo.OpenRead();
+            var bufferA = new byte[81920];
+            var bufferB = new byte[81920];
+            int read;
+            while ((read = a.Read(bufferA, 0, bufferA.Length)) > 0)
+            {
+                if (b.Read(bufferB, 0, read) != read)
+                    return false;
+                if (!bufferA.AsSpan(0, read).SequenceEqual(bufferB.AsSpan(0, read)))
+                    return false;
+            }
+            return true;
         }
-        return true;
+        catch (FileNotFoundException)
+        {
+            // The candidate vanished between the Exists check and the compare —
+            // treat it as non-equal so the suffix loop moves on.
+            return false;
+        }
     }
 
     // ── Draft filtering / naming ─────────────────────────────────────────────
