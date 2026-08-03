@@ -382,6 +382,7 @@
   "GdsImport.AutoConnectSkipSummaryNotFacingFormat": "{0} pins skipped: opposing pin(s) within the radius, but the pins do not face each other (wrap-around).",
   "GdsImport.AutoConnectTip": "Pairs unconnected optical pins facing each other within the radius; design validation runs afterwards and reports issues below",
   "GdsImport.AutoConnectedFormat": "Auto-connected — {0}",
+  "GdsImport.DetailsInErrorConsole": "Details were written to the Error Console (bottom panel, F12).",
   "GdsImport.ErrorLayerSyntax": "Invalid layer syntax: '{0}'. Use layer,datatype pairs separated by ';' (e.g. 1,10).",
   "GdsImport.ErrorRadiusSyntax": "Invalid auto-connect radius: '{0}'. Enter a positive number of micrometers.",
   "GdsImport.ErrorTitle": "Import error:",

@@ -56,6 +56,8 @@
                     <TextBlock Text="{Binding ErrorText}" Foreground="#FF9090"
                                TextWrapping="Wrap" FontFamily="Consolas, Courier New, monospace"
                                FontSize="10"/>
+                    <TextBlock Text="{loc:Localize GdsImport.DetailsInErrorConsole}" Foreground="#FF9090"
+                               FontSize="10" FontStyle="Italic" Opacity="0.8"/>
                 </StackPanel>
             </Border>
 
@@ -142,6 +144,10 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
+                <!-- Only shown with warnings: without them nothing was mirrored to the console. -->
+                <TextBlock Text="{loc:Localize GdsImport.DetailsInErrorConsole}" Foreground="Gray"
+                           FontSize="10" FontStyle="Italic"
+                           IsVisible="{Binding HasWarnings}"/>
             </StackPanel>
 
         </StackPanel>

@@ -4,6 +4,7 @@ using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
+using CAP_Core;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -22,6 +23,7 @@ public partial class GdsImportButtonViewModel : ObservableObject
     private readonly DesignCanvasViewModel _canvas;
     private readonly Commands.CommandManager _commandManager;
     private readonly LeftPanelViewModel _leftPanel;
+    private readonly ErrorConsoleService? _errorConsole;
 
     /// <summary>Open-file dialog service, injected from the view layer (MainWindow).</summary>
     public IFileDialogService? FileDialogService { get; set; }
@@ -43,14 +45,20 @@ public partial class GdsImportButtonViewModel : ObservableObject
     /// Component library: supplies the loaded templates for known-cell resolution
     /// and registers the imported components at runtime.
     /// </param>
+    /// <param name="errorConsole">
+    /// Optional error console handed through to the dialog ViewModel, so import
+    /// warnings/failures survive as copyable entries after the dialog closes.
+    /// </param>
     public GdsImportButtonViewModel(
         DesignCanvasViewModel canvas,
         Commands.CommandManager commandManager,
-        LeftPanelViewModel leftPanel)
+        LeftPanelViewModel leftPanel,
+        ErrorConsoleService? errorConsole = null)
     {
         _canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
         _commandManager = commandManager ?? throw new ArgumentNullException(nameof(commandManager));
         _leftPanel = leftPanel ?? throw new ArgumentNullException(nameof(leftPanel));
+        _errorConsole = errorConsole;
     }
 
     /// <summary>
@@ -84,7 +92,7 @@ public partial class GdsImportButtonViewModel : ObservableObject
             var placementExecutor = new GdsPlacementExecutor(
                 _canvas, _commandManager, () => _leftPanel.AllTemplates.ToList());
 
-            await ShowImportDialogAsync(new GdsImportDialogViewModel(gdsPath, importService, placementExecutor));
+            await ShowImportDialogAsync(new GdsImportDialogViewModel(gdsPath, importService, placementExecutor, _errorConsole));
         }
         catch (Exception ex)
         {

@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
+using CAP_Core;
 using CAP_DataAccess.Import.Gds;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -14,12 +15,15 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 /// lets the user pick the top cell, hierarchy mode and pin-detection layers, then
 /// runs the import and places the result on the canvas via
 /// <see cref="GdsPlacementExecutor"/>. The outcome (placed/connected counts plus
-/// all warnings) stays visible until the user closes the dialog.
+/// all warnings) stays visible until the user closes the dialog; every warning and
+/// failure is additionally mirrored to the error console, where the lines can be
+/// selected and copied (the dialog's own texts are not copyable).
 /// </summary>
 public partial class GdsImportDialogViewModel : ObservableObject
 {
     private readonly GdsImportService _importService;
     private readonly GdsPlacementExecutor _placementExecutor;
+    private readonly ErrorConsoleService? _errorConsole;
     private CancellationTokenSource? _cts;
 
     /// <summary>Absolute path of the .gds file being imported (chosen before the dialog opens).</summary>
@@ -64,9 +68,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExplodeMode = true;
 
-    /// <summary>Port-label layers as "layer,datatype" pairs, ';'-separated (gdsfactory default: 1,10).</summary>
+    /// <summary>
+    /// Port-label layers as "layer,datatype" pairs, ';'-separated. The default mirrors
+    /// <see cref="GdsPinDetectionOptions.PortLayers"/>: 1,10 (gdsfactory port labels)
+    /// plus 501,1 (nazca demofab's bb_pin_text layer) — shown explicitly because the
+    /// import service would union demofab's layer in invisibly otherwise.
+    /// </summary>
     [ObservableProperty]
-    private string _portLayersText = "1,10";
+    private string _portLayersText = "1,10;501,1";
 
     /// <summary>Waveguide-core layers as "layer,datatype" pairs, ';'-separated (gdsfactory default: 1,0).</summary>
     [ObservableProperty]
@@ -124,14 +133,20 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// <param name="gdsFilePath">Absolute path of the .gds file to import.</param>
     /// <param name="importService">Import orchestrator (parse → register → persist).</param>
     /// <param name="placementExecutor">Canvas placement executor for the import outcome.</param>
+    /// <param name="errorConsole">
+    /// Optional error console: every result warning and every failure message is
+    /// mirrored there as a distinct, copyable entry (same pattern as the export VMs).
+    /// </param>
     public GdsImportDialogViewModel(
         string gdsFilePath,
         GdsImportService importService,
-        GdsPlacementExecutor placementExecutor)
+        GdsPlacementExecutor placementExecutor,
+        ErrorConsoleService? errorConsole = null)
     {
         GdsFilePath = gdsFilePath ?? throw new ArgumentNullException(nameof(gdsFilePath));
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         _placementExecutor = placementExecutor ?? throw new ArgumentNullException(nameof(placementExecutor));
+        _errorConsole = errorConsole;
         Warnings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasWarnings));
     }
 
@@ -174,6 +189,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
             ErrorText = ex.Message;
             HasError = true;
             StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalysisFailed");
+            _errorConsole?.LogError("GDS import analysis failed", ex);
         }
         finally
         {
@@ -195,6 +211,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         {
             ErrorText = optionsError!;
             HasError = true;
+            _errorConsole?.LogError($"GDS import: {ErrorText}");
             return;
         }
 
@@ -203,6 +220,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
             ErrorText = string.Format(
                 LocalizationService.Instance.Translate("GdsImport.ErrorRadiusSyntax"), AutoConnectRadiusText);
             HasError = true;
+            _errorConsole?.LogError($"GDS import: {ErrorText}");
             return;
         }
 
@@ -245,6 +263,12 @@ public partial class GdsImportDialogViewModel : ObservableObject
             ResultSummaryText = BuildSummary(report, AutoConnectRequested);
             ImportCompleted = true;
             StatusText = "";
+
+            // Mirror every line of the result view into the error console as a
+            // distinct entry — the dialog texts are not selectable, the console's
+            // are (same pattern as the export warnings in FileOperationsViewModel).
+            foreach (var warning in Warnings)
+                _errorConsole?.LogWarning(warning);
         }
         catch (OperationCanceledException)
         {
@@ -253,12 +277,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
             StatusText = string.Format(
                 LocalizationService.Instance.Translate("GdsImport.StatusCancelledAfterPlacement"),
                 _placementExecutor.PlacedCountSoFar);
+            _errorConsole?.LogWarning($"GDS import: {StatusText}");
         }
         catch (Exception ex)
         {
             ErrorText = ex.Message;
             HasError = true;
             StatusText = LocalizationService.Instance.Translate("GdsImport.StatusImportFailed");
+            _errorConsole?.LogError("GDS import failed", ex);
         }
         finally
         {

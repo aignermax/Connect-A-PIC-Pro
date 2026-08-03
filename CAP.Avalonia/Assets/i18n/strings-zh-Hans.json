@@ -382,6 +382,7 @@
   "GdsImport.AutoConnectSkipSummaryNotFacingFormat": "{0} 个引脚已跳过：半径内存在对向引脚，但引脚彼此背向（绕行）。",
   "GdsImport.AutoConnectTip": "配对半径内相互面对的未连接光引脚；随后运行设计验证并在下方报告问题",
   "GdsImport.AutoConnectedFormat": "已自动连接 — {0}",
+  "GdsImport.DetailsInErrorConsole": "详细信息已写入错误控制台（底部面板，F12）。",
   "GdsImport.ErrorLayerSyntax": "图层语法无效：'{0}'。请使用以 ';' 分隔的 层,数据类型 对（例如 1,10）。",
   "GdsImport.ErrorRadiusSyntax": "自动连接半径无效：'{0}'。请输入正的微米数。",
   "GdsImport.ErrorTitle": "导入错误：",

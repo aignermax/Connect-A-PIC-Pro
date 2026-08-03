@@ -382,6 +382,7 @@
   "GdsImport.AutoConnectSkipSummaryNotFacingFormat": "{0} pines omitidos: pin(es) opuesto(s) dentro del radio, pero los pines no se orientan entre sí (rodeo).",
   "GdsImport.AutoConnectTip": "Empareja pines ópticos libres que se enfrentan dentro del radio; la validación se ejecuta después e informa los problemas abajo",
   "GdsImport.AutoConnectedFormat": "Conectado automáticamente — {0}",
+  "GdsImport.DetailsInErrorConsole": "Los detalles se escribieron en la Consola de errores (panel inferior, F12).",
   "GdsImport.ErrorLayerSyntax": "Sintaxis de capas no válida: '{0}'. Use pares capa,tipo de dato separados por ';' (p. ej. 1,10).",
   "GdsImport.ErrorRadiusSyntax": "Radio de conexión automática no válido: '{0}'. Introduzca un número positivo de micrómetros.",
   "GdsImport.ErrorTitle": "Error de importación:",

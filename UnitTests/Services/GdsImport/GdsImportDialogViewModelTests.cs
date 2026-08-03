@@ -8,6 +8,8 @@ using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.GdsImport;
 using CAP.Avalonia.ViewModels.Library;
+using CAP_Core;
+using CAP_Contracts.Logger;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -98,13 +100,14 @@ public class GdsImportDialogViewModelTests : IDisposable
     private UserPdkStore Store() => new(
         Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
 
-    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, LibrarySink sink) CreateDialog(string gdsPath)
+    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, LibrarySink sink) CreateDialog(
+        string gdsPath, ErrorConsoleService? errorConsole = null)
     {
         var sink = new LibrarySink(_prefsPath);
         var canvas = new DesignCanvasViewModel();
         var service = new GdsImportService(Store(), () => sink.Templates.ToList(), sink.Register);
         var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => sink.Templates.ToList());
-        return (new GdsImportDialogViewModel(gdsPath, service, executor), canvas, sink);
+        return (new GdsImportDialogViewModel(gdsPath, service, executor, errorConsole), canvas, sink);
     }
 
     // ── Analysis ─────────────────────────────────────────────────────────────
@@ -212,6 +215,21 @@ public class GdsImportDialogViewModelTests : IDisposable
         vm.ErrorText.ShouldContain("bogus");
         vm.ImportCompleted.ShouldBeFalse();
         canvas.Components.ShouldBeEmpty("nothing is imported when option validation fails");
+    }
+
+    [Fact]
+    public void PortLayersText_Default_ShowsGdsFactoryAndDemofabLayers()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+
+        vm.PortLayersText.ShouldBe("1,10;501,1",
+            "the field mirrors the detector default: gdsfactory port labels (1,10) plus " +
+            "nazca demofab's bb_pin_text layer (501,1), which the import service unions in anyway");
+        var pairs = GdsImportDialogViewModel.ParseLayerPairs(vm.PortLayersText)
+            .ShouldNotBeNull("the default text must stay valid layer syntax");
+        pairs.Count.ShouldBe(2);
+        pairs[0].ShouldBe((1, 10));
+        pairs[1].ShouldBe((501, 1));
     }
 
     // ── End-to-end: analyze → import → place on canvas ───────────────────────
@@ -336,6 +354,106 @@ public class GdsImportDialogViewModelTests : IDisposable
         vm.ErrorText.ShouldContain("bogus");
         vm.ImportCompleted.ShouldBeFalse();
         canvas.Components.ShouldBeEmpty("nothing is imported when option validation fails");
+    }
+
+    // ── Error-console mirroring ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_Success_MirrorsEveryWarningLineToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()), console);
+        await vm.StartAnalysisAsync();
+        vm.AutoConnectRequested = true;
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        vm.Warnings.ShouldNotBeEmpty("the gap fixture yields not-facing auto-connect skips");
+        var loggedWarnings = console.Entries
+            .Where(e => e.Level == LogLevel.Warn)
+            .Select(e => e.Message)
+            .ToList();
+        foreach (var warning in vm.Warnings)
+            loggedWarnings.ShouldContain(warning);
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_Failure_LogsTheErrorToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, _, _) = CreateDialog(WriteGds(new byte[] { 1, 2, 3, 4 }, "garbage.gds"), console);
+
+        await vm.StartAnalysisAsync();
+
+        vm.HasError.ShouldBeTrue();
+        var entry = console.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Error);
+        entry.Message.ShouldContain(vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task ImportAsync_InvalidLayerSyntax_LogsTheValidationErrorToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        await vm.StartAnalysisAsync();
+        vm.PortLayersText = "bogus";
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeTrue();
+        var entry = console.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Error);
+        entry.Message.ShouldContain("bogus");
+    }
+
+    [Fact]
+    public async Task ImportAsync_ImportRunFails_LogsTheErrorToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var gdsPath = WriteGds(TwoWaveguideLibrary());
+        var (vm, _, _) = CreateDialog(gdsPath, console);
+        await vm.StartAnalysisAsync();
+        // The file vanishes between analysis and import — the run fails mid-flow.
+        File.Delete(gdsPath);
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeTrue();
+        var entry = console.Entries.ShouldHaveSingleItem();
+        entry.Level.ShouldBe(LogLevel.Error);
+        entry.Message.ShouldContain(vm.ErrorText);
+    }
+
+    [Fact]
+    public async Task ImportAsync_Cancelled_LogsThePlacedNoteToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        await vm.StartAnalysisAsync();
+
+        var import = vm.ImportCommand.ExecuteAsync(null);
+        // Same determinism argument as ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy:
+        // the cancel lands before any placement, so the logged count is 0.
+        vm.CurrentCts.ShouldNotBeNull().Cancel();
+        await import;
+
+        var expectedNote = string.Format(
+            LocalizationService.Instance.Translate("GdsImport.StatusCancelledAfterPlacement"), 0);
+        vm.StatusText.ShouldBe(expectedNote);
+        console.Entries.ShouldContain(e => e.Level == LogLevel.Warn && e.Message.Contains(expectedNote));
+    }
+
+    [Fact]
+    public void DetailsInErrorConsoleHint_ResolvesAndPointsAtTheConsole()
+    {
+        var hint = LocalizationService.Instance.Translate("GdsImport.DetailsInErrorConsole");
+
+        hint.ShouldNotBe("GdsImport.DetailsInErrorConsole",
+            "the dialog's hint (result view + error panel) must resolve to real text in every language");
+        // The hint says where the Error Console lives (bottom panel, F12) in all five languages.
+        hint.ShouldContain("F12");
     }
 
     // ── Cancellation ─────────────────────────────────────────────────────────

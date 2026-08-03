@@ -382,6 +382,7 @@
   "GdsImport.AutoConnectSkipSummaryNotFacingFormat": "{0} ピンをスキップ: 半径内に対向するピンがありますが、ピン同士が向き合っていません（回り込み）。",
   "GdsImport.AutoConnectTip": "半径内で向かい合う未接続の光ピンをペアリングします。実行後にデザイン検証が走り、問題が下に報告されます",
   "GdsImport.AutoConnectedFormat": "自動接続 — {0}",
+  "GdsImport.DetailsInErrorConsole": "詳細はエラーコンソールに書き込まれました（下部パネル、F12）。",
   "GdsImport.ErrorLayerSyntax": "レイヤー構文が無効です: '{0}'。レイヤー,データ型 のペアを ';' で区切ってください（例: 1,10）。",
   "GdsImport.ErrorRadiusSyntax": "自動接続の半径が無効です: '{0}'。正の数（µm）を入力してください。",
   "GdsImport.ErrorTitle": "インポートエラー:",

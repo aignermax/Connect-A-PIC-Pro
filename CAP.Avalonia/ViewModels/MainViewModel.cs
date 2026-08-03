@@ -308,7 +308,7 @@ public partial class MainViewModel : ObservableObject
         BottomPanel = bottomPanel;
         Registry = registryBrowser;
 
-        GdsImport = new ViewModels.GdsImport.GdsImportButtonViewModel(_canvas, commandManager, LeftPanel);
+        GdsImport = new ViewModels.GdsImport.GdsImportButtonViewModel(_canvas, commandManager, LeftPanel, errorConsoleService);
 
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
