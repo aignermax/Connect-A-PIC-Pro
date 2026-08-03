@@ -60,7 +60,10 @@ public sealed class GdsImportService
     public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
         var library = await ReadLibraryAsync(gdsPath, ct);
-        var candidates = library.TopCellCandidates;
+        var candidates = library.TopCellCandidates
+            .Select(name => UnwrapPassThroughTopCell(library, name))
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
         return new GdsImportAnalysis
         {
             LibraryName = library.Name,
@@ -71,6 +74,39 @@ public sealed class GdsImportService
                 .ToList(),
         };
     }
+
+    /// <summary>
+    /// Looks through a pure pass-through wrapper cell: no geometry of its own and
+    /// exactly one element — an untransformed (1×1, unmagnified, unreflected,
+    /// unrotated) reference to another cell. Nazca's default export nests every
+    /// design under such a wrapper (the default 'nazca' cell), so the wrapper is
+    /// the ONLY unreferenced cell and would hide the actual design cell from the
+    /// candidate list. The wrapped cell is the more useful import target; the
+    /// unwrap repeats while the chain stays trivial (and terminates on cycles or
+    /// undefined references by returning the last resolvable name).
+    /// </summary>
+    private static string UnwrapPassThroughTopCell(GdsLibrary library, string cellName)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var current = cellName;
+        while (visited.Add(current)
+               && library.Cells.TryGetValue(current, out var cell)
+               && cell.Elements.Count == 1
+               && cell.Elements[0] is GdsReference reference
+               && reference.Columns == 1 && reference.Rows == 1
+               && !reference.Reflected
+               && Math.Abs(reference.Magnification - 1.0) < 1e-9
+               && IsIdentityAngle(reference.AngleDegrees)
+               && library.Cells.ContainsKey(reference.CellName))
+        {
+            current = reference.CellName;
+        }
+        return current;
+    }
+
+    /// <summary>True when the angle is a whole number of turns (an untransformed reference).</summary>
+    private static bool IsIdentityAngle(double angleDegrees) =>
+        Math.Abs(angleDegrees - (360.0 * Math.Round(angleDegrees / 360.0))) < 1e-9;
 
     /// <summary>
     /// Imports <paramref name="topCellName"/> from <paramref name="gdsPath"/>:
@@ -111,6 +147,7 @@ public sealed class GdsImportService
         var warnings = new List<string>();
 
         options ??= new GdsHierarchyImportOptions();
+        options = WithOwnExportPinLayers(options);
         if (options.ResolveKnownComponent is null)
         {
             var templates = _templateProvider?.Invoke() ?? (IReadOnlyList<ComponentTemplate>)Array.Empty<ComponentTemplate>();
@@ -175,6 +212,34 @@ public sealed class GdsImportService
             UserPdkName = pdkName,
             UserPdkPath = userPdkPath,
             GdsFileName = gdsFileName,
+        };
+    }
+
+    /// <summary>
+    /// nazca demofab's black-box pin-label layer (<c>bb_pin_text</c> in demofab's
+    /// layer table): our own Nazca export places demofab cells (the bundled Demo
+    /// PDK) whose pin names live only there.
+    /// </summary>
+    private static readonly (int Layer, int Datatype) DemofabPinTextLayer = (501, 1);
+
+    /// <summary>
+    /// Adds the pin-label layers of our OWN exports to the caller's pin detection
+    /// (currently demofab's <c>bb_pin_text</c> — the detector default already
+    /// carries it). The import dialog's layer fields default to the gdsfactory
+    /// convention and always pass an explicit list, which would silently drop
+    /// our own format: re-importing a Lunima-exported GDS must work out of the
+    /// box, so the layer is unioned in here rather than trusting any default.
+    /// </summary>
+    private static GdsHierarchyImportOptions WithOwnExportPinLayers(GdsHierarchyImportOptions options)
+    {
+        if (options.PinDetection.PortLayers.Contains(DemofabPinTextLayer))
+            return options;
+        return options with
+        {
+            PinDetection = options.PinDetection with
+            {
+                PortLayers = [.. options.PinDetection.PortLayers, DemofabPinTextLayer],
+            },
         };
     }
 

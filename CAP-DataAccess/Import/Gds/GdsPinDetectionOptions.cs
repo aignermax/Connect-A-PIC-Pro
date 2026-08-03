@@ -2,19 +2,22 @@ namespace CAP_DataAccess.Import.Gds;
 
 /// <summary>
 /// Tunables for <see cref="GdsPinDetector"/>. The defaults follow the gdsfactory
-/// conventions: port labels are TEXT elements on layer (1, 10) and waveguide
-/// cores are polygons on layer (1, 0).
+/// conventions — port labels are TEXT elements on layer (1, 10) and waveguide
+/// cores are polygons on layer (1, 0) — plus nazca demofab's black-box pin-text
+/// layer (501, 1): the application's own Nazca export places demofab cells whose
+/// pin labels live there, so re-importing our own GDS needs it recognized.
 /// </summary>
 public sealed record GdsPinDetectionOptions
 {
     /// <summary>
     /// (Layer, Datatype) pairs whose TEXT elements are treated as pin labels.
-    /// Default: (1, 10), the gdsfactory port-label layer. Other tools place pin
-    /// markers elsewhere (e.g. SiEPIC-Tools uses dedicated PinRec layers) — callers
-    /// targeting those PDKs must configure this list; we deliberately do not
-    /// hardcode a second default.
+    /// Defaults: (1, 10), the gdsfactory port-label layer, and (501, 1), nazca
+    /// demofab's <c>bb_pin_text</c> layer (demofab's layer table). Other tools
+    /// place pin markers elsewhere (e.g. SiEPIC-Tools uses dedicated PinRec
+    /// layers) — callers targeting those PDKs must configure this list; we
+    /// deliberately do not hardcode further defaults.
     /// </summary>
-    public IReadOnlyList<(int Layer, int Datatype)> PortLayers { get; init; } = [(1, 10)];
+    public IReadOnlyList<(int Layer, int Datatype)> PortLayers { get; init; } = [(1, 10), (501, 1)];
 
     /// <summary>
     /// (Layer, Datatype) pairs whose polygons count as waveguides for the

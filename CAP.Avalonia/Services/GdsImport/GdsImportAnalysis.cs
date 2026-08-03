@@ -23,8 +23,10 @@ public sealed record GdsImportAnalysis
     public int CellCount { get; init; }
 
     /// <summary>
-    /// Cells not referenced by any other cell — the candidates for the layout's
-    /// top cell, in file order (same list <see cref="IGdsImporter.ListTopCellsAsync"/> returns).
+    /// The candidates for the layout's top cell, in file order: cells not
+    /// referenced by any other cell, with pure pass-through wrappers (no own
+    /// geometry, exactly one untransformed reference — e.g. nazca's default
+    /// 'nazca' cell) replaced by the cell they wrap.
     /// </summary>
     public IReadOnlyList<string> TopCellCandidates { get; init; } = Array.Empty<string>();
 

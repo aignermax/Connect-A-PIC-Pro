@@ -48,7 +48,7 @@ public class NazcaExportAllComponentsTests
         // Verify basic structure
         result.ShouldContain("import nazca as nd");
         result.ShouldContain("def create_design():");
-        result.ShouldContain("nd.export_gds(filename=gds_filename)"); // Dynamic filename (Issue #172)
+        result.ShouldContain("nd.export_gds(topcells=[design], filename=gds_filename)"); // Dynamic filename (Issue #172)
     }
 
     [Fact]

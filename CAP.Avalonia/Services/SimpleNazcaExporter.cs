@@ -1143,14 +1143,19 @@ public class SimpleNazcaExporter
         sb.AppendLine();
         sb.AppendLine("# Create and export the design");
         sb.AppendLine("design = create_design()");
-        sb.AppendLine("design.put()");
         sb.AppendLine();
         sb.AppendLine("# Export GDS with filename matching this script");
         sb.AppendLine("import os");
         sb.AppendLine("import sys");
         sb.AppendLine("script_path = os.path.abspath(__file__)");
         sb.AppendLine("gds_filename = os.path.splitext(script_path)[0] + '.gds'");
-        sb.AppendLine("nd.export_gds(filename=gds_filename)");
+        // topcells=[design]: plain nd.export_gds() would export the default 'nazca'
+        // cell tree only, so the design had to be instantiated under it (design.put())
+        // and the written GDS's sole top cell was the empty 'nazca' wrapper around
+        // ConnectAPIC_Design — a re-import then offered only that wrapper as the
+        // top-cell candidate and exploded into ONE black box instead of the placed
+        // components. Exporting the design cell directly keeps it the GDS top cell.
+        sb.AppendLine("nd.export_gds(topcells=[design], filename=gds_filename)");
         sb.AppendLine("print(f'GDS exported to: {gds_filename}')");
     }
 
