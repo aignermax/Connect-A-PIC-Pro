@@ -40,7 +40,7 @@ public sealed record GdsPlacementInstruction
     /// </summary>
     public double RotationDegrees { get; init; }
 
-    /// <summary>True when the GDS reference was mirrored; the core model cannot mirror, so the component is placed unreflected.</summary>
+    /// <summary>True when the GDS reference was mirrored; the core model cannot mirror geometry, so the component body is placed unreflected — its pins are mirrored onto the true reflected positions instead.</summary>
     public bool Reflected { get; init; }
 
     /// <summary>User-presentable note for this instance (mirroring, unregistered draft), or null.</summary>
@@ -152,7 +152,8 @@ public sealed record GdsPlacementPlan
 
             if (instance.Reflected)
             {
-                var mirrorNote = "mirrored in GDS (STRANS) — placed unreflected (v1 limitation)";
+                var mirrorNote = "mirrored in GDS (STRANS) — body placed unreflected, " +
+                    "but pins mirrored onto the true positions (v1 limitation)";
                 warning = warning is null ? mirrorNote : $"{warning} Also: {mirrorNote}.";
             }
 

@@ -157,7 +157,8 @@ public sealed class GdsPlacementExecutor
 
             var quarterTurns = SnapToQuarterTurns(instruction.RotationDegrees, instruction.InstanceName, report);
             var command = PlaceComponentCommand.CreateExact(
-                _canvas, template, instruction.XUm, instruction.YUm, quarterTurns);
+                _canvas, template, instruction.XUm, instruction.YUm, quarterTurns,
+                mirrorPinsHorizontally: instruction.Reflected);
             Execute(command);
 
             placedViewModels.Add(command.CreatedViewModel);

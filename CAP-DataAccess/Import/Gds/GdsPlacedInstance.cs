@@ -55,9 +55,10 @@ public sealed record GdsPlacedInstance
 
     /// <summary>
     /// True when the GDS reference carries the STRANS mirror flag. The core
-    /// <c>Component</c> model has no mirroring support, so the instance is
-    /// placed unreflected (a warning is emitted); connection reconstruction
-    /// still uses the true reflected transform.
+    /// <c>Component</c> model has no mirroring support, so the instance's body is
+    /// placed unreflected (a warning is emitted); the placement layer mirrors the
+    /// placed component's pins onto the true reflected positions instead, so the
+    /// reconstructed connections anchor exactly where the placed pins are.
     /// </summary>
     public bool Reflected { get; init; }
 }

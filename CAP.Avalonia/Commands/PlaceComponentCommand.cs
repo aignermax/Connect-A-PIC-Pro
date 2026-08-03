@@ -25,7 +25,8 @@ public class PlaceComponentCommand : IUndoableCommand
         double x,
         double y,
         bool isValid,
-        int quarterTurnsCounterClockwise = 0)
+        int quarterTurnsCounterClockwise = 0,
+        bool mirrorPinsHorizontally = false)
     {
         _canvas = canvas;
         _template = template;
@@ -36,6 +37,11 @@ public class PlaceComponentCommand : IUndoableCommand
         if (isValid)
         {
             _component = ComponentTemplates.CreateFromTemplate(template, _x, _y);
+            // Mirror BEFORE rotating (below): the mirror is expressed in the
+            // component's local, unrotated frame — after the quarter turns the
+            // pins land exactly where a true GDS STRANS transform puts them.
+            if (mirrorPinsHorizontally)
+                MirrorPinsHorizontally(_component);
             // Rotate at the model level BEFORE the component is added to the canvas:
             // rotation keeps the top-left corner invariant, so (x, y) is the top-left
             // of the already-rotated bounding box. Doing it pre-placement also avoids
@@ -83,16 +89,47 @@ public class PlaceComponentCommand : IUndoableCommand
     /// Number of 90° counter-clockwise rotations applied to the component before
     /// placement (0–3). The position is rotation-invariant (top-left stays fixed).
     /// </param>
+    /// <param name="mirrorPinsHorizontally">
+    /// True for GDS references carrying the STRANS mirror flag (a reflection
+    /// across the GDS x-axis — a horizontal-axis mirror in the app's Y-down
+    /// plane). The core <c>Component</c> model cannot mirror geometry, so the
+    /// component body stays unreflected, but its pins are mirrored onto the TRUE
+    /// reflected positions: abutment connections reconstructed from the layout
+    /// then anchor exactly where the placed pins are, instead of at points where
+    /// no pin sits. The mirror is applied to the pin offsets/angles in the local
+    /// frame before <paramref name="quarterTurnsCounterClockwise"/> is applied.
+    /// </param>
     public static PlaceComponentCommand CreateExact(
         DesignCanvasViewModel canvas,
         ComponentTemplate template,
         double x,
         double y,
-        int quarterTurnsCounterClockwise = 0)
-        => new(canvas, template, x, y, true, quarterTurnsCounterClockwise);
+        int quarterTurnsCounterClockwise = 0,
+        bool mirrorPinsHorizontally = false)
+        => new(canvas, template, x, y, true, quarterTurnsCounterClockwise, mirrorPinsHorizontally);
 
     /// <summary>The component instance created by this command (null when invalid).</summary>
     public Component? PlacedComponent => _component;
+
+    /// <summary>
+    /// Mirrors the physical pins across the component's horizontal centerline in
+    /// its LOCAL (unrotated) frame: offset Y flips within the box, the angle maps
+    /// θ → −θ (a down-pointing pin becomes up-pointing). This is the app-space
+    /// effect of the GDS STRANS flag (reflection across the GDS x-axis) on pins;
+    /// combined with the placement position — the true reflected bbox top-left —
+    /// and the usual pre-placement rotation, the mirrored pins coincide with the
+    /// true reflected pin positions for every cardinal reference transform.
+    /// Geometry (parts, outlines) is NOT mirrored: the core model has no mirror
+    /// support (v1 limitation, surfaced as a placement warning).
+    /// </summary>
+    internal static void MirrorPinsHorizontally(Component component)
+    {
+        foreach (var pin in component.PhysicalPins)
+        {
+            pin.OffsetYMicrometers = component.HeightMicrometers - pin.OffsetYMicrometers;
+            pin.AngleDegrees = (360.0 - pin.AngleDegrees) % 360.0;
+        }
+    }
 
     /// <summary>The canvas ViewModel created for the component on <see cref="Execute"/> (null until then).</summary>
     public ComponentViewModel? CreatedViewModel => _createdViewModel;
