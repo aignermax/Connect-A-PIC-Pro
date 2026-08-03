@@ -107,6 +107,22 @@ public class GdsImportDialogViewModelTests : IDisposable
         .EndLibrary()
         .ToArray();
 
+    /// <summary>
+    /// TOP whose only instance is a zero-length-straight stand-in ("zeroL": a port
+    /// label on a point — an empty flattened bbox). The import succeeds, but every
+    /// instance is skipped: a successful run with zero placements.
+    /// </summary>
+    private static byte[] ZeroGeometryOnlyLibrary() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("zeroL", 0, 0)
+        .EndCell()
+        .BeginCell("zeroL")
+            .Text(1, 10, "io", 0, 0)
+        .EndCell()
+        .EndLibrary()
+        .ToArray();
+
     private string WriteGds(byte[] content, string fileName = "circuit.gds")
     {
         Directory.CreateDirectory(_root);
@@ -528,6 +544,78 @@ public class GdsImportDialogViewModelTests : IDisposable
             "the dialog's hint (result view + error panel) must resolve to real text in every language");
         // The hint says where the Error Console lives (bottom panel, F12) in all five languages.
         hint.ShouldContain("F12");
+    }
+
+    // ── Zoom-to-fit after import ─────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_SuccessWithPlacements_FiresZoomToFitOnce()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        var calls = new List<(double W, double H)>();
+        vm.ZoomToFitAfterImport = (w, h) => calls.Add((w, h));
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        canvas.Components.ShouldNotBeEmpty();
+        var call = calls.ShouldHaveSingleItem(
+            "a successful import with placements zooms the canvas to the content exactly once");
+        call.ShouldBe((900.0, 800.0),
+            "the dialog passes the fallback viewport size; the view layer substitutes the real one");
+    }
+
+    [Fact]
+    public async Task ImportAsync_ZeroPlacements_DoesNotFireZoomToFit()
+    {
+        var (vm, canvas, _) = CreateDialog(WriteGds(ZeroGeometryOnlyLibrary()));
+        var calls = 0;
+        vm.ZoomToFitAfterImport = (_, _) => calls++;
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        canvas.Components.ShouldBeEmpty(
+            "the only instance is a zero-geometry stand-in — skipped, not placed");
+        calls.ShouldBe(0, "nothing was placed, so there is nothing new to zoom to");
+    }
+
+    [Fact]
+    public async Task ImportAsync_Failure_DoesNotFireZoomToFit()
+    {
+        var gdsPath = WriteGds(TwoWaveguideLibrary());
+        var (vm, _, _) = CreateDialog(gdsPath);
+        var calls = 0;
+        vm.ZoomToFitAfterImport = (_, _) => calls++;
+        await vm.StartAnalysisAsync();
+        // The file vanishes between analysis and import — the run fails mid-flow.
+        File.Delete(gdsPath);
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeTrue();
+        vm.ImportCompleted.ShouldBeFalse();
+        calls.ShouldBe(0, "a failed import must not move the viewport");
+    }
+
+    [Fact]
+    public async Task ImportAsync_Cancelled_DoesNotFireZoomToFit()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        var calls = 0;
+        vm.ZoomToFitAfterImport = (_, _) => calls++;
+        await vm.StartAnalysisAsync();
+
+        var import = vm.ImportCommand.ExecuteAsync(null);
+        // Same determinism argument as ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy:
+        // the cancel lands before any placement.
+        vm.CurrentCts.ShouldNotBeNull().Cancel();
+        await import;
+
+        vm.ImportCompleted.ShouldBeFalse();
+        calls.ShouldBe(0, "a cancelled import must not move the viewport");
     }
 
     // ── Cancellation ─────────────────────────────────────────────────────────

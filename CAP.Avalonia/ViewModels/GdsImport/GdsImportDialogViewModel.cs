@@ -133,6 +133,16 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// <summary>Invoked by <see cref="CancelCommand"/> when the dialog should close. Set by the view.</summary>
     public Action? OnClose { get; set; }
 
+    /// <summary>
+    /// Callback to zoom the canvas so the whole content fits the viewport, fired
+    /// once after a successful import placement (executor completed, at least one
+    /// component placed) — never on failure, cancellation or a zero-placement run.
+    /// Mirrors <c>FileOperationsViewModel.ZoomToFitAfterLoad</c>: the fallback
+    /// viewport size passed here is replaced by the real one in the view layer.
+    /// Wired by <see cref="GdsImportButtonViewModel"/>.
+    /// </summary>
+    public Action<double, double>? ZoomToFitAfterImport { get; set; }
+
     /// <summary>True when the Import button can run (analysis done, top cell picked, not busy).</summary>
     public bool CanImport => AnalysisReady && !IsBusy && SelectedTopCell is not null;
 
@@ -300,6 +310,15 @@ public partial class GdsImportDialogViewModel : ObservableObject
                 _errorConsole?.LogWarning(warning);
             foreach (var info in Infos)
                 _errorConsole?.LogInfo(info);
+
+            // Imported content lands at its GDS coordinates, which can sit far
+            // off-screen — zoom the canvas to the whole content so the user sees
+            // what was placed (same semantics as ZoomToFitAfterLoad on the
+            // design-load path). Only after a real placement: a failed/cancelled
+            // run never reaches this point, and a 0-placement import has nothing
+            // to show.
+            if (report.PlacedCount > 0)
+                ZoomToFitAfterImport?.Invoke(900, 800);
         }
         catch (OperationCanceledException)
         {

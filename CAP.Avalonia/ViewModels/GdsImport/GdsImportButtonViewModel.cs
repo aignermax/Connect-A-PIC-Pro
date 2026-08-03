@@ -38,6 +38,16 @@ public partial class GdsImportButtonViewModel : ObservableObject
     /// <summary>Raised with a user-presentable status line (wired to the main status bar).</summary>
     public Action<string>? UpdateStatus { get; set; }
 
+    /// <summary>
+    /// Callback to zoom the canvas so the whole content fits the viewport after a
+    /// successful import placement — the same semantics as
+    /// <c>FileOperationsViewModel.ZoomToFitAfterLoad</c>: invoked with a fallback
+    /// viewport size the view layer replaces with the real one. Wired by
+    /// <see cref="MainViewModel"/> and handed through to the dialog ViewModel,
+    /// which owns the import's completion point.
+    /// </summary>
+    public Action<double, double>? ZoomToFitAfterImport { get; set; }
+
     /// <summary>Initializes a new <see cref="GdsImportButtonViewModel"/>.</summary>
     /// <param name="canvas">Canvas the imported circuit is placed onto.</param>
     /// <param name="commandManager">Undo stack for the placement commands.</param>
@@ -92,7 +102,12 @@ public partial class GdsImportButtonViewModel : ObservableObject
             var placementExecutor = new GdsPlacementExecutor(
                 _canvas, _commandManager, () => _leftPanel.AllTemplates.ToList());
 
-            await ShowImportDialogAsync(new GdsImportDialogViewModel(gdsPath, importService, placementExecutor, _errorConsole));
+            var dialogViewModel = new GdsImportDialogViewModel(gdsPath, importService, placementExecutor, _errorConsole);
+            // The dialog owns the import's completion point, so it fires the zoom
+            // (set by MainViewModel; null in headless runs) once its import task
+            // completes with at least one placed component.
+            dialogViewModel.ZoomToFitAfterImport = ZoomToFitAfterImport;
+            await ShowImportDialogAsync(dialogViewModel);
         }
         catch (Exception ex)
         {

@@ -17,7 +17,8 @@ namespace UnitTests.Services.GdsImport;
 /// Tests for <see cref="GdsImportButtonViewModel"/> (the library panel's "Import
 /// GDS" button): the command must never let a failure escape as an unhandled task
 /// exception — missing view wiring and a throwing file-dialog service surface on
-/// the status callback instead.
+/// the status callback instead. Also covers the hand-off of the zoom-to-fit
+/// callback to the dialog ViewModel (the dialog owns the import's completion point).
 /// </summary>
 public class GdsImportButtonViewModelTests : IDisposable
 {
@@ -37,6 +38,16 @@ public class GdsImportButtonViewModelTests : IDisposable
 
         public Task<string?> ShowOpenFileDialogAsync(string title, string filters)
             => throw new InvalidOperationException("dialog backend exploded");
+    }
+
+    /// <summary>File-dialog stub returning a fixed pick (the dialog host itself is faked away).</summary>
+    private sealed class StubFileDialogService(string path) : IFileDialogService
+    {
+        public Task<string?> ShowSaveFileDialogAsync(string title, string defaultExtension, string filters)
+            => Task.FromResult<string?>(path);
+
+        public Task<string?> ShowOpenFileDialogAsync(string title, string filters)
+            => Task.FromResult<string?>(path);
     }
 
     private GdsImportButtonViewModel CreateButton()
@@ -80,5 +91,39 @@ public class GdsImportButtonViewModelTests : IDisposable
         status.ShouldBe(string.Format(
             LocalizationService.Instance.Translate("GdsImport.StatusOpenFailed"),
             "dialog backend exploded"));
+    }
+
+    [Fact]
+    public async Task OpenGdsImportDialog_FilePicked_HandsZoomToFitCallbackToTheDialog()
+    {
+        var vm = CreateButton();
+        // The path is never read: analysis starts only when the (faked) dialog view opens.
+        vm.FileDialogService = new StubFileDialogService("circuit.gds");
+        GdsImportDialogViewModel? dialog = null;
+        vm.ShowImportDialogAsync = d => { dialog = d; return Task.CompletedTask; };
+        var fired = 0;
+        vm.ZoomToFitAfterImport = (_, _) => fired++;
+
+        await vm.OpenGdsImportDialogCommand.ExecuteAsync(null);
+
+        var callback = dialog.ShouldNotBeNull("a picked file opens the import dialog")
+            .ZoomToFitAfterImport.ShouldNotBeNull(
+                "the button's zoom callback rides along so the dialog can fire it after placement");
+        callback.Invoke(900, 800);
+        fired.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task OpenGdsImportDialog_NoZoomCallbackWired_DialogCallbackStaysNull()
+    {
+        var vm = CreateButton();
+        vm.FileDialogService = new StubFileDialogService("circuit.gds");
+        GdsImportDialogViewModel? dialog = null;
+        vm.ShowImportDialogAsync = d => { dialog = d; return Task.CompletedTask; };
+
+        await vm.OpenGdsImportDialogCommand.ExecuteAsync(null);
+
+        dialog.ShouldNotBeNull().ZoomToFitAfterImport.ShouldBeNull(
+            "without MainViewModel wiring (e.g. headless runs) there is no zoom to fire");
     }
 }

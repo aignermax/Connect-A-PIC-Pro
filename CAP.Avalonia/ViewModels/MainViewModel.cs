@@ -685,11 +685,16 @@ public partial class MainViewModel : ObservableObject
                 OnUiLanguageChanged();
         };
 
-        FileOperations.ZoomToFitAfterLoad = (w, h) =>
+        // One zoom-to-fit body for both post-content triggers — design load and
+        // GDS import placement: prefer the live viewport size over the caller's
+        // fallback, then fit the WHOLE canvas content (not just the new part).
+        Action<double, double> zoomToFitToViewport = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);
             ViewportControl.ZoomToFit(vpWidth, vpHeight);
         };
+        FileOperations.ZoomToFitAfterLoad = zoomToFitToViewport;
+        GdsImport.ZoomToFitAfterImport = zoomToFitToViewport;
 
         // Restore chip size from saved file without overwriting the user preference default
         FileOperations.ApplyChipSizeAfterLoad = (widthUm, heightUm) =>
