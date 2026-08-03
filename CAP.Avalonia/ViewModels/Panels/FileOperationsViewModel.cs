@@ -1619,12 +1619,16 @@ public partial class FileOperationsViewModel : ObservableObject
                 await File.WriteAllTextAsync(filePath, nazcaCode);
 
                 // Raw-code components whose geometry source vanished (a deleted .gds) exported
-                // as placeholder boxes — say so plainly instead of silently shipping the stub.
+                // as placeholder boxes — say so plainly instead of silently shipping the stub:
+                // each description in full to the (copyable) Error Console, the aggregated
+                // count additionally prefixed onto the final status via WithWarnings below,
+                // so it is visible without watching the console.
                 foreach (var exportWarning in exportWarningsList)
                     _errorConsole?.LogWarning(exportWarning);
 
                 var skippedConnectionsWarning = ExportWarningMessages.BuildSkipped(skippedConnectionsList);
                 var unresolvedCrossingsWarning = ExportWarningMessages.BuildUnresolvedCrossings(unresolvedCrossingsList);
+                var missingSourcesWarning = ExportWarningMessages.BuildMissingGdsSources(exportWarningsList);
                 if (skippedConnectionsWarning != null)
                     _errorConsole?.LogWarning(skippedConnectionsWarning);
                 if (unresolvedCrossingsWarning != null)
@@ -1639,7 +1643,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (decision != Export.GdsPreflightDecision.Proceed)
                 {
                     await HandleSkippedGdsAsync(
-                        decision, filePath, skippedConnectionsWarning, unresolvedCrossingsWarning);
+                        decision, filePath, skippedConnectionsWarning, unresolvedCrossingsWarning,
+                        missingSourcesWarning);
                     return;
                 }
 
@@ -1650,7 +1655,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 {
                     UpdateStatus?.Invoke(WithWarnings(
                         $"Exported {Path.GetFileName(filePath)} and {Path.GetFileName(result.GdsPath)}",
-                        skippedConnectionsWarning, unresolvedCrossingsWarning));
+                        skippedConnectionsWarning, unresolvedCrossingsWarning, missingSourcesWarning));
 
                     // Try to open the generated GDS file in the default viewer (KLayout etc.) —
                     // this is a content launch, not a file-manager open, so it stays useful even
@@ -1661,7 +1666,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 {
                     UpdateStatus?.Invoke(WithWarnings(
                         $"Exported to {Path.GetFileName(filePath)}",
-                        skippedConnectionsWarning, unresolvedCrossingsWarning));
+                        skippedConnectionsWarning, unresolvedCrossingsWarning, missingSourcesWarning));
                 }
                 else
                 {
@@ -1669,7 +1674,7 @@ public partial class FileOperationsViewModel : ObservableObject
                     _errorConsole?.LogError($"GDS generation failed: {result.ErrorMessage}");
                     UpdateStatus?.Invoke(WithWarnings(
                         $"Exported {Path.GetFileName(filePath)} (GDS generation failed: {result.ErrorMessage})",
-                        skippedConnectionsWarning, unresolvedCrossingsWarning));
+                        skippedConnectionsWarning, unresolvedCrossingsWarning, missingSourcesWarning));
                 }
             }
             catch (Exception ex)
@@ -1687,7 +1692,8 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     private async Task HandleSkippedGdsAsync(
         Export.GdsPreflightDecision decision, string scriptPath,
-        string? skippedConnectionsWarning = null, string? unresolvedCrossingsWarning = null)
+        string? skippedConnectionsWarning = null, string? unresolvedCrossingsWarning = null,
+        string? missingSourcesWarning = null)
     {
         if (decision == Export.GdsPreflightDecision.InstallRequested)
         {
@@ -1696,7 +1702,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 await ShowSettingsWindow(typeof(Settings.PythonEnvironmentsSettingsPage));
             UpdateStatus?.Invoke(WithWarnings(
                 $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (installing Nazca)",
-                skippedConnectionsWarning, unresolvedCrossingsWarning));
+                skippedConnectionsWarning, unresolvedCrossingsWarning, missingSourcesWarning));
             return;
         }
 
@@ -1706,7 +1712,7 @@ public partial class FileOperationsViewModel : ObservableObject
 
         UpdateStatus?.Invoke(WithWarnings(
             $"Exported {Path.GetFileName(scriptPath)} — GDS skipped (Nazca not available)",
-            skippedConnectionsWarning, unresolvedCrossingsWarning));
+            skippedConnectionsWarning, unresolvedCrossingsWarning, missingSourcesWarning));
     }
 
     /// <summary>Prefixes a status line with any non-null warnings, in order, so they survive

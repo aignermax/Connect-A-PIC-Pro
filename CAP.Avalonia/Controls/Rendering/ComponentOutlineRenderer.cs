@@ -39,14 +39,25 @@ internal sealed class ComponentOutlineRenderer
     /// guarantee a non-empty list — the fallback rectangle path lives in
     /// <see cref="ComponentRenderer"/>.
     /// </summary>
-    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed)
+    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed) =>
+        Draw(context, comp.X, comp.Y, comp.Width, comp.Height,
+            comp.Component.RotationDegrees, outlines, isDimmed);
+
+    /// <summary>
+    /// Pose-based overload for callers that have no <see cref="ComponentViewModel"/>:
+    /// group children are rendered straight from their core component pose
+    /// (<see cref="ComponentRenderer"/> flattens groups itself). Caller must guarantee
+    /// a non-empty list — the fallback rectangle path lives in
+    /// <see cref="ComponentRenderer"/>.
+    /// </summary>
+    public void Draw(DrawingContext context, double x, double y, double width, double height,
+        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed)
     {
         var geometries = _geometryCache.GetValue(outlines, BuildGeometries);
 
-        double rotationDegrees = comp.Component.RotationDegrees;
-        double centerX = comp.X + comp.Width / 2.0;
-        double centerY = comp.Y + comp.Height / 2.0;
-        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(comp.X, comp.Y, comp.Width, comp.Height, rotationDegrees);
+        double centerX = x + width / 2.0;
+        double centerY = y + height / 2.0;
+        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(x, y, width, height, rotationDegrees);
         var transform = Matrix.CreateTranslation(destRect.X, destRect.Y)
                       * GdsPolygonRenderer.BuildRotationMatrix(rotationDegrees, centerX, centerY);
 

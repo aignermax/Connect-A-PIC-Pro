@@ -91,6 +91,11 @@ public class GdsImportDesignRoundTripTests : IDisposable
             child.PhysicalY.ShouldBe(0);
             child.RotationDegrees.ShouldBe(0);
             child.PhysicalPins.Select(p => p.Name).ShouldBe(new[] { "in", "out" }, ignoreOrder: true);
+            // The load-path outline contract: outlines ride the resolved template onto the
+            // component (GDS fixture: core stripe on layer 1, extent rectangle on layer 111).
+            var outlines = child.OutlinePolygons.ShouldNotBeNull();
+            outlines.Count.ShouldBeGreaterThan(0);
+            outlines.Select(o => o.Layer).ShouldBe(new[] { 1, 111 }, ignoreOrder: true);
             sink.Templates.Single(t =>
                 t.Name == expectedName && t.PdkSource == "GDS Import - circuit")
                 .RawCode.ShouldContain($"cellname=\"{expectedName}\"");

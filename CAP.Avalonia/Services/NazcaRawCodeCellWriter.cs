@@ -53,8 +53,13 @@ internal sealed class RawCodeExportEntry
 /// </summary>
 internal sealed class RawCodeExportPlan
 {
-    /// <summary>Shared empty plan for callers that pass no component library.</summary>
-    public static readonly RawCodeExportPlan Empty = new();
+    /// <summary>
+    /// An empty plan for callers that pass no component library — identical to
+    /// pre-inlining behavior. Deliberately per-call (not a shared static): the plan is
+    /// mutable by design (<see cref="RawCodeEntries"/>, <see cref="Add"/>), so a shared
+    /// instance would let one consumer corrupt another's "empty" plan.
+    /// </summary>
+    public static RawCodeExportPlan Empty => new();
 
     private readonly Dictionary<Component, RawCodeExportEntry> _entryByComponent = new();
 
@@ -156,6 +161,13 @@ internal static class NazcaRawCodeCellWriter
     /// re-anchors it to the bbox bottom-left, and declares the app's optical pins
     /// plus their port labels. Placements then call
     /// <c>component_&lt;name&gt;().put('org', …)</c> exactly like stub placements.
+    /// <para>
+    /// The capture is guarded by an identity check against a pre-module snapshot
+    /// (<c>_prev_component</c>): a hand-rolled raw module that defines neither
+    /// <c>component</c> nor <c>cell</c> can no longer silently inherit the PREVIOUS
+    /// module's <c>component()</c> — it fails loudly on the undefined <c>cell</c>
+    /// instead of exporting the wrong geometry.
+    /// </para>
     /// </summary>
     public static void AppendCells(StringBuilder sb, RawCodeExportPlan plan, CultureInfo ci)
     {
@@ -165,14 +177,22 @@ internal static class NazcaRawCodeCellWriter
             var func = entry.FunctionName;
             var (anchorX, anchorY) = NazcaCoordinateMapper.GetStubAnchor(comp);
 
-            sb.AppendLine($"# Raw-code component '{entry.Template.Name}' (PDK '{entry.Template.PdkSource}'): real geometry");
+            // Template Name/PdkSource are user-controlled: CR/LF would break out of the
+            // generated comment/docstring (injecting raw script lines) and a literal
+            // triple quote would terminate the docstring — strip those characters.
+            var safeName = SimpleNazcaExporter.SanitizePythonComment(entry.Template.Name);
+            var safePdk = SimpleNazcaExporter.SanitizePythonComment(entry.Template.PdkSource);
+            sb.AppendLine($"# Raw-code component '{safeName}' (PDK '{safePdk}'): real geometry");
             sb.AppendLine("# from its raw-code cell, re-anchored to the geometry bbox bottom-left (Nazca Y-up),");
             sb.AppendLine("# the app-space bbox top-left the placement math anchors on.");
+            // Snapshot before the module runs: the wrapper below must capture only a
+            // component() THIS module (re)defined, never a previous module's stale one.
+            sb.AppendLine("_prev_component = globals().get('component')");
             sb.AppendLine(entry.Template.RawCode!.TrimEnd());
             sb.AppendLine();
-            sb.AppendLine($"_raw_{func} = component() if callable(globals().get('component')) else cell");
+            sb.AppendLine($"_raw_{func} = component() if callable(globals().get('component')) and globals().get('component') is not _prev_component else cell");
             sb.AppendLine($"with nd.Cell(name='{func}') as _{func}_cell:");
-            sb.AppendLine($"    \"\"\"Raw-code cell of {entry.Template.Name}, bbox-aligned, with the app's pins.\"\"\"");
+            sb.AppendLine($"    \"\"\"Raw-code cell of {safeName}, bbox-aligned, with the app's pins.\"\"\"");
             sb.AppendLine($"    _bb = _raw_{func}.bbox");
             sb.AppendLine($"    _raw_{func}.put(-_bb[0], -_bb[1])");
 
@@ -202,7 +222,14 @@ internal static class NazcaRawCodeCellWriter
 
     /// <summary>
     /// Enumerates components exactly like the exporter's stub generator: canvas
-    /// components with analysis tools skipped, groups flattened recursively.
+    /// components with analysis tools skipped, groups flattened recursively. A full
+    /// export (<paramref name="include"/> null) additionally skips components carrying
+    /// a gdsfactory function — mirroring <see cref="SimpleNazcaExporter"/>'s placement
+    /// loop, which renders them via the gdsfactory export instead. Without the mirror a
+    /// nazca raw-code component that also carries a gdsfactory function would get a dead
+    /// raw module + wrapper (its module-level <c>nd.load_gds</c> still runs!) plus a
+    /// misleading missing-source warning and fallback stub. A partial export's include
+    /// predicate alone decides (mixed-backend nazca components may carry both).
     /// </summary>
     private static IEnumerable<Component> EnumerateComponents(
         DesignCanvasViewModel canvas, Func<Component, bool>? include)
@@ -216,12 +243,14 @@ internal static class NazcaRawCodeCellWriter
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (child.IsAnalysisTool) continue;
+                    if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     if (include != null && !include(child)) continue;
                     yield return child;
                 }
             }
             else
             {
+                if (include == null && !string.IsNullOrEmpty(comp.GdsFactoryFunction)) continue;
                 if (include != null && !include(comp)) continue;
                 yield return comp;
             }

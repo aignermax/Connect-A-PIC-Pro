@@ -27,7 +27,7 @@ public class FileSizeLimitTests
     private static readonly HashSet<string> GrandfatheredFiles = new()
     {
         "FileOperationsViewModel.cs",       // 1031 lines - Issue #433 tracks extraction
-        "SimpleNazcaExporter.cs",           // 826 lines  - GDS export monolith, refactor planned
+        "SimpleNazcaExporter.cs",           // 1222 lines - GDS export monolith, refactor planned
         "ComponentGroup.cs",                // 796 lines  - Core group model, refactor planned
         "PathfindingGrid.cs",               // 771 lines  - A* grid state, refactor planned
         "CanvasInteractionViewModel.cs",    // 765 lines  - Canvas input handler, refactor planned

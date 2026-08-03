@@ -81,9 +81,10 @@ public class SimpleNazcaExporter
     /// heuristic. Null keeps the legacy behavior.
     /// </param>
     /// <param name="exportWarnings">
-    /// Optional collector: appended with one description per raw-code component whose
-    /// geometry source is missing (a deleted .gds file) and that therefore exports as a
-    /// placeholder box stub.
+    /// Optional collector: appended with one description per UNIQUE raw-code template
+    /// whose geometry source is missing (a deleted .gds file) and that therefore exports
+    /// as a placeholder box stub — a template placed ten times warns once, matching the
+    /// once-per-template fallback emission.
     /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
@@ -363,7 +364,9 @@ public class SimpleNazcaExporter
 
         // Define cell once, return cached instance on each call
         sb.AppendLine($"with nd.Cell(name='{stubName}') as _{pythonFuncName}_cell:");
-        sb.AppendLine($"    \"\"\"Auto-generated stub for {funcName} ({comp.WidthMicrometers.ToString(ci)}x{comp.HeightMicrometers.ToString(ci)} µm).\"\"\"");
+        // funcName is PDK-controlled (a raw-code template's Name in fallback mode) —
+        // sanitize so a hostile name cannot break out of the docstring.
+        sb.AppendLine($"    \"\"\"Auto-generated stub for {SanitizePythonComment(funcName)} ({comp.WidthMicrometers.ToString(ci)}x{comp.HeightMicrometers.ToString(ci)} µm).\"\"\"");
 
         // Stubs are only generated for PDK-named components (see RequiresStub), whose
         // placement always uses the calibrated origin offset — (0,0) means org at the
@@ -598,6 +601,20 @@ public class SimpleNazcaExporter
              .Replace("'", "\\'", StringComparison.Ordinal)
              .Replace("\r", "\\r", StringComparison.Ordinal)
              .Replace("\n", "\\n", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Makes an arbitrary PDK-controlled string (template name, PDK source) safe for
+    /// emission inside a single-line Python COMMENT or a <c>"""</c> docstring of the
+    /// generated script: CR/LF would break out of the line and inject raw script lines,
+    /// a literal <c>"""</c> would terminate the docstring early. The characters are
+    /// stripped outright (not escaped) — the text is informational only, so losing a
+    /// quote sequence beats complicating the generated script. Internal so
+    /// <see cref="NazcaRawCodeCellWriter"/> sanitizes its wrapper comments identically.
+    /// </summary>
+    internal static string SanitizePythonComment(string value) =>
+        value.Replace("\"\"\"", string.Empty, StringComparison.Ordinal)
+             .Replace("\r", string.Empty, StringComparison.Ordinal)
+             .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     private static void AppendConnections(
         StringBuilder sb,

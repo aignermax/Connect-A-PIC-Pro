@@ -113,12 +113,14 @@ and never appear in the process picker.
 | `category` | Yes | Group name for the component library panel |
 | `nazcaFunction` | Yes | Python function name for Nazca export (e.g. `"pdk.mmi1x2"`) |
 | `nazcaParameters` | No | Optional default parameters (e.g. `"length=100"`) |
+| `rawCode` | No | Custom Python cell source inlined into the export — written by the GDS import, not meant to be authored by hand (see the portability note below) |
+| `rawCodeBackend` | No | Export backend the `rawCode` targets: `"nazca"` (GDS imports) or `"gdsfactory"` |
 | `widthMicrometers` | Yes | Component bounding box width in µm |
 | `heightMicrometers` | Yes | Component bounding box height in µm |
 | `nazcaOriginOffsetX` | Yes* | Nazca cell origin measured from the bounding box **left** edge (µm) = `-XMin` of the Nazca bbox |
 | `nazcaOriginOffsetY` | Yes* | Nazca cell origin measured from the bounding box **top** edge (µm) = `YMax` of the Nazca bbox |
 | `pins` | Yes | List of optical port definitions |
-| `outlinePolygons` | No | Imported GDS outline polygons (see below) — when present, the canvas draws them instead of the plain rectangle body |
+| `outlinePolygons` | No | Imported GDS outline polygons (see below) — when present **and non-empty**, the canvas draws them instead of the plain rectangle body; an empty `[]` falls back to the rectangle |
 | `sMatrix` | No | S-matrix for optical simulation (omit to skip simulation) |
 
 > \* Required for GDS export on the normal load path. Analysis-tool components
@@ -126,6 +128,13 @@ and never appear in the process picker.
 > Don't compute the offsets by hand: open **Tools → PDK Offset Editor** and press
 > **Auto-Calibrate** (or **Try-Fix-All**) — it renders the real Nazca/KLayout cell
 > and writes bbox, offsets, and snapped pin positions back into the JSON.
+
+> **Portability caveat (`rawCode`):** in GDS-imported PDKs the `rawCode` snippet
+> embeds the **absolute, machine-local path** of the imported `.gds` file
+> (`nd.load_gds(filename="…")`). Such a PDK JSON is therefore NOT portable across
+> machines (or user accounts): on another machine the file is missing and the
+> export falls back to a placeholder box with a warning instead of the real
+> geometry. Re-import the GDS on the target machine to restore it.
 
 ### Pin Fields
 
@@ -141,8 +150,10 @@ and never appear in the process picker.
 
 Optional list of closed outline polygons describing the component's physical
 shape — written automatically by the GDS import, not meant to be authored by
-hand. When present, the canvas renders these polygons instead of the plain
-rectangle body (pins, labels and rotation keep working). Coordinates follow the
+hand. When present **and non-empty**, the canvas renders these polygons instead
+of the plain rectangle body — the render condition is `Count > 0`, so an empty
+`[]` falls back to the rectangle (pins, labels and rotation keep working either
+way). Coordinates follow the
 app convention: micrometers, **Y-down**, relative to the **top-left corner** of
 the component's unrotated bounding box. Each polygon's `points` form a closed
 ring — the first point is repeated at the end (GDS convention). `layer` and

@@ -18,7 +18,9 @@ namespace UnitTests.CodeExporter;
 /// its REAL geometry through an aligned wrapper cell instead of falling through to
 /// the demofab heuristics / a box stub. Covers the once-per-template emission, the
 /// pin/label mapping, rotation handling, the gdsfactory-backend exclusion, the
-/// no-library legacy path, and the missing-.gds fallback (box stub + warning).
+/// full-export skip of components that also carry a gdsfactory function, the
+/// no-library legacy path, the missing-.gds fallback (box stub + warning), the
+/// hostile-template-name sanitization, and the stale-<c>component</c> capture guard.
 /// </summary>
 public class SimpleNazcaExporterRawCodeTests : IDisposable
 {
@@ -49,7 +51,7 @@ public class SimpleNazcaExporterRawCodeTests : IDisposable
 
         // Aligned wrapper cell: the raw cell is re-anchored to the bbox bottom-left.
         script.ShouldContain("with nd.Cell(name='component_wgA') as _component_wgA_cell:");
-        script.ShouldContain("_raw_component_wgA = component() if callable(globals().get('component')) else cell");
+        script.ShouldContain("_raw_component_wgA = component() if callable(globals().get('component')) and globals().get('component') is not _prev_component else cell");
         script.ShouldContain("_raw_component_wgA.put(-_bb[0], -_bb[1])");
         script.ShouldContain("def component_wgA(**kwargs):");
 
@@ -86,6 +88,54 @@ public class SimpleNazcaExporterRawCodeTests : IDisposable
         indexA.ShouldBeGreaterThanOrEqualTo(0);
         indexBModule.ShouldBeGreaterThan(indexA);
         indexB.ShouldBeGreaterThan(indexBModule);
+    }
+
+    [Fact]
+    public void Export_CellOnlyRawModule_CaptureGuardedByFreshnessSnapshot()
+    {
+        // A hand-rolled raw module that defines ONLY `cell` (no component()): without the
+        // identity guard its wrapper would silently inherit the PREVIOUS module's
+        // component() — the pre-module snapshot keeps the module's own cell. (A module
+        // defining neither now fails loudly on the undefined `cell` instead of exporting
+        // foreign geometry.)
+        var gdsPath = WriteGds("circuit.gds");
+        var templateA = GdsTemplate(gdsPath);
+        var templateB = new ComponentTemplate
+        {
+            Name = "ringB",
+            PdkSource = "Custom",
+            WidthMicrometers = 10,
+            HeightMicrometers = 4,
+            PinDefinitions = new[]
+            {
+                new PinDefinition("in", 0, 2, 180),
+                new PinDefinition("out", 10, 2, 0),
+            },
+            RawCode =
+                "with nd.Cell(name=\"ringB_raw\") as cell:\n" +
+                "    nd.strt(length=5, width=0.5, layer=1).put(0, 0)\n",
+            RawCodeBackend = "nazca",
+        };
+        var canvas = new DesignCanvasViewModel();
+        canvas.Components.Add(new ComponentViewModel(GdsComponent("wgA_1", x: 0, y: 0)));
+        canvas.Components.Add(new ComponentViewModel(GdsComponent("ringB_1", x: 20, y: 0, funcName: "nazca_ringb")));
+
+        var script = new SimpleNazcaExporter().Export(canvas, library: new[] { templateA, templateB });
+
+        // Every raw module gets a pre-module snapshot and the identity-guarded capture.
+        CountOccurrences(script, "_prev_component = globals().get('component')").ShouldBe(2);
+        script.ShouldContain("_raw_component_wgA = component() if callable(globals().get('component')) and globals().get('component') is not _prev_component else cell");
+        script.ShouldContain("_raw_component_ringB = component() if callable(globals().get('component')) and globals().get('component') is not _prev_component else cell");
+
+        // Ordering: B's snapshot sits between A's capture and B's module, B's capture last.
+        var indexCaptureA = script.IndexOf("_raw_component_wgA = component()", StringComparison.Ordinal);
+        var indexSnapshotB = script.IndexOf("_prev_component = globals().get('component')", indexCaptureA, StringComparison.Ordinal);
+        var indexModuleB = script.IndexOf("ringB_raw", StringComparison.Ordinal);
+        var indexCaptureB = script.IndexOf("_raw_component_ringB = component()", StringComparison.Ordinal);
+        indexCaptureA.ShouldBeGreaterThanOrEqualTo(0);
+        indexSnapshotB.ShouldBeGreaterThan(indexCaptureA);
+        indexModuleB.ShouldBeGreaterThan(indexSnapshotB);
+        indexCaptureB.ShouldBeGreaterThan(indexModuleB);
     }
 
     [Fact]
@@ -128,6 +178,33 @@ public class SimpleNazcaExporterRawCodeTests : IDisposable
 
         script.ShouldNotContain("component_wgA");
         CountOccurrences(script, "nd.load_gds(filename=").ShouldBe(0);
+    }
+
+    [Fact]
+    public void Export_GdsFactoryCarryingRawCodeComponent_SkippedInFullExport_PlannedInPartial()
+    {
+        var missingPath = Path.Combine(_root, "deleted.gds"); // never written
+        var template = GdsTemplate(missingPath);
+        var canvas = new DesignCanvasViewModel();
+        var comp = GdsComponent("wgA_1", x: 0, y: 0);
+        comp.GdsFactoryFunction = "gf.components.straight"; // renders via the gdsfactory export
+        canvas.Components.Add(new ComponentViewModel(comp));
+
+        // Full export: the placement loop skips gdsfactory-carrying components — the plan
+        // must mirror that, or the dead wrapper's module-level load_gds would still run and
+        // the missing-source fallback would warn about a component that is not even placed.
+        var warnings = new List<string>();
+        var script = new SimpleNazcaExporter().Export(
+            canvas, library: new[] { template }, exportWarnings: warnings);
+        script.ShouldNotContain("component_wgA");
+        CountOccurrences(script, "nd.load_gds(filename=").ShouldBe(0);
+        warnings.ShouldBeEmpty();
+
+        // Partial export: the include predicate alone decides (mixed-backend) — the same
+        // component IS planned there (fallback box, since the .gds is missing).
+        var partial = new SimpleNazcaExporter().ExportPartial(
+            canvas, _ => true, "Partial", library: new[] { template });
+        partial.ShouldContain("comp_0 = component_wgA().put('org'");
     }
 
     [Fact]
@@ -185,6 +262,49 @@ public class SimpleNazcaExporterRawCodeTests : IDisposable
         new SimpleNazcaExporter().Export(canvas, library: new[] { template }, exportWarnings: warnings);
 
         warnings.ShouldBeEmpty();
+    }
+
+    // ── Hostile template names ────────────────────────────────────────────────
+
+    /// <summary>CR/LF and a literal triple quote in one name: the injection payload.</summary>
+    private const string HostileName = "wg\"\"\"\r\nraise SystemExit('pwned')\r\n#";
+
+    [Fact]
+    public void Export_HostileTemplateName_CannotBreakOutOfCommentOrDocstring()
+    {
+        var gdsPath = WriteGds("circuit.gds");
+        var template = GdsTemplate(gdsPath, name: HostileName);
+        template.NazcaFunctionName = "nazca_wga"; // resolve independent of the hostile name
+        var canvas = new DesignCanvasViewModel();
+        canvas.Components.Add(new ComponentViewModel(GdsComponent("wgA_1", x: 0, y: 0)));
+
+        var script = new SimpleNazcaExporter().Export(canvas, library: new[] { template });
+
+        // CR/LF stripped → the payload never becomes a line of its own; the exact
+        // single-line comment/docstring pins prove the name landed on ONE line each, and
+        // its literal triple quote is gone (exactly the wrapper docstring's own pair).
+        // (The footer legitimately ends with "import os" etc. — only a self-contained
+        // payload line proves injection.)
+        script.ShouldNotContain("\nraise SystemExit");
+        script.ShouldContain("# Raw-code component 'wgraise SystemExit('pwned')#' (PDK 'GDS Import - circuit'): real geometry");
+        script.ShouldContain("\"\"\"Raw-code cell of wgraise SystemExit('pwned')#, bbox-aligned, with the app's pins.\"\"\"");
+        CountOccurrences(script, "\"\"\"").ShouldBe(2);
+    }
+
+    [Fact]
+    public void Export_DeletedGdsFile_HostileTemplateName_FallbackStubDocstringSanitized()
+    {
+        var missingPath = Path.Combine(_root, "deleted.gds"); // never written
+        var template = GdsTemplate(missingPath, name: HostileName);
+        template.NazcaFunctionName = "nazca_wga";
+        var canvas = new DesignCanvasViewModel();
+        canvas.Components.Add(new ComponentViewModel(GdsComponent("wgA_1", x: 0, y: 0)));
+
+        var script = new SimpleNazcaExporter().Export(canvas, library: new[] { template });
+
+        script.ShouldNotContain("\nraise SystemExit");
+        script.ShouldContain("\"\"\"Auto-generated stub for wgraise SystemExit('pwned')# (10x4 µm).\"\"\"");
+        CountOccurrences(script, "\"\"\"").ShouldBe(2);
     }
 
     // ── Partial export ────────────────────────────────────────────────────────

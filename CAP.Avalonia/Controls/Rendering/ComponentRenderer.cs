@@ -123,10 +123,24 @@ public sealed class ComponentRenderer : ICanvasRenderer
             if (isHovered)
                 ComponentGroupRenderer.RenderGroupHoverOverlay(context, child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers);
 
-            context.FillRectangle(new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70)),
-                new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers));
-            context.DrawRectangle(new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1),
-                new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers));
+            var childRect = new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers);
+            if (child.OutlinePolygons is { Count: > 0 } childOutlines)
+            {
+                // GDS-imported child: draw its outline polygons instead of the plain
+                // rectangle body — the same branch DrawComponent takes for a top-level
+                // outlined component (same renderer, same dimming). Grouped children
+                // keep their thin bbox border below: inside a group the footprint
+                // rectangle is the hover/selection affordance, so it stays visible
+                // just like the selection border does for outlined top-level components.
+                _outlineRenderer.Draw(context, child.PhysicalX, child.PhysicalY,
+                    child.WidthMicrometers, child.HeightMicrometers,
+                    child.RotationDegrees, childOutlines, isDimmed);
+            }
+            else
+            {
+                context.FillRectangle(new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70)), childRect);
+            }
+            context.DrawRectangle(new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1), childRect);
 
             var displayName = child.HumanReadableName ?? child.Identifier;
             // Deferred to the topmost label pass like every other name label: a top-level
