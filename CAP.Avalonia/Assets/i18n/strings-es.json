@@ -387,6 +387,7 @@
   "GdsImport.ErrorRadiusSyntax": "Radio de conexión automática no válido: '{0}'. Introduzca un número positivo de micrómetros.",
   "GdsImport.ErrorTitle": "Error de importación:",
   "GdsImport.ImportButton": "Importar",
+  "GdsImport.InfosTitle": "Información:",
   "GdsImport.LayerSyntaxTip": "pares capa,tipo de dato, separados por ';' — p. ej. 1,10",
   "GdsImport.ModeBlackBox": "Importar como un único componente de caja negra",
   "GdsImport.ModeExplode": "Expandir la jerarquía en componentes (recomendado)",

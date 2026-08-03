@@ -136,8 +136,11 @@ public class GdsHierarchyImporterTests
         connection.B.PinName.ShouldBe("in");
         connection.XUm.ShouldBe(30, Tolerance);
         connection.YUm.ShouldBe(5, Tolerance);
-        // Resolution visibility: the user sees which library component the cell was bound to.
-        result.Warnings.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'mmi1x2'");
+        // Resolution visibility: the user sees which library component the cell
+        // was bound to — as an INFO note, not a warning (a successful binding
+        // is the normal case).
+        result.Warnings.ShouldBeEmpty();
+        result.Infos.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'mmi1x2'");
     }
 
     [Fact]
@@ -172,8 +175,9 @@ public class GdsHierarchyImporterTests
         result.Instances[0].KnownComponentIdentifier.ShouldBe("wgA");
         // Connection reconstruction uses the resolver-supplied pins.
         result.Connections.ShouldHaveSingleItem().A.PinName.ShouldBe("out");
-        // Resolution visibility: the binding lands in the warnings/notes channel.
-        result.Warnings.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'wgA'");
+        // Resolution visibility: the binding lands in the info-notes channel.
+        result.Warnings.ShouldBeEmpty();
+        result.Infos.ShouldHaveSingleItem().ShouldContain("resolved to existing component 'wgA'");
     }
 
     [Fact]
@@ -277,6 +281,7 @@ public class GdsHierarchyImporterTests
         var instance = result.Instances.ShouldHaveSingleItem();
         instance.Reflected.ShouldBeTrue();
         result.Warnings.ShouldContain(w => w.Contains("mirrored") && w.Contains("unreflected"));
+        result.Infos.ShouldBeEmpty("transform caveats stay warnings — nothing informational here");
 
         var flattener = new GdsCellFlattener(library);
         var projected = GdsInstancePinProjector.ProjectPins(
@@ -311,6 +316,7 @@ public class GdsHierarchyImporterTests
         result.Instances.ShouldHaveSingleItem().RotationDegrees.ShouldBe(270, Tolerance); // 45° → 90° → app −90°
         result.Warnings.ShouldContain(w =>
             w.Contains("45") && w.Contains("90") && w.Contains("Manhattan"));
+        result.Infos.ShouldBeEmpty("the rotation snap is a caveat, not an informational note");
     }
 
     // ── Abutment edge cases ──────────────────────────────────────────────────
@@ -515,6 +521,123 @@ public class GdsHierarchyImporterTests
         result.Connections.ShouldBeEmpty();
         result.Warnings.ShouldContain(w => w.Contains("nothing to explode"));
         result.Warnings.ShouldContain(w => w.Contains("own") && w.Contains("not reconstructed"));
+    }
+
+    // ── Zero-geometry / export-artifact cells ────────────────────────────────
+
+    [Fact]
+    public async Task Explode_ZeroGeometryCell_DroppedWithOneInfoNote_InstancesExcluded()
+    {
+        // "zeroL" mimics a gdsfactory zero-length straight (a route_bundle
+        // artifact): its only content is a port label at a single point, so the
+        // flattened bbox is empty (0 × 0). Two instances of it sit exactly on
+        // wgA's pins — the wgA.out ↔ wgB.in abutment must survive untouched.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("zeroL", 0, 2000)
+                .SRef("zeroL", 10000, 2000)
+                .SRef("wgB", 10000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .BeginCell("zeroL")
+                .Text(1, 10, "io", 0, 0)
+            .EndCell()
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        // The normal cells import as before; the zero-geometry cell leaves no
+        // draft and no instances behind.
+        result.ImportedCellDrafts.Select(d => d.CellName).ShouldBe(new[] { "wgA", "wgB" });
+        result.Instances.Count.ShouldBe(2);
+        result.Instances.ShouldNotContain(i => i.CellName == "zeroL");
+
+        // The old cascade (empty-bbox warning, "not registered: zero size",
+        // per-instance placement skips) collapses into ONE info note per cell.
+        result.Warnings.ShouldBeEmpty();
+        var note = result.Infos.ShouldHaveSingleItem();
+        note.ShouldContain("'zeroL'");
+        note.ShouldContain("2 instance(s) skipped");
+
+        // The surviving connection is the wgA.out ↔ wgB.in abutment — nothing
+        // references the dropped instances (they never entered the matcher).
+        var connection = result.Connections.ShouldHaveSingleItem();
+        connection.A.PinName.ShouldBe("out");
+        connection.B.PinName.ShouldBe("in");
+        connection.XUm.ShouldBe(10, Tolerance);
+        connection.YUm.ShouldBe(2, Tolerance);
+    }
+
+    [Fact]
+    public async Task Explode_LunimaExportArtifactCell_SkippedWithOneInfoNote()
+    {
+        // 'ConnectAPIC_NazcaPartial' is the top cell name our mixed-backend
+        // export (MixedBackendGdsOrchestrator.NazcaPartialTopCellName) writes
+        // for the flattened nazca partial. It HAS geometry (on a non-port
+        // layer, hence pinless) — the skip is by name convention, independent
+        // of the zero-geometry drop. Two references still yield ONE note.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("ConnectAPIC_NazcaPartial", 20000, 0)
+                .SRef("ConnectAPIC_NazcaPartial", 40000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .BeginCell("ConnectAPIC_NazcaPartial")
+                .Boundary(111, 0, (0, 0), (5000, 0), (5000, 3000), (0, 3000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("wgA");
+        result.Instances.ShouldHaveSingleItem().CellName.ShouldBe("wgA");
+        result.Warnings.ShouldBeEmpty(
+            "the artifact is skipped by convention, not failed as an unpersistable draft");
+        var note = result.Infos.ShouldHaveSingleItem();
+        note.ShouldContain("ConnectAPIC_NazcaPartial");
+        note.ShouldContain("export artifact");
+        note.ShouldContain("not reconstructed");
+    }
+
+    [Fact]
+    public async Task Explode_ZeroGeometryCellResolvingToKnownComponent_IsKept()
+    {
+        // A deliberate name binding to a PDK component wins over the
+        // zero-geometry drop (the size-mismatch warning covers the geometry
+        // gap) — only UNKNOWN zero-geometry cells are dropped.
+        var known = new KnownComponent(
+            "anchor", "testpdk", 5, 5,
+            new[] { Pin("io", 0, 0, 180) });
+
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("anchor", 0, 0)
+            .EndCell()
+            .BeginCell("anchor")
+                .Text(1, 10, "io", 0, 0)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(
+            library, "TOP", new GdsHierarchyImportOptions
+            {
+                ResolveKnownComponent = name => name == "anchor" ? known : null,
+            });
+
+        result.Instances.ShouldHaveSingleItem().KnownComponentIdentifier.ShouldBe("anchor");
+        result.Warnings.ShouldContain(w => w.Contains("UNSCALED"),
+            "the known component keeps its size-mismatch warning");
+        result.Infos.ShouldNotContain(i => i.Contains("skipped"),
+            "a resolved zero-geometry cell is not treated as a skip");
     }
 
     // ── Pin-name normalization (blank/duplicate names) ───────────────────────

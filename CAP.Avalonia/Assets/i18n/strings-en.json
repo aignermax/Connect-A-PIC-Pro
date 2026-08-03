@@ -387,6 +387,7 @@
   "GdsImport.ErrorRadiusSyntax": "Invalid auto-connect radius: '{0}'. Enter a positive number of micrometers.",
   "GdsImport.ErrorTitle": "Import error:",
   "GdsImport.ImportButton": "Import",
+  "GdsImport.InfosTitle": "Info:",
   "GdsImport.LayerSyntaxTip": "layer,datatype pairs, separated by ';' — e.g. 1,10",
   "GdsImport.ModeBlackBox": "Import as single black-box component",
   "GdsImport.ModeExplode": "Explode hierarchy into components (recommended)",

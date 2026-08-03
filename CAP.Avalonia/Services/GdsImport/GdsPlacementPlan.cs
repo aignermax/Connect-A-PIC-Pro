@@ -110,6 +110,9 @@ public sealed record GdsPlacementPlan
     /// <summary>The import's warnings, carried along for display.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
+    /// <summary>The import's informational notes, carried along for display.</summary>
+    public IReadOnlyList<string> Infos { get; init; } = Array.Empty<string>();
+
     /// <summary>Builds the plan for an import outcome. Pure; never throws on missing data.</summary>
     public static GdsPlacementPlan FromOutcome(GdsImportOutcome outcome)
     {
@@ -184,6 +187,7 @@ public sealed record GdsPlacementPlan
             Placements = placements,
             Connections = connections,
             Warnings = outcome.Warnings,
+            Infos = outcome.Infos,
         };
     }
 
@@ -223,6 +227,7 @@ public sealed record GdsPlacementPlan
             },
             Connections = Array.Empty<GdsConnectionInstruction>(),
             Warnings = outcome.Warnings,
+            Infos = outcome.Infos,
         };
     }
 }

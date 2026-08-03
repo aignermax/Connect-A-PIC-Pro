@@ -25,6 +25,7 @@ public class GdsPlacementPlanTests
         Instances = instances,
         Connections = connections,
         Warnings = new[] { "some import warning" },
+        Infos = new[] { "some import info" },
         UserPdkName = "GDS Import - circuit",
         UserPdkPath = "/pdks/gds-import-circuit.json",
         GdsFileName = "circuit.gds",
@@ -191,5 +192,6 @@ public class GdsPlacementPlanTests
 
         plan.GroupName.ShouldBe("TOP");
         plan.Warnings.ShouldBe(new[] { "some import warning" });
+        plan.Infos.ShouldBe(new[] { "some import info" });
     }
 }

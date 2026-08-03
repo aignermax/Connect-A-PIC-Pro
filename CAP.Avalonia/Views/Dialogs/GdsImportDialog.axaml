@@ -144,10 +144,23 @@
                         </DataTemplate>
                     </ListBox.ItemTemplate>
                 </ListBox>
-                <!-- Only shown with warnings: without them nothing was mirrored to the console. -->
+                <TextBlock Text="{loc:Localize GdsImport.InfosTitle}" Foreground="#7FB2E5"
+                           FontSize="11" FontWeight="SemiBold"
+                           IsVisible="{Binding HasInfos}"/>
+                <ListBox ItemsSource="{Binding Infos}" MaxHeight="120"
+                         Background="#252526" BorderThickness="0"
+                         IsVisible="{Binding HasInfos}">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="system:String">
+                            <TextBlock Text="{Binding}" Foreground="#A9C7E8" FontSize="10"
+                                       TextWrapping="Wrap" Margin="4,2"/>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+                <!-- Only shown with notes: without them nothing was mirrored to the console. -->
                 <TextBlock Text="{loc:Localize GdsImport.DetailsInErrorConsole}" Foreground="Gray"
                            FontSize="10" FontStyle="Italic"
-                           IsVisible="{Binding HasWarnings}"/>
+                           IsVisible="{Binding HasResultNotes}"/>
             </StackPanel>
 
         </StackPanel>

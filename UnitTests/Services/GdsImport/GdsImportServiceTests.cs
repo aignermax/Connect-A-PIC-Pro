@@ -185,6 +185,10 @@ public class GdsImportServiceTests : IDisposable
         outcome.Instances[0].PdkSource.ShouldBe("testpdk");
         outcome.RegisteredComponents.ShouldBe(new[] { new GdsRegisteredComponent("wgB", "wgB") });
         sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgB" });
+
+        // The resolution note is informational, not a warning.
+        outcome.Infos.ShouldContain(i => i.Contains("resolved to existing component 'wgA'"));
+        outcome.Warnings.ShouldNotContain(w => w.Contains("resolved to existing component"));
     }
 
     // ── .gds copy collision handling ─────────────────────────────────────────
@@ -274,6 +278,79 @@ public class GdsImportServiceTests : IDisposable
         pdk.Components.Count.ShouldBe(2, "components are replaced, not duplicated");
     }
 
+    // ── Info notes vs. warnings ──────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_ZeroGeometryAndArtifactCells_SkippedWithInfoNotes_NoWarningCascade()
+    {
+        // The mixed-backend round-trip finding: a zero-length gdsfactory
+        // straight (route_bundle artifact) and our own 'ConnectAPIC_NazcaPartial'
+        // export artifact used to flood the warnings with empty-bbox /
+        // not-registered / placement-skip cascades. Now: one info note each.
+        var library = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("zeroL", 10000, 2000)
+                .SRef("ConnectAPIC_NazcaPartial", 20000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .BeginCell("zeroL")
+                .Text(1, 10, "io", 0, 0)
+            .EndCell()
+            .BeginCell("ConnectAPIC_NazcaPartial")
+                .Boundary(111, 0, (0, 0), (5000, 0), (5000, 3000), (0, 3000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+        var path = WriteGds(library);
+        var sink = new LibrarySink(_prefsPath);
+        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+
+        var outcome = await service.ImportAsync(path, "TOP", null, null);
+
+        // Only the real cell is registered and placed.
+        outcome.RegisteredComponents.ShouldBe(new[] { new GdsRegisteredComponent("wgA", "wgA") });
+        outcome.Instances.ShouldHaveSingleItem().CellDraftName.ShouldBe("wgA");
+        sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA" });
+
+        outcome.Warnings.ShouldBeEmpty(
+            "no empty-bbox / not-registered / placement-skip cascade for skipped cells");
+        outcome.Infos.Count.ShouldBe(2);
+        outcome.Infos.ShouldContain(i => i.Contains("'zeroL'") && i.Contains("1 instance(s) skipped"));
+        outcome.Infos.ShouldContain(i =>
+            i.Contains("ConnectAPIC_NazcaPartial") && i.Contains("export artifact"));
+    }
+
+    [Fact]
+    public async Task ImportAsync_DuplicateTemplateAcrossPdks_FirstWinsNoteLandsInInfosNotWarnings()
+    {
+        // Two PDKs provide 'wgA': the first wins (deterministic) and the pick is
+        // an info note, not a warning.
+        var path = WriteGds(TwoWaveguideLibrary());
+        var sink = new LibrarySink(_prefsPath);
+        ComponentTemplate WgA(string pdk) => new()
+        {
+            Name = "wgA",
+            PdkSource = pdk,
+            WidthMicrometers = 10,
+            HeightMicrometers = 4,
+            PinDefinitions = new[]
+            {
+                new PinDefinition("in", 0, 2, 180),
+                new PinDefinition("out", 10, 2, 0),
+            },
+        };
+        var service = new GdsImportService(
+            Store(), () => new[] { WgA("pdk1"), WgA("pdk2") }, sink.Register);
+
+        var outcome = await service.ImportAsync(path, "TOP", null, null);
+
+        outcome.Instances[0].PdkSource.ShouldBe("pdk1", "first in library order wins");
+        outcome.Infos.ShouldContain(i => i.Contains("provided by 2 PDKs") && i.Contains("wgA"));
+        outcome.Warnings.ShouldNotContain(w => w.Contains("provided by"));
+    }
+
     // ── Errors / edge cases ──────────────────────────────────────────────────
 
     [Fact]
@@ -324,6 +401,8 @@ public class GdsImportServiceTests : IDisposable
         outcome.Warnings.ShouldContain(w => w.Contains("blob") && w.Contains("not registered"));
         outcome.Warnings.Count(w => w.Contains("no pins")).ShouldBe(1,
             "the pinless draft is reported ONCE (by the service), not again by the importer");
+        outcome.Infos.ShouldBeEmpty(
+            "an unpersistable draft is a real problem — it stays a warning, not an info note");
         sink.Templates.ShouldBeEmpty();
         Directory.Exists(Store().RootDirectory).ShouldBeFalse(
             "no PDK and no .gds copy — the store root is never created");

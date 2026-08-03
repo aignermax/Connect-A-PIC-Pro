@@ -15,9 +15,10 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 /// lets the user pick the top cell, hierarchy mode and pin-detection layers, then
 /// runs the import and places the result on the canvas via
 /// <see cref="GdsPlacementExecutor"/>. The outcome (placed/connected counts plus
-/// all warnings) stays visible until the user closes the dialog; every warning and
-/// failure is additionally mirrored to the error console, where the lines can be
-/// selected and copied (the dialog's own texts are not copyable).
+/// all warnings and info notes) stays visible until the user closes the dialog;
+/// every warning is mirrored to the error console via <c>LogWarning</c>, every
+/// info note via <c>LogInfo</c>, and failures via <c>LogError</c> — the console
+/// lines can be selected and copied (the dialog's own texts are not copyable).
 /// </summary>
 public partial class GdsImportDialogViewModel : ObservableObject
 {
@@ -116,6 +117,19 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// <summary>True when <see cref="Warnings"/> has entries (drives the warnings list visibility).</summary>
     public bool HasWarnings => Warnings.Count > 0;
 
+    /// <summary>
+    /// Informational import notes (known-component resolutions, skipped
+    /// zero-geometry/export-artifact cells), shown in the result view's info
+    /// section and mirrored to the error console at info level.
+    /// </summary>
+    public ObservableCollection<string> Infos { get; } = new();
+
+    /// <summary>True when <see cref="Infos"/> has entries (drives the info list visibility).</summary>
+    public bool HasInfos => Infos.Count > 0;
+
+    /// <summary>True when anything was mirrored to the error console (drives the hint's visibility).</summary>
+    public bool HasResultNotes => HasWarnings || HasInfos;
+
     /// <summary>Invoked by <see cref="CancelCommand"/> when the dialog should close. Set by the view.</summary>
     public Action? OnClose { get; set; }
 
@@ -134,8 +148,9 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// <param name="importService">Import orchestrator (parse → register → persist).</param>
     /// <param name="placementExecutor">Canvas placement executor for the import outcome.</param>
     /// <param name="errorConsole">
-    /// Optional error console: every result warning and every failure message is
-    /// mirrored there as a distinct, copyable entry (same pattern as the export VMs).
+    /// Optional error console: every result warning (warn level), info note (info
+    /// level) and failure message (error level) is mirrored there as a distinct,
+    /// copyable entry (same pattern as the export VMs).
     /// </param>
     public GdsImportDialogViewModel(
         string gdsFilePath,
@@ -147,7 +162,16 @@ public partial class GdsImportDialogViewModel : ObservableObject
         _importService = importService ?? throw new ArgumentNullException(nameof(importService));
         _placementExecutor = placementExecutor ?? throw new ArgumentNullException(nameof(placementExecutor));
         _errorConsole = errorConsole;
-        Warnings.CollectionChanged += (_, _) => OnPropertyChanged(nameof(HasWarnings));
+        Warnings.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasWarnings));
+            OnPropertyChanged(nameof(HasResultNotes));
+        };
+        Infos.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasInfos));
+            OnPropertyChanged(nameof(HasResultNotes));
+        };
     }
 
     /// <summary>
@@ -165,6 +189,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         AnalysisReady = false;
         ImportCompleted = false;
         Warnings.Clear();
+        Infos.Clear();
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
         var cts = ResetCancellationSource();
 
@@ -228,6 +253,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         HasError = false;
         ErrorText = "";
         Warnings.Clear();
+        Infos.Clear();
         var cts = ResetCancellationSource();
 
         try
@@ -242,6 +268,8 @@ public partial class GdsImportDialogViewModel : ObservableObject
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);
+            foreach (var info in outcome.Infos)
+                Infos.Add(info);
             foreach (var warning in report.Warnings)
                 Warnings.Add(warning);
             foreach (var skipped in report.SkippedPlacements)
@@ -267,8 +295,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
             // Mirror every line of the result view into the error console as a
             // distinct entry — the dialog texts are not selectable, the console's
             // are (same pattern as the export warnings in FileOperationsViewModel).
+            // Warnings stay warnings; informational notes log at info level.
             foreach (var warning in Warnings)
                 _errorConsole?.LogWarning(warning);
+            foreach (var info in Infos)
+                _errorConsole?.LogInfo(info);
         }
         catch (OperationCanceledException)
         {

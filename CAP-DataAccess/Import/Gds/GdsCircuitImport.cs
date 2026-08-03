@@ -39,4 +39,12 @@ public sealed record GdsCircuitImport
 
     /// <summary>User-presentable warnings collected during the import, in encounter order.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
+
+    /// <summary>
+    /// Informational notes collected during the import (known-component
+    /// resolutions, skipped zero-geometry/export-artifact cells), in encounter
+    /// order. These describe normal behavior — unlike <see cref="Warnings"/>,
+    /// no user action is needed; the UI shows them at info level.
+    /// </summary>
+    public IReadOnlyList<string> Infos { get; init; } = Array.Empty<string>();
 }

@@ -26,7 +26,7 @@ public static class GdsTemplateResolver
     /// </summary>
     /// <param name="templates">The currently loaded component templates.</param>
     /// <param name="resolutionNotes">
-    /// Optional sink (e.g. the import's warning list) receiving a note whenever a
+    /// Optional sink (e.g. the import's info-notes list) receiving a note whenever a
     /// cell name resolves to one of several same-named templates.
     /// </param>
     public static Func<string, KnownComponent?> BuildKnownComponentResolver(

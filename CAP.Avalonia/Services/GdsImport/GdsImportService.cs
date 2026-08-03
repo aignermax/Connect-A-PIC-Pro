@@ -145,19 +145,21 @@ public sealed class GdsImportService
         ValidateImportTarget(library, gdsPath, topCellName);
 
         var warnings = new List<string>();
+        var infos = new List<string>();
 
         options ??= new GdsHierarchyImportOptions();
         options = WithOwnExportPinLayers(options);
         if (options.ResolveKnownComponent is null)
         {
             var templates = _templateProvider?.Invoke() ?? (IReadOnlyList<ComponentTemplate>)Array.Empty<ComponentTemplate>();
-            options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, warnings) };
+            options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, infos) };
         }
 
         progress?.Report($"Analyzing hierarchy of '{topCellName}'…");
         var import = await GdsHierarchyImporter.ImportAsync(library, topCellName, options, ct);
 
         warnings.AddRange(import.Warnings);
+        infos.AddRange(import.Infos);
         var persistable = import.ImportedCellDrafts
             .Where(d => IsPersistable(d, warnings))
             .ToList();
@@ -209,6 +211,7 @@ public sealed class GdsImportService
             Instances = import.Instances,
             Connections = import.Connections,
             Warnings = warnings,
+            Infos = infos,
             UserPdkName = pdkName,
             UserPdkPath = userPdkPath,
             GdsFileName = gdsFileName,

@@ -89,6 +89,24 @@ public class GdsImportDialogViewModelTests : IDisposable
         .EndLibrary()
         .ToArray();
 
+    /// <summary>
+    /// TOP with one normal waveguide plus a zero-length-straight stand-in
+    /// ("zeroL": a port label on a point — an empty flattened bbox, like the
+    /// zero-length straights gdsfactory's route_bundle inserts).
+    /// </summary>
+    private static byte[] ZeroGeometryLibrary() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("wgA", 0, 0)
+            .SRef("zeroL", 10000, 2000)
+        .EndCell()
+        .WaveguideCell("wgA")
+        .BeginCell("zeroL")
+            .Text(1, 10, "io", 0, 0)
+        .EndCell()
+        .EndLibrary()
+        .ToArray();
+
     private string WriteGds(byte[] content, string fileName = "circuit.gds")
     {
         Directory.CreateDirectory(_root);
@@ -376,6 +394,62 @@ public class GdsImportDialogViewModelTests : IDisposable
             .ToList();
         foreach (var warning in vm.Warnings)
             loggedWarnings.ShouldContain(warning);
+    }
+
+    [Fact]
+    public async Task ImportAsync_ZeroGeometryCell_InfoNoteShownAndMirroredViaLogInfo()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, canvas, _) = CreateDialog(WriteGds(ZeroGeometryLibrary()), console);
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.ImportCompleted.ShouldBeTrue();
+        canvas.Components.ShouldHaveSingleItem("only the real cell is placed");
+        var note = vm.Infos.ShouldHaveSingleItem();
+        note.ShouldContain("'zeroL'");
+        note.ShouldContain("1 instance(s) skipped");
+        vm.Warnings.ShouldBeEmpty("the zero-geometry cascade is gone — one info note instead");
+
+        // The note reaches the error console at INFO level — never as a warning.
+        console.Entries.ShouldContain(e => e.Level == LogLevel.Info && e.Message.Contains("'zeroL'"));
+        console.Entries.ShouldNotContain(e => e.Level == LogLevel.Warn && e.Message.Contains("zeroL"));
+    }
+
+    [Fact]
+    public async Task ImportAsync_KnownComponentResolution_MirroredViaLogInfoNotWarning()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, _, sink) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        sink.Templates.Add(new ComponentTemplate
+        {
+            Name = "wgA",
+            Category = "Test",
+            PdkSource = "testpdk",
+            WidthMicrometers = 10,
+            HeightMicrometers = 4,
+            PinDefinitions = new[]
+            {
+                new PinDefinition("in", 0, 2, 180),
+                new PinDefinition("out", 10, 2, 0),
+            },
+            CreateSMatrix = pins => new CAP_Core.LightCalculation.SMatrix(
+                pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList(),
+                new List<(Guid, double)>()),
+        });
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeTrue();
+        vm.Infos.ShouldContain(i => i.Contains("resolved to existing component 'wgA'"));
+        vm.Warnings.ShouldNotContain(w => w.Contains("resolved to existing component"));
+        console.Entries.ShouldContain(e =>
+            e.Level == LogLevel.Info && e.Message.Contains("resolved to existing component 'wgA'"));
+        console.Entries.ShouldNotContain(e =>
+            e.Level == LogLevel.Warn && e.Message.Contains("resolved to existing component"));
     }
 
     [Fact]

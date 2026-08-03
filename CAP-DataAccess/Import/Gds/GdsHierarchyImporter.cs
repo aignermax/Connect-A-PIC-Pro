@@ -16,7 +16,10 @@ namespace CAP_DataAccess.Import.Gds;
 /// <see cref="GdsHierarchyImportOptions.ResolveKnownComponent"/> reference the
 /// existing PDK component; unknown cells become drafts whose outlines/pins
 /// absorb their whole subtree (one level of components, matching
-/// <see cref="GdsCellFlattener.GetInstanceTree"/>).</item>
+/// <see cref="GdsCellFlattener.GetInstanceTree"/>). Two cell kinds never become
+/// drafts or instances — zero-geometry cells (empty flattened bbox) and our own
+/// export artifacts (<see cref="LunimaExportArtifactCellNames"/>); each skipped
+/// cell produces ONE info note instead of a per-instance failure cascade.</item>
 /// <item><b>BlackBox</b>: the whole top cell becomes a single draft.</item>
 /// </list>
 ///
@@ -36,6 +39,17 @@ public static class GdsHierarchyImporter
     /// working directory, so a bare relative name would never resolve).
     /// </summary>
     public const string GdsFileNameToken = "{GdsFileName}";
+
+    /// <summary>
+    /// Cell names our OWN exporters write as auxiliary artifacts into a .gds —
+    /// never real design content, so re-importing skips them by convention.
+    /// Currently the mixed-backend export's flattened nazca partial
+    /// (<c>MixedBackendGdsOrchestrator.NazcaPartialTopCellName</c> in CAP.Avalonia;
+    /// duplicated here as a literal because CAP-DataAccess must not reference the
+    /// UI assembly). Add future artifact names here.
+    /// </summary>
+    private static readonly IReadOnlySet<string> LunimaExportArtifactCellNames =
+        new HashSet<string>(StringComparer.Ordinal) { "ConnectAPIC_NazcaPartial" };
 
     /// <summary>
     /// Imports <paramref name="topCellName"/> from <paramref name="library"/>.
@@ -85,6 +99,7 @@ public static class GdsHierarchyImporter
             BoundingBox = session.TopBBox,
             ImportedCellDrafts = [draft],
             Warnings = session.Warnings,
+            Infos = session.Infos,
         };
     }
 
@@ -104,13 +119,48 @@ public static class GdsHierarchyImporter
         // instance per member — identical warnings must collapse into ONE per
         // reference, with the member count, instead of flooding one per member).
         var transformNotes = new Dictionary<TransformSignature, (string FirstInstance, int Count)>();
+        // Skipped cells: export artifacts (note emitted on first encounter) and
+        // zero-geometry cells (note emitted after the loop, with the count).
+        var artifactNoted = new HashSet<string>(StringComparer.Ordinal);
+        var zeroGeometrySkips = new Dictionary<string, int>();
 
         foreach (var gdsInstance in gdsInstances)
         {
             ct.ThrowIfCancellationRequested();
             string cell = gdsInstance.CellName;
-            var cellBBox = session.GetCellBBox(cell);
+
+            // Our own export artifacts are not design content — the cell and all
+            // its instances vanish with ONE note per cell.
+            if (LunimaExportArtifactCellNames.Contains(cell))
+            {
+                if (artifactNoted.Add(cell))
+                {
+                    session.Infos.Add(
+                        $"Lunima export artifact '{cell}' skipped — flattened partial geometry " +
+                        "is not reconstructed (v1).");
+                }
+                continue;
+            }
+
             var known = session.ResolveKnown(cell);
+            var cellBBox = session.GetCellBBox(cell);
+
+            // Zero-geometry cells (empty flattened bbox — e.g. the zero-length
+            // straights gdsfactory's route_bundle inserts): no draft, no
+            // instance. They could never be persisted (zero size) or placed, so
+            // the per-instance failure cascade collapses into ONE note per cell
+            // (after the loop, when the count is known). Connections cannot
+            // dangle: dropped instances never enter the abutment matcher, and an
+            // unknown zero-geometry cell has no pins to match anyway (the pin
+            // detector yields nothing on a degenerate bbox). Cells resolving to
+            // a KNOWN component are exempt — the deliberate name binding wins
+            // (with the size-mismatch warning covering the geometry gap).
+            if (known is null && cellBBox.Width <= 0 && cellBBox.Height <= 0)
+            {
+                zeroGeometrySkips.TryGetValue(cell, out int skipped);
+                zeroGeometrySkips[cell] = skipped + 1;
+                continue;
+            }
 
             if (known is null && draftNames.Add(cell))
             {
@@ -161,6 +211,13 @@ public static class GdsHierarchyImporter
 
         WarnOnReferenceTransforms(session, transformNotes);
 
+        foreach (var (cell, skipCount) in zeroGeometrySkips)
+        {
+            session.Infos.Add(
+                $"Cell '{cell}' has no geometry (empty bounding box); " +
+                $"{skipCount} instance(s) skipped.");
+        }
+
         if (gdsInstances.Count == 0)
         {
             session.Warnings.Add(
@@ -185,6 +242,7 @@ public static class GdsHierarchyImporter
             Instances = placed,
             Connections = connections,
             Warnings = session.Warnings,
+            Infos = session.Infos,
         };
     }
 
@@ -253,10 +311,12 @@ public static class GdsHierarchyImporter
     }
 
     /// <summary>
-    /// Warns on zero-size drafts (unpersistable geometry). A PINLESS draft
-    /// deliberately gets no warning here: the service layer reports the more
-    /// actionable "not registered: no pins" message, and warning in both places
-    /// would double-report the same fact.
+    /// Warns on zero-size drafts (unpersistable geometry). Only drafts degenerate
+    /// in ONE dimension reach this in explode mode — cells empty in BOTH
+    /// dimensions are dropped earlier with a single info note, draft and all. A
+    /// PINLESS draft deliberately gets no warning here: the service layer reports
+    /// the more actionable "not registered: no pins" message, and warning in both
+    /// places would double-report the same fact.
     /// </summary>
     private static void WarnOnZeroSizeDraft(GdsCellDraft draft, List<string> warnings)
     {

@@ -387,6 +387,7 @@
   "GdsImport.ErrorRadiusSyntax": "Ungültiger Auto-Connect-Radius: '{0}'. Positive Mikrometer-Zahl eingeben.",
   "GdsImport.ErrorTitle": "Importfehler:",
   "GdsImport.ImportButton": "Importieren",
+  "GdsImport.InfosTitle": "Hinweise:",
   "GdsImport.LayerSyntaxTip": "Layer,Datentyp-Paare, getrennt durch ';' — z. B. 1,10",
   "GdsImport.ModeBlackBox": "Als einzelne Black-Box-Komponente importieren",
   "GdsImport.ModeExplode": "Hierarchie in Komponenten auflösen (empfohlen)",

@@ -34,6 +34,14 @@ internal sealed class GdsHierarchyImportSession
 
     public List<string> Warnings { get; } = new();
 
+    /// <summary>
+    /// Informational notes (no action needed): known-component resolutions,
+    /// skipped zero-geometry/export-artifact cells. Kept separate from
+    /// <see cref="Warnings"/> so the UI can show them at info level instead of
+    /// alarming the user about a normal import.
+    /// </summary>
+    public List<string> Infos { get; } = new();
+
     public GdsBoundingBox TopBBox => GetCellBBox(_topCellName);
 
     public GdsBoundingBox GetCellBBox(string cellName)
@@ -170,7 +178,8 @@ internal sealed class GdsHierarchyImportSession
         {
             // Resolution visibility: the user must see which library component a
             // cell was bound to (especially when several PDKs provide the name).
-            Warnings.Add(
+            // Informational, not a warning — a successful binding is the norm.
+            Infos.Add(
                 $"Cell '{cellName}' resolved to existing component '{result.Identifier}' " +
                 $"(PDK {result.PdkSource}).");
         }

@@ -387,6 +387,7 @@
   "GdsImport.ErrorRadiusSyntax": "自动连接半径无效：'{0}'。请输入正的微米数。",
   "GdsImport.ErrorTitle": "导入错误：",
   "GdsImport.ImportButton": "导入",
+  "GdsImport.InfosTitle": "信息：",
   "GdsImport.LayerSyntaxTip": "层,数据类型 对，用 ';' 分隔 — 例如 1,10",
   "GdsImport.ModeBlackBox": "作为单个黑盒组件导入",
   "GdsImport.ModeExplode": "将层级展开为组件（推荐）",

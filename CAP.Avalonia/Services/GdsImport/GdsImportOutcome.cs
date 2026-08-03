@@ -43,6 +43,14 @@ public sealed record GdsImportOutcome
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
     /// <summary>
+    /// Informational notes (known-component resolutions incl. cross-PDK
+    /// first-wins picks, skipped zero-geometry/export-artifact cells), in order.
+    /// Normal-behavior messages — the UI mirrors them at info level, not as
+    /// warnings.
+    /// </summary>
+    public IReadOnlyList<string> Infos { get; init; } = Array.Empty<string>();
+
+    /// <summary>
     /// Name of the user PDK the drafts were persisted to and registered from
     /// ("GDS Import - &lt;file stem&gt;"), even when nothing was registered.
     /// </summary>

@@ -387,6 +387,7 @@
   "GdsImport.ErrorRadiusSyntax": "自動接続の半径が無効です: '{0}'。正の数（µm）を入力してください。",
   "GdsImport.ErrorTitle": "インポートエラー:",
   "GdsImport.ImportButton": "インポート",
+  "GdsImport.InfosTitle": "情報:",
   "GdsImport.LayerSyntaxTip": "レイヤー,データ型 のペア（';' 区切り）— 例: 1,10",
   "GdsImport.ModeBlackBox": "単一のブラックボックスコンポーネントとしてインポート",
   "GdsImport.ModeExplode": "階層をコンポーネントに展開（推奨）",
