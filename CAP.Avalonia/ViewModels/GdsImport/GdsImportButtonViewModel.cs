@@ -67,21 +67,32 @@ public partial class GdsImportButtonViewModel : ObservableObject
             return;
         }
 
-        var gdsPath = await FileDialogService.ShowOpenFileDialogAsync(
-            LocalizationService.Instance.Translate("GdsImport.OpenFileTitle"),
-            "GDS files (*.gds;*.gdsii)|*.gds;*.gdsii|All files (*.*)|*.*");
-        if (string.IsNullOrEmpty(gdsPath))
-            return;
+        try
+        {
+            var gdsPath = await FileDialogService.ShowOpenFileDialogAsync(
+                LocalizationService.Instance.Translate("GdsImport.OpenFileTitle"),
+                "GDS files (*.gds;*.gdsii)|*.gds;*.gdsii|All files (*.*)|*.*");
+            if (string.IsNullOrEmpty(gdsPath))
+                return;
 
-        var importService = new GdsImportService(
-            UserPdkStore.CreateDefault(),
-            () => _leftPanel.AllTemplates.ToList(),
-            // Lambda, not the method group: the optional savedViaBundledFork
-            // parameter keeps it from matching the 3-argument Action directly.
-            (draft, pdkName, filePath) => _leftPanel.RegisterSavedCustomComponent(draft, pdkName, filePath));
-        var placementExecutor = new GdsPlacementExecutor(
-            _canvas, _commandManager, () => _leftPanel.AllTemplates.ToList());
+            var importService = new GdsImportService(
+                UserPdkStore.CreateDefault(),
+                () => _leftPanel.AllTemplates.ToList(),
+                // Lambda, not the method group: the optional savedViaBundledFork
+                // parameter keeps it from matching the 3-argument Action directly.
+                (draft, pdkName, filePath) => _leftPanel.RegisterSavedCustomComponent(draft, pdkName, filePath));
+            var placementExecutor = new GdsPlacementExecutor(
+                _canvas, _commandManager, () => _leftPanel.AllTemplates.ToList());
 
-        await ShowImportDialogAsync(new GdsImportDialogViewModel(gdsPath, importService, placementExecutor));
+            await ShowImportDialogAsync(new GdsImportDialogViewModel(gdsPath, importService, placementExecutor));
+        }
+        catch (Exception ex)
+        {
+            // A failing file dialog or dialog host must not escape the command as
+            // an unhandled task exception — surface it on the status bar instead
+            // (same pattern as the unavailable case above).
+            UpdateStatus?.Invoke(string.Format(
+                LocalizationService.Instance.Translate("GdsImport.StatusOpenFailed"), ex.Message));
+        }
     }
 }

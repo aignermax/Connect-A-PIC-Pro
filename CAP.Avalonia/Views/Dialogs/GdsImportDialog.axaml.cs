@@ -27,4 +27,16 @@ public partial class GdsImportDialog : Window
         vm.OnClose = Close;
         _ = vm.StartAnalysisAsync();
     }
+
+    /// <inheritdoc/>
+    protected override void OnClosed(EventArgs e)
+    {
+        // A close mid-import must not leave the background run mutating a canvas
+        // the user no longer sees: cancel and release the per-run cancellation
+        // source. (Window-lifecycle wiring is not coverable headless — the VM
+        // half, GdsImportDialogViewModel.OnWindowClosed, is unit-tested.)
+        if (DataContext is GdsImportDialogViewModel vm)
+            vm.OnWindowClosed();
+        base.OnClosed(e);
+    }
 }

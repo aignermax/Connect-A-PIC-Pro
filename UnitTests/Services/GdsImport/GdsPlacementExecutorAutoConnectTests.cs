@@ -1,5 +1,7 @@
+using System.Globalization;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services.GdsImport;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
@@ -80,6 +82,13 @@ public class GdsPlacementExecutorAutoConnectTests
         return (canvas, executor);
     }
 
+    /// <summary>
+    /// Builds an expected report line through the same localized format the
+    /// executor uses, so assertions stay valid under a non-English UI culture.
+    /// </summary>
+    private static string ExpectedFormat(string key, params object[] args) =>
+        string.Format(CultureInfo.InvariantCulture, LocalizationService.Instance.Translate(key), args);
+
     // ── Auto-connect on/off ──────────────────────────────────────────────────
 
     [Fact]
@@ -103,8 +112,11 @@ public class GdsPlacementExecutorAutoConnectTests
         pair.ShouldContain("wgA#0.out");
         pair.ShouldContain("wgB#1.in");
         report.ValidationWarnings.ShouldBeEmpty("a straight 90 µm route is clean");
-        report.SkippedAutoConnect.Count.ShouldBe(2, "the outward-facing in/out pins find no partner");
-        report.SkippedAutoConnect.ShouldAllBe(s => s.Contains("no opposing free pin"));
+        report.SkippedAutoConnect.ShouldBe(new[]
+        {
+            ExpectedFormat("GdsImport.AutoConnectSkipNoPartnerFormat", "'wgA#0.in'", 100.0),
+            ExpectedFormat("GdsImport.AutoConnectSkipNoPartnerFormat", "'wgB#1.out'", 100.0),
+        }, ignoreOrder: true);
 
         // The auto-connected route is frozen into the group like an abutment connection.
         var group = canvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
@@ -151,13 +163,38 @@ public class GdsPlacementExecutorAutoConnectTests
         report.SkippedAutoConnect.Count.ShouldBe(4, "all four free pins are out of each other's radius");
     }
 
+    [Fact]
+    public async Task ExecuteAsync_ManyUnpairableFreePins_CollapsesSkipsIntoOneSummaryLine()
+    {
+        var (_, executor) = CreateExecutor(WaveguideTemplate());
+        // 7 waveguides 500 µm apart: every pin sits beyond the radius from any
+        // opposing pin — 14 skips with the same reason, over the detail cap of 5.
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = Enumerable.Range(0, 7)
+                .Select(i => Placement($"wg#{i}", i * 500, 0))
+                .ToArray(),
+            Connections = Array.Empty<GdsConnectionInstruction>(),
+        };
+
+        var report = await executor.ExecuteAsync(plan, autoConnectFreePins: true, autoConnectRadiusUm: 200);
+
+        report.AutoConnectedCount.ShouldBe(0);
+        var summary = report.SkippedAutoConnect.ShouldHaveSingleItem(
+            "14 same-reason skips collapse into one summary line instead of flooding the report");
+        summary.ShouldBe(ExpectedFormat("GdsImport.AutoConnectSkipSummaryNoPartnerFormat", 14, 200.0));
+    }
+
     // ── Exclusions ───────────────────────────────────────────────────────────
 
     [Fact]
     public async Task ExecuteAsync_AlreadyConnectedPins_AreExcludedFromAutoConnect()
     {
         var (canvas, executor) = CreateExecutor(WaveguideTemplate());
-        // Three abutting waveguides: only wgA.in and wgC.out stay free.
+        // Three abutting waveguides: only wgA.in and wgC.out stay free. Those
+        // two free ends point AWAY from each other (outward off the chain), so
+        // the facing check skips them — the wrap-around case must not connect.
         var plan = new GdsPlacementPlan
         {
             GroupName = "TOP",
@@ -177,15 +214,19 @@ public class GdsPlacementExecutorAutoConnectTests
         var report = await executor.ExecuteAsync(plan, autoConnectFreePins: true);
 
         report.ConnectedCount.ShouldBe(2);
-        report.AutoConnectedCount.ShouldBe(1, "only the two remaining free pins can pair");
-        var pair = report.AutoConnectedPairs.ShouldHaveSingleItem();
-        pair.ShouldContain("wgA#0.in");
-        pair.ShouldContain("wgC#2.out");
-        report.SkippedAutoConnect.ShouldBeEmpty("occupied pins are excluded, not reported as skipped");
+        report.AutoConnectedCount.ShouldBe(0, "the only free pins face away from each other (wrap-around)");
+        // Exactly the two FREE pins are reported — occupied pins are excluded,
+        // not reported as skipped. Two skips stay below the summary cap, so both
+        // land with their full per-pin detail.
+        report.SkippedAutoConnect.ShouldBe(new[]
+        {
+            ExpectedFormat("GdsImport.AutoConnectSkipNotFacingFormat", "'wgA#0.in'", GdsPlacementExecutor.DefaultAutoConnectRadiusUm),
+            ExpectedFormat("GdsImport.AutoConnectSkipNotFacingFormat", "'wgC#2.out'", GdsPlacementExecutor.DefaultAutoConnectRadiusUm),
+        }, ignoreOrder: true);
 
         // The abutment connections were not replaced by the auto-connect pass.
         var group = canvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
-        group.InternalPaths.Count.ShouldBe(3);
+        group.InternalPaths.Count.ShouldBe(2);
     }
 
     [Fact]

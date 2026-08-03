@@ -84,10 +84,12 @@ public partial class GdsImportDialogViewModel : ObservableObject
 
     /// <summary>
     /// Pairing radius (µm) for the auto-connect pass, as typed by the user;
-    /// validated at import time (positive number, invariant culture).
+    /// validated at import time (positive number, invariant culture). Defaults to
+    /// <see cref="GdsPlacementExecutor.DefaultAutoConnectRadiusUm"/> — deliberately
+    /// short, a circuit-spanning default would wire far-apart ports together.
     /// </summary>
     [ObservableProperty]
-    private string _autoConnectRadiusText = "1000";
+    private string _autoConnectRadiusText = "200";
 
     /// <summary>True once an import finished successfully; switches the dialog to the result view.</summary>
     [ObservableProperty]
@@ -149,11 +151,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
         ImportCompleted = false;
         Warnings.Clear();
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
-        _cts = new CancellationTokenSource();
+        var cts = ResetCancellationSource();
 
         try
         {
-            var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, _cts.Token);
+            var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, cts.Token);
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
                 TopCells.Add(topCell);
@@ -208,17 +210,17 @@ public partial class GdsImportDialogViewModel : ObservableObject
         HasError = false;
         ErrorText = "";
         Warnings.Clear();
-        _cts = new CancellationTokenSource();
+        var cts = ResetCancellationSource();
 
         try
         {
             var progress = new Progress<string>(msg => StatusText = msg);
             var outcome = await _importService.ImportAsync(
-                GdsFilePath, SelectedTopCell.CellName, options, progress, _cts.Token);
+                GdsFilePath, SelectedTopCell.CellName, options, progress, cts.Token);
 
             var plan = GdsPlacementPlan.FromOutcome(outcome);
             var report = await _placementExecutor.ExecuteAsync(
-                plan, progress, _cts.Token, AutoConnectRequested, autoConnectRadiusUm);
+                plan, progress, cts.Token, AutoConnectRequested, autoConnectRadiusUm);
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);
@@ -246,7 +248,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
         }
         catch (OperationCanceledException)
         {
-            StatusText = LocalizationService.Instance.Translate("GdsImport.StatusCancelled");
+            // Name the damage: placements made before the cancel stay on the
+            // canvas, and a naive re-import would stack a second copy on top.
+            StatusText = string.Format(
+                LocalizationService.Instance.Translate("GdsImport.StatusCancelledAfterPlacement"),
+                _placementExecutor.PlacedCountSoFar);
         }
         catch (Exception ex)
         {
@@ -278,6 +284,34 @@ public partial class GdsImportDialogViewModel : ObservableObject
         }
         OnClose?.Invoke();
     }
+
+    /// <summary>
+    /// Called by the view when the dialog window closes: cancels the running
+    /// operation (if any) and releases the per-run cancellation source. A close
+    /// mid-import must not leave the background run mutating a canvas the user
+    /// no longer sees.
+    /// </summary>
+    public void OnWindowClosed()
+    {
+        _cts?.Cancel();
+        _cts?.Dispose();
+        _cts = null;
+    }
+
+    /// <summary>
+    /// Replaces the per-run cancellation source, disposing the previous run's, and
+    /// returns the new source. Safe because both entry points no-op while
+    /// <see cref="IsBusy"/> — the replaced source always belongs to a finished run.
+    /// </summary>
+    private CancellationTokenSource ResetCancellationSource()
+    {
+        _cts?.Dispose();
+        _cts = new CancellationTokenSource();
+        return _cts;
+    }
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
+    internal CancellationTokenSource? CurrentCts => _cts;
 
     private static string BuildSummary(GdsPlacementReport report, bool autoConnectRequested)
     {
@@ -353,7 +387,8 @@ public partial class GdsImportDialogViewModel : ObservableObject
 
     /// <summary>
     /// Parses "layer,datatype" pairs separated by ';' (e.g. <c>1,10</c> or
-    /// <c>1,10; 2,0</c>). Returns null when any segment is malformed.
+    /// <c>1,10; 2,0</c>). Returns null when any segment is malformed — GDS
+    /// layer/datatype numbers are unsigned, so negative values are rejected too.
     /// </summary>
     internal static List<(int Layer, int Datatype)>? ParseLayerPairs(string text)
     {
@@ -363,7 +398,9 @@ public partial class GdsImportDialogViewModel : ObservableObject
             var parts = segment.Split(',', StringSplitOptions.TrimEntries);
             if (parts.Length != 2
                 || !int.TryParse(parts[0], out var layer)
-                || !int.TryParse(parts[1], out var datatype))
+                || !int.TryParse(parts[1], out var datatype)
+                || layer < 0
+                || datatype < 0)
             {
                 return null;
             }

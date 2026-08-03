@@ -1,8 +1,10 @@
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.GdsImport;
 using CAP.Avalonia.ViewModels.Library;
@@ -190,6 +192,8 @@ public class GdsImportDialogViewModelTests : IDisposable
     [InlineData("1")]
     [InlineData("1,2,3")]
     [InlineData("1,x")]
+    [InlineData("-1,10")]
+    [InlineData("1,-1")]
     public void ParseLayerPairs_Malformed_ReturnsNull(string text)
     {
         GdsImportDialogViewModel.ParseLayerPairs(text).ShouldBeNull();
@@ -273,8 +277,19 @@ public class GdsImportDialogViewModelTests : IDisposable
         vm.ImportCompleted.ShouldBeTrue();
         var group = canvas.Components.ShouldHaveSingleItem().Component
             .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
-        group.InternalPaths.Count.ShouldBe(2,
-            "the flag reached the executor: wgA.out↔wgB.in across the gap plus the wgA.in↔wgB.out wrap-around");
+        group.InternalPaths.Count.ShouldBe(1,
+            "only the true facing pair connects: wgA.out↔wgB.in across the gap — " +
+            "wgA.in and wgB.out point AWAY from each other (wrap-around) and are skipped");
+
+        // Both outward-facing ports land in the warnings with the not-facing skip
+        // reason. The marker is built through the same localized format the
+        // executor uses (empty label → the name-independent suffix of the line),
+        // so the assertion holds under a non-English UI culture.
+        var notFacingMarker = string.Format(CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNotFacingFormat"),
+            "", GdsPlacementExecutor.DefaultAutoConnectRadiusUm);
+        vm.Warnings.Count(w => w.Contains(notFacingMarker)).ShouldBe(2,
+            "wgA.in and wgB.out are both reported as not-facing skips, not connected");
     }
 
     [Fact]
@@ -321,6 +336,62 @@ public class GdsImportDialogViewModelTests : IDisposable
         vm.ErrorText.ShouldContain("bogus");
         vm.ImportCompleted.ShouldBeFalse();
         canvas.Components.ShouldBeEmpty("nothing is imported when option validation fails");
+    }
+
+    // ── Cancellation ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        await vm.StartAnalysisAsync();
+
+        var import = vm.ImportCommand.ExecuteAsync(null);
+        // The cancellation source is assigned synchronously before ImportAsync's
+        // first await, so this cancel deterministically lands before any
+        // placement (the placed count in the message is 0 here; the executor
+        // tests cover the mid-placement count).
+        vm.CurrentCts.ShouldNotBeNull().Cancel();
+        await import;
+
+        vm.HasError.ShouldBeFalse();
+        vm.ImportCompleted.ShouldBeFalse();
+        vm.StatusText.ShouldBe(string.Format(
+            LocalizationService.Instance.Translate("GdsImport.StatusCancelledAfterPlacement"), 0));
+        vm.StatusText.ShouldNotBe(LocalizationService.Instance.Translate("GdsImport.StatusCancelled"),
+            "a bare \"Cancelled.\" hides that placements may stay on the canvas");
+    }
+
+    [Fact]
+    public async Task OnWindowClosed_WhileBusy_CancelsAndDisposesTheRun()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+
+        var run = vm.StartAnalysisAsync();
+        var cts = vm.CurrentCts.ShouldNotBeNull(
+            "the source is assigned synchronously before the first await");
+
+        vm.OnWindowClosed();
+
+        cts.IsCancellationRequested.ShouldBeTrue("a close mid-run cancels the operation");
+        vm.CurrentCts.ShouldBeNull("the source is released on close");
+        Should.Throw<ObjectDisposedException>(() => _ = cts.Token);
+
+        await run; // the cancellation surfaces as a caught status, never a fault
+        vm.IsBusy.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task StartAnalysisAsync_NewRun_DisposesThePreviousCancellationSource()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        await vm.StartAnalysisAsync();
+        var first = vm.CurrentCts.ShouldNotBeNull();
+
+        await vm.RetryAnalysisCommand.ExecuteAsync(null);
+
+        Should.Throw<ObjectDisposedException>(() => _ = first.Token);
+        vm.CurrentCts.ShouldNotBeNull().ShouldNotBeSameAs(first);
     }
 }
 

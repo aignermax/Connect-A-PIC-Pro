@@ -292,4 +292,126 @@ public class GdsPlacementExecutorTests
         await Should.ThrowAsync<OperationCanceledException>(
             () => executor.ExecuteAsync(plan, progress: null, cts.Token));
     }
+
+    /// <summary>
+    /// Cancels synchronously inside <see cref="IProgress{T}.Report"/> — unlike
+    /// <see cref="Progress{T}"/>, which posts to the thread pool and would make
+    /// the cancel timing nondeterministic in a headless test.
+    /// </summary>
+    private sealed class SyncCancelProgress(CancellationTokenSource cts) : IProgress<string>
+    {
+        public void Report(string value) => cts.Cancel();
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CancelledMidPlacement_PlacedCountSoFarReportsWhatLanded()
+    {
+        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("wgA#0", 0, 0),
+                Placement("wgB#1", 10, 0),
+                Placement("wgC#2", 20, 0),
+            },
+        };
+        using var cts = new CancellationTokenSource();
+        // The first progress report fires BEFORE the first placement, so exactly
+        // one placement lands before the next loop iteration's cancellation check.
+        var progress = new SyncCancelProgress(cts);
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => executor.ExecuteAsync(plan, progress, cts.Token));
+
+        executor.PlacedCountSoFar.ShouldBe(1,
+            "the dialog's cancel message names this count — it must track placements live");
+    }
+
+    // ── Routing batching ─────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_MultipleConnections_RecalculatesRoutesOnceForTheWholeBatch()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        // Count routing passes as IsRouting rising edges: RecalculateRoutesAsync
+        // flips IsRouting true exactly once per pass, and both the executor's
+        // awaited pass and the grouping command's fire-and-forget pass raise
+        // their first StateChanged synchronously (the routing semaphore starts
+        // free), so the count is settled when ExecuteAsync returns.
+        var routingPasses = 0;
+        var wasRouting = false;
+        canvas.Routing.StateChanged += () =>
+        {
+            if (canvas.Routing.IsRouting && !wasRouting)
+                routingPasses++;
+            wasRouting = canvas.Routing.IsRouting;
+        };
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("wgA#0", 0, 0),
+                Placement("wgB#1", 10, 0),
+                Placement("wgC#2", 20, 0),
+            },
+            Connections = new[]
+            {
+                Connection(0, "out", 1, "in"),
+                Connection(1, "out", 2, "in"),
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.ConnectedCount.ShouldBe(2);
+        routingPasses.ShouldBe(2,
+            "ONE batched routing pass covers both abutment connections (plus one from " +
+            "the grouping command) — the old per-connection ConnectPinsAsync re-routed " +
+            "once per connection (O(N²))");
+    }
+
+    // ── Group naming ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_GroupIsSelectedWithItsFinalName()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 10, 0) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+        };
+
+        await executor.ExecuteAsync(plan);
+
+        // The group is named BEFORE it is selected: bound panels never observe
+        // the placeholder Group_HHmmss name (DisplayName has no change notification).
+        var groupVm = canvas.Components.ShouldHaveSingleItem();
+        canvas.SelectedComponent.ShouldBeSameAs(groupVm);
+        groupVm.DisplayName.ShouldBe("TOP");
+    }
+
+    // ── Rotation snap rounding ───────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_HalfwayRotation_SnapsAwayFromZero()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0, rotationDegrees: 45) },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        // 45° is the exact midpoint between 0° and 90°: AwayFromZero snaps UP to
+        // 90° — banker's rounding would silently snap DOWN to 0°.
+        report.Warnings.ShouldHaveSingleItem().ShouldContain("snapped");
+        canvas.Components.ShouldHaveSingleItem().Component.RotationDegrees.ShouldBe(90);
+    }
 }

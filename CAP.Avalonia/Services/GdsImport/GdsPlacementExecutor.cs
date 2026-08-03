@@ -1,5 +1,6 @@
 using System.Globalization;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Analysis;
@@ -21,14 +22,19 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// Placement and grouping go through the undo stack (<see cref="PlaceComponentCommand.CreateExact"/>
 /// and <see cref="CreateGroupCommand"/>) when a <see cref="CommandManager"/> is
 /// supplied; pin connections follow the app's programmatic-connect path
-/// (<see cref="DesignCanvasViewModel.ConnectPinsAsync"/>), which — like interactive
-/// pin-drag connects — is not individually undoable.
+/// (<see cref="DesignCanvasViewModel.ConnectPins"/>) and are routed in ONE deferred
+/// recalculation per stage instead of a per-connection re-route — like interactive
+/// pin-drag connects, they are not individually undoable.
 /// </para>
 /// </summary>
 public sealed class GdsPlacementExecutor
 {
-    /// <summary>Default search radius (µm) for the experimental auto-connect pass.</summary>
-    public const double DefaultAutoConnectRadiusUm = 1000.0;
+    /// <summary>
+    /// Default search radius (µm) for the experimental auto-connect pass.
+    /// Deliberately short: a circuit-spanning default would wire far-apart
+    /// external ports together.
+    /// </summary>
+    public const double DefaultAutoConnectRadiusUm = 200.0;
 
     private readonly DesignCanvasViewModel _canvas;
     private readonly CommandManager? _commandManager;
@@ -56,6 +62,14 @@ public sealed class GdsPlacementExecutor
     }
 
     /// <summary>
+    /// Instances placed by the in-flight (or most recent) <see cref="ExecuteAsync"/>
+    /// run. Read after a cancellation to tell the user how much of the import
+    /// already landed on the canvas — and must be undone or deleted before
+    /// re-importing, or the next run stacks a second copy on top.
+    /// </summary>
+    public int PlacedCountSoFar { get; private set; }
+
+    /// <summary>
     /// Executes <paramref name="plan"/> in placement order: place+rotate all
     /// instances first, then connect, then (optionally) auto-connect free pins,
     /// then validate, then group (grouping freezes internal connections, so it
@@ -69,9 +83,9 @@ public sealed class GdsPlacementExecutor
     /// </param>
     /// <param name="autoConnectFreePins">
     /// Experimental: after the abutment connections, pair still-unoccupied optical
-    /// pins whose absolute angles oppose each other (see <see cref="GdsFreePinPairer"/>)
-    /// and connect each pair. Every pair and every skipped free pin (with reason)
-    /// lands in the report.
+    /// pins whose absolute angles oppose each other AND that face each other
+    /// (see <see cref="GdsFreePinPairer"/>) and connect each pair. Every pair and
+    /// every skipped free pin (with reason) lands in the report.
     /// </param>
     /// <param name="autoConnectRadiusUm">
     /// Maximum pin-to-pin distance (µm) for an auto-connected pair.
@@ -87,6 +101,7 @@ public sealed class GdsPlacementExecutor
         ArgumentNullException.ThrowIfNull(plan);
         var report = new GdsPlacementReport();
         var templates = _templateProvider();
+        PlacedCountSoFar = 0;
 
         var placedViewModels = PlaceAll(plan, templates, report, progress, ct);
         // No ConfigureAwait(false) here: continuations mutate the canvas'
@@ -147,6 +162,7 @@ public sealed class GdsPlacementExecutor
 
             placedViewModels.Add(command.CreatedViewModel);
             report.PlacedCount++;
+            PlacedCountSoFar++;
             if (instruction.Warning is not null)
                 report.Warnings.Add($"'{instruction.InstanceName}': {instruction.Warning}");
         }
@@ -157,6 +173,12 @@ public sealed class GdsPlacementExecutor
     /// <summary>
     /// Recreates the plan's abutment connections; returns the connections actually
     /// created so the validation stage can check exactly this execution's additions.
+    /// Every connection is added deferred (<see cref="DesignCanvasViewModel.ConnectPins"/>)
+    /// and the batch is routed in ONE recalculation at the end (the same pattern the
+    /// auto-connect pass uses) instead of a per-connection re-route storm — an
+    /// <c>await ConnectPinsAsync</c> per connection costs a full re-route each (O(N²)).
+    /// The recalculation runs BEFORE this method returns so the validation stage
+    /// keeps seeing fully routed connections.
     /// </summary>
     private async Task<List<WaveguideConnection>> ConnectAllAsync(
         GdsPlacementPlan plan,
@@ -197,11 +219,16 @@ public sealed class GdsPlacementExecutor
                 continue;
             }
 
-            var connectionVm = await _canvas.ConnectPinsAsync(startPin, endPin);
+            var connectionVm = _canvas.ConnectPins(startPin, endPin);
             if (connectionVm is not null)
+            {
                 created.Add(connectionVm.Connection);
-            report.ConnectedCount++;
+                report.ConnectedCount++;
+            }
         }
+
+        if (created.Count > 0)
+            await _canvas.RecalculateRoutesAsync(); // one routing pass for the whole batch
         return created;
     }
 
@@ -254,18 +281,34 @@ public sealed class GdsPlacementExecutor
 
         var pairing = GdsFreePinPairer.Pair(candidates, radiusUm);
 
-        foreach (var skip in pairing.Skipped)
-            report.SkippedAutoConnect.Add(FormatAutoConnectSkip(candidates[skip.Index].Label, skip, radiusUm));
+        // Same-reason skips beyond the detail cap collapse into one summary line —
+        // a big import would otherwise flood the report with one "no opposing free
+        // pin" line per external port. GroupBy keeps first-occurrence order, so the
+        // report stays deterministic.
+        foreach (var reasonGroup in pairing.Skipped.GroupBy(s => s.Reason))
+        {
+            var skips = reasonGroup.ToList();
+            if (skips.Count > MaxDetailedAutoConnectSkips)
+            {
+                report.SkippedAutoConnect.Add(
+                    FormatAutoConnectSkipSummary(reasonGroup.Key, skips.Count, radiusUm));
+                continue;
+            }
+            foreach (var skip in skips)
+                report.SkippedAutoConnect.Add(FormatAutoConnectSkip(candidates[skip.Index].Label, skip, radiusUm));
+        }
 
         foreach (var pair in pairing.Pairs)
         {
             ct.ThrowIfCancellationRequested();
             var connectionVm = _canvas.ConnectPins(candidatePins[pair.A], candidatePins[pair.B]);
             if (connectionVm is not null)
+            {
                 createdConnections.Add(connectionVm.Connection);
-            report.AutoConnectedCount++;
-            report.AutoConnectedPairs.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{candidates[pair.A].Label} ↔ {candidates[pair.B].Label} ({pair.DistanceUm:0.#} µm)"));
+                report.AutoConnectedCount++;
+                report.AutoConnectedPairs.Add(string.Create(CultureInfo.InvariantCulture,
+                    $"{candidates[pair.A].Label} ↔ {candidates[pair.B].Label} ({pair.DistanceUm:0.#} µm)"));
+            }
         }
 
         if (pairing.Pairs.Count > 0)
@@ -321,14 +364,38 @@ public sealed class GdsPlacementExecutor
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
+    /// <summary>
+    /// Cap of per-pin auto-connect skip detail lines: when more skips than this
+    /// share one reason, they collapse into a single summary line (count + reason)
+    /// instead of flooding the report.
+    /// </summary>
+    private const int MaxDetailedAutoConnectSkips = 5;
+
     private static string FormatAutoConnectSkip(string label, GdsFreePinSkip skip, double radiusUm) =>
         skip.Reason switch
         {
-            GdsFreePinSkipReason.AmbiguousNearestPartner => string.Create(CultureInfo.InvariantCulture,
-                $"{label}: ambiguous — two opposing candidates at nearly the same distance " +
-                $"({skip.NearestDistanceUm:0.#} vs {skip.SecondNearestDistanceUm:0.#} µm)."),
-            _ => string.Create(CultureInfo.InvariantCulture,
-                $"{label}: no opposing free pin within {radiusUm:0.#} µm."),
+            GdsFreePinSkipReason.NotFacingEachOther => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNotFacingFormat"), label, radiusUm),
+            GdsFreePinSkipReason.AmbiguousNearestPartner => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipAmbiguousFormat"),
+                label, skip.NearestDistanceUm, skip.SecondNearestDistanceUm),
+            _ => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNoPartnerFormat"), label, radiusUm),
+        };
+
+    /// <summary>
+    /// One summary line for a same-reason skip flood (see
+    /// <see cref="MaxDetailedAutoConnectSkips"/>): count plus reason, no per-pin labels.
+    /// </summary>
+    private static string FormatAutoConnectSkipSummary(GdsFreePinSkipReason reason, int count, double radiusUm) =>
+        reason switch
+        {
+            GdsFreePinSkipReason.NotFacingEachOther => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryNotFacingFormat"), count),
+            GdsFreePinSkipReason.AmbiguousNearestPartner => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryAmbiguousFormat"), count),
+            _ => string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryNoPartnerFormat"), count, radiusUm),
         };
 
     private void CreateGroup(
@@ -344,13 +411,17 @@ public sealed class GdsPlacementExecutor
             return; // CreateGroupCommand needs ≥2 components; a lone component stays ungrouped.
 
         progress?.Report($"Grouping {groupCandidates.Count} components as '{plan.GroupName}'…");
-        var command = new CreateGroupCommand(_canvas, groupCandidates);
+        // The final name rides into the command: the group is named when it is
+        // constructed — BEFORE the group ViewModel is added and selected. Renaming
+        // after selection would leave bound panels showing the placeholder
+        // Group_HHmmss name (ComponentViewModel.DisplayName has no change
+        // notification).
+        var command = new CreateGroupCommand(_canvas, groupCandidates, plan.GroupName);
         Execute(command);
 
         if (command.CreatedGroup is null)
             return; // grouping was rejected (e.g. locked components) — components stay ungrouped.
 
-        command.CreatedGroup.GroupName = plan.GroupName;
         report.GroupCreated = true;
         report.GroupName = plan.GroupName;
     }
@@ -368,11 +439,13 @@ public sealed class GdsPlacementExecutor
     /// <summary>
     /// The plan contract guarantees cardinal rotations; a non-cardinal value is
     /// snapped to the nearest quarter turn and surfaced as a warning instead of
-    /// silently misplacing the instance.
+    /// silently misplacing the instance. Exact midpoints (x.5 turns, e.g. 45°)
+    /// round AWAY FROM ZERO — <see cref="Math.Round(double)"/>'s banker's
+    /// rounding would snap 45° down to 0° but 135° up to 180°.
     /// </summary>
     private static int SnapToQuarterTurns(double rotationDegrees, string instanceName, GdsPlacementReport report)
     {
-        var snappedTurns = (int)Math.Round(rotationDegrees / 90.0);
+        var snappedTurns = (int)Math.Round(rotationDegrees / 90.0, MidpointRounding.AwayFromZero);
         var snappedDegrees = snappedTurns * 90.0;
         if (Math.Abs(rotationDegrees - snappedDegrees) > 0.001)
         {
@@ -384,48 +457,4 @@ public sealed class GdsPlacementExecutor
 
     private static string Describe(GdsConnectionInstruction connection) =>
         $"connection #{connection.A.InstanceIndex}:{connection.A.PinName} ↔ #{connection.B.InstanceIndex}:{connection.B.PinName}";
-}
-
-/// <summary>
-/// Outcome of <see cref="GdsPlacementExecutor.ExecuteAsync"/>: how much of the
-/// plan landed on the canvas and why the rest did not. All collections are
-/// user-presentable strings, shown in the import dialog's result panel.
-/// </summary>
-public sealed class GdsPlacementReport
-{
-    /// <summary>Number of instances placed on the canvas.</summary>
-    public int PlacedCount { get; internal set; }
-
-    /// <summary>Number of abutment connections created.</summary>
-    public int ConnectedCount { get; internal set; }
-
-    /// <summary>Number of auto-connected free-pin pairs (experimental pass).</summary>
-    public int AutoConnectedCount { get; internal set; }
-
-    /// <summary>Per-pair descriptions of auto-connected free pins.</summary>
-    public List<string> AutoConnectedPairs { get; } = new();
-
-    /// <summary>Per-pin reasons for free pins the auto-connect pass did not pair.</summary>
-    public List<string> SkippedAutoConnect { get; } = new();
-
-    /// <summary>
-    /// Issues the post-batch <see cref="DesignValidator"/> run found in the
-    /// connections created by this execution (type, location, involved pins).
-    /// </summary>
-    public List<string> ValidationWarnings { get; } = new();
-
-    /// <summary>Per-instance reasons for placements that did not happen.</summary>
-    public List<string> SkippedPlacements { get; } = new();
-
-    /// <summary>Per-connection reasons for connections that were not created.</summary>
-    public List<string> SkippedConnections { get; } = new();
-
-    /// <summary>Non-fatal notes (mirrored instances, non-cardinal rotation snaps).</summary>
-    public List<string> Warnings { get; } = new();
-
-    /// <summary>True when the placed components were wrapped in a group.</summary>
-    public bool GroupCreated { get; internal set; }
-
-    /// <summary>Name of the created group (the imported top cell), or null.</summary>
-    public string? GroupName { get; internal set; }
 }
