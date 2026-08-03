@@ -607,6 +607,100 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
+    public async Task Explode_LunimaExportArtifactBehindPassThroughWrapper_SkippedWithOneInfoNote()
+    {
+        // The user's mixed-backend round-trip: gdsfactory's import_gds names the
+        // merged component after the source file's TOP cell, so the flattened
+        // nazca partial re-enters the merged file behind nazca's default 'nazca'
+        // pass-through wrapper (one untransformed reference, nothing else). A
+        // name-only artifact check misses this — the wrapper became a pin-less
+        // draft and failed with "not registered: no pins" plus a skipped
+        // placement, the exact cascade the artifact skip exists to prevent.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("nazca", 20000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .BeginCell("nazca")
+                .SRef("ConnectAPIC_NazcaPartial", 0, 0)
+            .EndCell()
+            .BeginCell("ConnectAPIC_NazcaPartial")
+                .Boundary(111, 0, (0, 0), (5000, 0), (5000, 3000), (0, 3000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("wgA");
+        result.Instances.ShouldHaveSingleItem().CellName.ShouldBe("wgA");
+        result.Warnings.ShouldBeEmpty(
+            "the wrapped artifact is skipped by convention, not failed as an unpersistable draft");
+        var note = result.Infos.ShouldHaveSingleItem();
+        note.ShouldContain("nazca");
+        note.ShouldContain("ConnectAPIC_NazcaPartial");
+        note.ShouldContain("export artifact");
+        note.ShouldContain("not reconstructed");
+    }
+
+    [Fact]
+    public async Task Explode_PassThroughWrapperAroundNormalCell_IsNotSkipped()
+    {
+        // The wrapper look-through must ONLY recognize wrappers around artifact
+        // cells: a pass-through wrapper around a real design cell imports
+        // exactly as before (draft named after the wrapper, absorbing the
+        // subtree — pins included).
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("nazca", 0, 0)
+            .EndCell()
+            .BeginCell("nazca")
+                .SRef("wgA", 0, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("nazca");
+        result.Instances.ShouldHaveSingleItem().CellName.ShouldBe("nazca");
+        result.ImportedCellDrafts[0].Pins.Count.ShouldBe(2);
+        result.Warnings.ShouldBeEmpty();
+        result.Infos.ShouldBeEmpty("a wrapper around a normal cell is not an export artifact");
+    }
+
+    [Fact]
+    public async Task Explode_TransformedWrapperAroundArtifact_IsNotSkipped()
+    {
+        // A wrapper whose reference TRANSFORMS the artifact (here: 90° rotation)
+        // is not a pass-through — unwrapping would misplace the geometry, so the
+        // cell is treated as ordinary design content (draft, no artifact note).
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("nazca", 0, 0)
+            .EndCell()
+            .BeginCell("nazca")
+                .SRef("ConnectAPIC_NazcaPartial", 0, 0, angleDegrees: 90)
+            .EndCell()
+            .BeginCell("ConnectAPIC_NazcaPartial")
+                .Boundary(111, 0, (0, 0), (5000, 0), (5000, 3000), (0, 3000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("nazca");
+        result.Instances.ShouldHaveSingleItem().CellName.ShouldBe("nazca");
+        result.Infos.ShouldBeEmpty("a transforming wrapper is not a pass-through artifact");
+    }
+
+    [Fact]
     public async Task Explode_ZeroGeometryCellResolvingToKnownComponent_IsKept()
     {
         // A deliberate name binding to a PDK component wins over the

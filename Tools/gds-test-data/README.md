@@ -68,3 +68,45 @@ save_options = kdb.SaveLayoutOptions()
 save_options.write_context_info = False
 c.write_gds("gdsfactory_mzi_like.gds", save_options=save_options)
 ```
+
+## test.gds
+
+- **Produced by:** a **Lunima mixed-backend export, part 2 of 2** (the
+  gdsfactory merge script `test.py`): `gf.Component('ConnectAPIC_Design')`
+  with 30 `add_ref` route segments of ubcpdk-based
+  `gf.components.straight` / `bend_circular` (one `straight(length=0.00)`),
+  merging `test_nazca_partial.gds` (part 1, nazca-rendered devices) via
+  `gf.import_gds`. Committed **as-is** (the exact bytes the user reported);
+  `test_nazca_partial.gds` itself is NOT committed — its content is fully
+  contained in `test.gds`.
+- **Structure (34 cells, 1 nm database unit):** top-cell candidates
+  `$$$CONTEXT_INFO$$$` (kfactory metadata, references all 23 route cells at
+  the origin) and `ConnectAPIC_Design` (31 references: 30 route cells + the
+  merged partial). The 22 distinct route cells (20 `straight_*`, 2
+  `bend_circular_*`) carry waveguide cores on (1,0) plus a (68,0) devrec halo
+  and **no port labels**; the zero-length straight
+  (`straight_..._L0_N_a362bd09`) is an empty cell. The merged partial sits
+  behind nazca's default **`nazca`** pass-through wrapper (gf.import_gds names
+  the component after the source file's top cell) →
+  `ConnectAPIC_NazcaPartial` → 7 flattened device references (2× mmi2x2_dp,
+  ebeam_bdc_te1550, 2× ebeam_crossing4, ebeam_adiabatic_te/tm1550) whose
+  (1,10)/(501,1) port labels are nested inside the device cells.
+- **Expected import behavior (asserted by
+  `UnitTests/Services/GdsImport/MixedBackendReimportIntegrationTests.cs`):**
+  explode registers the 22 route cells, places 29 instances (31 refs −
+  zero-length straight − artifact wrapper), skips `ConnectAPIC_NazcaPartial`
+  behind its `nazca` wrapper with one info note (flattened partial geometry
+  is not reconstructed, v1), drops the zero-geometry straight with one info
+  note, and reconstructs 20 route↔route abutments (the chains run through
+  the skipped devices, so the joints at device ports dangle). Black-box
+  finds no pins (no top-level labels; no (1,0) polygon touches the top bbox
+  — route ends sit 0.225 µm inside the devrec halo) and fails with the
+  honest "no pins → nothing registered" warnings.
+
+### Regenerating
+
+Part 2 of the two-script export (`test.py`, run after the nazca part 1 wrote
+`test_nazca_partial.gds` next to it) is reproduced in the issue/PR
+discussion; the committed file is the ground truth and is not regenerated in
+CI.
+

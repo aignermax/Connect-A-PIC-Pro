@@ -18,7 +18,8 @@ namespace CAP_DataAccess.Import.Gds;
 /// absorb their whole subtree (one level of components, matching
 /// <see cref="GdsCellFlattener.GetInstanceTree"/>). Two cell kinds never become
 /// drafts or instances — zero-geometry cells (empty flattened bbox) and our own
-/// export artifacts (<see cref="LunimaExportArtifactCellNames"/>); each skipped
+/// export artifacts (<see cref="LunimaExportArtifactCellNames"/>, matched
+/// directly or through a pass-through wrapper); each skipped
 /// cell produces ONE info note instead of a per-instance failure cascade.</item>
 /// <item><b>BlackBox</b>: the whole top cell becomes a single draft.</item>
 /// </list>
@@ -46,7 +47,12 @@ public static class GdsHierarchyImporter
     /// Currently the mixed-backend export's flattened nazca partial
     /// (<c>MixedBackendGdsOrchestrator.NazcaPartialTopCellName</c> in CAP.Avalonia;
     /// duplicated here as a literal because CAP-DataAccess must not reference the
-    /// UI assembly). Add future artifact names here.
+    /// UI assembly). Add future artifact names here. The match looks through
+    /// pass-through wrappers (<see cref="TryUnwrapToArtifact"/>): gdsfactory's
+    /// <c>import_gds</c> names a merged component after the source file's TOP
+    /// cell, so a re-imported mixed-backend export nests the partial under
+    /// nazca's default <c>nazca</c> wrapper — the top cell's direct child is the
+    /// wrapper, not the artifact cell itself.
     /// </summary>
     private static readonly IReadOnlySet<string> LunimaExportArtifactCellNames =
         new HashSet<string>(StringComparer.Ordinal) { "ConnectAPIC_NazcaPartial" };
@@ -130,13 +136,19 @@ public static class GdsHierarchyImporter
             string cell = gdsInstance.CellName;
 
             // Our own export artifacts are not design content — the cell and all
-            // its instances vanish with ONE note per cell.
-            if (LunimaExportArtifactCellNames.Contains(cell))
+            // its instances vanish with ONE note per cell. The match looks
+            // through pass-through wrappers: gdsfactory nests a merged partial
+            // under nazca's default 'nazca' wrapper, so the direct child is the
+            // wrapper, not the artifact cell itself.
+            if (TryUnwrapToArtifact(session.Library, cell, out var artifactLeaf))
             {
                 if (artifactNoted.Add(cell))
                 {
+                    var subject = string.Equals(artifactLeaf, cell, StringComparison.Ordinal)
+                        ? $"'{cell}'"
+                        : $"'{cell}' (pass-through wrapper for '{artifactLeaf}')";
                     session.Infos.Add(
-                        $"Lunima export artifact '{cell}' skipped — flattened partial geometry " +
+                        $"Lunima export artifact {subject} skipped — flattened partial geometry " +
                         "is not reconstructed (v1).");
                 }
                 continue;
@@ -251,6 +263,48 @@ public static class GdsHierarchyImporter
             90.0 * Math.Round(angleDegrees / 90.0, MidpointRounding.AwayFromZero));
 
     /// <summary>
+    /// True when <paramref name="cellName"/> IS one of our export artifacts or
+    /// reaches one through a chain of pure pass-through wrappers (no elements of
+    /// its own beyond a single untransformed — 1×1, unmagnified, unreflected,
+    /// unrotated — reference; the same unwrap rule the import dialog applies to
+    /// top-cell candidates, cf. <c>GdsImportService.UnwrapPassThroughTopCell</c>).
+    /// <paramref name="artifactLeaf"/> receives the matched artifact cell name —
+    /// equal to <paramref name="cellName"/> for a direct hit.
+    /// </summary>
+    private static bool TryUnwrapToArtifact(
+        GdsLibrary library, string cellName, out string artifactLeaf)
+    {
+        var visited = new HashSet<string>(StringComparer.Ordinal);
+        var current = cellName;
+        while (visited.Add(current))
+        {
+            if (LunimaExportArtifactCellNames.Contains(current))
+            {
+                artifactLeaf = current;
+                return true;
+            }
+            if (!library.Cells.TryGetValue(current, out var cell)
+                || cell.Elements.Count != 1
+                || cell.Elements[0] is not GdsReference reference
+                || reference.Columns != 1
+                || reference.Rows != 1
+                || reference.Reflected
+                || Math.Abs(reference.Magnification - 1.0) > 1e-9
+                || Math.Abs(reference.AngleDegrees
+                            - (360.0 * Math.Round(reference.AngleDegrees / 360.0))) > 1e-9)
+            {
+                artifactLeaf = string.Empty;
+                return false;
+            }
+            current = reference.CellName;
+        }
+
+        // Reference cycle before any artifact — not a pass-through chain.
+        artifactLeaf = string.Empty;
+        return false;
+    }
+
+    /// <summary>
     /// The transform properties that make an instance noteworthy for warnings.
     /// All expanded members of one AREF share the same signature, so keying the
     /// warnings on it collapses the per-member flood into one warning per
@@ -289,9 +343,10 @@ public static class GdsHierarchyImporter
             if (signature.Reflected)
             {
                 session.Warnings.Add(
-                    $"{subject} {isAre} mirrored (GDS STRANS); placed " +
-                    "unreflected (v1 limitation — the core component model has no mirror support). " +
-                    "Pin positions for connection reconstruction use the true reflected transform.");
+                    $"{subject} {isAre} mirrored (GDS STRANS); the core component model has no " +
+                    "mirror support, so the component body is placed unreflected (v1 limitation) — " +
+                    "its pins are mirrored onto the true reflected positions, keeping the " +
+                    "reconstructed connections exact.");
             }
             if (Math.Abs(signature.Magnification - 1.0) > 1e-9)
             {
