@@ -126,4 +126,52 @@ public class GdsImportButtonViewModelTests : IDisposable
         dialog.ShouldNotBeNull().ZoomToFitAfterImport.ShouldBeNull(
             "without MainViewModel wiring (e.g. headless runs) there is no zoom to fire");
     }
+
+    [Fact]
+    public async Task OpenGdsImportDialogForFile_OpensDialogForThatFile()
+    {
+        // The File→Open dialog's GDS route: no file picking, the dialog opens
+        // straight for the handed-over path (and analyzes it on open).
+        var vm = CreateButton();
+        GdsImportDialogViewModel? dialog = null;
+        vm.ShowImportDialogAsync = d => { dialog = d; return Task.CompletedTask; };
+        var fired = 0;
+        vm.ZoomToFitAfterImport = (_, _) => fired++;
+
+        await vm.OpenGdsImportDialogForFileAsync("picked.gds");
+
+        var shown = dialog.ShouldNotBeNull("a routed file opens the import dialog directly");
+        shown.GdsFilePath.ShouldBe("picked.gds");
+        shown.ZoomToFitAfterImport.ShouldNotBeNull(
+            "the zoom callback rides along, exactly as on the file-pick path")
+            .Invoke(900, 800);
+        fired.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task OpenGdsImportDialogForFile_MissingViewWiring_ReportsUnavailable()
+    {
+        var vm = CreateButton();
+        string? status = null;
+        vm.UpdateStatus = s => status = s;
+
+        await vm.OpenGdsImportDialogForFileAsync("picked.gds");
+
+        status.ShouldBe(LocalizationService.Instance.Translate("GdsImport.StatusUnavailable"));
+    }
+
+    [Fact]
+    public async Task OpenGdsImportDialogForFile_DialogHostThrows_ReportsStatusInsteadOfThrowing()
+    {
+        var vm = CreateButton();
+        vm.ShowImportDialogAsync = _ => throw new InvalidOperationException("dialog host exploded");
+        string? status = null;
+        vm.UpdateStatus = s => status = s;
+
+        await vm.OpenGdsImportDialogForFileAsync("picked.gds");
+
+        status.ShouldBe(string.Format(
+            LocalizationService.Instance.Translate("GdsImport.StatusOpenFailed"),
+            "dialog host exploded"));
+    }
 }

@@ -1014,6 +1014,7 @@
   "Toolbar.DeleteModeTip": "削除モード (D) — コンポーネントまたは接続をクリックして削除（Del は現在の選択を削除）",
   "Toolbar.ExportButton": "📤 エクスポート ▾",
   "Toolbar.ExportTip": "設計をさまざまな形式にエクスポート",
+  "Toolbar.ImportButton": "📥 インポート…",
   "Toolbar.LoadDesignTip": "設計を読み込み",
   "Toolbar.LoadPdk": "PDK を読み込み…",
   "Toolbar.LoadPdkTip": "PDK コンポーネントライブラリ（JSON）を読み込み",

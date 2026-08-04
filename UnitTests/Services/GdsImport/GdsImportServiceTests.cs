@@ -107,6 +107,80 @@ public class GdsImportServiceTests : IDisposable
             () => GdsImportService.AnalyzeAsync(missing));
     }
 
+    [Fact]
+    public async Task AnalyzeAsync_MetadataSentinelCell_IsFilteredFromCandidates()
+    {
+        // A gdsfactory/kfactory file: the run-metadata cell floats unreferenced
+        // next to the design top cell and must not be offered as a second
+        // candidate the user has to guess between.
+        var library = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 10000, 0)
+            .EndCell()
+            .BeginCell("$$$CONTEXT_INFO$$$")
+                .Text(1, 0, "kfactory run metadata", 0, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray();
+        var path = WriteGds(library);
+
+        var analysis = await GdsImportService.AnalyzeAsync(path);
+
+        analysis.TopCellCandidates.ShouldBe(new[] { "TOP" });
+        analysis.TopCells.ShouldHaveSingleItem().CellName.ShouldBe("TOP");
+        analysis.CellCount.ShouldBe(4,
+            "the sentinel still counts toward the library size summary — only the candidate list is filtered");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_OnlyMetadataSentinelCells_ThrowsNoLayoutTopCell()
+    {
+        // A file whose ONLY cell is kfactory metadata must fail the analysis
+        // with a clear message instead of offering the junk cell for import.
+        var library = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("$$$CONTEXT_INFO$$$")
+                .Text(1, 0, "kfactory run metadata", 0, 0)
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+        var path = WriteGds(library);
+
+        var ex = await Should.ThrowAsync<InvalidDataException>(
+            () => GdsImportService.AnalyzeAsync(path));
+
+        ex.Message.ShouldContain("no layout top cell");
+        ex.Message.ShouldContain("$$$CONTEXT_INFO$$$");
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_CellNameMerelyStartingWithSentinelPrefix_StaysACandidate()
+    {
+        // The sentinel rule is deliberately conservative: only names wrapped in
+        // $$$ on BOTH sides are filtered. A cell that merely starts with $$$
+        // stays a candidate (two references — not a pass-through wrapper, so
+        // the unwrap does not replace it either).
+        var library = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("$$$partial")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 10000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray();
+        var path = WriteGds(library);
+
+        var analysis = await GdsImportService.AnalyzeAsync(path);
+
+        analysis.TopCellCandidates.ShouldBe(new[] { "$$$partial" });
+    }
+
     // ── Happy path ───────────────────────────────────────────────────────────
 
     [Fact]

@@ -1014,6 +1014,7 @@
   "Toolbar.DeleteModeTip": "Löschmodus (D) — Komponenten oder Verbindungen anklicken, um sie zu entfernen (Entf löscht die aktuelle Auswahl)",
   "Toolbar.ExportButton": "📤 Exportieren ▾",
   "Toolbar.ExportTip": "Design in verschiedene Formate exportieren",
+  "Toolbar.ImportButton": "📥 Importieren…",
   "Toolbar.LoadDesignTip": "Design laden",
   "Toolbar.LoadPdk": "PDK laden…",
   "Toolbar.LoadPdkTip": "Eine PDK-Komponentenbibliothek laden (JSON)",

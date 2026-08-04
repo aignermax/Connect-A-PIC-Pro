@@ -389,6 +389,9 @@ public partial class MainViewModel : ObservableObject
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
         GdsImport.UpdateStatus = UpdateStatusText;
+        // A .gds/.gdsii pick in the File→Open dialog routes into the GDS import
+        // flow (FileOperations owns no import knowledge beyond the callback).
+        FileOperations.OpenGdsImportRequested = GdsImport.OpenGdsImportDialogForFileAsync;
         // Key-preserving sink: lets a live UI language switch re-translate the startup
         // "Loaded N component types" status while it is still showing.
         LeftPanel.UpdateLocalizedStatus = SetLocalizedStatus;

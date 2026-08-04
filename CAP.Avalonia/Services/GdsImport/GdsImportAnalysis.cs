@@ -26,7 +26,10 @@ public sealed record GdsImportAnalysis
     /// The candidates for the layout's top cell, in file order: cells not
     /// referenced by any other cell, with pure pass-through wrappers (no own
     /// geometry, exactly one untransformed reference — e.g. nazca's default
-    /// 'nazca' cell) replaced by the cell they wrap.
+    /// 'nazca' cell) replaced by the cell they wrap, and metadata sentinel
+    /// cells (name wrapped in <c>$$$</c>, e.g. kfactory's
+    /// <c>$$$CONTEXT_INFO$$$</c>) filtered out. Never empty — the analysis
+    /// throws instead of offering no (or only junk) candidates.
     /// </summary>
     public IReadOnlyList<string> TopCellCandidates { get; init; } = Array.Empty<string>();
 

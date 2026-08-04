@@ -54,16 +54,24 @@ public sealed class GdsImportService
     /// <summary>
     /// Reads the library structure of a GDS file for the import dialog: top-cell
     /// candidates plus a size summary (cell count, per-candidate instance counts).
+    /// Metadata sentinel cells (<see cref="IsMetadataSentinelCell"/>) are filtered
+    /// out of the candidates — they carry no layout and only confuse the choice.
     /// </summary>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
-    /// <exception cref="InvalidDataException">The file is not a readable GDS II stream.</exception>
+    /// <exception cref="InvalidDataException">
+    /// The file is not a readable GDS II stream, or nothing but metadata sentinel
+    /// cells was found (there is no layout top cell to import).
+    /// </exception>
     public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
         var library = await ReadLibraryAsync(gdsPath, ct);
         var candidates = library.TopCellCandidates
             .Select(name => UnwrapPassThroughTopCell(library, name))
+            .Where(name => !IsMetadataSentinelCell(name))
             .Distinct(StringComparer.Ordinal)
             .ToList();
+        if (candidates.Count == 0)
+            throw new InvalidDataException(NoLayoutTopCellMessage(library, gdsPath));
         return new GdsImportAnalysis
         {
             LibraryName = library.Name,
@@ -73,6 +81,35 @@ public sealed class GdsImportService
                 .Select(name => new GdsTopCellSummary(name, CountDirectInstances(library, name)))
                 .ToList(),
         };
+    }
+
+    /// <summary>
+    /// True for metadata sentinel cells that must never be offered as layout top
+    /// cells. kfactory (the engine behind gdsfactory) writes a
+    /// <c>$$$CONTEXT_INFO$$$</c> cell with run metadata into every file; it is
+    /// unreferenced, so it floats into the top-candidate list despite holding no
+    /// layout. The rule is deliberately conservative: only names wrapped in
+    /// <c>$$$</c> on BOTH sides count — the shape layout tools reserve for such
+    /// sentinels. A name that merely starts (or ends) with <c>$$$</c> stays a
+    /// candidate.
+    /// </summary>
+    internal static bool IsMetadataSentinelCell(string cellName) =>
+        cellName.StartsWith("$$$", StringComparison.Ordinal)
+        && cellName.EndsWith("$$$", StringComparison.Ordinal);
+
+    /// <summary>
+    /// The analysis-failure message when no importable top cell remains. Names the
+    /// sentinel cells when they are the reason — "no candidates" alone would leave
+    /// the user staring at a file that visibly contains cells.
+    /// </summary>
+    private static string NoLayoutTopCellMessage(GdsLibrary library, string gdsPath)
+    {
+        var fileName = Path.GetFileName(gdsPath);
+        return library.Cells.Keys.Any(IsMetadataSentinelCell)
+            ? $"'{fileName}' contains no layout top cell: its only top-level cell(s) are metadata " +
+              "sentinels (name wrapped in '$$$', e.g. kfactory's '$$$CONTEXT_INFO$$$') — " +
+              "there is no layout to import."
+            : $"'{fileName}' contains no layout top cell to import.";
     }
 
     /// <summary>
@@ -210,6 +247,7 @@ public sealed class GdsImportService
             RegisteredComponents = registered,
             Instances = import.Instances,
             Connections = import.Connections,
+            TopCellWaveguidePolygons = import.TopCellWaveguidePolygons,
             Warnings = warnings,
             Infos = infos,
             UserPdkName = pdkName,

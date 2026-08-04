@@ -150,6 +150,15 @@
                         Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="{loc:Localize Toolbar.SaveDesignTip}"/>
                 <Button Content="💾+" Command="{Binding SaveDesignAsCommand}"
                         Width="50" Margin="2" Background="#3d3d3d" ToolTip.Tip="{loc:Localize Toolbar.SaveDesignAsTip}"/>
+                <!-- GDS import as the Export button's sibling — same command as the
+                     library panel's GDS button (#808), so the tooltip reuses its text. -->
+                <Button MinWidth="95" Margin="2" Padding="8,4" Background="#3d3d3d"
+                        Command="{Binding GdsImport.OpenGdsImportDialogCommand}"
+                        ToolTip.Tip="{loc:Localize GdsImport.OpenTip}">
+                    <Button.Content>
+                        <TextBlock Text="{loc:Localize Toolbar.ImportButton}"/>
+                    </Button.Content>
+                </Button>
                 <!-- Unified Export flyout — add formats via IExportFormat + ExportMenuViewModel, no axaml changes needed -->
                 <Button MinWidth="95" Margin="2" Padding="8,4" Background="#3d4d3d"
                         ToolTip.Tip="{loc:Localize Toolbar.ExportTip}">

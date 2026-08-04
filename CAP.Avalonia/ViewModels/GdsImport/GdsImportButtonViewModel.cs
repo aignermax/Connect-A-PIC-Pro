@@ -12,11 +12,13 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.GdsImport;
 
 /// <summary>
-/// ViewModel behind the library panel's "Import GDS" button (issue #808). Kept
-/// separate from <see cref="LeftPanelViewModel"/> on purpose: the left panel
-/// already carries component-library, PDK-management and trash responsibilities,
-/// and GDS import is a self-contained flow (file pick → dialog → canvas placement)
-/// that only needs the panel's template list and registration callback.
+/// ViewModel behind the GDS import entry points (issue #808): the library panel's
+/// "Import GDS" button, the toolbar's Import button, and the File→Open dialog's
+/// .gds/.gdsii route (<see cref="OpenGdsImportDialogForFileAsync"/>). Kept separate
+/// from <see cref="LeftPanelViewModel"/> on purpose: the left panel already carries
+/// component-library, PDK-management and trash responsibilities, and GDS import is
+/// a self-contained flow (file pick → dialog → canvas placement) that only needs
+/// the panel's template list and registration callback.
 /// </summary>
 public partial class GdsImportButtonViewModel : ObservableObject
 {
@@ -79,7 +81,45 @@ public partial class GdsImportButtonViewModel : ObservableObject
     [RelayCommand]
     private async Task OpenGdsImportDialog()
     {
-        if (FileDialogService is null || ShowImportDialogAsync is null)
+        if (FileDialogService is null)
+        {
+            UpdateStatus?.Invoke(LocalizationService.Instance.Translate("GdsImport.StatusUnavailable"));
+            return;
+        }
+
+        string? gdsPath;
+        try
+        {
+            gdsPath = await FileDialogService.ShowOpenFileDialogAsync(
+                LocalizationService.Instance.Translate("GdsImport.OpenFileTitle"),
+                "GDS files (*.gds;*.gdsii)|*.gds;*.gdsii|All files (*.*)|*.*");
+        }
+        catch (Exception ex)
+        {
+            // A failing file dialog must not escape the command as an unhandled
+            // task exception — surface it on the status bar instead (same pattern
+            // as the unavailable case above).
+            UpdateStatus?.Invoke(string.Format(
+                LocalizationService.Instance.Translate("GdsImport.StatusOpenFailed"), ex.Message));
+            return;
+        }
+
+        if (string.IsNullOrEmpty(gdsPath))
+            return;
+
+        await OpenGdsImportDialogForFileAsync(gdsPath);
+    }
+
+    /// <summary>
+    /// Opens the import dialog for an already-picked .gds file — e.g. a GDS picked
+    /// in the File→Open design dialog, which <c>FileOperationsViewModel</c> routes
+    /// here instead of the .lun load path. The dialog analyzes the file when it
+    /// opens, so the path only needs to exist.
+    /// </summary>
+    /// <param name="gdsPath">Absolute path of the .gds/.gdsii file to import.</param>
+    public async Task OpenGdsImportDialogForFileAsync(string gdsPath)
+    {
+        if (ShowImportDialogAsync is null)
         {
             UpdateStatus?.Invoke(LocalizationService.Instance.Translate("GdsImport.StatusUnavailable"));
             return;
@@ -87,12 +127,6 @@ public partial class GdsImportButtonViewModel : ObservableObject
 
         try
         {
-            var gdsPath = await FileDialogService.ShowOpenFileDialogAsync(
-                LocalizationService.Instance.Translate("GdsImport.OpenFileTitle"),
-                "GDS files (*.gds;*.gdsii)|*.gds;*.gdsii|All files (*.*)|*.*");
-            if (string.IsNullOrEmpty(gdsPath))
-                return;
-
             var importService = new GdsImportService(
                 UserPdkStore.CreateDefault(),
                 () => _leftPanel.AllTemplates.ToList(),
@@ -111,9 +145,8 @@ public partial class GdsImportButtonViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            // A failing file dialog or dialog host must not escape the command as
-            // an unhandled task exception — surface it on the status bar instead
-            // (same pattern as the unavailable case above).
+            // A failing dialog host must not escape as an unhandled task exception
+            // — surface it on the status bar instead.
             UpdateStatus?.Invoke(string.Format(
                 LocalizationService.Instance.Translate("GdsImport.StatusOpenFailed"), ex.Message));
         }

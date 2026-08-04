@@ -1014,6 +1014,7 @@
   "Toolbar.DeleteModeTip": "Delete mode (D) — click components or connections to remove them (Del deletes the current selection)",
   "Toolbar.ExportButton": "📤 Export ▾",
   "Toolbar.ExportTip": "Export design to various formats",
+  "Toolbar.ImportButton": "📥 Import…",
   "Toolbar.LoadDesignTip": "Load design",
   "Toolbar.LoadPdk": "Load PDK…",
   "Toolbar.LoadPdkTip": "Load a PDK component library (JSON)",

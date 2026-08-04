@@ -1014,6 +1014,7 @@
   "Toolbar.DeleteModeTip": "删除模式 (D) — 单击元件或连接以移除（Del 键删除当前选中项）",
   "Toolbar.ExportButton": "📤 导出 ▾",
   "Toolbar.ExportTip": "将设计导出为多种格式",
+  "Toolbar.ImportButton": "📥 导入…",
   "Toolbar.LoadDesignTip": "载入设计",
   "Toolbar.LoadPdk": "载入 PDK…",
   "Toolbar.LoadPdkTip": "载入 PDK 元件库 (JSON)",

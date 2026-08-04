@@ -181,6 +181,15 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     public Func<Task>? RequestGdsFactoryExport { get; set; }
 
+    /// <summary>
+    /// Routes a .gds/.gdsii pick from the open-design dialog into the GDS import
+    /// flow (the import dialog opens for that file, already analyzed on open).
+    /// Wired by <see cref="MainViewModel"/> to
+    /// <c>GdsImportButtonViewModel.OpenGdsImportDialogForFileAsync</c>; null in
+    /// headless contexts, where the pick surfaces a status hint instead.
+    /// </summary>
+    public Func<string, Task>? OpenGdsImportRequested { get; set; }
+
     /// <summary>Initializes a new instance of <see cref="FileOperationsViewModel"/>.</summary>
     public FileOperationsViewModel(
         DesignCanvasViewModel canvas,
@@ -771,12 +780,48 @@ public partial class FileOperationsViewModel : ObservableObject
 
         var filePath = await FileDialogService.ShowOpenFileDialogAsync(
             "Load Design",
-            "Lunima Files|*.lun|All Files|*.*");
+            "Lunima Files|*.lun|GDS files (*.gds;*.gdsii)|*.gds;*.gdsii|All Files|*.*");
 
-        if (filePath != null)
+        if (filePath == null)
+            return;
+
+        // A GDS pick routes into the GDS import flow instead of the .lun load
+        // path: the import dialog opens for that file and analyzes it on open.
+        // The import only ADDS to the canvas, so nothing here was put at risk
+        // by the (already answered) unsaved-changes prompt.
+        if (IsGdsFile(filePath))
         {
-            await LoadDesignFromFileAsync(filePath);
+            await OpenGdsImportAsync(filePath);
+            return;
         }
+
+        await LoadDesignFromFileAsync(filePath);
+    }
+
+    /// <summary>True for GDS II layout files (.gds/.gdsii, case-insensitive).</summary>
+    internal static bool IsGdsFile(string filePath)
+    {
+        var extension = Path.GetExtension(filePath);
+        return extension.Equals(".gds", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".gdsii", StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// Hands a GDS pick from the open-design dialog to the import flow and fires
+    /// <see cref="ProjectOpened"/> so the Home screen lets go of the window — the
+    /// import dialog and its canvas result must not stay hidden behind it.
+    /// </summary>
+    private async Task OpenGdsImportAsync(string gdsPath)
+    {
+        if (OpenGdsImportRequested is null)
+        {
+            UpdateStatus?.Invoke(Services.Localization.LocalizationService.Instance
+                .Translate("GdsImport.StatusUnavailable"));
+            return;
+        }
+
+        await OpenGdsImportRequested(gdsPath);
+        ProjectOpened?.Invoke();
     }
 
     /// <summary>
