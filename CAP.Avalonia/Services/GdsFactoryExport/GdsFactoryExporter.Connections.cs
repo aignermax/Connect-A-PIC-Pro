@@ -157,6 +157,10 @@ public partial class GdsFactoryExporter
             var segments = frozenPath.Path?.Segments;
             if (segments == null || segments.Count == 0)
             {
+                // Pin-less geometry (GDS-imported route outline) without segments has
+                // nothing to emit — and no pins a fallback straight could anchor on.
+                if (frozenPath.StartPin is null || frozenPath.EndPin is null)
+                    continue;
                 GdsFactorySegmentWriter.AppendPinToPinFallback(
                     sb, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
                 continue;

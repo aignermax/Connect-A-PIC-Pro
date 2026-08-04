@@ -282,9 +282,11 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     /// frame: the mmi1 footprint centre (filled in every panel), per-connection
     /// probe points sampled ON the routed segments of the original design
     /// (panel 1 renders them; panel 2 must contain the same centerlines as
-    /// flattened waveguide polygons), and the frozen group-internal path probe
-    /// points of the auto-connect canvas (panel 4 — empty when the scenario
-    /// restores nothing). Probe points lie on the segment geometry itself
+    /// flattened waveguide polygons), the imported top-cell route outlines of the
+    /// re-imported group (pin-less frozen paths — panels 3/4), and the restored
+    /// (pinned) frozen group-internal connections of the auto-connect canvas
+    /// (panel 4 — empty when the scenario restores nothing). Probe points lie on
+    /// the segment geometry itself
     /// (straight-segment quarter points, arc points from each bend's own
     /// centre/radius/sweep) rather than at pin midpoints, because the routes
     /// bend — the halfring↔adiabatic span is even routed as a full 360° circle
@@ -331,8 +333,28 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
                 placedMmi1.PhysicalX + placedMmi1.WidthMicrometers / 2,
                 placedMmi1.PhysicalY + placedMmi1.HeightMicrometers / 2);
 
+            // Probe points closer to a pin than the pin-glyph radius (≈5 µm glyph
+            // plus its white ring) are skipped — pins draw above the frozen paths,
+            // so a short outline section entirely under a pin-glyph cloud is
+            // legitimately invisible (the same concession CrossingConnectionIndex
+            // makes for the pin-covered crossing span in panel 1).
+            const double PinGlyphCoverRadiusUm = 6.0;
+            var pinPositions = groupOff.GetAllComponentsRecursive()
+                .SelectMany(c => c.PhysicalPins)
+                .Select(p => p.GetAbsolutePosition())
+                .ToList();
+            bool FarFromAnyPin(Point pt) => pinPositions.All(pin =>
+                Math.Sqrt((pt.X - pin.x) * (pt.X - pin.x) + (pt.Y - pin.y) * (pt.Y - pin.y))
+                    > PinGlyphCoverRadiusUm);
+            ImportedRouteProbes = groupOff.InternalPaths
+                .Where(path => path.StartPin is null) // imported top-cell route outlines
+                .Select(path => RouteProbePoints(path.Path.Segments).Where(FarFromAnyPin).ToList())
+                .Where(points => points.Count > 0)
+                .ToList();
+
             var groupOn = importedOn.Components.Single().Component.ShouldBeOfType<ComponentGroup>();
             FrozenRouteProbes = groupOn.InternalPaths
+                .Where(path => path.StartPin is not null) // restored connections only — the imported outlines are probed separately
                 .Select(path => RouteProbePoints(path.Path.Segments))
                 .ToList();
         }
@@ -366,6 +388,13 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
 
         /// <summary>Probe points per restored (frozen group-internal) connection of the auto-connect canvas (panels 3/4).</summary>
         internal IReadOnlyList<IReadOnlyList<Point>> FrozenRouteProbes { get; }
+
+        /// <summary>
+        /// Probe points per imported top-cell route outline (the pin-less frozen
+        /// paths of the auto-connect-OFF canvas) — the routing geometry the import
+        /// keeps visible (panel 3, and background geometry in panel 4).
+        /// </summary>
+        internal IReadOnlyList<IReadOnlyList<Point>> ImportedRouteProbes { get; }
 
         internal PixelRect AroundMmiCenter() => Around(MmiCenter, Shared, ProbeHalfExtentPx);
 
@@ -520,7 +549,13 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         AssertEmptyCorner(panel, size);
     }
 
-    /// <summary>Panel 03: the re-imported group — GDS outline fills, free green pins, NO connections.</summary>
+    /// <summary>
+    /// Panel 03: the re-imported group — GDS outline fills, free green pins, and
+    /// the imported route outlines as frozen paths (auto-connect OFF: no live or
+    /// restored connections — pinned by the model-level counts, not by pixel
+    /// absence, because the frozen pen's overlap blends are indistinguishable
+    /// from a live stroke — but the routing geometry is visible again).
+    /// </summary>
     private static void AssertPanel03(WriteableBitmap panel, string path, PixelSize size, Probes probes)
     {
         AssertFileIsRealPng(path);
@@ -529,12 +564,17 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
             .ShouldBeGreaterThan(30, "the placed mmi1 renders its imported GDS outline fill");
         CountExternalPinPixels(panel, size)
             .ShouldBeGreaterThan(30, "all 28 pins are free — every unoccupied group pin renders green");
-        CountWhere(panel, Full(size), IsAnyRoutePixel)
-            .ShouldBe(0, "auto-connect OFF: the honest v1 state has no connections at all — " +
-                "the same spots where panel 04 shows the restored routes must be empty here");
-        foreach (var points in probes.FrozenRouteProbes)
-            points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsAnyRoutePixel) > 0)
-                .ShouldBeFalse("no route at the spots where auto-connect would later restore them");
+        probes.ImportedRouteProbes.ShouldNotBeEmpty(
+            "the top cell's own waveguide polygons import as pin-less frozen paths");
+        for (var polyIndex = 0; polyIndex < probes.ImportedRouteProbes.Count; polyIndex++)
+        {
+            probes.ImportedRouteProbes[polyIndex]
+                .Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsRouteOrange) > 0)
+                .ShouldBeTrue($"imported route polygon #{polyIndex} renders as an orange frozen outline " +
+                    "— the routing is visible again");
+        }
+        CountWhere(panel, Full(size), IsFrozenOrange)
+            .ShouldBeGreaterThan(50, "the imported route outlines render as frozen group paths");
         AssertEmptyCorner(panel, size);
     }
 
@@ -553,9 +593,11 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         if (!siepicUpgraded)
         {
             // Bare-nazca environment: the ambiguity guard refuses every twin-poisoned
-            // pair — the panel must honestly show zero restored connections.
+            // pair — the panel honestly shows zero RESTORED connections, but the
+            // imported route outlines still render (they are geometry, not connections).
             probes.FrozenRouteProbes.ShouldBeEmpty();
-            CountWhere(panel, Full(size), IsAnyRoutePixel).ShouldBe(0);
+            CountWhere(panel, Full(size), IsFrozenOrange)
+                .ShouldBeGreaterThan(50, "the imported route outlines render even when nothing is restored");
             return;
         }
 
@@ -624,13 +666,19 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     private static bool IsBlockedRed(byte r, byte g, byte b) =>
         r >= 200 && g <= 70 && b <= 70;
 
-    /// <summary>Any top-level canvas route pixel, healthy or blocked (panel-1 probes).</summary>
+    /// <summary>Any top-level canvas route pixel, healthy or blocked (live-connection absence checks).</summary>
     private static bool IsRoutePixel(byte r, byte g, byte b) =>
         IsCanvasOrange(r, g, b) || IsBlockedRed(r, g, b);
 
-    /// <summary>Any route pixel including frozen group-internal ones (panel-3 absence check).</summary>
-    private static bool IsAnyRoutePixel(byte r, byte g, byte b) =>
-        IsRoutePixel(r, g, b) || IsFrozenOrange(r, g, b);
+    /// <summary>
+    /// Any orange route-stroke pixel — the frozen-pen core (206,116,7), the
+    /// multi-stroke overlap blends toward full orange (255,165,0) that thin
+    /// outline rings inevitably produce, and the anti-aliased fringes in between.
+    /// Used for visibility probes only ("a route renders here"); the
+    /// frozen-vs-live shade distinction lives in the frozen-core counts.
+    /// </summary>
+    private static bool IsRouteOrange(byte r, byte g, byte b) =>
+        r >= 195 && g >= 105 && g <= 190 && b <= 60;
 
     /// <summary>White-ish text pixels (name labels, pin labels).</summary>
     private static bool IsWhiteishText(byte r, byte g, byte b) => r >= 200 && g >= 200 && b >= 200;

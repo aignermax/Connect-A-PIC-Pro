@@ -121,7 +121,7 @@ public class GdsPlacementExecutorAutoConnectTests
         // The auto-connected route is frozen into the group like an abutment connection.
         var group = canvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         var path = group.InternalPaths.ShouldHaveSingleItem();
-        var pins = new[] { path.StartPin.Name, path.EndPin.Name };
+        var pins = new[] { path.StartPin!.Name, path.EndPin!.Name };
         pins.ShouldBe(new[] { "out", "in" }, ignoreOrder: true);
     }
 

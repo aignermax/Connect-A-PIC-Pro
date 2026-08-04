@@ -409,7 +409,10 @@ public sealed class GdsPlacementExecutor
         ct.ThrowIfCancellationRequested();
         var groupCandidates = placedViewModels.OfType<ComponentViewModel>().ToList();
         if (groupCandidates.Count < 2)
+        {
+            WarnOnDroppedRouteGeometry(plan, report);
             return; // CreateGroupCommand needs ≥2 components; a lone component stays ungrouped.
+        }
 
         progress?.Report($"Grouping {groupCandidates.Count} components as '{plan.GroupName}'…");
         // The final name rides into the command: the group is named when it is
@@ -421,10 +424,34 @@ public sealed class GdsPlacementExecutor
         Execute(command);
 
         if (command.CreatedGroup is null)
+        {
+            WarnOnDroppedRouteGeometry(plan, report);
             return; // grouping was rejected (e.g. locked components) — components stay ungrouped.
+        }
 
         report.GroupCreated = true;
         report.GroupName = plan.GroupName;
+
+        // The top cell's own routing geometry (waveguide-layer polygons) becomes
+        // pin-less frozen paths on the group: visible and persistent, but not
+        // re-routable (true route reconstruction is #814).
+        foreach (var polygon in plan.TopCellWaveguidePolygons)
+            command.CreatedGroup.AddInternalPath(GdsFrozenRoutePathFactory.Create(polygon));
+    }
+
+    /// <summary>
+    /// The import warning promises the top cell's routing geometry comes back as
+    /// frozen paths on the group — when no group was created there is nothing to
+    /// attach them to, and the geometry would vanish silently without this note.
+    /// </summary>
+    private static void WarnOnDroppedRouteGeometry(GdsPlacementPlan plan, GdsPlacementReport report)
+    {
+        if (plan.TopCellWaveguidePolygons.Count > 0)
+        {
+            report.Warnings.Add(
+                $"Top-cell routing geometry ({plan.TopCellWaveguidePolygons.Count} waveguide " +
+                "polygon(s)) was not imported: no group was created to hold the frozen paths.");
+        }
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

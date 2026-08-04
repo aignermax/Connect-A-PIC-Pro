@@ -196,13 +196,15 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // Pinned: ZERO reconstructed connections. His layout is SPACED — the
         // connections were drawn waveguide routes, which nazca flattens into
         // top-cell polygons (asserted above), so no two component pins abut and
-        // the abutment matcher finds nothing. The v1 warning says exactly that.
+        // the abutment matcher finds nothing. The flattened routes come back as
+        // frozen, non-re-routable paths instead.
         outcome.Connections.Count.ShouldBe(0);
         var warning = outcome.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("own geometry is not reconstructed");
-        // Warnings stay user-presentable sentences — no raw exception text.
+        warning.ShouldContain("imported as frozen paths (not re-routable)");
         warning.ShouldNotContain("Exception");
         warning.ShouldNotContain('\n');
+        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty(
+            "the flattened routes land on the waveguide layer");
 
         // The registered templates carry the pins found in the GDS:
         // the MMI via demofab's (501, 1) labels (a0/a1/b0/b1 — demofab's names for
@@ -259,6 +261,8 @@ public class GdsUserDesignRoundTripTests : IDisposable
 
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.GroupName.ShouldBe("ConnectAPIC_Design");
+        group.InternalPaths.ShouldContain(p => p.StartPin == null,
+            "the flattened routes ride the group as pin-less frozen paths");
         var children = group.GetAllComponentsRecursive().ToList();
         children.Count.ShouldBe(7);
         foreach (var child in children)

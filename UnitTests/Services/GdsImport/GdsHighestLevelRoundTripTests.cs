@@ -102,10 +102,13 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // The honest v1 connection outcome: his layout is SPACED — the 10 logical
         // connections are routed waveguides that nazca flattens into top-cell
         // polygons, so no two component pins abut and the abutment matcher finds
-        // nothing. Exactly one user-presentable warning says so.
+        // nothing. Exactly one user-presentable warning says so — and the
+        // flattened routes come back as frozen, non-re-routable paths.
         outcome.Connections.ShouldBeEmpty();
         var warning = outcome.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("own geometry is not reconstructed");
+        warning.ShouldContain("imported as frozen paths (not re-routable)");
+        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty(
+            "the flattened routes land on the waveguide layer");
 
         // ── 4. Place + auto-connect (executor default radius 200 µm) ──
         var canvas2 = new DesignCanvasViewModel();
@@ -251,7 +254,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         var (outcome, sink) = await ImportExplodeAsync(export.GdsPath, "stub");
         outcome.Instances.Count.ShouldBe(7);
         outcome.Connections.ShouldBeEmpty();
-        outcome.Warnings.ShouldHaveSingleItem().ShouldContain("own geometry is not reconstructed");
+        outcome.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
 
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
@@ -473,8 +476,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// <summary>
     /// Every message produced along the loop stays user-presentable: no raw
     /// exception text, no stack traces, no empty strings, no embedded newlines;
-    /// the info channel carries no warnings. The "own geometry is not
-    /// reconstructed" warning appears exactly once (in the import warnings).
+    /// the info channel carries no warnings. The "imported as frozen paths"
+    /// warning appears exactly once (in the import warnings).
     /// </summary>
     private static void AssertMessageChannels(
         IReadOnlyList<string> skippedConnections,
@@ -500,8 +503,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             "messages stay user-presentable single-line sentences");
         importInfos.ShouldAllBe(i => !i.Contains("WARN", StringComparison.Ordinal),
             "the info channel carries no warnings");
-        allMessages.Count(m => m.Contains("own geometry is not reconstructed", StringComparison.Ordinal))
-            .ShouldBe(1, "the v1 limitation warning is produced exactly once");
+        allMessages.Count(m => m.Contains("imported as frozen paths (not re-routable)", StringComparison.Ordinal))
+            .ShouldBe(1, "the frozen-route-paths warning is produced exactly once");
     }
 
     // ── Harness ──────────────────────────────────────────────────────────────

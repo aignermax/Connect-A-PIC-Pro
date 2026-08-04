@@ -520,7 +520,129 @@ public class GdsHierarchyImporterTests
         result.Instances.ShouldBeEmpty();
         result.Connections.ShouldBeEmpty();
         result.Warnings.ShouldContain(w => w.Contains("nothing to explode"));
-        result.Warnings.ShouldContain(w => w.Contains("own") && w.Contains("not reconstructed"));
+        // The lone (1,0) polygon is top-cell own geometry on a waveguide layer:
+        // it comes back as a frozen path, not as "not reconstructed".
+        result.Warnings.ShouldContain(w => w.Contains("imported as frozen paths (not re-routable)"));
+        var polygon = result.TopCellWaveguidePolygons.ShouldHaveSingleItem();
+        polygon.Layer.ShouldBe(1);
+        polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
+        {
+            (0.0, 4.0), (10.0, 4.0), (10.0, 0.0), (0.0, 0.0), (0.0, 4.0),
+        });
+    }
+
+    // ── Top-cell own waveguide polygons (frozen route paths) ─────────────────
+
+    [Fact]
+    public async Task Explode_TopCellOwnWaveguidePolygon_ImportedWithPinnedCoordinates()
+    {
+        // The route polygon bridging the 5 µm gap between wgA (ends at x=10) and
+        // wgB (starts at x=15) is the top cell's OWN geometry on the waveguide
+        // layer — it must import, in app space (Y-down, origin at the top bbox
+        // top-left (0, 4)). The wgA/wgB core stripes sit on the same (1,0) layer
+        // but belong to the INSTANCES — importing them here too would double-draw
+        // every component's waveguide, so exactly ONE polygon comes back.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+                .Boundary(68, 0, (0, 0), (25000, 0), (25000, 4000), (0, 4000), (0, 0)) // devrec halo
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var polygon = result.TopCellWaveguidePolygons.ShouldHaveSingleItem(
+            "only the top cell's OWN (1,0) polygon — instance geometry stays out");
+        polygon.Layer.ShouldBe(1);
+        polygon.DataType.ShouldBe(0);
+        polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
+        {
+            (10.0, 2.25), (15.0, 2.25), (15.0, 1.75), (10.0, 1.75), (10.0, 2.25),
+        });
+
+        var warning = result.Warnings.ShouldHaveSingleItem();
+        warning.ShouldContain("imported as frozen paths (not re-routable)");
+        // The devrec halo is neither a route nor imported.
+        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+    }
+
+    [Fact]
+    public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_KeepsNotReconstructedWarning()
+    {
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .Boundary(68, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0)) // devrec only
+            .EndCell()
+            .WaveguideCell("wgA")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldBeEmpty("a devrec halo is not routing geometry");
+        var warning = result.Warnings.ShouldHaveSingleItem();
+        warning.ShouldContain("own geometry is not reconstructed (v1)");
+        warning.ShouldNotContain("imported as frozen paths");
+    }
+
+    [Fact]
+    public async Task Explode_NazcaDefaultInterconnectPolygon_ImportedByDefault()
+    {
+        // Our OWN exporter flattens routed connections with nazca's default
+        // interconnect (nd.strt/nd.bend), which writes polygons on layer
+        // (1111,0) — a re-import must recognize it without any option tuning.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .Boundary(1111, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+            .EndCell()
+            .WaveguideCell("wgA")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldHaveSingleItem().Layer.ShouldBe(1111);
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+    }
+
+    [Fact]
+    public async Task Explode_CustomRouteLayers_ImportsOnlyTheConfiguredLayer()
+    {
+        // The route-layer list is configurable (GdsHierarchyImportOptions.RouteLayers);
+        // with (3,0) configured the (1,0) polygon is NOT routing anymore.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .Boundary(3, 0, (0, 500), (10000, 500), (10000, 1000), (0, 1000), (0, 500))
+                .Boundary(1, 0, (0, 3000), (10000, 3000), (10000, 3500), (0, 3500), (0, 3000))
+            .EndCell()
+            .WaveguideCell("wgA")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions
+        {
+            RouteLayers = [(3, 0)],
+        });
+
+        var polygon = result.TopCellWaveguidePolygons.ShouldHaveSingleItem();
+        polygon.Layer.ShouldBe(3);
+        polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
+        {
+            (0.0, 3.5), (10.0, 3.5), (10.0, 3.0), (0.0, 3.0), (0.0, 3.5),
+        });
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
     }
 
     // ── Zero-geometry / export-artifact cells ────────────────────────────────

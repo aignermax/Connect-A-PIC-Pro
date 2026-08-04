@@ -240,10 +240,12 @@ public class GdsRoundTripImportTests : IDisposable
         outcome.RegisteredComponents.ShouldContain(r => r.CellDraftName == "mmi1x2_sh");
         outcome.RegisteredComponents.ShouldContain(r => r.CellDraftName.StartsWith("io_", StringComparison.Ordinal));
         outcome.Instances.Count.ShouldBe(3);
-        // Honest limitation: the routed waveguide connections are flattened into
-        // top-cell geometry by nazca, so no abutment connections reconstruct.
+        // The routed waveguide connections are flattened into top-cell geometry by
+        // nazca, so no abutment connections reconstruct — but the top cell's own
+        // waveguide-layer polygons come back as frozen, non-re-routable paths.
         outcome.Connections.Count.ShouldBe(0);
-        outcome.Warnings.ShouldContain(w => w.Contains("own geometry is not reconstructed", StringComparison.Ordinal));
+        outcome.Warnings.ShouldContain(w => w.Contains("imported as frozen paths (not re-routable)", StringComparison.Ordinal));
+        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty("the flattened routes land on the waveguide layer");
 
         // The registered MMI template carries the demofab pin names.
         sink.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
@@ -259,6 +261,8 @@ public class GdsRoundTripImportTests : IDisposable
         // The executor wraps the import in one group — the canvas root holds that group.
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.GetAllComponentsRecursive().Count().ShouldBe(3);
+        group.InternalPaths.ShouldContain(p => p.StartPin == null,
+            "the flattened routes ride the group as pin-less frozen paths");
     }
 
     // ── Harness ───────────────────────────────────────────────────────────────

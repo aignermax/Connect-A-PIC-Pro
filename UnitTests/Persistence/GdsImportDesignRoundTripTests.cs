@@ -116,6 +116,55 @@ public class GdsImportDesignRoundTripTests : IDisposable
 
     // ── Harness (mirrors GdsImportServiceTests / SkippedRouteConnectionPersistenceTests) ──
 
+    [Fact]
+    public async Task ImportPlaceSaveLoad_TopCellRoutePolygon_RoundTripsAsPinLessFrozenPath()
+    {
+        var gdsPath = WriteGdsWithRoutePolygon();
+        var sink = new LibrarySink(_prefsPath);
+        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
+
+        // The top cell's own (1,0) polygon comes back as frozen route geometry.
+        outcome.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+        outcome.TopCellWaveguidePolygons.ShouldHaveSingleItem();
+
+        // Place: the polygon becomes a pin-less frozen path on the 'TOP' group.
+        var saveCanvas = new DesignCanvasViewModel();
+        var plan = GdsPlacementPlan.FromOutcome(outcome);
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => sink.Templates.ToList())
+            .ExecuteAsync(plan);
+        report.GroupCreated.ShouldBeTrue();
+
+        var savePath = Path.Combine(_root, "circuit-routes.lun");
+        await SaveToFile(CreateFileOperations(saveCanvas, sink.Templates, out _), savePath);
+
+        // Close → reopen into a fresh canvas against the same library.
+        var loadCanvas = new DesignCanvasViewModel();
+        await LoadFromFile(CreateFileOperations(loadCanvas, sink.Templates, out _), savePath);
+
+        var group = loadCanvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
+        group.InternalPaths.Count.ShouldBe(2, "the frozen abutment connection plus the imported route outline");
+
+        // The route outline round-tripped with exact coordinates and no pins.
+        var routePath = group.InternalPaths.Single(p => p.StartPin is null);
+        routePath.EndPin.ShouldBeNull("imported route geometry is pin-less on BOTH ends");
+        routePath.Path.Segments.Select(s => (s.StartPoint.X, s.StartPoint.Y, s.EndPoint.X, s.EndPoint.Y))
+            .ShouldBe(new[]
+            {
+                (10.0, 2.25, 12.0, 2.25),
+                (12.0, 2.25, 12.0, 1.75),
+                (12.0, 1.75, 10.0, 1.75),
+                (10.0, 1.75, 10.0, 2.25),
+            });
+
+        // The pinned abutment connection survived the same round-trip unchanged.
+        var abutment = group.InternalPaths.Single(p => p.StartPin is not null);
+        abutment.StartPin!.Name.ShouldBe("out");
+        abutment.EndPin!.Name.ShouldBe("in");
+    }
+
+    // ── Harness (mirrors GdsImportServiceTests / SkippedRouteConnectionPersistenceTests) ──
+
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>
     private string WriteGds()
     {
@@ -126,6 +175,30 @@ public class GdsImportDesignRoundTripTests : IDisposable
             .BeginCell("TOP")
                 .SRef("wgA", 0, 0)
                 .SRef("wgB", 10000, 0)
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray();
+        File.WriteAllBytes(path, content);
+        return path;
+    }
+
+    /// <summary>
+    /// The standard fixture plus the top cell's OWN route polygon on (1,0): a
+    /// 2×0.5 µm stub (GDS x 10…12, y 1.75…2.25) at the wgA↔wgB abutment — the
+    /// shape our exporters flatten routed waveguides into.
+    /// </summary>
+    private string WriteGdsWithRoutePolygon()
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "circuit-routes.gds");
+        var content = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 10000, 0)
+                .Boundary(1, 0, (10000, 1750), (12000, 1750), (12000, 2250), (10000, 2250), (10000, 1750))
             .EndCell()
             .WaveguideCell("wgA")
             .WaveguideCell("wgB")

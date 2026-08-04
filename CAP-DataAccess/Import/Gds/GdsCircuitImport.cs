@@ -37,6 +37,19 @@ public sealed record GdsCircuitImport
     /// <summary>Reconstructed abutment connections (empty in black-box mode).</summary>
     public IReadOnlyList<GdsPinPair> Connections { get; init; } = Array.Empty<GdsPinPair>();
 
+    /// <summary>
+    /// The top cell's OWN polygons on the configured route layers
+    /// (<see cref="GdsHierarchyImportOptions.RouteLayers"/>; routing geometry), in
+    /// app-space of <see cref="BoundingBox"/> (Y-down, origin at the
+    /// bbox top-left — the same frame <see cref="GdsPlacedInstance.PositionXUm"/>
+    /// uses). Explode mode only; the service layer attaches them to the created
+    /// group as frozen, pin-less, non-re-routable paths. Geometry contributed by
+    /// child instances is excluded — it renders through the placed components'
+    /// own outlines.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
+
     /// <summary>User-presentable warnings collected during the import, in encounter order.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 

@@ -107,6 +107,16 @@ public sealed record GdsPlacementPlan
     public IReadOnlyList<GdsConnectionInstruction> Connections { get; init; } =
         Array.Empty<GdsConnectionInstruction>();
 
+    /// <summary>
+    /// The top cell's OWN waveguide-layer polygons (routing geometry) in plan
+    /// space (µm, Y-down, origin at the imported layout's top-left). The executor
+    /// attaches them to the created group as frozen, pin-less, non-re-routable
+    /// paths. Empty in black-box mode (the single draft's outlines already carry
+    /// the whole cell's geometry).
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
+
     /// <summary>The import's warnings, carried along for display.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
@@ -187,6 +197,7 @@ public sealed record GdsPlacementPlan
             GroupName = outcome.TopCellName,
             Placements = placements,
             Connections = connections,
+            TopCellWaveguidePolygons = outcome.TopCellWaveguidePolygons,
             Warnings = outcome.Warnings,
             Infos = outcome.Infos,
         };

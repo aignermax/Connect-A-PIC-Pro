@@ -3,6 +3,7 @@ using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
+using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using Xunit;
 
@@ -112,7 +113,7 @@ public class GdsPlacementExecutorTests
 
         // The abutment connection is frozen into the group with the right pins.
         var path = group.InternalPaths.ShouldHaveSingleItem();
-        var pins = new[] { path.StartPin.Name, path.EndPin.Name };
+        var pins = new[] { path.StartPin!.Name, path.EndPin!.Name };
         pins.ShouldBe(new[] { "out", "in" }, ignoreOrder: true);
     }
 
@@ -413,5 +414,79 @@ public class GdsPlacementExecutorTests
         // 90° — banker's rounding would silently snap DOWN to 0°.
         report.Warnings.ShouldHaveSingleItem().ShouldContain("snapped");
         canvas.Components.ShouldHaveSingleItem().Component.RotationDegrees.ShouldBe(90);
+    }
+
+    // ── Top-cell route geometry (frozen paths) ───────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_TopCellWaveguidePolygons_BecomePinLessFrozenPathsOnGroup()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 10, 0) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+            TopCellWaveguidePolygons = new[]
+            {
+                new GdsOutlinePolygon
+                {
+                    Layer = 1,
+                    DataType = 0,
+                    Points = new GdsOutlinePoint[]
+                    {
+                        new(10, 2.25), new(12, 2.25), new(12, 1.75), new(10, 1.75), new(10, 2.25),
+                    },
+                },
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.GroupCreated.ShouldBeTrue();
+        report.Warnings.ShouldBeEmpty();
+
+        var group = SingleGroupOn(canvas);
+        group.InternalPaths.Count.ShouldBe(2, "the frozen abutment connection plus the route outline");
+        var routePath = group.InternalPaths.Single(p => p.StartPin is null);
+        routePath.EndPin.ShouldBeNull("imported route geometry is pin-less on BOTH ends");
+        routePath.Path.Segments.Count.ShouldBe(4, "the rectangle's four edges, first point repeated at the end");
+        routePath.Path.Segments.Select(s => (s.StartPoint.X, s.StartPoint.Y, s.EndPoint.X, s.EndPoint.Y))
+            .ShouldBe(new[]
+            {
+                (10.0, 2.25, 12.0, 2.25),
+                (12.0, 2.25, 12.0, 1.75),
+                (12.0, 1.75, 10.0, 1.75),
+                (10.0, 1.75, 10.0, 2.25),
+            });
+
+        // The frozen abutment connection is untouched by the imported geometry.
+        var abutment = group.InternalPaths.Single(p => p.StartPin is not null);
+        abutment.StartPin!.Name.ShouldBe("out");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RoutePolygonsWithoutGroup_ReportsDroppedGeometry()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0) }, // one component → no group
+            TopCellWaveguidePolygons = new[]
+            {
+                new GdsOutlinePolygon
+                {
+                    Layer = 1,
+                    Points = new GdsOutlinePoint[] { new(0, 0), new(5, 0), new(5, 1), new(0, 0) },
+                },
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.GroupCreated.ShouldBeFalse();
+        var warning = report.Warnings.ShouldHaveSingleItem();
+        warning.ShouldContain("no group was created to hold the frozen paths");
     }
 }

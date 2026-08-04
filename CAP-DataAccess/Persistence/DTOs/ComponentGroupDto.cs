@@ -99,6 +99,9 @@ public class FrozenPathDto
 
     /// <summary>
     /// Identifier of the start pin's parent component (human-readable, for old files).
+    /// Empty — together with null <see cref="StartComponentGuid"/>, an empty
+    /// <see cref="StartPinName"/> and the same triple on the end side — marks a
+    /// pin-less path (GDS-imported route outline): geometry without endpoint pins.
     /// </summary>
     public string StartComponentId { get; set; } = "";
 
@@ -114,6 +117,7 @@ public class FrozenPathDto
 
     /// <summary>
     /// Identifier of the end pin's parent component (human-readable, for old files).
+    /// Empty for a pin-less path (see <see cref="StartComponentId"/>).
     /// </summary>
     public string EndComponentId { get; set; } = "";
 

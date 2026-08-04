@@ -96,6 +96,36 @@ internal sealed class GdsHierarchyImportSession
         return GdsPinDetector.Detect(detectionCell, TopBBox, _options.PinDetection);
     }
 
+    /// <summary>
+    /// The top cell's OWN polygons on the configured route layers
+    /// (<see cref="GdsHierarchyImportOptions.RouteLayers"/>) — the routing
+    /// geometry our exporters flatten into the top cell — converted to app-space
+    /// of the top bbox (Y-down, origin at the bbox top-left; the same frame
+    /// <see cref="GdsInstancePinProjector.ProjectPlacedBoundsTopLeft"/> places
+    /// instances in). Only the top cell's own elements qualify: geometry pulled
+    /// in through references belongs to the placed instances, whose components
+    /// already render their own outlines — importing it here too would
+    /// double-draw every instance's waveguide. Polygons on any other layer
+    /// (devrec, halos, pin markers) are not routing and stay out.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> GetTopCellWaveguidePolygons()
+    {
+        var routeLayers = _options.RouteLayers;
+        var bbox = TopBBox;
+        return Library.Cells[_topCellName].Elements
+            .OfType<GdsPolygon>()
+            .Where(p => routeLayers.Contains((p.Layer, p.DataType)))
+            .Select(p => new GdsOutlinePolygon
+            {
+                Layer = p.Layer,
+                DataType = p.DataType,
+                Points = p.Points
+                    .Select(gp => new GdsOutlinePoint(gp.X - bbox.MinX, bbox.MaxY - gp.Y))
+                    .ToList(),
+            })
+            .ToList();
+    }
+
     public GdsCellDraft BuildDraft(string cellName)
     {
         var bbox = GetCellBBox(cellName);

@@ -56,6 +56,19 @@ public sealed record GdsHierarchyImportOptions
     public GdsPinDetectionOptions PinDetection { get; init; } = new();
 
     /// <summary>
+    /// (Layer, Datatype) pairs whose top-cell-OWN polygons are imported as frozen
+    /// route paths on the created group (explode mode). Default: (1, 0), the
+    /// gdsfactory waveguide-core layer, plus (1111, 0), the layer of nazca's
+    /// default interconnect (<c>nd.strt</c>/<c>nd.bend</c>) — what our own
+    /// exporter flattens routed connections into, so re-importing a Lunima export
+    /// shows its routes without any configuration. Kept separate from
+    /// <see cref="GdsPinDetectionOptions.WaveguideLayers"/>: that list feeds the
+    /// pin edge heuristic, where a routing layer that never touches a cell bbox
+    /// edge would only spawn spurious pins.
+    /// </summary>
+    public IReadOnlyList<(int Layer, int Datatype)> RouteLayers { get; init; } = [(1, 0), (1111, 0)];
+
+    /// <summary>
     /// Maximum distance in micrometers between two absolute pin positions for
     /// them to count as abutting (forming a connection). Default: 0.05 µm.
     /// </summary>

@@ -251,8 +251,8 @@ public class GroupTemplatePlacementIntegrationTests : IDisposable
 
         // Verify the path connects the cloned components, not the originals
         var path = placedGroup.InternalPaths[0];
-        path.StartPin.ParentComponent.ShouldBe(placedGroup.ChildComponents[0]);
-        path.EndPin.ParentComponent.ShouldBe(placedGroup.ChildComponents[1]);
+        path.StartPin!.ParentComponent.ShouldBe(placedGroup.ChildComponents[0]);
+        path.EndPin!.ParentComponent.ShouldBe(placedGroup.ChildComponents[1]);
     }
 
     [Fact]

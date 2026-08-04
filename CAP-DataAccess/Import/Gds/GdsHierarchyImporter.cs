@@ -236,7 +236,8 @@ public static class GdsHierarchyImporter
                 $"Top cell '{topCellName}' contains no cell references — nothing to explode. " +
                 "Use black-box mode to import it as a single component.");
         }
-        WarnOnTopLevelGeometry(session, topCellName);
+        var topCellWaveguidePolygons = session.GetTopCellWaveguidePolygons();
+        WarnOnTopLevelGeometry(session, topCellName, topCellWaveguidePolygons.Count);
 
         ct.ThrowIfCancellationRequested();
         var topPorts = session.GetTopLevelPorts()
@@ -253,6 +254,7 @@ public static class GdsHierarchyImporter
             ImportedCellDrafts = drafts,
             Instances = placed,
             Connections = connections,
+            TopCellWaveguidePolygons = topCellWaveguidePolygons,
             Warnings = session.Warnings,
             Infos = session.Infos,
         };
@@ -381,16 +383,37 @@ public static class GdsHierarchyImporter
         }
     }
 
-    private static void WarnOnTopLevelGeometry(GdsHierarchyImportSession session, string topCellName)
+    /// <summary>
+    /// Reports what happened to the top cell's OWN geometry (polygons/paths not
+    /// belonging to any instance — typically routing our exporters flattened into
+    /// the top cell): waveguide-layer polygons come back as frozen, non-re-routable
+    /// paths on the created group (<paramref name="importedAsPaths"/>), anything
+    /// else stays unreconstructed in v1.
+    /// </summary>
+    private static void WarnOnTopLevelGeometry(
+        GdsHierarchyImportSession session, string topCellName, int importedAsPaths)
     {
         int own = session.Library.Cells[topCellName].Elements
             .Count(e => e is GdsPolygon or GdsPath);
-        if (own > 0)
+        if (own == 0)
+            return;
+
+        if (importedAsPaths > 0)
         {
+            int remainder = own - importedAsPaths;
+            string remainderNote = remainder > 0
+                ? $"; the remaining {remainder} polygon(s)/path(s) on other layers are not reconstructed (v1)"
+                : string.Empty;
             session.Warnings.Add(
                 $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
-                "geometry); only cell references become components — own geometry is not reconstructed (v1).");
+                $"geometry); the {importedAsPaths} waveguide-layer polygon(s) are imported as frozen " +
+                $"paths (not re-routable){remainderNote}.");
+            return;
         }
+
+        session.Warnings.Add(
+            $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
+            "geometry); only cell references become components — own geometry is not reconstructed (v1).");
     }
 
     internal static string Fmt(double value) => value.ToString(CultureInfo.InvariantCulture);
