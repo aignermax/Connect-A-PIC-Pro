@@ -1,14 +1,8 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
-using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_Core.Export;
 using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Export;
@@ -178,7 +172,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         analysis.TopCells.ShouldBe(new[] { new GdsTopCellSummary("ConnectAPIC_Design", 7) });
 
         // ── 5. Explode import through the button's service path ──
-        var sink = new LibrarySink(_prefsPath);
+        var sink = new GdsUserDesignFixture.LibrarySink(_prefsPath);
         var service = new GdsImportService(Store("user-pdks"), () => sink.Templates.ToList(), sink.Register);
         var dialogOptions = new GdsHierarchyImportOptions
         {
@@ -283,7 +277,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // routed waveguides sit on a different layer, the MMI's bbox-spanning edges
         // are discarded as too wide). Zero pins → the draft is unpersistable and
         // nothing is placed. The warnings tell the user why, in plain text.
-        var sink2 = new LibrarySink(Path.Combine(_root, "prefs-blackbox.json"));
+        var sink2 = new GdsUserDesignFixture.LibrarySink(Path.Combine(_root, "prefs-blackbox.json"));
         var service2 = new GdsImportService(Store("user-pdks-blackbox"), () => sink2.Templates.ToList(), sink2.Register);
         var blackBoxOutcome = await service2.ImportAsync(
             gdsPath, analysis.TopCellCandidates[0],
@@ -306,129 +300,15 @@ public class GdsUserDesignRoundTripTests : IDisposable
         canvas3.Components.ShouldBeEmpty();
     }
 
-    // ── Harness ───────────────────────────────────────────────────────────────
+    // ── Harness (shared via <see cref="GdsUserDesignFixture"/>) ───────────────
 
     private static int CountLines(string script, string marker) =>
-        script.Split('\n').Count(l => l.Contains(marker, StringComparison.Ordinal));
+        GdsUserDesignFixture.CountLines(script, marker);
 
-    /// <summary>
-    /// Rebuilds the user's design on a fresh canvas: the seven components at his
-    /// exact coordinates, instantiated from the REAL bundled PDK templates (Demo
-    /// PDK "2x2 MMI Coupler" ×2; SiEPIC "Adiabatic Coupler TE 1550", "Broadband DC
-    /// TE 1550", "Crossing 4-Port" ×2, "DC Halfring-Straight"), then his ten
-    /// waveguide connections, routed for real (the A* grid is initialized around
-    /// the design's negative-Y extent like the app does).
-    /// </summary>
-    private static DesignCanvasViewModel BuildUserDesignCanvas()
-    {
-        var templates = TestPdkLoader.LoadAllTemplates();
-        var canvas = new DesignCanvasViewModel();
+    private static DesignCanvasViewModel BuildUserDesignCanvas() =>
+        GdsUserDesignFixture.BuildUserDesignCanvas();
 
-        Component Place(string templateName, string pdk, double x, double y)
-        {
-            var template = templates.First(t => t.Name == templateName && t.PdkSource == pdk);
-            var component = ComponentTemplates.CreateFromTemplate(template, x, y);
-            canvas.AddComponent(component, templateName, pdk);
-            return component;
-        }
+    private UserPdkStore Store(string name) => GdsUserDesignFixture.CreateStore(_root, name);
 
-        const string demo = "Demo PDK";
-        const string siepic = "SiEPIC EBeam PDK";
-        // His coordinates, verbatim from the exported netlist.
-        var mmi1 = Place("2x2 MMI Coupler", demo, 259.699, -513.629);       // _2x2_MMI_Coupler_1
-        var mmi2 = Place("2x2 MMI Coupler", demo, 253.899, -397.528);       // _2x2_MMI_Coupler_2
-        var adiabatic = Place("Adiabatic Coupler TE 1550", siepic, 298.420, -451.179);
-        var bdc = Place("Broadband DC TE 1550", siepic, 730.431, -452.029);
-        var crossing872 = Place("Crossing 4-Port", siepic, 542.084, -449.679);
-        var crossing1175 = Place("Crossing 4-Port", siepic, 519.699, -449.679);
-        var halfring = Place("DC Halfring-Straight", siepic, 267.425, -452.679);
-
-        // His ten connections, verbatim. Pin names match the bundled templates
-        // one-to-one (MMI: in1/in2/out1/out2; ebeam: "port N").
-        PhysicalPin Pin(Component c, string name) => c.PhysicalPins.First(p => p.Name == name);
-        canvas.ConnectPins(Pin(mmi2, "in2"), Pin(mmi1, "in1"));
-        canvas.ConnectPins(Pin(mmi1, "in2"), Pin(mmi2, "in1"));
-        canvas.ConnectPins(Pin(mmi1, "out2"), Pin(crossing872, "port 4"));
-        canvas.ConnectPins(Pin(crossing872, "port 3"), Pin(mmi2, "out1"));
-        canvas.ConnectPins(Pin(mmi2, "out2"), Pin(crossing1175, "port 3"));
-        canvas.ConnectPins(Pin(crossing1175, "port 4"), Pin(mmi1, "out1"));
-        canvas.ConnectPins(Pin(crossing1175, "port 2"), Pin(crossing872, "port 1"));
-        canvas.ConnectPins(Pin(crossing872, "port 2"), Pin(bdc, "port 1"));
-        canvas.ConnectPins(Pin(adiabatic, "port 4"), Pin(crossing1175, "port 1"));
-        canvas.ConnectPins(Pin(halfring, "port 3"), Pin(adiabatic, "port 2"));
-
-        // The app always routes on an initialized grid; the default bounds
-        // (-100..5100) would not cover this design's negative-Y extent.
-        canvas.InitializeAStarRouting(150, -700, 950, -250);
-        canvas.RecalculateRoutesAsync().GetAwaiter().GetResult();
-        return canvas;
-    }
-
-    private UserPdkStore Store(string name) => new(
-        Path.Combine(_root, name), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
-
-    /// <summary>
-    /// Locates a Python with nazca importable: first a Lunima managed env
-    /// (%LOCALAPPDATA%/Lunima/envs/*), then python/python3 on PATH (mirrors
-    /// <see cref="GdsExportFullCircleTests"/>).
-    /// </summary>
-    private static async Task<string?> FindNazcaPythonAsync()
-    {
-        var envs = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "envs");
-        if (Directory.Exists(envs))
-        {
-            foreach (var root in Directory.GetDirectories(envs))
-            {
-                foreach (var rel in new[] { Path.Combine("Scripts", "python.exe"), Path.Combine("bin", "python") })
-                {
-                    var py = Path.Combine(root, rel);
-                    if (File.Exists(py) && await ProbeNazca(py))
-                        return py;
-                }
-            }
-        }
-
-        foreach (var candidate in new[] { "python", "python3" })
-        {
-            if (await ProbeNazca(candidate))
-                return candidate;
-        }
-        return null;
-    }
-
-    private static async Task<bool> ProbeNazca(string python)
-    {
-        try
-        {
-            var probe = await SiepicRealGeometryExportTests.RunPythonAsync(
-                python, Path.GetTempPath(), "-c", "import nazca");
-            return probe.ExitCode == 0;
-        }
-        catch
-        {
-            return false;   // not on PATH at all
-        }
-    }
+    private static Task<string?> FindNazcaPythonAsync() => GdsUserDesignFixture.FindNazcaPythonAsync();
 }

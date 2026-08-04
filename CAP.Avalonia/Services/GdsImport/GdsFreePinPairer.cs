@@ -7,11 +7,20 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// two pins actually FACE each other — each partner must lie in the direction
 /// the other pin points (strictly positive dot product), so an opposing pin
 /// BEHIND a pin (the wrap-around case) or exactly 90° off-axis never pairs.
-/// Canvas-free and deterministic — candidates are considered in input order and
-/// a pin gets at most one partner. When the two nearest opposing candidates are
+/// Canvas-free and deterministic — a pin gets at most one partner. Origins are
+/// processed CLOSEST-FIRST (ascending distance of each pin's nearest opposing,
+/// mutually-facing partner, ties in input order): plain input order let an
+/// earlier-ENUMERATED pin take a partner that a later pin needs more (a pin
+/// 12.3 µm from a shared partner won it over the pin 10.6 µm away purely by
+/// pin-name sort order — first-come-first-served sniping that miswired the
+/// reconstructed circuit). When the two nearest opposing candidates are
 /// nearly equidistant, the pairing is AMBIGUOUS and the pin is skipped (with
 /// <see cref="GdsFreePinSkipReason.AmbiguousNearestPartner"/>) instead of
-/// guessing a partner. Pins of the SAME placed instance never pair with each
+/// guessing a partner. The ambiguity check is MUTUAL: a connection is
+/// symmetric, so the partner's two nearest are compared as well — when the
+/// partner can hardly tell the origin from another candidate, the PARTNER is
+/// the ambiguous one and is skipped, while the origin tries its next-best.
+/// Pins of the SAME placed instance never pair with each
 /// other: the pass connects pins BETWEEN instances, not a component's own input
 /// to its own output.
 /// </summary>
@@ -31,8 +40,9 @@ public static class GdsFreePinPairer
     public const double AmbiguityDeltaUm = 1.0;
 
     /// <summary>
-    /// Pairs the candidates greedily: every candidate (in input order) takes the
-    /// nearest still-free opposing candidate of a DIFFERENT owner within
+    /// Pairs the candidates greedily: every origin (in CLOSEST-FIRST order — see
+    /// the class summary; ties keep input order) takes the nearest still-free
+    /// opposing candidate of a DIFFERENT owner within
     /// <paramref name="radiusUm"/> (inclusive) that it FACES (and that faces it
     /// back — see <see cref="PinsFaceEachOther"/>), unless no such partner
     /// exists or the two nearest are within <see cref="AmbiguityDeltaUm"/> of
@@ -50,68 +60,146 @@ public static class GdsFreePinPairer
         var pairs = new List<GdsFreePinPair>();
         var skipped = new List<GdsFreePinSkip>();
 
-        for (var i = 0; i < candidates.Count; i++)
+        foreach (var i in ProcessingOrder(candidates, radiusUm))
         {
-            if (taken[i]) continue;
-            var origin = candidates[i];
-
-            // Nearest and second-nearest still-free opposing candidates in radius.
-            var nearest = -1;
-            var second = -1;
-            var nearestDist = double.MaxValue;
-            var secondDist = double.MaxValue;
-            var sawNonFacingOpposing = false;
-            for (var j = 0; j < candidates.Count; j++)
+            // A partner vetoed as ambiguous frees the origin to try its
+            // next-best candidate, so each origin loops until it pairs or its
+            // skip is recorded (every iteration either resolves the origin or
+            // marks one more pin taken — the loop always terminates).
+            while (!taken[i])
             {
-                if (j == i || taken[j]) continue;
-                if (candidates[j].OwnerIndex == origin.OwnerIndex) continue;
-                var dist = DistanceUm(origin, candidates[j]);
-                if (dist > radiusUm) continue;
-                if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
-                if (!PinsFaceEachOther(origin, candidates[j]))
+                var (nearest, second, nearestDist, secondDist, sawNonFacingOpposing) =
+                    FindNearestTwo(candidates, taken, i, radiusUm);
+
+                if (nearest < 0)
                 {
-                    // Opposing and in radius, but not in the direction the pins
-                    // point (wrap-around) — remembered for the skip reason.
-                    sawNonFacingOpposing = true;
+                    skipped.Add(new GdsFreePinSkip(
+                        i,
+                        sawNonFacingOpposing
+                            ? GdsFreePinSkipReason.NotFacingEachOther
+                            : GdsFreePinSkipReason.NoOpposingPartnerInRadius));
+                    break;
+                }
+                if (second >= 0 && secondDist - nearestDist < AmbiguityDeltaUm)
+                {
+                    skipped.Add(new GdsFreePinSkip(
+                        i, GdsFreePinSkipReason.AmbiguousNearestPartner, nearestDist, secondDist));
+                    taken[i] = true;
+                    break;
+                }
+
+                // Mutual ambiguity: a connection is symmetric, so the PARTNER's
+                // choice must be just as clear as the origin's. When the partner
+                // has a second still-free candidate nearly as close as this
+                // origin, the geometry cannot tell the two apart — the old
+                // origin-only check let exactly such a pair through whenever the
+                // CLEAR-eyed pin happened to be processed second (an order
+                // artifact), wiring the wrong pin of a component. The partner is
+                // reported and made unavailable instead of guessing; the origin
+                // falls through to its next-best candidate.
+                var (_, partnerSecond, partnerNearestDist, partnerSecondDist, _) =
+                    FindNearestTwo(candidates, taken, nearest, radiusUm);
+                if (partnerSecond >= 0 && partnerSecondDist - partnerNearestDist < AmbiguityDeltaUm)
+                {
+                    skipped.Add(new GdsFreePinSkip(
+                        nearest, GdsFreePinSkipReason.AmbiguousNearestPartner,
+                        partnerNearestDist, partnerSecondDist));
+                    taken[nearest] = true;
                     continue;
                 }
 
-                if (dist < nearestDist)
-                {
-                    second = nearest;
-                    secondDist = nearestDist;
-                    nearest = j;
-                    nearestDist = dist;
-                }
-                else if (dist < secondDist)
-                {
-                    second = j;
-                    secondDist = dist;
-                }
+                pairs.Add(new GdsFreePinPair(i, nearest, nearestDist));
+                taken[i] = taken[nearest] = true;
             }
-
-            if (nearest < 0)
-            {
-                skipped.Add(new GdsFreePinSkip(
-                    i,
-                    sawNonFacingOpposing
-                        ? GdsFreePinSkipReason.NotFacingEachOther
-                        : GdsFreePinSkipReason.NoOpposingPartnerInRadius));
-                continue;
-            }
-            if (second >= 0 && secondDist - nearestDist < AmbiguityDeltaUm)
-            {
-                skipped.Add(new GdsFreePinSkip(
-                    i, GdsFreePinSkipReason.AmbiguousNearestPartner, nearestDist, secondDist));
-                taken[i] = true;
-                continue;
-            }
-
-            pairs.Add(new GdsFreePinPair(i, nearest, nearestDist));
-            taken[i] = taken[nearest] = true;
         }
 
         return new GdsFreePinPairing(pairs, skipped);
+    }
+
+    /// <summary>
+    /// The nearest and second-nearest still-free opposing, mutually-facing
+    /// candidates of a DIFFERENT owner within <paramref name="radiusUm"/>
+    /// (inclusive) for the pin at <paramref name="originIndex"/>
+    /// (−1/<see cref="double.MaxValue"/> when none), plus whether any opposing
+    /// in-radius candidate failed the facing check (drives the skip reason).
+    /// </summary>
+    private static (int Nearest, int Second, double NearestDist, double SecondDist, bool SawNonFacingOpposing)
+        FindNearestTwo(IReadOnlyList<GdsFreePinCandidate> candidates, bool[] taken, int originIndex, double radiusUm)
+    {
+        var origin = candidates[originIndex];
+        var nearest = -1;
+        var second = -1;
+        var nearestDist = double.MaxValue;
+        var secondDist = double.MaxValue;
+        var sawNonFacingOpposing = false;
+        for (var j = 0; j < candidates.Count; j++)
+        {
+            if (j == originIndex || taken[j]) continue;
+            if (candidates[j].OwnerIndex == origin.OwnerIndex) continue;
+            var dist = DistanceUm(origin, candidates[j]);
+            if (dist > radiusUm) continue;
+            if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
+            if (!PinsFaceEachOther(origin, candidates[j]))
+            {
+                // Opposing and in radius, but not in the direction the pins
+                // point (wrap-around) — remembered for the skip reason.
+                sawNonFacingOpposing = true;
+                continue;
+            }
+
+            if (dist < nearestDist)
+            {
+                second = nearest;
+                secondDist = nearestDist;
+                nearest = j;
+                nearestDist = dist;
+            }
+            else if (dist < secondDist)
+            {
+                second = j;
+                secondDist = dist;
+            }
+        }
+        return (nearest, second, nearestDist, secondDist, sawNonFacingOpposing);
+    }
+
+    /// <summary>
+    /// Origin order for the greedy pass: ascending distance of each pin's
+    /// nearest opposing, mutually-facing partner within the radius (pins
+    /// without one come last). Closest-first keeps an earlier-ENUMERATED pin
+    /// from taking a partner that a later pin needs more (the sniping the class
+    /// summary describes). <see cref="Enumerable.OrderBy{TKey}"/> is stable, so
+    /// equal distances keep input order — the old first-come-first-served
+    /// behavior survives for genuine ties.
+    /// </summary>
+    private static IEnumerable<int> ProcessingOrder(
+        IReadOnlyList<GdsFreePinCandidate> candidates, double radiusUm) =>
+        Enumerable.Range(0, candidates.Count)
+            .OrderBy(i => BestPartnerDistanceUm(candidates, i, radiusUm));
+
+    /// <summary>
+    /// Distance (µm) to the origin's nearest opposing, mutually-facing candidate
+    /// of a different owner within <paramref name="radiusUm"/>, ignoring
+    /// occupancy (nothing is taken when the order is computed);
+    /// <see cref="double.MaxValue"/> when none exists — such pins never pair,
+    /// so they are processed last.
+    /// </summary>
+    private static double BestPartnerDistanceUm(
+        IReadOnlyList<GdsFreePinCandidate> candidates, int originIndex, double radiusUm)
+    {
+        var origin = candidates[originIndex];
+        var best = double.MaxValue;
+        for (var j = 0; j < candidates.Count; j++)
+        {
+            if (j == originIndex) continue;
+            if (candidates[j].OwnerIndex == origin.OwnerIndex) continue;
+            var dist = DistanceUm(origin, candidates[j]);
+            if (dist > radiusUm || dist >= best) continue;
+            if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
+            if (!PinsFaceEachOther(origin, candidates[j])) continue;
+            best = dist;
+        }
+        return best;
     }
 
     /// <summary>
