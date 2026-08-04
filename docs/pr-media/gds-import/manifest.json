@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-original-canvas.png",
+    "caption": "The ORIGINAL user design rendered by the production canvas renderers (WaveguideConnectionRenderer \u002B ComponentRenderer \u2014 the composition DesignCanvas.Render uses): 7 components from two PDKs (2\u00D7 demofab 2x2 MMI; SiEPIC adiabatic coupler, broadband DC, 2\u00D7 crossing 4-port, DC halfring) at the user\u0027s exact coordinates, joined by his 10 A*-routed waveguide connections. Dark #1E1E1E background, Y-down \u00B5m world. Look at: healthy routes in orange; several connections drawn as RED DASHED blocked-fallback detours (the overlapping app-template footprints leave no clean path \u2014 they still export as real geometry); the halfring\u2194adiabatic connection routed as a FULL CIRCLE (left, below the halfring pins \u2014 the bend math degenerates when the 10.6 \u00B5m pin span is shorter than the bend diameter); the 12.8 \u00B5m crossing\u2194crossing span is hidden under the two crossings\u0027 pin glyph clouds (pins draw above connections). The two MMI bodies are large app-template footprints that overlap the smaller SiEPIC components."
+  },
+  {
+    "file": "02-exported-gds-groundtruth.png",
+    "caption": "Independent ground truth of what actually landed in the exported GDS: the file read back with Lunima\u0027s OWN GdsReader \u002B GdsCellFlattener (not gdstk/klayout) and flattened. Bronze = the 10 routed waveguides (nazca flattens them into the top cell \u2014 including the full-circle ring left of centre and the 12.8 \u00B5m crossing waveguide that panel 01 hides under pin glyphs), steel blue = device bodies on the waveguide layer (1,0), plum = other foundry layers (the two big demofab MMI bodies), gray dots = pin-label anchors (1,10 / 501,1). Same world window and scale as 01 \u2014 every device and every waveguide must sit at the same pixels as in the canvas render."
+  },
+  {
+    "file": "03-reimported-canvas.png",
+    "caption": "The re-imported design (GdsImportService \u002B GdsPlacementExecutor, auto-connect OFF): the \u0027ConnectAPIC_Design\u0027 group (cyan selection border \u2014 the group lands selected, as after a real import) wraps the 7 placed instances, each drawn from its imported GDS outline polygons (blue fill, incl. the demofab \u0027mmi2x2_dp\u0027 name stubs etched into the MMI cells) with its name; light-green dots = the 28 free group pins. NO connections \u2014 the routed waveguides became flattened top-cell geometry, invisible to the abutment matcher (honest v1). Same window/scale as 01 (uniform re-origin shift removed): every component must align with the original render within ~1 \u00B5m. Child name labels overlap where instances cluster \u2014 group children get no label decluttering."
+  },
+  {
+    "file": "04-reimported-autoconnect.png",
+    "caption": "Same import with auto-connect ON (radius 200 \u00B5m): exactly 2 of the 10 logical connections are restored (orange group-internal paths) \u2014 the short opposing-pin spans crossing\u2194crossing (12.8 \u00B5m, the small orange line between the two central crossings) and halfring\u2194adiabatic (10.6 \u00B5m, re-routed by the router as the same FULL CIRCLE the original design carries \u2014 compare 01/02); their 4 pins leave the free-pin set (fewer green dots than 03). Two more candidate pairs were vetoed as genuinely ambiguous rather than miswired; the remaining 8 connections stay unrestored in v1."
+  }
+]
