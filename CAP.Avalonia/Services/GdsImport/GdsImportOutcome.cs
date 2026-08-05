@@ -36,15 +36,16 @@ public sealed record GdsImportOutcome
     /// <summary>Placed instances in GDS placement order (empty in black-box mode).</summary>
     public IReadOnlyList<GdsPlacedInstance> Instances { get; init; } = Array.Empty<GdsPlacedInstance>();
 
-    /// <summary>Reconstructed abutment connections (empty in black-box mode).</summary>
+    /// <summary>Reconstructed connections (route-derived first, then abutment; empty in black-box mode).</summary>
     public IReadOnlyList<GdsPinPair> Connections { get; init; } = Array.Empty<GdsPinPair>();
 
     /// <summary>
-    /// The top cell's OWN waveguide-layer polygons (routing geometry), in
-    /// app-space of the imported layout's top-left (the same frame
-    /// <see cref="GdsPlacedInstance.PositionXUm"/> uses). Empty in black-box mode.
-    /// The placement layer attaches them to the created group as frozen,
-    /// pin-less, non-re-routable paths so the imported routing stays visible.
+    /// The top cell's OWN waveguide-layer polygons that were NOT turned into
+    /// route-derived connections, in app-space of the imported layout's
+    /// top-left (the same frame <see cref="GdsPlacedInstance.PositionXUm"/>
+    /// uses). Empty in black-box mode. The placement layer attaches them to the
+    /// created group as frozen, pin-less, non-re-routable paths so the imported
+    /// routing stays visible.
     /// </summary>
     public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
         Array.Empty<GdsOutlinePolygon>();

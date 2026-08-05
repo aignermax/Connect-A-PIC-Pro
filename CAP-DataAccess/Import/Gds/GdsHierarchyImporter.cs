@@ -237,14 +237,32 @@ public static class GdsHierarchyImporter
                 "Use black-box mode to import it as a single component.");
         }
         var topCellWaveguidePolygons = session.GetTopCellWaveguidePolygons();
-        WarnOnTopLevelGeometry(session, topCellName, topCellWaveguidePolygons.Count);
 
         ct.ThrowIfCancellationRequested();
         var topPorts = session.GetTopLevelPorts()
             .Select(p => new GdsAbsolutePin { Name = p.Name, XUm = p.XUm, YUm = p.YUm, AngleDegrees = p.AngleDegrees })
             .ToList();
-        var connections = GdsAbutmentMatcher.Match(
-            names, pinsPerInstance, topPorts, session.Options.AbutmentToleranceUm, session.Warnings);
+
+        // Route derivation runs FIRST: a top-cell waveguide polygon drawn
+        // between exactly two pins IS the connection (the routing structure
+        // tells us the connectivity), so those pins are consumed before the
+        // abutment matcher pairs coincident positions — no double-connect.
+        // Polygons that connect nothing (0/1 pins) or form a junction
+        // (>2 pins, noted as info) stay frozen paths on the group.
+        var routeConnectivity = GdsRouteConnectivityMatcher.Match(
+            topCellWaveguidePolygons, pinsPerInstance, topPorts,
+            session.Options.PinTouchToleranceUm, session.Infos);
+        var frozenRoutePolygons = topCellWaveguidePolygons
+            .Where((_, index) => !routeConnectivity.ConsumedPolygonIndexes.Contains(index))
+            .ToList();
+        WarnOnTopLevelGeometry(
+            session, topCellName, routeConnectivity.Pairs.Count, frozenRoutePolygons.Count);
+
+        var connections = routeConnectivity.Pairs
+            .Concat(GdsAbutmentMatcher.Match(
+                names, pinsPerInstance, topPorts, session.Options.AbutmentToleranceUm, session.Warnings,
+                routeConnectivity.ConsumedInstancePins, routeConnectivity.ConsumedPortIndexes))
+            .ToList();
 
         return new GdsCircuitImport
         {
@@ -254,7 +272,7 @@ public static class GdsHierarchyImporter
             ImportedCellDrafts = drafts,
             Instances = placed,
             Connections = connections,
-            TopCellWaveguidePolygons = topCellWaveguidePolygons,
+            TopCellWaveguidePolygons = frozenRoutePolygons,
             Warnings = session.Warnings,
             Infos = session.Infos,
         };
@@ -386,24 +404,39 @@ public static class GdsHierarchyImporter
     /// <summary>
     /// Reports what happened to the top cell's OWN geometry (polygons/paths not
     /// belonging to any instance — typically routing our exporters flattened into
-    /// the top cell): waveguide-layer polygons come back as frozen, non-re-routable
-    /// paths on the created group (<paramref name="importedAsPaths"/>), anything
-    /// else stays unreconstructed in v1.
+    /// the top cell): waveguide-layer polygons bridging exactly two pins come back
+    /// as real, re-routable connections (<paramref name="restoredAsConnections"/>),
+    /// the remaining waveguide-layer polygons as frozen, non-re-routable paths on
+    /// the created group (<paramref name="importedAsPaths"/>); anything else stays
+    /// unreconstructed in v1.
     /// </summary>
     private static void WarnOnTopLevelGeometry(
-        GdsHierarchyImportSession session, string topCellName, int importedAsPaths)
+        GdsHierarchyImportSession session, string topCellName, int restoredAsConnections, int importedAsPaths)
     {
         int own = session.Library.Cells[topCellName].Elements
             .Count(e => e is GdsPolygon or GdsPath);
         if (own == 0)
             return;
 
+        int remainder = own - restoredAsConnections - importedAsPaths;
+        string remainderNote = remainder > 0
+            ? $"; the remaining {remainder} polygon(s)/path(s) on other layers are not reconstructed (v1)"
+            : string.Empty;
+
+        if (restoredAsConnections > 0)
+        {
+            string frozenNote = importedAsPaths > 0
+                ? $"; the {importedAsPaths} waveguide-layer polygon(s) are imported as frozen paths (not re-routable)"
+                : string.Empty;
+            session.Warnings.Add(
+                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
+                $"geometry); {restoredAsConnections} waveguide-layer polygon(s) were restored as real " +
+                $"connections (re-routable){frozenNote}{remainderNote}.");
+            return;
+        }
+
         if (importedAsPaths > 0)
         {
-            int remainder = own - importedAsPaths;
-            string remainderNote = remainder > 0
-                ? $"; the remaining {remainder} polygon(s)/path(s) on other layers are not reconstructed (v1)"
-                : string.Empty;
             session.Warnings.Add(
                 $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
                 $"geometry); the {importedAsPaths} waveguide-layer polygon(s) are imported as frozen " +

@@ -397,6 +397,7 @@
   "GdsImport.PortLayersLabel": "ポートラベルレイヤー:",
   "GdsImport.ResultAutoConnectSuffix": " {0} 組のピンを自動接続しました。",
   "GdsImport.ResultGroupSuffix": " グループ '{0}' を作成しました。",
+  "GdsImport.ResultRouteReconstructionSuffix": " ルートポリゴン: {0} 件を接続として復元し、{1} 件を固定パスとして保持しました。",
   "GdsImport.ResultSummary": "{0} 個のコンポーネントを配置し、{1} 組のピンを接続しました。",
   "GdsImport.Retry": "↺ 再試行",
   "GdsImport.SkippedAutoConnectFormat": "自動接続をスキップ — {0}",

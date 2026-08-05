@@ -397,6 +397,7 @@
   "GdsImport.PortLayersLabel": "Port-Label-Layer:",
   "GdsImport.ResultAutoConnectSuffix": " {0} Pin-Paar(e) automatisch verbunden.",
   "GdsImport.ResultGroupSuffix": " Als '{0}' gruppiert.",
+  "GdsImport.ResultRouteReconstructionSuffix": " Routen-Polygone: {0} als Verbindung(en) wiederhergestellt, {1} als eingefrorene Pfad(e) übernommen.",
   "GdsImport.ResultSummary": "{0} Komponente(n) platziert, {1} Pin-Paar(e) verbunden.",
   "GdsImport.Retry": "↺ Wiederholen",
   "GdsImport.SkippedAutoConnectFormat": "Auto-Connect übersprungen — {0}",

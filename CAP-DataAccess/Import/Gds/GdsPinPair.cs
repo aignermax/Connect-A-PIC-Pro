@@ -20,10 +20,12 @@ public sealed record GdsPinEndpoint
 }
 
 /// <summary>
-/// A reconstructed abutment connection between two pins whose absolute
-/// positions coincide (within
-/// <see cref="GdsHierarchyImportOptions.AbutmentToleranceUm"/>) and whose
-/// angles oppose — or between an instance pin and a coincident top-cell port.
+/// A reconstructed connection between two pins: either a coincident-pin
+/// abutment (positions within
+/// <see cref="GdsHierarchyImportOptions.AbutmentToleranceUm"/>, angles
+/// opposing), an instance pin coincident with a top-cell port — or a
+/// route-derived pair, where a top-cell waveguide polygon drawn between the two
+/// pins touches both (<see cref="IsRouteDerived"/>).
 /// </summary>
 public sealed record GdsPinPair
 {
@@ -34,11 +36,20 @@ public sealed record GdsPinPair
     public GdsPinEndpoint B { get; init; } = new();
 
     /// <summary>
-    /// App-space X of the connection point (midpoint of the two coincident pin
-    /// positions), in micrometers, relative to the top-cell bbox origin.
+    /// App-space X of the connection point (midpoint of the two pin positions),
+    /// in micrometers, relative to the top-cell bbox origin. Informational.
     /// </summary>
     public double XUm { get; init; }
 
     /// <summary>App-space Y of the connection point, in micrometers.</summary>
     public double YUm { get; init; }
+
+    /// <summary>
+    /// True when the pair was derived from a top-cell route polygon touching
+    /// both pins (the drawn route IS the connectivity) instead of from
+    /// coincident pin positions. Route-derived pairs run before abutment
+    /// matching and consume their pins; the placement layer re-routes them like
+    /// any reconstructed connection and reports them separately.
+    /// </summary>
+    public bool IsRouteDerived { get; init; }
 }

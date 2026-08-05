@@ -394,6 +394,12 @@ public partial class GdsImportDialogViewModel : ObservableObject
         var summary = string.Format(
             LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
             report.PlacedCount, report.ConnectedCount);
+        if (report.RouteDerivedCount > 0 || report.FrozenRoutePathCount > 0)
+        {
+            summary += string.Format(
+                LocalizationService.Instance.Translate("GdsImport.ResultRouteReconstructionSuffix"),
+                report.RouteDerivedCount, report.FrozenRoutePathCount);
+        }
         if (autoConnectRequested)
         {
             summary += string.Format(

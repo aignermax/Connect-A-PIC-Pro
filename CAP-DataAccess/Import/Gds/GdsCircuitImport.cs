@@ -34,13 +34,14 @@ public sealed record GdsCircuitImport
     /// <summary>Placed instances in GDS placement order (empty in black-box mode).</summary>
     public IReadOnlyList<GdsPlacedInstance> Instances { get; init; } = Array.Empty<GdsPlacedInstance>();
 
-    /// <summary>Reconstructed abutment connections (empty in black-box mode).</summary>
+    /// <summary>Reconstructed connections: route-derived pairs first, then abutment pairs (empty in black-box mode).</summary>
     public IReadOnlyList<GdsPinPair> Connections { get; init; } = Array.Empty<GdsPinPair>();
 
     /// <summary>
     /// The top cell's OWN polygons on the configured route layers
-    /// (<see cref="GdsHierarchyImportOptions.RouteLayers"/>; routing geometry), in
-    /// app-space of <see cref="BoundingBox"/> (Y-down, origin at the
+    /// (<see cref="GdsHierarchyImportOptions.RouteLayers"/>) that were NOT turned
+    /// into route-derived connections (they touch 0/1 pins, or a junction of
+    /// &gt;2 pins), in app-space of <see cref="BoundingBox"/> (Y-down, origin at the
     /// bbox top-left — the same frame <see cref="GdsPlacedInstance.PositionXUm"/>
     /// uses). Explode mode only; the service layer attaches them to the created
     /// group as frozen, pin-less, non-re-routable paths. Geometry contributed by

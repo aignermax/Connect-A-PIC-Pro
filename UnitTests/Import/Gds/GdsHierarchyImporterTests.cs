@@ -536,18 +536,24 @@ public class GdsHierarchyImporterTests
     [Fact]
     public async Task Explode_TopCellOwnWaveguidePolygon_ImportedWithPinnedCoordinates()
     {
-        // The route polygon bridging the 5 µm gap between wgA (ends at x=10) and
+        // The route polygon spanning the 5 µm gap between wgA (ends at x=10) and
         // wgB (starts at x=15) is the top cell's OWN geometry on the waveguide
         // layer — it must import, in app space (Y-down, origin at the top bbox
         // top-left (0, 4)). The wgA/wgB core stripes sit on the same (1,0) layer
         // but belong to the INSTANCES — importing them here too would double-draw
         // every component's waveguide, so exactly ONE polygon comes back.
+        //
+        // The polygon runs at app y ∈ [3.25, 3.75] (GDS y 250…750), 1.25 µm clear
+        // of the pin line: the pin labels sit at GDS y=2000 → app y=2 (wgA.out at
+        // (10, 2), wgB.in at (15, 2)), and the route-connectivity touch tolerance
+        // is 1.0 µm — 1.25 µm of clearance keeps the polygon pin-less, so it
+        // stays a FROZEN PATH instead of being consumed as a connection.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
                 .SRef("wgA", 0, 0)
                 .SRef("wgB", 15000, 0)
-                .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+                .Boundary(1, 0, (10000, 250), (15000, 250), (15000, 750), (10000, 750), (10000, 250))
                 .Boundary(68, 0, (0, 0), (25000, 0), (25000, 4000), (0, 4000), (0, 0)) // devrec halo
             .EndCell()
             .WaveguideCell("wgA")
@@ -563,11 +569,51 @@ public class GdsHierarchyImporterTests
         polygon.DataType.ShouldBe(0);
         polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
         {
-            (10.0, 2.25), (15.0, 2.25), (15.0, 1.75), (10.0, 1.75), (10.0, 2.25),
+            (10.0, 3.75), (15.0, 3.75), (15.0, 3.25), (10.0, 3.25), (10.0, 3.75),
         });
 
         var warning = result.Warnings.ShouldHaveSingleItem();
         warning.ShouldContain("imported as frozen paths (not re-routable)");
+        // The devrec halo is neither a route nor imported.
+        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+    }
+
+    [Fact]
+    public async Task Explode_TopCellOwnWaveguidePolygon_TouchingTwoPins_BecomesRouteDerivedConnection()
+    {
+        // The SAME geometry as the frozen-path test, but with the polygon ON the
+        // pin line: it bridges the 5 µm gap between wgA.out (app (10, 2)) and
+        // wgB.in (app (15, 2)) — its end edges pass exactly through both pins.
+        // The drawn route IS the connectivity, so the polygon is consumed into a
+        // real (re-routable) connection instead of coming back as a frozen path.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+                .Boundary(68, 0, (0, 0), (25000, 0), (25000, 4000), (0, 4000), (0, 0)) // devrec halo
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldBeEmpty(
+            "the bridging polygon was consumed into a route-derived connection");
+        var connection = result.Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.A.InstanceIndex.ShouldBe(0);
+        connection.A.PinName.ShouldBe("out");
+        connection.B.InstanceIndex.ShouldBe(1);
+        connection.B.PinName.ShouldBe("in");
+        connection.XUm.ShouldBe(12.5, Tolerance);
+        connection.YUm.ShouldBe(2.0, Tolerance);
+
+        var warning = result.Warnings.ShouldHaveSingleItem();
+        warning.ShouldContain("restored as real connections (re-routable)");
         // The devrec halo is neither a route nor imported.
         warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
     }

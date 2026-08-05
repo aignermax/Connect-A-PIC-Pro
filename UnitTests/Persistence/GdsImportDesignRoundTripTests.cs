@@ -151,10 +151,10 @@ public class GdsImportDesignRoundTripTests : IDisposable
         routePath.Path.Segments.Select(s => (s.StartPoint.X, s.StartPoint.Y, s.EndPoint.X, s.EndPoint.Y))
             .ShouldBe(new[]
             {
-                (10.0, 2.25, 12.0, 2.25),
-                (12.0, 2.25, 12.0, 1.75),
-                (12.0, 1.75, 10.0, 1.75),
-                (10.0, 1.75, 10.0, 2.25),
+                (10.0, 3.75, 12.0, 3.75),
+                (12.0, 3.75, 12.0, 3.25),
+                (12.0, 3.25, 10.0, 3.25),
+                (10.0, 3.25, 10.0, 3.75),
             });
 
         // The pinned abutment connection survived the same round-trip unchanged.
@@ -186,8 +186,12 @@ public class GdsImportDesignRoundTripTests : IDisposable
 
     /// <summary>
     /// The standard fixture plus the top cell's OWN route polygon on (1,0): a
-    /// 2×0.5 µm stub (GDS x 10…12, y 1.75…2.25) at the wgA↔wgB abutment — the
-    /// shape our exporters flatten routed waveguides into.
+    /// 2×0.5 µm stub (GDS x 10…12, y 0.25…0.75) — the shape our exporters
+    /// flatten routed waveguides into. It sits at app y ∈ [3.25, 3.75], 1.25 µm
+    /// off the pin line: both pins of the wgA↔wgB abutment sit at app (10, 2)
+    /// and the route-connectivity touch tolerance is 1.0 µm, so the stub touches
+    /// NO pin and stays a pin-less frozen path instead of being consumed as a
+    /// route-derived connection.
     /// </summary>
     private string WriteGdsWithRoutePolygon()
     {
@@ -198,7 +202,7 @@ public class GdsImportDesignRoundTripTests : IDisposable
             .BeginCell("TOP")
                 .SRef("wgA", 0, 0)
                 .SRef("wgB", 10000, 0)
-                .Boundary(1, 0, (10000, 1750), (12000, 1750), (12000, 2250), (10000, 2250), (10000, 1750))
+                .Boundary(1, 0, (10000, 250), (12000, 250), (12000, 750), (10000, 750), (10000, 250))
             .EndCell()
             .WaveguideCell("wgA")
             .WaveguideCell("wgB")

@@ -82,6 +82,14 @@ public sealed record GdsConnectionInstruction
     /// <summary>True when either endpoint is a top-cell port — v1 skips these connections.</summary>
     public bool InvolvesTopLevelPort => A.IsTopLevelPort || B.IsTopLevelPort;
 
+    /// <summary>
+    /// True when the connection was derived from a top-cell route polygon
+    /// touching both pins (the drawn route IS the connectivity), false for a
+    /// coincident-pin abutment. Reporting only — both kinds are created and
+    /// re-routed identically.
+    /// </summary>
+    public bool IsRouteDerived { get; init; }
+
     /// <summary>User-presentable note, set for skipped top-cell-port connections.</summary>
     public string? Note { get; init; }
 }
@@ -108,11 +116,12 @@ public sealed record GdsPlacementPlan
         Array.Empty<GdsConnectionInstruction>();
 
     /// <summary>
-    /// The top cell's OWN waveguide-layer polygons (routing geometry) in plan
-    /// space (µm, Y-down, origin at the imported layout's top-left). The executor
-    /// attaches them to the created group as frozen, pin-less, non-re-routable
-    /// paths. Empty in black-box mode (the single draft's outlines already carry
-    /// the whole cell's geometry).
+    /// The top cell's OWN waveguide-layer polygons that were NOT turned into
+    /// route-derived connections, in plan space (µm, Y-down, origin at the
+    /// imported layout's top-left). The executor attaches them to the created
+    /// group as frozen, pin-less, non-re-routable paths. Empty in black-box
+    /// mode (the single draft's outlines already carry the whole cell's
+    /// geometry).
     /// </summary>
     public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
         Array.Empty<GdsOutlinePolygon>();
@@ -187,6 +196,7 @@ public sealed record GdsPlacementPlan
             B = MapEndpoint(pair.B),
             XUm = pair.XUm,
             YUm = pair.YUm,
+            IsRouteDerived = pair.IsRouteDerived,
             Note = pair.A.IsTopLevelPort || pair.B.IsTopLevelPort
                 ? "involves a top-cell port of the imported circuit — left free in v1"
                 : null,

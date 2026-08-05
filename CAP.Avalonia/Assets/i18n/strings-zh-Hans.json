@@ -397,6 +397,7 @@
   "GdsImport.PortLayersLabel": "端口标签层：",
   "GdsImport.ResultAutoConnectSuffix": " 已自动连接 {0} 对引脚。",
   "GdsImport.ResultGroupSuffix": " 已分组为 '{0}'。",
+  "GdsImport.ResultRouteReconstructionSuffix": " 布线多边形：{0} 条已还原为连接，{1} 条保留为冻结路径。",
   "GdsImport.ResultSummary": "已放置 {0} 个组件，连接 {1} 对引脚。",
   "GdsImport.Retry": "↺ 重试",
   "GdsImport.SkippedAutoConnectFormat": "已跳过自动连接 — {0}",

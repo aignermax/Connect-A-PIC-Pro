@@ -225,6 +225,8 @@ public sealed class GdsPlacementExecutor
             {
                 created.Add(connectionVm.Connection);
                 report.ConnectedCount++;
+                if (connection.IsRouteDerived)
+                    report.RouteDerivedCount++;
             }
         }
 
@@ -431,10 +433,12 @@ public sealed class GdsPlacementExecutor
 
         report.GroupCreated = true;
         report.GroupName = plan.GroupName;
+        report.FrozenRoutePathCount = plan.TopCellWaveguidePolygons.Count;
 
         // The top cell's own routing geometry (waveguide-layer polygons) becomes
         // pin-less frozen paths on the group: visible and persistent, but not
-        // re-routable (true route reconstruction is #814).
+        // re-routable. Polygons that bridged exactly two pins already became
+        // real connections upstream (route derivation) and are not in this list.
         foreach (var polygon in plan.TopCellWaveguidePolygons)
             command.CreatedGroup.AddInternalPath(GdsFrozenRoutePathFactory.Create(polygon));
     }

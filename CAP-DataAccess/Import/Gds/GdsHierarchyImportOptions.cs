@@ -75,6 +75,17 @@ public sealed record GdsHierarchyImportOptions
     public double AbutmentToleranceUm { get; init; } = 0.05;
 
     /// <summary>
+    /// Maximum distance in micrometers between a pin position and a top-cell
+    /// route polygon for the pin to count as touching it (route-derivation, see
+    /// <c>GdsRouteConnectivityMatcher</c>). Deliberately much wider than
+    /// <see cref="AbutmentToleranceUm"/>: a drawn route ends ON its pins, so a
+    /// generous window catches pins that sit a fraction of a micron off the
+    /// polygon end (PDK cell swaps, rounding) without ever bridging the gap to
+    /// an unrelated neighbor. Default: 1.0 µm.
+    /// </summary>
+    public double PinTouchToleranceUm { get; init; } = 1.0;
+
+    /// <summary>
     /// Ramer-Douglas-Peucker tolerance in micrometers for simplifying draft
     /// outline polygons. Default: 0.05 µm.
     /// </summary>
@@ -109,6 +120,11 @@ public sealed record GdsHierarchyImportOptions
         {
             throw new ArgumentOutOfRangeException(
                 nameof(AbutmentToleranceUm), AbutmentToleranceUm, "The abutment tolerance must be ≥ 0.");
+        }
+        if (PinTouchToleranceUm < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(PinTouchToleranceUm), PinTouchToleranceUm, "The pin-touch tolerance must be ≥ 0.");
         }
         if (OutlineSimplificationToleranceUm < 0)
         {

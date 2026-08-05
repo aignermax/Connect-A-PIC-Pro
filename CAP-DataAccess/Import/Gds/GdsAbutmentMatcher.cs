@@ -8,6 +8,9 @@ namespace CAP_DataAccess.Import.Gds;
 /// labels carry no reliable inward direction, so no angle check applies).
 /// One partner per pin — first match in deterministic scan order wins, extra
 /// candidates produce an ambiguity warning. No self-connections.
+/// Pins already consumed by route-derived pairs
+/// (<see cref="GdsRouteConnectivityMatcher"/>, which runs first) are excluded
+/// up front, so a route polygon's connection is never double-connected.
 /// </summary>
 internal static class GdsAbutmentMatcher
 {
@@ -25,16 +28,35 @@ internal static class GdsAbutmentMatcher
     /// <param name="topPortPins">Absolute pins of the top cell's own port labels.</param>
     /// <param name="toleranceUm">Position coincidence tolerance in micrometers.</param>
     /// <param name="warnings">Collects user-presentable ambiguity warnings.</param>
+    /// <param name="preConsumedInstancePins">
+    /// Instance pins already paired by route derivation — treated as consumed
+    /// from the start (never matched, never ambiguous).
+    /// </param>
+    /// <param name="preConsumedPortIndexes">
+    /// Top-cell port indexes already paired by route derivation.
+    /// </param>
     public static IReadOnlyList<GdsPinPair> Match(
         IReadOnlyList<string> instanceNames,
         IReadOnlyList<IReadOnlyList<GdsAbsolutePin>> pinsPerInstance,
         IReadOnlyList<GdsAbsolutePin> topPortPins,
         double toleranceUm,
-        List<string> warnings)
+        List<string> warnings,
+        IReadOnlySet<(int InstanceIndex, int PinIndex)>? preConsumedInstancePins = null,
+        IReadOnlySet<int>? preConsumedPortIndexes = null)
     {
         var pairs = new List<GdsPinPair>();
         var consumedInstancePins = pinsPerInstance.Select(pins => new bool[pins.Count]).ToArray();
         var consumedPorts = new bool[topPortPins.Count];
+        if (preConsumedInstancePins is not null)
+        {
+            foreach (var (instance, pin) in preConsumedInstancePins)
+                consumedInstancePins[instance][pin] = true;
+        }
+        if (preConsumedPortIndexes is not null)
+        {
+            foreach (var port in preConsumedPortIndexes)
+                consumedPorts[port] = true;
+        }
 
         for (int i = 0; i < pinsPerInstance.Count; i++)
         {
