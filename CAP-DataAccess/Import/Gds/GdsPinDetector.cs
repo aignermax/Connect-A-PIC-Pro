@@ -19,8 +19,17 @@ namespace CAP_DataAccess.Import.Gds;
 /// Two detection strategies run over the same cell:
 /// <list type="number">
 /// <item>Label pins: every TEXT on a configured port layer becomes a named pin at
-/// its anchor; the angle is the outward normal of the bounding-box edge nearest
-/// to the anchor.</item>
+/// its anchor. The angle is the outward normal of the nearest waveguide/metal
+/// polygon SEGMENT when the anchor lies on such a polygon (within
+/// <see cref="GdsPinDetectionOptions.LabelGeometryTouchToleranceUm"/> of its
+/// outline) — the local geometry says where the pin points, which stays correct
+/// for black-box cells whose labels sit deep inside the bounding box; labels
+/// with no polygon near fall back to the outward normal of the bounding-box
+/// edge nearest to the anchor. The pin KIND is inferred the same way: an anchor
+/// touching a metal-layer polygon (its outline, or its interior) is electrical,
+/// one touching only waveguide polygons is optical, and with no polygon near
+/// the label text decides (<see cref="ElectricalLabelMarkers"/>) — anything
+/// else stays kind-unknown (the optical default downstream).</item>
 /// <item>Edge heuristic: waveguide-layer polygon segments lying on a bounding-box
 /// edge line yield a pin at the segment midpoint with the segment length as
 /// width. Touches already covered by a label pin are suppressed, and adjacent
@@ -49,6 +58,48 @@ public static class GdsPinDetector
     private readonly record struct Candidate(CellEdge Edge, DetectedPin Pin);
 
     /// <summary>
+    /// The geometry evidence around a label anchor, gathered by
+    /// <see cref="ProbeAnchorGeometry"/>: the nearest waveguide/metal outline
+    /// segment (for the direction rule) plus which layer classes the anchor
+    /// touches (for the kind inference).
+    /// </summary>
+    /// <param name="SegmentDistanceSquared">Squared distance (µm²) from the anchor to the nearest segment.</param>
+    /// <param name="Polygon">The polygon that segment belongs to (for the interior probe).</param>
+    /// <param name="P1">Segment start (GDS space).</param>
+    /// <param name="P2">Segment end (GDS space).</param>
+    /// <param name="TouchesWaveguide">The anchor lies inside a waveguide polygon or within tolerance of its outline.</param>
+    /// <param name="TouchesMetal">The anchor lies inside a metal polygon or within tolerance of its outline.</param>
+    private sealed record AnchorGeometry(
+        double SegmentDistanceSquared,
+        GdsPolygon Polygon,
+        GdsPoint P1,
+        GdsPoint P2,
+        bool TouchesWaveguide,
+        bool TouchesMetal);
+
+    /// <summary>
+    /// Offset (µm) of the interior probe point from a segment midpoint when
+    /// deciding which segment normal points AWAY from the polygon interior.
+    /// One nanometer (one database unit in a typical 1 nm grid): large enough
+    /// to survive floating-point noise, small enough to stay inside the
+    /// thinnest real geometry (a 0.5 µm waveguide core).
+    /// </summary>
+    private const double InteriorProbeOffsetUm = 0.001;
+
+    /// <summary>
+    /// Label substrings (case-insensitive CONTAINS) marking a pin as ELECTRICAL
+    /// when no waveguide/metal polygon is near the anchor — the name-based
+    /// fallback of the kind inference. The names PDK black-box cells give their
+    /// electrical contacts: anode/cathode (photodetectors, modulators), "elec"
+    /// (our own exports and the demofab eopm), bond/supply pads (pad, gnd, vcc,
+    /// vdd). Kept deliberately short: every entry must be unambiguous enough
+    /// that an OPTICAL port never carries it ("o1", "in", "out", "port0" match
+    /// nothing here).
+    /// </summary>
+    private static readonly string[] ElectricalLabelMarkers =
+        ["anode", "cathode", "elec", "pad", "gnd", "vcc", "vdd"];
+
+    /// <summary>
     /// Detects pins on <paramref name="flattened"/>. The bounding box is supplied
     /// by the caller (typically <see cref="GdsCellFlattener.GetBoundingBox"/>) and
     /// is used as-is — it defines both the app-space origin and the edges pins
@@ -73,21 +124,27 @@ public static class GdsPinDetector
         // ── 1. Label pins ────────────────────────────────────────────────────
         var labelAnchors = new List<GdsPoint>();
         var candidates = new List<Candidate>();
+        double geometryToleranceSquared =
+            options.LabelGeometryTouchToleranceUm * options.LabelGeometryTouchToleranceUm;
         foreach (var text in flattened.Texts)
         {
             if (!ContainsLayer(options.PortLayers, text.Layer, text.TextType))
                 continue;
 
             CellEdge edge = NearestEdge(text.Position, cellBBox);
+            var geometry = ProbeAnchorGeometry(text.Position, flattened.Polygons, options);
             labelAnchors.Add(text.Position);
             candidates.Add(new Candidate(edge, new DetectedPin
             {
                 Name = text.Text,
                 XUm = ToAppX(text.Position.X, cellBBox),
                 YUm = ToAppY(text.Position.Y, cellBBox),
-                AngleDegrees = OutwardAngleDegrees(edge),
+                AngleDegrees = geometry is not null && geometry.SegmentDistanceSquared <= geometryToleranceSquared
+                    ? SegmentOutwardAngleDegrees(geometry.Polygon, geometry.P1, geometry.P2)
+                    : OutwardAngleDegrees(edge),
                 WidthUm = 0,
                 Source = DetectedPinSource.Label,
+                IsElectrical = InferLabelPinKind(text.Text, geometry),
             }));
         }
 
@@ -194,6 +251,161 @@ public static class GdsPinDetector
         if (bottom < bestDistance) { best = CellEdge.Bottom; }
 
         return best;
+    }
+
+    /// <summary>
+    /// Gathers the waveguide/metal geometry evidence around a label anchor: the
+    /// candidate polygon (waveguide + electrical layers) whose OUTLINE segment
+    /// comes closest to the anchor — that segment drives the pin direction —
+    /// plus which layer classes the anchor TOUCHES (inside the polygon or
+    /// within <see cref="GdsPinDetectionOptions.LabelGeometryTouchToleranceUm"/>
+    /// of its outline — the same touch union <c>GdsRouteConnectivityMatcher</c>
+    /// uses) — that drives the kind inference. Null when no candidate polygon
+    /// has any usable segment. Deterministic: polygons and segments are scanned
+    /// in element order and a strictly smaller distance wins, so ties keep the
+    /// earliest polygon/segment.
+    /// </summary>
+    private static AnchorGeometry? ProbeAnchorGeometry(
+        GdsPoint anchor, IReadOnlyList<GdsPolygon> polygons, GdsPinDetectionOptions options)
+    {
+        double toleranceSquared = options.LabelGeometryTouchToleranceUm * options.LabelGeometryTouchToleranceUm;
+        double bestDistanceSquared = double.PositiveInfinity;
+        GdsPolygon? bestPolygon = null;
+        GdsPoint bestP1 = default, bestP2 = default;
+        bool touchesWaveguide = false, touchesMetal = false;
+
+        foreach (var polygon in polygons)
+        {
+            // A layer pair configured as both waveguide and metal counts as
+            // metal — metal is the stronger (direct electrical) evidence.
+            bool isMetal = ContainsLayer(options.ElectricalLayers, polygon.Layer, polygon.DataType);
+            bool isWaveguide = !isMetal && ContainsLayer(options.WaveguideLayers, polygon.Layer, polygon.DataType);
+            if (!isMetal && !isWaveguide)
+                continue;
+
+            double polygonBestSquared = double.PositiveInfinity;
+            GdsPoint polygonBestP1 = default, polygonBestP2 = default;
+            foreach (var (p1, p2) in Segments(polygon))
+            {
+                if (p1.Equals(p2))
+                    continue; // zero-length segments have no direction; their vertex is covered by the neighbours
+                double distanceSquared = DistanceToSegmentSquared(anchor, p1, p2);
+                if (distanceSquared < polygonBestSquared)
+                {
+                    polygonBestSquared = distanceSquared;
+                    polygonBestP1 = p1;
+                    polygonBestP2 = p2;
+                }
+            }
+            if (polygonBestSquared == double.PositiveInfinity)
+                continue;
+
+            if (polygonBestSquared <= toleranceSquared || PointInPolygon(polygon.Points, anchor))
+            {
+                touchesMetal |= isMetal;
+                touchesWaveguide |= isWaveguide;
+            }
+            if (polygonBestSquared < bestDistanceSquared)
+            {
+                bestDistanceSquared = polygonBestSquared;
+                bestPolygon = polygon;
+                bestP1 = polygonBestP1;
+                bestP2 = polygonBestP2;
+            }
+        }
+
+        return bestPolygon is null
+            ? null
+            : new AnchorGeometry(bestDistanceSquared, bestPolygon, bestP1, bestP2, touchesWaveguide, touchesMetal);
+    }
+
+    /// <summary>
+    /// The outward normal angle of the segment p1–p2 in the app convention
+    /// (0° = east, 90° = down in the Y-down plane). "Outward" — away from the
+    /// polygon interior — is decided winding-agnostically (GDS polygons come in
+    /// both orientations): the segment midpoint is probed a nanometer to the
+    /// segment's left; when that probe lands INSIDE the polygon the left normal
+    /// points inward and is flipped. The GDS-space (Y-up) normal (nx, ny) then
+    /// gets the same Y-flip the pin positions get: appAngle = atan2(−ny, nx) —
+    /// the transform <see cref="GdsInstancePinProjector"/> applies to pin
+    /// directions. The caller guarantees a non-zero-length segment (the probe
+    /// skips them).
+    /// </summary>
+    private static double SegmentOutwardAngleDegrees(GdsPolygon polygon, GdsPoint p1, GdsPoint p2)
+    {
+        double dx = p2.X - p1.X;
+        double dy = p2.Y - p1.Y;
+        double length = Math.Sqrt((dx * dx) + (dy * dy));
+        double nx = -dy / length;
+        double ny = dx / length;
+        var probe = new GdsPoint(
+            ((p1.X + p2.X) / 2.0) + (nx * InteriorProbeOffsetUm),
+            ((p1.Y + p2.Y) / 2.0) + (ny * InteriorProbeOffsetUm));
+        if (PointInPolygon(polygon.Points, probe))
+        {
+            nx = -nx;
+            ny = -ny;
+        }
+        return GdsInstancePinProjector.Normalize360(Math.Atan2(-ny, nx) * 180.0 / Math.PI);
+    }
+
+    /// <summary>
+    /// Infers a label pin's signal domain. Layer evidence is primary: touching
+    /// a metal polygon proves ELECTRICAL (metal only carries electrical
+    /// signals). Touching only waveguide polygons stays kind-UNKNOWN (null, the
+    /// optical default downstream) rather than proven-optical: a later
+    /// metal-route match (<c>GdsRouteConnectivityMatcher</c>) is stronger
+    /// physical evidence and must still be able to infer the pin electrical.
+    /// With no polygon near, the label text decides
+    /// (<see cref="ElectricalLabelMarkers"/>); anything else stays unknown.
+    /// </summary>
+    private static bool? InferLabelPinKind(string label, AnchorGeometry? geometry)
+    {
+        if (geometry is not null)
+        {
+            if (geometry.TouchesMetal)
+                return true;
+            if (geometry.TouchesWaveguide)
+                return null; // waveguide evidence beats the name heuristic
+        }
+
+        foreach (string marker in ElectricalLabelMarkers)
+        {
+            if (label.Contains(marker, StringComparison.OrdinalIgnoreCase))
+                return true;
+        }
+        return null;
+    }
+
+    /// <summary>Even-odd point-in-polygon (ray cast towards +X), GDS space.</summary>
+    private static bool PointInPolygon(IReadOnlyList<GdsPoint> polygon, GdsPoint point)
+    {
+        bool inside = false;
+        for (int i = 0, j = polygon.Count - 1; i < polygon.Count; j = i++)
+        {
+            var pi = polygon[i];
+            var pj = polygon[j];
+            if ((pi.Y > point.Y) != (pj.Y > point.Y)
+                && point.X < ((pj.X - pi.X) * (point.Y - pi.Y) / (pj.Y - pi.Y)) + pi.X)
+            {
+                inside = !inside;
+            }
+        }
+        return inside;
+    }
+
+    /// <summary>Squared distance from <paramref name="point"/> to the segment a–b.</summary>
+    private static double DistanceToSegmentSquared(GdsPoint point, GdsPoint a, GdsPoint b)
+    {
+        double dx = b.X - a.X;
+        double dy = b.Y - a.Y;
+        double lengthSquared = (dx * dx) + (dy * dy);
+        double t = lengthSquared == 0
+            ? 0
+            : Math.Clamp(((point.X - a.X) * dx + (point.Y - a.Y) * dy) / lengthSquared, 0, 1);
+        double cx = a.X + (t * dx) - point.X;
+        double cy = a.Y + (t * dy) - point.Y;
+        return (cx * cx) + (cy * cy);
     }
 
     /// <summary>

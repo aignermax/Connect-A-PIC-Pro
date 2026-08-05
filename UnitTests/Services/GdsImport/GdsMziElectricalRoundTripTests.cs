@@ -179,9 +179,31 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         var anode = stubTemplate.PinDefinitions.First(p => p.Name == "Photodetector#0_anode");
         anode.OffsetX.ShouldBe(1036.29, 0.6);
         anode.OffsetY.ShouldBe(225.20, 0.6);
-        // v1 limitation, pinned honestly: geometry labels carry no signal domain,
-        // so every black-box pin defaults to optical (even the pads' elec pins).
-        stubTemplate.PinDefinitions.ShouldAllBe(p => p.Kind == CAP_Core.Components.Core.MatterType.Light);
+        // Pin-kind inference: the black box's electrical pins — the detectors'
+        // anodes/cathodes (metal-trace touch), the phase shifter's elec1/elec2
+        // and the four bond-pad elec pins (electrical names) — read ELECTRICAL;
+        // every other pin keeps the optical default. (Previously all 31 pins
+        // were pinned Light as an honestly-documented v1 limitation: geometry
+        // labels carried no signal domain. That limitation is what the
+        // detector's kind inference removed.)
+        // The eleventh pin, the demofab PD's own contact label 'c0' on
+        // detector_cross: its anchor sits 0.3 µm from the crossing metal traces
+        // that sprawl over the cell's contact end there (verified by probing
+        // the flattened GDS; detector_bar's c0 is 32.5 µm from any metal and
+        // stays optical). Metal at the anchor IS the layer-based evidence —
+        // and physically c0 is the contact pin of demofab's pd_dp_50.
+        stubTemplate.PinDefinitions
+            .Where(p => p.Kind == CAP_Core.Components.Core.MatterType.Electricity)
+            .Select(p => p.Name)
+            .ShouldBe(new[]
+            {
+                "Photodetector#0_anode", "Photodetector#0_cathode",
+                "Photodetector#1_anode", "Photodetector#1_cathode",
+                "Phase_Shifter_elec1", "Phase_Shifter_elec2",
+                "ebeam_BondPad#0_elec", "ebeam_BondPad#1_elec",
+                "ebeam_BondPad#2_elec", "ebeam_BondPad#3_elec",
+                "pd_dp_50_$8443#1_c0",
+            }, ignoreOrder: true);
         stubTemplate.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
         stub.Outcome.Warnings.ShouldBeEmpty();
         stub.Report.PlacedCount.ShouldBe(1);

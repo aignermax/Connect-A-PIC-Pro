@@ -43,10 +43,13 @@ public sealed record DetectedPin
     /// <summary>
     /// Signal-domain knowledge: <c>true</c>/<c>false</c> when the kind is
     /// authoritative (pins of a known PDK component carry their template's
-    /// kind), <c>null</c> when the kind is unknown (geometry-detected pins —
-    /// a TEXT label or waveguide edge says nothing about the signal domain).
-    /// The metal-route matcher infers kinds for unknown pins that participate
-    /// in a metal-layer connection (metal only carries electrical signals).
+    /// kind; a label pin touching metal geometry or named like an electrical
+    /// contact is proven electrical — see <see cref="GdsPinDetector"/>),
+    /// <c>null</c> when the kind is unknown (waveguide-only or unlabeled
+    /// geometry says nothing reliable about the signal domain; the PDK layer
+    /// reads null as the optical default). The metal-route matcher infers kinds
+    /// for unknown pins that participate in a metal-layer connection (metal
+    /// only carries electrical signals).
     /// </summary>
     public bool? IsElectrical { get; init; }
 }

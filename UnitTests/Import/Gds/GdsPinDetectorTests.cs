@@ -243,6 +243,201 @@ public class GdsPinDetectorTests
         pin.AngleDegrees.ShouldBe(180, Tolerance);
     }
 
+    // ── Label direction from local geometry ──────────────────────────────────
+
+    [Fact]
+    public void Label_OnWaveguideEndFaceInsideLargeBBox_UsesSegmentNormal_AllOrientations()
+    {
+        // A 100 × 80 µm black-box-sized cell whose four waveguide stubs end deep
+        // inside the bbox, each label sitting ON its stub's end face. The bbox
+        // edge rule would point every pin at the nearest outer edge; the local
+        // geometry must win and point along the waveguide axis instead.
+        var box = new GdsBoundingBox(0, 0, 100, 80);
+        var cell = Cell(
+            // East-pointing stub: end face x = 14, body extending to -X.
+            Poly(1, 0, (10, 39.75), (14, 39.75), (14, 40.25), (10, 40.25), (10, 39.75)),
+            Label(1, 10, "east", x: 14, y: 40),
+            // West-pointing stub: end face x = 86, body extending to +X.
+            Poly(1, 0, (86, 39.75), (90, 39.75), (90, 40.25), (86, 40.25), (86, 39.75)),
+            Label(1, 10, "west", x: 86, y: 40),
+            // Down-pointing stub (app convention): body extending to GDS +Y.
+            Poly(1, 0, (49.75, 60), (50.25, 60), (50.25, 64), (49.75, 64), (49.75, 60)),
+            Label(1, 10, "down", x: 50, y: 60),
+            // Up-pointing stub (app convention): body extending to GDS -Y.
+            Poly(1, 0, (49.75, 16), (50.25, 16), (50.25, 20), (49.75, 20), (49.75, 16)),
+            Label(1, 10, "up", x: 50, y: 20));
+
+        var pins = GdsPinDetector.Detect(cell, box);
+
+        pins.Count.ShouldBe(4);
+        // Sorted by nearest bbox edge (left, top, right, bottom): east → left,
+        // down → top, west → right, up → bottom.
+        pins[0].Name.ShouldBe("east");
+        pins[0].AngleDegrees.ShouldBe(0, Tolerance);
+        pins[1].Name.ShouldBe("down");
+        pins[1].AngleDegrees.ShouldBe(90, Tolerance);
+        pins[2].Name.ShouldBe("west");
+        pins[2].AngleDegrees.ShouldBe(180, Tolerance);
+        pins[3].Name.ShouldBe("up");
+        pins[3].AngleDegrees.ShouldBe(270, Tolerance);
+    }
+
+    [Fact]
+    public void Label_OnDiagonalSegment_FlipsYIntoAppConvention()
+    {
+        // 45° face with GDS-space outward normal (+1, +1)/√2 (NE). Without the
+        // Y-flip this would come out as 45°; the app convention (Y-down) must
+        // mirror it to 315°.
+        var cell = Cell(
+            Poly(1, 0, (4, 4), (6, 4), (4, 6), (4, 4)),
+            Label(1, 10, "diag", x: 5.05, y: 5.05));
+
+        var pins = GdsPinDetector.Detect(cell, new GdsBoundingBox(0, 0, 10, 10));
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.Label);
+        pin.AngleDegrees.ShouldBe(315, Tolerance);
+    }
+
+    [Fact]
+    public void Label_FarFromGeometry_FallsBackToBoundingBoxEdge()
+    {
+        // Waveguide stub ends at x = 3, the label floats 2 µm past its end face
+        // — beyond LabelGeometryTouchToleranceUm (1.0), so the bbox rule applies.
+        var cell = Cell(
+            Poly(1, 0, (1, 1.75), (3, 1.75), (3, 2.25), (1, 2.25), (1, 1.75)),
+            Label(1, 10, "o1", x: 5, y: 3));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.AngleDegrees.ShouldBe(270, Tolerance); // nearest bbox edge: top (GDS MaxY)
+        pin.IsElectrical.ShouldBeNull("no polygon near, and 'o1' is no electrical name");
+    }
+
+    [Fact]
+    public void Label_OnMetalPolygonEndFaceInsideLargeBBox_UsesMetalSegmentNormal()
+    {
+        // Metal pads count as direction geometry too: the label sits on the pad's
+        // right end face, deep inside the bbox.
+        var box = new GdsBoundingBox(0, 0, 100, 80);
+        var cell = Cell(
+            Poly(11, 0, (10, 39.75), (14, 39.75), (14, 40.25), (10, 40.25), (10, 39.75)),
+            Label(1, 10, "anode", x: 14, y: 40));
+
+        var pins = GdsPinDetector.Detect(cell, box);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.AngleDegrees.ShouldBe(0, Tolerance);
+    }
+
+    // ── Label pin kind inference ─────────────────────────────────────────────
+
+    [Fact]
+    public void Label_OnMetalPolygonOutline_InfersElectrical()
+    {
+        var cell = Cell(
+            Poly(11, 0, (4, 1.75), (6, 1.75), (6, 2.25), (4, 2.25), (4, 1.75)),
+            Label(1, 10, "p1", x: 6, y: 2)); // ON the pad's right edge
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBe(true);
+    }
+
+    [Fact]
+    public void Label_InsideMetalPad_InfersElectrical()
+    {
+        // Pad label at the pad CENTER, farther from the outline than the touch
+        // tolerance: the interior still proves the metal contact (the user's
+        // black-box case).
+        var cell = Cell(
+            Poly(12, 0, (2, 0.5), (8, 0.5), (8, 3.5), (2, 3.5), (2, 0.5)),
+            Label(1, 10, "p1", x: 5, y: 2));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBe(true);
+    }
+
+    [Fact]
+    public void Label_OnWaveguidePolygon_KeepsUnknownKind()
+    {
+        // Waveguide evidence means optical — expressed as kind-UNKNOWN (null):
+        // a later metal-route match may still overrule it with stronger evidence.
+        var cell = Cell(
+            Poly(1, 0, (0, 1.75), (3, 1.75), (3, 2.25), (0, 2.25), (0, 1.75)),
+            Label(1, 10, "o1", x: 0, y: 2));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Label_TouchingMetalAndWaveguide_MetalWins()
+    {
+        // Electrode over waveguide (eopm-style): both layer classes touch the
+        // anchor; metal is the stronger evidence.
+        var cell = Cell(
+            Poly(1, 0, (1, 1.75), (4, 1.75), (4, 2.25), (1, 2.25), (1, 1.75)),
+            Poly(11, 0, (1, 1.9), (4, 1.9), (4, 2.1), (1, 2.1), (1, 1.9)),
+            Label(1, 10, "p1", x: 2, y: 2));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBe(true);
+    }
+
+    [Theory]
+    [InlineData("anode")]
+    [InlineData("CATHODE")]
+    [InlineData("elec1")]
+    [InlineData("Bond_Pad_34")]
+    [InlineData("gnd")]
+    [InlineData("VCC")]
+    [InlineData("vdd_0")]
+    public void Label_WithElectricalNameAndNoGeometry_InfersElectrical(string label)
+    {
+        var pins = GdsPinDetector.Detect(Cell(Label(1, 10, label, x: 5, y: 2)), Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBe(true);
+    }
+
+    [Theory]
+    [InlineData("o1")]
+    [InlineData("in")]
+    [InlineData("port0")]
+    public void Label_WithOpticalNameAndNoGeometry_KeepsUnknownKind(string label)
+    {
+        var pins = GdsPinDetector.Detect(Cell(Label(1, 10, label, x: 5, y: 2)), Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBeNull();
+    }
+
+    [Fact]
+    public void Label_WithElectricalNameOnWaveguide_GeometryBeatsName()
+    {
+        // The name heuristic is only the fallback: waveguide evidence wins.
+        var cell = Cell(
+            Poly(1, 0, (0, 1.75), (3, 1.75), (3, 2.25), (0, 2.25), (0, 1.75)),
+            Label(1, 10, "anode", x: 0, y: 2));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBeNull();
+    }
+
+    [Fact]
+    public void HeuristicPin_OnWaveguideEdge_KeepsUnknownKind()
+    {
+        var cell = Cell(Poly(1, 0, (8, 1), (10, 1), (10, 2), (8, 2), (8, 1)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().IsElectrical.ShouldBeNull();
+    }
+
     // ── Options ──────────────────────────────────────────────────────────────
 
     [Fact]

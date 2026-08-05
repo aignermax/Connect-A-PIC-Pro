@@ -173,9 +173,10 @@ internal sealed class GdsHierarchyImportSession
     /// is placed more than once) so every pin name is unique and traceable;
     /// the top cell's own labels keep their bare names (they ARE the circuit's
     /// ports). The waveguide edge heuristic runs over the flattened geometry
-    /// exactly like for explode-mode drafts.
-    /// Pin KINDS stay unknown (<see cref="DetectedPin.IsElectrical"/> null):
-    /// geometry labels carry no signal-domain information (v1 limitation).
+    /// exactly like for explode-mode drafts. Pin kinds come from the detector's
+    /// inference (<see cref="GdsPinDetector"/>): metal-touching or
+    /// electrically-named labels become electrical, the rest stays kind-unknown
+    /// (the optical default downstream).
     /// </summary>
     public GdsCellDraft BuildBlackBoxDraft(string cellName)
     {

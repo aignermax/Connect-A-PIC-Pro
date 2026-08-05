@@ -437,6 +437,66 @@ public class GdsHierarchyImporterTests
         result.Warnings.ShouldBeEmpty();
     }
 
+    [Fact]
+    public async Task BlackBox_NestedLabels_InferDirectionAndKindFromLocalGeometry()
+    {
+        // The user's black-box case: a 100 × 80 µm top cell absorbing one device
+        // cell whose pins sit DEEP inside the bbox. The metal pad pin must point
+        // along the pad's end face (the bbox edge rule would point it at the
+        // outer left edge) and read electrical from the metal layer alone ("m1"
+        // matches no electrical name); the waveguide pin stays optical; the top
+        // cell's own "anode" label has no geometry near and falls back to the
+        // bbox direction plus the name-based kind.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 20000, 30000)
+                .Boundary(111, 0, (0, 0), (100000, 0), (100000, 80000), (0, 80000), (0, 0))
+                .Text(1, 10, "anode", 50000, 50000)
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(11, 0, (6000, 2750), (10000, 2750), (10000, 3250), (6000, 3250), (6000, 2750))
+                .Boundary(1, 0, (0, 750), (4000, 750), (4000, 1250), (0, 1250), (0, 750))
+                .Text(1, 10, "m1", 10000, 3000)
+                .Text(1, 10, "o1", 0, 1000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(
+            library, "TOP", new GdsHierarchyImportOptions { Mode = GdsHierarchyImportMode.BlackBox });
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        result.Warnings.ShouldBeEmpty();
+        draft.Pins.Count.ShouldBe(3);
+
+        // dev_m1: on the pad's right end face → east (the bbox rule would say
+        // 180°, left edge); electrical from the metal polygon touch.
+        var metal = draft.Pins.Single(p => p.Name == "dev_m1");
+        metal.XUm.ShouldBe(30, Tolerance);
+        metal.YUm.ShouldBe(47, Tolerance);
+        metal.AngleDegrees.ShouldBe(0, Tolerance);
+        metal.IsElectrical.ShouldBe(true);
+
+        // dev_o1: on the waveguide's left end face → west, kind stays unknown
+        // (optical downstream).
+        var optical = draft.Pins.Single(p => p.Name == "dev_o1");
+        optical.XUm.ShouldBe(20, Tolerance);
+        optical.YUm.ShouldBe(49, Tolerance);
+        optical.AngleDegrees.ShouldBe(180, Tolerance);
+        optical.IsElectrical.ShouldBeNull();
+
+        // anode: no geometry near → bbox fallback direction (top edge), kind
+        // from the name.
+        var named = draft.Pins.Single(p => p.Name == "anode");
+        named.XUm.ShouldBe(50, Tolerance);
+        named.YUm.ShouldBe(30, Tolerance);
+        named.AngleDegrees.ShouldBe(270, Tolerance);
+        named.IsElectrical.ShouldBe(true);
+
+        AssertPinsWithinDraftBounds(draft);
+    }
+
     // ── Outlines ─────────────────────────────────────────────────────────────
 
     [Fact]

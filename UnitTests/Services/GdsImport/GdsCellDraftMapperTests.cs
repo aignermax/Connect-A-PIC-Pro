@@ -1,4 +1,7 @@
+using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsImport;
+using CAP.Avalonia.ViewModels.Library;
+using CAP_Core.Components.PinKinds;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using Xunit;
@@ -191,5 +194,63 @@ public class GdsCellDraftMapperTests
 
         result.Pins.Select(p => p.Name).ShouldBe(new[] { "in", "out" });
         warnings.ShouldBeEmpty();
+    }
+
+    // ── Pin kinds ────────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Map_ProvenElectricalPin_WritesElectricalPinKind_UnknownStaysAbsent()
+    {
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin
+                {
+                    Name = "anode", XUm = 0, YUm = 2, AngleDegrees = 180,
+                    Source = DetectedPinSource.Label, IsElectrical = true,
+                },
+                new DetectedPin
+                {
+                    Name = "o1", XUm = 10, YUm = 2, AngleDegrees = 0,
+                    Source = DetectedPinSource.Label, IsElectrical = null,
+                },
+            },
+        };
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds");
+
+        result.Pins[0].PinKind.ShouldBe("Electrical");
+        result.Pins[1].PinKind.ShouldBeNull("unknown kinds stay absent — the PDK loader reads them as the optical default");
+    }
+
+    [Fact]
+    public void Map_ProvenElectricalPin_PlacedComponentPinIsElectrical()
+    {
+        // The whole survival chain: DetectedPin.IsElectrical → pinKind JSON field
+        // → template pin MatterType → placed component's physical pin.
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin
+                {
+                    Name = "anode", XUm = 0, YUm = 2, AngleDegrees = 180,
+                    Source = DetectedPinSource.Label, IsElectrical = true,
+                },
+                new DetectedPin
+                {
+                    Name = "o1", XUm = 10, YUm = 2, AngleDegrees = 0,
+                    Source = DetectedPinSource.Label, IsElectrical = null,
+                },
+            },
+        };
+
+        var componentDraft = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds");
+        var template = PdkTemplateConverter.ConvertToTemplate(componentDraft, "user-pdk", null);
+        var component = ComponentTemplates.CreateFromTemplate(template, 0, 0);
+
+        PinKindHelper.IsElectrical(component.PhysicalPins.Single(p => p.Name == "anode")).ShouldBeTrue();
+        PinKindHelper.IsElectrical(component.PhysicalPins.Single(p => p.Name == "o1")).ShouldBeFalse();
     }
 }
