@@ -82,6 +82,9 @@ public sealed class GdsCellFlattener
     /// everything pulled in through (nested) references, transformed into the
     /// cell's own coordinate space. Paths are centerline geometry and are not
     /// converted to polygons here — consumers build outlines from the model.
+    /// Each text carries its provenance in <see cref="FlattenedGdsCell.TextOrigins"/>
+    /// (the owning leaf cell and the occurrence it rode in with), so importers
+    /// can attribute nested labels to their source instances.
     /// </summary>
     /// <exception cref="InvalidDataException">
     /// Unknown cell name, reference to an undefined cell, or a reference cycle.
@@ -89,7 +92,9 @@ public sealed class GdsCellFlattener
     public FlattenedGdsCell Flatten(string cellName)
     {
         var result = new FlattenedGdsCell { CellName = cellName };
-        FlattenInto(cellName, GdsTransform.Identity, result.Polygons, result.Texts, new Stack<string>());
+        FlattenInto(
+            cellName, occurrence: 0, GdsTransform.Identity, result, new Stack<string>(),
+            new Dictionary<string, int>(StringComparer.Ordinal));
         return result;
     }
 
@@ -147,10 +152,11 @@ public sealed class GdsCellFlattener
 
     private void FlattenInto(
         string cellName,
+        int occurrence,
         GdsTransform transform,
-        List<GdsPolygon> polygons,
-        List<GdsText> texts,
-        Stack<string> path)
+        FlattenedGdsCell result,
+        Stack<string> path,
+        Dictionary<string, int> nextOccurrences)
     {
         var cell = EnterCell(cellName, path);
 
@@ -159,11 +165,12 @@ public sealed class GdsCellFlattener
             switch (element)
             {
                 case GdsPolygon polygon:
-                    polygons.Add(polygon with { Points = polygon.Points.Select(transform.Apply).ToList() });
+                    result.Polygons.Add(polygon with { Points = polygon.Points.Select(transform.Apply).ToList() });
                     break;
 
                 case GdsText text:
-                    texts.Add(TransformText(text, transform));
+                    result.Texts.Add(TransformText(text, transform));
+                    result.TextOrigins.Add(new GdsTextOrigin(cellName, occurrence));
                     break;
 
                 case GdsReference reference:
@@ -172,7 +179,11 @@ public sealed class GdsCellFlattener
                         for (int column = 0; column < reference.Columns; column++)
                         {
                             var instanceTransform = GdsTransform.FromReference(reference, column, row).Then(transform);
-                            FlattenInto(reference.CellName, instanceTransform, polygons, texts, path);
+                            nextOccurrences.TryGetValue(reference.CellName, out int childOccurrence);
+                            nextOccurrences[reference.CellName] = childOccurrence + 1;
+                            FlattenInto(
+                                reference.CellName, childOccurrence, instanceTransform, result, path,
+                                nextOccurrences);
                         }
                     }
                     break;

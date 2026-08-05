@@ -39,4 +39,14 @@ public sealed record DetectedPin
 
     /// <summary>How this pin was detected.</summary>
     public DetectedPinSource Source { get; init; }
+
+    /// <summary>
+    /// Signal-domain knowledge: <c>true</c>/<c>false</c> when the kind is
+    /// authoritative (pins of a known PDK component carry their template's
+    /// kind), <c>null</c> when the kind is unknown (geometry-detected pins —
+    /// a TEXT label or waveguide edge says nothing about the signal domain).
+    /// The metal-route matcher infers kinds for unknown pins that participate
+    /// in a metal-layer connection (metal only carries electrical signals).
+    /// </summary>
+    public bool? IsElectrical { get; init; }
 }

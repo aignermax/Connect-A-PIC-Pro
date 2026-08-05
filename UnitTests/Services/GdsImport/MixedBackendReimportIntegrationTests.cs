@@ -183,25 +183,16 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         report.GroupCreated.ShouldBeTrue();
     }
 
-    // ── Black-box: current honest behavior on this file ──────────────────────
+    // ── Black-box: nested-label pins make the whole design importable ────────
 
     [Fact]
-    public async Task BlackBox_MixedBackendFile_NoPins_NothingRegistered_CurrentBehavior()
+    public async Task BlackBox_MixedBackendFile_NestedLabelPins_RegistersAndPlaces()
     {
-        // Pins the CURRENT behavior the user hit at 15:05: a black-box import of
-        // this file finds no pins. The top cell carries no OWN port labels
-        // (gdsfactory writes none for a port-less circuit; Lunima's mixed-backend
-        // export writes no top-level labels either), and the waveguide-edge
-        // heuristic finds no (1,0) polygon exactly touching the flattened top
-        // bbox — every route end sits 0.225 µm inside the (68,0) devrec halo of
-        // the outermost cell. The pin-less draft is unpersistable, so nothing is
-        // registered and the single black-box placement is skipped with clear
-        // warnings.
-        //
-        // FOLLOW-UP: black-box pin detection should also consider NESTED port
-        // labels (the absorbed sub-cells carry (1,10) and (501,1) labels, e.g.
-        // the mmi2x2_dp pins a0/a1/b0/b1) — the draft would then register with
-        // real pins instead of failing "no pins".
+        // Black-box pin detection considers the FLATTENED top cell: the nested
+        // device cells' port labels ((1,10)/(501,1), e.g. the mmi2x2_dp a0/a1/b0/b1)
+        // become texts at their absolute positions after flattening, so the
+        // whole design registers as ONE component with real pins instead of
+        // failing "no pins" (the 15:05 user report).
         var sink = new LibrarySink(_prefsPath);
         var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
 
@@ -209,24 +200,22 @@ public class MixedBackendReimportIntegrationTests : IDisposable
             GdsPath, TopCell, new GdsHierarchyImportOptions { Mode = GdsHierarchyImportMode.BlackBox });
 
         outcome.Mode.ShouldBe(GdsHierarchyImportMode.BlackBox);
-        outcome.RegisteredComponents.ShouldBeEmpty();
-        outcome.Warnings.ShouldContain(w =>
-            w.Contains($"'{TopCell}' was not registered: no pins detected"));
-        outcome.Warnings.ShouldContain(w =>
-            w.Contains("No importable component drafts remained"));
+        var registered = outcome.RegisteredComponents.ShouldHaveSingleItem();
+        registered.ComponentName.ShouldBe(TopCell);
+
+        var template = sink.Templates.ShouldHaveSingleItem(
+            "the black-box draft registers as one library component");
+        template.PinDefinitions.ShouldNotBeEmpty();
+        template.PinDefinitions.Select(p => p.Name).ShouldContain(n => n.EndsWith("_a0"),
+            "nested labels get instance-context prefixes, e.g. 'mmi2x2_dp#0_a0'");
 
         var plan = GdsPlacementPlan.FromOutcome(outcome);
-        var placement = plan.Placements.ShouldHaveSingleItem();
-        placement.ComponentIdentifier.ShouldBeNull();
-        placement.Warning.ShouldNotBeNull().ShouldContain("black-box component cannot be placed");
-
         var canvas = new DesignCanvasViewModel();
         var executor = new GdsPlacementExecutor(
             canvas, new CommandManager(), () => sink.Templates.ToList());
         var report = await executor.ExecuteAsync(plan);
-        report.PlacedCount.ShouldBe(0);
-        report.SkippedPlacements.ShouldHaveSingleItem().ShouldContain(TopCell);
-        report.GroupCreated.ShouldBeFalse();
+        report.PlacedCount.ShouldBe(1);
+        report.SkippedPlacements.ShouldBeEmpty();
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────

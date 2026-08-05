@@ -5,9 +5,9 @@ namespace CAP_DataAccess.Import.Gds;
 /// <summary>
 /// Turns a parsed GDS library into a pure-data circuit description
 /// (<see cref="GdsCircuitImport"/>): component drafts for unknown cells, placed
-/// instances, and abutment connections reconstructed from pin positions. No
-/// canvas, <c>Component</c> or UI objects are created — the service layer
-/// consumes the result.
+/// instances, and connections reconstructed from routing structure and pin
+/// positions. No canvas, <c>Component</c> or UI objects are created — the
+/// service layer consumes the result.
 ///
 /// Two modes (see <see cref="GdsHierarchyImportOptions.Mode"/>):
 /// <list type="bullet">
@@ -21,11 +21,14 @@ namespace CAP_DataAccess.Import.Gds;
 /// export artifacts (<see cref="LunimaExportArtifactCellNames"/>, matched
 /// directly or through a pass-through wrapper); each skipped
 /// cell produces ONE info note instead of a per-instance failure cascade.</item>
-/// <item><b>BlackBox</b>: the whole top cell becomes a single draft.</item>
+/// <item><b>BlackBox</b>: the whole top cell becomes a single draft whose pins
+/// are the port labels of the ENTIRE flattened hierarchy (nested subcell labels
+/// promoted with their instance context, see
+/// <see cref="GdsHierarchyImportSession.BuildBlackBoxDraft"/>).</item>
 /// </list>
 ///
-/// A draft's pins are the cell's OWN port labels (nested labels belong to
-/// absorbed sub-cells) plus the edge heuristic over its fully flattened
+/// An explode draft's pins are the cell's OWN port labels (nested labels belong
+/// to absorbed sub-cells) plus the edge heuristic over its fully flattened
 /// geometry. The circuit's external ports, by contrast, are the top cell's own
 /// port LABELS only (gdsfactory convention) — unlabeled geometry ends at the
 /// layout boundary stay internal.
@@ -96,8 +99,8 @@ public static class GdsHierarchyImporter
         GdsHierarchyImportSession session, string topCellName, CancellationToken ct)
     {
         ct.ThrowIfCancellationRequested();
-        var draft = session.BuildDraft(topCellName);
-        WarnOnZeroSizeDraft(draft, session.Warnings);
+        var draft = session.BuildBlackBoxDraft(topCellName);
+        GdsImportReporter.WarnOnZeroSizeDraft(draft, session.Warnings);
         return new GdsCircuitImport
         {
             Mode = GdsHierarchyImportMode.BlackBox,
@@ -124,7 +127,7 @@ public static class GdsHierarchyImporter
         // One entry per distinct reference transform (an AREF expands to one
         // instance per member — identical warnings must collapse into ONE per
         // reference, with the member count, instead of flooding one per member).
-        var transformNotes = new Dictionary<TransformSignature, (string FirstInstance, int Count)>();
+        var transformNotes = new Dictionary<GdsImportReporter.TransformSignature, (string FirstInstance, int Count)>();
         // Skipped cells: export artifacts (note emitted on first encounter) and
         // zero-geometry cells (note emitted after the loop, with the count).
         var artifactNoted = new HashSet<string>(StringComparer.Ordinal);
@@ -177,7 +180,7 @@ public static class GdsHierarchyImporter
             if (known is null && draftNames.Add(cell))
             {
                 var draft = session.BuildDraft(cell);
-                WarnOnZeroSizeDraft(draft, session.Warnings);
+                GdsImportReporter.WarnOnZeroSizeDraft(draft, session.Warnings);
                 drafts.Add(draft);
             }
             else if (known is not null)
@@ -195,7 +198,7 @@ public static class GdsHierarchyImporter
             bool magnified = Math.Abs(gdsInstance.Magnification - 1.0) > 1e-9;
             if (nonCardinal || gdsInstance.Reflected || magnified || gdsInstance.Magnification < 0)
             {
-                var signature = new TransformSignature(
+                var signature = new GdsImportReporter.TransformSignature(
                     cell, gdsInstance.AngleDegrees, gdsInstance.Reflected, gdsInstance.Magnification);
                 transformNotes.TryGetValue(signature, out var note);
                 transformNotes[signature] = (note.FirstInstance ?? instanceName, note.Count + 1);
@@ -221,7 +224,7 @@ public static class GdsHierarchyImporter
             names.Add(instanceName);
         }
 
-        WarnOnReferenceTransforms(session, transformNotes);
+        GdsImportReporter.WarnOnReferenceTransforms(session, transformNotes);
 
         foreach (var (cell, skipCount) in zeroGeometrySkips)
         {
@@ -236,32 +239,59 @@ public static class GdsHierarchyImporter
                 $"Top cell '{topCellName}' contains no cell references — nothing to explode. " +
                 "Use black-box mode to import it as a single component.");
         }
-        var topCellWaveguidePolygons = session.GetTopCellWaveguidePolygons();
 
         ct.ThrowIfCancellationRequested();
         var topPorts = session.GetTopLevelPorts()
-            .Select(p => new GdsAbsolutePin { Name = p.Name, XUm = p.XUm, YUm = p.YUm, AngleDegrees = p.AngleDegrees })
+            .Select(p => new GdsAbsolutePin
+            {
+                Name = p.Name,
+                XUm = p.XUm,
+                YUm = p.YUm,
+                AngleDegrees = p.AngleDegrees,
+                IsElectrical = p.IsElectrical,
+            })
             .ToList();
 
-        // Route derivation runs FIRST: a top-cell waveguide polygon drawn
+        // Route derivation runs FIRST — waveguide networks, then metal networks
+        // over the remaining pins: a top-cell route polygon network drawn
         // between exactly two pins IS the connection (the routing structure
         // tells us the connectivity), so those pins are consumed before the
         // abutment matcher pairs coincident positions — no double-connect.
-        // Polygons that connect nothing (0/1 pins) or form a junction
+        // Networks that connect nothing (0/1 pins) or form a junction
         // (>2 pins, noted as info) stay frozen paths on the group.
-        var routeConnectivity = GdsRouteConnectivityMatcher.Match(
-            topCellWaveguidePolygons, pinsPerInstance, topPorts,
-            session.Options.PinTouchToleranceUm, session.Infos);
-        var frozenRoutePolygons = topCellWaveguidePolygons
-            .Where((_, index) => !routeConnectivity.ConsumedPolygonIndexes.Contains(index))
-            .ToList();
-        WarnOnTopLevelGeometry(
-            session, topCellName, routeConnectivity.Pairs.Count, frozenRoutePolygons.Count);
+        var waveguidePolygons = session.GetTopCellWaveguidePolygons();
+        var metalPolygons = session.GetTopCellMetalPolygons();
+        var waveguideRoutes = GdsRouteConnectivityMatcher.Match(
+            waveguidePolygons, pinsPerInstance, topPorts,
+            session.Options.PinTouchToleranceUm, session.Options.PolygonChainToleranceUm, session.Infos);
+        var metalRoutes = GdsRouteConnectivityMatcher.Match(
+            metalPolygons, pinsPerInstance, topPorts,
+            session.Options.PinTouchToleranceUm, session.Options.PolygonChainToleranceUm, session.Infos,
+            electrical: true,
+            preConsumedInstancePins: waveguideRoutes.ConsumedInstancePins,
+            preConsumedPortIndexes: waveguideRoutes.ConsumedPortIndexes);
 
-        var connections = routeConnectivity.Pairs
+        // Metal-derived connections prove the touched pins are electrical (metal
+        // only carries electrical signals): infer the domain on the DRAFT pins
+        // they touch — geometry-detected pins start kind-unknown, and an
+        // unmarked draft pin would be placed as optical and re-route as a
+        // waveguide. Known-component pins need no inference (the template kind
+        // is authoritative); top-cell ports are not placed at all.
+        InferElectricalDraftPins(metalRoutes.Pairs, placed, drafts);
+
+        var frozenRoutePolygons = waveguidePolygons
+            .Where((_, index) => !waveguideRoutes.ConsumedPolygonIndexes.Contains(index))
+            .Concat(metalPolygons
+                .Where((_, index) => !metalRoutes.ConsumedPolygonIndexes.Contains(index)))
+            .ToList();
+        GdsImportReporter.ReportTopLevelGeometry(
+            session, topCellName, waveguideRoutes, metalRoutes, frozenRoutePolygons.Count);
+
+        var connections = waveguideRoutes.Pairs
+            .Concat(metalRoutes.Pairs)
             .Concat(GdsAbutmentMatcher.Match(
                 names, pinsPerInstance, topPorts, session.Options.AbutmentToleranceUm, session.Warnings,
-                routeConnectivity.ConsumedInstancePins, routeConnectivity.ConsumedPortIndexes))
+                metalRoutes.ConsumedInstancePins, metalRoutes.ConsumedPortIndexes))
             .ToList();
 
         return new GdsCircuitImport
@@ -278,7 +308,45 @@ public static class GdsHierarchyImporter
         };
     }
 
-    private static double SnapToCardinal(double angleDegrees) =>
+    /// <summary>
+    /// Marks the DRAFT pins touched by metal-derived connections as electrical
+    /// (metal-layer geometry is direct physical evidence of the signal domain).
+    /// Only kind-unknown pins (<see cref="DetectedPin.IsElectrical"/> null) are
+    /// touched; the change rides the draft into the persisted PDK component, so
+    /// the placed component's pin is electrical and the re-created connection
+    /// is a metal trace again.
+    /// </summary>
+    private static void InferElectricalDraftPins(
+        IReadOnlyList<GdsPinPair> metalPairs,
+        IReadOnlyList<GdsPlacedInstance> placed,
+        List<GdsCellDraft> drafts)
+    {
+        foreach (var pair in metalPairs)
+        {
+            Infer(pair.A);
+            Infer(pair.B);
+        }
+
+        void Infer(GdsPinEndpoint endpoint)
+        {
+            if (endpoint.IsTopLevelPort)
+                return;
+            var cellDraftName = placed[endpoint.InstanceIndex].CellDraftName;
+            if (cellDraftName is null)
+                return; // known component — the template's pin kind is authoritative.
+            int draftIndex = drafts.FindIndex(d => d.CellName == cellDraftName);
+            if (draftIndex < 0)
+                return;
+            var draftPins = drafts[draftIndex].Pins.ToList();
+            int pinIndex = draftPins.FindIndex(p => p.Name == endpoint.PinName && p.IsElectrical is null);
+            if (pinIndex < 0)
+                return;
+            draftPins[pinIndex] = draftPins[pinIndex] with { IsElectrical = true };
+            drafts[draftIndex] = drafts[draftIndex] with { Pins = draftPins };
+        }
+    }
+
+    internal static double SnapToCardinal(double angleDegrees) =>
         GdsInstancePinProjector.Normalize360(
             90.0 * Math.Round(angleDegrees / 90.0, MidpointRounding.AwayFromZero));
 
@@ -322,131 +390,6 @@ public static class GdsHierarchyImporter
         // Reference cycle before any artifact — not a pass-through chain.
         artifactLeaf = string.Empty;
         return false;
-    }
-
-    /// <summary>
-    /// The transform properties that make an instance noteworthy for warnings.
-    /// All expanded members of one AREF share the same signature, so keying the
-    /// warnings on it collapses the per-member flood into one warning per
-    /// reference (with member count).
-    /// </summary>
-    private readonly record struct TransformSignature(
-        string Cell, double AngleDegrees, bool Reflected, double Magnification);
-
-    /// <summary>
-    /// Emits the rotation/reflection/magnification warnings once per distinct
-    /// reference transform, including the member count when an array (or several
-    /// identical references) expanded to more than one instance.
-    /// </summary>
-    private static void WarnOnReferenceTransforms(
-        GdsHierarchyImportSession session,
-        Dictionary<TransformSignature, (string FirstInstance, int Count)> transformNotes)
-    {
-        foreach (var (signature, note) in transformNotes)
-        {
-            var single = note.Count == 1;
-            var subject = single
-                ? $"Instance '{note.FirstInstance}' of cell '{signature.Cell}'"
-                : $"{note.Count} instances of cell '{signature.Cell}' (first: '{note.FirstInstance}')";
-            var has = single ? "has" : "have";
-            var isAre = single ? "is" : "are";
-
-            double snapped = SnapToCardinal(GdsInstancePinProjector.Normalize360(signature.AngleDegrees));
-            if (Math.Abs(GdsInstancePinProjector.Normalize180(
-                    GdsInstancePinProjector.Normalize360(signature.AngleDegrees) - snapped)) > 1e-9)
-            {
-                session.Warnings.Add(
-                    $"{subject} {has} a non-cardinal rotation of " +
-                    $"{Fmt(signature.AngleDegrees)}° — snapped to {Fmt(snapped)}° " +
-                    "(gdsfactory layouts are Manhattan, so this is usually safe).");
-            }
-            if (signature.Reflected)
-            {
-                session.Warnings.Add(
-                    $"{subject} {isAre} mirrored (GDS STRANS); the core component model has no " +
-                    "mirror support, so the component body is placed unreflected (v1 limitation) — " +
-                    "its pins are mirrored onto the true reflected positions, keeping the " +
-                    "reconstructed connections exact.");
-            }
-            if (Math.Abs(signature.Magnification - 1.0) > 1e-9)
-            {
-                session.Warnings.Add(
-                    $"{subject} {has} magnification " +
-                    $"×{Fmt(signature.Magnification)}; placed at 1:1 scale (v1 limitation). " +
-                    "Pin positions for connection reconstruction use the true magnified transform.");
-            }
-            if (signature.Magnification < 0)
-            {
-                session.Warnings.Add(
-                    $"{subject} {has} a NEGATIVE magnification (×{Fmt(signature.Magnification)}) — a " +
-                    "negative MAG implies an additional mirror the placement snap does not model, " +
-                    "so the placed rotation can be off by 180°.");
-            }
-        }
-    }
-
-    /// <summary>
-    /// Warns on zero-size drafts (unpersistable geometry). Only drafts degenerate
-    /// in ONE dimension reach this in explode mode — cells empty in BOTH
-    /// dimensions are dropped earlier with a single info note, draft and all. A
-    /// PINLESS draft deliberately gets no warning here: the service layer reports
-    /// the more actionable "not registered: no pins" message, and warning in both
-    /// places would double-report the same fact.
-    /// </summary>
-    private static void WarnOnZeroSizeDraft(GdsCellDraft draft, List<string> warnings)
-    {
-        if (draft.WidthUm <= 0 || draft.HeightUm <= 0)
-        {
-            warnings.Add($"Cell '{draft.CellName}' has an empty bounding box; the draft has zero size.");
-        }
-    }
-
-    /// <summary>
-    /// Reports what happened to the top cell's OWN geometry (polygons/paths not
-    /// belonging to any instance — typically routing our exporters flattened into
-    /// the top cell): waveguide-layer polygons bridging exactly two pins come back
-    /// as real, re-routable connections (<paramref name="restoredAsConnections"/>),
-    /// the remaining waveguide-layer polygons as frozen, non-re-routable paths on
-    /// the created group (<paramref name="importedAsPaths"/>); anything else stays
-    /// unreconstructed in v1.
-    /// </summary>
-    private static void WarnOnTopLevelGeometry(
-        GdsHierarchyImportSession session, string topCellName, int restoredAsConnections, int importedAsPaths)
-    {
-        int own = session.Library.Cells[topCellName].Elements
-            .Count(e => e is GdsPolygon or GdsPath);
-        if (own == 0)
-            return;
-
-        int remainder = own - restoredAsConnections - importedAsPaths;
-        string remainderNote = remainder > 0
-            ? $"; the remaining {remainder} polygon(s)/path(s) on other layers are not reconstructed (v1)"
-            : string.Empty;
-
-        if (restoredAsConnections > 0)
-        {
-            string frozenNote = importedAsPaths > 0
-                ? $"; the {importedAsPaths} waveguide-layer polygon(s) are imported as frozen paths (not re-routable)"
-                : string.Empty;
-            session.Warnings.Add(
-                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
-                $"geometry); {restoredAsConnections} waveguide-layer polygon(s) were restored as real " +
-                $"connections (re-routable){frozenNote}{remainderNote}.");
-            return;
-        }
-
-        if (importedAsPaths > 0)
-        {
-            session.Warnings.Add(
-                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
-                $"geometry); the {importedAsPaths} waveguide-layer polygon(s) are imported as frozen " +
-                $"paths (not re-routable){remainderNote}.");
-            return;
-        }
-
-        session.Warnings.Add(
-            $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
-            "geometry); only cell references become components — own geometry is not reconstructed (v1).");
     }
 
     internal static string Fmt(double value) => value.ToString(CultureInfo.InvariantCulture);

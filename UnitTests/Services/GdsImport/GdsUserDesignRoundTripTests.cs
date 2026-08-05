@@ -34,13 +34,13 @@ namespace UnitTests.Services.GdsImport;
 /// <para>
 /// One environment fork is pinned honestly: when the Python that runs the script
 /// also has klayout + siepic_ebeam_pdk (the Lunima managed env, CI), the export's
-/// klayout post-pass swaps the four ebeam stub boxes for the REAL foundry cells,
-/// whose (1, 10) pin labels carry the SiEPIC names (<c>opt1..opt4</c>,
-/// <c>pin1..pin4</c>). With a bare nazca-only Python the stub boxes survive and
-/// their (1, 10) labels carry the app template names (<c>port 1..4</c>) — plus
-/// <c>heur_N</c> edge pins, because the stub box IS waveguide-layer geometry
-/// spanning the cell bounding box. Both shapes are verified and asserted per
-/// scenario; everything else is identical.
+/// klayout post-pass swaps the four ebeam stub boxes for the REAL foundry cells —
+/// re-anchored into the stub frame and with the stub's (1, 10) pin labels
+/// re-emitted (#811), so the pins keep the app template names (<c>port 1..4</c>)
+/// at exactly the foundry pins' anchors. With a bare nazca-only Python the stub
+/// boxes survive: same (1, 10) labels, PLUS <c>heur_N</c> edge pins, because the
+/// stub box IS waveguide-layer geometry spanning the cell bounding box. Both
+/// shapes are verified and asserted per scenario; everything else is identical.
 /// </para>
 /// </summary>
 [Trait("Category", "Slow")]
@@ -193,18 +193,39 @@ public class GdsUserDesignRoundTripTests : IDisposable
         outcome.Instances.Count(i => i.CellName == "mmi2x2_dp").ShouldBe(2);
         outcome.Instances.Count(i => i.CellName == "ebeam_crossing4").ShouldBe(2);
 
-        // Pinned: ZERO reconstructed connections. His layout is SPACED — the
+        // Pinned: FOUR reconstructed connections. His layout is SPACED — the
         // connections were drawn waveguide routes, which nazca flattens into
-        // top-cell polygons (asserted above), so no two component pins abut and
-        // the abutment matcher finds nothing. The flattened routes come back as
-        // frozen, non-re-routable paths instead.
-        outcome.Connections.Count.ShouldBe(0);
-        var warning = outcome.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("imported as frozen paths (not re-routable)");
-        warning.ShouldNotContain("Exception");
-        warning.ShouldNotContain('\n');
-        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty(
-            "the flattened routes land on the waveguide layer");
+        // top-cell polygon chains (asserted above). The route-network matcher
+        // merges each chain and restores the four chains that span exactly two
+        // pins as real connections; the remaining six chains entangle at the two
+        // crossing components into ONE 45-polygon junction network (12 pins) —
+        // crossing/junction topology is never disentangled by guessing, so those
+        // stay frozen paths with an informational junction note.
+        outcome.Connections.Count.ShouldBe(4);
+        outcome.Connections.ShouldAllBe(c => c.IsRouteDerived && !c.IsElectrical);
+        // The two MMI↔MMI braids restore with demofab pin names either way
+        // (a0 of one MMI against a1 of the other, in both directions).
+        outcome.Connections.ShouldContain(c =>
+            c.A.InstanceIndex == 1 && c.A.PinName == "a0" && c.B.InstanceIndex == 0 && c.B.PinName == "a1");
+        outcome.Connections.ShouldContain(c =>
+            c.A.InstanceIndex == 0 && c.A.PinName == "a0" && c.B.InstanceIndex == 1 && c.B.PinName == "a1");
+        // The two clean ebeam chains: both scenarios name the app template pins —
+        // since #811 the upgrade re-emits the stub's (1,10) labels (at exactly the
+        // anchors the real SiEPIC pin texts sat) instead of leaving the foundry's
+        // opt*/pin* names behind.
+        outcome.Connections.ShouldContain(c => c.A.PinName == "port 2" && c.B.PinName == "port 3");
+        outcome.Connections.ShouldContain(c => c.A.PinName == "port 1" && c.B.PinName == "port 2");
+
+        // Zero WARNINGS: the top-cell geometry accounting (restored/frozen) and
+        // the junction note are informational — nothing is silently dropped.
+        outcome.Warnings.ShouldBeEmpty();
+        if (siepicUpgraded)
+            outcome.Infos.ShouldContain(i => i.Contains("junction with 12 pins"));
+        else
+            outcome.Infos.ShouldContain(i => i.Contains("junction with"));
+        outcome.Infos.ShouldContain(i => i.Contains("restored as 4 real connection(s)"));
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(45,
+            "the junction network rides the group as frozen, non-re-routable paths");
 
         // The registered templates carry the pins found in the GDS:
         // the MMI via demofab's (501, 1) labels (a0/a1/b0/b1 — demofab's names for
@@ -217,12 +238,12 @@ public class GdsUserDesignRoundTripTests : IDisposable
         var expectedEbeamPins = siepicUpgraded
             ? new Dictionary<string, string[]>
             {
-                // Real foundry cells: the SiEPIC PDK's own port names (the crossing's
-                // west port is literally 'opt', not 'opt1').
-                ["ebeam_adiabatic_te1550"] = new[] { "opt1", "opt2", "opt3", "opt4" },
-                ["ebeam_bdc_te1550"] = new[] { "opt1", "opt2", "opt3", "opt4" },
-                ["ebeam_crossing4"] = new[] { "opt", "opt2", "opt4", "opt3" },
-                ["ebeam_dc_halfring_straight_7357fa"] = new[] { "pin1", "pin2", "pin4", "pin3" },
+                // Real foundry cells with the stub's (1,10) pin labels re-emitted
+                // (#811): the app template names at the foundry pins' anchors.
+                ["ebeam_adiabatic_te1550"] = new[] { "port 1", "port 2", "port 4", "port 3" },
+                ["ebeam_bdc_te1550"] = new[] { "port 1", "port 2", "port 4", "port 3" },
+                ["ebeam_crossing4"] = new[] { "port 1", "port 3", "port 2", "port 4" },
+                ["ebeam_dc_halfring_straight_7357fa"] = new[] { "port 1", "port 2", "port 4", "port 3" },
             }
             : new Dictionary<string, string[]>
             {
@@ -254,7 +275,8 @@ public class GdsUserDesignRoundTripTests : IDisposable
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
-        report.ConnectedCount.ShouldBe(0);
+        report.ConnectedCount.ShouldBe(4);
+        report.RouteDerivedCount.ShouldBe(4);
         report.Warnings.ShouldBeEmpty();
         report.GroupCreated.ShouldBeTrue();
         report.GroupName.ShouldBe("ConnectAPIC_Design");
@@ -262,7 +284,10 @@ public class GdsUserDesignRoundTripTests : IDisposable
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.GroupName.ShouldBe("ConnectAPIC_Design");
         group.InternalPaths.ShouldContain(p => p.StartPin == null,
-            "the flattened routes ride the group as pin-less frozen paths");
+            "the junction network's polygons ride the group as pin-less frozen paths");
+        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(45);
+        group.InternalPaths.Count(p => p.StartPin != null).ShouldBe(4,
+            "the four restored connections are frozen into the group with their pins");
         var children = group.GetAllComponentsRecursive().ToList();
         children.Count.ShouldBe(7);
         foreach (var child in children)
@@ -272,36 +297,35 @@ public class GdsUserDesignRoundTripTests : IDisposable
                 $"every placed component keeps its GDS outline ({child.Identifier})");
         }
 
-        // ── 7. Black-box mode on the same file: honestly registers NOTHING ──
-        // The whole-design draft gets its pins only from the top cell's OWN port
-        // labels plus the bbox edge heuristic. ConnectAPIC_Design has no own texts
-        // (the exporter labels external ports only for grating/edge couplers — this
-        // design has none, so its 8 external ports never became GDS labels), and no
-        // waveguide-layer polygon ends exactly on the design's outer bbox (the
-        // routed waveguides sit on a different layer, the MMI's bbox-spanning edges
-        // are discarded as too wide). Zero pins → the draft is unpersistable and
-        // nothing is placed. The warnings tell the user why, in plain text.
+        // ── 7. Black-box mode on the same file: ONE component with the full pin set ──
+        // The whole-design draft's pins come from the FLATTENED hierarchy: every
+        // subcell's port labels, prefixed with their instance context. This design
+        // has no top-cell port labels of its own (its 8 external ports are a
+        // simulation concept and were never exported as labels), but the nested
+        // labels give the black box a complete, unique pin set — 28 pins here —
+        // so it registers and places like any other imported component.
         var sink2 = new GdsUserDesignFixture.LibrarySink(Path.Combine(_root, "prefs-blackbox.json"));
         var service2 = new GdsImportService(Store("user-pdks-blackbox"), () => sink2.Templates.ToList(), sink2.Register);
         var blackBoxOutcome = await service2.ImportAsync(
             gdsPath, analysis.TopCellCandidates[0],
             dialogOptions with { Mode = GdsHierarchyImportMode.BlackBox }, null);
 
-        blackBoxOutcome.RegisteredComponents.ShouldBeEmpty();
-        blackBoxOutcome.Warnings.ShouldContain(
-            w => w.Contains("was not registered: no pins detected", StringComparison.Ordinal));
-        blackBoxOutcome.Warnings.ShouldContain(
-            w => w.Contains("nothing was registered", StringComparison.Ordinal));
-        blackBoxOutcome.Warnings.ShouldAllBe(w => !w.Contains("Exception") && !w.Contains('\n'));
+        var blackBoxComponent = blackBoxOutcome.RegisteredComponents.ShouldHaveSingleItem();
+        blackBoxComponent.CellDraftName.ShouldBe("ConnectAPIC_Design");
+        blackBoxOutcome.Warnings.ShouldBeEmpty();
+        var blackBoxTemplate = sink2.Templates.ShouldHaveSingleItem();
+        blackBoxTemplate.PinDefinitions.Length.ShouldBe(28);
+        blackBoxTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("mmi2x2_dp#0_a0");
+        blackBoxTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("mmi2x2_dp#1_b1");
+        blackBoxTemplate.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
 
         var canvas3 = new DesignCanvasViewModel();
         var blackBoxReport = await new GdsPlacementExecutor(canvas3, null, () => sink2.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(blackBoxOutcome));
-        blackBoxReport.PlacedCount.ShouldBe(0);
-        blackBoxReport.SkippedPlacements.ShouldHaveSingleItem()
-            .ShouldContain("cannot be placed");
-        blackBoxReport.GroupCreated.ShouldBeFalse();
-        canvas3.Components.ShouldBeEmpty();
+        blackBoxReport.PlacedCount.ShouldBe(1);
+        blackBoxReport.SkippedPlacements.ShouldBeEmpty();
+        blackBoxReport.GroupCreated.ShouldBeFalse("a single placed component forms no group");
+        canvas3.Components.ShouldHaveSingleItem();
     }
 
     // ── Harness (shared via <see cref="GdsUserDesignFixture"/>) ───────────────

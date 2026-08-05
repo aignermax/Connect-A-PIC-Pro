@@ -20,6 +20,22 @@ namespace CAP.Avalonia.Services;
 /// (<see cref="NazcaStubNaming"/>, issue #783), so the map keys each variant's
 /// cell to ITS OWN function name + parameters; a residual stderr warning covers
 /// only a hash collision (two parameter sets, same stub name).
+/// <para>
+/// The copy is RE-ANCHORED into the stub frame: <c>copy_tree</c> brings the real
+/// cell's own frame (often origin-centred — ebeam_BondPad occupies (−50..+50)²)
+/// while the stub frame anchors at the calibrated nazca origin offset (the pad's
+/// is the left-edge middle), so an un-anchored copy lands shifted (the pad sat
+/// exactly 50 µm off, metal routes hitting a pad corner — issue #811). The block
+/// translates the copied content so its bbox centre lands on the stub box's bbox
+/// centre — the calibrated offsets derive from the real cells' bounding boxes, so
+/// the shift is ~0 for well-calibrated cells and exactly compensates
+/// frame-convention mismatches like the pad's (pin-marker centroid matching was
+/// measured wrong: the pad's app pin sits at its visual top edge while the real
+/// cell's four m_pin_* markers average to the pad centre). It also restores the
+/// stub's (1,10) pin labels after the swap (the clear wiped them, and the real
+/// cell's own (1,10) SiEPIC pin texts are dropped so a re-import sees exactly the
+/// app pins, not a doubled set).
+/// </para>
 /// </summary>
 public static class SiepicCellUpgradeWriter
 {
@@ -208,6 +224,19 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
 
         _out = _kdb.Layout()
         _out.read(gds_path)
+
+        # Our port-label layer: the stub carries one TEXT per app pin (name +
+        # position = the app pin anchor in the stub frame).
+        _PIN_LABEL_LP = (1, 10)
+
+        def _texts(_cell, _lp):
+            # (string, x, y) of every text on the layer, in micrometers.
+            _li = _out.find_layer(*_lp)
+            if _li is None:
+                return []
+            return [(_s.dtext.string, _s.dtext.x, _s.dtext.y)
+                    for _s in _cell.shapes(_li).each() if _s.is_text()]
+
         _upgraded = 0
         for _stub_name, (_func_name, _params) in cells.items():
             _stub = _out.cell(_stub_name)
@@ -218,10 +247,53 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
             except Exception as _exc:
                 print(f"[Lunima] WARN: real SiEPIC cell '{_func_name}' unavailable ({_exc}); keeping stub box.", file=_sys.stderr)
                 continue
+            # Capture the stub's frame BEFORE the swap wipes it: the (1,10) pin
+            # labels (the app pin anchors, re-emitted after the swap so the
+            # upgraded cell keeps re-importable pins) and the content bbox (the
+            # re-anchor target below).
+            _labels = _texts(_stub, _PIN_LABEL_LP)
+            _stub_bbox = _stub.dbbox()
             # Swap content, keep the cell name so placed instances stay put.
             for _li in list(_out.layer_indexes()):
                 _stub.shapes(_li).clear()
             _stub.copy_tree(_real)
+            # Re-anchor the copied content into the stub frame: copy_tree keeps
+            # the real cell's OWN frame (often origin-centred — ebeam_BondPad
+            # occupies (-50..+50)^2) while the stub frame anchors at the
+            # calibrated nazca origin offset (the pad's is the left-edge middle),
+            # so an un-anchored copy lands shifted (the pad sat 50 um off along
+            # local X, metal routes hitting a pad corner — issue #811). Align the
+            # real content's bbox CENTRE to the stub box's: the PDK's calibrated
+            # nazcaOriginOffset values derive from the real cells' bounding boxes
+            # (verified against SiEPIC-Tools 0.5.31: ebeam_BondPad,
+            # ebeam_crossing4, ebeam_dc_te1550, ebeam_adiabatic_te1550,
+            # ebeam_bdc_te1550, ebeam_dc_halfring_straight all match to rounding),
+            # so the translation is ~0 for well-calibrated cells and exactly
+            # compensates frame-convention mismatches like the pad's. Pin-marker
+            # centroid matching was measured WRONG here: the pad's app 'elec' pin
+            # sits at the pad's visual top EDGE while the real cell's four
+            # m_pin_* edge markers average to the pad CENTRE — centroid matching
+            # shifted the pad 50 um up (and SiEPIC marker names opt*/pin*/m_pin_*
+            # never match the app pin names 'port N'/'elec' anyway).
+            if not _stub_bbox.empty() and not _stub.dbbox().empty():
+                _dx = _stub_bbox.center().x - _stub.dbbox().center().x
+                _dy = _stub_bbox.center().y - _stub.dbbox().center().y
+            else:
+                _dx = _dy = 0.0
+            if abs(_dx) > 1e-9 or abs(_dy) > 1e-9:
+                _stub.transform(_kdb.DCplxTrans(_kdb.DVector(_dx, _dy)))
+            # Restore the stub's pin labels: the clear above wiped them, and the
+            # real cell's own (1,10) pin texts carry SiEPIC names that a re-import
+            # must NOT see doubled — drop those texts, then re-emit the app labels
+            # at their captured stub-frame positions (they are the frame's
+            # anchors, so they are NOT transformed).
+            _li_lab = _out.find_layer(*_PIN_LABEL_LP)
+            if _li_lab is not None:
+                _sh = _stub.shapes(_li_lab)
+                for _s in [_s for _s in _sh.each() if _s.is_text()]:
+                    _sh.erase(_s)
+                for _name, _x, _y in _labels:
+                    _sh.insert(_kdb.DText(_name, _x, _y))
             _upgraded += 1
         if _upgraded:
             import os as _os

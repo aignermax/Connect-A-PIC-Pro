@@ -46,11 +46,11 @@ namespace UnitTests.Services.GdsImport;
 /// Pin-name mapping used for the topology comparison (original template pin →
 /// re-imported pin, verified GEOMETRICALLY against the placed pins within 1 µm):
 /// demofab MMI in1/in2/out1/out2 → a0/a1/b0/b1 (its (501,1) bb_pin_text labels);
-/// ebeam cells "port 1..4" → the SiEPIC foundry port names: adiabatic/bdc
-/// port1→opt1, port2→opt2, port3→opt4, port4→opt3 (the foundry numbers the east
-/// side top-down, the app template bottom-up); crossing port1→opt, port2→opt4,
-/// port3→opt2, port4→opt3 (the west port is literally "opt"); halfring
-/// port1..4→pin1..4. Component-class mapping for the netlist instances:
+/// the ebeam cells keep their app template names "port 1..4" — since #811 the
+/// klayout upgrade re-emits the stub's (1,10) pin labels (at exactly the anchors
+/// the real SiEPIC pin texts sat — the calibrated app pins coincide with the
+/// foundry pins to rounding) and drops the real cells' SiEPIC-named pin texts.
+/// Component-class mapping for the netlist instances:
 /// "demo.mmi2x2_dp" (module-qualified nazca name) and the imported drafts'
 /// fabricated "nazca_&lt;cellname&gt;" (raw-code components carry no nazca
 /// function — a documented convention, see GdsCellDraftMapperTests) both map to
@@ -59,7 +59,7 @@ namespace UnitTests.Services.GdsImport;
 /// </para>
 /// <para>
 /// The stub scenario (bare-nazca python: the four ebeam cells stay 1-polygon stub
-/// boxes) is forced in <see cref="FullLoop_StubScenario_AutoConnectRestoresNothingButNeverMiswires"/>
+/// boxes) is forced in <see cref="FullLoop_StubScenario_RouteDerivationRestoresMmiBraids_WithoutMiswires"/>
 /// by stripping the klayout upgrade call from the export script — the same GDS a
 /// bare-nazca environment would produce. There the heuristic edge pins
 /// (<c>heur_N</c>) sit within a µm of their labeled twins, so EVERY candidate
@@ -99,16 +99,18 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         });
         outcome.Instances.Count.ShouldBe(7);
 
-        // The honest v1 connection outcome: his layout is SPACED — the 10 logical
+        // The honest connection outcome: his layout is SPACED — the 10 logical
         // connections are routed waveguides that nazca flattens into top-cell
-        // polygons, so no two component pins abut and the abutment matcher finds
-        // nothing. Exactly one user-presentable warning says so — and the
-        // flattened routes come back as frozen, non-re-routable paths.
-        outcome.Connections.ShouldBeEmpty();
-        var warning = outcome.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("imported as frozen paths (not re-routable)");
-        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty(
-            "the flattened routes land on the waveguide layer");
+        // polygon chains. The route-network matcher restores the four chains
+        // that span exactly two pins (the two MMI braids, crossing↔crossing,
+        // adiabatic↔halfring); the remaining six entangle into ONE junction
+        // network across the crossing components — never disentangled by
+        // guessing, so those stay frozen paths with an informational note.
+        outcome.Connections.Count.ShouldBe(4);
+        outcome.Connections.ShouldAllBe(c => c.IsRouteDerived);
+        outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(45,
+            "the junction network's polygons ride the group as frozen, non-re-routable paths");
 
         // ── 4. Place + auto-connect (executor default radius 200 µm) ──
         var canvas2 = new DesignCanvasViewModel();
@@ -118,9 +120,13 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
-        report.ConnectedCount.ShouldBe(0, "no abutment connections exist in this spaced design");
+        report.ConnectedCount.ShouldBe(4,
+            "the four clean two-pin route chains restore as real connections (route-derived)");
+        report.RouteDerivedCount.ShouldBe(4);
         report.Warnings.ShouldBeEmpty();
-        report.ValidationWarnings.ShouldBeEmpty("the restored routes are short and clean");
+        report.ValidationWarnings.Count.ShouldBe(2,
+            "the re-routed MMI braids honestly trip the validator (blocked/overlapping) — " +
+            "re-routing jitter around the braided pair, not an import defect");
         report.GroupCreated.ShouldBeTrue();
         report.GroupName.ShouldBe("ConnectAPIC_Design");
 
@@ -241,20 +247,25 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// Forces the bare-nazca scenario on ANY machine: the export script's klayout
     /// upgrade call is stripped, so the ebeam cells stay 1-polygon stub boxes whose
     /// waveguide-layer bodies spawn heuristic <c>heur_N</c> edge pins next to the
-    /// labeled ones. The auto-connect pass must then restore NOTHING — every
-    /// candidate pair is ambiguous (labeled pin vs. its heur twin) — while never
-    /// wiring a single wrong connection.
+    /// labeled ones. Auto-connect must then restore NOTHING (every candidate pair
+    /// is ambiguous: labeled pin vs. its heur twin) — but the two MMI braids still
+    /// come back ROUTE-DERIVED: their flattened route polygons each touch exactly
+    /// the two demofab a-pins, which carry real labels (no heur pollution).
     /// </summary>
     [SkippableFact]
-    public async Task FullLoop_StubScenario_AutoConnectRestoresNothingButNeverMiswires()
+    public async Task FullLoop_StubScenario_RouteDerivationRestoresMmiBraids_WithoutMiswires()
     {
         var export = await ExportUserDesignAsync("export-stub", stripSiepicUpgrade: true);
         export.SiepicUpgraded.ShouldBeFalse("the upgrade call was stripped — the stubs survive");
 
         var (outcome, sink) = await ImportExplodeAsync(export.GdsPath, "stub");
         outcome.Instances.Count.ShouldBe(7);
-        outcome.Connections.ShouldBeEmpty();
-        outcome.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+        outcome.Connections.ShouldAllBe(c => c.IsRouteDerived,
+            "structural restoration only — nothing guessed");
+        outcome.Connections.Count.ShouldBe(2,
+            "the two MMI braids (a0↔a1 both directions) restore from their route polygons");
+        outcome.Infos.ShouldContain(i => i.Contains("restored as 2 real connection"),
+            "the geometry report moved to the info channel with the restored/frozen split");
 
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
@@ -263,9 +274,12 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
-        report.ConnectedCount.ShouldBe(0);
+        report.ConnectedCount.ShouldBe(2, "the two route-derived MMI braids");
         report.Warnings.ShouldBeEmpty();
-        report.ValidationWarnings.ShouldBeEmpty();
+        report.ValidationWarnings.Count.ShouldBe(2,
+            "the two braided cross-links re-route as degraded geometry (BlockedPath + " +
+            "OverlappingPaths) — the SAME degradation the original canvas shows there " +
+            "(red-dashed fallback detours in panel 01); logically correct, honestly reported");
         report.GroupCreated.ShouldBeTrue();
 
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
@@ -284,49 +298,39 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     // ── Stage assertions ─────────────────────────────────────────────────────
 
     /// <summary>
-    /// The SiEPIC-upgraded auto-connect outcome: exactly 2 of the 10 logical
-    /// connections restored pin-exact, 2 vetoed as genuinely ambiguous, the rest
-    /// skipped with reasons — see the class summary for the per-connection
-    /// accounting. Radius is the executor default (200 µm).
+    /// The SiEPIC-upgraded auto-connect outcome: NOTHING to auto-connect — the
+    /// four clean two-pin chains already came back route-derived (including the
+    /// two spans earlier auto-connect restored: connection 7 crossing↔crossing
+    /// and connection 10 halfring↔adiabatic). The two genuinely ambiguous
+    /// pairings stay vetoed; every skip keeps its reason. Radius is the
+    /// executor default (200 µm).
     /// </summary>
     private static void AssertAutoConnectUpgraded(GdsPlacementReport report)
     {
-        report.AutoConnectedCount.ShouldBe(2,
-            "connections 7 (crossing↔crossing, 12.8 µm) and 10 (halfring↔adiabatic, 10.6 µm) " +
-            "are the only short straight opposing-pin spans of his layout");
-
-        var pairAssertions = new[]
-        {
-            new[] { "'ebeam_crossing4#0.opt'", "'ebeam_crossing4#1.opt4'" },       // connection 7
-            new[] { "'ebeam_adiabatic_te1550#0.opt2'", "'ebeam_dc_halfring_straight_7357fa#0.pin3'" }, // connection 10
-        };
-        foreach (var labels in pairAssertions)
-        {
-            report.AutoConnectedPairs.ShouldContain(
-                p => p.Contains(labels[0], StringComparison.Ordinal) &&
-                     p.Contains(labels[1], StringComparison.Ordinal),
-                $"the restored pair {labels[0]} ↔ {labels[1]}");
-        }
+        report.AutoConnectedCount.ShouldBe(0,
+            "the only short straight opposing-pin spans of his layout (connections 7 and 10) " +
+            "are route-derived now — their pins are occupied before auto-connect runs");
 
         // The two ambiguity vetoes, per-pin (below the summary-collapse cap):
         // connection 8 (crossing872's east pin sees the bdc's two west pins
         // 0.09 µm apart) and connection 9 (crossing1175's west pin sees the
         // adiabatic's two east pins 0.39 µm apart). Guessing would miswire.
-        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#0.opt4'", StringComparison.Ordinal))
+        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#0.port 2'", StringComparison.Ordinal))
             .ShouldBe(1, "connection 8 is honestly refused: 178.75 vs 178.85 µm — a coin flip");
-        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#1.opt'", StringComparison.Ordinal))
+        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#1.port 1'", StringComparison.Ordinal))
             .ShouldBe(1, "connection 9 is honestly refused: 25.55 vs 25.94 µm — a coin flip");
 
-        // Skip accounting: 28 pins total, 4 paired, 24 skipped — 2 ambiguous
-        // (above), 4 not-facing (the crossings' north/south pins see the MMI
-        // output pins opposing but perpendicular), 18 with no opposing partner
-        // in radius (collapsed into one summary line, over the detail cap of 5).
+        // Skip accounting: 28 pins total, 8 consumed by the four route-derived
+        // connections, 20 free-pin candidates — 2 ambiguous (above), 4
+        // not-facing (the crossings' north/south pins see the MMI output pins
+        // opposing but perpendicular), 14 with no opposing partner in radius
+        // (collapsed into one summary line, over the detail cap of 5).
         report.SkippedAutoConnect.Count.ShouldBe(7,
             "2 ambiguous + 4 not-facing (detailed) + 1 collapsed no-partner summary line");
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.opt2'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.opt3'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.opt2'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.opt3'", StringComparison.Ordinal));
+        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.port 3'", StringComparison.Ordinal));
+        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.port 4'", StringComparison.Ordinal));
+        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.port 3'", StringComparison.Ordinal));
+        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.port 4'", StringComparison.Ordinal));
     }
 
     /// <summary>
@@ -339,12 +343,12 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     private static void AssertAutoConnectStub(GdsPlacementReport report)
     {
         report.AutoConnectedCount.ShouldBe(0,
-            "every candidate pair is ambiguous: each labeled pin has a heur twin within a µm");
+            "every remaining candidate pair is ambiguous: each labeled pin has a heur twin within a µm");
         report.AutoConnectedPairs.ShouldBeEmpty();
         report.SkippedAutoConnect.Count.ShouldBe(3,
-            "all three skip reasons exceed the detail cap of 5 and collapse into summary lines: " +
-            "10 ambiguous, 28 no-partner-in-radius, 8 not-facing = 46 pins (28 labeled + 18 heuristic)");
-        report.ValidationWarnings.ShouldBeEmpty();
+            "all three skip reasons exceed the detail cap of 5 and collapse into summary lines; " +
+            "the four MMI a-pins are occupied by the route-derived braids before auto-connect runs");
+        // (ValidationWarnings for the degraded braid geometry are asserted in the caller.)
     }
 
     /// <summary>
@@ -426,10 +430,10 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// <summary>
     /// SiEPIC-upgraded netlist comparison: the imported circuit's YAML netlist is a
     /// SUBSET of the original's topology — same instance census per component class,
-    /// exactly the 2 auto-restored edges (both pin-exact edges of the original
+    /// exactly the 4 route-derived edges (each a pin-exact edge of the original
     /// graph, zero miswired edges), and every originally-external port still
-    /// external (the 8 user external ports are among the imported 24 ports:
-    /// 28 pins − 2 restored edges × 2).
+    /// external (the 8 user external ports are among the imported 20 ports:
+    /// 28 pins − 4 restored edges × 2).
     /// </summary>
     private static void AssertNetlistTopologyUpgraded(DesignCanvasViewModel original, DesignCanvasViewModel imported)
     {
@@ -442,24 +446,28 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         originalTopology.Edges.Count.ShouldBe(10, "his ten waveguide connections");
         importedTopology.Edges.ShouldBe(new[]
         {
-            "ebeam_adiabatic_te1550#0/opt2 = ebeam_dc_halfring_straight#0/pin3",
-            "ebeam_crossing4#0/opt4 = ebeam_crossing4#1/opt",
+            // The two MMI braids (his connections 1 and 2).
+            "mmi2x2_dp#0/a0 = mmi2x2_dp#1/a1",
+            "mmi2x2_dp#0/a1 = mmi2x2_dp#1/a0",
+            // Connection 10 (halfring↔adiabatic) and connection 7 (crossing↔crossing).
+            "ebeam_adiabatic_te1550#0/port 2 = ebeam_dc_halfring_straight#0/port 3",
+            "ebeam_crossing4#0/port 2 = ebeam_crossing4#1/port 1",
         }, ignoreOrder: true,
-            customMessage: "exactly connections 7 and 10 restored, pin-exact, nothing miswired");
+            customMessage: "exactly the four clean two-pin chains restore, pin-exact, nothing miswired");
         importedTopology.Edges.ShouldBeSubsetOf(originalTopology.Edges,
             "every restored edge is a real edge of the original circuit — no spurious topology");
 
-        importedTopology.Ports.Count.ShouldBe(24, "28 pins minus the two restored edges");
+        importedTopology.Ports.Count.ShouldBe(20, "28 pins minus the four restored edges");
         originalTopology.Ports.Count.ShouldBe(8, "his eight external ports");
         originalTopology.Ports.ShouldBeSubsetOf(importedTopology.Ports,
             "every originally-external pin stays external after the round trip");
     }
 
     /// <summary>
-    /// Stub-scenario netlist comparison: same instance census, but ZERO edges
-    /// (every pairing vetoed as ambiguous among the heur twins) — the imported
-    /// netlist is honestly disconnected rather than miswired. All 46 pins
-    /// surface as ports.
+    /// Stub-scenario netlist comparison: same instance census; the two MMI braids
+    /// restore route-derived (subset of the original edges, nothing miswired);
+    /// every other pairing is vetoed as ambiguous among the heur twins. The four
+    /// MMI a-pins are occupied, so 42 pins surface as ports.
     /// </summary>
     private static void AssertNetlistTopologyStub(DesignCanvasViewModel original, DesignCanvasViewModel imported)
     {
@@ -467,8 +475,14 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         var importedTopology = ParseTopology(DeriveYaml(imported, "imported"), mapOriginalPinNames: false);
 
         importedTopology.InstanceCountsByClass.ShouldBe(originalTopology.InstanceCountsByClass);
-        importedTopology.Edges.ShouldBeEmpty("the ambiguity guard refuses every twin-poisoned pair");
-        importedTopology.Ports.Count.ShouldBe(46, "28 labeled pins + 18 heuristic edge pins, all unconnected");
+        importedTopology.Edges.ShouldBe(new[]
+        {
+            "mmi2x2_dp#0/a0 = mmi2x2_dp#1/a1",
+            "mmi2x2_dp#0/a1 = mmi2x2_dp#1/a0",
+        }, ignoreOrder: true, customMessage: "the two MMI braids restore route-derived, pin-exact");
+        importedTopology.Edges.ShouldBeSubsetOf(originalTopology.Edges,
+            "every restored edge is a real edge of the original circuit — no spurious topology");
+        importedTopology.Ports.Count.ShouldBe(42, "46 pins minus the four occupied by the braids");
     }
 
     // ── Error-channel sanity ─────────────────────────────────────────────────
@@ -477,7 +491,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// Every message produced along the loop stays user-presentable: no raw
     /// exception text, no stack traces, no empty strings, no embedded newlines;
     /// the info channel carries no warnings. The "imported as frozen paths"
-    /// warning appears exactly once (in the import warnings).
+    /// note appears exactly once (in the import INFOS — frozen geometry is
+    /// visible on the group, not silent data loss, so it is not a warning).
     /// </summary>
     private static void AssertMessageChannels(
         IReadOnlyList<string> skippedConnections,
@@ -492,7 +507,6 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         exportWarnings.ShouldBeEmpty("nothing fell back to placeholder geometry");
         exportStdErr.ShouldNotContain("Traceback");
 
-        importInfos.ShouldBeEmpty("every cell was unknown to the empty sink — nothing resolved, nothing skipped");
         var allMessages = importWarnings.Concat(importInfos)
             .Concat(placementWarnings).Concat(validationWarnings).ToList();
         allMessages.ShouldAllBe(m =>
@@ -504,7 +518,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         importInfos.ShouldAllBe(i => !i.Contains("WARN", StringComparison.Ordinal),
             "the info channel carries no warnings");
         allMessages.Count(m => m.Contains("imported as frozen paths (not re-routable)", StringComparison.Ordinal))
-            .ShouldBe(1, "the frozen-route-paths warning is produced exactly once");
+            .ShouldBe(1, "the frozen-route-paths note is produced exactly once");
     }
 
     // ── Harness ──────────────────────────────────────────────────────────────
@@ -722,19 +736,20 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             },
             ["ebeam_adiabatic_te1550"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["port 1"] = "opt1", ["port 2"] = "opt2", ["port 3"] = "opt4", ["port 4"] = "opt3",
+                // Since #811 the upgraded cells carry the app pin names verbatim.
+                ["port 1"] = "port 1", ["port 2"] = "port 2", ["port 3"] = "port 3", ["port 4"] = "port 4",
             },
             ["ebeam_bdc_te1550"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["port 1"] = "opt1", ["port 2"] = "opt2", ["port 3"] = "opt4", ["port 4"] = "opt3",
+                ["port 1"] = "port 1", ["port 2"] = "port 2", ["port 3"] = "port 3", ["port 4"] = "port 4",
             },
             ["ebeam_crossing4"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["port 1"] = "opt", ["port 2"] = "opt4", ["port 3"] = "opt2", ["port 4"] = "opt3",
+                ["port 1"] = "port 1", ["port 2"] = "port 2", ["port 3"] = "port 3", ["port 4"] = "port 4",
             },
             ["ebeam_dc_halfring_straight"] = new Dictionary<string, string>(StringComparer.Ordinal)
             {
-                ["port 1"] = "pin1", ["port 2"] = "pin2", ["port 3"] = "pin3", ["port 4"] = "pin4",
+                ["port 1"] = "port 1", ["port 2"] = "port 2", ["port 3"] = "port 3", ["port 4"] = "port 4",
             },
         };
 

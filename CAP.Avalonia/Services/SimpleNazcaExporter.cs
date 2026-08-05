@@ -100,11 +100,13 @@ public class SimpleNazcaExporter
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
         var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include: null, library, exportWarnings);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include: null, rawCodePlan);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas, include: null, rawCodePlan);
+        AppendPdkComponentStubs(sb, canvas, include: null, rawCodePlan, wrapperPlan);
         NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
-        var componentNames = AppendComponents(sb, canvas, emitVerification, rawCodePlan: rawCodePlan);
+        NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
+        var componentNames = AppendComponents(sb, canvas, emitVerification, rawCodePlan: rawCodePlan, wrapperPlan: wrapperPlan);
         AppendConnections(
             sb, canvas, componentNames, metal, interconnectSettings.GdsLayer,
             skippedConnections, unresolvedCrossings);
@@ -145,11 +147,13 @@ public class SimpleNazcaExporter
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
         var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include, library, exportWarnings);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include, rawCodePlan);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas, include, rawCodePlan);
+        AppendPdkComponentStubs(sb, canvas, include, rawCodePlan, wrapperPlan);
         NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
-        AppendComponents(sb, canvas, emitVerification: false, include, topCellName, rawCodePlan);
+        NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
+        AppendComponents(sb, canvas, emitVerification: false, include, topCellName, rawCodePlan, wrapperPlan);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
@@ -189,7 +193,7 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendPdkComponentStubs(
         StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null,
-        RawCodeExportPlan? rawCodePlan = null)
+        RawCodeExportPlan? rawCodePlan = null, PinLabelWrapperPlan? wrapperPlan = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
@@ -205,13 +209,13 @@ public class SimpleNazcaExporter
                 {
                     if (child.IsAnalysisTool) continue;
                     if (include != null && !include(child)) continue;
-                    AppendComponentStub(sb, child, generated, ci, plan);
+                    AppendComponentStub(sb, child, generated, ci, plan, wrapperPlan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendComponentStub(sb, comp, generated, ci, plan);
+                AppendComponentStub(sb, comp, generated, ci, plan, wrapperPlan);
             }
         }
     }
@@ -228,7 +232,7 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendComponentStub(
         StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci,
-        RawCodeExportPlan plan)
+        RawCodeExportPlan plan, PinLabelWrapperPlan? wrapperPlan = null)
     {
         if (plan.TryGetEntry(comp, out var rawEntry))
         {
@@ -239,6 +243,11 @@ public class SimpleNazcaExporter
                 NazcaCoordinateMapper.GetStubAnchor(comp));
             return;
         }
+
+        // Pin-label-wrapped components place the real module cell inside the
+        // wrapper — the (dead, never-called) box stub would be pure noise.
+        if (wrapperPlan is not null && wrapperPlan.TryGetEntry(comp, out _))
+            return;
 
         var funcName = comp.NazcaFunctionName;
         if (string.IsNullOrEmpty(funcName) || !RequiresStub(funcName))
@@ -279,7 +288,7 @@ public class SimpleNazcaExporter
         // The cell is rotation-independent (placement applies .put(rot)); use the
         // UNROTATED first-pin offset as the org anchor (oy), mirroring the mapper. The
         // straight's centre line coincides with its pins, so it sits at oy - firstPin.oy.
-        var (_, anchorY) = NazcaCoordinateMapper.GetStubAnchor(comp);
+        var (anchorX, anchorY) = NazcaCoordinateMapper.GetStubAnchor(comp);
         var firstPin = comp.PhysicalPins.FirstOrDefault();
         var firstPinY = firstPin != null
             ? NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, firstPin).OffsetY
@@ -291,32 +300,51 @@ public class SimpleNazcaExporter
 
         sb.AppendLine($"def {pythonFuncName}(length=100, **kwargs):");
         sb.AppendLine($"    \"\"\"Auto-generated parametric straight waveguide stub for {funcName}.\"\"\"");
-        sb.AppendLine($"    with nd.Cell(name='{funcName}_{{length}}') as cell:");
+        // The cell name is an f-string so each length gets its OWN cell
+        // ('demo.shallow.strt_100') — a plain string would bake the literal
+        // "{length}" into the name, collapsing every length into one cell.
+        sb.AppendLine($"    with nd.Cell(name=f'{funcName}_{{length}}') as cell:");
         sb.AppendLine($"        # Use nd.strt() for proper waveguide with specified length");
         sb.AppendLine($"        nd.strt(length=length, width=0.45, layer=1).put(0, {strtY})");
+
+        // The black-box body frame on demofab's bb_body layer (1003, 0) — the
+        // same documentation layer demofab's own cells draw their frames on:
+        // the bare straight is 0.45 µm tall while the app component is W×H, so
+        // without the frame the cell bbox (and with it the re-imported
+        // placement position) would sit ~(H−0.45)/2 off the original.
+        var w = comp.WidthMicrometers;
+        var h = comp.HeightMicrometers;
+        var bx0 = NazcaCoordinateMapper.NormalizeZero(-anchorX).ToString("F2", ci);
+        var by0 = NazcaCoordinateMapper.NormalizeZero(anchorY - h).ToString("F2", ci);
+        var bx1 = NazcaCoordinateMapper.NormalizeZero(w - anchorX).ToString("F2", ci);
+        var by1 = NazcaCoordinateMapper.NormalizeZero(anchorY).ToString("F2", ci);
+        sb.AppendLine(
+            $"        nd.Polygon(points=[({bx0},{by0}),({bx1},{by0}),({bx1},{by1}),({bx0},{by1})], " +
+            "layer=(1003, 0)).put(0, 0)  # bb_body frame (documentation layer)");
 
         // Generate pins from the UNROTATED offsets, relative to org (the mapper anchor);
         // a straight's pins share the centre line, so their local Y is oy - OffsetY = 0.
         foreach (var pin in comp.PhysicalPins)
         {
-            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
-            // must not be emitted as waveguide stubs (#519). Metal routing is a separate feature.
-            if (pin.MatterType != MatterType.Light) continue;
-
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
 
             // For straight waveguides: input pin at x=0, output pin at x=length.
             // The label anchors exactly on the pin so re-import detects it there (#808).
+            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
+            // must not be emitted as waveguide stubs (#519) — but they still get the
+            // port label, or a re-import could never see the pin.
             if (uox == 0)
             {
-                sb.AppendLine($"        nd.Pin('{pin.Name}').put(0, {py}, {pa})");
+                if (pin.MatterType == MatterType.Light)
+                    sb.AppendLine($"        nd.Pin('{pin.Name}').put(0, {py}, {pa})");
                 sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(0, {py})");
             }
             else
             {
-                sb.AppendLine($"        nd.Pin('{pin.Name}').put(length, {py}, {pa})");
+                if (pin.MatterType == MatterType.Light)
+                    sb.AppendLine($"        nd.Pin('{pin.Name}').put(length, {py}, {pa})");
                 sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(length, {py})");
             }
         }
@@ -387,17 +415,23 @@ public class SimpleNazcaExporter
 
         sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer={bodyLayer}).put(0, 0)");
 
-        // Pins relative to org: local = (OffsetX-ox, oy-OffsetY), the plain Y negation
-        // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
+        // Pins relative to org: local = (UnrotatedOffsetX-ox, oy-UnrotatedOffsetY), the
+        // plain Y negation of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition
+        // contract). The UNROTATED offsets matter: the cell is rotation-independent
+        // (placement applies .put(rot)) and one stub is shared by instances at different
+        // rotations — live offsets would bake the first instance's rotation into the
+        // shared cell (NazcaCoordinateMapper.GetUnrotatedPinOffset).
         foreach (var pin in comp.PhysicalPins)
         {
-            // Optical ports only — see the straight-stub loop above (#519).
-            if (pin.MatterType != MatterType.Light) continue;
-
-            var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - offsetX).ToString("F2", ci);
-            var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
+            var (pinOffsetX, pinOffsetY) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
+            var px = NazcaCoordinateMapper.NormalizeZero(pinOffsetX - offsetX).ToString("F2", ci);
+            var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pinOffsetY).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
-            sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
+            // nd.Pin is an optical Nazca port: electrical pins get no Pin (#519) —
+            // but they DO get the port label, or a re-import could never see them
+            // (a purely electrical component like a bond pad carries no other pin trace).
+            if (pin.MatterType == MatterType.Light)
+                sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
             // Pin label at the same anchor — re-import detects the named pin there (#808).
             sb.AppendLine($"    nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put({px}, {py})");
         }
@@ -411,7 +445,7 @@ public class SimpleNazcaExporter
     private static Dictionary<Component, string> AppendComponents(
         StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false,
         Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design",
-        RawCodeExportPlan? rawCodePlan = null)
+        RawCodeExportPlan? rawCodePlan = null, PinLabelWrapperPlan? wrapperPlan = null)
     {
         sb.AppendLine("def create_design():");
         sb.AppendLine($"    with nd.Cell(name='{topCellName}') as design:");
@@ -441,13 +475,13 @@ public class SimpleNazcaExporter
                     if (child.IsAnalysisTool) continue;
                     if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     if (include != null && !include(child)) continue;
-                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, plan);
+                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, plan, wrapperPlan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci, plan);
+                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci, plan, wrapperPlan);
             }
         }
 
@@ -501,7 +535,8 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendSingleComponent(
         StringBuilder sb, Component comp, Dictionary<Component, string> componentNames,
-        ref int compIndex, CultureInfo ci, RawCodeExportPlan? rawCodePlan = null)
+        ref int compIndex, CultureInfo ci, RawCodeExportPlan? rawCodePlan = null,
+        PinLabelWrapperPlan? wrapperPlan = null)
     {
         var varName = $"comp_{compIndex}";
 
@@ -512,9 +547,13 @@ public class SimpleNazcaExporter
         // A raw-code component (GDS import / custom Python cell) calls its inlined
         // wrapper — same call shape for the real-geometry wrapper and the
         // missing-source fallback box stub (<see cref="NazcaRawCodeCellWriter"/>).
+        // A pin-label-wrapped component (electrical pins on a real module call)
+        // calls its wrapper cell (<see cref="NazcaPinLabelWrapperWriter"/>).
         var nazcaFunc = rawCodePlan is not null && rawCodePlan.TryGetEntry(comp, out var rawEntry)
             ? $"{rawEntry.FunctionName}()"
-            : GetNazcaFunction(comp);
+            : wrapperPlan is not null && wrapperPlan.TryGetEntry(comp, out var wrapperEntry)
+                ? $"{wrapperEntry.FunctionName}()"
+                : GetNazcaFunction(comp);
 
         // Diagnostic logging (Issue #334): trace coordinate transform for each component.
         // originOffset is the effective put-position offset relative to the editor
@@ -1170,6 +1209,21 @@ public class SimpleNazcaExporter
         var funcName = comp.NazcaFunctionName;
         if (!string.IsNullOrEmpty(funcName) && NazcaCoordinateMapper.IsPdkFunction(funcName))
         {
+            var funcParams = comp.NazcaFunctionParameters;
+            if (!string.IsNullOrEmpty(funcParams)
+                && NazcaCoordinateMapper.IsParametricStraight(funcName, funcParams))
+            {
+                // A parametric straight calls its generated stub — the same call
+                // shape demo_pdk.* straights and non-dotted PDK straights already
+                // use. The REAL module call (demo.shallow.strt) would dissolve at
+                // export: nazca flattens interconnect straights into the PARENT
+                // cell, erasing the component from the GDS structure (and merging
+                // its two connections into one on re-import).
+                var stubFuncName = System.Text.RegularExpressions.Regex.Replace(
+                    funcName, @"[^a-zA-Z0-9_]", "_");
+                return $"{stubFuncName}({funcParams})";
+            }
+
             // Keep dots (for module attribute access like demo.mmi2x2_dp), replace other invalid chars.
             // The placement calls the parameter-specific stub (issue #783): StubName appends
             // the parameters hash exactly when the stub generator did — dotted names bypass
@@ -1179,7 +1233,6 @@ public class SimpleNazcaExporter
 
             // Forward stored parameters verbatim — the caller (component model)
             // is responsible for ensuring they match the target PDK function's signature.
-            var funcParams = comp.NazcaFunctionParameters;
             if (!string.IsNullOrEmpty(funcParams))
                 return $"{pythonFuncName}({funcParams})";
             else

@@ -421,10 +421,15 @@ public class GdsHierarchyImporterTests
         draft.WidthUm.ShouldBe(20, Tolerance);
         draft.HeightUm.ShouldBe(4, Tolerance);
 
-        // Only the top cell's OWN labels are ports — child labels stay internal.
-        draft.Pins.Count.ShouldBe(2);
-        draft.Pins[0].Name.ShouldBe("a0");
-        draft.Pins[1].Name.ShouldBe("a1");
+        // Black-box pins come from the WHOLE flattened hierarchy: the top cell's
+        // own labels keep their bare names (they are the circuit's ports), the
+        // absorbed children's labels are promoted with their cell context
+        // (each of wgA/wgB occurs once, so no occurrence qualifier). Detector
+        // order: left edge top-down, then top edge, then right edge.
+        draft.Pins.Select(p => p.Name).ShouldBe(new[]
+        {
+            "wgA_in", "a0", "wgA_out", "wgB_in", "wgB_out", "a1",
+        });
         AssertPinsWithinDraftBounds(draft);
 
         // Outlines absorb the whole hierarchy (stripe + extent per child).
@@ -521,8 +526,9 @@ public class GdsHierarchyImporterTests
         result.Connections.ShouldBeEmpty();
         result.Warnings.ShouldContain(w => w.Contains("nothing to explode"));
         // The lone (1,0) polygon is top-cell own geometry on a waveguide layer:
-        // it comes back as a frozen path, not as "not reconstructed".
-        result.Warnings.ShouldContain(w => w.Contains("imported as frozen paths (not re-routable)"));
+        // it comes back as a frozen path — an INFO, not a warning (nothing is
+        // silently dropped: the frozen path stays visible on the group).
+        result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
         var polygon = result.TopCellWaveguidePolygons.ShouldHaveSingleItem();
         polygon.Layer.ShouldBe(1);
         polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
@@ -572,9 +578,11 @@ public class GdsHierarchyImporterTests
             (10.0, 3.75), (15.0, 3.75), (15.0, 3.25), (10.0, 3.25), (10.0, 3.75),
         });
 
+        // Restored/frozen accounting is INFO (fully reconstructed geometry);
+        // only the devrec halo — on neither the route nor the metal layers —
+        // earns the not-reconstructed WARNING.
+        result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
         var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("imported as frozen paths (not re-routable)");
-        // The devrec halo is neither a route nor imported.
         warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
     }
 
@@ -612,9 +620,10 @@ public class GdsHierarchyImporterTests
         connection.XUm.ShouldBe(12.5, Tolerance);
         connection.YUm.ShouldBe(2.0, Tolerance);
 
+        // The restored connection is INFO (normal, fully-reconstructed
+        // behavior); only the devrec halo earns the not-reconstructed WARNING.
+        result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
         var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("restored as real connections (re-routable)");
-        // The devrec halo is neither a route nor imported.
         warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
     }
 
@@ -635,7 +644,7 @@ public class GdsHierarchyImporterTests
 
         result.TopCellWaveguidePolygons.ShouldBeEmpty("a devrec halo is not routing geometry");
         var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("own geometry is not reconstructed (v1)");
+        warning.ShouldContain("on other layers are not reconstructed (v1)");
         warning.ShouldNotContain("imported as frozen paths");
     }
 
@@ -658,7 +667,8 @@ public class GdsHierarchyImporterTests
         var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
 
         result.TopCellWaveguidePolygons.ShouldHaveSingleItem().Layer.ShouldBe(1111);
-        result.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+        result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
+        result.Warnings.ShouldBeEmpty("the (1111,0) polygon is fully reconstructed as a frozen path — no leftover geometry");
     }
 
     [Fact]
@@ -688,7 +698,10 @@ public class GdsHierarchyImporterTests
         {
             (0.0, 3.5), (10.0, 3.5), (10.0, 3.0), (0.0, 3.0), (0.0, 3.5),
         });
-        result.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+        // The (3,0) polygon comes back as a frozen path (INFO); the (1,0)
+        // polygon is on no configured route layer — the not-reconstructed WARNING.
+        result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
+        result.Warnings.ShouldHaveSingleItem().ShouldContain("on other layers are not reconstructed (v1)");
     }
 
     // ── Zero-geometry / export-artifact cells ────────────────────────────────

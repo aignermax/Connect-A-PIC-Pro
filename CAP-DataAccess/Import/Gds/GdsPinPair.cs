@@ -52,4 +52,14 @@ public sealed record GdsPinPair
     /// any reconstructed connection and reports them separately.
     /// </summary>
     public bool IsRouteDerived { get; init; }
+
+    /// <summary>
+    /// True when the pair was derived from a top-cell METAL-layer polygon
+    /// network — an electrical connection (metal trace), not an optical
+    /// waveguide (<see cref="GdsHierarchyImportOptions.MetalRouteLayers"/>).
+    /// Metal-derived pairs are always route-derived as well; the placement
+    /// layer creates them identically (the connection's kind follows from the
+    /// connected pins' signal domains).
+    /// </summary>
+    public bool IsElectrical { get; init; }
 }

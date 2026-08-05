@@ -69,6 +69,21 @@ public sealed record GdsHierarchyImportOptions
     public IReadOnlyList<(int Layer, int Datatype)> RouteLayers { get; init; } = [(1, 0), (1111, 0)];
 
     /// <summary>
+    /// (Layer, Datatype) pairs whose top-cell-OWN polygons are treated as METAL
+    /// traces (electrical routing): a metal polygon network touched by exactly
+    /// two pins becomes an ELECTRICAL connection (not a waveguide connection —
+    /// the pins' signal domains decide the created connection's kind, with
+    /// unknown-kind pins inferred electrical); unconsumed metal polygons are
+    /// imported as frozen paths like their waveguide counterparts. Default:
+    /// (11, 0) and (12, 0) — the metal trace and bridge-marker layers our own
+    /// exporters use (<c>MetalRoutingSpec</c> defaults, issues #682/#519), so
+    /// re-importing a Lunima export reconstructs its electrical routing out of
+    /// the box. Kept separate from <see cref="RouteLayers"/>: optical and metal
+    /// polygon networks must never merge into one connection.
+    /// </summary>
+    public IReadOnlyList<(int Layer, int Datatype)> MetalRouteLayers { get; init; } = [(11, 0), (12, 0)];
+
+    /// <summary>
     /// Maximum distance in micrometers between two absolute pin positions for
     /// them to count as abutting (forming a connection). Default: 0.05 µm.
     /// </summary>
@@ -84,6 +99,19 @@ public sealed record GdsHierarchyImportOptions
     /// an unrelated neighbor. Default: 1.0 µm.
     /// </summary>
     public double PinTouchToleranceUm { get; init; } = 1.0;
+
+    /// <summary>
+    /// Maximum distance in micrometers between two top-cell route polygons for
+    /// them to count as one connected network (route-derivation chaining, see
+    /// <c>GdsRouteConnectivityMatcher</c>). Deliberately TIGHT: consecutive
+    /// segments of one exported route share their joint exactly (within export
+    /// rounding), while independently routed traces can run at a pitch far
+    /// below <see cref="PinTouchToleranceUm"/> — a 10 µm-wide metal trace pair
+    /// 0.6 µm apart must stay two networks, or parallel buses would merge into
+    /// one junction blob. True crossings still merge (their polygons genuinely
+    /// overlap) and become junction-frozen, as intended. Default: 0.05 µm.
+    /// </summary>
+    public double PolygonChainToleranceUm { get; init; } = 0.05;
 
     /// <summary>
     /// Ramer-Douglas-Peucker tolerance in micrometers for simplifying draft
@@ -125,6 +153,11 @@ public sealed record GdsHierarchyImportOptions
         {
             throw new ArgumentOutOfRangeException(
                 nameof(PinTouchToleranceUm), PinTouchToleranceUm, "The pin-touch tolerance must be ≥ 0.");
+        }
+        if (PolygonChainToleranceUm < 0)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(PolygonChainToleranceUm), PolygonChainToleranceUm, "The polygon-chain tolerance must be ≥ 0.");
         }
         if (OutlineSimplificationToleranceUm < 0)
         {

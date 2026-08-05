@@ -232,6 +232,16 @@ public sealed record GdsInstance
 }
 
 /// <summary>
+/// Where a flattened text came from: the cell that OWNS the label (the leaf
+/// cell of the flatten walk, not the requested top cell) and which occurrence
+/// of that cell it rode in with (0-based, in flatten walk order — the same
+/// order <see cref="GdsCellFlattener.GetInstanceTree"/> expands instances, so
+/// occurrence numbers match the importer's <c>{cell}#{n}</c> instance naming
+/// for direct children).
+/// </summary>
+public readonly record struct GdsTextOrigin(string CellName, int Occurrence);
+
+/// <summary>
 /// Result of <see cref="GdsCellFlattener.Flatten"/>: all polygons and texts of a
 /// cell hierarchy transformed into the top cell's coordinate space (micrometers,
 /// Y-up preserved).
@@ -246,4 +256,12 @@ public class FlattenedGdsCell
 
     /// <summary>All texts, including those pulled in through references, in top-cell coordinates.</summary>
     public List<GdsText> Texts { get; } = new();
+
+    /// <summary>
+    /// Per-entry provenance of <see cref="Texts"/> (index-aligned), filled only
+    /// by <see cref="GdsCellFlattener.Flatten"/> — manually assembled detection
+    /// cells leave this empty. Consumers that attribute labels to their source
+    /// cells (black-box pin detection) must check the count before indexing.
+    /// </summary>
+    public List<GdsTextOrigin> TextOrigins { get; } = new();
 }

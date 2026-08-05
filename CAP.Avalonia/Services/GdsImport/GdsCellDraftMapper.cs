@@ -61,6 +61,12 @@ public static class GdsCellDraftMapper
                 OffsetXMicrometers = p.XUm,
                 OffsetYMicrometers = p.YUm,
                 AngleDegrees = p.AngleDegrees,
+                // Electrical only when the kind is proven (metal-route inference,
+                // issue #682): null/unknown stays absent, which the PDK loader
+                // reads as the optical default — never guessed.
+                PinKind = p.IsElectrical == true
+                    ? CAP_Core.Components.PinKinds.PinKindHelper.ElectricalKindName
+                    : null,
             }).ToList(),
             SMatrix = null,
             RawCode = SubstituteGdsFileName(draft.RawCode, gdsFilePathForRawCode),

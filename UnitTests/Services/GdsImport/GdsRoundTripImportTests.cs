@@ -243,9 +243,23 @@ public class GdsRoundTripImportTests : IDisposable
         // The routed waveguide connections are flattened into top-cell geometry by
         // nazca, so no abutment connections reconstruct — but the top cell's own
         // waveguide-layer polygons come back as frozen, non-re-routable paths.
-        outcome.Connections.Count.ShouldBe(0);
-        outcome.Warnings.ShouldContain(w => w.Contains("imported as frozen paths (not re-routable)", StringComparison.Ordinal));
-        outcome.TopCellWaveguidePolygons.ShouldNotBeEmpty("the flattened routes land on the waveguide layer");
+        // The routed waveguide connections are flattened into top-cell polygon
+        // chains by nazca. The gcIn.waveguide → mmi.in chain spans exactly two
+        // pins and restores as a real, re-routable connection (route-derived);
+        // the mmi.out2 → gcOut.waveguide chain entangles three pins (the
+        // rot180 gcOut's two heuristic edge pins + mmi.b1) into a junction
+        // network, which v1 deliberately leaves frozen with an info note.
+        var connection = outcome.Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.IsElectrical.ShouldBeFalse();
+        connection.A.PinName.ShouldBe("a0");
+        connection.B.PinName.ShouldBe("heur_2");
+        outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
+        outcome.Infos.ShouldContain(i => i.Contains("junction with 3 pins"));
+        outcome.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s)"));
+        outcome.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(3,
+            "the junction network's polygons ride the group as frozen, non-re-routable paths");
 
         // The registered MMI template carries the demofab pin names.
         sink.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
@@ -258,11 +272,14 @@ public class GdsRoundTripImportTests : IDisposable
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         report.SkippedPlacements.ShouldBeEmpty();
         report.PlacedCount.ShouldBe(3);
+        report.ConnectedCount.ShouldBe(1);
         // The executor wraps the import in one group — the canvas root holds that group.
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.GetAllComponentsRecursive().Count().ShouldBe(3);
         group.InternalPaths.ShouldContain(p => p.StartPin == null,
-            "the flattened routes ride the group as pin-less frozen paths");
+            "the junction network's polygons ride the group as pin-less frozen paths");
+        group.InternalPaths.ShouldContain(p => p.StartPin != null,
+            "the restored connection freezes into the group with its pins");
     }
 
     // ── Harness ───────────────────────────────────────────────────────────────

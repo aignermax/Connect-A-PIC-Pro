@@ -171,10 +171,20 @@ public class RealGdsFileIntegrationTests
         draft.HeightUm.ShouldBeGreaterThan(0);
         AssertPinsWithinDraftBounds(draft);
 
-        // The circuit ports written on the top cell become label pins.
-        draft.Pins.Count.ShouldBeGreaterThan(0);
-        var labelPinNames = draft.Pins.Where(p => p.Source == DetectedPinSource.Label).Select(p => p.Name).OrderBy(n => n);
-        labelPinNames.ShouldBe(new[] { "in0", "out0", "out1" });
+        // The circuit ports written on the top cell keep their bare names; the
+        // absorbed subcells' labels join them, prefixed with their instance
+        // context — the whole flattened hierarchy IS the black box's interface
+        // (gdsfactory's mangled cell names ride along in the prefixes).
+        var labelPinNames = draft.Pins
+            .Where(p => p.Source == DetectedPinSource.Label).Select(p => p.Name).ToList();
+        labelPinNames.ShouldContain("in0");
+        labelPinNames.ShouldContain("out0");
+        labelPinNames.ShouldContain("out1");
+        labelPinNames.Count.ShouldBe(12,
+            "3 circuit ports + 2 bend + 3 mmi + 2×2 straight subcell pins of the reference circuit");
+        labelPinNames.ShouldContain(n =>
+            n.StartsWith("straight_", StringComparison.Ordinal) && n.EndsWith("#0_o1", StringComparison.Ordinal),
+            "a twice-placed cell qualifies its pins with the occurrence (#0/#1)");
 
         // The flattened hierarchy (three WG-carrying children) yields outlines.
         draft.Outlines.ShouldNotBeEmpty();

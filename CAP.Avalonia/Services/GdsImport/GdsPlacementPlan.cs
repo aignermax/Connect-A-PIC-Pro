@@ -90,6 +90,14 @@ public sealed record GdsConnectionInstruction
     /// </summary>
     public bool IsRouteDerived { get; init; }
 
+    /// <summary>
+    /// True when the connection was derived from a top-cell METAL-layer polygon
+    /// network — an electrical (metal trace) connection, not an optical
+    /// waveguide. Reporting only; the created connection's kind follows from
+    /// the connected pins either way.
+    /// </summary>
+    public bool IsElectrical { get; init; }
+
     /// <summary>User-presentable note, set for skipped top-cell-port connections.</summary>
     public string? Note { get; init; }
 }
@@ -197,6 +205,7 @@ public sealed record GdsPlacementPlan
             XUm = pair.XUm,
             YUm = pair.YUm,
             IsRouteDerived = pair.IsRouteDerived,
+            IsElectrical = pair.IsElectrical,
             Note = pair.A.IsTopLevelPort || pair.B.IsTopLevelPort
                 ? "involves a top-cell port of the imported circuit — left free in v1"
                 : null,

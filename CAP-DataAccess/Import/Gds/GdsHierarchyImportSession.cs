@@ -1,3 +1,5 @@
+using System.Globalization;
+
 namespace CAP_DataAccess.Import.Gds;
 
 /// <summary>
@@ -108,13 +110,25 @@ internal sealed class GdsHierarchyImportSession
     /// double-draw every instance's waveguide. Polygons on any other layer
     /// (devrec, halos, pin markers) are not routing and stay out.
     /// </summary>
-    public IReadOnlyList<GdsOutlinePolygon> GetTopCellWaveguidePolygons()
+    public IReadOnlyList<GdsOutlinePolygon> GetTopCellWaveguidePolygons() =>
+        GetTopCellPolygonsOnLayers(_options.RouteLayers);
+
+    /// <summary>
+    /// The top cell's OWN polygons on the configured METAL route layers
+    /// (<see cref="GdsHierarchyImportOptions.MetalRouteLayers"/>) — the
+    /// electrical routing our exporters flatten into the top cell — in the same
+    /// app-space frame <see cref="GetTopCellWaveguidePolygons"/> uses.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> GetTopCellMetalPolygons() =>
+        GetTopCellPolygonsOnLayers(_options.MetalRouteLayers);
+
+    private IReadOnlyList<GdsOutlinePolygon> GetTopCellPolygonsOnLayers(
+        IReadOnlyList<(int Layer, int Datatype)> layers)
     {
-        var routeLayers = _options.RouteLayers;
         var bbox = TopBBox;
         return Library.Cells[_topCellName].Elements
             .OfType<GdsPolygon>()
-            .Where(p => routeLayers.Contains((p.Layer, p.DataType)))
+            .Where(p => layers.Contains((p.Layer, p.DataType)))
             .Select(p => new GdsOutlinePolygon
             {
                 Layer = p.Layer,
@@ -138,6 +152,88 @@ internal sealed class GdsHierarchyImportSession
             Outlines = BuildOutlines(cellName, bbox),
             RawCode = BuildRawCode(cellName),
         };
+    }
+
+    /// <summary>
+    /// Builds the draft for BLACK-BOX mode: the whole top cell becomes one
+    /// component, so its pins are the port labels of the ENTIRE flattened
+    /// hierarchy (nested subcell labels become texts at their positions after
+    /// flattening), not just the top cell's own labels — a whole-circuit black
+    /// box has no own labels at all when nothing was explicitly exported as a
+    /// circuit port. Subcell labels are prefixed with their instance context
+    /// (<c>{cell}_{pin}</c>, or <c>{cell}#{occurrence}_{pin}</c> when the cell
+    /// is placed more than once) so every pin name is unique and traceable;
+    /// the top cell's own labels keep their bare names (they ARE the circuit's
+    /// ports). The waveguide edge heuristic runs over the flattened geometry
+    /// exactly like for explode-mode drafts.
+    /// Pin KINDS stay unknown (<see cref="DetectedPin.IsElectrical"/> null):
+    /// geometry labels carry no signal-domain information (v1 limitation).
+    /// </summary>
+    public GdsCellDraft BuildBlackBoxDraft(string cellName)
+    {
+        var bbox = GetCellBBox(cellName);
+        return new GdsCellDraft
+        {
+            CellName = cellName,
+            WidthUm = bbox.Width,
+            HeightUm = bbox.Height,
+            Pins = GetBlackBoxPins(cellName, bbox),
+            Outlines = BuildOutlines(cellName, bbox),
+            RawCode = BuildRawCode(cellName),
+        };
+    }
+
+    /// <summary>
+    /// Black-box pin detection: runs <see cref="GdsPinDetector"/> over the fully
+    /// flattened top cell with every nested port label promoted to a
+    /// context-prefixed text (see <see cref="BuildBlackBoxDraft"/>). Labels
+    /// duplicated verbatim (same text, layer and anchor — e.g. demofab's
+    /// doubled <c>c0</c> label on its eopm cell) collapse into ONE pin
+    /// silently: two identical label records describe one physical pin, and
+    /// keeping both would only trigger the duplicate-name rename warning.
+    /// </summary>
+    private IReadOnlyList<DetectedPin> GetBlackBoxPins(string cellName, GdsBoundingBox bbox)
+    {
+        var flat = GetFlattened(cellName);
+        var detectionCell = new FlattenedGdsCell { CellName = cellName };
+        detectionCell.Polygons.AddRange(flat.Polygons);
+
+        // How often each source cell occurs in the walk (decides the occurrence
+        // qualifier in the prefix); derived from the text origins, so cells
+        // whose instances carry no labels never disturb the numbering.
+        var occurrencesPerCell = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var origin in flat.TextOrigins)
+        {
+            occurrencesPerCell[origin.CellName] =
+                Math.Max(occurrencesPerCell.GetValueOrDefault(origin.CellName), origin.Occurrence + 1);
+        }
+
+        var seenLabels = new HashSet<string>(StringComparer.Ordinal);
+        for (int i = 0; i < flat.Texts.Count; i++)
+        {
+            var text = flat.Texts[i];
+            var origin = flat.TextOrigins[i];
+            string label = origin.CellName == cellName
+                ? text.Text
+                : occurrencesPerCell.GetValueOrDefault(origin.CellName) > 1
+                    ? $"{origin.CellName}#{origin.Occurrence}_{text.Text}"
+                    : $"{origin.CellName}_{text.Text}";
+
+            // 1 nm position quantization: the same label anchored twice at the
+            // same spot is one pin, not a duplicate.
+            string fingerprint = string.Create(
+                CultureInfo.InvariantCulture,
+                $"{label}|{text.Layer}|{text.TextType}|{Math.Round(text.Position.X * 1000)}|{Math.Round(text.Position.Y * 1000)}");
+            if (!seenLabels.Add(fingerprint))
+                continue;
+
+            detectionCell.Texts.Add(text with { Text = label });
+        }
+
+        return GdsPinNameNormalizer.Normalize(
+            GdsPinDetector.Detect(detectionCell, bbox, _options.PinDetection),
+            $"Cell '{cellName}'",
+            Warnings);
     }
 
     private IReadOnlyList<GdsOutlinePolygon> BuildOutlines(string cellName, GdsBoundingBox bbox)

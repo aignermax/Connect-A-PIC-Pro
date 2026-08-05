@@ -14,6 +14,13 @@ internal sealed record GdsAbsolutePin
 
     /// <summary>Outward direction in degrees, app convention (0° = east, 90° = down in the Y-down plane).</summary>
     public double AngleDegrees { get; init; }
+
+    /// <summary>
+    /// Signal domain of the source pin: <c>true</c>/<c>false</c> for pins of known
+    /// PDK components (from the template), <c>null</c> for geometry-detected pins
+    /// (kind unknown — see <see cref="DetectedPin.IsElectrical"/>).
+    /// </summary>
+    public bool? IsElectrical { get; init; }
 }
 
 /// <summary>
@@ -68,6 +75,7 @@ internal static class GdsInstancePinProjector
                 XUm = placed.X - topBBox.MinX,
                 YUm = topBBox.MaxY - placed.Y,
                 AngleDegrees = Normalize360(Math.Atan2(-dirY, dirX) * 180.0 / Math.PI),
+                IsElectrical = pin.IsElectrical,
             });
         }
         return result;

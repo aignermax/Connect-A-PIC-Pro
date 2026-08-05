@@ -125,7 +125,10 @@ public class GdsImportDesignRoundTripTests : IDisposable
         var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
 
         // The top cell's own (1,0) polygon comes back as frozen route geometry.
-        outcome.Warnings.ShouldHaveSingleItem().ShouldContain("imported as frozen paths (not re-routable)");
+        // (The report moved to the INFO channel: importable geometry is good news,
+        // not a warning — see GdsImportReporter.)
+        outcome.Warnings.ShouldBeEmpty();
+        outcome.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
         outcome.TopCellWaveguidePolygons.ShouldHaveSingleItem();
 
         // Place: the polygon becomes a pin-less frozen path on the 'TOP' group.
