@@ -438,14 +438,18 @@ public class GdsPlacementExecutorTests
                 routingPasses++;
             wasRouting = canvas.Routing.IsRouting;
         };
+        // Spaced (non-abutting) instances: these connections carry no recovered
+        // geometry, so they still need the router — the batching this test guards.
+        // (Coincident abutments get frozen cached straights and never route, see
+        // ExecuteAsync_CoincidentAbutments_UseCachedStraightRoutes.)
         var plan = new GdsPlacementPlan
         {
             GroupName = "TOP",
             Placements = new[]
             {
                 Placement("wgA#0", 0, 0),
-                Placement("wgB#1", 10, 0),
-                Placement("wgC#2", 20, 0),
+                Placement("wgB#1", 30, 0),
+                Placement("wgC#2", 60, 0),
             },
             Connections = new[]
             {
@@ -457,10 +461,143 @@ public class GdsPlacementExecutorTests
         var report = await executor.ExecuteAsync(plan);
 
         report.ConnectedCount.ShouldBe(2);
+        report.CachedRouteCount.ShouldBe(0);
         routingPasses.ShouldBe(2,
-            "ONE batched routing pass covers both abutment connections (plus one from " +
+            "ONE batched routing pass covers both connections (plus one from " +
             "the grouping command) — the old per-connection ConnectPinsAsync re-routed " +
             "once per connection (O(N²))");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_CoincidentAbutments_UseCachedStraightRoutes()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var routingPasses = 0;
+        var wasRouting = false;
+        canvas.Routing.StateChanged += () =>
+        {
+            if (canvas.Routing.IsRouting && !wasRouting)
+                routingPasses++;
+            wasRouting = canvas.Routing.IsRouting;
+        };
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 10, 0) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.ConnectedCount.ShouldBe(1);
+        report.CachedRouteCount.ShouldBe(1);
+        routingPasses.ShouldBe(1,
+            "only the grouping command's pass runs — a coincident abutment gets the exact " +
+            "pin-to-pin straight as a frozen cached route and never sees the router");
+
+        var group = SingleGroupOn(canvas);
+        var path = group.InternalPaths.ShouldHaveSingleItem();
+        path.IsRouteFrozen.ShouldBeTrue();
+        path.Path.IsBlockedFallback.ShouldBeFalse(
+            "the cached abutment straight is honest geometry — the router's degenerate " +
+            "CSC fallback used to flag these blocked");
+        var segment = path.Path.Segments.ShouldHaveSingleItem();
+        var straight = segment.ShouldBeOfType<CAP_Core.Routing.StraightSegment>();
+        straight.LengthMicrometers.ShouldBe(0.0, 1e-9);
+    }
+
+    // ── Group naming ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_RouteDerivedConnection_UsesTracedCachedRoute()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var routingPasses = 0;
+        var wasRouting = false;
+        canvas.Routing.StateChanged += () =>
+        {
+            if (canvas.Routing.IsRouting && !wasRouting)
+                routingPasses++;
+            wasRouting = canvas.Routing.IsRouting;
+        };
+        // wgA.out at (10, 2), wgB.in at (20, 2), bridged by a drawn route stripe.
+        var stripe = new GdsOutlinePolygon
+        {
+            Layer = 1,
+            DataType = 0,
+            Points = new[]
+            {
+                new GdsOutlinePoint(10, 1.75), new GdsOutlinePoint(20, 1.75),
+                new GdsOutlinePoint(20, 2.25), new GdsOutlinePoint(10, 2.25),
+                new GdsOutlinePoint(10, 1.75),
+            },
+        };
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 20, 0) },
+            Connections = new[]
+            {
+                new GdsConnectionInstruction
+                {
+                    A = new GdsConnectionEndpoint { InstanceIndex = 0, PinName = "out" },
+                    B = new GdsConnectionEndpoint { InstanceIndex = 1, PinName = "in" },
+                    IsRouteDerived = true,
+                    SourcePolygons = new[] { stripe },
+                },
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.ConnectedCount.ShouldBe(1);
+        report.RouteDerivedCount.ShouldBe(1);
+        report.CachedRouteCount.ShouldBe(1);
+        routingPasses.ShouldBe(1,
+            "only the grouping command's pass runs — the drawn polygon IS the route, " +
+            "no A* recalculation replaces it");
+
+        var group = SingleGroupOn(canvas);
+        var path = group.InternalPaths.ShouldHaveSingleItem();
+        path.IsRouteFrozen.ShouldBeTrue("the imported route is hardcoded, like a .lun cached route");
+        path.Path.IsValid.ShouldBeTrue();
+        path.Path.IsBlockedFallback.ShouldBeFalse();
+        path.Path.Segments[0].StartPoint.ShouldBe((10.0, 2.0), "anchored at the placed start pin");
+        path.Path.Segments[^1].EndPoint.ShouldBe((20.0, 2.0), "anchored at the placed end pin");
+        path.Path.Segments.Any(s =>
+            s.StartPoint.X == 10.0 && s.StartPoint.Y == 1.75
+            && s.EndPoint.X == 20.0 && s.EndPoint.Y == 1.75).ShouldBeTrue(
+            "the drawn stripe's outline is traced into the route");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RouteDerivedWithoutPolygons_FallsBackToRouting()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 20, 0) },
+            Connections = new[]
+            {
+                new GdsConnectionInstruction
+                {
+                    A = new GdsConnectionEndpoint { InstanceIndex = 0, PinName = "out" },
+                    B = new GdsConnectionEndpoint { InstanceIndex = 1, PinName = "in" },
+                    IsRouteDerived = true,
+                    // No SourcePolygons (a hand-built plan may carry none): the batch
+                    // routing pass must still give the connection a route.
+                },
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.ConnectedCount.ShouldBe(1);
+        report.RouteDerivedCount.ShouldBe(1);
+        report.CachedRouteCount.ShouldBe(0);
+        var group = SingleGroupOn(canvas);
+        group.InternalPaths.ShouldHaveSingleItem().Path.Segments.ShouldNotBeEmpty();
     }
 
     // ── Group naming ─────────────────────────────────────────────────────────

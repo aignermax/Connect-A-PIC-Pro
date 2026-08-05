@@ -3,9 +3,6 @@ using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_Core.Analysis;
-using CAP_Core.Components.Connections;
-using CAP_Core.Components.Core;
 
 namespace CAP.Avalonia.Services.GdsImport;
 
@@ -28,9 +25,12 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// <para>
 /// Placement and grouping go through the undo stack (<see cref="PlaceComponentCommand.CreateExact"/>
 /// and <see cref="CreateGroupCommand"/>) when a <see cref="CommandManager"/> is
-/// supplied; pin connections follow the app's programmatic-connect path
-/// (<see cref="DesignCanvasViewModel.ConnectPins"/>) and are routed in ONE deferred
-/// recalculation per stage instead of a per-connection re-route — like interactive
+/// supplied; pin connections keep the geometry the import recovered (drawn route
+/// polygons, or the exact pin-to-pin straight of a coincident abutment) as frozen
+/// cached routes — the same hardcoded-path mechanism .lun loading uses
+/// (<see cref="DesignCanvasViewModel.ConnectPinsWithCachedRoute"/>) — and only
+/// connections WITHOUT recovered geometry are routed in one deferred recalculation
+/// per stage instead of a per-connection re-route — like interactive
 /// pin-drag connects, they are not individually undoable.
 /// </para>
 /// </summary>
@@ -120,7 +120,7 @@ public sealed partial class GdsPlacementExecutor
         // Computed BEFORE anything is placed: the canvas must still hold only the
         // pre-import content for the free-space rule.
         var originOffset = ComputeImportOriginOffset(plan);
-        var placedViewModels = PlaceAll(plan, templates, report, progress, ct, originOffset);
+        var placedViewModels = await PlaceAllAsync(plan, templates, report, progress, ct, originOffset);
         if (originOffset != (0.0, 0.0) && report.PlacedCount > 0)
         {
             // Only a placement that actually happened may claim the shift — a plan
@@ -131,7 +131,7 @@ public sealed partial class GdsPlacementExecutor
         }
         // No ConfigureAwait(false) here: continuations mutate the canvas'
         // ObservableCollections and must stay on the caller's (UI) context.
-        var createdConnections = await ConnectAllAsync(plan, placedViewModels, report, progress, ct);
+        var createdConnections = await ConnectAllAsync(plan, placedViewModels, report, progress, ct, originOffset);
         if (autoConnectFreePins)
         {
             await AutoConnectFreePinsAsync(
@@ -144,7 +144,17 @@ public sealed partial class GdsPlacementExecutor
 
     // ── Stages ───────────────────────────────────────────────────────────────
 
-    private List<ComponentViewModel?> PlaceAll(
+    /// <summary>
+    /// How often the placement/connect loops yield to the UI message loop. The
+    /// canvas must mutate on the UI thread, but an all-cached import no longer
+    /// hits an await between the stages — without a periodic yield the dialog
+    /// freezes for the whole placement (progress reports queue up unrendered
+    /// and Cancel stays unclickable). Yielding posts the continuation back to
+    /// the same (UI) context: the thread rule is untouched.
+    /// </summary>
+    private const int UiYieldInterval = 64;
+
+    private async Task<List<ComponentViewModel?>> PlaceAllAsync(
         GdsPlacementPlan plan,
         IReadOnlyList<ComponentTemplate> templates,
         GdsPlacementReport report,
@@ -159,6 +169,8 @@ public sealed partial class GdsPlacementExecutor
         for (var i = 0; i < plan.Placements.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
+            if (i % UiYieldInterval == UiYieldInterval - 1)
+                await Task.Yield();
             var instruction = plan.Placements[i];
             progress?.Report($"Placing component {i + 1}/{plan.Placements.Count} ({instruction.InstanceName})…");
 
@@ -195,119 +207,6 @@ public sealed partial class GdsPlacementExecutor
         }
 
         return placedViewModels;
-    }
-
-    /// <summary>
-    /// Recreates the plan's abutment connections; returns the connections actually
-    /// created so the validation stage can check exactly this execution's additions.
-    /// Every connection is added deferred (<see cref="DesignCanvasViewModel.ConnectPins"/>)
-    /// and the batch is routed in ONE recalculation at the end (the same pattern the
-    /// auto-connect pass uses) instead of a per-connection re-route storm — an
-    /// <c>await ConnectPinsAsync</c> per connection costs a full re-route each (O(N²)).
-    /// The recalculation runs BEFORE this method returns so the validation stage
-    /// keeps seeing fully routed connections.
-    /// </summary>
-    private async Task<List<WaveguideConnection>> ConnectAllAsync(
-        GdsPlacementPlan plan,
-        IReadOnlyList<ComponentViewModel?> placedViewModels,
-        GdsPlacementReport report,
-        IProgress<string>? progress,
-        CancellationToken ct)
-    {
-        var created = new List<WaveguideConnection>();
-        for (var i = 0; i < plan.Connections.Count; i++)
-        {
-            ct.ThrowIfCancellationRequested();
-            var connection = plan.Connections[i];
-            progress?.Report($"Connecting pins {i + 1}/{plan.Connections.Count}…");
-
-            if (connection.InvolvesTopLevelPort)
-            {
-                report.SkippedConnections.Add(
-                    $"{Describe(connection)}: {connection.Note ?? "involves a top-cell port."}");
-                continue;
-            }
-
-            var startVm = placedViewModels[connection.A.InstanceIndex];
-            var endVm = placedViewModels[connection.B.InstanceIndex];
-            if (startVm is null || endVm is null)
-            {
-                report.SkippedConnections.Add(
-                    $"{Describe(connection)}: an endpoint instance was not placed.");
-                continue;
-            }
-
-            var startPin = startVm.Component.PhysicalPins.FirstOrDefault(p => p.Name == connection.A.PinName);
-            var endPin = endVm.Component.PhysicalPins.FirstOrDefault(p => p.Name == connection.B.PinName);
-            if (startPin is null || endPin is null)
-            {
-                report.SkippedConnections.Add(
-                    $"{Describe(connection)}: pin not found on the placed component.");
-                continue;
-            }
-
-            var connectionVm = _canvas.ConnectPins(startPin, endPin);
-            if (connectionVm is not null)
-            {
-                created.Add(connectionVm.Connection);
-                report.ConnectedCount++;
-                if (connection.IsRouteDerived)
-                    report.RouteDerivedCount++;
-            }
-        }
-
-        if (created.Count > 0)
-            await _canvas.RecalculateRoutesAsync(); // one routing pass for the whole batch
-        return created;
-    }
-
-    /// <summary>
-    /// Post-batch honesty net: runs <see cref="DesignValidator"/> over exactly the
-    /// connections created by this execution (abutment + auto-connect), including
-    /// overlap checks against the frozen paths of groups already on the canvas,
-    /// and appends the issues to the report as validation warnings.
-    /// Coincident-pin connections (a perfect GDS abutment: the pins sit at the
-    /// same point, below the router's own 1 µm endpoint tolerance) have NO routed
-    /// geometry to validate — the CSC fallback still flags their degenerate route
-    /// as blocked, so including them would plaster every standard abutment import
-    /// with false BlockedPath warnings. They are filtered out here instead.
-    /// </summary>
-    private void ValidateCreatedConnections(
-        IReadOnlyList<WaveguideConnection> createdConnections,
-        GdsPlacementReport report)
-    {
-        var routable = createdConnections
-            .Where(c => PinDistanceUm(c) >= DegenerateRouteThresholdUm)
-            .ToList();
-        if (routable.Count == 0)
-            return;
-
-        var existingGroups = _canvas.Components
-            .Select(c => c.Component)
-            .OfType<ComponentGroup>()
-            .ToList();
-        var issues = new DesignValidator().Validate(routable, existingGroups);
-        foreach (var issue in issues)
-        {
-            report.ValidationWarnings.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{issue.Type} at ({issue.X:0.#}, {issue.Y:0.#}) µm — {issue.Description}"));
-        }
-    }
-
-    /// <summary>
-    /// Pin-to-pin distance (µm) below which a route is degenerate — aligned with
-    /// the router's endpoint tolerance (a route this short is a perfect abutment,
-    /// not a waveguide).
-    /// </summary>
-    private const double DegenerateRouteThresholdUm = 1.0;
-
-    private static double PinDistanceUm(WaveguideConnection connection)
-    {
-        var (x1, y1) = connection.StartPin.GetAbsolutePosition();
-        var (x2, y2) = connection.EndPin.GetAbsolutePosition();
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        return Math.Sqrt(dx * dx + dy * dy);
     }
 
     private void CreateGroup(

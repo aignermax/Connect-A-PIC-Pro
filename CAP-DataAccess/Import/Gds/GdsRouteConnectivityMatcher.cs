@@ -62,11 +62,42 @@ internal sealed record GdsRouteConnectivityResult
 /// One partner per pin, first network in scan order wins: a pin already
 /// consumed by an earlier network is invisible to later networks
 /// (deterministic in GDS element order).
+///
+/// Performance: both quadratic scans run over a <see cref="GdsSpatialGrid"/>
+/// uniform hash — polygon∩polygon candidates come from bbox overlap for the
+/// network build, pin candidates from the polygon's expanded bbox for the
+/// touch scan. The grid only prunes candidates that geometrically cannot
+/// qualify, so results are identical to the brute-force scans; what was
+/// O(polygons²) + O(polygons × pins) becomes near-linear and a production-scale
+/// file (thousands of route polygons and pins) imports in seconds instead of
+/// hanging the dialog.
 /// </summary>
 internal static class GdsRouteConnectivityMatcher
 {
     /// <summary>A pin touching the current network: an instance pin, or a top-cell port when <see cref="IsPort"/>.</summary>
     private readonly record struct Touch(int InstanceIndex, int PinIndex, bool IsPort, GdsAbsolutePin Pin);
+
+    /// <summary>Axis-aligned polygon bbox; <see cref="IsEmpty"/> marks polygons with no points (they never touch anything).</summary>
+    private readonly record struct Bounds(double MinX, double MinY, double MaxX, double MaxY)
+    {
+        public bool IsEmpty => MaxX < MinX;
+    }
+
+    /// <summary>
+    /// The pins in one flat deterministic scan order — all instance pins
+    /// (instance placement order, then pin order), then the top-cell ports —
+    /// with a spatial index over their positions. The ordinal IS the scan order:
+    /// sorting grid candidates by it reproduces the brute-force nested loops
+    /// exactly.
+    /// </summary>
+    private sealed class PinTable
+    {
+        public List<int> InstanceOf = new(); // −1 for a top-cell port
+        public List<int> IndexOf = new();    // pin index within the instance, or port index
+        public GdsSpatialGrid? Grid;
+
+        public int Count => InstanceOf.Count;
+    }
 
     /// <summary>
     /// Merges the polygons into touch networks, then scans the networks in
@@ -114,37 +145,50 @@ internal static class GdsRouteConnectivityMatcher
         var consumedInstancePins = new HashSet<(int, int)>(preConsumedInstancePins ?? Enumerable.Empty<(int, int)>());
         var consumedPorts = new HashSet<int>(preConsumedPortIndexes ?? Enumerable.Empty<int>());
 
-        foreach (var network in BuildNetworks(polygons, chainToleranceUm))
+        var bounds = ComputeBounds(polygons);
+        var pinTable = BuildPinTable(polygons, pinsPerInstance, topPortPins, toleranceUm, bounds);
+
+        foreach (var network in BuildNetworks(polygons, bounds, chainToleranceUm))
         {
             var touches = new List<Touch>();
             var seen = new HashSet<(int, int)>();
             foreach (int p in network)
             {
                 var polygon = polygons[p];
-                for (int i = 0; i < pinsPerInstance.Count; i++)
+                if (polygon.Points.Count == 0)
+                    continue;
+                var box = bounds[p];
+
+                // `seen` marks pins that already TOUCHED an earlier polygon of this
+                // network (a pin counts once per network) — never as a visit marker:
+                // a pin may legitimately touch only the last polygon of a chain.
+                // The grid candidates are unordered — the ordinal sort restores the
+                // deterministic scan order (instance pins, then top-cell ports).
+                var candidates = pinTable.Grid is null
+                    ? Enumerable.Empty<int>()
+                    : pinTable.Grid.QueryBox(
+                        box.MinX - toleranceUm, box.MinY - toleranceUm,
+                        box.MaxX + toleranceUm, box.MaxY + toleranceUm);
+                foreach (int ordinal in candidates.OrderBy(o => o))
                 {
-                    for (int k = 0; k < pinsPerInstance[i].Count; k++)
+                    int i = pinTable.InstanceOf[ordinal];
+                    int k = pinTable.IndexOf[ordinal];
+                    if (i < 0)
                     {
-                        // `seen` marks pins that already TOUCHED an earlier polygon of this
-                        // network (a pin counts once per network) — never as a visit marker:
-                        // a pin may legitimately touch only the last polygon of a chain.
-                        if (!consumedInstancePins.Contains((i, k))
-                            && !seen.Contains((i, k))
-                            && Touches(polygon, pinsPerInstance[i][k], toleranceUm))
+                        if (!consumedPorts.Contains(k)
+                            && !seen.Contains((-1, k))
+                            && Touches(polygon, topPortPins[k], toleranceUm))
                         {
-                            seen.Add((i, k));
-                            touches.Add(new Touch(i, k, IsPort: false, pinsPerInstance[i][k]));
+                            seen.Add((-1, k));
+                            touches.Add(new Touch(-1, k, IsPort: true, topPortPins[k]));
                         }
                     }
-                }
-                for (int t = 0; t < topPortPins.Count; t++)
-                {
-                    if (!consumedPorts.Contains(t)
-                        && !seen.Contains((-1, t))
-                        && Touches(polygon, topPortPins[t], toleranceUm))
+                    else if (!consumedInstancePins.Contains((i, k))
+                             && !seen.Contains((i, k))
+                             && Touches(polygon, pinsPerInstance[i][k], toleranceUm))
                     {
-                        seen.Add((-1, t));
-                        touches.Add(new Touch(-1, t, IsPort: true, topPortPins[t]));
+                        seen.Add((i, k));
+                        touches.Add(new Touch(i, k, IsPort: false, pinsPerInstance[i][k]));
                     }
                 }
             }
@@ -193,6 +237,10 @@ internal static class GdsRouteConnectivityMatcher
                 YUm = (a.Pin.YUm + b.Pin.YUm) / 2.0,
                 IsRouteDerived = true,
                 IsElectrical = electrical,
+                // The drawn geometry rides along so the placement layer can attach
+                // it as the connection's frozen cached route instead of re-routing
+                // (shares the polygon instances — records, never mutated).
+                SourcePolygons = network.Select(p => polygons[p]).ToList(),
             });
         }
 
@@ -213,24 +261,142 @@ internal static class GdsRouteConnectivityMatcher
         }
     }
 
+    /// <summary>Per-polygon bounding boxes; empty polygons get the empty marker (they never touch anything).</summary>
+    private static Bounds[] ComputeBounds(IReadOnlyList<GdsOutlinePolygon> polygons)
+    {
+        var bounds = new Bounds[polygons.Count];
+        for (var p = 0; p < polygons.Count; p++)
+        {
+            var points = polygons[p].Points;
+            if (points.Count == 0)
+            {
+                bounds[p] = new Bounds(0, 0, -1, -1); // empty marker
+                continue;
+            }
+            double minX = double.MaxValue, minY = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var point in points)
+            {
+                minX = Math.Min(minX, point.X);
+                minY = Math.Min(minY, point.Y);
+                maxX = Math.Max(maxX, point.X);
+                maxY = Math.Max(maxY, point.Y);
+            }
+            bounds[p] = new Bounds(minX, minY, maxX, maxY);
+        }
+        return bounds;
+    }
+
+    /// <summary>
+    /// Builds the flat pin table with its spatial index; the grid is null when
+    /// there are no pins to find (networks then simply collect no touches).
+    /// The cell size adapts to the pin spread and the touch tolerance.
+    /// </summary>
+    private static PinTable BuildPinTable(
+        IReadOnlyList<GdsOutlinePolygon> polygons,
+        IReadOnlyList<IReadOnlyList<GdsAbsolutePin>> pinsPerInstance,
+        IReadOnlyList<GdsAbsolutePin> topPortPins,
+        double toleranceUm,
+        Bounds[] bounds)
+    {
+        var table = new PinTable();
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+
+        void Add(GdsAbsolutePin pin, int instanceIndex, int pinIndex)
+        {
+            table.InstanceOf.Add(instanceIndex);
+            table.IndexOf.Add(pinIndex);
+            minX = Math.Min(minX, pin.XUm);
+            minY = Math.Min(minY, pin.YUm);
+            maxX = Math.Max(maxX, pin.XUm);
+            maxY = Math.Max(maxY, pin.YUm);
+        }
+
+        for (var i = 0; i < pinsPerInstance.Count; i++)
+            for (var k = 0; k < pinsPerInstance[i].Count; k++)
+                Add(pinsPerInstance[i][k], i, k);
+        for (var t = 0; t < topPortPins.Count; t++)
+            Add(topPortPins[t], -1, t);
+
+        if (table.Count == 0 || polygons.Count == 0)
+            return table;
+
+        // The grid spans pins AND polygons alike so outlier geometry cannot
+        // stretch the cells; the spread of either side alone could be tiny.
+        for (var p = 0; p < bounds.Length; p++)
+        {
+            if (bounds[p].IsEmpty)
+                continue;
+            minX = Math.Min(minX, bounds[p].MinX);
+            minY = Math.Min(minY, bounds[p].MinY);
+            maxX = Math.Max(maxX, bounds[p].MaxX);
+            maxY = Math.Max(maxY, bounds[p].MaxY);
+        }
+        var span = Math.Max(maxX - minX, maxY - minY);
+        table.Grid = GdsSpatialGrid.Create(span, toleranceUm, table.Count);
+
+        var ordinal = 0;
+        for (var i = 0; i < pinsPerInstance.Count; i++)
+            for (var k = 0; k < pinsPerInstance[i].Count; k++)
+                table.Grid.InsertPoint(ordinal++, pinsPerInstance[i][k].XUm, pinsPerInstance[i][k].YUm);
+        for (var t = 0; t < topPortPins.Count; t++)
+            table.Grid.InsertPoint(ordinal++, topPortPins[t].XUm, topPortPins[t].YUm);
+        return table;
+    }
+
     /// <summary>
     /// Merges the polygons into networks of transitively touching polygons
     /// (union-find), returned in order of each network's first polygon index
-    /// (member lists ascending). Deterministic in GDS element order.
+    /// (member lists ascending). Deterministic in GDS element order. Candidate
+    /// pairs come from a spatial grid over the polygon bboxes — only polygons
+    /// whose bboxes come within the tolerance can touch, so the quadratic
+    /// all-pairs scan is pruned to near-neighbours (connected components are
+    /// order-independent: the networks are identical to the brute-force build).
     /// </summary>
     private static List<List<int>> BuildNetworks(
-        IReadOnlyList<GdsOutlinePolygon> polygons, double toleranceUm)
+        IReadOnlyList<GdsOutlinePolygon> polygons, Bounds[] bounds, double toleranceUm)
     {
         var parent = new int[polygons.Count];
         for (int i = 0; i < parent.Length; i++)
             parent[i] = i;
 
-        for (int p = 0; p < polygons.Count; p++)
+        if (polygons.Count > 1)
         {
-            for (int q = p + 1; q < polygons.Count; q++)
+            double minX = double.MaxValue, minY = double.MaxValue;
+            double maxX = double.MinValue, maxY = double.MinValue;
+            foreach (var box in bounds)
             {
-                if (Find(p) != Find(q) && PolygonsTouch(polygons[p], polygons[q], toleranceUm))
-                    Union(p, q);
+                if (box.IsEmpty)
+                    continue;
+                minX = Math.Min(minX, box.MinX);
+                minY = Math.Min(minY, box.MinY);
+                maxX = Math.Max(maxX, box.MaxX);
+                maxY = Math.Max(maxY, box.MaxY);
+            }
+            var span = Math.Max(maxX - minX, maxY - minY);
+            var grid = GdsSpatialGrid.Create(span, toleranceUm, polygons.Count);
+            for (var p = 0; p < polygons.Count; p++)
+            {
+                if (!bounds[p].IsEmpty)
+                    grid.InsertBox(p, bounds[p].MinX, bounds[p].MinY, bounds[p].MaxX, bounds[p].MaxY);
+            }
+
+            for (var p = 0; p < polygons.Count; p++)
+            {
+                if (bounds[p].IsEmpty)
+                    continue;
+                // Raw bboxes are inserted; querying with the tolerance-expanded
+                // box finds exactly the polygons whose bbox comes within the
+                // tolerance (a superset of actual touches — PolygonsTouch decides).
+                var candidates = grid.QueryBox(
+                    bounds[p].MinX - toleranceUm, bounds[p].MinY - toleranceUm,
+                    bounds[p].MaxX + toleranceUm, bounds[p].MaxY + toleranceUm);
+                foreach (int q in candidates)
+                {
+                    if (q > p && Find(p) != Find(q) && PolygonsTouch(polygons[p], polygons[q], toleranceUm))
+                        Union(p, q);
+                }
             }
         }
 

@@ -22,6 +22,13 @@ public sealed class GdsPlacementReport
     /// </summary>
     public int RouteDerivedCount { get; internal set; }
 
+    /// <summary>
+    /// Number of the created connections that carry a frozen cached route (subset
+    /// of <see cref="ConnectedCount"/>) — their geometry came from the import
+    /// (traced route polygons, exact abutment straight) and was never re-routed.
+    /// </summary>
+    public int CachedRouteCount { get; internal set; }
+
     /// <summary>Number of top-cell route polygons kept as frozen, non-re-routable paths on the group.</summary>
     public int FrozenRoutePathCount { get; internal set; }
 

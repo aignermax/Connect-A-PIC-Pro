@@ -85,10 +85,21 @@ public sealed record GdsConnectionInstruction
     /// <summary>
     /// True when the connection was derived from a top-cell route polygon
     /// touching both pins (the drawn route IS the connectivity), false for a
-    /// coincident-pin abutment. Reporting only — both kinds are created and
-    /// re-routed identically.
+    /// coincident-pin abutment. Route-derived connections carry their drawn
+    /// geometry (<see cref="SourcePolygons"/>) so the executor can attach it as
+    /// a frozen cached route instead of re-routing.
     /// </summary>
     public bool IsRouteDerived { get; init; }
+
+    /// <summary>
+    /// The top-cell route polygons this connection was derived from, in plan
+    /// space (µm, Y-down — the same frame as <see cref="XUm"/>/<see cref="YUm"/>).
+    /// The executor traces them into the connection's frozen cached route;
+    /// empty for abutment pairs (a coincident-pin abutment needs no drawn
+    /// geometry — the executor uses the exact pin-to-pin straight).
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> SourcePolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
 
     /// <summary>
     /// True when the connection was derived from a top-cell METAL-layer polygon
@@ -206,6 +217,7 @@ public sealed record GdsPlacementPlan
             YUm = pair.YUm,
             IsRouteDerived = pair.IsRouteDerived,
             IsElectrical = pair.IsElectrical,
+            SourcePolygons = pair.SourcePolygons,
             Note = pair.A.IsTopLevelPort || pair.B.IsTopLevelPort
                 ? "involves a top-cell port of the imported circuit — left free in v1"
                 : null,

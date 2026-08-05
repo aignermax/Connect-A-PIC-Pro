@@ -91,6 +91,45 @@ public class GdsRouteConnectivityMatcherTests
     }
 
     [Fact]
+    public void Match_RouteDerivedPair_CarriesItsNetworkPolygons()
+    {
+        // The drawn geometry must ride the pair into the placement layer, which
+        // traces it into the connection's frozen cached route instead of re-routing.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("in", 0, 2), Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2), Pin("out", 25, 2) },
+        };
+        var bridge = Bridge();
+
+        var result = Match(new[] { bridge }, pinsPerInstance);
+
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.SourcePolygons.ShouldHaveSingleItem().ShouldBe(bridge,
+            "the single-polygon network carries exactly its polygon");
+    }
+
+    [Fact]
+    public void Match_ChainedNetworkPair_CarriesAllNetworkPolygons()
+    {
+        // A two-polygon chain (overlapping halves, as a flattened route emits):
+        // BOTH halves belong to the pair's source geometry.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("in", 0, 2), Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2), Pin("out", 25, 2) },
+        };
+        var firstHalf = Rect(10, 1.75, 12.6, 2.25);
+        var secondHalf = Rect(12.5, 1.75, 15, 2.25);
+
+        var result = Match(new[] { firstHalf, secondHalf }, pinsPerInstance);
+
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.SourcePolygons.Count.ShouldBe(2);
+        pair.SourcePolygons.ShouldBe(new[] { firstHalf, secondHalf }, ignoreOrder: true);
+    }
+
+    [Fact]
     public void Match_PolygonTouchingOnePin_StaysFrozen()
     {
         var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]

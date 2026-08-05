@@ -201,6 +201,47 @@ public class UserPdkStoreTests : IDisposable
         ex.Message.ShouldContain("import was aborted");
     }
 
+    // ── SaveAllToProcessAgnosticNamedPdk ─────────────────────────────────────
+
+    [Fact]
+    public void SaveAllToProcessAgnosticNamedPdk_saves_the_whole_batch_in_one_file()
+    {
+        var store = CreateStore();
+        var path = store.SaveAllToProcessAgnosticNamedPdk(
+            "Lib", new[] { Comp("A"), Comp("B"), Comp("C") }, "nazca");
+
+        path.ShouldNotBeNull();
+        var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+        reloaded.Name.ShouldBe("Lib");
+        reloaded.ProcessAgnostic.ShouldBeTrue();
+        reloaded.Components.Select(c => c.Name).ShouldBe(new[] { "A", "B", "C" });
+    }
+
+    [Fact]
+    public void SaveAllToProcessAgnosticNamedPdk_replaces_existing_component_case_insensitively()
+    {
+        var store = CreateStore();
+        var path = store.SaveToProcessAgnosticNamedPdk("Lib", Comp("a"), "nazca");
+
+        store.SaveAllToProcessAgnosticNamedPdk("Lib", new[] { Comp("A"), Comp("B") }, "nazca")
+            .ShouldBe(path);
+
+        var reloaded = new PdkLoader().LoadFromFileForEditing(path);
+        reloaded.Components.Select(c => c.Name).ShouldBe(new[] { "A", "B" },
+            "the batch replaces the same-named existing component, never duplicates");
+    }
+
+    [Fact]
+    public void SaveAllToProcessAgnosticNamedPdk_empty_batch_writes_nothing()
+    {
+        var store = CreateStore();
+
+        store.SaveAllToProcessAgnosticNamedPdk("Lib", Array.Empty<PdkComponentDraft>(), "nazca")
+            .ShouldBeNull();
+
+        File.Exists(store.ResolveNamedPath("Lib")).ShouldBeFalse();
+    }
+
     // ── ListCustomPdks ───────────────────────────────────────────────────────
 
     [Fact]

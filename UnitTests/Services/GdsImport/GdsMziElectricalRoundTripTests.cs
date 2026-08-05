@@ -298,11 +298,13 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         r.Outcome.Warnings.ShouldBeEmpty(
             "the clean round trip produces no warnings — junctions/frozen paths are infos");
 
-        // The placement-time validator honestly flags that the re-routed
-        // replacement connections overlap near the combiner (the junction-frozen
-        // originals are gone, so the re-routes reuse corridors) — pinned as the
-        // known re-routing artifact, not an import defect.
-        r.Report.ValidationWarnings.Count.ShouldBe(3);
+        // The placement-time validator honestly flags that the restored
+        // connections overlap near the combiner (the source geometry genuinely
+        // entangles there — the junction-frozen networks prove it): the traced
+        // outline of a drawn route runs along BOTH stripe edges, so the tight
+        // corridors cross-detect one pair more than the old A* detours did —
+        // pinned as the known traced-geometry artifact, not an import defect.
+        r.Report.ValidationWarnings.Count.ShouldBe(4);
     }
 
     private static void AssertExplodeUpgradedScenario(ExplodeResult r)

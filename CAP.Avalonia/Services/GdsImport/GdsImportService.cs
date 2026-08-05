@@ -19,8 +19,20 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// callback mirrors <c>LeftPanelViewModel.RegisterSavedCustomComponent</c>
 /// (null = skip runtime registration, e.g. headless runs).
 /// </para>
+/// <para>
+/// Threading: the heavy stages (file read, parse, flatten, pin detection,
+/// matching, persistence) run inside <see cref="Task.Run{TResult}"/> so a large
+/// file cannot freeze the caller's (UI) thread — and the dialog's Cancel stays
+/// clickable. The awaits do NOT use <c>ConfigureAwait(false)</c>: the
+/// continuations resume on the caller's context, so the component-registration
+/// callback — which mutates UI-bound ObservableCollections — runs exactly where
+/// it did before (the same rule <see cref="GdsPlacementExecutor"/> documents
+/// for the canvas). The template provider is invoked BEFORE the handoff: it
+/// reads UI-bound library collections and must not run on the background
+/// thread.
+/// </para>
 /// </summary>
-public sealed class GdsImportService
+public sealed partial class GdsImportService
 {
     /// <summary>Display-name prefix of the per-file user PDK an import writes ("GDS Import - &lt;file stem&gt;").</summary>
     public const string ImportPdkNamePrefix = "GDS Import - ";
@@ -64,7 +76,9 @@ public sealed class GdsImportService
     /// </exception>
     public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
-        var library = await ReadLibraryAsync(gdsPath, ct);
+        // Parse on a thread-pool thread: the record loop is CPU-bound and would
+        // otherwise pin the caller's (UI) context for the whole file.
+        var library = await Task.Run(() => ReadLibraryAsync(gdsPath, ct), ct);
         var candidates = library.TopCellCandidates
             .Select(name => UnwrapPassThroughTopCell(library, name))
             .Where(name => !IsMetadataSentinelCell(name))
@@ -173,24 +187,70 @@ public sealed class GdsImportService
         IProgress<string>? progress = null,
         CancellationToken ct = default)
     {
-        progress?.Report($"Reading '{Path.GetFileName(gdsPath)}'…");
-        // No ConfigureAwait(false) in this service: the continuations (including
-        // the component-registration callback below) mutate UI-bound
-        // ObservableCollections and must stay on the caller's (UI) context —
-        // the same rule GdsPlacementExecutor documents for the canvas.
-        var library = await ReadLibraryAsync(gdsPath, ct);
-        ValidateImportTarget(library, gdsPath, topCellName);
+        options ??= new GdsHierarchyImportOptions();
+        options = WithOwnExportPinLayers(options);
 
         var warnings = new List<string>();
         var infos = new List<string>();
 
-        options ??= new GdsHierarchyImportOptions();
-        options = WithOwnExportPinLayers(options);
+        // UI-bound input, read on the caller's context before the handoff: the
+        // template provider touches the loaded library's ObservableCollections.
         if (options.ResolveKnownComponent is null)
         {
             var templates = _templateProvider?.Invoke() ?? (IReadOnlyList<ComponentTemplate>)Array.Empty<ComponentTemplate>();
             options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, infos) };
         }
+
+        // Heavy stages on a thread-pool thread (see the class remarks); the await
+        // resumes on the caller's context, so the registration callback below
+        // mutates the UI-bound library exactly where it did before.
+        var prepared = await Task.Run(
+            () => ParseImportAndPersistAsync(gdsPath, topCellName, options, warnings, infos, progress, ct), ct);
+
+        if (prepared.PdkDrafts.Count > 0 && _registerComponent is not null)
+        {
+            progress?.Report("Registering components in the library…");
+            foreach (var pdkDraft in prepared.PdkDrafts)
+                _registerComponent(pdkDraft, prepared.PdkName, prepared.UserPdkPath!);
+        }
+        else if (prepared.PdkDrafts.Count == 0 && prepared.Import.ImportedCellDrafts.Count > 0)
+        {
+            warnings.Add("No importable component drafts remained — nothing was registered.");
+        }
+
+        return new GdsImportOutcome
+        {
+            TopCellName = prepared.Import.TopCellName,
+            Mode = prepared.Import.Mode,
+            RegisteredComponents = prepared.Registered,
+            Instances = prepared.Import.Instances,
+            Connections = prepared.Import.Connections,
+            TopCellWaveguidePolygons = prepared.Import.TopCellWaveguidePolygons,
+            Warnings = warnings,
+            Infos = infos,
+            UserPdkName = prepared.PdkName,
+            UserPdkPath = prepared.UserPdkPath,
+            GdsFileName = prepared.GdsFileName,
+        };
+    }
+
+    /// <summary>
+    /// The off-thread body of <see cref="ImportAsync"/>: read → validate →
+    /// hierarchy import → persist. Pure data and file IO only — nothing here may
+    /// touch UI-bound state (the registration callback stays with the caller).
+    /// </summary>
+    private async Task<PreparedImport> ParseImportAndPersistAsync(
+        string gdsPath,
+        string topCellName,
+        GdsHierarchyImportOptions options,
+        List<string> warnings,
+        List<string> infos,
+        IProgress<string>? progress,
+        CancellationToken ct)
+    {
+        progress?.Report($"Reading '{Path.GetFileName(gdsPath)}'…");
+        var library = await ReadLibraryAsync(gdsPath, ct);
+        ValidateImportTarget(library, gdsPath, topCellName);
 
         progress?.Report($"Analyzing hierarchy of '{topCellName}'…");
         var import = await GdsHierarchyImporter.ImportAsync(library, topCellName, options, ct);
@@ -201,10 +261,11 @@ public sealed class GdsImportService
             .Where(d => IsPersistable(d, warnings))
             .ToList();
 
+        var pdkName = ImportPdkNamePrefix + Path.GetFileNameWithoutExtension(gdsPath);
+        var pdkDrafts = new List<PdkComponentDraft>();
+        var registered = new List<GdsRegisteredComponent>();
         string? gdsFileName = null;
         string? userPdkPath = null;
-        var registered = new List<GdsRegisteredComponent>();
-        var pdkName = ImportPdkNamePrefix + Path.GetFileNameWithoutExtension(gdsPath);
 
         if (persistable.Count > 0)
         {
@@ -217,43 +278,60 @@ public sealed class GdsImportService
 
             progress?.Report($"Saving {persistable.Count} component(s) to '{pdkName}'…");
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-            var pdkDrafts = new List<PdkComponentDraft>();
-            foreach (var cellDraft in persistable)
+            for (var i = 0; i < persistable.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
+                var cellDraft = persistable[i];
                 var pdkDraft = GdsCellDraftMapper.Map(cellDraft, gdsCopyPath, warnings);
                 pdkDraft.Name = DeduplicateName(pdkDraft.Name, cellDraft.CellName, usedNames, warnings);
-                userPdkPath = _userPdkStore.SaveToProcessAgnosticNamedPdk(pdkName, pdkDraft, "nazca");
                 pdkDrafts.Add(pdkDraft);
                 registered.Add(new GdsRegisteredComponent(cellDraft.CellName, pdkDraft.Name));
+                if ((i + 1) % 100 == 0 && i + 1 < persistable.Count)
+                    progress?.Report($"Saving components to '{pdkName}'… {i + 1}/{persistable.Count}");
             }
 
-            if (_registerComponent is not null)
-            {
-                progress?.Report("Registering components in the library…");
-                foreach (var pdkDraft in pdkDrafts)
-                    _registerComponent(pdkDraft, pdkName, userPdkPath!);
-            }
-        }
-        else if (import.ImportedCellDrafts.Count > 0)
-        {
-            warnings.Add("No importable component drafts remained — nothing was registered.");
+            // One load-modify-save for the whole batch: the per-draft variant
+            // rewrites the entire PDK file on every call (O(n²) — it dominated
+            // large imports). All-or-nothing also means a cancelled import never
+            // leaves a half-written PDK behind.
+            userPdkPath = _userPdkStore.SaveAllToProcessAgnosticNamedPdk(pdkName, pdkDrafts, "nazca");
         }
 
-        return new GdsImportOutcome
+        return new PreparedImport
         {
-            TopCellName = import.TopCellName,
-            Mode = import.Mode,
-            RegisteredComponents = registered,
-            Instances = import.Instances,
-            Connections = import.Connections,
-            TopCellWaveguidePolygons = import.TopCellWaveguidePolygons,
-            Warnings = warnings,
-            Infos = infos,
-            UserPdkName = pdkName,
+            Import = import,
+            PdkDrafts = pdkDrafts,
+            Registered = registered,
+            PdkName = pdkName,
             UserPdkPath = userPdkPath,
             GdsFileName = gdsFileName,
         };
+    }
+
+    /// <summary>
+    /// Intermediate result of the off-thread stages: the hierarchy import plus
+    /// the persisted drafts awaiting runtime registration on the caller's
+    /// context.
+    /// </summary>
+    private sealed record PreparedImport
+    {
+        /// <summary>The hierarchy import result (drafts, instances, connections).</summary>
+        public required GdsCircuitImport Import { get; init; }
+
+        /// <summary>Persisted PDK drafts, in persist order (empty when nothing was importable).</summary>
+        public required List<PdkComponentDraft> PdkDrafts { get; init; }
+
+        /// <summary>Cell-name → registered-component-name pairs, parallel to <see cref="PdkDrafts"/>.</summary>
+        public required List<GdsRegisteredComponent> Registered { get; init; }
+
+        /// <summary>Final (collision-resolved) user-PDK name.</summary>
+        public required string PdkName { get; init; }
+
+        /// <summary>Path of the user-PDK JSON the drafts were saved to, or null when nothing persisted.</summary>
+        public string? UserPdkPath { get; init; }
+
+        /// <summary>File name of the .gds copy in the user-PDK root, or null when nothing persisted.</summary>
+        public string? GdsFileName { get; init; }
     }
 
     /// <summary>
@@ -296,7 +374,7 @@ public sealed class GdsImportService
             await using var stream = new FileStream(
                 gdsPath, FileMode.Open, FileAccess.Read, FileShare.Read,
                 bufferSize: 81920, useAsync: true);
-            return await new GdsReader().ReadAsync(stream, ct);
+            return await new GdsReader().ReadAsync(stream, ct).ConfigureAwait(false);
         }
         catch (InvalidDataException ex)
         {
@@ -318,118 +396,6 @@ public sealed class GdsImportService
                 : string.Empty;
             throw new InvalidDataException($"Cell '{topCellName}' does not exist in '{fileName}'.{hint}");
         }
-    }
-
-    /// <summary>
-    /// Copies the source .gds into the user-PDK root, content-aware: an existing
-    /// file with identical content is reused, a same-named file with DIFFERENT
-    /// content is never overwritten — the copy gets a <c>-2</c>, <c>-3</c>, …
-    /// suffix instead. Returns the final file name (not a path).
-    /// </summary>
-    private string CopyGdsIntoStoreRoot(string gdsPath)
-    {
-        Directory.CreateDirectory(_userPdkStore.RootDirectory);
-        var stem = Path.GetFileNameWithoutExtension(gdsPath);
-        var extension = Path.GetExtension(gdsPath);
-
-        for (var n = 1; ; n++)
-        {
-            var candidateName = n == 1 ? stem + extension : $"{stem}-{n}{extension}";
-            var candidatePath = Path.Combine(_userPdkStore.RootDirectory, candidateName);
-            if (!File.Exists(candidatePath))
-            {
-                try
-                {
-                    File.Copy(gdsPath, candidatePath);
-                    return candidateName;
-                }
-                catch (IOException) when (File.Exists(candidatePath))
-                {
-                    // Lost the race: another writer created the candidate between the
-                    // Exists check and the copy. Fall through to the content compare
-                    // below instead of rethrowing. A copy failure that did NOT
-                    // produce the candidate (e.g. the source vanished) rethrows.
-                }
-            }
-            if (FilesEqual(gdsPath, candidatePath))
-                return candidateName;
-        }
-    }
-
-    private static bool FilesEqual(string first, string second)
-    {
-        try
-        {
-            var firstInfo = new FileInfo(first);
-            var secondInfo = new FileInfo(second);
-            if (firstInfo.Length != secondInfo.Length)
-                return false;
-
-            using var a = firstInfo.OpenRead();
-            using var b = secondInfo.OpenRead();
-            var bufferA = new byte[81920];
-            var bufferB = new byte[81920];
-            int read;
-            while ((read = a.Read(bufferA, 0, bufferA.Length)) > 0)
-            {
-                if (b.Read(bufferB, 0, read) != read)
-                    return false;
-                if (!bufferA.AsSpan(0, read).SequenceEqual(bufferB.AsSpan(0, read)))
-                    return false;
-            }
-            return true;
-        }
-        catch (FileNotFoundException)
-        {
-            // The candidate vanished between the Exists check and the compare —
-            // treat it as non-equal so the suffix loop moves on.
-            return false;
-        }
-    }
-
-    // ── Draft filtering / naming ─────────────────────────────────────────────
-
-    /// <summary>
-    /// The PDK loader's hard rules a draft must satisfy to round-trip: positive
-    /// size and at least one pin (pins within bounds are guaranteed by the
-    /// importer). Unpersistable drafts are skipped with a warning — persisting
-    /// them would make every later save of the same PDK file fail validation.
-    /// </summary>
-    private static bool IsPersistable(GdsCellDraft draft, List<string> warnings)
-    {
-        if (draft.WidthUm <= 0 || draft.HeightUm <= 0)
-        {
-            warnings.Add($"Cell '{draft.CellName}' was not registered: zero size " +
-                         "(the GDS cell has an empty bounding box).");
-            return false;
-        }
-        if (draft.Pins.Count == 0)
-        {
-            warnings.Add($"Cell '{draft.CellName}' was not registered: no pins detected " +
-                         "(a PDK component needs at least one pin).");
-            return false;
-        }
-        return true;
-    }
-
-    /// <summary>
-    /// Two different GDS cells can sanitize to the same component name; the
-    /// store replaces components name-case-insensitively, so later duplicates
-    /// get a deterministic <c>_2</c>, <c>_3</c>, … suffix.
-    /// </summary>
-    private static string DeduplicateName(
-        string sanitizedName, string cellName, HashSet<string> usedNames, List<string> warnings)
-    {
-        var candidate = sanitizedName;
-        for (var n = 2; !usedNames.Add(candidate); n++)
-            candidate = $"{sanitizedName}_{n}";
-
-        if (!string.Equals(candidate, sanitizedName, StringComparison.Ordinal))
-        {
-            warnings.Add($"Cell '{cellName}' collides with another imported cell after name " +
-                         $"sanitization; registered as '{candidate}' instead of '{sanitizedName}'.");
-        }
-        return candidate;
     }
 
     private static int CountDirectInstances(GdsLibrary library, string cellName) =>

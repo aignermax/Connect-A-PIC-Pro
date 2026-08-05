@@ -265,6 +265,43 @@ public class GdsImportServiceTests : IDisposable
         outcome.Warnings.ShouldNotContain(w => w.Contains("resolved to existing component"));
     }
 
+    // ── Cancellation ─────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_CancelledDuringParse_ThrowsOperationCanceled()
+    {
+        // A production-scale file so the parse spans many record reads; the
+        // cancel fires from inside the first progress report ("Reading …"),
+        // which the service raises BEFORE the parse — the off-thread record
+        // loop must then abort on the token (the dialog's Cancel path).
+        var path = WriteGds(GdsImportBenchmark.CreateLibrary(chainedInstances: 200, abutmentPairs: 0));
+        using var cts = new CancellationTokenSource();
+        var progress = new CancelOnFirstReport(cts);
+        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), null);
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => service.ImportAsync(path, "TOP", null, progress, cts.Token));
+    }
+
+    [Fact]
+    public async Task AnalyzeAsync_CancelledBeforeStart_ThrowsOperationCanceled()
+    {
+        var path = WriteGds(TwoWaveguideLibrary());
+        using var cts = new CancellationTokenSource();
+        cts.Cancel();
+
+        await Should.ThrowAsync<OperationCanceledException>(
+            () => GdsImportService.AnalyzeAsync(path, cts.Token));
+    }
+
+    /// <summary>Cancels the source synchronously on the first reported stage.</summary>
+    private sealed class CancelOnFirstReport : IProgress<string>
+    {
+        private readonly CancellationTokenSource _cts;
+        public CancelOnFirstReport(CancellationTokenSource cts) => _cts = cts;
+        public void Report(string value) => _cts.Cancel();
+    }
+
     // ── .gds copy collision handling ─────────────────────────────────────────
 
     [Fact]

@@ -48,10 +48,19 @@ public sealed record GdsPinPair
     /// True when the pair was derived from a top-cell route polygon touching
     /// both pins (the drawn route IS the connectivity) instead of from
     /// coincident pin positions. Route-derived pairs run before abutment
-    /// matching and consume their pins; the placement layer re-routes them like
-    /// any reconstructed connection and reports them separately.
+    /// matching and consume their pins; the placement layer attaches the drawn
+    /// geometry as a frozen cached route (<see cref="SourcePolygons"/>) instead
+    /// of re-routing, and reports them separately.
     /// </summary>
     public bool IsRouteDerived { get; init; }
+
+    /// <summary>
+    /// The top-cell route polygons of the network this pair was derived from
+    /// (app-space of the top-cell bbox, like the pair positions) — the drawn
+    /// geometry the placement layer turns into the connection's cached route.
+    /// Empty for coincident-pin abutment pairs.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> SourcePolygons { get; init; } = Array.Empty<GdsOutlinePolygon>();
 
     /// <summary>
     /// True when the pair was derived from a top-cell METAL-layer polygon

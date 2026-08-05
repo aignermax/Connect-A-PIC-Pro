@@ -105,6 +105,43 @@ public class GdsPlacementPlanTests
     }
 
     [Fact]
+    public void Plan_RouteDerivedConnection_CarriesSourcePolygons()
+    {
+        var stripe = new GdsOutlinePolygon
+        {
+            Layer = 1,
+            DataType = 0,
+            Points = new[] { new GdsOutlinePoint(10, 1.75), new GdsOutlinePoint(20, 2.25) },
+        };
+        var outcome = Outcome(
+            new[]
+            {
+                new GdsPlacedInstance { InstanceName = "wgA#0", CellDraftName = "wgA" },
+                new GdsPlacedInstance { InstanceName = "wgB#0", CellDraftName = "wgB" },
+            },
+            new[]
+            {
+                new GdsPinPair
+                {
+                    A = new GdsPinEndpoint { InstanceIndex = 0, PinName = "out" },
+                    B = new GdsPinEndpoint { InstanceIndex = 1, PinName = "in" },
+                    IsRouteDerived = true,
+                    SourcePolygons = new[] { stripe },
+                },
+            },
+            new[]
+            {
+                new GdsRegisteredComponent("wgA", "wgA"),
+                new GdsRegisteredComponent("wgB", "wgB"),
+            });
+
+        var connection = GdsPlacementPlan.FromOutcome(outcome).Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.SourcePolygons.ShouldHaveSingleItem().ShouldBe(stripe,
+            "the drawn geometry rides the plan so the executor can attach it as a frozen cached route");
+    }
+
+    [Fact]
     public void Plan_Connections_MapInstanceIndexesAndPinNames()
     {
         var outcome = Outcome(

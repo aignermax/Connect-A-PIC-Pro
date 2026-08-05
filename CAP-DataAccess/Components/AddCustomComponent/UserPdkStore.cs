@@ -263,6 +263,39 @@ public sealed class UserPdkStore
     }
 
     /// <summary>
+    /// Bulk variant of <see cref="SaveToProcessAgnosticNamedPdk"/>: adds or
+    /// replaces ALL <paramref name="components"/> in one load-modify-save cycle.
+    /// The per-component variant rewrites the whole PDK file on every call —
+    /// O(n²) for an n-component batch (a large GDS import registers thousands of
+    /// drafts, where that dominated the import time). Returns the PDK file path,
+    /// or null when <paramref name="components"/> is empty (nothing to save).
+    /// </summary>
+    public string? SaveAllToProcessAgnosticNamedPdk(
+        string pdkName, IReadOnlyList<PdkComponentDraft> components, string backend)
+    {
+        if (components.Count == 0)
+            return null;
+
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var pdk = File.Exists(path)
+            ? LoadExistingForEditing(path)
+            : new PdkDraft { Name = pdkName, Backend = backend, Components = new() };
+        pdk.Name = pdkName;
+        pdk.ProcessAgnostic = true;
+
+        foreach (var component in components)
+        {
+            pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+            pdk.Components.Add(component);
+        }
+
+        _saver.SaveToFile(pdk, path);
+        return path;
+    }
+
+    /// <summary>
     /// Loads an existing managed PDK file for a load-modify-save cycle. A corrupt
     /// or hand-edited file aborts the operation with a user-presentable
     /// <see cref="InvalidDataException"/> naming the broken file instead of

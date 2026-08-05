@@ -124,9 +124,11 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             "the four clean two-pin route chains restore as real connections (route-derived)");
         report.RouteDerivedCount.ShouldBe(4);
         report.Warnings.ShouldBeEmpty();
-        report.ValidationWarnings.Count.ShouldBe(2,
-            "the re-routed MMI braids honestly trip the validator (blocked/overlapping) — " +
-            "re-routing jitter around the braided pair, not an import defect");
+        report.ValidationWarnings.ShouldBeEmpty(
+            "the four route chains keep their drawn polygons as frozen cached routes — no " +
+            "re-route, so the old A* braid jitter (blocked/overlapping) no longer trips the validator");
+        report.CachedRouteCount.ShouldBe(4,
+            "all four restored chains load with their drawn geometry as hardcoded paths (issue #811)");
         report.GroupCreated.ShouldBeTrue();
         report.GroupName.ShouldBe("ConnectAPIC_Design");
 
@@ -276,10 +278,12 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         report.SkippedPlacements.ShouldBeEmpty();
         report.ConnectedCount.ShouldBe(2, "the two route-derived MMI braids");
         report.Warnings.ShouldBeEmpty();
-        report.ValidationWarnings.Count.ShouldBe(2,
-            "the two braided cross-links re-route as degraded geometry (BlockedPath + " +
-            "OverlappingPaths) — the SAME degradation the original canvas shows there " +
-            "(red-dashed fallback detours in panel 01); logically correct, honestly reported");
+        report.ValidationWarnings.ShouldBeEmpty(
+            "the two braided cross-links keep their drawn geometry as frozen cached routes — " +
+            "the same shape the original canvas shows (red-dashed detours in panel 01), loaded " +
+            "verbatim instead of re-routed through the old A* degradation");
+        report.CachedRouteCount.ShouldBe(2,
+            "both braids load with their drawn geometry as hardcoded paths (issue #811)");
         report.GroupCreated.ShouldBeTrue();
 
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
