@@ -167,8 +167,10 @@ public class GdsPlacementExecutorAutoConnectTests
     public async Task ExecuteAsync_ManyUnpairableFreePins_CollapsesSkipsIntoOneSummaryLine()
     {
         var (_, executor) = CreateExecutor(WaveguideTemplate());
-        // 7 waveguides 500 µm apart: every pin sits beyond the radius from any
-        // opposing pin — 14 skips with the same reason, over the detail cap of 5.
+        // 7 waveguides 500 µm apart: no CROSS-instance pin is in radius, but
+        // every pin sees its own straight-through sibling as an opposing,
+        // non-facing candidate — 14 skips with the same (not-facing) reason,
+        // over the detail cap of 5.
         var plan = new GdsPlacementPlan
         {
             GroupName = "TOP",
@@ -183,7 +185,7 @@ public class GdsPlacementExecutorAutoConnectTests
         report.AutoConnectedCount.ShouldBe(0);
         var summary = report.SkippedAutoConnect.ShouldHaveSingleItem(
             "14 same-reason skips collapse into one summary line instead of flooding the report");
-        summary.ShouldBe(ExpectedFormat("GdsImport.AutoConnectSkipSummaryNoPartnerFormat", 14, 200.0));
+        summary.ShouldBe(ExpectedFormat("GdsImport.AutoConnectSkipSummaryNotFacingFormat", 14));
     }
 
     // ── Exclusions ───────────────────────────────────────────────────────────

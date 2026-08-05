@@ -302,8 +302,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// four clean two-pin chains already came back route-derived (including the
     /// two spans earlier auto-connect restored: connection 7 crossing↔crossing
     /// and connection 10 halfring↔adiabatic). The two genuinely ambiguous
-    /// pairings stay vetoed; every skip keeps its reason. Radius is the
-    /// executor default (200 µm).
+    /// pairings stay vetoed. Radius is the executor default (200 µm).
     /// </summary>
     private static void AssertAutoConnectUpgraded(GdsPlacementReport report)
     {
@@ -321,16 +320,16 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             .ShouldBe(1, "connection 9 is honestly refused: 25.55 vs 25.94 µm — a coin flip");
 
         // Skip accounting: 28 pins total, 8 consumed by the four route-derived
-        // connections, 20 free-pin candidates — 2 ambiguous (above), 4
+        // connections, 20 free-pin candidates — 2 ambiguous (above), 11
         // not-facing (the crossings' north/south pins see the MMI output pins
-        // opposing but perpendicular), 14 with no opposing partner in radius
-        // (collapsed into one summary line, over the detail cap of 5).
-        report.SkippedAutoConnect.Count.ShouldBe(7,
-            "2 ambiguous + 4 not-facing (detailed) + 1 collapsed no-partner summary line");
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.port 3'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#0.port 4'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.port 3'", StringComparison.Ordinal));
-        report.SkippedAutoConnect.ShouldContain(s => s.Contains("'ebeam_crossing4#1.port 4'", StringComparison.Ordinal));
+        // opposing but perpendicular; 7 more pins see their OWN straight-through
+        // sibling as an opposing, non-facing candidate — same-instance pins are
+        // eligible partners now, so they show up as not-facing instead of
+        // no-partner; both groups exceed the detail cap of 5 and collapse into
+        // summary lines), 7 with no opposing partner in radius (collapsed).
+        report.SkippedAutoConnect.Count.ShouldBe(4,
+            "2 ambiguous (detailed) + 1 collapsed not-facing summary (11 pins) + " +
+            "1 collapsed no-partner summary (7 pins)");
     }
 
     /// <summary>

@@ -28,11 +28,13 @@ internal sealed record GdsRouteConnectivityResult
 /// per emitted straight/bend segment, each touching only its neighbours, not
 /// the pins at the far ends), the matcher first merges the polygons into
 /// NETWORKS by transitive polygon∩polygon touch (union-find), then applies
-/// the pin rule per network: a network touched by EXACTLY two pins of
-/// different instances (or one instance pin plus one top-cell port, consistent
-/// with the abutment rules in <see cref="GdsAbutmentMatcher"/>) becomes one
-/// route-derived <see cref="GdsPinPair"/> and all its polygons are consumed
-/// (re-created as a real, re-routable connection instead of frozen paths).
+/// the pin rule per network: a network touched by EXACTLY two pins (of two
+/// different instances, of ONE instance — a drawn feedback loop coupling the
+/// instance's own out back to its own in — or one instance pin plus one
+/// top-cell port, consistent with the abutment rules in
+/// <see cref="GdsAbutmentMatcher"/>) becomes one route-derived
+/// <see cref="GdsPinPair"/> and all its polygons are consumed (re-created as a
+/// real, re-routable connection instead of frozen paths).
 /// Networks touched by 0/1 pins stay frozen paths; networks touched by more
 /// than two pins are junction/crossing topology — guessing the pairing there
 /// would miswire, so they stay frozen with an informational note.
@@ -165,10 +167,9 @@ internal static class GdsRouteConnectivityMatcher
             {
                 continue; // two external ports — nothing on the canvas to connect (v1).
             }
-            if (!a.IsPort && !b.IsPort && a.InstanceIndex == b.InstanceIndex)
-            {
-                continue; // both pins of the same instance — a connection needs two partners.
-            }
+            // Two pins of the SAME instance DO pair: a drawn route touching
+            // exactly the instance's own two pins is a feedback loop (ring
+            // self-coupling, black-box self-connection) — restore it.
             if (electrical && a.Pin.IsElectrical == false && b.Pin.IsElectrical == false)
             {
                 // Metal-layer geometry between two KNOWN-optical pins contradicts the

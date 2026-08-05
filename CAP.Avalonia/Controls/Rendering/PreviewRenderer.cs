@@ -91,8 +91,9 @@ public sealed class PreviewRenderer : ICanvasRenderer
         var startPin = state.ConnectionDragStartPin!;
         var (startX, startY) = startPin.GetAbsolutePosition();
         var targetPin = vm.HighlightedPin?.Pin;
-        bool isValidTarget = targetPin != null && targetPin != startPin &&
-                             targetPin.ParentComponent != startPin.ParentComponent;
+        // Same-component pins are valid targets (feedback loops); only the
+        // start pin itself is not.
+        bool isValidTarget = targetPin != null && targetPin != startPin;
 
         var pen = isValidTarget
             ? new Pen(Brushes.LimeGreen, 2)

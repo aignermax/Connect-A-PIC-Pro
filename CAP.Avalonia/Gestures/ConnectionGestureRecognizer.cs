@@ -87,8 +87,10 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
         _state.ConnectionDragCurrentPoint = canvasPoint;
 
         var targetPin = canvas.HighlightedPin?.Pin;
-        if (targetPin != null && targetPin != _state.ConnectionDragStartPin &&
-            targetPin.ParentComponent != _state.ConnectionDragStartPin.ParentComponent)
+        // A different pin of the SAME component is a valid target (feedback
+        // loops, ring-resonator self-coupling, black-box GDS imports); only the
+        // start pin itself is not.
+        if (targetPin != null && targetPin != _state.ConnectionDragStartPin)
         {
             if (mainVm != null)
             {
@@ -116,8 +118,7 @@ public class ConnectionGestureRecognizer : IGestureRecognizer
 
         var startPin = _state.ConnectionDragStartPin;
         var targetPin = canvas.HighlightedPin?.Pin;
-        bool isValidTarget = targetPin != null && targetPin != startPin &&
-            targetPin.ParentComponent != startPin.ParentComponent;
+        bool isValidTarget = targetPin != null && targetPin != startPin;
 
         if (isValidTarget && !PinKindHelper.AreKindsCompatible(startPin, targetPin!))
         {

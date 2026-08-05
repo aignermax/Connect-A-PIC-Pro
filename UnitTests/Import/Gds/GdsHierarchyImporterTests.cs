@@ -654,11 +654,15 @@ public class GdsHierarchyImporterTests
         // Our OWN exporter flattens routed connections with nazca's default
         // interconnect (nd.strt/nd.bend), which writes polygons on layer
         // (1111,0) — a re-import must recognize it without any option tuning.
+        // The polygon is drawn OFF the pins (1.5 µm clear of the 1 µm touch
+        // tolerance): a polygon touching exactly two pins of ONE instance is a
+        // feedback loop and becomes a route-derived connection instead of a
+        // frozen path — not what this layer-recognition test is about.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
                 .SRef("wgA", 0, 0)
-                .Boundary(1111, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(1111, 0, (0, 3500), (10000, 3500), (10000, 4000), (0, 4000), (0, 3500))
             .EndCell()
             .WaveguideCell("wgA")
             .EndLibrary()
@@ -676,11 +680,15 @@ public class GdsHierarchyImporterTests
     {
         // The route-layer list is configurable (GdsHierarchyImportOptions.RouteLayers);
         // with (3,0) configured the (1,0) polygon is NOT routing anymore.
+        // The (3,0) polygon is drawn 1.5 µm clear of the pins (touch tolerance
+        // is 1 µm): touching exactly two pins of ONE instance would make it a
+        // route-derived feedback-loop connection, not the frozen path this
+        // layer-filtering test asserts.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
                 .SRef("wgA", 0, 0)
-                .Boundary(3, 0, (0, 500), (10000, 500), (10000, 1000), (0, 1000), (0, 500))
+                .Boundary(3, 0, (0, 0), (10000, 0), (10000, 500), (0, 500), (0, 0))
                 .Boundary(1, 0, (0, 3000), (10000, 3000), (10000, 3500), (0, 3500), (0, 3000))
             .EndCell()
             .WaveguideCell("wgA")
@@ -696,7 +704,7 @@ public class GdsHierarchyImporterTests
         polygon.Layer.ShouldBe(3);
         polygon.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
         {
-            (0.0, 3.5), (10.0, 3.5), (10.0, 3.0), (0.0, 3.0), (0.0, 3.5),
+            (0.0, 4.0), (10.0, 4.0), (10.0, 3.5), (0.0, 3.5), (0.0, 4.0),
         });
         // The (3,0) polygon comes back as a frozen path (INFO); the (1,0)
         // polygon is on no configured route layer — the not-reconstructed WARNING.

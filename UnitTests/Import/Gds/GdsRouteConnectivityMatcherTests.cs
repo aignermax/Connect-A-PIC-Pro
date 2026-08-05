@@ -6,9 +6,10 @@ namespace UnitTests.Import.Gds;
 /// <summary>
 /// Unit tests for <see cref="GdsRouteConnectivityMatcher"/> with hand-built
 /// polygons/pins: transitive chain merging into networks, the exactly-two-pins
-/// rule per network, junction/crossing networks, the port/same-instance
-/// exclusions, one-partner-per-pin consumption, the metal (electrical) run
-/// rules, and the touch test itself (point-in-polygon ∪ outline distance).
+/// rule per network (including same-instance feedback loops), junction/crossing
+/// networks, the two-port exclusion, one-partner-per-pin consumption, the
+/// metal (electrical) run rules, and the touch test itself
+/// (point-in-polygon ∪ outline distance).
 ///
 /// The matcher never looks at layers: restricting the input to waveguide- or
 /// metal-layer polygons happens upstream (<c>GdsHierarchyImportSession</c>
@@ -126,11 +127,11 @@ public class GdsRouteConnectivityMatcherTests
     }
 
     [Fact]
-    public void Match_PolygonBridgingTwoPinsOfSameInstance_NoPairAndPinsStayAvailable()
+    public void Match_PolygonBridgingTwoPinsOfSameInstance_BecomesFeedbackLoopPair()
     {
-        // One polygon bridging BOTH pins of instance 0 — a connection needs two
-        // partners, so it must not pair AND must not consume the pins (they stay
-        // available for the abutment matcher).
+        // One polygon bridging BOTH pins of instance 0 — a drawn feedback loop
+        // (ring self-coupling, black-box self-connection): it must become a
+        // route-derived pair and consume the pins like any other connection.
         var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
         {
             new[] { Pin("in", 10, 2), Pin("out", 15, 2) },
@@ -139,9 +140,14 @@ public class GdsRouteConnectivityMatcherTests
 
         var result = Match(new[] { Bridge() }, pinsPerInstance);
 
-        result.Pairs.ShouldBeEmpty();
-        result.ConsumedPolygonIndexes.ShouldBeEmpty("the same-instance bridge stays a frozen path");
-        result.ConsumedInstancePins.ShouldBeEmpty();
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.IsRouteDerived.ShouldBeTrue();
+        pair.A.InstanceIndex.ShouldBe(0);
+        pair.A.PinName.ShouldBe("in");
+        pair.B.InstanceIndex.ShouldBe(0, "a feedback loop connects the instance to itself");
+        pair.B.PinName.ShouldBe("out");
+        result.ConsumedPolygonIndexes.ShouldBe(new[] { 0 });
+        result.ConsumedInstancePins.ShouldBe(new[] { (0, 0), (0, 1) }, ignoreOrder: true);
     }
 
     [Fact]
@@ -171,7 +177,7 @@ public class GdsRouteConnectivityMatcherTests
     public void Match_PolygonBridgingTwoTopPorts_NoPair()
     {
         // Two external ports — nothing on the canvas to connect (v1). The ports
-        // stay unconsumed, consistent with the same-instance rule.
+        // stay unconsumed and available for the abutment matcher.
         var topPortPins = new[] { Pin("o1", 10, 2), Pin("o2", 15, 2) };
 
         var result = Match(new[] { Bridge() }, topPortPins: topPortPins);

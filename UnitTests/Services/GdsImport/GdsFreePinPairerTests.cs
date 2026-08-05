@@ -7,7 +7,8 @@ namespace UnitTests.Services.GdsImport;
 /// <summary>
 /// Tests for <see cref="GdsFreePinPairer"/>: nearest-opposing pairing, the
 /// 180° ± 10° opposition cone, radius cutoff, ambiguity skips, same-instance
-/// exclusion, and one-partner-per-pin. Pure geometry — no canvas involved.
+/// self-feedback (allowed when the pins face each other), and
+/// one-partner-per-pin. Pure geometry — no canvas involved.
 /// </summary>
 public class GdsFreePinPairerTests
 {
@@ -198,16 +199,56 @@ public class GdsFreePinPairerTests
     }
 
     [Fact]
-    public void Pair_SameInstancePins_NeverPair()
+    public void Pair_SameInstancePinsPointingAway_DoNotPair()
     {
-        // A two-port component's own in/out oppose each other — they must not pair.
+        // A straight-through component's own in/out oppose angle-wise but point
+        // AWAY from each other: the mutual-facing check — not an owner
+        // exclusion — is what keeps them from pairing (feedback loops need the
+        // same-instance case to be allowed in general).
         var pairing = GdsFreePinPairer.Pair(
             new[] { Pin("a.in", 0, 2, 180, owner: 0), Pin("a.out", 10, 2, 0, owner: 0) },
             radiusUm: 1000);
 
         pairing.Pairs.ShouldBeEmpty();
         pairing.Skipped.Count.ShouldBe(2);
-        pairing.Skipped.ShouldAllBe(s => s.Reason == GdsFreePinSkipReason.NoOpposingPartnerInRadius);
+        pairing.Skipped.ShouldAllBe(s => s.Reason == GdsFreePinSkipReason.NotFacingEachOther);
+    }
+
+    [Fact]
+    public void Pair_SameInstanceFacingPins_Pair()
+    {
+        // Black-box / ring self-coupling: the instance's own out faces its own
+        // in (each lies in the direction the other points) — a real feedback
+        // loop that must auto-connect like any cross-instance pair.
+        var pairing = GdsFreePinPairer.Pair(
+            new[] { Pin("a.out", 0, 0, 0, owner: 0), Pin("a.in", 40, 0, 180, owner: 0) },
+            radiusUm: 1000);
+
+        var pair = pairing.Pairs.ShouldHaveSingleItem();
+        (pair.A, pair.B).ShouldBe((0, 1));
+        pair.DistanceUm.ShouldBe(40, 1e-9);
+        pairing.Skipped.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Pair_SameInstancePartnerLosesToCloserCrossInstancePin()
+    {
+        // The instance's own facing pin (30 µm) is a candidate, but the nearer
+        // cross-instance pin (20 µm) wins: same-instance eligibility must not
+        // trump the closest-first rule.
+        var pairing = GdsFreePinPairer.Pair(
+            new[]
+            {
+                Pin("a.out", 0, 0, 0, owner: 0),
+                Pin("a.in", 30, 0, 180, owner: 0),
+                Pin("b.in", 20, 0, 180, owner: 1),
+            },
+            radiusUm: 1000);
+
+        var pair = pairing.Pairs.ShouldHaveSingleItem();
+        (pair.A, pair.B).ShouldBe((0, 2));
+        pairing.Skipped.ShouldHaveSingleItem().Index.ShouldBe(1,
+            "a.in is left over once a.out pairs with the closer b.in");
     }
 
     [Fact]

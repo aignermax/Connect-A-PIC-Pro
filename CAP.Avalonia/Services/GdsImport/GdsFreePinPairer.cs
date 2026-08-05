@@ -20,9 +20,12 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// symmetric, so the partner's two nearest are compared as well — when the
 /// partner can hardly tell the origin from another candidate, the PARTNER is
 /// the ambiguous one and is skipped, while the origin tries its next-best.
-/// Pins of the SAME placed instance never pair with each
-/// other: the pass connects pins BETWEEN instances, not a component's own input
-/// to its own output.
+/// Pins of the SAME placed instance MAY pair (feedback loops, ring-resonator
+/// self-coupling, black-box cells whose only meaningful partners are their own
+/// pins): the mutual-facing check is what stops the classic miswire the old
+/// owner exclusion guarded against — a straight-through component's own in/out
+/// point AWAY from each other, so they fail the facing test regardless of
+/// proximity.
 /// </summary>
 public static class GdsFreePinPairer
 {
@@ -42,13 +45,15 @@ public static class GdsFreePinPairer
     /// <summary>
     /// Pairs the candidates greedily: every origin (in CLOSEST-FIRST order — see
     /// the class summary; ties keep input order) takes the nearest still-free
-    /// opposing candidate of a DIFFERENT owner within
-    /// <paramref name="radiusUm"/> (inclusive) that it FACES (and that faces it
-    /// back — see <see cref="PinsFaceEachOther"/>), unless no such partner
-    /// exists or the two nearest are within <see cref="AmbiguityDeltaUm"/> of
-    /// each other. An ambiguous pin is reported and marked unavailable for the
-    /// rest of the pass — a reported skip must never end up connected through
-    /// the back door; its contenders stay available for other pins.
+    /// opposing candidate within <paramref name="radiusUm"/> (inclusive) that it
+    /// FACES (and that faces it back — see <see cref="PinsFaceEachOther"/>),
+    /// unless no such partner exists or the two nearest are within
+    /// <see cref="AmbiguityDeltaUm"/> of each other. Same-owner candidates are
+    /// eligible (self-feedback); the facing check keeps a component's
+    /// straight-through in/out from pairing. An ambiguous pin is reported and
+    /// marked unavailable for the rest of the pass — a reported skip must never
+    /// end up connected through the back door; its contenders stay available
+    /// for other pins.
     /// </summary>
     /// <param name="candidates">Free pins in deterministic (placement) order.</param>
     /// <param name="radiusUm">Maximum pin-to-pin distance for a pair, in µm.</param>
@@ -118,10 +123,10 @@ public static class GdsFreePinPairer
 
     /// <summary>
     /// The nearest and second-nearest still-free opposing, mutually-facing
-    /// candidates of a DIFFERENT owner within <paramref name="radiusUm"/>
-    /// (inclusive) for the pin at <paramref name="originIndex"/>
-    /// (−1/<see cref="double.MaxValue"/> when none), plus whether any opposing
-    /// in-radius candidate failed the facing check (drives the skip reason).
+    /// candidates within <paramref name="radiusUm"/> (inclusive) for the pin at
+    /// <paramref name="originIndex"/> (−1/<see cref="double.MaxValue"/> when
+    /// none), plus whether any opposing in-radius candidate failed the facing
+    /// check (drives the skip reason).
     /// </summary>
     private static (int Nearest, int Second, double NearestDist, double SecondDist, bool SawNonFacingOpposing)
         FindNearestTwo(IReadOnlyList<GdsFreePinCandidate> candidates, bool[] taken, int originIndex, double radiusUm)
@@ -135,7 +140,6 @@ public static class GdsFreePinPairer
         for (var j = 0; j < candidates.Count; j++)
         {
             if (j == originIndex || taken[j]) continue;
-            if (candidates[j].OwnerIndex == origin.OwnerIndex) continue;
             var dist = DistanceUm(origin, candidates[j]);
             if (dist > radiusUm) continue;
             if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
@@ -179,10 +183,9 @@ public static class GdsFreePinPairer
 
     /// <summary>
     /// Distance (µm) to the origin's nearest opposing, mutually-facing candidate
-    /// of a different owner within <paramref name="radiusUm"/>, ignoring
-    /// occupancy (nothing is taken when the order is computed);
-    /// <see cref="double.MaxValue"/> when none exists — such pins never pair,
-    /// so they are processed last.
+    /// within <paramref name="radiusUm"/>, ignoring occupancy (nothing is taken
+    /// when the order is computed); <see cref="double.MaxValue"/> when none
+    /// exists — such pins never pair, so they are processed last.
     /// </summary>
     private static double BestPartnerDistanceUm(
         IReadOnlyList<GdsFreePinCandidate> candidates, int originIndex, double radiusUm)
@@ -192,7 +195,6 @@ public static class GdsFreePinPairer
         for (var j = 0; j < candidates.Count; j++)
         {
             if (j == originIndex) continue;
-            if (candidates[j].OwnerIndex == origin.OwnerIndex) continue;
             var dist = DistanceUm(origin, candidates[j]);
             if (dist > radiusUm || dist >= best) continue;
             if (!AnglesOppose(origin.AngleDegrees, candidates[j].AngleDegrees)) continue;
@@ -255,7 +257,8 @@ public static class GdsFreePinPairer
 /// One free pin considered by <see cref="GdsFreePinPairer"/>: user-presentable
 /// label, absolute position (µm), absolute outward angle (degrees, component
 /// rotation included), and the index of the placed instance it belongs to
-/// (same-instance pins never pair).
+/// (reporting/grouping only — same-instance pins may pair when they face each
+/// other).
 /// </summary>
 public sealed record GdsFreePinCandidate(
     string Label, double XUm, double YUm, double AngleDegrees, int OwnerIndex);
@@ -266,7 +269,7 @@ public sealed record GdsFreePinPair(int A, int B, double DistanceUm);
 /// <summary>Why a free pin was not paired.</summary>
 public enum GdsFreePinSkipReason
 {
-    /// <summary>No opposing free pin of another instance exists within the pairing radius.</summary>
+    /// <summary>No opposing free pin exists within the pairing radius.</summary>
     NoOpposingPartnerInRadius,
 
     /// <summary>
