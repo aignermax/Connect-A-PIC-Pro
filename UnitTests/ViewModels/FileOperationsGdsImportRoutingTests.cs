@@ -6,7 +6,11 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
+using CAP_Core.Components;
+using CAP_Core.Components.Core;
 using CAP_Core.Export;
+using CAP_Core.LightCalculation;
+using CAP_Core.Routing;
 using Moq;
 using Shouldly;
 using Xunit;
@@ -88,11 +92,69 @@ public class FileOperationsGdsImportRoutingTests : IDisposable
         PickFile(Path.Combine(Path.GetTempPath(), "circuit.gds"));
         string? status = null;
         _fileOps.UpdateStatus = s => status = s;
+        _canvas.Components.Add(new ComponentViewModel(CreateComponent("old-component")));
 
         await _fileOps.LoadDesignCommand.ExecuteAsync(null);
 
         status.ShouldBe(LocalizationService.Instance.Translate("GdsImport.StatusUnavailable"));
+        _canvas.Components.ShouldHaveSingleItem(
+            "without an import flow to hand off to, the canvas must NOT be cleared");
     }
+
+    [Fact]
+    public async Task LoadDesign_GdsFilePicked_ClearsExistingDesignBeforeImport()
+    {
+        // A previous design is open: a component on the canvas and a project
+        // file path. Loading a file — a .gds included — starts fresh: the old
+        // content is cleared BEFORE the import flow runs (the import itself
+        // only ADDS to the canvas; simulated here by placing one new component
+        // from the callback), so the canvas must end up holding ONLY the
+        // imported design, and the result must not stay attached to the old
+        // .lun (a later Save would otherwise overwrite it).
+        _canvas.Components.Add(new ComponentViewModel(CreateComponent("old-component")));
+        _fileOps.CurrentFilePath = Path.Combine(Path.GetTempPath(), "previous.lun");
+
+        PickFile(Path.Combine(Path.GetTempPath(), "circuit.gds"));
+        var clearedBeforeImport = false;
+        _fileOps.OpenGdsImportRequested = _ =>
+        {
+            clearedBeforeImport = _canvas.Components.Count == 0;
+            _canvas.Components.Add(new ComponentViewModel(CreateComponent("imported")));
+            return Task.CompletedTask;
+        };
+
+        await _fileOps.LoadDesignCommand.ExecuteAsync(null);
+
+        clearedBeforeImport.ShouldBeTrue("the canvas is cleared before the import flow runs");
+        var remaining = _canvas.Components.ShouldHaveSingleItem(
+            "the canvas holds only the imported design, not a merge with the old content");
+        remaining.Component.Name.ShouldBe("imported");
+        _fileOps.CurrentFilePath.ShouldBeNull(
+            "the imported design did not come from the previous .lun");
+        _fileOps.HasUnsavedChanges.ShouldBeTrue("a freshly imported design is unsaved content");
+    }
+
+    /// <summary>Minimal canvas component (pattern from GroupCollisionIntegrationTests).</summary>
+    private static Component CreateComponent(string name) =>
+        new(
+            new Dictionary<int, SMatrix>(),
+            new List<Slider>(),
+            "test",
+            "",
+            new Part[1, 1] { { new Part() } },
+            0,
+            name,
+            new DiscreteRotation(),
+            new List<PhysicalPin>
+            {
+                new()
+                {
+                    Name = "pin0",
+                    OffsetXMicrometers = 0,
+                    OffsetYMicrometers = 0,
+                    AngleDegrees = 0
+                }
+            });
 
     [Fact]
     public async Task LoadDesign_LunFilePicked_LoadsAsDesignAndSkipsGdsImport()

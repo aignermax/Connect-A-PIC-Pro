@@ -787,8 +787,9 @@ public partial class FileOperationsViewModel : ObservableObject
 
         // A GDS pick routes into the GDS import flow instead of the .lun load
         // path: the import dialog opens for that file and analyzes it on open.
-        // The import only ADDS to the canvas, so nothing here was put at risk
-        // by the (already answered) unsaved-changes prompt.
+        // Like a .lun load, this REPLACES the current design — the clear
+        // happens inside OpenGdsImportAsync, covered by the (already answered)
+        // unsaved-changes prompt: prompt → pick → clear → import.
         if (IsGdsFile(filePath))
         {
             await OpenGdsImportAsync(filePath);
@@ -810,6 +811,14 @@ public partial class FileOperationsViewModel : ObservableObject
     /// Hands a GDS pick from the open-design dialog to the import flow and fires
     /// <see cref="ProjectOpened"/> so the Home screen lets go of the window — the
     /// import dialog and its canvas result must not stay hidden behind it.
+    /// Loading a file starts fresh, so the current design is cleared FIRST — the
+    /// same reset the .lun load performs (<see cref="ClearCanvas"/> plus the
+    /// load-time migration state <see cref="LoadDesignFromFileAsync"/> resets);
+    /// the import flow itself only ADDS to the canvas and would otherwise merge
+    /// into the existing content. The discard was covered by the unsaved-changes
+    /// prompt before the pick. The clear marks the project dirty (canvas change
+    /// tracking) and detaches it from the previous project file — a later Save
+    /// must not overwrite a .lun the imported design did not come from.
     /// </summary>
     private async Task OpenGdsImportAsync(string gdsPath)
     {
@@ -819,6 +828,11 @@ public partial class FileOperationsViewModel : ObservableObject
                 .Translate("GdsImport.StatusUnavailable"));
             return;
         }
+
+        ClearCanvas();
+        _pinCalibrationMigratedComponents.Clear();
+        CurrentFilePath = null;
+        _loadedMetadata = null;
 
         await OpenGdsImportRequested(gdsPath);
         ProjectOpened?.Invoke();

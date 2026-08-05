@@ -37,20 +37,36 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     /// script (test.py, 30 route segments + 1 merged partial) and re-measured
     /// with our own reader: 31 direct references = 30 route cells + the
     /// 'nazca' wrapper around the merged partial. Explode drops the zero-length
-    /// straight (empty bbox) and the artifact wrapper → 29 placed instances of
-    /// 22 distinct route cells (20 straights + 2 bend_circular variants).
+    /// straight (empty bbox) and recurses ONE level into the partial (through
+    /// the wrapper — it is written UNFLATTENED, its device cells are real SREFs
+    /// with port labels) → 29 route instances + the partial's 7 device
+    /// instances of 5 distinct device cells.
     /// </summary>
     private const int RouteCellCount = 22;
-    private const int PlacedInstanceCount = 29;
+    private const int DeviceCellCount = 5;
+    private const int DeviceInstanceCount = 7;
+    private const int PlacedInstanceCount = 36;
+
+    /// <summary>The partial's device cells (the 7 instances: 2× mmi2x2_dp, 2× ebeam_crossing4).</summary>
+    private static readonly string[] DeviceCellNames =
+    [
+        "mmi2x2_dp", "ebeam_bdc_te1550", "ebeam_crossing4",
+        "ebeam_adiabatic_te1550", "ebeam_adiabatic_tm1550",
+    ];
 
     /// <summary>
-    /// Route↔route abutments that reconstruct. test.py's chains run THROUGH the
-    /// skipped partial's devices (mmi2x2_dp, crossings, bdc, adiabatics), so
-    /// the joints at device ports dangle; the 20 remaining direct joints are
-    /// nm-exact (1 nm grid, abutment tolerance 0.05 µm). Measured with
+    /// Abutments that reconstruct: the 20 route↔route joints (unchanged) plus
+    /// 10 route↔device joints — test.py routed to the ports gdsfactory read
+    /// from the partial's (1,10) labels, so those route ends land nm-exact on
+    /// the device label pins (1 nm grid, abutment tolerance 0.05 µm). The
+    /// mmi2x2_dp joints still dangle: its demofab (501,1) labels sit 0.3 µm
+    /// inside the cell edge (nazca's pin-text offset) while the route ends stop
+    /// at the waveguide mouth — past the tolerance — and the remaining
+    /// unconnected device ports are the circuit's free externals. Measured with
     /// <see cref="GdsAbutmentMatcher"/> on the committed file.
     /// </summary>
-    private const int ReconstructedConnectionCount = 20;
+    private const int ReconstructedConnectionCount = 30;
+    private const int RouteDeviceConnectionCount = 10;
 
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdsreimport-" + Guid.NewGuid().ToString("N"));
@@ -90,7 +106,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     // ── Explode: first import (every cell unknown) ───────────────────────────
 
     [Fact]
-    public async Task Explode_FirstImport_PlacesRouteCells_SkipsPartialAndZeroLength()
+    public async Task Explode_FirstImport_PlacesRouteCellsAndPartialDevices()
     {
         File.Exists(GdsPath).ShouldBeTrue($"Reference file missing: {GdsPath}");
         var sink = new LibrarySink(_prefsPath);
@@ -99,22 +115,52 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         var outcome = await service.ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
 
         outcome.Mode.ShouldBe(GdsHierarchyImportMode.ExplodeHierarchy);
-        outcome.RegisteredComponents.Count.ShouldBe(RouteCellCount);
+        outcome.RegisteredComponents.Count.ShouldBe(RouteCellCount + DeviceCellCount);
         outcome.Instances.Count.ShouldBe(PlacedInstanceCount);
 
-        // No failure cascade: the flattened partial is skipped by convention and
-        // the zero-length straight by the zero-geometry drop — one info note each.
-        outcome.Warnings.ShouldBeEmpty();
-        outcome.Infos.Count.ShouldBe(2);
-        outcome.Infos.ShouldContain(i =>
-            i.Contains("export artifact") && i.Contains("'nazca'") && i.Contains("ConnectAPIC_NazcaPartial"));
-        outcome.Infos.ShouldContain(i =>
-            i.Contains("no geometry") && i.Contains("L0_N_a362bd09") && i.Contains("1 instance(s) skipped"));
+        // The partial's 7 devices come back (first import: every cell unknown,
+        // so they register as drafts) at their absolute positions — the one-level
+        // recursion into the unflattened partial, transforms composed through
+        // the 'nazca' wrapper. Multiplicities: 2× mmi2x2_dp, 2× ebeam_crossing4.
+        var deviceInstances = outcome.Instances
+            .Where(i => DeviceCellNames.Contains(i.CellName)).ToList();
+        deviceInstances.Count.ShouldBe(DeviceInstanceCount);
+        deviceInstances.ShouldAllBe(i => i.CellDraftName == i.CellName && i.KnownComponentIdentifier == null);
+        deviceInstances.Count(i => i.CellName == "mmi2x2_dp").ShouldBe(2);
+        deviceInstances.Count(i => i.CellName == "ebeam_crossing4").ShouldBe(2);
+        outcome.RegisteredComponents.Count(r => DeviceCellNames.Contains(r.CellDraftName))
+            .ShouldBe(DeviceCellCount);
 
-        // 20 route↔route abutments; none involve top-cell ports (the file has
-        // no top-level port labels).
+        // No failure cascade and no artifact-skip note: the partial is EXPANDED,
+        // not skipped — the only remaining note is the zero-geometry drop of the
+        // zero-length straight.
+        outcome.Warnings.ShouldBeEmpty();
+        var note = outcome.Infos.ShouldHaveSingleItem();
+        note.ShouldContain("no geometry");
+        note.ShouldContain("L0_N_a362bd09");
+        note.ShouldContain("1 instance(s) skipped");
+
+        // 30 abutments: 20 route↔route (unchanged) + 10 route↔device; none
+        // involve top-cell ports (the file has no top-level port labels).
         outcome.Connections.Count.ShouldBe(ReconstructedConnectionCount);
         outcome.Connections.ShouldAllBe(c => !c.A.IsTopLevelPort && !c.B.IsTopLevelPort);
+        var routeDevice = outcome.Connections
+            .Where(c => IsDeviceEndpoint(outcome, c.A) != IsDeviceEndpoint(outcome, c.B))
+            .ToList();
+        routeDevice.Count.ShouldBe(RouteDeviceConnectionCount);
+
+        // Spot-check two route↔device joints at their nm-exact positions: the
+        // crossing's west/south ports and the bdc's opt1 take straight ends.
+        AssertConnection(outcome,
+            "straight_gdsfactorypcomponentspwaveguidespstraight_L12p_77ad6bb4#0", "heur_2",
+            "ebeam_crossing4#0", "opt3", 311.875, 86.95);
+        AssertConnection(outcome,
+            "straight_gdsfactorypcomponentspwaveguidespstraight_L13p_45bcd56d#0", "heur_2",
+            "ebeam_bdc_te1550#0", "opt1", 464.775, 82.15);
+
+        // The mmi2x2_dp joints keep dangling (see ReconstructedConnectionCount).
+        outcome.Connections.ShouldNotContain(c =>
+            IsEndpointOf(outcome, c.A, "mmi2x2_dp") || IsEndpointOf(outcome, c.B, "mmi2x2_dp"));
 
         AssertHandComputedPositions(outcome);
 
@@ -125,7 +171,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         plan.Placements.ShouldAllBe(p => p.ComponentIdentifier != null && p.Warning == null);
         plan.Connections.Count.ShouldBe(ReconstructedConnectionCount);
 
-        // Execution: 29 components on the canvas, 20 frozen connections, one group.
+        // Execution: 36 components on the canvas, 30 frozen connections, one group.
         var canvas = new DesignCanvasViewModel();
         var executor = new GdsPlacementExecutor(
             canvas, new CommandManager(), () => sink.Templates.ToList());
@@ -154,12 +200,13 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         var store = Store();
         var first = await new GdsImportService(store, () => Array.Empty<ComponentTemplate>(), sink.Register)
             .ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
-        first.RegisteredComponents.Count.ShouldBe(RouteCellCount);
+        first.RegisteredComponents.Count.ShouldBe(RouteCellCount + DeviceCellCount);
 
-        // Second import: every route cell resolves to an existing component, so
-        // ZERO new drafts are registered — the import must still produce all
-        // instance placements (no "nothing was registered" misfire, no
-        // black-box fallback; those only apply to true black-box mode).
+        // Second import: every route cell AND every partial device cell resolves
+        // to an existing component, so ZERO new drafts are registered — the
+        // import must still produce all instance placements (no "nothing was
+        // registered" misfire, no black-box fallback; those only apply to true
+        // black-box mode).
         var second = await new GdsImportService(store, () => sink.Templates.ToList(), sink.Register)
             .ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
 
@@ -221,11 +268,14 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Spot-checks three instance positions hand-computed from test.py's
-    /// <c>move</c> values. App space: origin at the top-left of the flattened
-    /// top bbox (211.105, −342.7) in GDS coordinates (measured by
-    /// <see cref="GdsCellFlattener"/> over all layers, the (68,0) devrec halo
-    /// included), Y flipped (app y = −342.7 − placed-bbox-max-Y).
+    /// Spot-checks three route and three device instance positions hand-computed
+    /// from test.py's <c>move</c> values and the partial's reference offsets.
+    /// App space: origin at the top-left of the flattened top bbox (211.105,
+    /// −342.7) in GDS coordinates (measured by <see cref="GdsCellFlattener"/>
+    /// over all layers, the (68,0) devrec halo included), Y flipped (app y =
+    /// −342.7 − placed-bbox-max-Y). The partial sits behind the 'nazca' wrapper
+    /// at the origin, untransformed — the composed device offsets are the raw
+    /// partial reference offsets.
     /// </summary>
     private static void AssertHandComputedPositions(GdsImportOutcome outcome)
     {
@@ -256,7 +306,63 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         rotated.PositionXUm.ShouldBe(12.97, tol);
         rotated.PositionYUm.ShouldBe(44.0, tol);
         rotated.RotationDegrees.ShouldBe(90, tol);
+
+        // ── Devices from the expanded partial ────────────────────────────────
+        // mmi2x2_dp#0, ref offset (240.60, −488.80); cell bbox (0, −30)..(250, 30)
+        // (the (1004,0) marker labels set the extent):
+        // app x = 240.60 − 211.105 = 29.495; app y = −342.7 − (−458.80) = 116.1.
+        var mmi = outcome.Instances.Single(i => i.InstanceName == "mmi2x2_dp#0");
+        mmi.PositionXUm.ShouldBe(29.495, tol);
+        mmi.PositionYUm.ShouldBe(116.1, tol);
+        mmi.RotationDegrees.ShouldBe(0, tol);
+
+        // ebeam_crossing4#0, ref offset (522.98, −424.85); our flattener's bbox
+        // is (±5.1) — the crossing arms end at ±4.85 and the flattener adds half
+        // the 0.5 µm path width:
+        // app x = 522.98 − 5.1 − 211.105 = 306.775; app y = −342.7 − (−419.75) = 77.05.
+        var crossing = outcome.Instances.Single(i => i.InstanceName == "ebeam_crossing4#0");
+        crossing.PositionXUm.ShouldBe(306.775, tol);
+        crossing.PositionYUm.ShouldBe(77.05, tol);
+
+        // ebeam_adiabatic_te1550#0, ref offset (273.54, −426.35); bbox MinX −0.2
+        // (taper tip path at 0.05 minus the half-width stroke), MaxY 3.0:
+        // app x = 273.54 − 0.2 − 211.105 = 62.235; app y = −342.7 − (−423.35) = 80.65.
+        var adiabatic = outcome.Instances.Single(i => i.InstanceName == "ebeam_adiabatic_te1550#0");
+        adiabatic.PositionXUm.ShouldBe(62.235, tol);
+        adiabatic.PositionYUm.ShouldBe(80.65, tol);
     }
+
+    /// <summary>True when the endpoint is an instance pin of one of the partial's device cells.</summary>
+    private static bool IsDeviceEndpoint(GdsImportOutcome outcome, GdsPinEndpoint endpoint) =>
+        !endpoint.IsTopLevelPort && DeviceCellNames.Contains(outcome.Instances[endpoint.InstanceIndex].CellName);
+
+    /// <summary>True when the endpoint is an instance pin of the named cell.</summary>
+    private static bool IsEndpointOf(GdsImportOutcome outcome, GdsPinEndpoint endpoint, string cellName) =>
+        !endpoint.IsTopLevelPort && outcome.Instances[endpoint.InstanceIndex].CellName == cellName;
+
+    /// <summary>
+    /// Asserts a reconstructed abutment between two instance pins at an
+    /// nm-exact position (endpoint order is scan order — matched either way).
+    /// </summary>
+    private static void AssertConnection(
+        GdsImportOutcome outcome,
+        string instanceA, string pinA,
+        string instanceB, string pinB,
+        double expectedXUm, double expectedYUm)
+    {
+        const double tol = 1e-3;
+        outcome.Connections.ShouldContain(c =>
+            ((EndpointIs(outcome, c.A, instanceA, pinA) && EndpointIs(outcome, c.B, instanceB, pinB))
+             || (EndpointIs(outcome, c.A, instanceB, pinB) && EndpointIs(outcome, c.B, instanceA, pinA)))
+            && Math.Abs(c.XUm - expectedXUm) < tol
+            && Math.Abs(c.YUm - expectedYUm) < tol);
+    }
+
+    /// <summary>True when the endpoint is the named pin of the named instance.</summary>
+    private static bool EndpointIs(GdsImportOutcome outcome, GdsPinEndpoint endpoint, string instance, string pin) =>
+        !endpoint.IsTopLevelPort
+        && outcome.Instances[endpoint.InstanceIndex].InstanceName == instance
+        && endpoint.PinName == pin;
 
     private static string FindRepoRelative(params string[] segments)
     {

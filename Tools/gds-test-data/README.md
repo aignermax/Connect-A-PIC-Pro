@@ -88,20 +88,25 @@ c.write_gds("gdsfactory_mzi_like.gds", save_options=save_options)
   (`straight_..._L0_N_a362bd09`) is an empty cell. The merged partial sits
   behind nazca's default **`nazca`** pass-through wrapper (gf.import_gds names
   the component after the source file's top cell) →
-  `ConnectAPIC_NazcaPartial` → 7 flattened device references (2× mmi2x2_dp,
-  ebeam_bdc_te1550, 2× ebeam_crossing4, ebeam_adiabatic_te/tm1550) whose
-  (1,10)/(501,1) port labels are nested inside the device cells.
+  `ConnectAPIC_NazcaPartial` → 7 device references (2× mmi2x2_dp,
+  ebeam_bdc_te1550, 2× ebeam_crossing4, ebeam_adiabatic_te/tm1550) — real
+  SREFs, NOT flattened — whose (1,10)/(501,1) port labels are nested inside
+  the device cells.
 - **Expected import behavior (asserted by
   `UnitTests/Services/GdsImport/MixedBackendReimportIntegrationTests.cs`):**
-  explode registers the 22 route cells, places 29 instances (31 refs −
-  zero-length straight − artifact wrapper), skips `ConnectAPIC_NazcaPartial`
-  behind its `nazca` wrapper with one info note (flattened partial geometry
-  is not reconstructed, v1), drops the zero-geometry straight with one info
-  note, and reconstructs 20 route↔route abutments (the chains run through
-  the skipped devices, so the joints at device ports dangle). Black-box
-  finds no pins (no top-level labels; no (1,0) polygon touches the top bbox
-  — route ends sit 0.225 µm inside the devrec halo) and fails with the
-  honest "no pins → nothing registered" warnings.
+  explode registers the 22 route cells plus the 5 device cells, places 36
+  instances (31 refs − zero-length straight, plus the partial's 7 device
+  references — the partial is written UNFLATTENED, so the import recurses one
+  level into it through the `nazca` wrapper instead of skipping it), drops the
+  zero-geometry straight with one info note, and reconstructs 30 abutments:
+  the 20 route↔route joints plus 10 route↔device joints (test.py routed to the
+  ports gdsfactory read from the partial's (1,10) labels, so those route ends
+  land nm-exact on the device label pins). The mmi2x2_dp joints still dangle —
+  their (501,1) demofab labels sit 0.3 µm inside the cell edge while the route
+  ends stop at the waveguide mouth, past the 0.05 µm abutment tolerance — and
+  the remaining unconnected device ports are the circuit's free externals.
+  Black-box registers the whole design as ONE component whose pins come from
+  the nested device labels (promoted with instance-context prefixes).
 
 ### Regenerating
 

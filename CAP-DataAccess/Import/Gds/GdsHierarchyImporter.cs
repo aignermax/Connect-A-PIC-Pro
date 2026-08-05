@@ -18,9 +18,14 @@ namespace CAP_DataAccess.Import.Gds;
 /// absorb their whole subtree (one level of components, matching
 /// <see cref="GdsCellFlattener.GetInstanceTree"/>). Two cell kinds never become
 /// drafts or instances — zero-geometry cells (empty flattened bbox) and our own
-/// export artifacts (<see cref="LunimaExportArtifactCellNames"/>, matched
-/// directly or through a pass-through wrapper); each skipped
-/// cell produces ONE info note instead of a per-instance failure cascade.</item>
+/// export artifacts (<see cref="GdsExportArtifactExpander.ArtifactCellNames"/>,
+/// matched directly or through a pass-through wrapper); each skipped
+/// cell produces ONE info note instead of a per-instance failure cascade.
+/// The one exception: an export artifact that holds real cell references (the
+/// mixed-backend nazca partial is NOT flattened — its device cells are SREFs
+/// carrying port labels) is recursed into ONE level, so its children join the
+/// placement set as if they were top-level instances
+/// (<see cref="GdsExportArtifactExpander.TryExpandArtifactInstances"/>).</item>
 /// <item><b>BlackBox</b>: the whole top cell becomes a single draft whose pins
 /// are the port labels of the ENTIRE flattened hierarchy (nested subcell labels
 /// promoted with their instance context, see
@@ -43,22 +48,6 @@ public static class GdsHierarchyImporter
     /// working directory, so a bare relative name would never resolve).
     /// </summary>
     public const string GdsFileNameToken = "{GdsFileName}";
-
-    /// <summary>
-    /// Cell names our OWN exporters write as auxiliary artifacts into a .gds —
-    /// never real design content, so re-importing skips them by convention.
-    /// Currently the mixed-backend export's flattened nazca partial
-    /// (<c>MixedBackendGdsOrchestrator.NazcaPartialTopCellName</c> in CAP.Avalonia;
-    /// duplicated here as a literal because CAP-DataAccess must not reference the
-    /// UI assembly). Add future artifact names here. The match looks through
-    /// pass-through wrappers (<see cref="TryUnwrapToArtifact"/>): gdsfactory's
-    /// <c>import_gds</c> names a merged component after the source file's TOP
-    /// cell, so a re-imported mixed-backend export nests the partial under
-    /// nazca's default <c>nazca</c> wrapper — the top cell's direct child is the
-    /// wrapper, not the artifact cell itself.
-    /// </summary>
-    private static readonly IReadOnlySet<string> LunimaExportArtifactCellNames =
-        new HashSet<string>(StringComparer.Ordinal) { "ConnectAPIC_NazcaPartial" };
 
     /// <summary>
     /// Imports <paramref name="topCellName"/> from <paramref name="library"/>.
@@ -133,26 +122,54 @@ public static class GdsHierarchyImporter
         var artifactNoted = new HashSet<string>(StringComparer.Ordinal);
         var zeroGeometrySkips = new Dictionary<string, int>();
 
+        // Work list: the top cell's direct children, plus — appended while
+        // walking — the device instances carried by an expanded export-artifact
+        // partial. The flag marks such appended instances: the artifact check
+        // still applies to them (artifact-shaped content INSIDE a partial falls
+        // back to the skip note), but they are never expanded themselves — the
+        // recursion is exactly one level.
+        var workList = new List<(GdsInstance Instance, bool FromArtifact)>(gdsInstances.Count);
         foreach (var gdsInstance in gdsInstances)
+            workList.Add((gdsInstance, false));
+
+        for (int workIndex = 0; workIndex < workList.Count; workIndex++)
         {
             ct.ThrowIfCancellationRequested();
+            var (gdsInstance, fromArtifact) = workList[workIndex];
             string cell = gdsInstance.CellName;
 
-            // Our own export artifacts are not design content — the cell and all
-            // its instances vanish with ONE note per cell. The match looks
-            // through pass-through wrappers: gdsfactory nests a merged partial
-            // under nazca's default 'nazca' wrapper, so the direct child is the
-            // wrapper, not the artifact cell itself.
-            if (TryUnwrapToArtifact(session.Library, cell, out var artifactLeaf))
+            // Our own export artifacts are not design content of their own — but
+            // the mixed-backend nazca partial is written UNFLATTENED: its device
+            // cells sit inside as real references with port labels. Recurse ONE
+            // level (transforms composed through the partial's own transform) so
+            // the devices join the placement set like top-level instances — pin
+            // detection and known-component resolution apply as usual. Only the
+            // documented shape expands (top → optional 'nazca' wrapper → partial
+            // → devices); a flat or deeper-nested partial keeps the skip with
+            // ONE note per cell. The match looks through pass-through wrappers:
+            // gdsfactory nests a merged partial under nazca's default 'nazca'
+            // wrapper, so the direct child is the wrapper, not the artifact cell
+            // itself.
+            if (GdsExportArtifactExpander.TryUnwrapToArtifact(session.Library, cell, out var artifactLeaf))
             {
+                if (!fromArtifact
+                    && GdsExportArtifactExpander.TryExpandArtifactInstances(
+                        session.Library, gdsInstance, artifactLeaf, out var nested))
+                {
+                    foreach (var nestedInstance in nested)
+                        workList.Add((nestedInstance, true));
+                    continue;
+                }
+
                 if (artifactNoted.Add(cell))
                 {
                     var subject = string.Equals(artifactLeaf, cell, StringComparison.Ordinal)
                         ? $"'{cell}'"
                         : $"'{cell}' (pass-through wrapper for '{artifactLeaf}')";
                     session.Infos.Add(
-                        $"Lunima export artifact {subject} skipped — flattened partial geometry " +
-                        "is not reconstructed (v1).");
+                        $"Lunima export artifact {subject} skipped — it holds no directly referenced " +
+                        "device cells (flattened geometry or deeper nesting), which is not " +
+                        "reconstructed (v1).");
                 }
                 continue;
             }
@@ -361,48 +378,6 @@ public static class GdsHierarchyImporter
     internal static double SnapToCardinal(double angleDegrees) =>
         GdsInstancePinProjector.Normalize360(
             90.0 * Math.Round(angleDegrees / 90.0, MidpointRounding.AwayFromZero));
-
-    /// <summary>
-    /// True when <paramref name="cellName"/> IS one of our export artifacts or
-    /// reaches one through a chain of pure pass-through wrappers (no elements of
-    /// its own beyond a single untransformed — 1×1, unmagnified, unreflected,
-    /// unrotated — reference; the same unwrap rule the import dialog applies to
-    /// top-cell candidates, cf. <c>GdsImportService.UnwrapPassThroughTopCell</c>).
-    /// <paramref name="artifactLeaf"/> receives the matched artifact cell name —
-    /// equal to <paramref name="cellName"/> for a direct hit.
-    /// </summary>
-    private static bool TryUnwrapToArtifact(
-        GdsLibrary library, string cellName, out string artifactLeaf)
-    {
-        var visited = new HashSet<string>(StringComparer.Ordinal);
-        var current = cellName;
-        while (visited.Add(current))
-        {
-            if (LunimaExportArtifactCellNames.Contains(current))
-            {
-                artifactLeaf = current;
-                return true;
-            }
-            if (!library.Cells.TryGetValue(current, out var cell)
-                || cell.Elements.Count != 1
-                || cell.Elements[0] is not GdsReference reference
-                || reference.Columns != 1
-                || reference.Rows != 1
-                || reference.Reflected
-                || Math.Abs(reference.Magnification - 1.0) > 1e-9
-                || Math.Abs(reference.AngleDegrees
-                            - (360.0 * Math.Round(reference.AngleDegrees / 360.0))) > 1e-9)
-            {
-                artifactLeaf = string.Empty;
-                return false;
-            }
-            current = reference.CellName;
-        }
-
-        // Reference cycle before any artifact — not a pass-through chain.
-        artifactLeaf = string.Empty;
-        return false;
-    }
 
     internal static string Fmt(double value) => value.ToString(CultureInfo.InvariantCulture);
 }

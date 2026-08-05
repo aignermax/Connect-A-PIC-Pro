@@ -222,8 +222,11 @@ internal static class GdsInstancePinProjector
     /// first, then the counter-clockwise rotation, then the translation — the
     /// same construction <see cref="GdsTransform.FromReference"/> uses.
     /// <see cref="GdsInstance.Offset"/> already holds the resolved translation.
+    /// Also used by <see cref="GdsExportArtifactExpander"/> when it composes an
+    /// instance's transform with the references inside an expanded export
+    /// artifact.
     /// </summary>
-    private static GdsTransform TrueTransform(GdsInstance instance)
+    internal static GdsTransform TrueTransform(GdsInstance instance)
     {
         double radians = instance.AngleDegrees * Math.PI / 180.0;
         double cos = Math.Cos(radians);
