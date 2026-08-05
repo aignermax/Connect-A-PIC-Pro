@@ -193,10 +193,13 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         // ── 9. Sanity + per-panel pixel assertions ──
         reportOff.PlacedCount.ShouldBe(7);
         reportOff.GroupCreated.ShouldBeTrue();
-        reportOff.ConnectedCount.ShouldBe(0, "no abutment connections exist in this spaced design");
+        reportOff.ConnectedCount.ShouldBe(siepicUpgraded ? 4 : 2,
+            "route-derived structural restoration: the two MMI braids (both scenarios); plus " +
+            "crossing↔crossing and halfring↔adiabatic when the real SiEPIC cells carry labels");
         reportOff.AutoConnectedCount.ShouldBe(0);
         reportOn.PlacedCount.ShouldBe(7);
-        reportOn.AutoConnectedCount.ShouldBe(siepicUpgraded ? 2 : 0);
+        reportOn.AutoConnectedCount.ShouldBe(0,
+            "nothing left for auto-connect: the formerly restored spans (7 and 10) are route-derived now");
 
         var probes = new Probes(original, canvasOff, canvasOn, shared, importedWorld, scale);
         AssertPanel01(panel1, path1, panelSize, probes);
@@ -563,7 +566,7 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         CountWhere(panel, probes.AroundPlacedMmiCenter(), IsOutlineFill)
             .ShouldBeGreaterThan(30, "the placed mmi1 renders its imported GDS outline fill");
         CountExternalPinPixels(panel, size)
-            .ShouldBeGreaterThan(30, "all 28 pins are free — every unoccupied group pin renders green");
+            .ShouldBeGreaterThan(30, "the unoccupied pins render green (route-derived connections occupy some)");
         probes.ImportedRouteProbes.ShouldNotBeEmpty(
             "the top cell's own waveguide polygons import as pin-less frozen paths");
         for (var polyIndex = 0; polyIndex < probes.ImportedRouteProbes.Count; polyIndex++)
@@ -590,27 +593,20 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     {
         AssertFileIsRealPng(path);
 
-        if (!siepicUpgraded)
-        {
-            // Bare-nazca environment: the ambiguity guard refuses every twin-poisoned
-            // pair — the panel honestly shows zero RESTORED connections, but the
-            // imported route outlines still render (they are geometry, not connections).
-            probes.FrozenRouteProbes.ShouldBeEmpty();
-            CountWhere(panel, Full(size), IsFrozenOrange)
-                .ShouldBeGreaterThan(50, "the imported route outlines render even when nothing is restored");
-            return;
-        }
-
-        reportOn.AutoConnectedCount.ShouldBe(2);
-        probes.FrozenRouteProbes.Count.ShouldBe(2, "the two restored connections are frozen into the group");
+        reportOn.AutoConnectedCount.ShouldBe(0,
+            "auto-connect has nothing left: connections 7 and 10 come back route-derived");
+        var expectedConnections = siepicUpgraded ? 4 : 2;
+        probes.FrozenRouteProbes.Count.ShouldBe(expectedConnections,
+            "the route-derived real connections live on the group (2 MMI braids; plus " +
+            "crossing↔crossing and halfring↔adiabatic when the real SiEPIC cells carry labels)");
         foreach (var points in probes.FrozenRouteProbes)
             points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsFrozenOrange) > 0)
-                .ShouldBeTrue("each restored connection renders as an orange frozen path " +
-                    "(crossing↔crossing 12.8 µm, halfring↔adiabatic 10.6 µm)");
+                .ShouldBeTrue("each route-derived connection renders as an orange routed path");
         CountWhere(panel, Full(size), IsFrozenOrange)
-            .ShouldBeGreaterThan(50, "the two restored spans are drawn as frozen group-internal paths");
+            .ShouldBeGreaterThan(50, "the restored connections and frozen outlines are drawn");
         CountExternalPinPixels(panel, size)
-            .ShouldBeLessThan(panel3PinPixels, "the 2 restored connections occupy 4 of the 28 free pins");
+            .ShouldBe(panel3PinPixels,
+                "auto-connect occupies no extra pins — panels 03 and 04 have the same free-pin count");
         AssertEmptyCorner(panel, size);
     }
 

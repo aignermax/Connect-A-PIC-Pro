@@ -24,14 +24,19 @@ public class GratingCouplerRotationTests
         var parts = new Part[1, 1];
         parts[0, 0] = new Part(new List<Pin>());
 
+        // App convention (RotateComponentCommand): pin offsets are stored POST-rotation
+        // (rotated about the component centre). The exporter's GetUnrotatedPinOffset
+        // recovers the unrotated frame from them — so a 180° fixture must pre-rotate
+        // the authored offset (50,15) about the centre (25,15) → (0,15).
+        var isRotated180 = ((int)rotationDegrees % 360 + 360) % 360 == 180;
         var physicalPins = new List<PhysicalPin>
         {
             new PhysicalPin
             {
                 Name = "opt",
-                OffsetXMicrometers = 50,  // Right edge
-                OffsetYMicrometers = 15,  // Middle (height=30)
-                AngleDegrees = 0          // Pointing right
+                OffsetXMicrometers = isRotated180 ? 0 : 50,  // Right edge (unrotated)
+                OffsetYMicrometers = 15,  // Middle (height=30) — invariant under 180° about (25,15)
+                AngleDegrees = 0  // Local angle stays unrotated; GetAbsoluteAngle adds RotationDegrees
             }
         };
 
