@@ -6,7 +6,6 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Analysis;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
-using CAP_Core.Components.PinKinds;
 
 namespace CAP.Avalonia.Services.GdsImport;
 
@@ -19,6 +18,14 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// named after the imported top cell. Non-UI and headless-testable — the canvas
 /// ViewModel works without a window.
 /// <para>
+/// When the canvas already holds content, the whole import is shifted by ONE
+/// uniform translation first (<see cref="ComputeImportOriginOffset"/>): the
+/// import's bounding box starts right of the existing content with a margin, so
+/// the import never stacks on top of the existing design. The internal relative
+/// geometry stays exact — abutment is preserved. An empty canvas keeps the raw
+/// GDS coordinates (no offset).
+/// </para>
+/// <para>
 /// Placement and grouping go through the undo stack (<see cref="PlaceComponentCommand.CreateExact"/>
 /// and <see cref="CreateGroupCommand"/>) when a <see cref="CommandManager"/> is
 /// supplied; pin connections follow the app's programmatic-connect path
@@ -27,7 +34,7 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// pin-drag connects, they are not individually undoable.
 /// </para>
 /// </summary>
-public sealed class GdsPlacementExecutor
+public sealed partial class GdsPlacementExecutor
 {
     /// <summary>
     /// Default search radius (µm) for the experimental auto-connect pass.
@@ -35,6 +42,13 @@ public sealed class GdsPlacementExecutor
     /// external ports together.
     /// </summary>
     public const double DefaultAutoConnectRadiusUm = 200.0;
+
+    /// <summary>
+    /// Horizontal gap (µm) between the existing canvas content's right edge and an
+    /// import's bounding box when the canvas is not empty (see
+    /// <see cref="ComputeImportOriginOffset"/>).
+    /// </summary>
+    public const double ExistingContentMarginUm = 50.0;
 
     private readonly DesignCanvasViewModel _canvas;
     private readonly CommandManager? _commandManager;
@@ -103,7 +117,18 @@ public sealed class GdsPlacementExecutor
         var templates = _templateProvider();
         PlacedCountSoFar = 0;
 
-        var placedViewModels = PlaceAll(plan, templates, report, progress, ct);
+        // Computed BEFORE anything is placed: the canvas must still hold only the
+        // pre-import content for the free-space rule.
+        var originOffset = ComputeImportOriginOffset(plan);
+        var placedViewModels = PlaceAll(plan, templates, report, progress, ct, originOffset);
+        if (originOffset != (0.0, 0.0) && report.PlacedCount > 0)
+        {
+            // Only a placement that actually happened may claim the shift — a plan
+            // whose templates all went missing placed nothing at the offset.
+            report.Warnings.Add(string.Format(CultureInfo.InvariantCulture,
+                LocalizationService.Instance.Translate("GdsImport.PlacedNextToExistingContentFormat"),
+                originOffset.X));
+        }
         // No ConfigureAwait(false) here: continuations mutate the canvas'
         // ObservableCollections and must stay on the caller's (UI) context.
         var createdConnections = await ConnectAllAsync(plan, placedViewModels, report, progress, ct);
@@ -113,7 +138,7 @@ public sealed class GdsPlacementExecutor
                 plan, placedViewModels, createdConnections, report, progress, autoConnectRadiusUm, ct);
         }
         ValidateCreatedConnections(createdConnections, report);
-        CreateGroup(plan, placedViewModels, report, progress, ct);
+        CreateGroup(plan, placedViewModels, report, progress, ct, originOffset);
         return report;
     }
 
@@ -124,7 +149,8 @@ public sealed class GdsPlacementExecutor
         IReadOnlyList<ComponentTemplate> templates,
         GdsPlacementReport report,
         IProgress<string>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        (double X, double Y) originOffset)
     {
         // Index-aligned with plan.Placements; null entries mark skipped instances
         // so connection endpoint indexes stay valid.
@@ -157,7 +183,7 @@ public sealed class GdsPlacementExecutor
 
             var quarterTurns = SnapToQuarterTurns(instruction.RotationDegrees, instruction.InstanceName, report);
             var command = PlaceComponentCommand.CreateExact(
-                _canvas, template, instruction.XUm, instruction.YUm, quarterTurns,
+                _canvas, template, instruction.XUm + originOffset.X, instruction.YUm + originOffset.Y, quarterTurns,
                 mirrorPinsHorizontally: instruction.Reflected);
             Execute(command);
 
@@ -236,89 +262,6 @@ public sealed class GdsPlacementExecutor
     }
 
     /// <summary>
-    /// Experimental auto-connect (issue #808 follow-up): pairs the still-unoccupied
-    /// optical pins of the placed instances via <see cref="GdsFreePinPairer"/> and
-    /// connects each pair. Occupancy is checked against the canvas connection state
-    /// (<see cref="DesignCanvasViewModel.GetConnectionForPin"/>) because
-    /// <c>ConnectPinsAsync</c> REPLACES existing pin connections — only pins with no
-    /// connection at all are candidates. All pairs are added deferred
-    /// (<see cref="DesignCanvasViewModel.ConnectPins"/>) and routed in ONE
-    /// recalculation at the end instead of a per-pair re-route storm.
-    /// </summary>
-    private async Task AutoConnectFreePinsAsync(
-        GdsPlacementPlan plan,
-        IReadOnlyList<ComponentViewModel?> placedViewModels,
-        List<WaveguideConnection> createdConnections,
-        GdsPlacementReport report,
-        IProgress<string>? progress,
-        double radiusUm,
-        CancellationToken ct)
-    {
-        progress?.Report("Auto-connecting free pins…");
-
-        var candidates = new List<GdsFreePinCandidate>();
-        var candidatePins = new List<PhysicalPin>();
-        for (var i = 0; i < placedViewModels.Count; i++)
-        {
-            var vm = placedViewModels[i];
-            if (vm is null) continue;
-
-            // Ordinal pin-name order keeps the pairing deterministic across runs.
-            foreach (var pin in vm.Component.PhysicalPins.OrderBy(p => p.Name, StringComparer.Ordinal))
-            {
-                ct.ThrowIfCancellationRequested();
-                var label = $"'{plan.Placements[i].InstanceName}.{pin.Name}'";
-                if (PinKindHelper.IsElectrical(pin))
-                {
-                    report.SkippedAutoConnect.Add($"{label}: non-optical (electrical) pin.");
-                    continue;
-                }
-                if (_canvas.GetConnectionForPin(pin) is not null)
-                    continue; // occupied by an abutment connection — not a free pin.
-
-                var (x, y) = pin.GetAbsolutePosition();
-                candidates.Add(new GdsFreePinCandidate(label, x, y, pin.GetAbsoluteAngle(), i));
-                candidatePins.Add(pin);
-            }
-        }
-
-        var pairing = GdsFreePinPairer.Pair(candidates, radiusUm);
-
-        // Same-reason skips beyond the detail cap collapse into one summary line —
-        // a big import would otherwise flood the report with one "no opposing free
-        // pin" line per external port. GroupBy keeps first-occurrence order, so the
-        // report stays deterministic.
-        foreach (var reasonGroup in pairing.Skipped.GroupBy(s => s.Reason))
-        {
-            var skips = reasonGroup.ToList();
-            if (skips.Count > MaxDetailedAutoConnectSkips)
-            {
-                report.SkippedAutoConnect.Add(
-                    FormatAutoConnectSkipSummary(reasonGroup.Key, skips.Count, radiusUm));
-                continue;
-            }
-            foreach (var skip in skips)
-                report.SkippedAutoConnect.Add(FormatAutoConnectSkip(candidates[skip.Index].Label, skip, radiusUm));
-        }
-
-        foreach (var pair in pairing.Pairs)
-        {
-            ct.ThrowIfCancellationRequested();
-            var connectionVm = _canvas.ConnectPins(candidatePins[pair.A], candidatePins[pair.B]);
-            if (connectionVm is not null)
-            {
-                createdConnections.Add(connectionVm.Connection);
-                report.AutoConnectedCount++;
-                report.AutoConnectedPairs.Add(string.Create(CultureInfo.InvariantCulture,
-                    $"{candidates[pair.A].Label} ↔ {candidates[pair.B].Label} ({pair.DistanceUm:0.#} µm)"));
-            }
-        }
-
-        if (pairing.Pairs.Count > 0)
-            await _canvas.RecalculateRoutesAsync(); // one routing pass for the whole batch
-    }
-
-    /// <summary>
     /// Post-batch honesty net: runs <see cref="DesignValidator"/> over exactly the
     /// connections created by this execution (abutment + auto-connect), including
     /// overlap checks against the frozen paths of groups already on the canvas,
@@ -367,46 +310,13 @@ public sealed class GdsPlacementExecutor
         return Math.Sqrt(dx * dx + dy * dy);
     }
 
-    /// <summary>
-    /// Cap of per-pin auto-connect skip detail lines: when more skips than this
-    /// share one reason, they collapse into a single summary line (count + reason)
-    /// instead of flooding the report.
-    /// </summary>
-    private const int MaxDetailedAutoConnectSkips = 5;
-
-    private static string FormatAutoConnectSkip(string label, GdsFreePinSkip skip, double radiusUm) =>
-        skip.Reason switch
-        {
-            GdsFreePinSkipReason.NotFacingEachOther => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNotFacingFormat"), label, radiusUm),
-            GdsFreePinSkipReason.AmbiguousNearestPartner => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipAmbiguousFormat"),
-                label, skip.NearestDistanceUm, skip.SecondNearestDistanceUm),
-            _ => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNoPartnerFormat"), label, radiusUm),
-        };
-
-    /// <summary>
-    /// One summary line for a same-reason skip flood (see
-    /// <see cref="MaxDetailedAutoConnectSkips"/>): count plus reason, no per-pin labels.
-    /// </summary>
-    private static string FormatAutoConnectSkipSummary(GdsFreePinSkipReason reason, int count, double radiusUm) =>
-        reason switch
-        {
-            GdsFreePinSkipReason.NotFacingEachOther => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryNotFacingFormat"), count),
-            GdsFreePinSkipReason.AmbiguousNearestPartner => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryAmbiguousFormat"), count),
-            _ => string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipSummaryNoPartnerFormat"), count, radiusUm),
-        };
-
     private void CreateGroup(
         GdsPlacementPlan plan,
         IReadOnlyList<ComponentViewModel?> placedViewModels,
         GdsPlacementReport report,
         IProgress<string>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        (double X, double Y) originOffset)
     {
         ct.ThrowIfCancellationRequested();
         var groupCandidates = placedViewModels.OfType<ComponentViewModel>().ToList();
@@ -439,8 +349,12 @@ public sealed class GdsPlacementExecutor
         // pin-less frozen paths on the group: visible and persistent, but not
         // re-routable. Polygons that bridged exactly two pins already became
         // real connections upstream (route derivation) and are not in this list.
+        // The polygons are in plan space, so the import origin offset the
+        // placements already received must be applied here too — frozen paths
+        // hold absolute canvas coordinates.
         foreach (var polygon in plan.TopCellWaveguidePolygons)
-            command.CreatedGroup.AddInternalPath(GdsFrozenRoutePathFactory.Create(polygon));
+            command.CreatedGroup.AddInternalPath(
+                GdsFrozenRoutePathFactory.Create(polygon, originOffset.X, originOffset.Y));
     }
 
     /// <summary>
@@ -459,6 +373,39 @@ public sealed class GdsPlacementExecutor
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// The uniform translation the whole import receives so it lands in free space:
+    /// when the canvas already holds components, the import's bounding-box top-left
+    /// moves to (existing maxX + <see cref="ExistingContentMarginUm"/>, existing minY)
+    /// — right of the existing content, top-aligned with it. Every placement shifts
+    /// by the same delta, so the import's internal relative geometry (abutment!)
+    /// stays exact. Returns (0, 0) — keep the raw GDS coordinates — on an empty
+    /// canvas or when the plan has nothing placeable.
+    /// </summary>
+    private (double X, double Y) ComputeImportOriginOffset(GdsPlacementPlan plan)
+    {
+        var existing = BoundingBoxCalculator.Calculate(_canvas.Components);
+        if (existing is null)
+            return (0.0, 0.0);
+
+        var importMinX = double.MaxValue;
+        var importMinY = double.MaxValue;
+        var anyPlaceable = false;
+        foreach (var placement in plan.Placements)
+        {
+            if (placement.ComponentIdentifier is null)
+                continue; // unplaceable instances never land on the canvas — exclude from the bbox.
+            anyPlaceable = true;
+            importMinX = Math.Min(importMinX, placement.XUm);
+            importMinY = Math.Min(importMinY, placement.YUm);
+        }
+        if (!anyPlaceable)
+            return (0.0, 0.0);
+
+        return (existing.Value.MaxX + ExistingContentMarginUm - importMinX,
+                existing.Value.MinY - importMinY);
+    }
 
     private void Execute(IUndoableCommand command)
     {

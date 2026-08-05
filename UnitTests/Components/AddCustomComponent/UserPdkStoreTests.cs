@@ -201,6 +201,50 @@ public class UserPdkStoreTests : IDisposable
         ex.Message.ShouldContain("import was aborted");
     }
 
+    // ── ListCustomPdks ───────────────────────────────────────────────────────
+
+    [Fact]
+    public void ListCustomPdks_includes_process_agnostic_pdks_with_null_process()
+    {
+        // GDS-import PDKs declare no fabrication process — they must still be
+        // listed as custom (user-managed) PDKs or the component editor refuses them.
+        var store = CreateStore();
+        var path = store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", Comp("WG"), "nazca");
+
+        var list = store.ListCustomPdks();
+
+        var info = list.ShouldHaveSingleItem();
+        info.Name.ShouldBe("GDS Import - demo");
+        info.FilePath.ShouldBe(path);
+        info.Process.ShouldBeNull("a process-agnostic PDK has no fabrication process, but is still user-managed");
+    }
+
+    [Fact]
+    public void ListCustomPdks_still_lists_process_bound_pdks_with_their_process()
+    {
+        var store = CreateStore();
+        store.SaveToNamedPdk("Lib", Process("P"), Comp("X"), "gdsfactory", null);
+        store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", Comp("WG"), "nazca");
+
+        var list = store.ListCustomPdks();
+
+        list.Count.ShouldBe(2);
+        list.ShouldContain(i => i.Name == "Lib" && i.Process!.Name == "P");
+        list.ShouldContain(i => i.Name == "GDS Import - demo" && i.Process == null);
+    }
+
+    [Fact]
+    public void ListCustomPdks_skips_files_with_neither_process_nor_agnostic_flag()
+    {
+        // A stray file in the root that declares neither a process nor the
+        // process-agnostic flag is not a managed user PDK — keep excluding it.
+        var store = CreateStore();
+        Directory.CreateDirectory(_root);
+        File.WriteAllText(store.ResolveNamedPath("Odd"), "{\"name\":\"Odd\",\"components\":[]}");
+
+        store.ListCustomPdks().ShouldBeEmpty();
+    }
+
     // ── ResolveAvailablePdkName ──────────────────────────────────────────────
 
     [Fact]

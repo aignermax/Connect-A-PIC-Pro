@@ -394,6 +394,7 @@
   "GdsImport.ModeLabel": "階層モード:",
   "GdsImport.OpenFileTitle": "GDSレイアウトをインポート",
   "GdsImport.OpenTip": "GDSレイアウトをキャンバスコンポーネントとしてインポート…",
+  "GdsImport.PlacedNextToExistingContentFormat": "キャンバスに既存のコンテンツがあったため、インポートはその右側に配置されました（+{0:0.#} µm シフト）。",
   "GdsImport.PortLayersLabel": "ポートラベルレイヤー:",
   "GdsImport.ResultAutoConnectSuffix": " {0} 組のピンを自動接続しました。",
   "GdsImport.ResultGroupSuffix": " グループ '{0}' を作成しました。",

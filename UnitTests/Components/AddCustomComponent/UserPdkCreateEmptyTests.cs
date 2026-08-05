@@ -23,7 +23,7 @@ public class UserPdkCreateEmptyTests : IDisposable
         pdk.Name.ShouldBe("My SiN Lib");
         pdk.Process!.Name.ShouldBe("CornerStone SiN 300");
         pdk.Components.ShouldBeEmpty();
-        s.ListCustomPdks().ShouldContain(i => i.Name == "My SiN Lib" && i.Process.Name == "CornerStone SiN 300");
+        s.ListCustomPdks().ShouldContain(i => i.Name == "My SiN Lib" && i.Process!.Name == "CornerStone SiN 300");
     }
 
     [Fact]

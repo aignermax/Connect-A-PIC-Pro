@@ -24,12 +24,19 @@ public static class GdsFrozenRoutePathFactory
     /// group and round-trips the .lun file, but group edit mode, ungroup and
     /// simulation skip it.
     /// </summary>
-    public static FrozenWaveguidePath Create(GdsOutlinePolygon polygon)
+    /// <param name="polygon">Top-cell waveguide polygon, in plan space.</param>
+    /// <param name="offsetXUm">
+    /// Uniform X translation (µm) from plan space to canvas space — the import
+    /// origin offset the placements received (0 when the canvas was empty).
+    /// Frozen paths hold absolute canvas coordinates, so they need the same shift.
+    /// </param>
+    /// <param name="offsetYUm">Uniform Y translation (µm), see <paramref name="offsetXUm"/>.</param>
+    public static FrozenWaveguidePath Create(GdsOutlinePolygon polygon, double offsetXUm = 0.0, double offsetYUm = 0.0)
     {
         ArgumentNullException.ThrowIfNull(polygon);
         var path = new RoutedPath();
         for (var i = 0; i + 1 < polygon.Points.Count; i++)
-            path.Segments.Add(CreateSegment(polygon.Points[i], polygon.Points[i + 1]));
+            path.Segments.Add(CreateSegment(polygon.Points[i], polygon.Points[i + 1], offsetXUm, offsetYUm));
 
         var points = polygon.Points;
         if (points.Count > 1)
@@ -37,7 +44,7 @@ public static class GdsFrozenRoutePathFactory
             var first = points[0];
             var last = points[^1];
             if (first.X != last.X || first.Y != last.Y)
-                path.Segments.Add(CreateSegment(last, first));
+                path.Segments.Add(CreateSegment(last, first, offsetXUm, offsetYUm));
         }
 
         return new FrozenWaveguidePath
@@ -48,9 +55,9 @@ public static class GdsFrozenRoutePathFactory
         };
     }
 
-    private static StraightSegment CreateSegment(GdsOutlinePoint start, GdsOutlinePoint end)
+    private static StraightSegment CreateSegment(GdsOutlinePoint start, GdsOutlinePoint end, double offsetXUm, double offsetYUm)
     {
         double angleDegrees = Math.Atan2(end.Y - start.Y, end.X - start.X) * 180.0 / Math.PI;
-        return new StraightSegment(start.X, start.Y, end.X, end.Y, angleDegrees);
+        return new StraightSegment(start.X + offsetXUm, start.Y + offsetYUm, end.X + offsetXUm, end.Y + offsetYUm, angleDegrees);
     }
 }

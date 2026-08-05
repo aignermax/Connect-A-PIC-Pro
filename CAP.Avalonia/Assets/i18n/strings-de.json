@@ -394,6 +394,7 @@
   "GdsImport.ModeLabel": "Hierarchiemodus:",
   "GdsImport.OpenFileTitle": "GDS-Layout importieren",
   "GdsImport.OpenTip": "GDS-Layout als Canvas-Komponenten importieren…",
+  "GdsImport.PlacedNextToExistingContentFormat": "Die Zeichenfläche enthielt bereits Inhalte — der Import wurde daneben platziert (+{0:0.#} µm nach rechts verschoben).",
   "GdsImport.PortLayersLabel": "Port-Label-Layer:",
   "GdsImport.ResultAutoConnectSuffix": " {0} Pin-Paar(e) automatisch verbunden.",
   "GdsImport.ResultGroupSuffix": " Als '{0}' gruppiert.",

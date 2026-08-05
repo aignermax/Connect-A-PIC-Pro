@@ -394,6 +394,7 @@
   "GdsImport.ModeLabel": "层级模式：",
   "GdsImport.OpenFileTitle": "导入 GDS 版图",
   "GdsImport.OpenTip": "将 GDS 版图导入为画布组件…",
+  "GdsImport.PlacedNextToExistingContentFormat": "画布已有内容 — 导入内容已放置在其旁边（向右偏移 +{0:0.#} µm）。",
   "GdsImport.PortLayersLabel": "端口标签层：",
   "GdsImport.ResultAutoConnectSuffix": " 已自动连接 {0} 对引脚。",
   "GdsImport.ResultGroupSuffix": " 已分组为 '{0}'。",

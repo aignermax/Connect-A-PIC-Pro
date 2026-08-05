@@ -138,6 +138,95 @@ public class GdsPlacementExecutorTests
         canvas.Components.ShouldBeEmpty();
     }
 
+    // ── Free-space placement on a non-empty canvas ───────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_NonEmptyCanvas_ShiftsImportRightOfExistingContent_KeepingInternalSpacing()
+    {
+        var (canvas, commands, executor) = CreateExecutor(WaveguideTemplate());
+        // Existing design: one waveguide at (100, 200), 10×4 µm → content bbox maxX = 110, minY = 200.
+        commands.ExecuteCommand(PlaceComponentCommand.CreateExact(canvas, WaveguideTemplate(), 100, 200));
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", x: 0, y: 0), Placement("wgB#1", x: 10, y: 0) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        // Import bbox min corner (0,0) → offset (110 + margin − 0, 200 − 0) = (160, 200):
+        // right of the existing content with the margin, top-aligned with it.
+        const double expectedOffsetX = 100 + 10 + GdsPlacementExecutor.ExistingContentMarginUm;
+        const double expectedOffsetY = 200.0;
+
+        var group = canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().ShouldHaveSingleItem();
+        var ordered = group.ChildComponents.OrderBy(c => c.PhysicalX).ToList();
+        ordered[0].PhysicalX.ShouldBe(expectedOffsetX);
+        ordered[0].PhysicalY.ShouldBe(expectedOffsetY);
+        (ordered[1].PhysicalX - ordered[0].PhysicalX).ShouldBe(10, 1e-9);
+        (ordered[1].PhysicalY - ordered[0].PhysicalY).ShouldBe(0, 1e-9);
+
+        // The pre-existing component was not touched.
+        var seed = canvas.Components.Select(c => c.Component).First(c => c is not ComponentGroup);
+        seed.PhysicalX.ShouldBe(100);
+        seed.PhysicalY.ShouldBe(200);
+
+        // The user hears about the shift ("+160" appears in every language's format string).
+        report.Warnings.ShouldContain(w => w.Contains("+160"));
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_EmptyCanvas_KeepsExactGdsCoordinatesWithoutOffsetWarning()
+    {
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", x: 5, y: 7), Placement("wgB#1", x: 15, y: 7) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.Warnings.ShouldBeEmpty("no existing content → no placement offset");
+        var group = SingleGroupOn(canvas);
+        var ordered = group.ChildComponents.OrderBy(c => c.PhysicalX).ToList();
+        ordered[0].PhysicalX.ShouldBe(5);
+        ordered[0].PhysicalY.ShouldBe(7);
+        ordered[1].PhysicalX.ShouldBe(15);
+        ordered[1].PhysicalY.ShouldBe(7);
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_NonEmptyCanvas_FrozenRoutePathsShiftWithTheImportOffset()
+    {
+        var (canvas, commands, executor) = CreateExecutor(WaveguideTemplate());
+        commands.ExecuteCommand(PlaceComponentCommand.CreateExact(canvas, WaveguideTemplate(), 100, 200));
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[] { Placement("wgA#0", 0, 0), Placement("wgB#1", 10, 0) },
+            Connections = new[] { Connection(0, "out", 1, "in") },
+            TopCellWaveguidePolygons = new[]
+            {
+                new GdsOutlinePolygon
+                {
+                    Layer = 1,
+                    Points = new GdsOutlinePoint[] { new(10, 2.25), new(12, 2.25), new(12, 1.75), new(10, 2.25) },
+                },
+            },
+        };
+
+        await executor.ExecuteAsync(plan);
+
+        var group = canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().ShouldHaveSingleItem();
+        var routePath = group.InternalPaths.Single(p => p.StartPin is null);
+        // Plan-space (10, 2.25) + offset (160, 200): frozen paths hold absolute canvas coordinates.
+        routePath.Path.Segments[0].StartPoint.X.ShouldBe(170, 1e-9);
+        routePath.Path.Segments[0].StartPoint.Y.ShouldBe(202.25, 1e-9);
+    }
+
     // ── Rotation ─────────────────────────────────────────────────────────────
 
     [Fact]

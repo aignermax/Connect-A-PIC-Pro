@@ -273,6 +273,49 @@ public class EditComponentModeTests : IDisposable
     }
 
     [Fact]
+    public void LoadForEdit_processAgnosticImportPdk_opensEditor_insteadOfRefusingAsNotCustom()
+    {
+        // Regression: GDS-import PDKs are process-agnostic user PDKs — the edit gate
+        // wrongly refused them as "not a custom PDK" because they declare no process.
+        var store = Store();
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var pdkPath = store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", SeedComponent("comp1", rawCode), "nazca");
+        var (vm, _) = Build(store, new List<ProcessDefinition>());
+        var template = BuildTemplate(rawCode);
+        template.PdkSource = "GDS Import - demo";
+
+        vm.LoadForEdit(template).ShouldBeTrue();
+
+        vm.IsEditMode.ShouldBeTrue();
+        vm.SelectedCustomPdk.ShouldNotBeNull();
+        vm.SelectedCustomPdk!.FilePath.ShouldBe(pdkPath);
+        vm.SelectedProcess.ShouldBeNull("a process-agnostic PDK declares no fabrication process");
+        vm.StatusText.ShouldNotContain("not a custom PDK");
+    }
+
+    [Fact]
+    public async Task Save_afterLoadForEdit_processAgnosticImportPdk_savesInPlace_keepingItProcessAgnostic()
+    {
+        var store = Store();
+        const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
+        var pdkPath = store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", SeedComponent("comp1", rawCode), "nazca");
+        var (vm, _) = Build(store, new List<ProcessDefinition>());
+        var template = BuildTemplate(rawCode);
+        template.PdkSource = "GDS Import - demo";
+        vm.LoadForEdit(template).ShouldBeTrue();
+
+        await vm.RunPreviewCommand.ExecuteAsync(null);
+        await vm.SaveCommand.ExecuteAsync(null);
+
+        vm.SavedDraft.ShouldNotBeNull();
+        vm.SavedFilePath.ShouldBe(pdkPath);
+        var pdk = new PdkLoader().LoadFromFileForEditing(pdkPath);
+        pdk.ProcessAgnostic.ShouldBeTrue();
+        pdk.Process.ShouldBeNull();
+        pdk.Components.ShouldHaveSingleItem().Name.ShouldBe("comp1");
+    }
+
+    [Fact]
     public void LoadForEdit_returnsTrue_onSuccess()
     {
         var (vm, _, rawCode) = BuildWithSeededPdk();

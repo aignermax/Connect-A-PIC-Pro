@@ -394,6 +394,7 @@
   "GdsImport.ModeLabel": "Modo de jerarquía:",
   "GdsImport.OpenFileTitle": "Importar diseño GDS",
   "GdsImport.OpenTip": "Importar un diseño GDS como componentes del lienzo…",
+  "GdsImport.PlacedNextToExistingContentFormat": "El lienzo ya tenía contenido — la importación se colocó a su lado (desplazada +{0:0.#} µm a la derecha).",
   "GdsImport.PortLayersLabel": "Capas de etiquetas de puertos:",
   "GdsImport.ResultAutoConnectSuffix": " {0} par(es) de pines conectados automáticamente.",
   "GdsImport.ResultGroupSuffix": " Agrupado como '{0}'.",

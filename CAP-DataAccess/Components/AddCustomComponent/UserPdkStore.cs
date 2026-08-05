@@ -173,6 +173,15 @@ public sealed class UserPdkStore
         return pdk.Components.Exists(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Lists every user-managed PDK in the root directory: process-bound ones and
+    /// process-agnostic ones (e.g. created by a GDS import). Membership in the root
+    /// directory IS the "user-defined" classification — bundled PDKs never live here —
+    /// so a process-agnostic file must not be excluded merely for declaring no
+    /// fabrication process (its <see cref="UserPdkInfo.Process"/> is null then).
+    /// Unreadable files and files with neither a process nor the process-agnostic
+    /// flag are skipped.
+    /// </summary>
     public IReadOnlyList<UserPdkInfo> ListCustomPdks()
     {
         var result = new List<UserPdkInfo>();
@@ -186,7 +195,7 @@ public sealed class UserPdkStore
             try
             {
                 var pdk = _loader.LoadFromFileForEditing(path);
-                if (pdk.Process is not null)
+                if (pdk.Process is not null || pdk.ProcessAgnostic)
                 {
                     result.Add(new UserPdkInfo(pdk.Name, path, pdk.Process));
                 }

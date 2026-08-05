@@ -394,6 +394,7 @@
   "GdsImport.ModeLabel": "Hierarchy mode:",
   "GdsImport.OpenFileTitle": "Import GDS layout",
   "GdsImport.OpenTip": "Import a GDS layout as canvas components…",
+  "GdsImport.PlacedNextToExistingContentFormat": "Canvas already had content — the import was placed next to it (shifted +{0:0.#} µm to the right).",
   "GdsImport.PortLayersLabel": "Port-label layers:",
   "GdsImport.ResultAutoConnectSuffix": " Auto-connected {0} pin pair(s).",
   "GdsImport.ResultGroupSuffix": " Grouped as '{0}'.",
