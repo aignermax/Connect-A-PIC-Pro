@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text;
+using CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.ComponentHelpers;
@@ -63,9 +64,10 @@ internal sealed class PinLabelWrapperPlan
 /// black-box layer (501, 1) with demofab's pin names/positions — the app's
 /// electrical pins (a detector's anode/cathode) exist nowhere in that geometry,
 /// so a re-import could never see the metal traces' endpoints. The wrapper cell
-/// is named after the component's display (template) name and labels EVERY app
-/// pin (optical ones too — one authoritative label set per component, anchored
-/// exactly on the app pin positions via the
+/// is named after the component's TEMPLATE (resolved against the library —
+/// a user-renamed instance still round-trips to its template) and labels EVERY
+/// app pin (optical ones too — one authoritative label set per component,
+/// anchored exactly on the app pin positions via the
 /// <see cref="NazcaCoordinateMapper.GetStubAnchor"/> mapping), so the GDS
 /// re-import resolves the cell straight back to the library template with
 /// kind-correct pins. Geometry is untouched: the wrapper adds only TEXT records
@@ -79,7 +81,7 @@ internal static class NazcaPinLabelWrapperWriter
     /// Collects the wrapper plan for <paramref name="canvas"/>: every placed
     /// component with at least one electrical pin whose placement calls a real
     /// module function (dotted nazca name, e.g. demofab) gets one entry per
-    /// unique (display name, call, pin set) — identical components share a cell,
+    /// unique (template name, call, pin set) — identical components share a cell,
     /// a genuine content difference under one name gets a deterministic
     /// <c>_2</c> suffix (which then deliberately no longer matches a template
     /// name on re-import — ambiguous content must not resolve silently).
@@ -91,8 +93,19 @@ internal static class NazcaPinLabelWrapperWriter
     /// geometry through raw-code wrappers (which already label their pins) and
     /// are skipped here.
     /// </param>
+    /// <param name="library">
+    /// The loaded component library, used to name each wrapper cell after the
+    /// component's TEMPLATE (resolved like
+    /// <see cref="NazcaRawCodeCellWriter"/> resolves raw-code templates) — a
+    /// user-renamed instance must still export a cell that resolves back to its
+    /// template on re-import. Null (or an unmatched component) falls back to
+    /// the instance's display name.
+    /// </param>
     public static PinLabelWrapperPlan BuildPlan(
-        DesignCanvasViewModel canvas, Func<Component, bool>? include, RawCodeExportPlan? rawCodePlan)
+        DesignCanvasViewModel canvas,
+        Func<Component, bool>? include,
+        RawCodeExportPlan? rawCodePlan,
+        IEnumerable<ComponentTemplate>? library = null)
     {
         var plan = new PinLabelWrapperPlan();
         var takenNames = new Dictionary<string, string>(StringComparer.Ordinal); // cell name → content signature
@@ -106,12 +119,12 @@ internal static class NazcaPinLabelWrapperWriter
                 foreach (var child in group.GetAllComponentsRecursive())
                 {
                     if (!child.IsAnalysisTool)
-                        AddIfEligible(plan, takenNames, child, include, rawCodePlan);
+                        AddIfEligible(plan, takenNames, child, include, rawCodePlan, library);
                 }
             }
             else
             {
-                AddIfEligible(plan, takenNames, comp, include, rawCodePlan);
+                AddIfEligible(plan, takenNames, comp, include, rawCodePlan, library);
             }
         }
         return plan;
@@ -149,7 +162,8 @@ internal static class NazcaPinLabelWrapperWriter
         Dictionary<string, string> takenNames,
         Component comp,
         Func<Component, bool>? include,
-        RawCodeExportPlan? rawCodePlan)
+        RawCodeExportPlan? rawCodePlan,
+        IEnumerable<ComponentTemplate>? library)
     {
         if (include != null && !include(comp)) return;
         // gdsfactory-native components are skipped by the nazca export entirely
@@ -184,8 +198,16 @@ internal static class NazcaPinLabelWrapperWriter
         string signature = string.Join("|", new[] { innerCall }
             .Concat(labels.Select(l => $"{l.Item1}:{l.Item2.ToString(ci)}:{l.Item3.ToString(ci)}")));
 
+        // The cell is named after the component's TEMPLATE (resolved against the
+        // library like NazcaRawCodeCellWriter does), not its instance display
+        // name: a user-renamed copy must still export a cell that resolves back
+        // to the original template on re-import.
+        var templateName = library is null
+            ? null
+            : InherentBackendClassifier.ResolveTemplate(comp, library)?.Name;
         var baseName = GdsImport.GdsTemplateResolver.SanitizeGdsCellName(
-            string.IsNullOrWhiteSpace(comp.HumanReadableName) ? funcName : comp.HumanReadableName);
+            templateName
+            ?? (string.IsNullOrWhiteSpace(comp.HumanReadableName) ? funcName : comp.HumanReadableName));
         string cellName = baseName;
         for (var n = 2; takenNames.TryGetValue(cellName, out var existing) && existing != signature; n++)
             cellName = $"{baseName}_{n}";

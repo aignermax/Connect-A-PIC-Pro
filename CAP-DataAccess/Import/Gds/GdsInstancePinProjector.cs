@@ -24,6 +24,31 @@ internal sealed record GdsAbsolutePin
 }
 
 /// <summary>
+/// The pin-anchored placement frame of a known-resolved cell: the template's
+/// bounding box re-located inside the GDS cell's bbox frame (for
+/// <see cref="GdsInstancePinProjector.ProjectPlacedBoundsTopLeft"/>) and the
+/// template pins shifted by the same delta (for
+/// <see cref="GdsInstancePinProjector.ProjectPins"/>), so both placement and
+/// projected pins follow the cell's PIN LABELS instead of its bounding box —
+/// foundry cells routinely carry marker geometry (e.g. SiEPIC m_pin paths) that
+/// inflates the bbox past the template without moving a single pin.
+/// </summary>
+internal sealed record KnownCellPinAnchor
+{
+    /// <summary>The template's bbox re-located into the GDS cell's coordinate frame (GDS, Y-up).</summary>
+    public required GdsBoundingBox PlacementBox { get; init; }
+
+    /// <summary>The template's pins shifted by the anchor delta, in app-space of the CELL bbox.</summary>
+    public required IReadOnlyList<DetectedPin> ShiftedPins { get; init; }
+
+    /// <summary>Largest per-pin distance (µm) between a matched pin's delta and the mean delta; 0 for a single matched pin.</summary>
+    public required double MaxDeviationUm { get; init; }
+
+    /// <summary>Name of the pin with the largest deviation (empty for a single matched pin).</summary>
+    public required string WorstPinName { get; init; }
+}
+
+/// <summary>
 /// Projects cell-local pins and bounding boxes through an instance transform
 /// into top-cell app space. The projection always uses the TRUE GDS transform
 /// (reflection, exact angle and magnification included, via the same linear
@@ -45,6 +70,91 @@ internal sealed record GdsAbsolutePin
 /// </summary>
 internal static class GdsInstancePinProjector
 {
+    /// <summary>
+    /// Computes the pin-anchored placement frame for a cell resolved to a known
+    /// component: the pure translation that best maps the template's pin offsets
+    /// onto the cell's detected pin-LABEL positions. Both frames are app-space
+    /// with the origin at their bbox top-left, so the same component placed in
+    /// the GDS differs from the template only by the bbox framing — foundry
+    /// marker geometry (e.g. SiEPIC m_pin paths) inflates the cell bbox without
+    /// moving the pins, and the labels remain the authoritative pin evidence.
+    /// Returns null when not a single template pin has a same-named label on
+    /// the cell — the caller then keeps the bbox frame (and its size-mismatch
+    /// warning).
+    /// <para>
+    /// The anchor is a TRANSLATION only: the placement rotation stays the
+    /// instance's STRANS-derived cardinal. A pin layout rotated or genuinely
+    /// resized inside the cell cannot be absorbed by a translation — it spreads
+    /// the per-pin deltas, which <see cref="KnownCellPinAnchor.MaxDeviationUm"/>
+    /// surfaces (the caller warns past its tolerance).
+    /// </para>
+    /// </summary>
+    /// <param name="known">The resolved known component (template pins authoritative).</param>
+    /// <param name="cellPins">
+    /// The cell's detected pins in app-space of <paramref name="cellBBox"/>
+    /// (label + edge-heuristic pins; only label pins participate).
+    /// </param>
+    /// <param name="cellBBox">The GDS cell's bounding box (GDS, Y-up).</param>
+    public static KnownCellPinAnchor? AnchorToTemplatePins(
+        KnownComponent known,
+        IReadOnlyList<DetectedPin> cellPins,
+        GdsBoundingBox cellBBox)
+    {
+        var labelsByName = new Dictionary<string, DetectedPin>(StringComparer.Ordinal);
+        foreach (var pin in cellPins)
+        {
+            if (pin.Source == DetectedPinSource.Label)
+                labelsByName.TryAdd(pin.Name, pin);
+        }
+
+        double sumX = 0, sumY = 0;
+        var deltas = new List<(string PinName, double Dx, double Dy)>();
+        foreach (var templatePin in known.Pins)
+        {
+            if (!labelsByName.TryGetValue(templatePin.Name, out var label))
+                continue;
+            deltas.Add((templatePin.Name, label.XUm - templatePin.XUm, label.YUm - templatePin.YUm));
+            sumX += label.XUm - templatePin.XUm;
+            sumY += label.YUm - templatePin.YUm;
+        }
+        if (deltas.Count == 0)
+            return null;
+
+        double dx = sumX / deltas.Count;
+        double dy = sumY / deltas.Count;
+        double maxDeviation = 0;
+        var worstPin = string.Empty;
+        foreach (var (pinName, ddx, ddy) in deltas)
+        {
+            var deviation = Math.Sqrt((ddx - dx) * (ddx - dx) + (ddy - dy) * (ddy - dy));
+            if (deviation > maxDeviation)
+            {
+                maxDeviation = deviation;
+                worstPin = pinName;
+            }
+        }
+
+        // The template's bbox re-located into the GDS cell's (Y-up) coordinate
+        // frame: the template pin at offset t sits at t + (dx, dy) in cell-bbox
+        // app space, so the template's own top-left corner lands at (dx, dy)
+        // there — (MinX + dx, MaxY − dy) in GDS coordinates.
+        var placementBox = new GdsBoundingBox(
+            cellBBox.MinX + dx,
+            cellBBox.MaxY - dy - known.HeightUm,
+            cellBBox.MinX + dx + known.WidthUm,
+            cellBBox.MaxY - dy);
+        var shiftedPins = known.Pins
+            .Select(p => p with { XUm = p.XUm + dx, YUm = p.YUm + dy })
+            .ToList();
+        return new KnownCellPinAnchor
+        {
+            PlacementBox = placementBox,
+            ShiftedPins = shiftedPins,
+            MaxDeviationUm = maxDeviation,
+            WorstPinName = worstPin,
+        };
+    }
+
     /// <summary>
     /// Projects <paramref name="cellPins"/> (app-space of the cell's own bbox,
     /// as <see cref="GdsPinDetector"/> emits them) through the instance

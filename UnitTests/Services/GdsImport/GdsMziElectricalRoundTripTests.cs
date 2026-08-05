@@ -23,10 +23,12 @@ namespace UnitTests.Services.GdsImport;
 /// post-pass swaps the bond-pad stub boxes for the real foundry cell — since #811
 /// RE-ANCHORED into the stub frame with the stub's pin labels restored, so the
 /// pads land exactly on their app placements and keep their re-importable 'elec'
-/// pins (the real cell's 15 µm-wide m_pin marker paths still inflate our
-/// conservative bbox treatment to 115.2 µm). The forced-stub run (same script,
-/// klayout/siepic imports poisoned) pins the bare-nazca behavior deterministically
-/// in every environment; the upgraded run is asserted in addition when it happens.
+/// pins. The import is pin-anchored for known-resolved cells, so the real cell's
+/// 15 µm-wide m_pin marker paths (bbox inflated to 115.2 µm vs the 100 µm
+/// template) are benign: the pins, not the bbox, anchor the placement. The
+/// forced-stub run (same script, klayout/siepic imports poisoned) pins the
+/// bare-nazca behavior deterministically in every environment; the upgraded run
+/// is asserted in addition when it happens.
 /// </para>
 /// <para>
 /// Honest v1 outcome for the optical side: his A*-routed layout contains three
@@ -291,37 +293,35 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         // optical chains restore.
         r.Outcome.Connections.Count(c => !c.IsElectrical).ShouldBe(4);
 
-        // #811 fixed the EXPORT side (probe-pinned in GdsBondPadOffsetProbeTests:
-        // the swap re-anchors the real pad into the stub frame and restores the
-        // (1,10) 'elec' labels — the black-box scenario above gets the full 31
-        // pins back). One honest IMPORT-side residual remains, pinned here: the
-        // real cell's 15 µm-wide m_pin marker paths inflate the import's
-        // (deliberately conservative) path-bbox treatment to 115.2 µm vs the
-        // 100 µm template, so the resolved pad places 7.6 µm off its app position
-        // — past the 1 µm pin-touch tolerance, the metal traces' endpoints miss
-        // the placed pad pins and the four electrical connections stay frozen
-        // metal silhouettes.
-        r.Outcome.Connections.Count(c => c.IsElectrical).ShouldBe(0);
-        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(43);
+        // Pin-anchored placement (#811 follow-up): the resolved pads place on
+        // their 'elec' pin labels, so the real cell's m_pin marker paths (bbox
+        // inflated to 115.2 µm) no longer shift anything — the two detector_bar
+        // metal traces restore as ROUTE-DERIVED electrical connections, exactly
+        // like the stub scenario. The two detector_cross traces genuinely cross
+        // each other and freeze as a junction in both scenarios.
+        var electrical = r.Outcome.Connections.Where(c => c.IsElectrical).ToList();
+        electrical.Count.ShouldBe(2);
+        electrical.ShouldAllBe(c => c.IsRouteDerived);
+        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(24,
+            "same frozen remainder as the stub scenario: 14 optical + 10 metal junction polygons");
 
-        // The same marker-path bbox inflation produces the one warning of this
-        // scenario (size mismatch vs the 100 µm template).
-        var warning = r.Outcome.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("'Bond Pad'");
-        warning.ShouldContain("115.2");
+        // With the pins anchoring the placement, the marker-path bbox inflation
+        // is benign — no size-mismatch warning anymore.
+        r.Outcome.Warnings.ShouldBeEmpty(
+            "the pads' pin labels match the template — the inflated bbox is not a mismatch");
 
-        // Pads place within the marker-inflation residual (measured: exactly
-        // 7.6 µm = (115.2 − 100)/2); demofab parts stay exact.
-        AssertPositionsCongruent(r.Outcome, padSlackUm: 8.0);
+        // Pads place on their pins (sub-µm: the export labels carry F2 rounding
+        // and the klayout re-anchor is centroid-based); demofab parts stay exact.
+        AssertPositionsCongruent(r.Outcome, padSlackUm: 0.5);
     }
 
     /// <summary>
     /// Every instance sits at its original position modulo the import's re-framing
     /// (app-space origin = the imported layout's top-left): the per-instance offset
     /// to the original canvas position must be one constant vector. Demofab parts
-    /// must match within 1 µm; the pads get the scenario slack (the real cell's
-    /// m_pin marker paths inflate the import's bbox-based placement — measured
-    /// 7.6 µm in the upgraded scenario).
+    /// must match within 1 µm; the pads get the scenario slack (known-resolved
+    /// cells place pin-anchored — sub-µm label rounding only; pre-fix the
+    /// marker-inflated bbox placed them 7.6 µm off).
     /// </summary>
     private static void AssertPositionsCongruent(GdsImportOutcome outcome, double padSlackUm)
     {

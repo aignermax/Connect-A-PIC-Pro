@@ -35,7 +35,10 @@ public sealed record GdsPlacedInstance
 
     /// <summary>
     /// App-space X of the placed instance's axis-aligned bounding box top-left
-    /// corner (the true GDS transform applied to the cell bbox), in micrometers.
+    /// corner, in micrometers. For known components with matching pin labels the
+    /// placement is pin-anchored (the template's bbox placed so its pins land on
+    /// the cell's pin labels — immune to marker-inflated GDS bboxes); otherwise
+    /// it is the true GDS transform applied to the cell bbox.
     /// </summary>
     public double PositionXUm { get; init; }
 

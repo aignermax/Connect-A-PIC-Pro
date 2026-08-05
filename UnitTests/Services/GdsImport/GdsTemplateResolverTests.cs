@@ -132,4 +132,166 @@ public class GdsTemplateResolverTests
         result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("other_cell");
         result.Instances.ShouldHaveSingleItem().CellDraftName.ShouldBe("other_cell");
     }
+
+    // ── Function-name keys and PDK precedence (issue #811) ───────────────────
+
+    /// <summary>The bundled demofab template whose cells land in the GDS under the bare function name.</summary>
+    private static ComponentTemplate BundledMmi2x2() => new()
+    {
+        Name = "2x2 MMI Coupler",
+        PdkSource = "Demo PDK",
+        NazcaFunctionName = "demo.mmi2x2_dp",
+        IsCustom = false,
+        WidthMicrometers = 120,
+        HeightMicrometers = 60,
+        PinDefinitions = new[]
+        {
+            new PinDefinition("in1", 0, 20, 180),
+            new PinDefinition("out1", 120, 20, 0),
+        },
+    };
+
+    [Fact]
+    public void Resolver_FunctionNameLastSegment_PrefersBundledOverPriorGdsImport()
+    {
+        // The re-import scenario: yesterday's import of the same file registered
+        // a black-box component NAMED after the cell; the bundled demofab
+        // template only matches through its function name's last segment
+        // (demo.mmi2x2_dp → mmi2x2_dp). The bundled PDK must win.
+        var priorImport = new ComponentTemplate
+        {
+            Name = "mmi2x2_dp",
+            PdkSource = "GDS Import - mzi",
+            IsCustom = true,
+            WidthMicrometers = 121,
+            HeightMicrometers = 61,
+            PinDefinitions = new[] { new PinDefinition("in1", 0, 20, 180) },
+        };
+        var notes = new List<string>();
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(
+            new ComponentTemplate[] { priorImport, BundledMmi2x2() }, notes);
+
+        var known = resolver("mmi2x2_dp");
+
+        known.ShouldNotBeNull();
+        known.Identifier.ShouldBe("2x2 MMI Coupler");
+        known.PdkSource.ShouldBe("Demo PDK", "the bundled PDK outranks the stale same-named import");
+        var note = notes.ShouldHaveSingleItem("the cross-PDK collision stays visible as a note");
+        note.ShouldContain("mmi2x2_dp");
+        note.ShouldContain("Demo PDK");
+        note.ShouldContain("GDS Import - mzi");
+    }
+
+    [Fact]
+    public void Resolver_SameNameInUserAndImportPdks_UserPdkWins()
+    {
+        var userTemplate = new ComponentTemplate
+        {
+            Name = "my_cell",
+            PdkSource = "My PDK",
+            IsCustom = true,
+            WidthMicrometers = 10,
+            HeightMicrometers = 5,
+            PinDefinitions = new[] { new PinDefinition("o1", 0, 2, 180) },
+        };
+        var importTemplate = new ComponentTemplate
+        {
+            Name = "my_cell",
+            PdkSource = "GDS Import - old",
+            IsCustom = true,
+            WidthMicrometers = 10,
+            HeightMicrometers = 5,
+            PinDefinitions = new[] { new PinDefinition("o1", 0, 2, 180) },
+        };
+        // Deliberately import-first enumeration order: the tier, not the order, decides.
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(
+            new[] { importTemplate, userTemplate });
+
+        var known = resolver("my_cell");
+
+        known.ShouldNotBeNull();
+        known.PdkSource.ShouldBe("My PDK", "a user PDK outranks a prior 'GDS Import - *' PDK");
+    }
+
+    [Fact]
+    public void Resolver_PhaseShifter_HitByBothExactAndSanitizedCellName()
+    {
+        // The wrapper export names the cell Phase_Shifter (spaces cannot be GDS
+        // cell-name characters); both name shapes must resolve to the template —
+        // including a PARAMETERIZED one (the pin-label wrapper proves the
+        // content, so the parameterless restriction only covers function-name
+        // keys).
+        var phaseShifter = new ComponentTemplate
+        {
+            Name = "Phase Shifter",
+            PdkSource = "Demo PDK",
+            NazcaFunctionName = "demo.eopm_dc",
+            NazcaParameters = "length=500",
+            IsCustom = false,
+            WidthMicrometers = 500,
+            HeightMicrometers = 60,
+            PinDefinitions = new[]
+            {
+                new PinDefinition("in", 0, 30, 180),
+                new PinDefinition("out", 500, 30, 0),
+            },
+        };
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(new[] { phaseShifter });
+
+        resolver("Phase Shifter").ShouldNotBeNull().Identifier.ShouldBe("Phase Shifter");
+        resolver("Phase_Shifter").ShouldNotBeNull().Identifier.ShouldBe("Phase Shifter");
+        resolver("eopm_dc").ShouldBeNull(
+            "a parameterized template registers no function-name keys — the cell name " +
+            "cannot prove which length the geometry carries");
+    }
+
+    [Fact]
+    public void Resolver_SynthesizedNazcaPrefixedCellName_ResolvesToFunctionlessTemplate()
+    {
+        // A function-less template (e.g. a prior import) exports under the
+        // synthesized fallback function name nazca_<name> — the cell name must
+        // resolve back to the template.
+        var imported = new ComponentTemplate
+        {
+            Name = "mmi1x2_sh",
+            PdkSource = "GDS Import - old",
+            IsCustom = true,
+            WidthMicrometers = 80,
+            HeightMicrometers = 55,
+            PinDefinitions = new[] { new PinDefinition("in", 0, 27, 180) },
+        };
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(new[] { imported });
+
+        var known = resolver("nazca_mmi1x2_sh");
+
+        known.ShouldNotBeNull();
+        known.Identifier.ShouldBe("mmi1x2_sh");
+        known.PdkSource.ShouldBe("GDS Import - old");
+    }
+
+    [Fact]
+    public void Resolver_AmbiguousFunctionSegment_NeverGuessed()
+    {
+        // The real bundled library: '2x2 MMI Coupler' and 'Directional Coupler'
+        // share the demofab function demo.mmi2x2_dp — the last-segment key is
+        // ambiguous within the bundled tier, so the cell resolves to NOTHING
+        // (a new draft), never a guess.
+        var directionalCoupler = new ComponentTemplate
+        {
+            Name = "Directional Coupler",
+            PdkSource = "Demo PDK",
+            NazcaFunctionName = "demo.mmi2x2_dp",
+            IsCustom = false,
+            WidthMicrometers = 120,
+            HeightMicrometers = 60,
+            PinDefinitions = new[] { new PinDefinition("in1", 0, 20, 180) },
+        };
+        var notes = new List<string>();
+        var resolver = GdsTemplateResolver.BuildKnownComponentResolver(
+            new ComponentTemplate[] { BundledMmi2x2(), directionalCoupler }, notes);
+
+        resolver("mmi2x2_dp").ShouldBeNull(
+            "two bundled templates share the function name — ambiguous, never guessed");
+        notes.ShouldBeEmpty();
+    }
 }

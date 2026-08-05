@@ -183,7 +183,14 @@ public static class GdsHierarchyImporter
                 GdsImportReporter.WarnOnZeroSizeDraft(draft, session.Warnings);
                 drafts.Add(draft);
             }
-            else if (known is not null)
+
+            // Placement frame for a KNOWN component: pin-anchored when at least
+            // one template pin matches a pin label on the cell (the GDS bbox may
+            // be inflated by marker paths — benign, it must not shift the
+            // placement); the bbox top-left mapping is the fallback and keeps
+            // the size-mismatch warning for genuine size/pin mismatches.
+            var pinAnchor = known is null ? null : session.GetKnownCellPinAnchor(cell, known, cellBBox);
+            if (known is not null && pinAnchor is null)
             {
                 session.WarnOnSizeMismatchOnce(cell, known, cellBBox);
             }
@@ -204,7 +211,8 @@ public static class GdsHierarchyImporter
                 transformNotes[signature] = (note.FirstInstance ?? instanceName, note.Count + 1);
             }
 
-            var topLeft = GdsInstancePinProjector.ProjectPlacedBoundsTopLeft(gdsInstance, cellBBox, session.TopBBox);
+            var topLeft = GdsInstancePinProjector.ProjectPlacedBoundsTopLeft(
+                gdsInstance, pinAnchor?.PlacementBox ?? cellBBox, session.TopBBox);
             placed.Add(new GdsPlacedInstance
             {
                 InstanceName = instanceName,
@@ -218,7 +226,11 @@ public static class GdsHierarchyImporter
                 Reflected = gdsInstance.Reflected,
             });
 
-            var cellPins = known?.Pins ?? session.GetCellPins(cell, cellBBox);
+            // Pin-anchored known components project the TEMPLATE pins shifted by
+            // the anchor delta: the authoritative template pin set (names, kinds)
+            // at the pins' true GDS positions — the placed component's pins land
+            // exactly there (same delta, same transform).
+            var cellPins = pinAnchor?.ShiftedPins ?? known?.Pins ?? session.GetCellPins(cell, cellBBox);
             pinsPerInstance.Add(
                 GdsInstancePinProjector.ProjectPins(gdsInstance, cellBBox, cellPins, session.TopBBox));
             names.Add(instanceName);

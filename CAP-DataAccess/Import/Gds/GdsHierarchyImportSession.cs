@@ -12,13 +12,21 @@ internal sealed class GdsHierarchyImportSession
     /// <summary>Pin-frame size mismatch (µm) tolerated before warning about a known component's size.</summary>
     private const double SizeMismatchToleranceUm = 1.0;
 
+    /// <summary>
+    /// Per-pin deviation (µm) tolerated in a pin-anchored placement before the
+    /// cell's pin labels are reported as not matching the template's pin layout.
+    /// </summary>
+    private const double PinMismatchToleranceUm = 1.0;
+
     private readonly GdsHierarchyImportOptions _options;
     private readonly string _topCellName;
     private readonly Dictionary<string, GdsBoundingBox> _bboxes = new();
     private readonly Dictionary<string, FlattenedGdsCell> _flattened = new();
     private readonly Dictionary<string, IReadOnlyList<DetectedPin>> _pins = new();
     private readonly Dictionary<string, KnownComponent?> _known = new();
+    private readonly Dictionary<string, KnownCellPinAnchor?> _pinAnchors = new();
     private readonly HashSet<string> _sizeMismatchWarned = new();
+    private readonly HashSet<string> _pinMismatchWarned = new();
 
     public GdsHierarchyImportSession(GdsLibrary library, string topCellName, GdsHierarchyImportOptions options)
     {
@@ -314,6 +322,46 @@ internal sealed class GdsHierarchyImportSession
         return result;
     }
 
+    /// <summary>
+    /// The pin-anchored placement frame for a cell resolved to a known component
+    /// (<see cref="GdsInstancePinProjector.AnchorToTemplatePins"/>), or null when
+    /// no template pin has a same-named label on the cell — the caller then keeps
+    /// the bbox placement and the size-mismatch warning
+    /// (<see cref="WarnOnSizeMismatchOnce"/>). Computed once per cell (every
+    /// instance shares the cell-local delta). When the matched pins deviate past
+    /// <see cref="PinMismatchToleranceUm"/> (a genuine pin-layout mismatch — the
+    /// cell's pins are not a rigid translation of the template's), ONE warning
+    /// per cell is emitted; the placement is still pin-anchored (best fit).
+    /// </summary>
+    public KnownCellPinAnchor? GetKnownCellPinAnchor(
+        string cellName, KnownComponent known, GdsBoundingBox cellBBox)
+    {
+        if (_pinAnchors.TryGetValue(cellName, out var cached))
+            return cached;
+
+        var anchor = GdsInstancePinProjector.AnchorToTemplatePins(known, GetCellPins(cellName, cellBBox), cellBBox);
+        if (anchor is not null
+            && anchor.MaxDeviationUm > PinMismatchToleranceUm
+            && _pinMismatchWarned.Add(cellName))
+        {
+            Warnings.Add(
+                $"Known component '{known.Identifier}': the pin labels of GDS cell '{cellName}' do not match " +
+                $"the template's pin layout (largest deviation {GdsHierarchyImporter.Fmt(Math.Round(anchor.MaxDeviationUm, 1))} µm " +
+                $"at pin '{anchor.WorstPinName}') — placed pin-anchored (best fit); the reconstructed " +
+                "connections may be geometrically incorrect.");
+        }
+
+        _pinAnchors[cellName] = anchor;
+        return anchor;
+    }
+
+    /// <summary>
+    /// The bbox-fallback size warning for a known-resolved cell, emitted once per
+    /// cell. Only fires when NO template pin could be matched to a pin label on
+    /// the cell — with matching labels the pins anchor the placement and a
+    /// marker-inflated bbox (e.g. SiEPIC m_pin paths) is benign, so a pure size
+    /// mismatch without pin evidence never reaches this method.
+    /// </summary>
     public void WarnOnSizeMismatchOnce(string cellName, KnownComponent known, GdsBoundingBox cellBBox)
     {
         if (!_sizeMismatchWarned.Add(cellName))

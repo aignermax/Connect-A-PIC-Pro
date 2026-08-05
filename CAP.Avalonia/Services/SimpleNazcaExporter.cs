@@ -100,7 +100,7 @@ public class SimpleNazcaExporter
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
         var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include: null, library, exportWarnings);
-        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include: null, rawCodePlan);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include: null, rawCodePlan, library);
 
         AppendHeader(sb, interconnectSettings, metal);
         AppendPdkComponentStubs(sb, canvas, include: null, rawCodePlan, wrapperPlan);
@@ -147,7 +147,7 @@ public class SimpleNazcaExporter
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
         var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include, library, exportWarnings);
-        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include, rawCodePlan);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include, rawCodePlan, library);
 
         AppendHeader(sb, interconnectSettings, metal);
         AppendPdkComponentStubs(sb, canvas, include, rawCodePlan, wrapperPlan);
