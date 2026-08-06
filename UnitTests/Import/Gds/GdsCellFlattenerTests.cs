@@ -412,6 +412,64 @@ public class GdsCellFlattenerTests
         box.MaxY.ShouldBe(0.5);
     }
 
+    // ── Paths ────────────────────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Flatten_PathInTopCell_YieldsOutlineQuad()
+    {
+        // A 1 µm wide flush path flows into Polygons as its outline quad,
+        // carrying the path's layer/datatype.
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .Path(1, 0, widthDbUnits: 1000, pathType: 0, (0, 0), (4000, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+
+        var quad = await FlattenSinglePolygon(gds);
+
+        quad.Layer.ShouldBe(1);
+        quad.DataType.ShouldBe(0);
+        quad.Points.ShouldBe(new[]
+        {
+            new GdsPoint(0, 0.5), new GdsPoint(4, 0.5), new GdsPoint(4, -0.5),
+            new GdsPoint(0, -0.5), new GdsPoint(0, 0.5),
+        });
+    }
+
+    [Fact]
+    public async Task Flatten_PathInReferencedCell_OutlinedLocally_ThenTransformed()
+    {
+        // The quad is built in the child's local space FIRST and its corners
+        // then ride the reference transform like polygon points: with angle
+        // 90° and mag 2 at offset (10, 20), (x, y) → (−2y, 2x) + (10, 20) —
+        // the stroked width doubles to 2 µm.
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("CHILD", 10000, 20000, angleDegrees: 90.0, magnification: 2.0)
+            .EndCell()
+            .BeginCell("CHILD")
+                .Path(1, 0, widthDbUnits: 1000, pathType: 0, (0, 0), (4000, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+
+        var quad = await FlattenSinglePolygon(gds);
+
+        quad.Points.Count.ShouldBe(5);
+        quad.Points[0].X.ShouldBe(9, Tolerance);   // (0, 0.5) → (9, 20)
+        quad.Points[0].Y.ShouldBe(20, Tolerance);
+        quad.Points[1].X.ShouldBe(9, Tolerance);   // (4, 0.5) → (9, 28)
+        quad.Points[1].Y.ShouldBe(28, Tolerance);
+        quad.Points[2].X.ShouldBe(11, Tolerance);  // (4, −0.5) → (11, 28)
+        quad.Points[2].Y.ShouldBe(28, Tolerance);
+        quad.Points[3].X.ShouldBe(11, Tolerance);  // (0, −0.5) → (11, 20)
+        quad.Points[3].Y.ShouldBe(20, Tolerance);
+        quad.Points[4].ShouldBe(quad.Points[0]);
+    }
+
     // ── Texts ────────────────────────────────────────────────────────────────
 
     [Fact]

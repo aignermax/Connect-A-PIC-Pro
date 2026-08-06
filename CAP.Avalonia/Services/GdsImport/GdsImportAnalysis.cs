@@ -35,4 +35,12 @@ public sealed record GdsImportAnalysis
 
     /// <summary>Per-candidate instance counts, aligned with <see cref="TopCellCandidates"/>.</summary>
     public IReadOnlyList<GdsTopCellSummary> TopCells { get; init; } = Array.Empty<GdsTopCellSummary>();
+
+    /// <summary>
+    /// The parsed library behind this analysis. The import dialog hands it back
+    /// to <see cref="GdsImportService.ImportAsync"/> so a large file is not
+    /// parsed a second time; the import then works on the snapshot the user
+    /// picked the top cell from, even if the file changed on disk in between.
+    /// </summary>
+    public GdsLibrary? Library { get; init; }
 }

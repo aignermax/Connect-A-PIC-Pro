@@ -688,6 +688,46 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
+    public async Task Explode_TopCellOwnWaveguidePath_TouchingTwoPins_BecomesRouteDerivedConnection()
+    {
+        // The same bridge as the polygon test above, but drawn the way real
+        // PDK exports draw most routing: a PATH (centerline + width) instead
+        // of a BOUNDARY. The 0.5 µm wide centerline runs on the pin line from
+        // wgA.out (app (10, 2)) to wgB.in (app (15, 2)); its outline quad is
+        // geometrically identical to the polygon fixture, so the route matcher
+        // must consume it into the same route-derived connection.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Path(1, 0, widthDbUnits: 500, pathType: 0, (10000, 2000), (15000, 2000))
+                .Boundary(68, 0, (0, 0), (25000, 0), (25000, 4000), (0, 4000), (0, 0)) // devrec halo
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldBeEmpty(
+            "the path's outline quad was consumed into a route-derived connection");
+        var connection = result.Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.A.InstanceIndex.ShouldBe(0);
+        connection.A.PinName.ShouldBe("out");
+        connection.B.InstanceIndex.ShouldBe(1);
+        connection.B.PinName.ShouldBe("in");
+        connection.XUm.ShouldBe(12.5, Tolerance);
+        connection.YUm.ShouldBe(2.0, Tolerance);
+
+        result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
+        var warning = result.Warnings.ShouldHaveSingleItem();
+        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+    }
+
+    [Fact]
     public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_KeepsNotReconstructedWarning()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()

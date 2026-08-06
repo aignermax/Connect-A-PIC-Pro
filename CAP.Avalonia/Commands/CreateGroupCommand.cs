@@ -230,49 +230,42 @@ public class CreateGroupCommand : IUndoableCommand
         {
             _canvas.BeginCommandExecution();
 
-            // 7. Store and remove individual components from canvas
+            // 7. Store and remove individual components from canvas.
+            // Set/dictionary lookups keep this O(N + P + C): the previous
+            // per-item LINQ scans made grouping a 5000-component import
+            // quadratic (minutes on the UI thread).
             _componentViewModels.Clear();
+            var groupedComponents = new HashSet<Component>(_components);
             var componentsToRemove = _canvas.Components
-                .Where(cvm => _components.Contains(cvm.Component))
+                .Where(cvm => groupedComponents.Contains(cvm.Component))
                 .ToList();
 
             // Store ComponentViewModels so we can restore them in Undo!
             _componentViewModels.AddRange(componentsToRemove);
 
-            // Store internal connection ViewModels before removing
+            // Store internal connection ViewModels, then remove them from the
+            // canvas (they're now frozen in the group).
             _internalConnectionViewModels.Clear();
-            foreach (var conn in _internalConnections)
+            var internalConnectionSet = new HashSet<WaveguideConnection>(_internalConnections);
+            _internalConnectionViewModels.AddRange(
+                _canvas.Connections.Where(c => internalConnectionSet.Contains(c.Connection)));
+            foreach (var connVm in _internalConnectionViewModels)
             {
-                var connVm = _canvas.Connections.FirstOrDefault(c => c.Connection == conn);
-                if (connVm != null)
-                {
-                    _internalConnectionViewModels.Add(connVm);
-                }
+                _canvas.Connections.Remove(connVm);
+                _canvas.ConnectionManager.RemoveConnectionDeferred(connVm.Connection);
             }
 
-            // Remove internal connections from canvas (they're now frozen in the group)
-            foreach (var conn in _internalConnections)
+            var removedViewModels = new HashSet<ComponentViewModel>(componentsToRemove);
+            var pinsToRemove = _canvas.AllPins
+                .Where(p => p.ParentComponentViewModel is ComponentViewModel parent
+                            && removedViewModels.Contains(parent))
+                .ToList();
+            foreach (var pin in pinsToRemove)
             {
-                var connVm = _canvas.Connections.FirstOrDefault(c => c.Connection == conn);
-                if (connVm != null)
-                {
-                    _canvas.Connections.Remove(connVm);
-                    _canvas.ConnectionManager.RemoveConnectionDeferred(conn);
-                }
+                _canvas.AllPins.Remove(pin);
             }
-
             foreach (var compVm in componentsToRemove)
             {
-                // Remove pins from AllPins
-                var pinsToRemove = _canvas.AllPins
-                    .Where(p => p.ParentComponentViewModel == compVm)
-                    .ToList();
-                foreach (var pin in pinsToRemove)
-                {
-                    _canvas.AllPins.Remove(pin);
-                }
-
-                // Remove from Components collection
                 _canvas.Components.Remove(compVm);
             }
 

@@ -50,6 +50,15 @@ public sealed record GdsImportOutcome
     public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
         Array.Empty<GdsOutlinePolygon>();
 
+    /// <summary>
+    /// The top cell's OWN polygons on non-routing layers (substrate/base plates,
+    /// exclusion zones, logos) — render-only background geometry for the created
+    /// group, same frame as <see cref="TopCellWaveguidePolygons"/>. Empty in
+    /// black-box mode.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> TopCellResidualPolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
+
     /// <summary>Import warnings plus any persistence/registration warnings, in order.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 

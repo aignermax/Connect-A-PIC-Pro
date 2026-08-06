@@ -22,6 +22,11 @@ public static class ComponentGroupRenderer
     private static readonly Color ExternalPinHoverColor = Color.FromRgb(255, 215, 0); // Gold
     private static readonly Color GroupHoverOverlay = Color.FromArgb(51, 255, 165, 0); // Orange overlay (20% opacity)
 
+    // Static readonly — drawn once per group child / frozen path per frame, so these
+    // must never be allocated inside the render loop (see ComponentOutlineRenderer).
+    private static readonly IBrush GroupHoverOverlayBrush = new SolidColorBrush(GroupHoverOverlay);
+    private static readonly Pen DefaultFrozenPathPen = new(new SolidColorBrush(Color.FromArgb(200, 255, 140, 0)), 2);
+
     private const double DefaultPinSize = 8.0;
     private const double HoveredPinSize = 12.0;
     private const double BorderThickness = 2.0;
@@ -79,7 +84,7 @@ public static class ComponentGroupRenderer
         else
         {
             // Default color for frozen paths (orange, slightly dimmed)
-            frozenPen = new Pen(new SolidColorBrush(Color.FromArgb(200, 255, 140, 0)), 2);
+            frozenPen = DefaultFrozenPathPen;
         }
 
         foreach (var segment in frozenPath.Path.Segments)
@@ -402,7 +407,7 @@ public static class ComponentGroupRenderer
     public static void RenderGroupHoverOverlay(DrawingContext context, double x, double y, double width, double height)
     {
         var rect = new Rect(x, y, width, height);
-        context.FillRectangle(new SolidColorBrush(GroupHoverOverlay), rect);
+        context.FillRectangle(GroupHoverOverlayBrush, rect);
     }
 
     /// <summary>

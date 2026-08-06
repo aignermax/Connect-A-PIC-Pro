@@ -91,8 +91,11 @@ internal static class GdsImportReporter
         GdsRouteConnectivityResult metalRoutes,
         int frozenPolygonCount)
     {
-        int own = session.Library.Cells[topCellName].Elements
-            .Count(e => e is GdsPolygon or GdsPath);
+        // Counted in outline-polygon units (a path expands to one quad per
+        // segment) — the same units the route matcher and the frozen-path
+        // collector work in; counting path ELEMENTS instead would let a
+        // multi-segment path drive the remainder negative.
+        int own = GdsPathOutliner.ExpandDrawnGeometry(session.Library.Cells[topCellName].Elements).Count();
         if (own == 0)
             return;
 

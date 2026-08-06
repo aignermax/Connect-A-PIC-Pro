@@ -332,6 +332,7 @@ public static class GdsHierarchyImporter
             Instances = placed,
             Connections = connections,
             TopCellWaveguidePolygons = frozenRoutePolygons,
+            TopCellResidualPolygons = session.GetTopCellResidualPolygons(),
             Warnings = session.Warnings,
             Infos = session.Infos,
         };

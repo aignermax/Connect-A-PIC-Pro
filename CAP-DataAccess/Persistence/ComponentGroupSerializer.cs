@@ -55,6 +55,10 @@ public static class ComponentGroupSerializer
             dto.ExternalPins.Add(ToGroupPinDto(pin));
         }
 
+        // Render-only background geometry (GDS-imported base plates, logos, …)
+        if (group.OutlinePolygons is { Count: > 0 })
+            dto.BackgroundPolygons = group.OutlinePolygons.ToList();
+
         return dto;
     }
 
@@ -113,7 +117,9 @@ public static class ComponentGroupSerializer
             Identifier = dto.Identifier,
             PhysicalX = dto.PhysicalX,
             PhysicalY = dto.PhysicalY,
-            Rotation90CounterClock = (DiscreteRotation)dto.Rotation90CounterClock
+            Rotation90CounterClock = (DiscreteRotation)dto.Rotation90CounterClock,
+            // Null in files that predate background geometry — stays null.
+            OutlinePolygons = dto.BackgroundPolygons
         };
 
         // Add child components - prefer Guid lookup, fall back to name lookup

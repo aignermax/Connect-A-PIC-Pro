@@ -140,16 +140,23 @@ public class PlaceComponentCommand : IUndoableCommand
     {
         if (_isValid && _component != null)
         {
-            // Check if component already exists in canvas (e.g. after Undo then Redo)
-            _createdViewModel = _canvas.Components.FirstOrDefault(c => c.Component == _component);
+            // The already-on-canvas check only matters after Undo→Redo; a first
+            // execution skips the O(N) scan, which would otherwise make a bulk
+            // import (N placements) quadratic in canvas size.
+            _createdViewModel = _hasExecuted
+                ? _canvas.Components.FirstOrDefault(c => c.Component == _component)
+                : null;
 
             if (_createdViewModel == null)
             {
                 // Component not in canvas, add it
                 _createdViewModel = _canvas.AddComponent(_component, _template.Name, _template.PdkSource);
             }
+            _hasExecuted = true;
         }
     }
+
+    private bool _hasExecuted;
 
     public void Undo()
     {

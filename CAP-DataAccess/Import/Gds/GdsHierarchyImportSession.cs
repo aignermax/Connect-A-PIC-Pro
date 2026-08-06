@@ -139,13 +139,50 @@ internal sealed partial class GdsHierarchyImportSession
     public IReadOnlyList<GdsOutlinePolygon> GetTopCellMetalPolygons() =>
         GetTopCellPolygonsOnLayers(_options.MetalRouteLayers);
 
+    /// <summary>
+    /// The top cell's OWN polygons on every layer that is NEITHER optical routing
+    /// (<see cref="GdsHierarchyImportOptions.RouteLayers"/>) nor metal routing
+    /// (<see cref="GdsHierarchyImportOptions.MetalRouteLayers"/>): substrate/base
+    /// plates, exclusion zones, logos, markers. Real foundry designs carry such
+    /// geometry directly in the top cell — dropping it made imports visibly
+    /// incomplete. Simplified under the same outline-point cap as cell outlines
+    /// (with a warning when polygons are dropped); same app-space frame as
+    /// <see cref="GetTopCellWaveguidePolygons"/>.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> GetTopCellResidualPolygons()
+    {
+        var routingLayers = new HashSet<(int, int)>(
+            _options.RouteLayers.Concat(_options.MetalRouteLayers));
+        var converted = ConvertTopCellPolygons(p => !routingLayers.Contains((p.Layer, p.DataType)));
+        if (converted.Count == 0)
+            return converted;
+
+        var simplified = GdsOutlineSimplifier.Simplify(
+            converted,
+            _options.OutlineSimplificationToleranceUm,
+            _options.MaxOutlinePointsPerCell,
+            out int dropped);
+        if (dropped > 0)
+        {
+            Warnings.Add(
+                $"Top cell '{_topCellName}': dropped {dropped} background polygon(s) to stay " +
+                $"within the {_options.MaxOutlinePointsPerCell} outline-point cap.");
+        }
+        return simplified;
+    }
+
     private IReadOnlyList<GdsOutlinePolygon> GetTopCellPolygonsOnLayers(
-        IReadOnlyList<(int Layer, int Datatype)> layers)
+        IReadOnlyList<(int Layer, int Datatype)> layers) =>
+        ConvertTopCellPolygons(p => layers.Contains((p.Layer, p.DataType)));
+
+    private List<GdsOutlinePolygon> ConvertTopCellPolygons(Func<GdsPolygon, bool> keep)
     {
         var bbox = TopBBox;
-        return Library.Cells[_topCellName].Elements
-            .OfType<GdsPolygon>()
-            .Where(p => layers.Contains((p.Layer, p.DataType)))
+        // PATH elements are expanded to outline quads: real PDK exports draw
+        // most top-cell routing as PATHs, which the route matcher and the
+        // frozen/residual collectors would otherwise never see.
+        return GdsPathOutliner.ExpandDrawnGeometry(Library.Cells[_topCellName].Elements)
+            .Where(keep)
             .Select(p => new GdsOutlinePolygon
             {
                 Layer = p.Layer,

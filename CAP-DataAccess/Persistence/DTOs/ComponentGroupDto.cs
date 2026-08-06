@@ -82,6 +82,13 @@ public class ComponentGroupDto
     public List<GroupPinDto> ExternalPins { get; set; } = new();
 
     /// <summary>
+    /// Render-only background geometry of the group (GDS-imported base plates,
+    /// exclusion zones, logos — the top cell's own non-routing polygons),
+    /// relative to the group's top-left. Null for files that predate it.
+    /// </summary>
+    public List<CAP_Core.Components.Core.OutlinePolygon>? BackgroundPolygons { get; set; }
+
+    /// <summary>
     /// Identifier of parent group (null if top-level).
     /// </summary>
     public string? ParentGroupId { get; set; }

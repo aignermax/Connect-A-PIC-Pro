@@ -40,6 +40,7 @@ public sealed partial class GdsImportService
     private readonly UserPdkStore _userPdkStore;
     private readonly Func<IReadOnlyList<ComponentTemplate>>? _templateProvider;
     private readonly Action<PdkComponentDraft, string, string>? _registerComponent;
+    private readonly Func<IDisposable>? _beginRegistrationBatch;
 
     /// <summary>Initializes a new <see cref="GdsImportService"/>.</summary>
     /// <param name="userPdkStore">User-PDK persistence; defaults to the managed root under %LocalAppData%.</param>
@@ -53,14 +54,23 @@ public sealed partial class GdsImportService
     /// <c>LeftPanelViewModel.RegisterSavedCustomComponent</c>: (draft, pdkName,
     /// filePath). Null skips runtime registration (persistence still happens).
     /// </param>
+    /// <param name="beginRegistrationBatch">
+    /// Opens a deferral scope around the whole per-draft registration loop
+    /// (e.g. <c>LeftPanelViewModel.BeginBatchRegistration</c>), so the library
+    /// refreshes once per import instead of once per draft — with hundreds of
+    /// imported cells the per-draft refresh froze the UI thread for minutes.
+    /// Null registers each draft with an immediate refresh.
+    /// </param>
     public GdsImportService(
         UserPdkStore? userPdkStore = null,
         Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null,
-        Action<PdkComponentDraft, string, string>? registerComponent = null)
+        Action<PdkComponentDraft, string, string>? registerComponent = null,
+        Func<IDisposable>? beginRegistrationBatch = null)
     {
         _userPdkStore = userPdkStore ?? UserPdkStore.CreateDefault();
         _templateProvider = templateProvider;
         _registerComponent = registerComponent;
+        _beginRegistrationBatch = beginRegistrationBatch;
     }
 
     /// <summary>
@@ -94,6 +104,7 @@ public sealed partial class GdsImportService
             TopCells = candidates
                 .Select(name => new GdsTopCellSummary(name, CountDirectInstances(library, name)))
                 .ToList(),
+            Library = library,
         };
     }
 
@@ -175,6 +186,11 @@ public sealed partial class GdsImportService
     /// </param>
     /// <param name="progress">Optional user-presentable stage reporter.</param>
     /// <param name="ct">Cancellation token.</param>
+    /// <param name="preParsedLibrary">
+    /// The library a preceding <see cref="AnalyzeAsync"/> already parsed
+    /// (<see cref="GdsImportAnalysis.Library"/>), so a large file is read once,
+    /// not twice. Null re-reads <paramref name="gdsPath"/>.
+    /// </param>
     /// <exception cref="FileNotFoundException">The file does not exist.</exception>
     /// <exception cref="InvalidDataException">
     /// The file is not a readable GDS II stream, contains no cells, or does not
@@ -185,7 +201,8 @@ public sealed partial class GdsImportService
         string topCellName,
         GdsHierarchyImportOptions? options = null,
         IProgress<string>? progress = null,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        GdsLibrary? preParsedLibrary = null)
     {
         options ??= new GdsHierarchyImportOptions();
         options = WithOwnExportPinLayers(options);
@@ -205,11 +222,15 @@ public sealed partial class GdsImportService
         // resumes on the caller's context, so the registration callback below
         // mutates the UI-bound library exactly where it did before.
         var prepared = await Task.Run(
-            () => ParseImportAndPersistAsync(gdsPath, topCellName, options, warnings, infos, progress, ct), ct);
+            () => ParseImportAndPersistAsync(gdsPath, topCellName, options, warnings, infos, progress, ct, preParsedLibrary), ct);
 
         if (prepared.PdkDrafts.Count > 0 && _registerComponent is not null)
         {
             progress?.Report("Registering components in the library…");
+            // One batch scope around the whole loop: the library defers its
+            // per-registration refresh work until the scope closes (see the
+            // beginRegistrationBatch constructor doc).
+            using var registrationBatch = _beginRegistrationBatch?.Invoke();
             foreach (var pdkDraft in prepared.PdkDrafts)
                 _registerComponent(pdkDraft, prepared.PdkName, prepared.UserPdkPath!);
         }
@@ -226,6 +247,7 @@ public sealed partial class GdsImportService
             Instances = prepared.Import.Instances,
             Connections = prepared.Import.Connections,
             TopCellWaveguidePolygons = prepared.Import.TopCellWaveguidePolygons,
+            TopCellResidualPolygons = prepared.Import.TopCellResidualPolygons,
             Warnings = warnings,
             Infos = infos,
             UserPdkName = prepared.PdkName,
@@ -246,10 +268,11 @@ public sealed partial class GdsImportService
         List<string> warnings,
         List<string> infos,
         IProgress<string>? progress,
-        CancellationToken ct)
+        CancellationToken ct,
+        GdsLibrary? preParsedLibrary = null)
     {
         progress?.Report($"Reading '{Path.GetFileName(gdsPath)}'…");
-        var library = await ReadLibraryAsync(gdsPath, ct);
+        var library = preParsedLibrary ?? await ReadLibraryAsync(gdsPath, ct);
         ValidateImportTarget(library, gdsPath, topCellName);
 
         progress?.Report($"Analyzing hierarchy of '{topCellName}'…");

@@ -145,6 +145,14 @@ public sealed record GdsPlacementPlan
     public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
         Array.Empty<GdsOutlinePolygon>();
 
+    /// <summary>
+    /// The top cell's OWN polygons on non-routing layers, in plan space. The
+    /// executor attaches them to the created group as render-only background
+    /// geometry (never routing obstacles). Empty in black-box mode.
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> TopCellResidualPolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
+
     /// <summary>The import's warnings, carried along for display.</summary>
     public IReadOnlyList<string> Warnings { get; init; } = Array.Empty<string>();
 
@@ -229,6 +237,7 @@ public sealed record GdsPlacementPlan
             Placements = placements,
             Connections = connections,
             TopCellWaveguidePolygons = outcome.TopCellWaveguidePolygons,
+            TopCellResidualPolygons = outcome.TopCellResidualPolygons,
             Warnings = outcome.Warnings,
             Infos = outcome.Infos,
         };

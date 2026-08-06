@@ -80,8 +80,9 @@ public sealed class GdsCellFlattener
     /// <summary>
     /// Returns all polygons and texts of <paramref name="cellName"/>, including
     /// everything pulled in through (nested) references, transformed into the
-    /// cell's own coordinate space. Paths are centerline geometry and are not
-    /// converted to polygons here — consumers build outlines from the model.
+    /// cell's own coordinate space. Paths are expanded to their outline quads
+    /// (<see cref="GdsPathOutliner"/>), so path-drawn geometry flows into
+    /// <see cref="FlattenedGdsCell.Polygons"/> like any polygon.
     /// Each text carries its provenance in <see cref="FlattenedGdsCell.TextOrigins"/>
     /// (the owning leaf cell and the occurrence it rode in with), so importers
     /// can attribute nested labels to their source instances.
@@ -188,8 +189,13 @@ public sealed class GdsCellFlattener
                     }
                     break;
 
-                // GdsPath: kept as centerline + width in the model; outline
-                // generation is a consumer concern (different end-cap styles).
+                case GdsPath gdsPath:
+                    // Outlined in the path's local space FIRST, then each quad
+                    // corner is transformed like any polygon point — the stroked
+                    // width thereby scales with magnification and mirrors exactly.
+                    foreach (var quad in GdsPathOutliner.Outline(gdsPath))
+                        result.Polygons.Add(quad with { Points = quad.Points.Select(transform.Apply).ToList() });
+                    break;
             }
         }
 

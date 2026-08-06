@@ -44,8 +44,64 @@ public partial class LeftPanelViewModel
             return;
         }
 
-        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
+        // While a batch scope is open, the expensive per-registration tail (process
+        // re-application, full list re-filter, preferences write) is deferred to the
+        // scope's dispose; the catalog itself (AllTemplates/Categories) still updates per call.
+        Action reapply = ReapplyActiveProcessAfterPdkChange;
+        Action filter = FilterComponents;
+        if (_batchRegistrationDepth > 0)
+        {
+            _batchRegistrationRefreshPending = true;
+            reapply = filter = static () => { };
+        }
+        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, reapply, filter);
         NotifyTemplateDefinitionSaved(pdkName, draft.Name);
+    }
+
+    private int _batchRegistrationDepth;
+    private bool _batchRegistrationRefreshPending;
+
+    /// <summary>
+    /// Defers the per-registration library refresh (process re-application, filtered-list
+    /// rebuild and the preferences disk write inside it) until the returned scope is
+    /// disposed, where it runs exactly once. Wrap bulk registrations in this scope —
+    /// e.g. a GDS import registering hundreds of drafts — because per call the refresh
+    /// re-sorts and re-publishes the whole filtered list and rewrites the preferences
+    /// file on the UI thread. Scopes are ref-counted rather than rejected when nested:
+    /// two composing bulk callers both just mean "defer until the outermost scope
+    /// closes", so throwing would turn a harmless composition into a UI-thread crash.
+    /// UI-thread only, like registration itself.
+    /// </summary>
+    public IDisposable BeginBatchRegistration()
+    {
+        _batchRegistrationDepth++;
+        return new BatchRegistrationScope(this);
+    }
+
+    private void EndBatchRegistration()
+    {
+        _batchRegistrationDepth--;
+        if (_batchRegistrationDepth > 0 || !_batchRegistrationRefreshPending)
+            return;
+
+        _batchRegistrationRefreshPending = false;
+        ReapplyActiveProcessAfterPdkChange();
+        FilterComponents();
+    }
+
+    /// <summary>Closes its batch level exactly once — extra Dispose calls must not unbalance the depth counter.</summary>
+    private sealed class BatchRegistrationScope : IDisposable
+    {
+        private LeftPanelViewModel? _owner;
+
+        public BatchRegistrationScope(LeftPanelViewModel owner) => _owner = owner;
+
+        public void Dispose()
+        {
+            var owner = _owner;
+            _owner = null;
+            owner?.EndBatchRegistration();
+        }
     }
 
     private void NotifyTemplateDefinitionSaved(string pdkName, string componentName)

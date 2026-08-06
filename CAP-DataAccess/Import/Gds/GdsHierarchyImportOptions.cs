@@ -76,7 +76,7 @@ public sealed record GdsHierarchyImportOptions
     /// unknown-kind pins inferred electrical); unconsumed metal polygons are
     /// imported as frozen paths like their waveguide counterparts. Default:
     /// (11, 0) and (12, 0) — the metal trace and bridge-marker layers our own
-    /// exporters use (<c>MetalRoutingSpec</c> defaults, issues #682/#519), so
+    /// exporters use (<c>MetalRoutingSpec</c> defaults), so
     /// re-importing a Lunima export reconstructs its electrical routing out of
     /// the box. Kept separate from <see cref="RouteLayers"/>: optical and metal
     /// polygon networks must never merge into one connection.
@@ -123,9 +123,11 @@ public sealed record GdsHierarchyImportOptions
     /// Maximum total outline points kept per cell draft. When simplification at
     /// the configured tolerance exceeds this, the tolerance is raised
     /// adaptively; as a last resort the smallest-area polygons are dropped
-    /// (with a warning). Default: 2000.
+    /// (with a warning). Default: 8000 — outline geometry is built once per
+    /// template and drawn from a cached Skia geometry, so detail is cheap; the
+    /// cap only guards degenerate multi-million-point cells.
     /// </summary>
-    public int MaxOutlinePointsPerCell { get; init; } = 2000;
+    public int MaxOutlinePointsPerCell { get; init; } = 8000;
 
     /// <summary>
     /// Resolves a GDS cell name to an existing PDK component. Called with the

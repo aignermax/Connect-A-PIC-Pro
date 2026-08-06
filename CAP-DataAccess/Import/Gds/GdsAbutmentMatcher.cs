@@ -11,6 +11,14 @@ namespace CAP_DataAccess.Import.Gds;
 /// Pins already consumed by route-derived pairs
 /// (<see cref="GdsRouteConnectivityMatcher"/>, which runs first) are excluded
 /// up front, so a route polygon's connection is never double-connected.
+///
+/// Performance: partner candidates come from a <see cref="GdsSpatialGrid"/>
+/// uniform hash over all pin positions instead of the quadratic all-pins scan.
+/// The grid only prunes pins that geometrically cannot lie within the
+/// tolerance and the ordinal sort restores the scan order, so the pairs, the
+/// warnings, and their ordering are identical to the brute-force scan; what
+/// was O(pins²) becomes near-linear (tens of thousands of pins on a
+/// production-scale file).
 /// </summary>
 internal static class GdsAbutmentMatcher
 {
@@ -18,6 +26,22 @@ internal static class GdsAbutmentMatcher
 
     /// <summary>A match candidate: an instance pin, or a top-cell port when <see cref="IsPort"/>.</summary>
     private readonly record struct Candidate(int InstanceIndex, int PinIndex, string PinName, bool IsPort);
+
+    /// <summary>
+    /// The pins in one flat deterministic scan order — all instance pins
+    /// (instance placement order, then pin order), then the top-cell ports —
+    /// with a spatial index over their positions. The ordinal IS the scan
+    /// order: sorting grid candidates by it reproduces the brute-force nested
+    /// loops exactly.
+    /// </summary>
+    private sealed class PinTable
+    {
+        public List<int> InstanceOf = new(); // −1 for a top-cell port
+        public List<int> IndexOf = new();    // pin index within the instance, or port index
+        public GdsSpatialGrid? Grid;
+
+        public int Count => InstanceOf.Count;
+    }
 
     /// <summary>
     /// Scans pins in deterministic order (instance placement order, then pin
@@ -58,6 +82,8 @@ internal static class GdsAbutmentMatcher
                 consumedPorts[port] = true;
         }
 
+        var table = BuildPinTable(pinsPerInstance, topPortPins, toleranceUm);
+
         for (int i = 0; i < pinsPerInstance.Count; i++)
         {
             for (int k = 0; k < pinsPerInstance[i].Count; k++)
@@ -66,29 +92,7 @@ internal static class GdsAbutmentMatcher
                     continue;
 
                 var pin = pinsPerInstance[i][k];
-                var candidates = new List<Candidate>();
-
-                for (int j = 0; j < pinsPerInstance.Count; j++)
-                {
-                    if (j == i)
-                        continue;
-                    for (int l = 0; l < pinsPerInstance[j].Count; l++)
-                    {
-                        if (consumedInstancePins[j][l])
-                            continue;
-                        var other = pinsPerInstance[j][l];
-                        if (WithinTolerance(pin, other, toleranceUm) && AnglesOppose(pin, other))
-                            candidates.Add(new Candidate(j, l, other.Name, IsPort: false));
-                    }
-                }
-                for (int p = 0; p < topPortPins.Count; p++)
-                {
-                    if (consumedPorts[p])
-                        continue;
-                    if (WithinTolerance(pin, topPortPins[p], toleranceUm))
-                        candidates.Add(new Candidate(-1, p, topPortPins[p].Name, IsPort: true));
-                }
-
+                var candidates = CollectCandidates(pin, ownInstance: i);
                 if (candidates.Count == 0)
                     continue;
 
@@ -120,6 +124,82 @@ internal static class GdsAbutmentMatcher
             }
         }
         return pairs;
+
+        // The grid query box is a SUPERSET of the tolerance disk — it only
+        // prunes pins that cannot possibly coincide; the original predicates
+        // stay the arbiter, and the ordinal sort restores the brute-force scan
+        // order (instance pins in placement order, then top-cell ports).
+        List<Candidate> CollectCandidates(GdsAbsolutePin sourcePin, int ownInstance)
+        {
+            var candidates = new List<Candidate>();
+            if (table.Grid is null)
+                return candidates;
+            var ordinals = table.Grid.QueryBox(
+                sourcePin.XUm - toleranceUm, sourcePin.YUm - toleranceUm,
+                sourcePin.XUm + toleranceUm, sourcePin.YUm + toleranceUm);
+            ordinals.Sort();
+            foreach (int ordinal in ordinals)
+            {
+                int j = table.InstanceOf[ordinal];
+                int l = table.IndexOf[ordinal];
+                if (j < 0)
+                {
+                    if (!consumedPorts[l] && WithinTolerance(sourcePin, topPortPins[l], toleranceUm))
+                        candidates.Add(new Candidate(-1, l, topPortPins[l].Name, IsPort: true));
+                }
+                else if (j != ownInstance && !consumedInstancePins[j][l])
+                {
+                    var other = pinsPerInstance[j][l];
+                    if (WithinTolerance(sourcePin, other, toleranceUm) && AnglesOppose(sourcePin, other))
+                        candidates.Add(new Candidate(j, l, other.Name, IsPort: false));
+                }
+            }
+            return candidates;
+        }
+    }
+
+    /// <summary>
+    /// Builds the flat pin table with its spatial index; the grid is null when
+    /// there are no pins at all (the scan then collects no candidates). The
+    /// cell size adapts to the pin spread and the coincidence tolerance.
+    /// </summary>
+    private static PinTable BuildPinTable(
+        IReadOnlyList<IReadOnlyList<GdsAbsolutePin>> pinsPerInstance,
+        IReadOnlyList<GdsAbsolutePin> topPortPins,
+        double toleranceUm)
+    {
+        var table = new PinTable();
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+
+        void Add(int instanceIndex, int pinIndex, GdsAbsolutePin pin)
+        {
+            table.InstanceOf.Add(instanceIndex);
+            table.IndexOf.Add(pinIndex);
+            minX = Math.Min(minX, pin.XUm);
+            minY = Math.Min(minY, pin.YUm);
+            maxX = Math.Max(maxX, pin.XUm);
+            maxY = Math.Max(maxY, pin.YUm);
+        }
+
+        for (var i = 0; i < pinsPerInstance.Count; i++)
+            for (var k = 0; k < pinsPerInstance[i].Count; k++)
+                Add(i, k, pinsPerInstance[i][k]);
+        for (var t = 0; t < topPortPins.Count; t++)
+            Add(-1, t, topPortPins[t]);
+
+        if (table.Count == 0)
+            return table;
+
+        var span = Math.Max(maxX - minX, maxY - minY);
+        table.Grid = GdsSpatialGrid.Create(span, toleranceUm, table.Count);
+        var ordinal = 0;
+        for (var i = 0; i < pinsPerInstance.Count; i++)
+            for (var k = 0; k < pinsPerInstance[i].Count; k++)
+                table.Grid.InsertPoint(ordinal++, pinsPerInstance[i][k].XUm, pinsPerInstance[i][k].YUm);
+        for (var t = 0; t < topPortPins.Count; t++)
+            table.Grid.InsertPoint(ordinal++, topPortPins[t].XUm, topPortPins[t].YUm);
+        return table;
     }
 
     private static bool WithinTolerance(GdsAbsolutePin a, GdsAbsolutePin b, double toleranceUm)

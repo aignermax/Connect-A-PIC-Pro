@@ -518,7 +518,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             PhysicalY = PhysicalY,
             WidthMicrometers = WidthMicrometers,
             HeightMicrometers = HeightMicrometers,
-            Rotation90CounterClock = Rotation90CounterClock
+            Rotation90CounterClock = Rotation90CounterClock,
+            // Immutable records — sharing the list is safe (same rule as Component.DeepCopy).
+            OutlinePolygons = OutlinePolygons
         };
 
         // Map old component Ids (Guid) to new cloned components

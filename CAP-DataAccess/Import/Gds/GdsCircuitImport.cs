@@ -17,9 +17,9 @@ public sealed record GdsCircuitImport
 
     /// <summary>
     /// Bounding box of the whole top-cell hierarchy in micrometers, in
-    /// GDS-native Y-up coordinates (same convention as
-    /// <see cref="GdsImportResult.BoundingBox"/>). App-space coordinates in this
-    /// result are relative to this box's top-left corner: appX = gdsX − MinX,
+    /// GDS-native Y-up coordinates (as measured by
+    /// <see cref="GdsCellFlattener.GetBoundingBox"/>). App-space coordinates in
+    /// this result are relative to this box's top-left corner: appX = gdsX − MinX,
     /// appY = MaxY − gdsY.
     /// </summary>
     public GdsBoundingBox BoundingBox { get; init; }
@@ -49,6 +49,16 @@ public sealed record GdsCircuitImport
     /// own outlines.
     /// </summary>
     public IReadOnlyList<GdsOutlinePolygon> TopCellWaveguidePolygons { get; init; } =
+        Array.Empty<GdsOutlinePolygon>();
+
+    /// <summary>
+    /// The top cell's OWN polygons on non-routing layers (substrate/base plates,
+    /// exclusion zones, logos) — render-only background geometry for the created
+    /// group. Never routing obstacles: a base plate spanning the whole design
+    /// would otherwise wall off every route. Empty in black-box mode (the single
+    /// draft's outlines already carry every layer).
+    /// </summary>
+    public IReadOnlyList<GdsOutlinePolygon> TopCellResidualPolygons { get; init; } =
         Array.Empty<GdsOutlinePolygon>();
 
     /// <summary>User-presentable warnings collected during the import, in encounter order.</summary>
