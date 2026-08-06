@@ -150,6 +150,15 @@
                         Width="36" Margin="2" Background="#3d3d3d" ToolTip.Tip="{loc:Localize Toolbar.SaveDesignTip}"/>
                 <Button Content="💾+" Command="{Binding SaveDesignAsCommand}"
                         Width="50" Margin="2" Background="#3d3d3d" ToolTip.Tip="{loc:Localize Toolbar.SaveDesignAsTip}"/>
+                <!-- GDS import as the Export button's sibling — same command as the
+                     library panel's GDS button (#808), so the tooltip reuses its text. -->
+                <Button MinWidth="95" Margin="2" Padding="8,4" Background="#3d3d3d"
+                        Command="{Binding GdsImport.OpenGdsImportDialogCommand}"
+                        ToolTip.Tip="{loc:Localize GdsImport.OpenTip}">
+                    <Button.Content>
+                        <TextBlock Text="{loc:Localize Toolbar.ImportButton}"/>
+                    </Button.Content>
+                </Button>
                 <!-- Unified Export flyout — add formats via IExportFormat + ExportMenuViewModel, no axaml changes needed -->
                 <Button MinWidth="95" Margin="2" Padding="8,4" Background="#3d4d3d"
                         ToolTip.Tip="{loc:Localize Toolbar.ExportTip}">
@@ -613,7 +622,7 @@
 
                 <!-- Component Library -->
                 <DockPanel Grid.Row="4">
-                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto" Margin="10,6,10,4">
+                    <Grid DockPanel.Dock="Top" ColumnDefinitions="*,Auto,Auto,Auto" Margin="10,6,10,4">
                         <TextBlock Grid.Column="0" Text="{loc:Localize LeftPanel.ComponentLibrary}"
                                    FontWeight="Bold" Foreground="White" VerticalAlignment="Center"/>
                         <!-- Opens the Component Registry browser window (#656) — the online,
@@ -621,7 +630,12 @@
                         <Button Grid.Column="1" Content="🌐" Click="OpenRegistryBrowser_Click"
                                 Padding="6,0" Margin="0,0,4,0" Background="#2a3a4a"
                                 ToolTip.Tip="{loc:Localize Registry.OpenTip}"/>
-                        <Button Grid.Column="2" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
+                        <!-- Imports a GDS layout as canvas components (#808) — the command lives
+                             on MainViewModel.GdsImport, not on LeftPanelViewModel. -->
+                        <Button Grid.Column="2" Content="GDS" Command="{Binding GdsImport.OpenGdsImportDialogCommand}"
+                                Padding="6,0" Margin="0,0,4,0" Background="#3a3a4a" FontSize="10"
+                                ToolTip.Tip="{loc:Localize GdsImport.OpenTip}"/>
+                        <Button Grid.Column="3" Content="+" Command="{Binding LeftPanel.OpenNewComponentCommand}"
                                 Padding="8,0" FontWeight="Bold" Background="#2a4a2a"
                                 ToolTip.Tip="{loc:Localize LeftPanel.NewComponentTip}"/>
                     </Grid>

@@ -272,13 +272,15 @@ public static class GroupTemplateSerializer
 
     /// <summary>
     /// Serializes a frozen path, referencing child components by index.
+    /// Pin-less paths (GDS-imported route outlines) serialize with −1 child
+    /// indexes and empty pin names.
     /// </summary>
     private static FrozenPathDto SerializeFrozenPath(
         FrozenWaveguidePath path,
         List<Component> children)
     {
-        int startIdx = children.IndexOf(path.StartPin.ParentComponent);
-        int endIdx = children.IndexOf(path.EndPin.ParentComponent);
+        int startIdx = path.StartPin is null ? -1 : children.IndexOf(path.StartPin.ParentComponent);
+        int endIdx = path.EndPin is null ? -1 : children.IndexOf(path.EndPin.ParentComponent);
 
         var segments = path.Path.Segments.Select(seg =>
         {
@@ -313,9 +315,9 @@ public static class GroupTemplateSerializer
         return new FrozenPathDto
         {
             StartChildIndex = startIdx,
-            StartPinName = path.StartPin.Name,
+            StartPinName = path.StartPin?.Name ?? "",
             EndChildIndex = endIdx,
-            EndPinName = path.EndPin.Name,
+            EndPinName = path.EndPin?.Name ?? "",
             IsBlockedFallback = path.Path.IsBlockedFallback,
             IsInvalidGeometry = path.Path.IsInvalidGeometry,
             IsPlaceholderGeometry = path.Path.IsPlaceholderGeometry,
@@ -331,25 +333,33 @@ public static class GroupTemplateSerializer
     }
 
     /// <summary>
-    /// Deserializes a frozen path, resolving child references by index.
+    /// Deserializes a frozen path, resolving child references by index. A path with
+    /// BOTH child indexes at −1 is pin-less geometry (GDS-imported route outline) —
+    /// it is restored without pins instead of being dropped.
     /// </summary>
     private static FrozenWaveguidePath? DeserializeFrozenPath(
         FrozenPathDto dto,
         List<Component> children)
     {
-        if (dto.StartChildIndex < 0 || dto.StartChildIndex >= children.Count)
-            return null;
-        if (dto.EndChildIndex < 0 || dto.EndChildIndex >= children.Count)
-            return null;
+        PhysicalPin? startPin = null;
+        PhysicalPin? endPin = null;
+        bool pinLess = dto.StartChildIndex < 0 && dto.EndChildIndex < 0;
+        if (!pinLess)
+        {
+            if (dto.StartChildIndex < 0 || dto.StartChildIndex >= children.Count)
+                return null;
+            if (dto.EndChildIndex < 0 || dto.EndChildIndex >= children.Count)
+                return null;
 
-        var startComp = children[dto.StartChildIndex];
-        var endComp = children[dto.EndChildIndex];
+            var startComp = children[dto.StartChildIndex];
+            var endComp = children[dto.EndChildIndex];
 
-        var startPin = startComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.StartPinName);
-        var endPin = endComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.EndPinName);
+            startPin = startComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.StartPinName);
+            endPin = endComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.EndPinName);
 
-        if (startPin == null || endPin == null)
-            return null;
+            if (startPin == null || endPin == null)
+                return null;
+        }
 
         var routedPath = new RoutedPath
         {

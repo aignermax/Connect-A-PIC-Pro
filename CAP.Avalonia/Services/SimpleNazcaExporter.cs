@@ -2,7 +2,9 @@ using System.Globalization;
 using System.Text;
 using CAP.Avalonia.Services.MetalRouting;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components;
+using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.PinKinds;
@@ -21,6 +23,17 @@ namespace CAP.Avalonia.Services;
 public class SimpleNazcaExporter
 {
     /// <summary>
+    /// GDS (layer, datatype) pair for pin/port labels (TEXT elements), emitted as a
+    /// Python layer tuple: the gdsfactory port-label convention (1, 10), which is also
+    /// the default our GDS re-import pin detector reads
+    /// (<c>GdsPinDetectionOptions.PortLayers</c>, issue #808). Labels are emitted as
+    /// <c>nd.Annotation</c> — <c>nd.text</c> renders stroked POLYGONS, not GDS TEXT
+    /// records, so a label-based pin detector would never see it.
+    /// Internal so <see cref="NazcaRawCodeCellWriter"/> labels raw-code pins identically.
+    /// </summary>
+    internal const string PortLabelLayer = "(1, 10)";
+
+    /// <summary>
     /// Optional source of global interconnect settings (waveguide width/bend radius/GDS layer,
     /// issue #574). When null, the historical export defaults (<see cref="InterconnectSettings"/>)
     /// are used.
@@ -29,6 +42,9 @@ public class SimpleNazcaExporter
 
     /// <summary>
     /// Exports the full design to a Python/Nazca script.
+    /// Component stub cells carry a TEXT label per optical pin and the design's external
+    /// ports (fiber couplers) carry top-cell labels — both on the gdsfactory port-label
+    /// layer (1, 10) so the GDS re-import detects named pins (issue #808).
     /// </summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="pdkModuleName">Optional PDK module name (e.g., "siepic_ebeam_pdk") for import.</param>
@@ -58,21 +74,39 @@ public class SimpleNazcaExporter
     /// resolve — the geometry is rendered (a real, non-placeholder crossing is not a reason to
     /// omit it), but the layout still deserves a second look.
     /// </param>
+    /// <param name="library">
+    /// Optional component library for raw-code inlining (<see cref="NazcaRawCodeCellWriter"/>):
+    /// placed components whose template carries nazca-backend raw code (GDS imports, custom
+    /// Python cells) then export their REAL geometry instead of a box stub / demofab
+    /// heuristic. Null keeps the legacy behavior.
+    /// </param>
+    /// <param name="exportWarnings">
+    /// Optional collector: appended with one description per UNIQUE raw-code template
+    /// whose geometry source is missing (a deleted .gds file) and that therefore exports
+    /// as a placeholder box stub — a template placed ten times warns once, matching the
+    /// once-per-template fallback emission.
+    /// </param>
     public string Export(
         DesignCanvasViewModel canvas,
         string? pdkModuleName = null,
         bool emitVerification = false,
         MetalRoutingSpec? metalSpec = null,
         List<string>? skippedConnections = null,
-        List<string>? unresolvedCrossings = null)
+        List<string>? unresolvedCrossings = null,
+        IEnumerable<ComponentTemplate>? library = null,
+        List<string>? exportWarnings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+        var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include: null, library, exportWarnings);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include: null, rawCodePlan, library);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas);
-        var componentNames = AppendComponents(sb, canvas, emitVerification);
+        AppendPdkComponentStubs(sb, canvas, include: null, rawCodePlan, wrapperPlan);
+        NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
+        NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
+        var componentNames = AppendComponents(sb, canvas, emitVerification, rawCodePlan: rawCodePlan, wrapperPlan: wrapperPlan);
         AppendConnections(
             sb, canvas, componentNames, metal, interconnectSettings.GdsLayer,
             skippedConnections, unresolvedCrossings);
@@ -95,19 +129,31 @@ public class SimpleNazcaExporter
     /// <param name="include">Predicate selecting the components to render.</param>
     /// <param name="topCellName">Name of the partial design's top cell.</param>
     /// <param name="metalSpec">Metal routing parameters; null uses <see cref="MetalRoutingSpec.Default"/>.</param>
+    /// <param name="library">
+    /// Optional component library for raw-code inlining — see <see cref="Export"/>.
+    /// </param>
+    /// <param name="exportWarnings">
+    /// Optional collector for missing-source raw-code fallbacks — see <see cref="Export"/>.
+    /// </param>
     public string ExportPartial(
         DesignCanvasViewModel canvas,
         Func<Component, bool> include,
         string topCellName,
-        MetalRoutingSpec? metalSpec = null)
+        MetalRoutingSpec? metalSpec = null,
+        IEnumerable<ComponentTemplate>? library = null,
+        List<string>? exportWarnings = null)
     {
         var sb = new StringBuilder();
         var metal = metalSpec ?? MetalRoutingSpec.Default;
         var interconnectSettings = SettingsSource?.Invoke() ?? new InterconnectSettings();
+        var rawCodePlan = NazcaRawCodeCellWriter.BuildPlan(canvas, include, library, exportWarnings);
+        var wrapperPlan = NazcaPinLabelWrapperWriter.BuildPlan(canvas, include, rawCodePlan, library);
 
         AppendHeader(sb, interconnectSettings, metal);
-        AppendPdkComponentStubs(sb, canvas, include);
-        AppendComponents(sb, canvas, emitVerification: false, include, topCellName);
+        AppendPdkComponentStubs(sb, canvas, include, rawCodePlan, wrapperPlan);
+        NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
+        NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
+        AppendComponents(sb, canvas, emitVerification: false, include, topCellName, rawCodePlan, wrapperPlan);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
@@ -146,10 +192,12 @@ public class SimpleNazcaExporter
     /// for the real foundry geometry when the PDK is installed.
     /// </summary>
     private static void AppendPdkComponentStubs(
-        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null)
+        StringBuilder sb, DesignCanvasViewModel canvas, Func<Component, bool>? include = null,
+        RawCodeExportPlan? rawCodePlan = null, PinLabelWrapperPlan? wrapperPlan = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var generated = new HashSet<string>(StringComparer.Ordinal);
+        var plan = rawCodePlan ?? RawCodeExportPlan.Empty;
 
         foreach (var compVm in canvas.Components)
         {
@@ -161,13 +209,13 @@ public class SimpleNazcaExporter
                 {
                     if (child.IsAnalysisTool) continue;
                     if (include != null && !include(child)) continue;
-                    AppendComponentStub(sb, child, generated, ci);
+                    AppendComponentStub(sb, child, generated, ci, plan, wrapperPlan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendComponentStub(sb, comp, generated, ci);
+                AppendComponentStub(sb, comp, generated, ci, plan, wrapperPlan);
             }
         }
     }
@@ -177,10 +225,30 @@ public class SimpleNazcaExporter
     /// Dedupes by STUB name, not function name: parameterized components carry a
     /// parameters hash in the name (issue #783), so each distinct parameter set
     /// generates its own stub while identical placements still share one.
+    /// A component in the raw-code plan renders its real geometry via
+    /// <see cref="NazcaRawCodeCellWriter"/> instead — no stub — unless it is a
+    /// missing-source fallback, which keeps a box stub under the wrapper's
+    /// function name so the placement call is identical either way.
     /// </summary>
     private static void AppendComponentStub(
-        StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci)
+        StringBuilder sb, Component comp, HashSet<string> generated, CultureInfo ci,
+        RawCodeExportPlan plan, PinLabelWrapperPlan? wrapperPlan = null)
     {
+        if (plan.TryGetEntry(comp, out var rawEntry))
+        {
+            if (!rawEntry.IsFallback || !generated.Add(rawEntry.FunctionName))
+                return;
+            AppendStandardComponentStub(
+                sb, rawEntry.Template.Name, rawEntry.FunctionName, comp, ci,
+                NazcaCoordinateMapper.GetStubAnchor(comp));
+            return;
+        }
+
+        // Pin-label-wrapped components place the real module cell inside the
+        // wrapper — the (dead, never-called) box stub would be pure noise.
+        if (wrapperPlan is not null && wrapperPlan.TryGetEntry(comp, out _))
+            return;
+
         var funcName = comp.NazcaFunctionName;
         if (string.IsNullOrEmpty(funcName) || !RequiresStub(funcName))
             return;
@@ -220,7 +288,7 @@ public class SimpleNazcaExporter
         // The cell is rotation-independent (placement applies .put(rot)); use the
         // UNROTATED first-pin offset as the org anchor (oy), mirroring the mapper. The
         // straight's centre line coincides with its pins, so it sits at oy - firstPin.oy.
-        var (_, anchorY) = NazcaCoordinateMapper.GetStubAnchor(comp);
+        var (anchorX, anchorY) = NazcaCoordinateMapper.GetStubAnchor(comp);
         var firstPin = comp.PhysicalPins.FirstOrDefault();
         var firstPinY = firstPin != null
             ? NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, firstPin).OffsetY
@@ -232,27 +300,53 @@ public class SimpleNazcaExporter
 
         sb.AppendLine($"def {pythonFuncName}(length=100, **kwargs):");
         sb.AppendLine($"    \"\"\"Auto-generated parametric straight waveguide stub for {funcName}.\"\"\"");
-        sb.AppendLine($"    with nd.Cell(name='{funcName}_{{length}}') as cell:");
+        // The cell name is an f-string so each length gets its OWN cell
+        // ('demo.shallow.strt_100') — a plain string would bake the literal
+        // "{length}" into the name, collapsing every length into one cell.
+        sb.AppendLine($"    with nd.Cell(name=f'{funcName}_{{length}}') as cell:");
         sb.AppendLine($"        # Use nd.strt() for proper waveguide with specified length");
         sb.AppendLine($"        nd.strt(length=length, width=0.45, layer=1).put(0, {strtY})");
+
+        // The black-box body frame on demofab's bb_body layer (1003, 0) — the
+        // same documentation layer demofab's own cells draw their frames on:
+        // the bare straight is 0.45 µm tall while the app component is W×H, so
+        // without the frame the cell bbox (and with it the re-imported
+        // placement position) would sit ~(H−0.45)/2 off the original.
+        var w = comp.WidthMicrometers;
+        var h = comp.HeightMicrometers;
+        var bx0 = NazcaCoordinateMapper.NormalizeZero(-anchorX).ToString("F2", ci);
+        var by0 = NazcaCoordinateMapper.NormalizeZero(anchorY - h).ToString("F2", ci);
+        var bx1 = NazcaCoordinateMapper.NormalizeZero(w - anchorX).ToString("F2", ci);
+        var by1 = NazcaCoordinateMapper.NormalizeZero(anchorY).ToString("F2", ci);
+        sb.AppendLine(
+            $"        nd.Polygon(points=[({bx0},{by0}),({bx1},{by0}),({bx1},{by1}),({bx0},{by1})], " +
+            "layer=(1003, 0)).put(0, 0)  # bb_body frame (documentation layer)");
 
         // Generate pins from the UNROTATED offsets, relative to org (the mapper anchor);
         // a straight's pins share the centre line, so their local Y is oy - OffsetY = 0.
         foreach (var pin in comp.PhysicalPins)
         {
-            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
-            // must not be emitted as waveguide stubs (#519). Metal routing is a separate feature.
-            if (pin.MatterType != MatterType.Light) continue;
-
             var (uox, uoy) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
             var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
 
             // For straight waveguides: input pin at x=0, output pin at x=length.
+            // The label anchors exactly on the pin so re-import detects it there (#808).
+            // nd.Pin is an optical Nazca port; electrical pins are not optical ports and
+            // must not be emitted as waveguide stubs (#519) — but they still get the
+            // port label, or a re-import could never see the pin.
             if (uox == 0)
-                sb.AppendLine($"        nd.Pin('{pin.Name}').put(0, {py}, {pa})");
+            {
+                if (pin.MatterType == MatterType.Light)
+                    sb.AppendLine($"        nd.Pin('{pin.Name}').put(0, {py}, {pa})");
+                sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(0, {py})");
+            }
             else
-                sb.AppendLine($"        nd.Pin('{pin.Name}').put(length, {py}, {pa})");
+            {
+                if (pin.MatterType == MatterType.Light)
+                    sb.AppendLine($"        nd.Pin('{pin.Name}').put(length, {py}, {pa})");
+                sb.AppendLine($"        nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put(length, {py})");
+            }
         }
 
         sb.AppendLine($"    return cell");
@@ -270,14 +364,25 @@ public class SimpleNazcaExporter
     /// The stub box doubles as the anchor the klayout post-pass
     /// (<see cref="SiepicCellUpgradeWriter"/>) fills with real foundry geometry
     /// for SiEPIC cells — same cell name, so instances keep their placement.
+    /// Every optical pin additionally gets a TEXT label on <see cref="PortLabelLayer"/>
+    /// anchored on the pin, so a re-import of the cell detects named pins there
+    /// (issue #808).
     /// </summary>
     /// <param name="stubName">
     /// Cell/function name to emit: <paramref name="funcName"/> plus the parameters
     /// hash for parameterized components (<see cref="NazcaStubNaming"/>, issue #783),
     /// so two parameter sets never share one cell.
     /// </param>
+    /// <param name="anchorOverride">
+    /// Optional cell anchor replacing the calibrated origin offset: the raw-code
+    /// fallback stub anchors on <see cref="NazcaCoordinateMapper.GetStubAnchor"/>
+    /// (the same value the placement derives its bbox from) because raw-code
+    /// components carry no calibrated offset — the plain (0, 0) default would
+    /// render the box and its pins one cell height below the placed position.
+    /// </param>
     private static void AppendStandardComponentStub(
-        StringBuilder sb, string funcName, string stubName, Component comp, CultureInfo ci)
+        StringBuilder sb, string funcName, string stubName, Component comp, CultureInfo ci,
+        (double X, double Y)? anchorOverride = null)
     {
         var w = comp.WidthMicrometers;
         var h = comp.HeightMicrometers;
@@ -287,13 +392,15 @@ public class SimpleNazcaExporter
 
         // Define cell once, return cached instance on each call
         sb.AppendLine($"with nd.Cell(name='{stubName}') as _{pythonFuncName}_cell:");
-        sb.AppendLine($"    \"\"\"Auto-generated stub for {funcName} ({comp.WidthMicrometers.ToString(ci)}x{comp.HeightMicrometers.ToString(ci)} µm).\"\"\"");
+        // funcName is PDK-controlled (a raw-code template's Name in fallback mode) —
+        // sanitize so a hostile name cannot break out of the docstring.
+        sb.AppendLine($"    \"\"\"Auto-generated stub for {SanitizePythonComment(funcName)} ({comp.WidthMicrometers.ToString(ci)}x{comp.HeightMicrometers.ToString(ci)} µm).\"\"\"");
 
         // Stubs are only generated for PDK-named components (see RequiresStub), whose
         // placement always uses the calibrated origin offset — (0,0) means org at the
         // box top-left. Example: GC with offset (0, 9.5), H=19 → polygon (0,-9.5)..(W,9.5).
-        double offsetX = comp.NazcaOriginOffsetX;
-        double offsetY = comp.NazcaOriginOffsetY;
+        double offsetX = anchorOverride?.X ?? comp.NazcaOriginOffsetX;
+        double offsetY = anchorOverride?.Y ?? comp.NazcaOriginOffsetY;
 
         var px0 = NazcaCoordinateMapper.NormalizeZero(-offsetX).ToString("F2", ci);
         var py0 = NazcaCoordinateMapper.NormalizeZero(offsetY - h).ToString("F2", ci);
@@ -308,17 +415,25 @@ public class SimpleNazcaExporter
 
         sb.AppendLine($"    nd.Polygon(points=[({px0},{py0}),({px1},{py0}),({px1},{py1}),({px0},{py1})], layer={bodyLayer}).put(0, 0)");
 
-        // Pins relative to org: local = (OffsetX-ox, oy-OffsetY), the plain Y negation
-        // of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition contract).
+        // Pins relative to org: local = (UnrotatedOffsetX-ox, oy-UnrotatedOffsetY), the
+        // plain Y negation of the app pin offsets (NazcaCoordinateMapper.GetPinNazcaPosition
+        // contract). The UNROTATED offsets matter: the cell is rotation-independent
+        // (placement applies .put(rot)) and one stub is shared by instances at different
+        // rotations — live offsets would bake the first instance's rotation into the
+        // shared cell (NazcaCoordinateMapper.GetUnrotatedPinOffset).
         foreach (var pin in comp.PhysicalPins)
         {
-            // Optical ports only — see the straight-stub loop above (#519).
-            if (pin.MatterType != MatterType.Light) continue;
-
-            var px = NazcaCoordinateMapper.NormalizeZero(pin.OffsetXMicrometers - offsetX).ToString("F2", ci);
-            var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pin.OffsetYMicrometers).ToString("F2", ci);
+            var (pinOffsetX, pinOffsetY) = NazcaCoordinateMapper.GetUnrotatedPinOffset(comp, pin);
+            var px = NazcaCoordinateMapper.NormalizeZero(pinOffsetX - offsetX).ToString("F2", ci);
+            var py = NazcaCoordinateMapper.NormalizeZero(offsetY - pinOffsetY).ToString("F2", ci);
             var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
-            sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
+            // nd.Pin is an optical Nazca port: electrical pins get no Pin (#519) —
+            // but they DO get the port label, or a re-import could never see them
+            // (a purely electrical component like a bond pad carries no other pin trace).
+            if (pin.MatterType == MatterType.Light)
+                sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
+            // Pin label at the same anchor — re-import detects the named pin there (#808).
+            sb.AppendLine($"    nd.Annotation(text='{EscapePythonString(pin.Name)}', layer={PortLabelLayer}).put({px}, {py})");
         }
 
         sb.AppendLine();
@@ -329,7 +444,8 @@ public class SimpleNazcaExporter
 
     private static Dictionary<Component, string> AppendComponents(
         StringBuilder sb, DesignCanvasViewModel canvas, bool emitVerification = false,
-        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design")
+        Func<Component, bool>? include = null, string topCellName = "ConnectAPIC_Design",
+        RawCodeExportPlan? rawCodePlan = null, PinLabelWrapperPlan? wrapperPlan = null)
     {
         sb.AppendLine("def create_design():");
         sb.AppendLine($"    with nd.Cell(name='{topCellName}') as design:");
@@ -338,6 +454,7 @@ public class SimpleNazcaExporter
         var componentNames = new Dictionary<Component, string>();
         int compIndex = 0;
         var ci = CultureInfo.InvariantCulture;
+        var plan = rawCodePlan ?? RawCodeExportPlan.Empty;
 
         foreach (var compVm in canvas.Components)
         {
@@ -358,13 +475,13 @@ public class SimpleNazcaExporter
                     if (child.IsAnalysisTool) continue;
                     if (include == null && !string.IsNullOrEmpty(child.GdsFactoryFunction)) continue;
                     if (include != null && !include(child)) continue;
-                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci);
+                    AppendSingleComponent(sb, child, componentNames, ref compIndex, ci, plan, wrapperPlan);
                 }
             }
             else
             {
                 if (include != null && !include(comp)) continue;
-                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci);
+                AppendSingleComponent(sb, comp, componentNames, ref compIndex, ci, plan, wrapperPlan);
             }
         }
 
@@ -418,7 +535,8 @@ public class SimpleNazcaExporter
     /// </summary>
     private static void AppendSingleComponent(
         StringBuilder sb, Component comp, Dictionary<Component, string> componentNames,
-        ref int compIndex, CultureInfo ci)
+        ref int compIndex, CultureInfo ci, RawCodeExportPlan? rawCodePlan = null,
+        PinLabelWrapperPlan? wrapperPlan = null)
     {
         var varName = $"comp_{compIndex}";
 
@@ -426,7 +544,16 @@ public class SimpleNazcaExporter
         var nazcaX = placement.X.ToString("F2", ci);
         var nazcaY = placement.Y.ToString("F2", ci);
         var rot = placement.RotationDegrees.ToString("F0", ci);
-        var nazcaFunc = GetNazcaFunction(comp);
+        // A raw-code component (GDS import / custom Python cell) calls its inlined
+        // wrapper — same call shape for the real-geometry wrapper and the
+        // missing-source fallback box stub (<see cref="NazcaRawCodeCellWriter"/>).
+        // A pin-label-wrapped component (electrical pins on a real module call)
+        // calls its wrapper cell (<see cref="NazcaPinLabelWrapperWriter"/>).
+        var nazcaFunc = rawCodePlan is not null && rawCodePlan.TryGetEntry(comp, out var rawEntry)
+            ? $"{rawEntry.FunctionName}()"
+            : wrapperPlan is not null && wrapperPlan.TryGetEntry(comp, out var wrapperEntry)
+                ? $"{wrapperEntry.FunctionName}()"
+                : GetNazcaFunction(comp);
 
         // Diagnostic logging (Issue #334): trace coordinate transform for each component.
         // originOffset is the effective put-position offset relative to the editor
@@ -462,11 +589,71 @@ public class SimpleNazcaExporter
         // and export math both assume.
         sb.AppendLine($"        {varName} = {nazcaFunc}.put('org', {nazcaX}, {nazcaY}, {rot})  # {comp.Identifier}");
 
+        // External ports of the design get a top-cell label on the port-label layer,
+        // so re-imports and label-based tools find the circuit's interface (#808).
+        AppendExternalPortLabels(sb, comp, ci);
+
         // Record the variable only after its put-line was emitted: a half-failed append
         // must not leave a name pointing at a component that was never placed.
         componentNames[comp] = varName;
         compIndex++;
     }
+
+    /// <summary>
+    /// Emits one top-cell port label (GDS TEXT on <see cref="PortLabelLayer"/>) per optical
+    /// pin of a fiber-interface coupler — the design's external ports. What counts as a
+    /// coupler follows <see cref="LightSourceClassifier"/> (grating/edge couplers), the same
+    /// single source of truth the simulation uses to bind external inputs/outputs: both
+    /// laser-enabled input couplers and listen-only output couplers are labeled. The label
+    /// sits at the pin's world position (the same plain-Y-negation transform as every other
+    /// pin coordinate in this script) and is named "{Identifier}_{PinName}" so multiple
+    /// couplers never produce colliding port names. Non-coupler components emit nothing:
+    /// their pins are already labeled inside their stub cells.
+    /// </summary>
+    private static void AppendExternalPortLabels(StringBuilder sb, Component comp, CultureInfo ci)
+    {
+        if (!LightSourceClassifier.IsLightInjectingCoupler(comp))
+            return;
+
+        foreach (var pin in comp.PhysicalPins)
+        {
+            // Optical pins only — an electrical pin (e.g. a detector's contacts) is not
+            // an optical port and must not become one on re-import (#519).
+            if (pin.MatterType != MatterType.Light) continue;
+
+            var (x, y) = NazcaCoordinateMapper.GetPinNazcaPosition(pin);
+            var px = x.ToString("F2", ci);
+            var py = y.ToString("F2", ci);
+            var portName = EscapePythonString($"{comp.Identifier}_{pin.Name}");
+            sb.AppendLine($"        nd.Annotation(text='{portName}', layer={PortLabelLayer}).put({px}, {py})");
+        }
+    }
+
+    /// <summary>
+    /// Escapes a name for emission inside a single-quoted Python string literal:
+    /// backslashes and single quotes would otherwise break (or inject into) the
+    /// generated script, and raw line breaks would split the statement (#808).
+    /// Internal so <see cref="NazcaRawCodeCellWriter"/> escapes pin labels identically.
+    /// </summary>
+    internal static string EscapePythonString(string value) =>
+        value.Replace("\\", "\\\\", StringComparison.Ordinal)
+             .Replace("'", "\\'", StringComparison.Ordinal)
+             .Replace("\r", "\\r", StringComparison.Ordinal)
+             .Replace("\n", "\\n", StringComparison.Ordinal);
+
+    /// <summary>
+    /// Makes an arbitrary PDK-controlled string (template name, PDK source) safe for
+    /// emission inside a single-line Python COMMENT or a <c>"""</c> docstring of the
+    /// generated script: CR/LF would break out of the line and inject raw script lines,
+    /// a literal <c>"""</c> would terminate the docstring early. The characters are
+    /// stripped outright (not escaped) — the text is informational only, so losing a
+    /// quote sequence beats complicating the generated script. Internal so
+    /// <see cref="NazcaRawCodeCellWriter"/> sanitizes its wrapper comments identically.
+    /// </summary>
+    internal static string SanitizePythonComment(string value) =>
+        value.Replace("\"\"\"", string.Empty, StringComparison.Ordinal)
+             .Replace("\r", string.Empty, StringComparison.Ordinal)
+             .Replace("\n", string.Empty, StringComparison.Ordinal);
 
     private static void AppendConnections(
         StringBuilder sb,
@@ -995,14 +1182,19 @@ public class SimpleNazcaExporter
         sb.AppendLine();
         sb.AppendLine("# Create and export the design");
         sb.AppendLine("design = create_design()");
-        sb.AppendLine("design.put()");
         sb.AppendLine();
         sb.AppendLine("# Export GDS with filename matching this script");
         sb.AppendLine("import os");
         sb.AppendLine("import sys");
         sb.AppendLine("script_path = os.path.abspath(__file__)");
         sb.AppendLine("gds_filename = os.path.splitext(script_path)[0] + '.gds'");
-        sb.AppendLine("nd.export_gds(filename=gds_filename)");
+        // topcells=[design]: plain nd.export_gds() would export the default 'nazca'
+        // cell tree only, so the design had to be instantiated under it (design.put())
+        // and the written GDS's sole top cell was the empty 'nazca' wrapper around
+        // ConnectAPIC_Design — a re-import then offered only that wrapper as the
+        // top-cell candidate and exploded into ONE black box instead of the placed
+        // components. Exporting the design cell directly keeps it the GDS top cell.
+        sb.AppendLine("nd.export_gds(topcells=[design], filename=gds_filename)");
         sb.AppendLine("print(f'GDS exported to: {gds_filename}')");
     }
 
@@ -1017,6 +1209,21 @@ public class SimpleNazcaExporter
         var funcName = comp.NazcaFunctionName;
         if (!string.IsNullOrEmpty(funcName) && NazcaCoordinateMapper.IsPdkFunction(funcName))
         {
+            var funcParams = comp.NazcaFunctionParameters;
+            if (!string.IsNullOrEmpty(funcParams)
+                && NazcaCoordinateMapper.IsParametricStraight(funcName, funcParams))
+            {
+                // A parametric straight calls its generated stub — the same call
+                // shape demo_pdk.* straights and non-dotted PDK straights already
+                // use. The REAL module call (demo.shallow.strt) would dissolve at
+                // export: nazca flattens interconnect straights into the PARENT
+                // cell, erasing the component from the GDS structure (and merging
+                // its two connections into one on re-import).
+                var stubFuncName = System.Text.RegularExpressions.Regex.Replace(
+                    funcName, @"[^a-zA-Z0-9_]", "_");
+                return $"{stubFuncName}({funcParams})";
+            }
+
             // Keep dots (for module attribute access like demo.mmi2x2_dp), replace other invalid chars.
             // The placement calls the parameter-specific stub (issue #783): StubName appends
             // the parameters hash exactly when the stub generator did — dotted names bypass
@@ -1026,7 +1233,6 @@ public class SimpleNazcaExporter
 
             // Forward stored parameters verbatim — the caller (component model)
             // is responsible for ensuring they match the target PDK function's signature.
-            var funcParams = comp.NazcaFunctionParameters;
             if (!string.IsNullOrEmpty(funcParams))
                 return $"{pythonFuncName}({funcParams})";
             else

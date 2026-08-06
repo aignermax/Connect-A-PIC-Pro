@@ -3,6 +3,7 @@ using CAP.Avalonia.Services.GdsFactoryExport.MixedBackend;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
@@ -226,6 +227,104 @@ public class MixedBackendExportViewModelTests
             if (File.Exists(partialPath)) File.Delete(partialPath);
         }
     }
+
+    /// <summary>
+    /// Finding: the mixed-backend export must surface raw-code missing-source fallbacks
+    /// (a deleted .gds → placeholder box in the nazca partial) on the aggregated status
+    /// line, not only in the Error Console — the details stay in the console, the count
+    /// rides the final status.
+    /// </summary>
+    [Fact]
+    public async Task Export_MixedBackendWithMissingGdsSource_WarnsInConsoleAndStatus()
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), $"gfmx-{Guid.NewGuid():N}.py");
+        var partialPath = MixedBackendGdsOrchestrator.PartialScriptPathFor(scriptPath);
+        try
+        {
+            var missingGds = Path.Combine(Path.GetTempPath(), $"deleted-{Guid.NewGuid():N}.gds"); // never written
+            var errorConsole = new CAP_Core.ErrorConsoleService();
+            var service = new RecordingExportService();
+            var vm = new GdsFactoryExportViewModel(
+                MixedBackendCanvasWithRawCodeComponent(), service, errorConsole: errorConsole)
+            {
+                FileDialogService = new FixedPathFileDialog(scriptPath),
+                TemplateLibraryProvider = () => new[] { RawCodeTemplate(missingGds) },
+            };
+
+            await vm.ExportCommand.ExecuteAsync(null);
+
+            // Detailed per-component description → Error Console (as before)…
+            errorConsole.Entries.ShouldContain(e =>
+                e.Level == CAP_Contracts.Logger.LogLevel.Warn
+                && e.Message.Contains("wgA")
+                && e.Message.Contains(missingGds));
+            // …and the aggregated count on the final status line (the new part).
+            vm.StatusText.ShouldContain("1 component(s)");
+            vm.StatusText.ShouldContain("placeholder box");
+            // The nazca partial genuinely got the fallback box under the wrapper name.
+            var partialScript = await File.ReadAllTextAsync(partialPath);
+            partialScript.ShouldContain("component_wgA");
+        }
+        finally
+        {
+            if (File.Exists(scriptPath)) File.Delete(scriptPath);
+            if (File.Exists(partialPath)) File.Delete(partialPath);
+        }
+    }
+
+    /// <summary>The mixed-backend layout of <see cref="MixedBackendCanvas"/>, but the
+    /// nazca side is a raw-code component whose template loads a missing .gds.</summary>
+    private static DesignCanvasViewModel MixedBackendCanvasWithRawCodeComponent()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var gf = TestComponentFactory.CreateBasicComponent();
+        gf.Identifier = "GF1";
+        gf.NazcaFunctionName = "";
+        gf.GdsFactoryFunction = "cspdk.sin300.mmi1x2";
+        canvas.AddComponent(gf, "SiN MMI");
+
+        var raw = TestComponentFactory.CreateBasicComponent();
+        raw.Identifier = "WG1";
+        raw.NazcaFunctionName = "nazca_wga";
+        raw.PhysicalX = 400;
+        raw.PhysicalPins.Add(new PhysicalPin
+        {
+            Name = "in", ParentComponent = raw,
+            OffsetXMicrometers = 0, OffsetYMicrometers = 125, AngleDegrees = 180,
+        });
+        raw.PhysicalPins.Add(new PhysicalPin
+        {
+            Name = "out", ParentComponent = raw,
+            OffsetXMicrometers = 250, OffsetYMicrometers = 125, AngleDegrees = 0,
+        });
+        canvas.AddComponent(raw, "wgA");
+        return canvas;
+    }
+
+    /// <summary>A nazca-backend raw-code template shaped like a GDS import, loading a
+    /// .gds file that does not exist (the fallback path under test).</summary>
+    private static ComponentTemplate RawCodeTemplate(string missingGdsPath) => new()
+    {
+        Name = "wgA",
+        PdkSource = "GDS Import - circuit",
+        WidthMicrometers = 250,
+        HeightMicrometers = 250,
+        PinDefinitions = new[]
+        {
+            new PinDefinition("in", 0, 125, 180),
+            new PinDefinition("out", 250, 125, 0),
+        },
+        RawCode =
+            "import nazca as nd\n" +
+            "\n" +
+            "def component():\n" +
+            "    with nd.Cell(name=\"wgA_aligned\") as cell:\n" +
+            $"        _loaded = nd.load_gds(filename=\"{missingGdsPath.Replace("\\", "\\\\")}\", cellname=\"wgA\", topcellsonly=False)\n" +
+            "        _bb = _loaded.bbox\n" +
+            "        _loaded.put(-_bb[0], -_bb[1])\n" +
+            "    return cell\n",
+        RawCodeBackend = "nazca",
+    };
 
     [Fact]
     public async Task Export_SingleGdsFactoryBackendDesign_WritesNoPartialScript()

@@ -149,6 +149,14 @@ public partial class MainViewModel : ObservableObject
     public LeftPanelViewModel LeftPanel { get; }
 
     /// <summary>
+    /// ViewModel behind the library panel's "Import GDS" button (issue #808):
+    /// picks the .gds file and opens the import dialog. Deliberately NOT part of
+    /// <see cref="LeftPanelViewModel"/> — GDS import is a self-contained flow that
+    /// only reads the panel's template list and registration callback.
+    /// </summary>
+    public ViewModels.GdsImport.GdsImportButtonViewModel GdsImport { get; }
+
+    /// <summary>
     /// ViewModel for the right sidebar panel (analysis, diagnostics, validation).
     /// </summary>
     public RightPanelViewModel RightPanel { get; }
@@ -208,6 +216,7 @@ public partial class MainViewModel : ObservableObject
             FileOperations.VerilogAExport.FileDialogService = value;
             GdsFactoryExport.FileDialogService = value;
             LeftPanel.FileDialogService = value;
+            GdsImport.FileDialogService = value;
         }
     }
 
@@ -272,6 +281,7 @@ public partial class MainViewModel : ObservableObject
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
         ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel registryBrowser,
+        ViewModels.GdsImport.GdsImportButtonViewModel gdsImportButton,
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
         Services.RecentProjectsService? recentProjectsService = null,
@@ -298,6 +308,8 @@ public partial class MainViewModel : ObservableObject
         RightPanel = rightPanel;
         BottomPanel = bottomPanel;
         Registry = registryBrowser;
+
+        GdsImport = gdsImportButton;
 
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
@@ -377,6 +389,10 @@ public partial class MainViewModel : ObservableObject
         FileOperations.UpdateStatus = UpdateStatusText;
         ViewportControl.UpdateStatus = UpdateStatusText;
         LeftPanel.UpdateStatus = UpdateStatusText;
+        GdsImport.UpdateStatus = UpdateStatusText;
+        // A .gds/.gdsii pick in the File→Open dialog routes into the GDS import
+        // flow (FileOperations owns no import knowledge beyond the callback).
+        FileOperations.OpenGdsImportRequested = GdsImport.OpenGdsImportDialogForFileAsync;
         // Key-preserving sink: lets a live UI language switch re-translate the startup
         // "Loaded N component types" status while it is still showing.
         LeftPanel.UpdateLocalizedStatus = SetLocalizedStatus;
@@ -673,11 +689,19 @@ public partial class MainViewModel : ObservableObject
                 OnUiLanguageChanged();
         };
 
-        FileOperations.ZoomToFitAfterLoad = (w, h) =>
+        // One zoom-to-fit body for both post-content triggers — design load and
+        // GDS import placement: prefer the live viewport size over the caller's
+        // fallback, then fit the WHOLE canvas content (not just the new part).
+        Action<double, double> zoomToFitToViewport = (w, h) =>
         {
             var (vpWidth, vpHeight) = ViewportControl.GetViewportSize?.Invoke() ?? (w, h);
             ViewportControl.ZoomToFit(vpWidth, vpHeight);
         };
+        FileOperations.ZoomToFitAfterLoad = zoomToFitToViewport;
+        GdsImport.ZoomToFitAfterImport = zoomToFitToViewport;
+        // An import that outgrew the chip already resized the canvas; this syncs
+        // the chip-size settings panel (same pattern as ApplyChipSizeAfterLoad).
+        GdsImport.ApplyChipSizeAfterImport = ChipSize.ApplyFromMicrometers;
 
         // Restore chip size from saved file without overwriting the user preference default
         FileOperations.ApplyChipSizeAfterLoad = (widthUm, heightUm) =>

@@ -49,6 +49,7 @@ public partial class App : Application
         services.AddHomeFeature();
         services.AddComponentRegistryFeature();
         services.AddAddCustomComponentFeature();
+        services.AddGdsImportFeature();
         services.AddLocalizationFeature();
 
         services.AddSingleton<MainViewModel>();

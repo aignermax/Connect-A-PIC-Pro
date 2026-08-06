@@ -109,7 +109,7 @@ public class CreateCustomPdkFlowTests : IDisposable
 
         vm.CreatePdkCommand.Execute(null);
 
-        _store.ListCustomPdks().ShouldContain(p => p.Name == "MyLib" && p.Process.Name == process.Name,
+        _store.ListCustomPdks().ShouldContain(p => p.Name == "MyLib" && p.Process!.Name == process.Name,
             "creating a PDK via the dialog with an adopted existing process must persist it with that process");
     }
 

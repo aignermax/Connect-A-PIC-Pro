@@ -216,13 +216,13 @@ public partial class DesignCanvasViewModel : ObservableObject
 
     // ── Drag / command execution ──────────────────────────────────────────
 
-    public void BeginDragComponent(ComponentViewModel component) => Placement.IsDragging = true;
+    public void BeginDragComponent(ComponentViewModel component) => Placement.BeginDrag(component.Component);
     public void BeginCommandExecution() => Placement.IsExecutingCommand = true;
     public void EndCommandExecution() => Placement.IsExecutingCommand = false;
 
     public async void EndDragComponent(ComponentViewModel component)
     {
-        Placement.IsDragging = false;
+        Placement.EndDrag();
         await RecalculateRoutesAsync();
         InvalidateSimulation();
     }

@@ -17,6 +17,7 @@ public class CreateGroupCommand : IUndoableCommand
     private readonly DesignCanvasViewModel _canvas;
     private readonly List<Component> _components;
     private readonly List<ComponentViewModel> _componentViewModels = new(); // STORE ViewModels!
+    private readonly string? _requestedGroupName;
     private ComponentGroup? _createdGroup;
     private ComponentViewModel? _groupViewModel;
     private readonly List<WaveguideConnection> _internalConnections = new();
@@ -27,9 +28,32 @@ public class CreateGroupCommand : IUndoableCommand
     public CreateGroupCommand(
         DesignCanvasViewModel canvas,
         List<ComponentViewModel> components)
+        : this(canvas, components, null)
+    {
+    }
+
+    /// <summary>
+    /// Creates the command with the group's final name up front. The name is
+    /// applied when the <see cref="ComponentGroup"/> is constructed — BEFORE the
+    /// group ViewModel is added to the canvas and selected — so bound panels never
+    /// observe the placeholder <c>Group_HHmmss</c> name (a post-selection rename
+    /// leaves <c>ComponentViewModel.DisplayName</c> stale; it has no change
+    /// notification).
+    /// </summary>
+    /// <param name="canvas">Canvas the group is created on.</param>
+    /// <param name="components">Components to group.</param>
+    /// <param name="requestedGroupName">
+    /// Final group name (e.g. an imported GDS top cell); null or whitespace keeps
+    /// the timestamped default.
+    /// </param>
+    public CreateGroupCommand(
+        DesignCanvasViewModel canvas,
+        List<ComponentViewModel> components,
+        string? requestedGroupName)
     {
         _canvas = canvas;
         _components = components.Select(c => c.Component).ToList();
+        _requestedGroupName = string.IsNullOrWhiteSpace(requestedGroupName) ? null : requestedGroupName;
 
         // Store original positions
         foreach (var comp in _components)
@@ -39,6 +63,9 @@ public class CreateGroupCommand : IUndoableCommand
     }
 
     public string Description => $"Create group from {_components.Count} components";
+
+    /// <summary>The group created by <see cref="Execute"/> (null until the first execution).</summary>
+    public ComponentGroup? CreatedGroup => _createdGroup;
 
     public void Execute()
     {
@@ -133,8 +160,9 @@ public class CreateGroupCommand : IUndoableCommand
             }
         }
 
-        // 3. Create ComponentGroup
-        _createdGroup = new ComponentGroup($"Group_{DateTime.Now:HHmmss}")
+        // 3. Create ComponentGroup (with the requested final name when given —
+        // the group is selected below, so the name must be correct by then)
+        _createdGroup = new ComponentGroup(_requestedGroupName ?? $"Group_{DateTime.Now:HHmmss}")
         {
             PhysicalX = minX,
             PhysicalY = minY,
@@ -202,49 +230,42 @@ public class CreateGroupCommand : IUndoableCommand
         {
             _canvas.BeginCommandExecution();
 
-            // 7. Store and remove individual components from canvas
+            // 7. Store and remove individual components from canvas.
+            // Set/dictionary lookups keep this O(N + P + C): the previous
+            // per-item LINQ scans made grouping a 5000-component import
+            // quadratic (minutes on the UI thread).
             _componentViewModels.Clear();
+            var groupedComponents = new HashSet<Component>(_components);
             var componentsToRemove = _canvas.Components
-                .Where(cvm => _components.Contains(cvm.Component))
+                .Where(cvm => groupedComponents.Contains(cvm.Component))
                 .ToList();
 
             // Store ComponentViewModels so we can restore them in Undo!
             _componentViewModels.AddRange(componentsToRemove);
 
-            // Store internal connection ViewModels before removing
+            // Store internal connection ViewModels, then remove them from the
+            // canvas (they're now frozen in the group).
             _internalConnectionViewModels.Clear();
-            foreach (var conn in _internalConnections)
+            var internalConnectionSet = new HashSet<WaveguideConnection>(_internalConnections);
+            _internalConnectionViewModels.AddRange(
+                _canvas.Connections.Where(c => internalConnectionSet.Contains(c.Connection)));
+            foreach (var connVm in _internalConnectionViewModels)
             {
-                var connVm = _canvas.Connections.FirstOrDefault(c => c.Connection == conn);
-                if (connVm != null)
-                {
-                    _internalConnectionViewModels.Add(connVm);
-                }
+                _canvas.Connections.Remove(connVm);
+                _canvas.ConnectionManager.RemoveConnectionDeferred(connVm.Connection);
             }
 
-            // Remove internal connections from canvas (they're now frozen in the group)
-            foreach (var conn in _internalConnections)
+            var removedViewModels = new HashSet<ComponentViewModel>(componentsToRemove);
+            var pinsToRemove = _canvas.AllPins
+                .Where(p => p.ParentComponentViewModel is ComponentViewModel parent
+                            && removedViewModels.Contains(parent))
+                .ToList();
+            foreach (var pin in pinsToRemove)
             {
-                var connVm = _canvas.Connections.FirstOrDefault(c => c.Connection == conn);
-                if (connVm != null)
-                {
-                    _canvas.Connections.Remove(connVm);
-                    _canvas.ConnectionManager.RemoveConnectionDeferred(conn);
-                }
+                _canvas.AllPins.Remove(pin);
             }
-
             foreach (var compVm in componentsToRemove)
             {
-                // Remove pins from AllPins
-                var pinsToRemove = _canvas.AllPins
-                    .Where(p => p.ParentComponentViewModel == compVm)
-                    .ToList();
-                foreach (var pin in pinsToRemove)
-                {
-                    _canvas.AllPins.Remove(pin);
-                }
-
-                // Remove from Components collection
                 _canvas.Components.Remove(compVm);
             }
 
