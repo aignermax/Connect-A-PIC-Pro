@@ -433,8 +433,11 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         var outcome = await service.ImportAsync(gdsPath, analysis.TopCellCandidates[0], dialogOptions, null);
 
         var canvas2 = new DesignCanvasViewModel();
+        // Frozen mode: these round-trip assertions pin the traced-geometry
+        // contract (frozen path counts, the traced-outline validation artifact)
+        // and must stay deterministic and router-independent.
         var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(sink.Templates).ToList())
-            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
         return new ExplodeResult(outcome, report, canvas2);
     }
 
@@ -454,8 +457,9 @@ public class GdsMziElectricalRoundTripTests : IDisposable
             }, null);
 
         var canvas2 = new DesignCanvasViewModel();
+        // Frozen mode, for the same determinism reason as the explode path.
         var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(sink.Templates).ToList())
-            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
         var template = sink.Templates.ShouldHaveSingleItem("the black box registers exactly one component");
         return new BlackBoxResult(outcome, report, template);
     }
