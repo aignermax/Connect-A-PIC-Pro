@@ -17,9 +17,9 @@ public class GdsLabelLayerFallbackTests
     private const double Tolerance = 1e-6;
 
     /// <summary>
-    /// HHI-style device cell: 10×4 µm extent with a waveguide core, but the
-    /// in/out pin labels live on the foundry layer (235,0) instead of the
-    /// configured (1,10)/(501,1).
+    /// Foundry-style device cell: 10×4 µm extent with a waveguide core, but the
+    /// in/out pin labels live on a foundry layer (235,0) instead of the
+    /// configured (1,10)/(501,1) — the shape a big production design arrives in.
     /// </summary>
     private static byte[] FoundryLayerLibrary(int labelLayer, int labelType) => GdsTestWriter.Create()
         .StandardPrologue()
@@ -179,7 +179,7 @@ public class GdsLabelLayerFallbackTests
             .BeginCell("TOP")
                 .Boundary(1, 0, (0, 0), (20000, 0), (20000, 4000), (0, 4000), (0, 0))
                 .Text(1, 10, "in0", 0, 2000)
-                .Text(1, 10, "cellname: HHI_SOA\nfoundry_pdk: HHI InP", 10000, 2000)
+                .Text(1, 10, "cellname: big_design\nfoundry_pdk: bigfoundry", 10000, 2000)
             .EndCell()
             .EndLibrary()
             .ToArray());

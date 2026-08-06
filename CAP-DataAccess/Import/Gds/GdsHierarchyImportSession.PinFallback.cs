@@ -10,13 +10,13 @@ internal sealed partial class GdsHierarchyImportSession
     /// Runs <see cref="GdsPinDetector"/> with the configured port layers. When
     /// that yields ZERO label pins although the cell carries text labels on
     /// OTHER layers, retries once with every text label treated as a pin label:
-    /// real foundry files place pin labels on their own layers (e.g. HHI InP
-    /// labels device pins on (56,0)/(59,0)/(233,0)/(235,0)), so a configured-only
-    /// pass finds nothing and the whole import would silently drop the cell.
-    /// Configured layers always win; the fallback never mixes (a single
-    /// configured label pin skips it). A used fallback emits ONE info note per
-    /// cell listing the layer(s) pins were found on, so the user can add them
-    /// to the port-layer list. Deterministic: layers are reported sorted.
+    /// real foundry files place pin labels on their own layers (e.g. a big
+    /// production design places device pins on (56,0)/(59,0)/(233,0)/(235,0)),
+    /// so a configured-only pass finds nothing and the whole import would
+    /// silently drop the cell. Configured layers always win; the fallback never
+    /// mixes (a single configured label pin skips it). A used fallback emits ONE
+    /// info note per cell listing the layer(s) pins were found on, so the user
+    /// can add them to the port-layer list. Deterministic: layers reported sorted.
     /// </summary>
     private IReadOnlyList<DetectedPin> DetectWithAnyLayerFallback(
         FlattenedGdsCell detectionCell, GdsBoundingBox bbox, string cellName)
