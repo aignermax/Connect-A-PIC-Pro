@@ -40,10 +40,10 @@ public sealed record GdsPlacementInstruction
     /// </summary>
     public double RotationDegrees { get; init; }
 
-    /// <summary>True when the GDS reference was mirrored; the core model cannot mirror geometry, so the component body is placed unreflected — its pins are mirrored onto the true reflected positions instead.</summary>
+    /// <summary>True when the GDS reference was mirrored; the core model cannot mirror geometry, so the component body is placed unreflected — its pins are mirrored onto the true reflected positions instead. The importer's transform-aggregated STRANS warning already covers every mirrored instance's cell, so the plan carries no per-instance mirror note.</summary>
     public bool Reflected { get; init; }
 
-    /// <summary>User-presentable note for this instance (mirroring, unregistered draft), or null.</summary>
+    /// <summary>User-presentable note for this instance (unregistered draft), or null.</summary>
     public string? Warning { get; init; }
 }
 
@@ -196,13 +196,10 @@ public sealed record GdsPlacementPlan
                 pdkSource = instance.PdkSource;
             }
 
-            if (instance.Reflected)
-            {
-                var mirrorNote = "mirrored in GDS (STRANS) — body placed unreflected, " +
-                    "but pins mirrored onto the true positions (v1 limitation)";
-                warning = warning is null ? mirrorNote : $"{warning} Also: {mirrorNote}.";
-            }
-
+            // Mirrored instances get NO per-instance note here: the importer's
+            // transform-signature-aggregated STRANS warning already names every
+            // mirrored instance's cell (first instance + count), so a per-instance
+            // note would only re-flood the report on huge imports.
             return new GdsPlacementInstruction
             {
                 InstanceName = instance.InstanceName,

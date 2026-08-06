@@ -105,8 +105,13 @@ public class GdsReflectedInstancePlacementTests
 
         var report = await executor.ExecuteAsync(PlanFrom(import));
 
-        // The two STRANS instances are flagged in the plan and the report…
-        report.Warnings.Count(w => w.Contains("LEAF#3") || w.Contains("LEAF#4")).ShouldBe(2);
+        // The two STRANS instances are covered by the importer's transform-aggregated
+        // mirror warnings (distinct signatures: angle 0 and angle 90)…
+        import.Warnings.Count(w => w.Contains("LEAF#3") || w.Contains("LEAF#4")).ShouldBe(2);
+        // …so the placement report adds NO per-instance mirror lines of its own.
+        report.Warnings.ShouldBeEmpty(
+            "the importer's signature-aggregated STRANS warning covers every mirrored " +
+            "instance's cell — per-instance placement notes would only re-flood the report");
         // …and no connection was reconstructed (instances are far apart), so the
         // canvas must not invent any either.
         report.ConnectedCount.ShouldBe(0);

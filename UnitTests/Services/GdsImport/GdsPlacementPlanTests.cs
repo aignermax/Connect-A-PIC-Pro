@@ -32,7 +32,7 @@ public class GdsPlacementPlanTests
     };
 
     [Fact]
-    public void Plan_RotatedReflectedInstance_CarriesTransformAndWarning()
+    public void Plan_RotatedReflectedInstance_CarriesTransformWithoutMirrorNote()
     {
         var outcome = Outcome(
             new[]
@@ -61,7 +61,9 @@ public class GdsPlacementPlanTests
         placement.YUm.ShouldBe(40, Tolerance);
         placement.RotationDegrees.ShouldBe(270, Tolerance);
         placement.Reflected.ShouldBeTrue();
-        placement.Warning.ShouldContain("unreflected");
+        placement.Warning.ShouldBeNull(
+            "no per-instance mirror note — the importer's transform-aggregated " +
+            "STRANS warning already covers every mirrored instance's cell");
     }
 
     [Fact]

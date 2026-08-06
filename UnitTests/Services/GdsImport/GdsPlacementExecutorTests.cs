@@ -365,6 +365,97 @@ public class GdsPlacementExecutorTests
         report.SkippedConnections.ShouldHaveSingleItem().ShouldContain("not placed");
     }
 
+    // ── Per-instance line grouping ───────────────────────────────────────────
+
+    [Fact]
+    public async Task ExecuteAsync_RepeatedSkipReasons_GroupIntoOneLinePerDistinctMessage()
+    {
+        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("wgA#0", 0, 0),
+                Placement("blob#1", 30, 0, identifier: null, warning: "Cell 'blob' was not registered; this instance cannot be placed."),
+                Placement("blob#2", 40, 0, identifier: null, warning: "Cell 'blob' was not registered; this instance cannot be placed."),
+                Placement("blob#3", 50, 0, identifier: null, warning: "Cell 'blob' was not registered; this instance cannot be placed."),
+                Placement("coal#4", 60, 0, identifier: null, warning: "Cell 'coal' was not registered; this instance cannot be placed."),
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.PlacedCount.ShouldBe(1);
+        report.SkippedPlacements.Count.ShouldBe(2, "one grouped line per distinct message");
+        report.SkippedPlacements[0].ShouldBe(
+            "'blob#1': Cell 'blob' was not registered; this instance cannot be placed. — × 3 instances",
+            "first example named, count appended");
+        report.SkippedPlacements[1].ShouldBe(
+            "'coal#4': Cell 'coal' was not registered; this instance cannot be placed.",
+            "a single occurrence keeps the plain per-instance line (no suffix)");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_MissingTemplates_GroupPerTemplate()
+    {
+        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("mmi#0", 0, 0, identifier: "mmi1x2", pdkSource: "otherpdk"),
+                Placement("mmi#1", 30, 0, identifier: "mmi1x2", pdkSource: "otherpdk"),
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.PlacedCount.ShouldBe(0);
+        report.SkippedPlacements.ShouldHaveSingleItem().ShouldBe(
+            "'mmi#0': template 'mmi1x2' from PDK 'otherpdk' is not in the library. — × 2 instances");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_RepeatedInstanceWarnings_GroupIntoOneLine()
+    {
+        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("wgA#0", 0, 0, warning: "something noteworthy"),
+                Placement("wgA#1", 30, 0, warning: "something noteworthy"),
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.Warnings.ShouldHaveSingleItem().ShouldBe("'wgA#0': something noteworthy — × 2 instances");
+    }
+
+    [Fact]
+    public async Task ExecuteAsync_IdenticalRotationSnaps_GroupIntoOneWarning()
+    {
+        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var plan = new GdsPlacementPlan
+        {
+            GroupName = "TOP",
+            Placements = new[]
+            {
+                Placement("wgA#0", 0, 0, rotationDegrees: 44),
+                Placement("wgA#1", 30, 0, rotationDegrees: 44),
+            },
+        };
+
+        var report = await executor.ExecuteAsync(plan);
+
+        report.Warnings.ShouldHaveSingleItem().ShouldBe(
+            "'wgA#0': non-cardinal rotation 44° snapped to 0°. — × 2 instances");
+    }
+
     // ── Cancellation ─────────────────────────────────────────────────────────
 
     [Fact]

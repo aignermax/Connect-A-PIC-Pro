@@ -225,11 +225,18 @@ public sealed partial class GdsPlacementExecutor
             .OfType<ComponentGroup>()
             .ToList();
         var issues = new DesignValidator().Validate(routable, existingGroups);
+        // Grouped per distinct issue (type + involved pins): a big import repeats
+        // the same issue once per affected connection — one grouped line, with the
+        // first issue's coordinates as the example, replaces the per-issue flood.
+        var grouper = new GdsReportLineGrouper();
         foreach (var issue in issues)
         {
-            report.ValidationWarnings.Add(string.Create(CultureInfo.InvariantCulture,
-                $"{issue.Type} at ({issue.X:0.#}, {issue.Y:0.#}) µm — {issue.Description}"));
+            grouper.Add(
+                $"{issue.Type} — {issue.Description}",
+                string.Create(CultureInfo.InvariantCulture,
+                    $"{issue.Type} at ({issue.X:0.#}, {issue.Y:0.#}) µm — {issue.Description}"));
         }
+        grouper.FlushInto(report.ValidationWarnings);
     }
 
     /// <summary>

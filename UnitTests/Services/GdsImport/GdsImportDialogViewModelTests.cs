@@ -140,6 +140,24 @@ public class GdsImportDialogViewModelTests : IDisposable
         .EndLibrary()
         .ToArray();
 
+    /// <summary>
+    /// TOP whose only content is two references to "np", a cell with a zero-width
+    /// (degenerate) extent: the draft has zero size, so the service refuses
+    /// registration and BOTH instances are skipped with the identical reason —
+    /// the fixture for the grouped-skip reporting.
+    /// </summary>
+    private static byte[] ZeroWidthCellLibrary() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("np", 0, 0)
+            .SRef("np", 10000, 0)
+        .EndCell()
+        .BeginCell("np")
+            .Boundary(111, 0, (0, 0), (0, 0), (0, 5000), (0, 5000), (0, 0))
+        .EndCell()
+        .EndLibrary()
+        .ToArray();
+
     private string WriteGds(byte[] content, string fileName = "circuit.gds")
     {
         Directory.CreateDirectory(_root);
@@ -438,6 +456,31 @@ public class GdsImportDialogViewModelTests : IDisposable
             e.Level == LogLevel.Info && e.Message.Contains("resolved to existing component 'wgA'"));
         console.Entries.ShouldNotContain(e =>
             e.Level == LogLevel.Warn && e.Message.Contains("resolved to existing component"));
+    }
+
+    // ── Grouped warning mirroring ────────────────────────────────────────────
+
+    [Fact]
+    public async Task ImportAsync_RepeatedPerInstanceSkips_MirrorOneGroupedLineToTheErrorConsole()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, canvas, _) = CreateDialog(WriteGds(ZeroWidthCellLibrary()), console);
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeTrue();
+        canvas.Components.ShouldBeEmpty("both instances of the zero-size cell are skipped");
+        var grouped = vm.Warnings.Where(w => w.Contains("this instance cannot be placed"))
+            .ShouldHaveSingleItem("identical per-instance skip reasons collapse into ONE grouped line");
+        grouped.ShouldContain("'np#0'", customMessage: "the first example is named");
+        grouped.ShouldContain("× 2 instances", customMessage: "the count is appended");
+
+        // The console receives the same single grouped line, not one entry per instance.
+        console.Entries.Count(e => e.Level == LogLevel.Warn && e.Message.Contains("this instance cannot be placed"))
+            .ShouldBe(1);
+        console.Entries.ShouldContain(e => e.Level == LogLevel.Warn && e.Message.Contains("× 2 instances"));
     }
 
     [Fact]

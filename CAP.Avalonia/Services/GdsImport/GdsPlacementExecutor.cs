@@ -185,6 +185,11 @@ public sealed partial class GdsPlacementExecutor
         foreach (var template in templates)
             templatesByKey.TryAdd((template.Name, template.PdkSource), template);
         var stageProgress = StageProgress(progress, "Placing components");
+        // Per-instance lines (skips, notes) collect into groupers and flush once
+        // after the loop: a huge import reports ONE line per distinct message
+        // instead of one per instance.
+        var skippedGrouper = new GdsReportLineGrouper();
+        var warningGrouper = new GdsReportLineGrouper();
 
         for (var i = 0; i < plan.Placements.Count; i++)
         {
@@ -196,8 +201,8 @@ public sealed partial class GdsPlacementExecutor
 
             if (instruction.ComponentIdentifier is null)
             {
-                report.SkippedPlacements.Add(
-                    $"'{instruction.InstanceName}': {instruction.Warning ?? "no component to place."}");
+                var reason = instruction.Warning ?? "no component to place.";
+                skippedGrouper.Add(reason, $"'{instruction.InstanceName}': {reason}");
                 placedViewModels.Add(null);
                 continue;
             }
@@ -206,14 +211,15 @@ public sealed partial class GdsPlacementExecutor
                 (instruction.ComponentIdentifier, instruction.PdkSource), out var template);
             if (template is null)
             {
-                report.SkippedPlacements.Add(
-                    $"'{instruction.InstanceName}': template '{instruction.ComponentIdentifier}' " +
-                    $"from PDK '{instruction.PdkSource}' is not in the library.");
+                var missing =
+                    $"template '{instruction.ComponentIdentifier}' " +
+                    $"from PDK '{instruction.PdkSource}' is not in the library.";
+                skippedGrouper.Add(missing, $"'{instruction.InstanceName}': {missing}");
                 placedViewModels.Add(null);
                 continue;
             }
 
-            var quarterTurns = SnapToQuarterTurns(instruction.RotationDegrees, instruction.InstanceName, report);
+            var quarterTurns = SnapToQuarterTurns(instruction.RotationDegrees, instruction.InstanceName, warningGrouper);
             var command = PlaceComponentCommand.CreateExact(
                 _canvas, template, instruction.XUm + originOffset.X, instruction.YUm + originOffset.Y, quarterTurns,
                 mirrorPinsHorizontally: instruction.Reflected);
@@ -223,9 +229,11 @@ public sealed partial class GdsPlacementExecutor
             report.PlacedCount++;
             PlacedCountSoFar++;
             if (instruction.Warning is not null)
-                report.Warnings.Add($"'{instruction.InstanceName}': {instruction.Warning}");
+                warningGrouper.Add(instruction.Warning, $"'{instruction.InstanceName}': {instruction.Warning}");
         }
 
+        skippedGrouper.FlushInto(report.SkippedPlacements);
+        warningGrouper.FlushInto(report.Warnings);
         return placedViewModels;
     }
 
@@ -433,16 +441,18 @@ public sealed partial class GdsPlacementExecutor
     /// snapped to the nearest quarter turn and surfaced as a warning instead of
     /// silently misplacing the instance. Exact midpoints (x.5 turns, e.g. 45°)
     /// round AWAY FROM ZERO — <see cref="Math.Round(double)"/>'s banker's
-    /// rounding would snap 45° down to 0° but 135° up to 180°.
+    /// rounding would snap 45° down to 0° but 135° up to 180°. Warnings collect
+    /// into <paramref name="warningGrouper"/>: identical snaps collapse into one
+    /// grouped line per distinct rotation instead of flooding one per instance.
     /// </summary>
-    private static int SnapToQuarterTurns(double rotationDegrees, string instanceName, GdsPlacementReport report)
+    private static int SnapToQuarterTurns(double rotationDegrees, string instanceName, GdsReportLineGrouper warningGrouper)
     {
         var snappedTurns = (int)Math.Round(rotationDegrees / 90.0, MidpointRounding.AwayFromZero);
         var snappedDegrees = snappedTurns * 90.0;
         if (Math.Abs(rotationDegrees - snappedDegrees) > 0.001)
         {
-            report.Warnings.Add(
-                $"'{instanceName}': non-cardinal rotation {rotationDegrees:0.###}° snapped to {snappedDegrees % 360:0}°.");
+            var note = $"non-cardinal rotation {rotationDegrees:0.###}° snapped to {snappedDegrees % 360:0}°.";
+            warningGrouper.Add(note, $"'{instanceName}': {note}");
         }
         return ((snappedTurns % 4) + 4) % 4;
     }
