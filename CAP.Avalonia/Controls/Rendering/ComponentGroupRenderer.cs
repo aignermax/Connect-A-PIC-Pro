@@ -87,8 +87,7 @@ public static class ComponentGroupRenderer
         }
         else
         {
-            // Default color for frozen paths (orange, slightly dimmed)
-            frozenPen = DefaultFrozenPathPen;
+            frozenPen = SelectFrozenPathPen(frozenPath);
         }
 
         foreach (var segment in frozenPath.Path.Segments)
@@ -118,6 +117,18 @@ public static class ComponentGroupRenderer
             DrawFrozenPathLabel(context, labelFlow, midPoint);
         }
     }
+
+    /// <summary>
+    /// The pen a frozen path draws with when no power-flow overlay is active: a path
+    /// tagged with its import source's (layer, datatype) draws in that layer's muted
+    /// palette color (same alpha/thickness as the default), everything else keeps
+    /// the historical orange. Internal so unit tests can assert the selection
+    /// headlessly (InternalsVisibleTo UnitTests).
+    /// </summary>
+    internal static Pen SelectFrozenPathPen(FrozenWaveguidePath frozenPath) =>
+        frozenPath.Layer is int layer && frozenPath.DataType is int dataType
+            ? OutlineLayerPalette.PathPenFor(layer, dataType)
+            : DefaultFrozenPathPen;
 
     /// <summary>
     /// Calculates the visual midpoint of a frozen path from its first and last segment endpoints.

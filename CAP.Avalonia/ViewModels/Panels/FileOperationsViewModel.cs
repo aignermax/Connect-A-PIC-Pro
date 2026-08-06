@@ -402,7 +402,9 @@ public partial class FileOperationsViewModel : ObservableObject
                             : null,
                         StraightShiftOffsets = c.Connection.StraightShiftOffsets.Count > 0
                             ? new Dictionary<int, double>(c.Connection.StraightShiftOffsets)
-                            : null
+                            : null,
+                        SourceGdsLayer = c.Connection.SourceGdsLayer,
+                        SourceGdsDataType = c.Connection.SourceGdsDataType
                     };
                 }).ToList()
             };
@@ -1564,6 +1566,14 @@ public partial class FileOperationsViewModel : ObservableObject
         if (connVm != null && connData.IsLocked == true)
         {
             connVm.Connection.IsLocked = true;
+        }
+
+        // Restore the import source-layer tag (route-derived GDS connections); null in
+        // files that predate the field — the connection stays untagged, unchanged.
+        if (connVm != null)
+        {
+            connVm.Connection.SourceGdsLayer = connData.SourceGdsLayer;
+            connVm.Connection.SourceGdsDataType = connData.SourceGdsDataType;
         }
 
         // Restore routing style / interconnect settings / freeze state (issue #574)

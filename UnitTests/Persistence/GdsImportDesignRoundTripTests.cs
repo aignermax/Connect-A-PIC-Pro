@@ -160,6 +160,17 @@ public class GdsImportDesignRoundTripTests : IDisposable
                 (10.0, 3.25, 10.0, 3.75),
             });
 
+        // The source polygon's (layer, datatype) rode along the whole way: import →
+        // frozen path → .lun → reload (the fixture's route stub sits on (1, 0)).
+        routePath.Layer.ShouldBe(1);
+        routePath.DataType.ShouldBe(0);
+
+        // …and the reloaded design exports the outline back on its OWN layer, not
+        // the process default — one tagged segment per traced outline edge.
+        var script = new SimpleNazcaExporter().Export(loadCanvas, library: sink.Templates.ToList());
+        script.ShouldContain("nd.strt(length=2.00, layer=(1, 0)).put(");
+        script.ShouldContain("nd.strt(length=0.50, layer=(1, 0)).put(");
+
         // The pinned abutment connection survived the same round-trip unchanged.
         var abutment = group.InternalPaths.Single(p => p.StartPin is not null);
         abutment.StartPin!.Name.ShouldBe("out");

@@ -44,7 +44,9 @@ public class SimpleNazcaExporter
     /// Exports the full design to a Python/Nazca script.
     /// Component stub cells carry a TEXT label per optical pin and the design's external
     /// ports (fiber couplers) carry top-cell labels — both on the gdsfactory port-label
-    /// layer (1, 10) so the GDS re-import detects named pins (issue #808).
+    /// layer (1, 10) so the GDS re-import detects named pins (issue #808). Group outline
+    /// polygons (GDS-imported background geometry) export as nd.Polygon on their original
+    /// (layer, datatype) — see <see cref="NazcaOutlinePolygonWriter"/>.
     /// </summary>
     /// <param name="canvas">The design canvas to export.</param>
     /// <param name="pdkModuleName">Optional PDK module name (e.g., "siepic_ebeam_pdk") for import.</param>
@@ -107,6 +109,7 @@ public class SimpleNazcaExporter
         NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
         NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
         var componentNames = AppendComponents(sb, canvas, emitVerification, rawCodePlan: rawCodePlan, wrapperPlan: wrapperPlan);
+        NazcaOutlinePolygonWriter.AppendGroupOutlinePolygons(sb, canvas);
         AppendConnections(
             sb, canvas, componentNames, metal, interconnectSettings.GdsLayer,
             skippedConnections, unresolvedCrossings);
@@ -154,6 +157,7 @@ public class SimpleNazcaExporter
         NazcaRawCodeCellWriter.AppendCells(sb, rawCodePlan, CultureInfo.InvariantCulture);
         NazcaPinLabelWrapperWriter.AppendCells(sb, wrapperPlan);
         AppendComponents(sb, canvas, emitVerification: false, include, topCellName, rawCodePlan, wrapperPlan);
+        NazcaOutlinePolygonWriter.AppendGroupOutlinePolygons(sb, canvas, include);
         AppendFooter(sb);
         SiepicCellUpgradeWriter.AppendUpgradeBlock(sb, canvas, include);
 
@@ -704,6 +708,13 @@ public class SimpleNazcaExporter
                 // second look unless a bridge marker actually resolves the crossing.
                 unresolvedCrossingCandidates.Add(conn);
 
+            // The import source's (layer, datatype) tag (route-derived GDS connections
+            // with an unambiguous source layer): the connection exports on the ORIGINAL
+            // layer — for a metal trace the tag wins over the process metal default.
+            var sourceLayer = conn.SourceGdsLayer is int sourceL && conn.SourceGdsDataType is int sourceD
+                ? (sourceL, sourceD)
+                : ((int Layer, int DataType)?)null;
+
             // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
             // point-to-point styles export a single Nazca primitive (strt/sinebend/cobra)
             // on the waveguide layer instead of the routed segments; Bend and Euler return
@@ -714,7 +725,7 @@ public class SimpleNazcaExporter
             // set, so styled export is gated on metal == null.
             if (metal == null)
             {
-                var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer);
+                var styledLine = NazcaConnectionStyleWriter.Format(conn, gdsLayer, sourceLayer);
                 if (styledLine != null)
                 {
                     sb.AppendLine(styledLine);
@@ -727,9 +738,9 @@ public class SimpleNazcaExporter
             var segments = conn.GetPathSegments();
 
             if (segments.Count > 0)
-                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin, metal);
+                AppendSegmentExport(sb, segments, conn.StartPin, conn.EndPin, metal, sourceLayer);
             else
-                AppendFallbackExport(sb, conn.StartPin, conn.EndPin, componentNames, metal);
+                AppendFallbackExport(sb, conn.StartPin, conn.EndPin, componentNames, metal, sourceLayer);
         }
 
         // Export frozen waveguide paths from ComponentGroups
@@ -862,7 +873,9 @@ public class SimpleNazcaExporter
     /// connection — freezing (grouping) a connection must not bypass the export filter. A
     /// frozen path with NO route at all (a connection frozen before it was ever routed keeps
     /// an empty <c>RoutedPath</c>, not null) renders the same pin-to-pin fallback a routeless
-    /// live connection gets, instead of silently vanishing.
+    /// live connection gets, instead of silently vanishing. A path carrying the import's
+    /// source-layer tag (<see cref="FrozenWaveguidePath.Layer"/>) exports on THAT layer —
+    /// manufacturing needs the original layers back, not the process defaults.
     /// </summary>
     private static void AppendGroupFrozenPaths(
         StringBuilder sb, ComponentGroup group, MetalTraceStyle metalStyle,
@@ -873,17 +886,23 @@ public class SimpleNazcaExporter
             if (frozenPath == null) continue;
 
             var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+            // The import source's (layer, datatype) tag: emitted per segment so imported
+            // geometry lands back on its original layer (a metal polygon's tag also wins
+            // over the process metal layer). Untagged paths keep the historical defaults.
+            var sourceLayer = frozenPath.Layer is int layer && frozenPath.DataType is int dataType
+                ? (layer, dataType)
+                : ((int Layer, int DataType)?)null;
             var segments = frozenPath.Path?.Segments;
             if (segments == null || segments.Count == 0)
             {
-                AppendFallbackExport(sb, frozenPath.StartPin, frozenPath.EndPin, componentNames, metal);
+                AppendFallbackExport(sb, frozenPath.StartPin, frozenPath.EndPin, componentNames, metal, sourceLayer);
                 continue;
             }
 
             if (ExportableConnections.TryRecordSkip(
                     frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
                 continue;
-            AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal);
+            AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal, sourceLayer);
         }
 
         foreach (var child in group.ChildComponents)
@@ -906,16 +925,21 @@ public class SimpleNazcaExporter
     /// <param name="segments">Routed path segments in editor (app) coordinates.</param>
     /// <param name="startPin">Start pin, used for single-straight pin-to-pin geometry.</param>
     /// <param name="endPin">End pin, used for single-straight pin-to-pin geometry.</param>
+    /// <param name="sourceLayer">
+    /// Optional GDS layer/datatype tag of the geometry's import source — emitted as
+    /// <c>layer=(L, D)</c> on every segment (winning over the metal style's process
+    /// default layer, see <see cref="SegmentKwargs"/>). Null keeps the default layers.
+    /// </param>
     internal static void AppendSegmentExport(
         StringBuilder sb, IReadOnlyList<PathSegment> segments,
         PhysicalPin? startPin = null, PhysicalPin? endPin = null,
-        MetalTraceStyle? metal = null)
+        MetalTraceStyle? metal = null, (int Layer, int DataType)? sourceLayer = null)
     {
         // Single straight segment: compute geometry directly from both pin positions
         // so the waveguide hits both pins exactly even if the stored segment drifts.
         if (segments.Count == 1 && segments[0] is StraightSegment && startPin != null && endPin != null)
         {
-            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal));
+            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal, sourceLayer));
             return;
         }
 
@@ -924,16 +948,33 @@ public class SimpleNazcaExporter
             var (nStartX, nStartY) = NazcaCoordinateMapper.ToNazca(segment.StartPoint.X, segment.StartPoint.Y);
             var (nEndX, nEndY) = NazcaCoordinateMapper.ToNazca(segment.EndPoint.X, segment.EndPoint.Y);
 
-            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY, metal));
+            sb.AppendLine(FormatSegmentAbsolute(segment, nStartX, nStartY, nEndX, nEndY, metal, sourceLayer));
         }
     }
 
     /// <summary>
-    /// The trailing <c>width=…, layer=(…, …)</c> kwargs that place a segment on the metal
-    /// routing layer; empty for optical segments (which use the Nazca default layer).
+    /// The trailing <c>width=…, layer=(…, …)</c> kwargs of a segment call. A source-layer
+    /// tag (the GDS layer/datatype the geometry was IMPORTED from, carried by frozen paths
+    /// and route-derived connections) wins over the process default: for a metal trace the
+    /// tag replaces <see cref="MetalTraceStyle.LayerTuple"/> (the metal WIDTH is kept — the
+    /// tag carries no width); for an optical segment it is the only override, so untagged
+    /// geometry keeps the Nazca default layer exactly like before.
     /// </summary>
-    private static string MetalKwargs(MetalTraceStyle? metal) =>
-        metal is null ? string.Empty : $", width={metal.WidthLiteral}, layer={metal.LayerTuple}";
+    private static string SegmentKwargs(MetalTraceStyle? metal, (int Layer, int DataType)? sourceLayer)
+    {
+        if (metal is not null)
+        {
+            var layerTuple = sourceLayer is { } tagged
+                ? LayerTupleLiteral(tagged)
+                : metal.LayerTuple;
+            return $", width={metal.WidthLiteral}, layer={layerTuple}";
+        }
+        return sourceLayer is { } s ? $", layer={LayerTupleLiteral(s)}" : string.Empty;
+    }
+
+    /// <summary>The <c>(layer, datatype)</c> tuple literal of a source-layer tag.</summary>
+    private static string LayerTupleLiteral((int Layer, int DataType) layer) =>
+        $"({layer.Layer.ToString(CultureInfo.InvariantCulture)}, {layer.DataType.ToString(CultureInfo.InvariantCulture)})";
 
     /// <summary>
     /// True when a connection between these two pins is a metal (electrical) trace: BOTH pins
@@ -951,14 +992,15 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatSegmentAbsolute(
         PathSegment segment, double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY, MetalTraceStyle? metal = null)
+        double nazcaEndX, double nazcaEndY, MetalTraceStyle? metal = null,
+        (int Layer, int DataType)? sourceLayer = null)
     {
         var ci = CultureInfo.InvariantCulture;
         return segment switch
         {
             StraightSegment => FormatStraightAbsolute(
-                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci, metal),
-            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci, metal),
+                nazcaStartX, nazcaStartY, nazcaEndX, nazcaEndY, ci, metal, sourceLayer),
+            BendSegment bend => FormatBendAbsolute(bend, nazcaStartX, nazcaStartY, ci, metal, sourceLayer),
             _ => $"        # Unknown segment type: {segment.GetType().Name}"
         };
     }
@@ -970,7 +1012,8 @@ public class SimpleNazcaExporter
     /// </summary>
     private static string FormatStraightAbsolute(
         double nazcaStartX, double nazcaStartY,
-        double nazcaEndX, double nazcaEndY, CultureInfo ci, MetalTraceStyle? metal = null)
+        double nazcaEndX, double nazcaEndY, CultureInfo ci, MetalTraceStyle? metal = null,
+        (int Layer, int DataType)? sourceLayer = null)
     {
         double dx = nazcaEndX - nazcaStartX;
         double dy = nazcaEndY - nazcaStartY;
@@ -981,7 +1024,7 @@ public class SimpleNazcaExporter
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaStartX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaStartY).ToString("F2", ci);
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
-        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{SegmentKwargs(metal, sourceLayer)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -989,14 +1032,15 @@ public class SimpleNazcaExporter
     /// The radius is invariant under Y-flip; the sweep angle and start angle are negated.
     /// </summary>
     private static string FormatBendAbsolute(
-        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci, MetalTraceStyle? metal = null)
+        BendSegment bend, double nazcaX, double nazcaY, CultureInfo ci, MetalTraceStyle? metal = null,
+        (int Layer, int DataType)? sourceLayer = null)
     {
         var radius = bend.RadiusMicrometers.ToString("F2", ci);
         var sweepAngle = NazcaCoordinateMapper.NormalizeZero(-bend.SweepAngleDegrees).ToString("F2", ci);
         var x = NazcaCoordinateMapper.NormalizeZero(nazcaX).ToString("F2", ci);
         var y = NazcaCoordinateMapper.NormalizeZero(nazcaY).ToString("F2", ci);
         var angle = NazcaCoordinateMapper.NormalizeZero(-bend.StartAngleDegrees).ToString("F2", ci);
-        return $"        nd.bend(radius={radius}, angle={sweepAngle}{MetalKwargs(metal)}).put({x}, {y}, {angle})";
+        return $"        nd.bend(radius={radius}, angle={sweepAngle}{SegmentKwargs(metal, sourceLayer)}).put({x}, {y}, {angle})";
     }
 
     /// <summary>
@@ -1005,7 +1049,8 @@ public class SimpleNazcaExporter
     /// ensuring the waveguide reaches both pins exactly.
     /// </summary>
     private static string FormatStraightSegmentFromPins(
-        PhysicalPin startPin, PhysicalPin endPin, MetalTraceStyle? metal = null)
+        PhysicalPin startPin, PhysicalPin endPin, MetalTraceStyle? metal = null,
+        (int Layer, int DataType)? sourceLayer = null)
     {
         var ci = CultureInfo.InvariantCulture;
         var (sx, sy) = NazcaCoordinateMapper.GetPinNazcaPosition(startPin);
@@ -1021,7 +1066,7 @@ public class SimpleNazcaExporter
         var a = NazcaCoordinateMapper.NormalizeZero(angleDeg).ToString("F2", ci);
         var l = length.ToString("F2", ci);
 
-        return $"        nd.strt(length={l}{MetalKwargs(metal)}).put({x}, {y}, {a})";
+        return $"        nd.strt(length={l}{SegmentKwargs(metal, sourceLayer)}).put({x}, {y}, {a})";
     }
 
     /// <summary>
@@ -1134,7 +1179,8 @@ public class SimpleNazcaExporter
         PhysicalPin? startPin,
         PhysicalPin? endPin,
         Dictionary<Component, string> componentNames,
-        MetalTraceStyle? metal = null)
+        MetalTraceStyle? metal = null,
+        (int Layer, int DataType)? sourceLayer = null)
     {
         if (startPin == null || endPin == null)
             return;
@@ -1143,7 +1189,7 @@ public class SimpleNazcaExporter
         // metal layer — the optical sbend interconnect (ic) would draw it as a waveguide (#682).
         if (metal != null)
         {
-            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal));
+            sb.AppendLine(FormatStraightSegmentFromPins(startPin, endPin, metal, sourceLayer));
             return;
         }
 

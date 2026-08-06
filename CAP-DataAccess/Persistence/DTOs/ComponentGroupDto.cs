@@ -186,6 +186,18 @@ public class FrozenPathDto
     public bool IsRouteFrozen { get; set; }
 
     /// <summary>
+    /// GDS layer of the source geometry this path was imported from, paired with
+    /// <see cref="DataType"/>. Null in design files that predate layer persistence —
+    /// loads as null and exports fall back to the process default layers, unchanged.
+    /// </summary>
+    public int? Layer { get; set; }
+
+    /// <summary>
+    /// GDS datatype of the source geometry — see <see cref="Layer"/>. Null in old files.
+    /// </summary>
+    public int? DataType { get; set; }
+
+    /// <summary>
     /// Propagation loss of the original connection in dB/cm.
     /// Null in old design files — loads with the model default.
     /// </summary>

@@ -21,10 +21,10 @@ namespace CAP.Avalonia.Controls.Rendering;
 /// </summary>
 internal sealed class ComponentOutlineRenderer
 {
-    // Static readonly — never allocate per-frame (see GdsPolygonRenderer).
-    // v1 styles every layer the same; Layer/DataType stay on the model.
-    private static readonly IBrush FillBrush = new SolidColorBrush(Color.FromArgb(46, 100, 160, 220));
-    private static readonly Pen OutlinePen = new(new SolidColorBrush(Color.FromArgb(160, 100, 160, 220)), 1);
+    // Geometry is cached per outline list (below); the per-layer brushes/pens come
+    // from OutlineLayerPalette's static cache — never allocated per frame.
+    // v2 styles per (layer, datatype); the v1 single blue survives as the palette's
+    // waveguide-core entry (1, 0).
 
     /// <summary>
     /// Geometry cache keyed by the outline list instance. All placed instances of
@@ -92,7 +92,7 @@ internal sealed class ComponentOutlineRenderer
                     continue;
                 }
                 IssuedGeometryCount++;
-                context.DrawGeometry(FillBrush, OutlinePen, cached.Geometry);
+                context.DrawGeometry(cached.Fill, cached.Outline, cached.Geometry);
             }
         }
     }
@@ -134,7 +134,8 @@ internal sealed class ComponentOutlineRenderer
 
     // One geometry per polygon (mirrors GdsPolygonRenderer): a single multi-figure
     // geometry would punch EvenOdd holes where overlapping layers coincide. The
-    // local-frame bounding box rides along for the per-polygon LOD cull in Draw.
+    // local-frame bounding box rides along for the per-polygon LOD cull in Draw;
+    // the palette style is resolved here, once per polygon, never per frame.
     private static CachedGeometry[] BuildGeometries(IReadOnlyList<OutlinePolygon> outlines)
     {
         var geometries = new List<CachedGeometry>(outlines.Count);
@@ -151,7 +152,8 @@ internal sealed class ComponentOutlineRenderer
                     ctx.LineTo(new Point(polygon.Points[i].X, polygon.Points[i].Y));
                 ctx.EndFigure(true);
             }
-            geometries.Add(new CachedGeometry(geometry, ComputeLocalBounds(polygon)));
+            var (fill, outline) = OutlineLayerPalette.OutlineStyleFor(polygon.Layer, polygon.DataType);
+            geometries.Add(new CachedGeometry(geometry, ComputeLocalBounds(polygon), fill, outline));
         }
         return geometries.ToArray();
     }
@@ -170,17 +172,21 @@ internal sealed class ComponentOutlineRenderer
         return new Rect(minX, minY, maxX - minX, maxY - minY);
     }
 
-    /// <summary>One cached polygon: its geometry plus the local-frame bounding box
-    /// the per-polygon LOD cull scales by the current zoom.</summary>
+    /// <summary>One cached polygon: its geometry, the local-frame bounding box the
+    /// per-polygon LOD cull scales by the current zoom, and its per-layer style.</summary>
     private sealed class CachedGeometry
     {
-        public CachedGeometry(StreamGeometry geometry, Rect bounds)
+        public CachedGeometry(StreamGeometry geometry, Rect bounds, IBrush fill, Pen outline)
         {
             Geometry = geometry;
             Bounds = bounds;
+            Fill = fill;
+            Outline = outline;
         }
 
         public StreamGeometry Geometry { get; }
         public Rect Bounds { get; }
+        public IBrush Fill { get; }
+        public Pen Outline { get; }
     }
 }
