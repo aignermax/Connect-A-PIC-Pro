@@ -48,6 +48,11 @@ public partial class RightPanelViewModel : ObservableObject
     public ParameterSweepViewModel Sweep { get; }
 
     /// <summary>
+    /// ViewModel for the circuit optimization search panel (issue #820).
+    /// </summary>
+    public Analysis.CircuitOptimization.CircuitOptimizationViewModel Optimization { get; }
+
+    /// <summary>
     /// ViewModel for waveguide routing diagnostics (path finding performance).
     /// </summary>
     public RoutingDiagnosticsViewModel RoutingDiagnostics { get; }
@@ -136,6 +141,7 @@ public partial class RightPanelViewModel : ObservableObject
         DesignCanvasViewModel canvas,
         UserPreferencesService preferencesService,
         ParameterSweepViewModel sweep,
+        Analysis.CircuitOptimization.CircuitOptimizationViewModel optimization,
         RoutingDiagnosticsViewModel routingDiagnostics,
         DesignValidationViewModel designValidation,
         ComponentDimensionDiagnosticsViewModel dimensionDiagnostics,
@@ -155,6 +161,7 @@ public partial class RightPanelViewModel : ObservableObject
         _editorFactory = editorFactory;
 
         Sweep = sweep;
+        Optimization = optimization;
         RoutingDiagnostics = routingDiagnostics;
         DesignValidation = designValidation;
         DimensionDiagnostics = dimensionDiagnostics;
@@ -175,6 +182,7 @@ public partial class RightPanelViewModel : ObservableObject
         DimensionValidator.Configure(canvas);
         CompressLayout.Configure(canvas);
         OnaAnalysis.Configure(canvas);
+        Optimization.ConfigureForCanvas(canvas);
 
         // Drive the per-component property editor from canvas selection.
         // Switching the selected component on the canvas swaps the editor

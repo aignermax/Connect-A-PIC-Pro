@@ -169,6 +169,7 @@ public static class MainViewModelTestHelper
             canvas,
             preferencesService,
             new ParameterSweepViewModel(),
+            new CAP.Avalonia.ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel(new CommandManager()),
             new RoutingDiagnosticsViewModel(),
             new DesignValidationViewModel(),
             new ComponentDimensionDiagnosticsViewModel(canvas),

@@ -1,0 +1,77 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:opt="using:CAP.Avalonia.ViewModels.Analysis.CircuitOptimization"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.CircuitOptimizationPanel"
+             x:DataType="vm:MainViewModel">
+
+    <!-- Circuit optimization (issue #820): seeded hill-climb over all sliders,
+         ranked top-N improved variants with undo-safe one-click apply. -->
+    <StackPanel IsVisible="{Binding RightPanel.Optimization.HasParameters}">
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <TextBlock Text="{loc:Localize Optimize.Title}" Foreground="Orange" Margin="0,0,0,3" FontWeight="SemiBold"/>
+        <TextBlock Text="{loc:Localize Optimize.Hint}" Foreground="Gray" FontSize="10"
+                   TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+        <TextBlock Text="{loc:Localize Optimize.Target}" Foreground="Gray" Margin="0,0,0,3"/>
+        <ComboBox ItemsSource="{Binding RightPanel.Optimization.Targets}"
+                  SelectedItem="{Binding RightPanel.Optimization.SelectedTarget}"
+                  HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+        <CheckBox IsChecked="{Binding RightPanel.Optimization.Maximize}"
+                  Content="{loc:Localize Optimize.Maximize}" Margin="0,0,0,5"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="{loc:Localize Optimize.Budget}" Foreground="Gray" VerticalAlignment="Center" Width="60"/>
+            <NumericUpDown Value="{Binding RightPanel.Optimization.EvaluationBudget}"
+                           Minimum="2" Maximum="2000" Increment="10" Width="130" FormatString="F0"/>
+        </StackPanel>
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+            <TextBlock Text="{loc:Localize Optimize.Seed}" Foreground="Gray" VerticalAlignment="Center" Width="60"/>
+            <NumericUpDown Value="{Binding RightPanel.Optimization.Seed}"
+                           Minimum="0" Maximum="99999" Increment="1" Width="130" FormatString="F0"/>
+        </StackPanel>
+
+        <StackPanel Orientation="Horizontal" Margin="0,5,0,5" Spacing="8">
+            <Button Content="{loc:Localize Optimize.Run}"
+                    Command="{Binding RightPanel.Optimization.RunOptimizationCommand}"
+                    Background="#3d5d3d"
+                    IsEnabled="{Binding RightPanel.Optimization.IsOptimizing, Converter={x:Static BoolConverters.Not}}"/>
+            <Button Content="{loc:Localize Optimize.Cancel}"
+                    Command="{Binding RightPanel.Optimization.CancelOptimizationCommand}"
+                    Background="#5d3d3d"
+                    IsVisible="{Binding RightPanel.Optimization.IsOptimizing}"/>
+        </StackPanel>
+
+        <TextBlock Text="{Binding RightPanel.Optimization.StatusText}" Foreground="Gray" FontSize="10" Margin="0,0,0,3"
+                   TextWrapping="Wrap"
+                   IsVisible="{Binding RightPanel.Optimization.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <TextBlock Text="{Binding RightPanel.Optimization.BaselineText}" Foreground="LightGreen" FontSize="10" Margin="0,0,0,5"
+                   IsVisible="{Binding RightPanel.Optimization.BaselineText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <ItemsControl ItemsSource="{Binding RightPanel.Optimization.Variants}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="opt:OptimizationVariantViewModel">
+                    <Border Background="#2d2d30" CornerRadius="3" Padding="6" Margin="0,0,0,4">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="{loc:Localize Optimize.Apply}"
+                                        Command="{Binding ApplyCommand}" FontSize="10" Padding="6,2"
+                                        Background="#3d5d3d"/>
+                                <TextBlock VerticalAlignment="Center" Foreground="White" FontSize="11">
+                                    <Run Text="#"/><Run Text="{Binding Rank}"/>
+                                    <Run Text="  "/><Run Text="{Binding ScoreText}" Foreground="LightGreen"/>
+                                    <Run Text=" ("/><Run Text="{Binding ImprovementText}" Foreground="Orange"/><Run Text=")"/>
+                                </TextBlock>
+                            </DockPanel>
+                            <TextBlock Text="{Binding ParameterSummary}" Foreground="Gray" FontSize="10"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            <TextBlock Text="{loc:Localize Optimize.AppliedBadge}" Foreground="LightGreen" FontSize="10"
+                                       IsVisible="{Binding IsApplied}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

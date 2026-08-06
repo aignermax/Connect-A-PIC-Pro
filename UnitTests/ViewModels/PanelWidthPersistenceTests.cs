@@ -62,6 +62,7 @@ public class PanelWidthPersistenceTests : IDisposable
     private RightPanelViewModel CreateRightPanelViewModel() =>
         new(_canvas, _preferencesService,
             new ParameterSweepViewModel(),
+            new CAP.Avalonia.ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel(new CAP.Avalonia.Commands.CommandManager()),
             new RoutingDiagnosticsViewModel(),
             new DesignValidationViewModel(),
             new ComponentDimensionDiagnosticsViewModel(_canvas),

@@ -475,6 +475,7 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.OnSelectionChanged = comp =>
         {
             RightPanel.Sweep.ConfigureForComponent(comp, Canvas);
+            RightPanel.Optimization.RefreshFromCanvas();
             LeftPanel.HierarchyPanel.SyncSelectionFromCanvas(comp);
         };
 
