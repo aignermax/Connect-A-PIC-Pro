@@ -1473,6 +1473,47 @@ public class GdsHierarchyImporterTests
         await new GdsReader().ReadAsync(new MemoryStream(gds));
 
     /// <summary>The PdkLoader rule: pins within [0, W] × [0, H] (±1 µm tolerance).</summary>
+    /// <summary>
+    /// Conservation invariant: every direct top-cell instance (SREF + expanded
+    /// AREF members) is either imported as a placed instance or covered by an
+    /// explicit skip note naming the cell and count — a GDS import must never
+    /// lose components silently.
+    /// </summary>
+    [Fact]
+    public async Task Explode_EveryDirectInstanceIsImportedOrExplicitlySkipped()
+    {
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("WG", 0, 0)
+                .SRef("WG", 0, 20000)
+                .ARef("WG", columns: 2, rows: 2, originX: 40000, originY: 0,
+                    columnSpacingDbUnits: 20000, rowSpacingDbUnits: 20000)
+                .SRef("EMPTY", 100000, 0)
+                .SRef("EMPTY", 120000, 0)
+            .EndCell()
+            .WaveguideCell("WG")
+            .BeginCell("EMPTY").EndCell()
+            .EndLibrary()
+            .ToArray();
+        var library = await new GdsReader().ReadAsync(new MemoryStream(gds));
+
+        var circuit = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        int directInstances = library.Cells["TOP"].Elements
+            .OfType<GdsReference>()
+            .Sum(r => r.Rows * r.Columns);
+        directInstances.ShouldBe(8, "fixture: 2 SREFs + 2×2 AREF of WG, 2 SREFs of EMPTY");
+
+        circuit.Instances.Count.ShouldBe(6, "the six WG instances all import");
+        var skipNote = circuit.Infos.Single(i => i.Contains("has no geometry", StringComparison.Ordinal));
+        skipNote.ShouldContain("'EMPTY'");
+        skipNote.ShouldContain("2 instance(s)");
+
+        // The invariant itself: imported + explicitly skipped == everything the GDS placed.
+        (circuit.Instances.Count + 2).ShouldBe(directInstances);
+    }
+
     private static void AssertPinsWithinDraftBounds(GdsCellDraft draft)
     {
         foreach (var pin in draft.Pins)

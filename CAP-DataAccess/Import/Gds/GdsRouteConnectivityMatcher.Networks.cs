@@ -43,6 +43,13 @@ internal static partial class GdsRouteConnectivityMatcher
                     grid.InsertBox(p, bounds[p].MinX, bounds[p].MinY, bounds[p].MaxX, bounds[p].MaxY);
             }
 
+            // Per-polygon segment grids, built lazily for many-vertex polygons:
+            // a chip-spanning plane bbox-overlaps almost everything, so the bbox
+            // pruning above cannot save the O(|a|×|b|) segment scan inside
+            // PolygonsTouch — on a real design one large metal plane turned the
+            // network build into minutes.
+            var segmentGrids = new GdsSpatialGrid?[polygons.Count];
+
             for (var p = 0; p < polygons.Count; p++)
             {
                 if (bounds[p].IsEmpty)
@@ -55,8 +62,11 @@ internal static partial class GdsRouteConnectivityMatcher
                     bounds[p].MaxX + toleranceUm, bounds[p].MaxY + toleranceUm);
                 foreach (int q in candidates)
                 {
-                    if (q > p && Find(p) != Find(q) && PolygonsTouch(polygons[p], polygons[q], toleranceUm))
+                    if (q > p && Find(p) != Find(q)
+                        && PolygonsTouchPruned(polygons, bounds, segmentGrids, p, q, toleranceUm))
+                    {
                         Union(p, q);
+                    }
                 }
             }
         }
@@ -84,6 +94,79 @@ internal static partial class GdsRouteConnectivityMatcher
         }
 
         void Union(int x, int y) => parent[Find(x)] = Find(y);
+    }
+
+    /// <summary>
+    /// Vertex count above which a polygon gets a lazy segment grid for its touch
+    /// tests; below it the direct segment-pair scan is cheaper than grid setup.
+    /// </summary>
+    private const int SegmentGridVertexThreshold = 32;
+
+    /// <summary>
+    /// <see cref="PolygonsTouch"/> with the O(|a|×|b|) segment scan pruned via a
+    /// lazily built (and cached) segment grid on the larger polygon: each segment
+    /// of the smaller polygon only tests the grid's tolerance-window candidates.
+    /// The grid window is a strict superset of every in-tolerance segment pair
+    /// and <see cref="SegmentsTouch"/> stays the arbiter, so the boolean result
+    /// is identical to the direct scan.
+    /// </summary>
+    private static bool PolygonsTouchPruned(
+        IReadOnlyList<GdsOutlinePolygon> polygons,
+        Bounds[] bounds,
+        GdsSpatialGrid?[] segmentGrids,
+        int p,
+        int q,
+        double toleranceUm)
+    {
+        var a = polygons[p];
+        var b = polygons[q];
+        if (a.Points.Count == 0 || b.Points.Count == 0)
+            return false;
+
+        var (small, largeIndex) = a.Points.Count <= b.Points.Count ? (a, q) : (b, p);
+        var large = polygons[largeIndex];
+        if (large.Points.Count < SegmentGridVertexThreshold)
+            return PolygonsTouch(a, b, toleranceUm);
+
+        var grid = segmentGrids[largeIndex] ??= BuildSegmentGrid(large, bounds[largeIndex], toleranceUm);
+        double toleranceSquared = toleranceUm * toleranceUm;
+        for (int i = 0; i < small.Points.Count; i++)
+        {
+            var s1 = small.Points[i];
+            var s2 = small.Points[(i + 1) % small.Points.Count];
+            var candidates = grid.QueryBox(
+                Math.Min(s1.X, s2.X) - toleranceUm, Math.Min(s1.Y, s2.Y) - toleranceUm,
+                Math.Max(s1.X, s2.X) + toleranceUm, Math.Max(s1.Y, s2.Y) + toleranceUm);
+            foreach (int j in candidates)
+            {
+                var b1 = large.Points[j];
+                var b2 = large.Points[(j + 1) % large.Points.Count];
+                if (SegmentsTouch(s1, s2, b1, b2, toleranceSquared))
+                    return true;
+            }
+        }
+
+        return PointInPolygon(large.Points, small.Points[0].X, small.Points[0].Y)
+            || PointInPolygon(small.Points, large.Points[0].X, large.Points[0].Y);
+    }
+
+    /// <summary>One entry per outline segment (same wrap-around enumeration as <see cref="PolygonsTouch"/>).</summary>
+    private static GdsSpatialGrid BuildSegmentGrid(
+        GdsOutlinePolygon polygon, Bounds polygonBounds, double toleranceUm)
+    {
+        var span = Math.Max(
+            polygonBounds.MaxX - polygonBounds.MinX,
+            polygonBounds.MaxY - polygonBounds.MinY);
+        var grid = GdsSpatialGrid.Create(span, toleranceUm, polygon.Points.Count);
+        for (int i = 0; i < polygon.Points.Count; i++)
+        {
+            var p1 = polygon.Points[i];
+            var p2 = polygon.Points[(i + 1) % polygon.Points.Count];
+            grid.InsertBox(i,
+                Math.Min(p1.X, p2.X), Math.Min(p1.Y, p2.Y),
+                Math.Max(p1.X, p2.X), Math.Max(p1.Y, p2.Y));
+        }
+        return grid;
     }
 
     /// <summary>
