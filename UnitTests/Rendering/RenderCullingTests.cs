@@ -74,6 +74,42 @@ public class RenderCullingTests
         bounds.Bottom.ShouldBe(20.0, Tolerance);
     }
 
+    // ── IsBelowOutlineLodThreshold ──────────────────────────────────────────
+
+    [Theory]
+    [InlineData(10, 10, 1.0, false)]   // typical polygon at typical zoom: drawn
+    [InlineData(1, 1, 1.0, true)]      // 1 px speck: culled
+    [InlineData(1.5, 1.5, 1.0, false)] // exactly at the threshold: still drawn
+    [InlineData(100, 1, 0.1, false)]   // long thin waveguide: larger dimension governs
+    [InlineData(10, 10, 0.0, false)]   // degenerate zoom falls back to 1.0
+    [InlineData(28, 28, 0.05, true)]   // 1.4 px at zoom-out: culled
+    [InlineData(40, 40, 0.05, false)]  // 2 px at zoom-out: drawn
+    public void IsBelowOutlineLodThreshold_ComparesLargerDimensionInScreenPixels(
+        double width, double height, double zoom, bool expected)
+    {
+        RenderCulling.IsBelowOutlineLodThreshold(width, height, zoom).ShouldBe(expected);
+    }
+
+    // ── ComputeSegmentBounds (single segment) ───────────────────────────────
+
+    [Fact]
+    public void ComputeSegmentBounds_SingleStraightSegment_MatchesListOverload()
+    {
+        PathSegment segment = new StraightSegment(2, 3, 8, 7, 0);
+
+        RenderCulling.ComputeSegmentBounds(segment)
+            .ShouldBe(RenderCulling.ComputeSegmentBounds(new[] { segment }));
+    }
+
+    [Fact]
+    public void ComputeSegmentBounds_SingleBendSegment_MatchesListOverload()
+    {
+        PathSegment segment = new BendSegment(centerX: 10, centerY: 10, radius: 5, startAngle: 0, sweepAngle: 90);
+
+        RenderCulling.ComputeSegmentBounds(segment)
+            .ShouldBe(RenderCulling.ComputeSegmentBounds(new[] { segment }));
+    }
+
     // ── GetFrozenPathBounds ─────────────────────────────────────────────────
 
     [Fact]
@@ -168,5 +204,27 @@ public class RenderCullingTests
         var inflated = RenderCulling.InflateForCulling(viewport, zoom: 1.0);
 
         inflated.Intersects(itemJustOffscreen).ShouldBeTrue();
+    }
+
+    // ── ComputeViewportWorld ────────────────────────────────────────────────
+
+    [Fact]
+    public void ComputeViewportWorld_ConvertsScreenBoundsThroughPanAndZoom()
+    {
+        var viewport = RenderCulling.ComputeViewportWorld(panX: -50, panY: 20, new Rect(0, 0, 200, 100), zoom: 2.0);
+
+        viewport.X.ShouldBe(25.0, Tolerance);
+        viewport.Y.ShouldBe(-10.0, Tolerance);
+        viewport.Width.ShouldBe(100.0, Tolerance);
+        viewport.Height.ShouldBe(50.0, Tolerance);
+    }
+
+    [Fact]
+    public void ComputeViewportWorld_DegenerateZoom_FallsBackToOne()
+    {
+        var viewport = RenderCulling.ComputeViewportWorld(0, 0, new Rect(0, 0, 200, 100), zoom: 0.0);
+
+        viewport.Width.ShouldBe(200.0, Tolerance);
+        viewport.Height.ShouldBe(100.0, Tolerance);
     }
 }

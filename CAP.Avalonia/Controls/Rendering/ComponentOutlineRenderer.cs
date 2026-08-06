@@ -32,16 +32,30 @@ internal sealed class ComponentOutlineRenderer
     /// so geometry is built once per component type, never per frame; the weak
     /// table drops the entry when the template is unloaded.
     /// </summary>
-    private readonly ConditionalWeakTable<IReadOnlyList<OutlinePolygon>, StreamGeometry[]> _geometryCache = new();
+    private readonly ConditionalWeakTable<IReadOnlyList<OutlinePolygon>, CachedGeometry[]> _geometryCache = new();
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): geometries actually issued to
+    /// <see cref="DrawingContext"/> since the last <see cref="ResetDrawCounters"/> — the
+    /// LOD perf guard asserts this against <see cref="CulledGeometryCount"/>.</summary>
+    internal long IssuedGeometryCount { get; private set; }
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): geometries skipped by the
+    /// per-polygon LOD cull since the last <see cref="ResetDrawCounters"/>.</summary>
+    internal long CulledGeometryCount { get; private set; }
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): zeroes both draw counters.</summary>
+    internal void ResetDrawCounters() => (IssuedGeometryCount, CulledGeometryCount) = (0, 0);
 
     /// <summary>
     /// Draws <paramref name="outlines"/> for <paramref name="comp"/>. Caller must
     /// guarantee a non-empty list — the fallback rectangle path lives in
     /// <see cref="ComponentRenderer"/>.
     /// </summary>
-    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed) =>
+    /// <param name="zoom">Current canvas zoom, used only for the per-polygon LOD cull
+    /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
+    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom) =>
         Draw(context, comp.X, comp.Y, comp.Width, comp.Height,
-            comp.Component.RotationDegrees, outlines, isDimmed);
+            comp.Component.RotationDegrees, outlines, isDimmed, zoom);
 
     /// <summary>
     /// Pose-based overload for callers that have no <see cref="ComponentViewModel"/>:
@@ -50,8 +64,10 @@ internal sealed class ComponentOutlineRenderer
     /// a non-empty list — the fallback rectangle path lives in
     /// <see cref="ComponentRenderer"/>.
     /// </summary>
+    /// <param name="zoom">Current canvas zoom, used only for the per-polygon LOD cull
+    /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
     public void Draw(DrawingContext context, double x, double y, double width, double height,
-        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed)
+        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom)
     {
         var geometries = _geometryCache.GetValue(outlines, BuildGeometries);
 
@@ -64,8 +80,20 @@ internal sealed class ComponentOutlineRenderer
         using (context.PushTransform(transform))
         using (context.PushOpacity(isDimmed ? 128.0 / 255.0 : 1.0))
         {
-            foreach (var geometry in geometries)
-                context.DrawGeometry(FillBrush, OutlinePen, geometry);
+            foreach (var cached in geometries)
+            {
+                // The pushed transform is rigid, so the local-frame bbox × zoom is a
+                // conservative on-screen size: at full zoom-out on a huge import most
+                // polygons are sub-pixel specks whose DrawGeometry call costs far more
+                // than what they rasterize.
+                if (RenderCulling.IsBelowOutlineLodThreshold(cached.Bounds.Width, cached.Bounds.Height, zoom))
+                {
+                    CulledGeometryCount++;
+                    continue;
+                }
+                IssuedGeometryCount++;
+                context.DrawGeometry(FillBrush, OutlinePen, cached.Geometry);
+            }
         }
     }
 
@@ -105,10 +133,11 @@ internal sealed class ComponentOutlineRenderer
     }
 
     // One geometry per polygon (mirrors GdsPolygonRenderer): a single multi-figure
-    // geometry would punch EvenOdd holes where overlapping layers coincide.
-    private static StreamGeometry[] BuildGeometries(IReadOnlyList<OutlinePolygon> outlines)
+    // geometry would punch EvenOdd holes where overlapping layers coincide. The
+    // local-frame bounding box rides along for the per-polygon LOD cull in Draw.
+    private static CachedGeometry[] BuildGeometries(IReadOnlyList<OutlinePolygon> outlines)
     {
-        var geometries = new List<StreamGeometry>(outlines.Count);
+        var geometries = new List<CachedGeometry>(outlines.Count);
         foreach (var polygon in outlines)
         {
             if (polygon.Points.Count < 2)
@@ -122,8 +151,36 @@ internal sealed class ComponentOutlineRenderer
                     ctx.LineTo(new Point(polygon.Points[i].X, polygon.Points[i].Y));
                 ctx.EndFigure(true);
             }
-            geometries.Add(geometry);
+            geometries.Add(new CachedGeometry(geometry, ComputeLocalBounds(polygon)));
         }
         return geometries.ToArray();
+    }
+
+    private static Rect ComputeLocalBounds(OutlinePolygon polygon)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var point in polygon.Points)
+        {
+            minX = Math.Min(minX, point.X);
+            minY = Math.Min(minY, point.Y);
+            maxX = Math.Max(maxX, point.X);
+            maxY = Math.Max(maxY, point.Y);
+        }
+        return new Rect(minX, minY, maxX - minX, maxY - minY);
+    }
+
+    /// <summary>One cached polygon: its geometry plus the local-frame bounding box
+    /// the per-polygon LOD cull scales by the current zoom.</summary>
+    private sealed class CachedGeometry
+    {
+        public CachedGeometry(StreamGeometry geometry, Rect bounds)
+        {
+            Geometry = geometry;
+            Bounds = bounds;
+        }
+
+        public StreamGeometry Geometry { get; }
+        public Rect Bounds { get; }
     }
 }

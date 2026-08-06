@@ -64,11 +64,15 @@ public static class ComponentGroupRenderer
     /// <param name="frozenPath">The frozen path to render.</param>
     /// <param name="powerFlowResult">Optional power flow result for color rendering.</param>
     /// <param name="fadeThresholdDb">Threshold in dB for fading out weak connections.</param>
+    /// <param name="cullRect">Optional world-space cull rectangle: segments fully outside
+    /// it are skipped. Long frozen buses can span far beyond the viewport, so per-segment
+    /// culling avoids drawing hundreds of off-screen lines; <c>null</c> draws every segment.</param>
     public static void RenderFrozenWaveguidePath(
         DrawingContext context,
         FrozenWaveguidePath frozenPath,
         PowerFlowResult? powerFlowResult = null,
-        double fadeThresholdDb = -40.0)
+        double fadeThresholdDb = -40.0,
+        Rect? cullRect = null)
     {
         if (frozenPath?.Path?.Segments == null || frozenPath.Path.Segments.Count == 0)
             return;
@@ -89,6 +93,9 @@ public static class ComponentGroupRenderer
 
         foreach (var segment in frozenPath.Path.Segments)
         {
+            if (cullRect.HasValue && !cullRect.Value.Intersects(RenderCulling.ComputeSegmentBounds(segment)))
+                continue;
+
             if (segment is StraightSegment straight)
             {
                 context.DrawLine(

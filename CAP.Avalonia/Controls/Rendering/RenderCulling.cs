@@ -27,7 +27,24 @@ internal static class RenderCulling
     /// </summary>
     internal const double LodMinScreenPixels = 4.0;
 
+    /// <summary>
+    /// On-screen size (larger bounding-box dimension × zoom) below which an outline
+    /// polygon is not drawn at all (KLayout-style geometry LOD). Far tighter than
+    /// <see cref="LodMinScreenPixels"/>: this culls real geometry, not decorations,
+    /// so it must only drop what rasterizes as an anti-aliased speck.
+    /// </summary>
+    internal const double OutlineMinScreenPixels = 1.5;
+
     private static readonly ConditionalWeakTable<FrozenWaveguidePath, CachedPathBounds> PathBoundsCache = new();
+
+    /// <summary>Visible canvas area in world (µm) coordinates from pan/zoom and the
+    /// screen-space canvas bounds.</summary>
+    internal static Rect ComputeViewportWorld(double panX, double panY, Rect bounds, double zoom)
+    {
+        double safeZoom = SafeZoom(zoom);
+        return new Rect(-panX / safeZoom, -panY / safeZoom,
+                        bounds.Width / safeZoom, bounds.Height / safeZoom);
+    }
 
     /// <summary>Grows the world-space viewport by the culling margin.</summary>
     internal static Rect InflateForCulling(Rect viewportWorld, double zoom) =>
@@ -39,6 +56,16 @@ internal static class RenderCulling
     /// </summary>
     internal static bool IsBelowLodThreshold(double widthWorld, double heightWorld, double zoom) =>
         Math.Max(widthWorld, heightWorld) * SafeZoom(zoom) < LodMinScreenPixels;
+
+    /// <summary>
+    /// True when the polygon's larger bounding-box dimension is smaller on screen than
+    /// <see cref="OutlineMinScreenPixels"/>, i.e. drawing it costs more than the speck
+    /// it produces. Callers pass the polygon's local-frame bounds: the outline draw
+    /// transform is rigid (translation + rotation), so the local bbox × zoom is a
+    /// conservative on-screen size that can never cull a polygon that would be visible.
+    /// </summary>
+    internal static bool IsBelowOutlineLodThreshold(double widthWorld, double heightWorld, double zoom) =>
+        Math.Max(widthWorld, heightWorld) * SafeZoom(zoom) < OutlineMinScreenPixels;
 
     /// <summary>
     /// World-space bounding box of a frozen path, or <c>null</c> when the path has no
@@ -71,27 +98,31 @@ internal static class RenderCulling
     /// </summary>
     internal static Rect ComputeSegmentBounds(IReadOnlyList<PathSegment> segments)
     {
-        double minX = double.MaxValue, minY = double.MaxValue;
-        double maxX = double.MinValue, maxY = double.MinValue;
-        foreach (var segment in segments)
+        var bounds = ComputeSegmentBounds(segments[0]);
+        for (int i = 1; i < segments.Count; i++)
+            bounds = bounds.Union(ComputeSegmentBounds(segments[i]));
+        return bounds;
+    }
+
+    /// <summary>
+    /// Conservative world-space bounds of one segment — the same union of endpoint
+    /// box and bend circle the list overload builds, for per-segment culling in the
+    /// render loop (no intermediate list allocation).
+    /// </summary>
+    internal static Rect ComputeSegmentBounds(PathSegment segment)
+    {
+        double minX = Math.Min(segment.StartPoint.X, segment.EndPoint.X);
+        double minY = Math.Min(segment.StartPoint.Y, segment.EndPoint.Y);
+        double maxX = Math.Max(segment.StartPoint.X, segment.EndPoint.X);
+        double maxY = Math.Max(segment.StartPoint.Y, segment.EndPoint.Y);
+        if (segment is BendSegment bend)
         {
-            Include(segment.StartPoint.X, segment.StartPoint.Y);
-            Include(segment.EndPoint.X, segment.EndPoint.Y);
-            if (segment is BendSegment bend)
-            {
-                Include(bend.Center.X - bend.RadiusMicrometers, bend.Center.Y - bend.RadiusMicrometers);
-                Include(bend.Center.X + bend.RadiusMicrometers, bend.Center.Y + bend.RadiusMicrometers);
-            }
+            minX = Math.Min(minX, bend.Center.X - bend.RadiusMicrometers);
+            minY = Math.Min(minY, bend.Center.Y - bend.RadiusMicrometers);
+            maxX = Math.Max(maxX, bend.Center.X + bend.RadiusMicrometers);
+            maxY = Math.Max(maxY, bend.Center.Y + bend.RadiusMicrometers);
         }
         return new Rect(minX, minY, maxX - minX, maxY - minY);
-
-        void Include(double x, double y)
-        {
-            minX = Math.Min(minX, x);
-            minY = Math.Min(minY, y);
-            maxX = Math.Max(maxX, x);
-            maxY = Math.Max(maxY, y);
-        }
     }
 
     private static double SafeZoom(double zoom) => zoom <= 0 ? 1.0 : zoom;

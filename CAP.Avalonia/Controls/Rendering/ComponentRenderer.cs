@@ -40,7 +40,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
     /// <inheritdoc/>
     public void Render(DrawingContext context, CanvasRenderContext rc)
     {
-        var viewport = ComputeViewportWorld(rc);
+        var viewport = RenderCulling.ComputeViewportWorld(rc.ViewModel.PanX, rc.ViewModel.PanY, rc.Bounds, rc.Zoom);
         var cullRect = RenderCulling.InflateForCulling(viewport, rc.Zoom);
         Guid? hoveredComponentId = rc.InteractionState.HoveredComponent?.Component.Id;
         var visibleNameIds = _nameLabels.GetVisibleLabelIds(
@@ -48,16 +48,6 @@ public sealed class ComponentRenderer : ICanvasRenderer
 
         foreach (var comp in rc.ViewModel.Components)
             DrawComponent(context, comp, rc, visibleNameIds, cullRect);
-    }
-
-    /// <summary>Visible canvas area in world (µm) coordinates, used to cull off-screen
-    /// components before measuring their name labels for overlap resolution.</summary>
-    private static Rect ComputeViewportWorld(CanvasRenderContext rc)
-    {
-        double zoom = rc.Zoom <= 0 ? 1.0 : rc.Zoom;
-        var vm = rc.ViewModel;
-        return new Rect(-vm.PanX / zoom, -vm.PanY / zoom,
-                        rc.Bounds.Width / zoom, rc.Bounds.Height / zoom);
     }
 
     private void DrawComponent(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc,
@@ -119,7 +109,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // rectangle body. No Nazca preview is fetched for it — the real imported
             // geometry is already on screen, and the synthesized import function name
             // would only spawn a doomed Python render per unique cell.
-            _outlineRenderer.Draw(context, comp, comp.Component.OutlinePolygons!, isDimmed);
+            _outlineRenderer.Draw(context, comp, comp.Component.OutlinePolygons!, isDimmed, rc.Zoom);
             return;
         }
 
@@ -147,7 +137,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // draws beneath the children so components stay legible on top.
             _outlineRenderer.Draw(context, group.PhysicalX, group.PhysicalY,
                 group.WidthMicrometers, group.HeightMicrometers,
-                group.RotationDegrees, backgroundPolygons, isDimmed);
+                group.RotationDegrees, backgroundPolygons, isDimmed, rc.Zoom);
         }
 
         foreach (var child in group.ChildComponents)
@@ -171,7 +161,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // is culled individually by its cached bounding box.
             if (RenderCulling.GetFrozenPathBounds(frozenPath) is { } pathBounds && !cullRect.Intersects(pathBounds))
                 continue;
-            ComponentGroupRenderer.RenderFrozenWaveguidePath(context, frozenPath, powerFlowResult, fadeThreshold);
+            ComponentGroupRenderer.RenderFrozenWaveguidePath(context, frozenPath, powerFlowResult, fadeThreshold, cullRect);
         }
 
         if (!cullRect.Intersects(bounds))
@@ -209,7 +199,7 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // just like the selection border does for outlined top-level components.
             _outlineRenderer.Draw(context, child.PhysicalX, child.PhysicalY,
                 child.WidthMicrometers, child.HeightMicrometers,
-                child.RotationDegrees, childOutlines, isDimmed);
+                child.RotationDegrees, childOutlines, isDimmed, rc.Zoom);
         }
         else
         {
