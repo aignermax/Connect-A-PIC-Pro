@@ -83,6 +83,11 @@
                             <panels:EyeDiagramPanel/>
                         </ScrollViewer>
                     </TabItem>
+                    <TabItem Header="{loc:Localize AnalysisDock.TabSpectrum}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <panels:WavelengthSpectrumPanel/>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </StackPanel>
