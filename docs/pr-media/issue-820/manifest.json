@@ -1,0 +1,5 @@
+[
+  {"file": "01-panel-ready.png", "caption": "Optimization panel ready: target selector (total output power / single coupler port), maximize toggle, evaluation budget and seed, and the Run button."},
+  {"file": "02-running.png", "caption": "Run in progress: Run disabled, Cancel visible, live status line shows evaluation 23/50 and the best score so far — cancellation is clean at any point."},
+  {"file": "03-results-applied.png", "caption": "Finished run: baseline score plus ranked top-N variants with score, improvement over baseline and the parameter assignment; variant #1 applied via the undo-safe one-click Apply (Ctrl+Z restores)."}
+]
