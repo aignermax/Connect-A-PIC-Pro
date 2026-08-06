@@ -166,6 +166,71 @@ public class GdsImportDesignRoundTripTests : IDisposable
         abutment.EndPin!.Name.ShouldBe("in");
     }
 
+    [Fact]
+    public async Task ImportPlaceSaveLoad_GeometryOnlyComponent_RoundTripsWithZeroPins()
+    {
+        // A pin-less foundry cell (logo) next to a pinned waveguide: the
+        // geometry-only component must survive the .lun round-trip like any
+        // other — resolving back to its imported template with its outlines.
+        var gdsPath = WriteGdsMixedWithPinlessCell();
+        var sink = new LibrarySink(_prefsPath);
+        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
+        outcome.Warnings.ShouldContain(w => w.Contains("'logo'") && w.Contains("geometry-only"));
+
+        var saveCanvas = new DesignCanvasViewModel();
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => sink.Templates.ToList())
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
+        report.PlacedCount.ShouldBe(2);
+        report.GroupCreated.ShouldBeTrue();
+
+        var savePath = Path.Combine(_root, "circuit-geomonly.lun");
+        await SaveToFile(CreateFileOperations(saveCanvas, sink.Templates, out _), savePath);
+
+        var loadCanvas = new DesignCanvasViewModel();
+        await LoadFromFile(CreateFileOperations(loadCanvas, sink.Templates, out _), savePath);
+
+        var group = loadCanvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
+        group.ChildComponents.Count.ShouldBe(2);
+        var logo = group.ChildComponents.Single(c => c.PhysicalX == 20);
+        logo.HumanReadableName.ShouldBe("logo");
+        logo.PhysicalPins.ShouldBeEmpty("a geometry-only component round-trips with zero pins");
+        logo.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
+        sink.Templates.Single(t => t.Name == "logo" && t.PdkSource == "GDS Import - circuit-geomonly")
+            .RawCode.ShouldNotBeNull().ShouldContain("cellname=\"logo\"");
+
+        // The top-cell route stub (touches no pins) survived as a pin-less frozen path.
+        var frozen = group.InternalPaths.ShouldHaveSingleItem();
+        frozen.StartPin.ShouldBeNull();
+        frozen.EndPin.ShouldBeNull();
+    }
+
+    /// <summary>
+    /// TOP with one pinned waveguide (wgA), one pin-less geometry cell ("logo":
+    /// only an extent rectangle on (111,0)), and a top-cell route stub on (1,0)
+    /// that touches no pin (same placement as <see cref="WriteGdsWithRoutePolygon"/>).
+    /// </summary>
+    private string WriteGdsMixedWithPinlessCell()
+    {
+        Directory.CreateDirectory(_root);
+        var path = Path.Combine(_root, "circuit-geomonly.gds");
+        var content = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("logo", 20000, 0)
+                .Boundary(1, 0, (10000, 250), (12000, 250), (12000, 750), (10000, 750), (10000, 250))
+            .EndCell()
+            .WaveguideCell("wgA")
+            .BeginCell("logo")
+                .Boundary(111, 0, (0, 0), (5000, 0), (5000, 5000), (0, 5000), (0, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+        File.WriteAllBytes(path, content);
+        return path;
+    }
+
     // ── Harness (mirrors GdsImportServiceTests / SkippedRouteConnectionPersistenceTests) ──
 
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>

@@ -48,13 +48,14 @@ public sealed partial class GdsPlacementExecutor
         var created = new List<WaveguideConnection>();
         var awaitingRoute = 0;
         var frozenCached = 0;
+        var stageProgress = StageProgress(progress, "Connecting pins");
         for (var i = 0; i < plan.Connections.Count; i++)
         {
             ct.ThrowIfCancellationRequested();
             if (i % UiYieldInterval == UiYieldInterval - 1)
                 await Task.Yield();
             var connection = plan.Connections[i];
-            progress?.Report($"Connecting pins {i + 1}/{plan.Connections.Count}…");
+            stageProgress?.Report(i + 1, plan.Connections.Count);
 
             if (connection.InvolvesTopLevelPort)
             {

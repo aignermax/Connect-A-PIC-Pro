@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
 using CAP_Core;
@@ -83,10 +82,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private string _waveguideLayersText = "1,0";
 
     /// <summary>
-    /// Auto-connect free pins after placement (experimental). When set, the flag
-    /// flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>: a pass pairs
-    /// unconnected optical pins of the placed instances that face each other
-    /// within <see cref="AutoConnectRadiusText"/> after the abutment connections,
+    /// Guess connections for remaining free pins after placement (experimental).
+    /// When set, the flag flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>:
+    /// a pass pairs unconnected optical pins of the placed instances that face each
+    /// other within <see cref="AutoConnectRadiusText"/> after the abutment connections
+    /// — a proximity/facing GUESS (real connectivity comes from the route structure),
     /// followed by a validation run whose issues land in the result warnings.
     /// </summary>
     [ObservableProperty]
@@ -355,7 +355,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
     {
         if (IsBusy)
         {
-            _cts?.Cancel();
+            CancelCurrentRun();
             return;
         }
         OnClose?.Invoke();
@@ -369,21 +369,47 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// </summary>
     public void OnWindowClosed()
     {
-        _cts?.Cancel();
+        CancelCurrentRun();
         _cts?.Dispose();
         _cts = null;
     }
 
     /// <summary>
     /// Replaces the per-run cancellation source, disposing the previous run's, and
-    /// returns the new source. Safe because both entry points no-op while
-    /// <see cref="IsBusy"/> — the replaced source always belongs to a finished run.
+    /// returns the new source. Both entry points no-op while <see cref="IsBusy"/>,
+    /// so the replaced source always belongs to a finished run — but a late
+    /// progress callback, a queued await continuation or a FileStream read of the
+    /// service's off-thread parse may still REFERENCE its token. Cancel BEFORE
+    /// dispose: every .NET registration path (stream reads, task cancellation
+    /// wiring, semaphore waits) short-circuits on an already-cancelled source,
+    /// while registering on a disposed-not-cancelled source throws
+    /// <see cref="ObjectDisposedException"/> ("The CancellationTokenSource has
+    /// been disposed") — the import failure this ordering prevents.
     /// </summary>
     private CancellationTokenSource ResetCancellationSource()
     {
+        CancelCurrentRun();
         _cts?.Dispose();
         _cts = new CancellationTokenSource();
         return _cts;
+    }
+
+    /// <summary>
+    /// Cancels the current run's source, tolerating one that a racing reset or
+    /// window close already disposed: <see cref="CancellationTokenSource.Cancel"/>
+    /// throws <see cref="ObjectDisposedException"/> on a disposed source, which
+    /// must never escape as an import failure (the run is over either way).
+    /// </summary>
+    private void CancelCurrentRun()
+    {
+        try
+        {
+            _cts?.Cancel();
+        }
+        catch (ObjectDisposedException)
+        {
+            // The source was already released by a racing reset/close — nothing to cancel.
+        }
     }
 
     /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
@@ -412,82 +438,5 @@ public partial class GdsImportDialogViewModel : ObservableObject
                 LocalizationService.Instance.Translate("GdsImport.ResultGroupSuffix"), report.GroupName);
         }
         return summary;
-    }
-
-    /// <summary>
-    /// Parses the auto-connect radius field (invariant culture, so the field behaves
-    /// identically on every machine locale). Only consulted when auto-connect is on;
-    /// an unchecked box always yields the default radius.
-    /// </summary>
-    private bool TryParseAutoConnectRadius(out double radiusUm)
-    {
-        radiusUm = GdsPlacementExecutor.DefaultAutoConnectRadiusUm;
-        if (!AutoConnectRequested)
-            return true;
-
-        return double.TryParse(
-                   AutoConnectRadiusText,
-                   NumberStyles.Float,
-                   CultureInfo.InvariantCulture,
-                   out radiusUm)
-               && radiusUm > 0
-               && !double.IsInfinity(radiusUm);
-    }
-
-    /// <summary>Builds the import options from the mode radio and the layer text fields.</summary>
-    private bool TryBuildOptions(out GdsHierarchyImportOptions options, out string? error)
-    {
-        options = new GdsHierarchyImportOptions();
-        error = null;
-
-        var portLayers = ParseLayerPairs(PortLayersText);
-        if (portLayers is null)
-        {
-            error = string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ErrorLayerSyntax"), PortLayersText);
-            return false;
-        }
-        var waveguideLayers = ParseLayerPairs(WaveguideLayersText);
-        if (waveguideLayers is null)
-        {
-            error = string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ErrorLayerSyntax"), WaveguideLayersText);
-            return false;
-        }
-
-        options = options with
-        {
-            Mode = IsExplodeMode ? GdsHierarchyImportMode.ExplodeHierarchy : GdsHierarchyImportMode.BlackBox,
-            PinDetection = new GdsPinDetectionOptions
-            {
-                PortLayers = portLayers,
-                WaveguideLayers = waveguideLayers,
-            },
-        };
-        return true;
-    }
-
-    /// <summary>
-    /// Parses "layer,datatype" pairs separated by ';' (e.g. <c>1,10</c> or
-    /// <c>1,10; 2,0</c>). Returns null when any segment is malformed — GDS
-    /// layer/datatype numbers are unsigned, so negative values are rejected too.
-    /// </summary>
-    internal static List<(int Layer, int Datatype)>? ParseLayerPairs(string text)
-    {
-        var pairs = new List<(int, int)>();
-        foreach (var segment in text.Split(';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            var parts = segment.Split(',', StringSplitOptions.TrimEntries);
-            if (parts.Length != 2
-                || !int.TryParse(parts[0], out var layer)
-                || !int.TryParse(parts[1], out var datatype)
-                || layer < 0
-                || datatype < 0)
-            {
-                return null;
-            }
-            pairs.Add((layer, datatype));
-        }
-        return pairs.Count > 0 ? pairs : null;
     }
 }

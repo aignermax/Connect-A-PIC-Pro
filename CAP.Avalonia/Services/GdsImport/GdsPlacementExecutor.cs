@@ -154,6 +154,18 @@ public sealed partial class GdsPlacementExecutor
     /// </summary>
     private const int UiYieldInterval = 64;
 
+    /// <summary>
+    /// Minimum interval between throttled stage-progress messages of a run
+    /// (<see cref="GdsStageProgressReporter"/>): per-item reports post to the UI
+    /// dispatcher, so huge imports would flood the message loop without the
+    /// throttle. Internal set-seam for tests (zero reports every item).
+    /// </summary>
+    internal TimeSpan ProgressReportInterval { get; set; } = TimeSpan.FromMilliseconds(300);
+
+    /// <summary>Creates a throttled reporter for a stage loop, or null when no progress sink exists.</summary>
+    private GdsStageProgressReporter? StageProgress(IProgress<string>? progress, string stageName) =>
+        progress is null ? null : new GdsStageProgressReporter(progress, stageName, ProgressReportInterval);
+
     private async Task<List<ComponentViewModel?>> PlaceAllAsync(
         GdsPlacementPlan plan,
         IReadOnlyList<ComponentTemplate> templates,
@@ -165,6 +177,7 @@ public sealed partial class GdsPlacementExecutor
         // Index-aligned with plan.Placements; null entries mark skipped instances
         // so connection endpoint indexes stay valid.
         var placedViewModels = new List<ComponentViewModel?>(plan.Placements.Count);
+        var stageProgress = StageProgress(progress, "Placing components");
 
         for (var i = 0; i < plan.Placements.Count; i++)
         {
@@ -172,7 +185,7 @@ public sealed partial class GdsPlacementExecutor
             if (i % UiYieldInterval == UiYieldInterval - 1)
                 await Task.Yield();
             var instruction = plan.Placements[i];
-            progress?.Report($"Placing component {i + 1}/{plan.Placements.Count} ({instruction.InstanceName})…");
+            stageProgress?.Report(i + 1, plan.Placements.Count);
 
             if (instruction.ComponentIdentifier is null)
             {
@@ -251,9 +264,14 @@ public sealed partial class GdsPlacementExecutor
         // The polygons are in plan space, so the import origin offset the
         // placements already received must be applied here too — frozen paths
         // hold absolute canvas coordinates.
-        foreach (var polygon in plan.TopCellWaveguidePolygons)
+        var frozenProgress = StageProgress(progress, "Attaching frozen route paths");
+        for (var i = 0; i < plan.TopCellWaveguidePolygons.Count; i++)
+        {
+            ct.ThrowIfCancellationRequested();
+            frozenProgress?.Report(i + 1, plan.TopCellWaveguidePolygons.Count);
             command.CreatedGroup.AddInternalPath(
-                GdsFrozenRoutePathFactory.Create(polygon, originOffset.X, originOffset.Y));
+                GdsFrozenRoutePathFactory.Create(plan.TopCellWaveguidePolygons[i], originOffset.X, originOffset.Y));
+        }
     }
 
     /// <summary>

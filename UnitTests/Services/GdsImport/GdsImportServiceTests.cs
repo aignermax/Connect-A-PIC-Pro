@@ -488,15 +488,19 @@ public class GdsImportServiceTests : IDisposable
     [Fact]
     public async Task ImportAsync_UnpersistableDraft_RegistersNothingAndWarns()
     {
-        // "blob" has no waveguide-layer geometry and no port labels → no pins →
-        // the PDK loader would reject it, so the service skips it with a warning.
+        // "flat" spans 10×0 µm — a degenerate, zero-height bbox: the importer's
+        // zero-geometry skip (which requires BOTH dimensions to be empty) does
+        // not catch it, so the draft is built but the service refuses to persist
+        // a zero-size component (the PDK loader would reject it). Pin-LESS
+        // drafts, by contrast, are persistable since geometry-only components
+        // became legal (see GdsGeometryOnlyComponentTests).
         var library = GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
-                .SRef("blob", 0, 0)
+                .SRef("flat", 0, 0)
             .EndCell()
-            .BeginCell("blob")
-                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+            .BeginCell("flat")
+                .Boundary(111, 0, (0, 2000), (10000, 2000), (10000, 2000), (0, 2000), (0, 2000))
             .EndCell()
             .EndLibrary()
             .ToArray();
@@ -509,9 +513,9 @@ public class GdsImportServiceTests : IDisposable
         outcome.RegisteredComponents.ShouldBeEmpty();
         outcome.UserPdkPath.ShouldBeNull();
         outcome.GdsFileName.ShouldBeNull("no draft needs the .gds copy when nothing is registered");
-        outcome.Warnings.ShouldContain(w => w.Contains("blob") && w.Contains("not registered"));
-        outcome.Warnings.Count(w => w.Contains("no pins")).ShouldBe(1,
-            "the pinless draft is reported ONCE (by the service), not again by the importer");
+        outcome.Warnings.ShouldContain(w => w.Contains("flat") && w.Contains("not registered: zero size"));
+        outcome.Warnings.ShouldContain(w => w.Contains("flat") && w.Contains("empty bounding box"),
+            "the importer's zero-size note fires alongside (pre-existing reporter behavior)");
         outcome.Infos.ShouldBeEmpty(
             "an unpersistable draft is a real problem — it stays a warning, not an info note");
         sink.Templates.ShouldBeEmpty();

@@ -7,7 +7,7 @@ namespace CAP_DataAccess.Import.Gds;
 /// bounding boxes, flattened cells, pins, known-component resolutions) and the
 /// warning sink, so each cell is flattened/resolved exactly once per import.
 /// </summary>
-internal sealed class GdsHierarchyImportSession
+internal sealed partial class GdsHierarchyImportSession
 {
     /// <summary>Pin-frame size mismatch (µm) tolerated before warning about a known component's size.</summary>
     private const double SizeMismatchToleranceUm = 1.0;
@@ -74,7 +74,9 @@ internal sealed class GdsHierarchyImportSession
     /// are normalized (<see cref="GdsPinNameNormalizer"/>) BEFORE caching, so
     /// the draft pins and the names used for connection reconstruction can
     /// never diverge (blank/duplicate names would otherwise mis-wire or poison
-    /// the persisted PDK).
+    /// the persisted PDK). When no configured port layer yields any label pin,
+    /// the any-layer fallback retries with every text label
+    /// (<see cref="DetectWithAnyLayerFallback"/>).
     /// </summary>
     public IReadOnlyList<DetectedPin> GetCellPins(string cellName, GdsBoundingBox bbox)
     {
@@ -85,7 +87,7 @@ internal sealed class GdsHierarchyImportSession
         detectionCell.Polygons.AddRange(GetFlattened(cellName).Polygons);
         detectionCell.Texts.AddRange(Library.Cells[cellName].Elements.OfType<GdsText>());
         var pins = GdsPinNameNormalizer.Normalize(
-            GdsPinDetector.Detect(detectionCell, bbox, _options.PinDetection),
+            DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
             Warnings);
         _pins[cellName] = pins;
@@ -98,11 +100,18 @@ internal sealed class GdsHierarchyImportSession
     /// — internal geometry ends at the layout boundary belong to instances,
     /// and treating them as ports would fabricate connections the designer
     /// never labeled (gdsfactory circuits expose ports via top-level labels).
+    /// The any-layer label fallback (<see cref="DetectWithAnyLayerFallback"/>)
+    /// deliberately does NOT apply here either: an unconfigured top-cell text
+    /// is more likely a stray annotation than a circuit port, and a fabricated
+    /// external port is worse than a missing one.
     /// </summary>
     public IReadOnlyList<DetectedPin> GetTopLevelPorts()
     {
         var detectionCell = new FlattenedGdsCell { CellName = _topCellName };
-        detectionCell.Texts.AddRange(Library.Cells[_topCellName].Elements.OfType<GdsText>());
+        // Multi-line texts are metadata blobs (e.g. nazca's "cellname: …\nfoundry_pdk: …"),
+        // never port labels — a pin name cannot span lines.
+        detectionCell.Texts.AddRange(Library.Cells[_topCellName].Elements.OfType<GdsText>()
+            .Where(t => !t.Text.Contains('\n')));
         return GdsPinDetector.Detect(detectionCell, TopBBox, _options.PinDetection);
     }
 
@@ -240,7 +249,7 @@ internal sealed class GdsHierarchyImportSession
         }
 
         return GdsPinNameNormalizer.Normalize(
-            GdsPinDetector.Detect(detectionCell, bbox, _options.PinDetection),
+            DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
             Warnings);
     }

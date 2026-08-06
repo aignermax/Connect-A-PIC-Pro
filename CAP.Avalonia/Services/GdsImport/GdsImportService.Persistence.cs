@@ -80,9 +80,13 @@ public sealed partial class GdsImportService
 
     /// <summary>
     /// The PDK loader's hard rules a draft must satisfy to round-trip: positive
-    /// size and at least one pin (pins within bounds are guaranteed by the
-    /// importer). Unpersistable drafts are skipped with a warning — persisting
-    /// them would make every later save of the same PDK file fail validation.
+    /// size (pins within bounds are guaranteed by the importer; a pin-LESS draft
+    /// is fine — the loader accepts geometry-only components that carry
+    /// outlines). Zero-size drafts are skipped with a warning — persisting them
+    /// would make every later save of the same PDK file fail validation. A
+    /// draft WITHOUT pins (foundry marker/pad/logo cells carry no pin labels)
+    /// registers as a geometry-only component with one warning: it places with
+    /// its outlines but can never be connected.
     /// </summary>
     private static bool IsPersistable(GdsCellDraft draft, List<string> warnings)
     {
@@ -94,9 +98,8 @@ public sealed partial class GdsImportService
         }
         if (draft.Pins.Count == 0)
         {
-            warnings.Add($"Cell '{draft.CellName}' was not registered: no pins detected " +
-                         "(a PDK component needs at least one pin).");
-            return false;
+            warnings.Add($"Cell '{draft.CellName}' has no pins — registered as a " +
+                         "geometry-only component (outlines only); it cannot be connected.");
         }
         return true;
     }

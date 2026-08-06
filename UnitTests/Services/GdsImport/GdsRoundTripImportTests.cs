@@ -253,7 +253,12 @@ public class GdsRoundTripImportTests : IDisposable
         connection.IsRouteDerived.ShouldBeTrue();
         connection.IsElectrical.ShouldBeFalse();
         connection.A.PinName.ShouldBe("a0");
-        connection.B.PinName.ShouldBe("heur_2");
+        // The any-layer label fallback discovers the GC's fiber-side pin label
+        // (demofab's io pin text is not on a configured port layer): the label
+        // pin suppresses the fiber-side heuristic touch, so the surviving
+        // waveguide-side heuristic pin — the same physical pin as before —
+        // renumbers from heur_2 to heur_1.
+        connection.B.PinName.ShouldBe("heur_1");
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
         outcome.Infos.ShouldContain(i => i.Contains("junction with 3 pins"));
         outcome.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s)"));

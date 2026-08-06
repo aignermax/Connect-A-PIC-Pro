@@ -123,9 +123,11 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 errors.Add($"[{pdkName}/{compLabel}] Height must be positive");
             }
 
-            if (comp.Pins == null || comp.Pins.Count == 0)
+            if ((comp.Pins == null || comp.Pins.Count == 0)
+                && (comp.OutlinePolygons == null || comp.OutlinePolygons.Count == 0))
             {
-                errors.Add($"[{pdkName}/{compLabel}] Must have at least one pin");
+                errors.Add($"[{pdkName}/{compLabel}] Must have at least one pin " +
+                           "(or outline polygons for a geometry-only component)");
             }
 
             if (requireNazcaOffset && !isAnalysisTool && !isGdsFactoryComponent && !hasRawCode)

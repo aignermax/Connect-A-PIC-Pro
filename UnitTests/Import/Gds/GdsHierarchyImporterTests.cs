@@ -1271,8 +1271,8 @@ public class GdsHierarchyImporterTests
     {
         // "blob" has no waveguide-layer geometry and no port labels → no pins.
         // The importer deliberately does NOT warn here: the service reports the
-        // more actionable "not registered: no pins" message — two warnings for
-        // the same fact would be noise.
+        // more actionable "geometry-only component" message when it registers
+        // the draft — two warnings for the same fact would be noise.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
