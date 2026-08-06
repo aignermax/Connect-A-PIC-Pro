@@ -1,5 +1,3 @@
-using CAP_Core.Analysis;
-
 namespace CAP.Avalonia.Services.GdsImport;
 
 /// <summary>
@@ -32,17 +30,20 @@ public sealed class GdsPlacementReport
     /// <summary>Number of top-cell route polygons kept as frozen, non-re-routable paths on the group.</summary>
     public int FrozenRoutePathCount { get; internal set; }
 
-    /// <summary>Number of auto-connected free-pin pairs (experimental pass).</summary>
-    public int AutoConnectedCount { get; internal set; }
-
-    /// <summary>Per-pair descriptions of auto-connected free pins.</summary>
-    public List<string> AutoConnectedPairs { get; } = new();
-
-    /// <summary>Per-pin reasons for free pins the auto-connect pass did not pair.</summary>
-    public List<string> SkippedAutoConnect { get; } = new();
+    /// <summary>
+    /// Number of top-cell non-routing polygons (substrate/base plates, logos)
+    /// attached to the group as render-only background geometry.
+    /// </summary>
+    public int BackgroundPolygonCount { get; internal set; }
 
     /// <summary>
-    /// Issues the post-batch <see cref="DesignValidator"/> run found in the
+    /// Number of created connections handed to Lunima's router (one batch
+    /// recalculation) instead of keeping imported geometry.
+    /// </summary>
+    public int ReroutedCount { get; internal set; }
+
+    /// <summary>
+    /// Issues the post-batch <see cref="CAP_Core.Analysis.DesignValidator"/> run found in the
     /// connections created by this execution (type, location, involved pins).
     /// </summary>
     public List<string> ValidationWarnings { get; } = new();
@@ -55,6 +56,16 @@ public sealed class GdsPlacementReport
 
     /// <summary>Non-fatal notes (mirrored instances, non-cardinal rotation snaps).</summary>
     public List<string> Warnings { get; } = new();
+
+    /// <summary>
+    /// Chip width (µm) after the import auto-enlarged the playfield to fit the
+    /// design, or null when the chip was already big enough. The dialog uses it
+    /// to sync the chip-size settings panel.
+    /// </summary>
+    public double? ChipEnlargedToWidthUm { get; internal set; }
+
+    /// <summary>Chip height (µm) after auto-enlargement, or null (see <see cref="ChipEnlargedToWidthUm"/>).</summary>
+    public double? ChipEnlargedToHeightUm { get; internal set; }
 
     /// <summary>True when the placed components were wrapped in a group.</summary>
     public bool GroupCreated { get; internal set; }

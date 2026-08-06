@@ -36,8 +36,9 @@ namespace UnitTests.UI;
 /// <list type="number">
 /// <item>the ORIGINAL design on the production canvas renderers,</item>
 /// <item>the exported GDS as an independent ground truth (own reader,</item>
-/// <item>the re-imported design (auto-connect OFF, honest v1: no connections),</item>
-/// <item>the re-imported design (auto-connect ON: the 2 restored connections).</item>
+/// <item>the re-imported design (re-routing OFF: frozen imported geometry),</item>
+/// <item>the re-imported design (re-routing ON: the route-derived connections
+/// re-routed with Lunima routing).</item>
 /// </list>
 /// <para>
 /// Render path: the real <c>DesignCanvas</c> control is NOT headless-feasible
@@ -58,7 +59,7 @@ namespace UnitTests.UI;
 /// </para>
 /// <para>
 /// Environment guard: needs a Python with nazca (SiEPIC-upgraded for the
-/// auto-connect pins). This is an <see cref="AvaloniaFactAttribute"/> test —
+/// labeled foundry pins). This is an <see cref="AvaloniaFactAttribute"/> test —
 /// Xunit.SkippableFact's <c>Skip.If</c> cannot report a skip through
 /// AvaloniaFact's own test-case discoverer, so a missing engine is an early
 /// return here, matching the repo's other environment-gated screenshot tests
@@ -165,16 +166,16 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         outcome.Instances.Count.ShouldBe(7);
         var plan = GdsPlacementPlan.FromOutcome(outcome);
 
-        // ── 7. Place twice on fresh canvases: auto-connect OFF vs ON (radius 200 µm default) ──
+        // ── 7. Place twice on fresh canvases: re-routing OFF (frozen imported geometry) vs ON (Lunima routing) ──
         var canvasOff = new DesignCanvasViewModel();
         canvasOff.InitializeAStarRouting(150, -700, 950, -250);
         var reportOff = await new GdsPlacementExecutor(canvasOff, null, () => sink.Templates.ToList())
-            .ExecuteAsync(plan, autoConnectFreePins: false);
+            .ExecuteAsync(plan, rerouteImportedConnections: false);
 
         var canvasOn = new DesignCanvasViewModel();
         canvasOn.InitializeAStarRouting(150, -700, 950, -250);
         var reportOn = await new GdsPlacementExecutor(canvasOn, null, () => sink.Templates.ToList())
-            .ExecuteAsync(plan, autoConnectFreePins: true);
+            .ExecuteAsync(plan, rerouteImportedConnections: true);
 
         // ── 8. Panels 03/04 in the same window, translated by the re-origin shift ──
         var (shiftX, shiftY) = ComputeReoriginShift(original, canvasOff);
@@ -185,7 +186,7 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         ScreenshotArtifacts.SavePng(panel3, path3);
 
         using var panel4 = CaptureCanvas(canvasOn, importedWorld, panelSize);
-        string path4 = Path.Combine(outDir, "04-reimported-autoconnect.png");
+        string path4 = Path.Combine(outDir, "04-reimported-rerouted.png");
         ScreenshotArtifacts.SavePng(panel4, path4);
 
         WriteManifest(outDir);
@@ -196,17 +197,17 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         reportOff.ConnectedCount.ShouldBe(siepicUpgraded ? 4 : 2,
             "route-derived structural restoration: the two MMI braids (both scenarios); plus " +
             "crossing↔crossing and halfring↔adiabatic when the real SiEPIC cells carry labels");
-        reportOff.AutoConnectedCount.ShouldBe(0);
+        reportOff.ReroutedCount.ShouldBe(0, "frozen mode hands nothing to the live router");
         reportOn.PlacedCount.ShouldBe(7);
-        reportOn.AutoConnectedCount.ShouldBe(0,
-            "nothing left for auto-connect: the formerly restored spans (7 and 10) are route-derived now");
+        reportOn.ConnectedCount.ShouldBe(reportOff.ConnectedCount,
+            "both modes create the same connections — only their geometry differs");
 
-        var probes = new Probes(original, canvasOff, canvasOn, shared, importedWorld, scale);
+        var groupOn = canvasOn.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
+        var probes = new Probes(original, canvasOff, shared, importedWorld, scale);
         AssertPanel01(panel1, path1, panelSize, probes);
         AssertPanel02(panel2, path2, panelSize, probes);
         AssertPanel03(panel3, path3, panelSize, probes);
-        AssertPanel04(panel4, path4, panelSize, probes, reportOn, siepicUpgraded,
-            CountExternalPinPixels(panel3, panelSize));
+        AssertPanel04(panel4, path4, panelSize, probes, reportOn, groupOn, siepicUpgraded);
     }
 
     // ── World-window helpers ─────────────────────────────────────────────────
@@ -285,22 +286,22 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     /// frame: the mmi1 footprint centre (filled in every panel), per-connection
     /// probe points sampled ON the routed segments of the original design
     /// (panel 1 renders them; panel 2 must contain the same centerlines as
-    /// flattened waveguide polygons), the imported top-cell route outlines of the
-    /// re-imported group (pin-less frozen paths — panels 3/4), and the restored
-    /// (pinned) frozen group-internal connections of the auto-connect canvas
-    /// (panel 4 — empty when the scenario restores nothing). Probe points lie on
-    /// the segment geometry itself
+    /// flattened waveguide polygons), and the imported top-cell route outlines of
+    /// the re-imported group (pin-less frozen paths — identical imported geometry
+    /// in panels 3/4). The re-routed connections of panel 4 get NO probe points:
+    /// their geometry is the live router's choice and not pixel-stable. Probe
+    /// points lie on the segment geometry itself
     /// (straight-segment quarter points, arc points from each bend's own
     /// centre/radius/sweep) rather than at pin midpoints, because the routes
     /// bend — the halfring↔adiabatic span is even routed as a full 360° circle
     /// in this layout (the bend math degenerates when the 10.6 µm pin span is
-    /// shorter than the bend diameter — visible as the ring in panels 1/2/4).
+    /// shorter than the bend diameter — visible as the ring in panels 1/2).
     /// Pin endpoints are never probed: pin glyphs paint over them.
     /// </summary>
     private sealed class Probes
     {
         internal Probes(
-            DesignCanvasViewModel original, DesignCanvasViewModel importedOff, DesignCanvasViewModel importedOn,
+            DesignCanvasViewModel original, DesignCanvasViewModel importedOff,
             Rect shared, Rect importedWorld, double scale)
         {
             Shared = shared;
@@ -354,12 +355,6 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
                 .Select(path => RouteProbePoints(path.Path.Segments).Where(FarFromAnyPin).ToList())
                 .Where(points => points.Count > 0)
                 .ToList();
-
-            var groupOn = importedOn.Components.Single().Component.ShouldBeOfType<ComponentGroup>();
-            FrozenRouteProbes = groupOn.InternalPaths
-                .Where(path => path.StartPin is not null) // restored connections only — the imported outlines are probed separately
-                .Select(path => RouteProbePoints(path.Path.Segments))
-                .ToList();
         }
 
         internal Rect Shared { get; }
@@ -389,13 +384,10 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         /// <summary>Probe points on the halfring↔adiabatic route — the full-circle bend (panel 2).</summary>
         internal IReadOnlyList<Point> RingRouteProbes { get; }
 
-        /// <summary>Probe points per restored (frozen group-internal) connection of the auto-connect canvas (panels 3/4).</summary>
-        internal IReadOnlyList<IReadOnlyList<Point>> FrozenRouteProbes { get; }
-
         /// <summary>
         /// Probe points per imported top-cell route outline (the pin-less frozen
-        /// paths of the auto-connect-OFF canvas) — the routing geometry the import
-        /// keeps visible (panel 3, and background geometry in panel 4).
+        /// paths of the group) — imported geometry identical in both placement
+        /// modes, so it stays pixel-stable in panel 3 AND panel 4.
         /// </summary>
         internal IReadOnlyList<IReadOnlyList<Point>> ImportedRouteProbes { get; }
 
@@ -553,11 +545,11 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     }
 
     /// <summary>
-    /// Panel 03: the re-imported group — GDS outline fills, free green pins, and
-    /// the imported route outlines as frozen paths (auto-connect OFF: no live or
-    /// restored connections — pinned by the model-level counts, not by pixel
-    /// absence, because the frozen pen's overlap blends are indistinguishable
-    /// from a live stroke — but the routing geometry is visible again).
+    /// Panel 03: the re-imported group with re-routing OFF — GDS outline fills,
+    /// free green pins, and every drawn route is imported geometry: the
+    /// route-derived connections keep their imported polygons as frozen cached
+    /// routes and the junction network rides the group as pin-less frozen paths,
+    /// so the pixel probes on the drawn route polygons stay valid here.
     /// </summary>
     private static void AssertPanel03(WriteableBitmap panel, string path, PixelSize size, Probes probes)
     {
@@ -582,31 +574,39 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     }
 
     /// <summary>
-    /// Panel 04: auto-connect ON — exactly the 2 restored connections appear as
-    /// orange group-internal paths (one of them re-routed as the same full
-    /// circle the original design carries), and their 4 pins leave the
-    /// free-pin set.
+    /// Panel 04: re-routing ON — the route-derived connections are handed to
+    /// Lunima's live router, so their geometry is router-generated and NOT
+    /// pixel-stable. The connection facts are pinned at report/model level
+    /// (rerouted count, unfrozen connections); pixel probes cover only geometry
+    /// that is identical to panel 03 (component bodies, the pin-less imported
+    /// outlines, free pins).
     /// </summary>
     private static void AssertPanel04(
         WriteableBitmap panel, string path, PixelSize size, Probes probes,
-        GdsPlacementReport reportOn, bool siepicUpgraded, int panel3PinPixels)
+        GdsPlacementReport reportOn, ComponentGroup groupOn, bool siepicUpgraded)
     {
         AssertFileIsRealPng(path);
 
-        reportOn.AutoConnectedCount.ShouldBe(0,
-            "auto-connect has nothing left: connections 7 and 10 come back route-derived");
         var expectedConnections = siepicUpgraded ? 4 : 2;
-        probes.FrozenRouteProbes.Count.ShouldBe(expectedConnections,
-            "the route-derived real connections live on the group (2 MMI braids; plus " +
-            "crossing↔crossing and halfring↔adiabatic when the real SiEPIC cells carry labels)");
-        foreach (var points in probes.FrozenRouteProbes)
-            points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsFrozenOrange) > 0)
-                .ShouldBeTrue("each route-derived connection renders as an orange routed path");
+        reportOn.ReroutedCount.ShouldBe(expectedConnections,
+            "every route-derived connection is handed to Lunima's router in re-route mode " +
+            "(2 MMI braids; plus crossing↔crossing and halfring↔adiabatic when the real " +
+            "SiEPIC cells carry labels)");
+        var rerouted = groupOn.InternalPaths.Where(p => p.StartPin is not null).ToList();
+        rerouted.Count.ShouldBe(expectedConnections,
+            "the re-routed connections live on the group with their pins");
+        rerouted.ShouldAllBe(p => !p.IsRouteFrozen,
+            "re-routed connections are live Lunima routes, not frozen imported polygons");
+
+        CountWhere(panel, probes.AroundPlacedMmiCenter(), IsOutlineFill)
+            .ShouldBeGreaterThan(30, "component bodies sit at the same pixels as in panel 03");
+        foreach (var points in probes.ImportedRouteProbes)
+            points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsRouteOrange) > 0)
+                .ShouldBeTrue("the pin-less imported outlines render identically in both modes");
         CountWhere(panel, Full(size), IsFrozenOrange)
-            .ShouldBeGreaterThan(50, "the restored connections and frozen outlines are drawn");
+            .ShouldBeGreaterThan(50, "the re-routed connections and the imported outlines are drawn");
         CountExternalPinPixels(panel, size)
-            .ShouldBe(panel3PinPixels,
-                "auto-connect occupies no extra pins — panels 03 and 04 have the same free-pin count");
+            .ShouldBeGreaterThan(30, "the unoccupied pins render green");
         AssertEmptyCorner(panel, size);
     }
 
@@ -869,26 +869,28 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
             new
             {
                 file = "03-reimported-canvas.png",
-                caption = "The re-imported design (GdsImportService + GdsPlacementExecutor, auto-connect OFF): "
+                caption = "The re-imported design (GdsImportService + GdsPlacementExecutor, re-routing OFF): "
                     + "the 'ConnectAPIC_Design' group (cyan selection border — the group lands selected, as "
                     + "after a real import) wraps the 7 placed instances, each drawn from its imported GDS "
                     + "outline polygons (blue fill, incl. the demofab 'mmi2x2_dp' name stubs etched into the "
-                    + "MMI cells) with its name; light-green dots = the 28 free group pins. NO connections — "
-                    + "the routed waveguides became flattened top-cell geometry, invisible to the abutment "
-                    + "matcher (honest v1). Same window/scale as 01 (uniform re-origin shift removed): every "
-                    + "component must align with the original render within ~1 µm. Child name labels overlap "
-                    + "where instances cluster — group children get no label decluttering.",
+                    + "MMI cells) with its name; light-green dots = the free group pins. Every drawn route is "
+                    + "imported geometry: the 4 route-derived connections (2 MMI braids, crossing↔crossing, "
+                    + "halfring↔adiabatic) keep their imported polygons as frozen cached routes, and the "
+                    + "junction network rides the group as pin-less frozen paths — pixel-aligned with 02. "
+                    + "Same window/scale as 01 (uniform re-origin shift removed): every component must align "
+                    + "with the original render within ~1 µm. Child name labels overlap where instances "
+                    + "cluster — group children get no label decluttering.",
             },
             new
             {
-                file = "04-reimported-autoconnect.png",
-                caption = "Same import with auto-connect ON (radius 200 µm): exactly 2 of the 10 logical "
-                    + "connections are restored (orange group-internal paths) — the short opposing-pin spans "
-                    + "crossing↔crossing (12.8 µm, the small orange line between the two central crossings) "
-                    + "and halfring↔adiabatic (10.6 µm, re-routed by the router as the same FULL CIRCLE the "
-                    + "original design carries — compare 01/02); their 4 pins leave the free-pin set (fewer "
-                    + "green dots than 03). Two more candidate pairs were vetoed as genuinely ambiguous rather "
-                    + "than miswired; the remaining 8 connections stay unrestored in v1.",
+                file = "04-reimported-rerouted.png",
+                caption = "Same import with re-routing ON (the default): the 4 route-derived connections are "
+                    + "handed to Lunima's live router and drawn as router-generated waveguides — real, "
+                    + "re-routable connections (not frozen imported polygons), so their geometry is the "
+                    + "router's choice and may differ from panels 01/02/03. Component bodies, the pin-less "
+                    + "imported outlines of the junction network and the free pins sit at the same pixels as "
+                    + "in 03; the connection facts are pinned at report level (re-routed count, unfrozen "
+                    + "connections) rather than by pixel probes.",
             },
         };
         ScreenshotArtifacts.WriteText(

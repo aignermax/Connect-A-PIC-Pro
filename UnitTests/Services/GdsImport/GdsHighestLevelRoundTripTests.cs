@@ -19,9 +19,9 @@ namespace UnitTests.Services.GdsImport;
 /// 7-component mixed-PDK design (<see cref="GdsUserDesignFixture"/>) is exported to GDS
 /// with the app's own <see cref="SimpleNazcaExporter"/> (run with real nazca),
 /// cross-checked INDEPENDENTLY from Python (klayout/gdstk), re-imported through the
-/// button's service path (<see cref="GdsImportService"/> + <see cref="GdsPlacementExecutor"/>
-/// with auto-connect), and finally compared as a NETLIST (gdsfactory YAML, parsed with
-/// YamlDotNet) against the original canvas — topology, not names.
+/// button's service path (<see cref="GdsImportService"/> + <see cref="GdsPlacementExecutor"/>,
+/// frozen imported geometry), and finally compared as a NETLIST (gdsfactory YAML, parsed
+/// with YamlDotNet) against the original canvas — topology, not names.
 /// <para>
 /// Pinned loop numbers (SiEPIC-upgraded scenario — klayout + siepic_ebeam_pdk present,
 /// i.e. the Lunima managed env and CI): the export writes 7 top-cell references over
@@ -29,18 +29,16 @@ namespace UnitTests.Services.GdsImport;
 /// original coordinates (uniform origin shift, ≤1 µm slack from the real foundry
 /// cells' bounding boxes); the abutment matcher reconstructs 0 connections (his 10
 /// connections were routed waveguides — flattened top-cell geometry, no abutting
-/// pins); the auto-connect pass restores exactly 2 of the 10 logical connections
-/// (the two short straight opposing-pin spans: crossing↔crossing 12.8 µm and
-/// halfring↔adiabatic 10.6 µm) and vetoes 2 more as genuinely ambiguous
-/// (see below); the other 6 are unrestorable by an opposing-pin heuristic:
-/// connections 1–2 join same-direction MMI input pins (both point west — never
-/// opposing) and connections 3–6 join an east MMI output to a north/south
-/// crossing pin (90° off — never opposing). The ambiguity vetoes: connection 8
-/// (crossing872 east pin → bdc west pins: the bdc's two west pins are 0.09 µm
-/// equidistant from it) and connection 9 (crossing1175 west pin ← adiabatic east
-/// pins: 0.39 µm apart) — guessing there would wire the WRONG pin, so the pass
-/// honestly refuses. The imported netlist is therefore a SUBSET of the original
-/// topology: 2 of 10 edges, pin-exact, zero miswired edges.
+/// pins); the route-network matcher restores the four polygon chains that span
+/// exactly two pins (the two MMI braids, crossing↔crossing 12.8 µm,
+/// halfring↔adiabatic 10.6 µm); the remaining six connections entangle into ONE
+/// junction network across the crossing components — never disentangled by
+/// guessing, so their polygons ride the group as frozen, pin-less paths with an
+/// informational note. The imported netlist is therefore a SUBSET of the
+/// original topology: 4 of 10 edges, pin-exact, zero miswired edges. Placement
+/// runs with <c>rerouteImportedConnections: false</c>: these are netlist-TOPOLOGY
+/// equivalence tests, and frozen imported geometry keeps them deterministic and
+/// independent of the live router.
 /// </para>
 /// <para>
 /// Pin-name mapping used for the topology comparison (original template pin →
@@ -61,10 +59,11 @@ namespace UnitTests.Services.GdsImport;
 /// The stub scenario (bare-nazca python: the four ebeam cells stay 1-polygon stub
 /// boxes) is forced in <see cref="FullLoop_StubScenario_RouteDerivationRestoresMmiBraids_WithoutMiswires"/>
 /// by stripping the klayout upgrade call from the export script — the same GDS a
-/// bare-nazca environment would produce. There the heuristic edge pins
-/// (<c>heur_N</c>) sit within a µm of their labeled twins, so EVERY candidate
-/// pairing dies of the ambiguity guard: 0/10 restored, but also zero miswired
-/// connections — the honest v1 outcome.
+/// bare-nazca environment would produce. There the two MMI braids still restore
+/// ROUTE-DERIVED (their route polygons touch exactly the two labeled demofab
+/// a-pins each), while the stubs' heuristic <c>heur_N</c> edge pins entangle
+/// everything else into junction networks that stay frozen paths: 2/10 restored,
+/// zero miswired connections — the honest v1 outcome.
 /// </para>
 /// </summary>
 [Trait("Category", "Slow")]
@@ -81,7 +80,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     // ── The full loop ────────────────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task FullLoop_UserDesign_ExportReimportAutoConnect_NetlistTopologyMatchesOriginal()
+    public async Task FullLoop_UserDesign_ExportReimport_NetlistTopologyMatchesOriginal()
     {
         // ── 1+2. Export the user's design with the app's exporter and run it ──
         var export = await ExportUserDesignAsync("export", stripSiepicUpgrade: false);
@@ -112,17 +111,20 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         outcome.TopCellWaveguidePolygons.Count.ShouldBe(45,
             "the junction network's polygons ride the group as frozen, non-re-routable paths");
 
-        // ── 4. Place + auto-connect (executor default radius 200 µm) ──
+        // ── 4. Place with frozen imported geometry: this is a netlist-TOPOLOGY
+        // equivalence test, and frozen mode keeps it deterministic and
+        // router-independent (the re-route path is covered elsewhere) ──
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
         var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
-            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), autoConnectFreePins: true);
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
 
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
         report.ConnectedCount.ShouldBe(4,
             "the four clean two-pin route chains restore as real connections (route-derived)");
         report.RouteDerivedCount.ShouldBe(4);
+        report.ReroutedCount.ShouldBe(0, "frozen mode hands nothing to the live router");
         report.Warnings.ShouldBeEmpty();
         report.ValidationWarnings.ShouldBeEmpty(
             "the four route chains keep their drawn polygons as frozen cached routes — no " +
@@ -138,7 +140,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         if (export.SiepicUpgraded)
         {
-            AssertAutoConnectUpgraded(report);
+            group.ExternalPins.Count.ShouldBe(20,
+                "28 pins minus the eight consumed by the four restored connections stay free");
             AssertPlacementsMatchOriginals(export.Canvas, children, positionToleranceUm: 1.0);
             AssertPinMappingGeometrically(export.Canvas, children);
             AssertEveryChildIsVisible(children, expectedPinsPerChild: 4);
@@ -147,7 +150,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         else
         {
             // Bare-nazca environment: the same outcome the forced-stub test pins.
-            AssertAutoConnectStub(report);
+            group.ExternalPins.Count.ShouldBe(42,
+                "46 pins minus the four consumed by the two restored braids stay free");
             AssertPlacementsMatchOriginals(export.Canvas, children, positionToleranceUm: 1.0);
             AssertEveryChildIsVisible(children, expectedPinsPerChild: null);
             AssertNetlistTopologyStub(export.Canvas, canvas2);
@@ -249,10 +253,10 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// Forces the bare-nazca scenario on ANY machine: the export script's klayout
     /// upgrade call is stripped, so the ebeam cells stay 1-polygon stub boxes whose
     /// waveguide-layer bodies spawn heuristic <c>heur_N</c> edge pins next to the
-    /// labeled ones. Auto-connect must then restore NOTHING (every candidate pair
-    /// is ambiguous: labeled pin vs. its heur twin) — but the two MMI braids still
-    /// come back ROUTE-DERIVED: their flattened route polygons each touch exactly
-    /// the two demofab a-pins, which carry real labels (no heur pollution).
+    /// labeled ones. The heur pollution entangles every ebeam chain into junction
+    /// networks that stay frozen — but the two MMI braids still come back
+    /// ROUTE-DERIVED: their flattened route polygons each touch exactly the two
+    /// demofab a-pins, which carry real labels (no heur pollution).
     /// </summary>
     [SkippableFact]
     public async Task FullLoop_StubScenario_RouteDerivationRestoresMmiBraids_WithoutMiswires()
@@ -269,14 +273,17 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         outcome.Infos.ShouldContain(i => i.Contains("restored as 2 real connection"),
             "the geometry report moved to the info channel with the restored/frozen split");
 
+        // Frozen mode, like the full-loop test: the netlist comparison must stay
+        // deterministic and router-independent.
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
         var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
-            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), autoConnectFreePins: true);
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
 
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
         report.ConnectedCount.ShouldBe(2, "the two route-derived MMI braids");
+        report.ReroutedCount.ShouldBe(0, "frozen mode hands nothing to the live router");
         report.Warnings.ShouldBeEmpty();
         report.ValidationWarnings.ShouldBeEmpty(
             "the two braided cross-links keep their drawn geometry as frozen cached routes — " +
@@ -290,7 +297,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         var children = group.GetAllComponentsRecursive().ToList();
         children.Count.ShouldBe(7);
 
-        AssertAutoConnectStub(report);
+        group.ExternalPins.Count.ShouldBe(42,
+            "46 pins (28 labeled + 18 heuristic) minus the four consumed by the two restored braids stay free");
         AssertPlacementsMatchOriginals(export.Canvas, children, positionToleranceUm: 1.0);
         AssertEveryChildIsVisible(children, expectedPinsPerChild: null);
         AssertNetlistTopologyStub(export.Canvas, canvas2);
@@ -300,59 +308,6 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     }
 
     // ── Stage assertions ─────────────────────────────────────────────────────
-
-    /// <summary>
-    /// The SiEPIC-upgraded auto-connect outcome: NOTHING to auto-connect — the
-    /// four clean two-pin chains already came back route-derived (including the
-    /// two spans earlier auto-connect restored: connection 7 crossing↔crossing
-    /// and connection 10 halfring↔adiabatic). The two genuinely ambiguous
-    /// pairings stay vetoed. Radius is the executor default (200 µm).
-    /// </summary>
-    private static void AssertAutoConnectUpgraded(GdsPlacementReport report)
-    {
-        report.AutoConnectedCount.ShouldBe(0,
-            "the only short straight opposing-pin spans of his layout (connections 7 and 10) " +
-            "are route-derived now — their pins are occupied before auto-connect runs");
-
-        // The two ambiguity vetoes, per-pin (below the summary-collapse cap):
-        // connection 8 (crossing872's east pin sees the bdc's two west pins
-        // 0.09 µm apart) and connection 9 (crossing1175's west pin sees the
-        // adiabatic's two east pins 0.39 µm apart). Guessing would miswire.
-        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#0.port 2'", StringComparison.Ordinal))
-            .ShouldBe(1, "connection 8 is honestly refused: 178.75 vs 178.85 µm — a coin flip");
-        report.SkippedAutoConnect.Count(s => s.Contains("'ebeam_crossing4#1.port 1'", StringComparison.Ordinal))
-            .ShouldBe(1, "connection 9 is honestly refused: 25.55 vs 25.94 µm — a coin flip");
-
-        // Skip accounting: 28 pins total, 8 consumed by the four route-derived
-        // connections, 20 free-pin candidates — 2 ambiguous (above), 11
-        // not-facing (the crossings' north/south pins see the MMI output pins
-        // opposing but perpendicular; 7 more pins see their OWN straight-through
-        // sibling as an opposing, non-facing candidate — same-instance pins are
-        // eligible partners now, so they show up as not-facing instead of
-        // no-partner; both groups exceed the detail cap of 5 and collapse into
-        // summary lines), 7 with no opposing partner in radius (collapsed).
-        report.SkippedAutoConnect.Count.ShouldBe(4,
-            "2 ambiguous (detailed) + 1 collapsed not-facing summary (11 pins) + " +
-            "1 collapsed no-partner summary (7 pins)");
-    }
-
-    /// <summary>
-    /// The stub-scenario auto-connect outcome: 0/10 restored — the heuristic
-    /// <c>heur_N</c> edge pins sit within a µm of their labeled twins, so every
-    /// candidate pair (labeled pin vs. twin) dies of the ambiguity guard. No
-    /// miswired connection is created either: all 46 pins (28 labeled + 18
-    /// heuristic) are accounted for as skips in three collapsed summary lines.
-    /// </summary>
-    private static void AssertAutoConnectStub(GdsPlacementReport report)
-    {
-        report.AutoConnectedCount.ShouldBe(0,
-            "every remaining candidate pair is ambiguous: each labeled pin has a heur twin within a µm");
-        report.AutoConnectedPairs.ShouldBeEmpty();
-        report.SkippedAutoConnect.Count.ShouldBe(3,
-            "all three skip reasons exceed the detail cap of 5 and collapse into summary lines; " +
-            "the four MMI a-pins are occupied by the route-derived braids before auto-connect runs");
-        // (ValidationWarnings for the degraded braid geometry are asserted in the caller.)
-    }
 
     /// <summary>
     /// Every placed child sits at its original component's position modulo the
@@ -469,8 +424,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// <summary>
     /// Stub-scenario netlist comparison: same instance census; the two MMI braids
     /// restore route-derived (subset of the original edges, nothing miswired);
-    /// every other pairing is vetoed as ambiguous among the heur twins. The four
-    /// MMI a-pins are occupied, so 42 pins surface as ports.
+    /// everything else stays frozen junction geometry without netlist edges. The
+    /// four MMI a-pins are occupied, so 42 pins surface as ports.
     /// </summary>
     private static void AssertNetlistTopologyStub(DesignCanvasViewModel original, DesignCanvasViewModel imported)
     {

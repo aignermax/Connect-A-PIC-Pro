@@ -1,5 +1,3 @@
-using System.Globalization;
-using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
 using CAP_DataAccess.Import.Gds;
 
@@ -7,31 +5,11 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 
 /// <summary>
 /// The option-parsing half of <see cref="GdsImportDialogViewModel"/> (layer
-/// fields, auto-connect radius), split out to keep the dialog ViewModel under
-/// the project's 500-line gate.
+/// fields), split out to keep the dialog ViewModel under the project's
+/// 500-line gate.
 /// </summary>
 public partial class GdsImportDialogViewModel
 {
-    /// <summary>
-    /// Parses the auto-connect radius field (invariant culture, so the field behaves
-    /// identically on every machine locale). Only consulted when auto-connect is on;
-    /// an unchecked box always yields the default radius.
-    /// </summary>
-    private bool TryParseAutoConnectRadius(out double radiusUm)
-    {
-        radiusUm = GdsPlacementExecutor.DefaultAutoConnectRadiusUm;
-        if (!AutoConnectRequested)
-            return true;
-
-        return double.TryParse(
-                   AutoConnectRadiusText,
-                   NumberStyles.Float,
-                   CultureInfo.InvariantCulture,
-                   out radiusUm)
-               && radiusUm > 0
-               && !double.IsInfinity(radiusUm);
-    }
-
     /// <summary>Builds the import options from the mode radio and the layer text fields.</summary>
     private bool TryBuildOptions(out GdsHierarchyImportOptions options, out string? error)
     {

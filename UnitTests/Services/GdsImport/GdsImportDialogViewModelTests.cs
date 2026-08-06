@@ -1,5 +1,4 @@
 using System.Collections.ObjectModel;
-using System.Globalization;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.AddCustomComponent;
@@ -75,14 +74,32 @@ public class GdsImportDialogViewModelTests : IDisposable
 
     /// <summary>
     /// Same cells as <see cref="TwoWaveguideLibrary"/> but with an 80 µm gap between
-    /// wgA.out and wgB.in — the pins face each other without abutting, so only the
-    /// auto-connect pass can wire them.
+    /// wgA.out and wgB.in — the pins face each other without abutting and without
+    /// any drawn route geometry between them, so no connection may be reconstructed.
     /// </summary>
     private static byte[] TwoWaveguideLibraryWithGap() => GdsTestWriter.Create()
         .StandardPrologue()
         .BeginCell("TOP")
             .SRef("wgA", 0, 0)
             .SRef("wgB", 90000, 0)
+        .EndCell()
+        .WaveguideCell("wgA")
+        .WaveguideCell("wgB")
+        .EndLibrary()
+        .ToArray();
+
+    /// <summary>
+    /// Same cells 5 µm apart, bridged by a top-cell stripe on the waveguide layer
+    /// (1,0) whose edges pass exactly through wgA.out (10, 2) and wgB.in (15, 2):
+    /// the drawn route IS the connection, so the import derives it from the route
+    /// network (route-derived, not an abutment).
+    /// </summary>
+    private static byte[] TwoWaveguideLibraryBridgedByRoute() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("wgA", 0, 0)
+            .SRef("wgB", 15000, 0)
+            .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
         .EndCell()
         .WaveguideCell("wgA")
         .WaveguideCell("wgB")
@@ -306,111 +323,66 @@ public class GdsImportDialogViewModelTests : IDisposable
     }
 
     [Fact]
-    public async Task AutoConnectRequested_IsExposedButFalseByDefault()
+    public void RerouteConnectionsRequested_IsTrueByDefault()
     {
         var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
 
-        vm.AutoConnectRequested.ShouldBeFalse(
-            "auto-connect is an opt-in experimental feature; the default import changes nothing");
+        vm.RerouteConnectionsRequested.ShouldBeTrue(
+            "detected connections should come back as real Lunima routing by default");
     }
 
-    // ── Auto-connect (experimental) ──────────────────────────────────────────
+    // ── Connection reconstruction ────────────────────────────────────────────
 
     [Fact]
-    public async Task ImportAsync_AutoConnectOn_ConnectsFacingFreePinsAcrossTheGap()
+    public async Task ImportAsync_GappedFreePins_AreNeverGuessedConnected()
     {
         var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
         await vm.StartAnalysisAsync();
-        vm.AutoConnectRequested = true;
 
         await vm.ImportCommand.ExecuteAsync(null);
 
-        vm.HasError.ShouldBeFalse();
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
         vm.ImportCompleted.ShouldBeTrue();
         var group = canvas.Components.ShouldHaveSingleItem().Component
             .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
-        group.InternalPaths.Count.ShouldBe(1,
-            "only the true facing pair connects: wgA.out↔wgB.in across the gap — " +
-            "wgA.in and wgB.out point AWAY from each other (wrap-around) and are skipped");
-
-        // Both outward-facing ports land in the warnings with the not-facing skip
-        // reason. The marker is built through the same localized format the
-        // executor uses (empty label → the name-independent suffix of the line),
-        // so the assertion holds under a non-English UI culture.
-        var notFacingMarker = string.Format(CultureInfo.InvariantCulture,
-            LocalizationService.Instance.Translate("GdsImport.AutoConnectSkipNotFacingFormat"),
-            "", GdsPlacementExecutor.DefaultAutoConnectRadiusUm);
-        vm.Warnings.Count(w => w.Contains(notFacingMarker)).ShouldBe(2,
-            "wgA.in and wgB.out are both reported as not-facing skips, not connected");
+        group.InternalPaths.ShouldBeEmpty(
+            "the 80 µm gap is no abutment and carries no drawn route geometry — " +
+            "connectivity comes from the GDS structure only, never from pin proximity");
     }
 
-    [Fact]
-    public async Task ImportAsync_AutoConnectOff_LeavesGappedPinsUnconnected()
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ImportAsync_RouteDerivedConnection_HonorsRerouteToggle(bool reroute)
     {
-        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryBridgedByRoute()));
         await vm.StartAnalysisAsync();
+        vm.RerouteConnectionsRequested = reroute;
 
         await vm.ImportCommand.ExecuteAsync(null);
 
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
         vm.ImportCompleted.ShouldBeTrue();
         var group = canvas.Components.ShouldHaveSingleItem().Component
             .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
-        group.InternalPaths.ShouldBeEmpty("the 80 µm gap is no abutment, and auto-connect is off");
-    }
+        var path = group.InternalPaths.ShouldHaveSingleItem(
+            "the bridge polygon is consumed by route derivation — one pinned connection, no pin-less leftover");
+        path.StartPin.ShouldNotBeNull("a route-derived connection keeps its pins");
+        path.IsRouteFrozen.ShouldBe(!reroute,
+            "re-routing hands the route-derived connection to Lunima's router as a live route; " +
+            "otherwise the imported polygon geometry stays as a frozen cached route");
 
-    [Fact]
-    public async Task ImportAsync_AutoConnectRadiusBelowGap_ConnectsNothing()
-    {
-        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
-        await vm.StartAnalysisAsync();
-        vm.AutoConnectRequested = true;
-        vm.AutoConnectRadiusText = "10"; // gap is 80 µm — out of radius
-
-        await vm.ImportCommand.ExecuteAsync(null);
-
-        vm.ImportCompleted.ShouldBeTrue();
-        var group = canvas.Components.ShouldHaveSingleItem().Component
-            .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
-        group.InternalPaths.ShouldBeEmpty("the radius field flows into the executor's pairing pass");
-    }
-
-    [Fact]
-    public async Task ImportAsync_InvalidAutoConnectRadius_ShowsErrorWithoutImporting()
-    {
-        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()));
-        await vm.StartAnalysisAsync();
-        vm.AutoConnectRequested = true;
-        vm.AutoConnectRadiusText = "bogus";
-
-        await vm.ImportCommand.ExecuteAsync(null);
-
-        vm.HasError.ShouldBeTrue();
-        vm.ErrorText.ShouldContain("bogus");
-        vm.ImportCompleted.ShouldBeFalse();
-        canvas.Components.ShouldBeEmpty("nothing is imported when option validation fails");
+        var reroutedSuffix = string.Format(
+            LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"), 1);
+        if (reroute)
+            vm.ResultSummaryText.ShouldContain(reroutedSuffix,
+                customMessage: "the one route-derived connection is reported as re-routed");
+        else
+            vm.ResultSummaryText.ShouldNotContain(reroutedSuffix,
+                customMessage: "frozen mode hands nothing to the router");
     }
 
     // ── Error-console mirroring ──────────────────────────────────────────────
-
-    [Fact]
-    public async Task ImportAsync_Success_MirrorsEveryWarningLineToTheErrorConsole()
-    {
-        var console = new ErrorConsoleService();
-        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibraryWithGap()), console);
-        await vm.StartAnalysisAsync();
-        vm.AutoConnectRequested = true;
-
-        await vm.ImportCommand.ExecuteAsync(null);
-
-        vm.ImportCompleted.ShouldBeTrue();
-        vm.Warnings.ShouldNotBeEmpty("the gap fixture yields not-facing auto-connect skips");
-        var loggedWarnings = console.Entries
-            .Where(e => e.Level == LogLevel.Warn)
-            .Select(e => e.Message)
-            .ToList();
-        foreach (var warning in vm.Warnings)
-            loggedWarnings.ShouldContain(warning);
-    }
 
     [Fact]
     public async Task ImportAsync_ZeroGeometryCell_InfoNoteShownAndMirroredViaLogInfo()

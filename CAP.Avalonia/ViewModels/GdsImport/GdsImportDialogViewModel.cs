@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.GdsImport;
 
 /// <summary>
-/// ViewModel for the GDS import dialog (issue #808). The .gds file is chosen
+/// ViewModel for the GDS import dialog. The .gds file is chosen
 /// before the dialog opens; the dialog analyzes it on open (top-cell candidates),
 /// lets the user pick the top cell, hierarchy mode and pin-detection layers, then
 /// runs the import and places the result on the canvas via
@@ -25,6 +25,12 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private readonly GdsPlacementExecutor _placementExecutor;
     private readonly ErrorConsoleService? _errorConsole;
     private CancellationTokenSource? _cts;
+
+    /// <summary>
+    /// The library parsed by the analysis pass, handed back to the import so a
+    /// large file is read once, not twice. Held only for the dialog's lifetime.
+    /// </summary>
+    private GdsLibrary? _analyzedLibrary;
 
     /// <summary>Absolute path of the .gds file being imported (chosen before the dialog opens).</summary>
     public string GdsFilePath { get; }
@@ -82,24 +88,17 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private string _waveguideLayersText = "1,0";
 
     /// <summary>
-    /// Guess connections for remaining free pins after placement (experimental).
-    /// When set, the flag flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>:
-    /// a pass pairs unconnected optical pins of the placed instances that face each
-    /// other within <see cref="AutoConnectRadiusText"/> after the abutment connections
-    /// — a proximity/facing GUESS (real connectivity comes from the route structure),
-    /// followed by a validation run whose issues land in the result warnings.
+    /// Recreate the detected connections with Lunima's own routing (default: on).
+    /// The flag flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>: the
+    /// route-derived connections become real router-generated waveguides/metal
+    /// traces instead of keeping the imported route geometry as frozen paths.
+    /// Real connectivity always comes from the GDS route structure — this option
+    /// only decides HOW the detected connections get their geometry. Very large
+    /// imports fall back to frozen geometry automatically
+    /// (<see cref="GdsPlacementExecutor.MaxReroutedConnections"/>).
     /// </summary>
     [ObservableProperty]
-    private bool _autoConnectRequested;
-
-    /// <summary>
-    /// Pairing radius (µm) for the auto-connect pass, as typed by the user;
-    /// validated at import time (positive number, invariant culture). Defaults to
-    /// <see cref="GdsPlacementExecutor.DefaultAutoConnectRadiusUm"/> — deliberately
-    /// short, a circuit-spanning default would wire far-apart ports together.
-    /// </summary>
-    [ObservableProperty]
-    private string _autoConnectRadiusText = "200";
+    private bool _rerouteConnectionsRequested = true;
 
     /// <summary>True once an import finished successfully; switches the dialog to the result view.</summary>
     [ObservableProperty]
@@ -142,6 +141,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// Wired by <see cref="GdsImportButtonViewModel"/>.
     /// </summary>
     public Action<double, double>? ZoomToFitAfterImport { get; set; }
+
+    /// <summary>
+    /// Invoked with the chip size (µm) the executor auto-applied when the
+    /// imported design was bigger than the playfield — wired to the chip-size
+    /// settings ViewModel so the settings panel and user-visible tile counts
+    /// stay in sync with what the canvas already shows.
+    /// </summary>
+    public Action<double, double>? ApplyChipSizeAfterImport { get; set; }
 
     /// <summary>True when the Import button can run (analysis done, top cell picked, not busy).</summary>
     public bool CanImport => AnalysisReady && !IsBusy && SelectedTopCell is not null;
@@ -206,6 +213,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         try
         {
             var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, cts.Token);
+            _analyzedLibrary = analysis.Library;
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
                 TopCells.Add(topCell);
@@ -250,15 +258,6 @@ public partial class GdsImportDialogViewModel : ObservableObject
             return;
         }
 
-        if (!TryParseAutoConnectRadius(out var autoConnectRadiusUm))
-        {
-            ErrorText = string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ErrorRadiusSyntax"), AutoConnectRadiusText);
-            HasError = true;
-            _errorConsole?.LogError($"GDS import: {ErrorText}");
-            return;
-        }
-
         IsBusy = true;
         HasError = false;
         ErrorText = "";
@@ -270,11 +269,12 @@ public partial class GdsImportDialogViewModel : ObservableObject
         {
             var progress = new Progress<string>(msg => StatusText = msg);
             var outcome = await _importService.ImportAsync(
-                GdsFilePath, SelectedTopCell.CellName, options, progress, cts.Token);
+                GdsFilePath, SelectedTopCell.CellName, options, progress, cts.Token,
+                preParsedLibrary: _analyzedLibrary);
 
             var plan = GdsPlacementPlan.FromOutcome(outcome);
             var report = await _placementExecutor.ExecuteAsync(
-                plan, progress, cts.Token, AutoConnectRequested, autoConnectRadiusUm);
+                plan, progress, cts.Token, RerouteConnectionsRequested);
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);
@@ -288,17 +288,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
             foreach (var skipped in report.SkippedConnections)
                 Warnings.Add(string.Format(
                     LocalizationService.Instance.Translate("GdsImport.SkippedConnectionFormat"), skipped));
-            foreach (var pair in report.AutoConnectedPairs)
-                Warnings.Add(string.Format(
-                    LocalizationService.Instance.Translate("GdsImport.AutoConnectedFormat"), pair));
-            foreach (var skipped in report.SkippedAutoConnect)
-                Warnings.Add(string.Format(
-                    LocalizationService.Instance.Translate("GdsImport.SkippedAutoConnectFormat"), skipped));
             foreach (var issue in report.ValidationWarnings)
                 Warnings.Add(string.Format(
                     LocalizationService.Instance.Translate("GdsImport.ValidationWarningFormat"), issue));
 
-            ResultSummaryText = BuildSummary(report, AutoConnectRequested);
+            ResultSummaryText = BuildSummary(report);
             ImportCompleted = true;
             StatusText = "";
 
@@ -317,6 +311,8 @@ public partial class GdsImportDialogViewModel : ObservableObject
             // design-load path). Only after a real placement: a failed/cancelled
             // run never reaches this point, and a 0-placement import has nothing
             // to show.
+            if (report.ChipEnlargedToWidthUm is double chipW && report.ChipEnlargedToHeightUm is double chipH)
+                ApplyChipSizeAfterImport?.Invoke(chipW, chipH);
             if (report.PlacedCount > 0)
                 ZoomToFitAfterImport?.Invoke(900, 800);
         }
@@ -415,7 +411,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
     internal CancellationTokenSource? CurrentCts => _cts;
 
-    private static string BuildSummary(GdsPlacementReport report, bool autoConnectRequested)
+    private static string BuildSummary(GdsPlacementReport report)
     {
         var summary = string.Format(
             LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
@@ -426,11 +422,11 @@ public partial class GdsImportDialogViewModel : ObservableObject
                 LocalizationService.Instance.Translate("GdsImport.ResultRouteReconstructionSuffix"),
                 report.RouteDerivedCount, report.FrozenRoutePathCount);
         }
-        if (autoConnectRequested)
+        if (report.ReroutedCount > 0)
         {
             summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultAutoConnectSuffix"),
-                report.AutoConnectedCount);
+                LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"),
+                report.ReroutedCount);
         }
         if (report.GroupCreated)
         {

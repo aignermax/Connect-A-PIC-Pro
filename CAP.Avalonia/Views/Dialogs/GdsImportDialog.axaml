@@ -110,21 +110,11 @@
                     </StackPanel>
                 </Grid>
 
-                <!-- Auto-connect (experimental) + pairing radius -->
-                <Grid ColumnDefinitions="Auto,12,Auto">
-                    <CheckBox IsChecked="{Binding AutoConnectRequested}"
-                              Content="{loc:Localize GdsImport.AutoConnect}"
-                              ToolTip.Tip="{loc:Localize GdsImport.AutoConnectTip}"
-                              Foreground="White" FontSize="11" VerticalAlignment="Center"/>
-                    <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="6"
-                                IsVisible="{Binding AutoConnectRequested}"
-                                VerticalAlignment="Center">
-                        <TextBox Text="{Binding AutoConnectRadiusText}" Width="70"
-                                 Background="#2d2d2d" Foreground="White" FontSize="11"
-                                 ToolTip.Tip="{loc:Localize GdsImport.AutoConnectRadiusTip}"/>
-                        <TextBlock Text="µm" Foreground="Gray" FontSize="11" VerticalAlignment="Center"/>
-                    </StackPanel>
-                </Grid>
+                <!-- Recreate detected connections with Lunima routing -->
+                <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"
+                          Content="{loc:Localize GdsImport.RerouteConnections}"
+                          ToolTip.Tip="{loc:Localize GdsImport.RerouteConnectionsTip}"
+                          Foreground="White" FontSize="11" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- ═══ Result (after successful import) ═══ -->

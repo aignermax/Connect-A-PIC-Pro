@@ -548,11 +548,14 @@ public class GdsPlacementExecutorTests
             },
         };
 
-        var report = await executor.ExecuteAsync(plan);
+        // Frozen mode: this test pins the traced-cached-route contract; the
+        // re-route default is covered by the dialog-level reroute-toggle theory.
+        var report = await executor.ExecuteAsync(plan, rerouteImportedConnections: false);
 
         report.ConnectedCount.ShouldBe(1);
         report.RouteDerivedCount.ShouldBe(1);
         report.CachedRouteCount.ShouldBe(1);
+        report.ReroutedCount.ShouldBe(0);
         routingPasses.ShouldBe(1,
             "only the grouping command's pass runs — the drawn polygon IS the route, " +
             "no A* recalculation replaces it");

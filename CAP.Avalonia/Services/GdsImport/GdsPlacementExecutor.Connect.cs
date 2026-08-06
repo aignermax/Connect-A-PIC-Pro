@@ -11,17 +11,18 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// The connection stage of <see cref="GdsPlacementExecutor"/>, split out to keep
 /// each executor file under the project's 500-line gate.
 /// <para>
-/// Connections whose geometry the import already recovered are attached as
-/// FROZEN cached routes (<see cref="DesignCanvasViewModel.ConnectPinsWithCachedRoute"/>
-/// — the same mechanism .lun loading uses for its cached routes) and never see
-/// the router: route-derived connections trace their drawn top-cell polygons
-/// (<see cref="GdsFrozenRoutePathFactory.CreateConnectionRoute"/>), and
-/// coincident-pin abutments get the exact pin-to-pin straight (opposing
-/// coincident pins need no waveguide — the router's degenerate CSC fallback
-/// only flagged them blocked). The single deferred recalculation at the end
-/// therefore runs only for connections that still need a route (auto-connect
-/// pairs, route-derived pairs without traceable geometry) — for a route-derived
-/// import the re-route storm disappears entirely.
+/// Two modes. Frozen (re-routing off, or the plan exceeds
+/// <see cref="MaxReroutedConnections"/>): connections whose geometry the import
+/// recovered are attached as FROZEN cached routes
+/// (<see cref="DesignCanvasViewModel.ConnectPinsWithCachedRoute"/> — the same
+/// mechanism .lun loading uses) and never see the router — route-derived
+/// connections trace their drawn top-cell polygons
+/// (<see cref="GdsFrozenRoutePathFactory.CreateConnectionRoute"/>). Re-routing
+/// (the default): route-derived connections become live connections that
+/// Lunima's router routes as real waveguides/metal traces in ONE deferred
+/// recalculation at the end. In BOTH modes coincident-pin abutments get the
+/// exact pin-to-pin straight (opposing coincident pins need no waveguide — the
+/// router's degenerate CSC fallback only flagged them blocked).
 /// </para>
 /// </summary>
 public sealed partial class GdsPlacementExecutor
@@ -29,13 +30,13 @@ public sealed partial class GdsPlacementExecutor
     /// <summary>
     /// Recreates the plan's connections; returns the connections actually
     /// created so the validation stage can check exactly this execution's additions.
-    /// Connections with recovered geometry are added frozen with their cached
+    /// Connections that keep recovered geometry are added frozen with their cached
     /// route, the rest deferred (<see cref="DesignCanvasViewModel.ConnectPins"/>)
-    /// and routed in ONE recalculation at the end (the same pattern the
-    /// auto-connect pass uses) instead of a per-connection re-route storm — an
-    /// <c>await ConnectPinsAsync</c> per connection costs a full re-route each
-    /// (O(N²)). The recalculation (when needed at all) runs BEFORE this method
-    /// returns so the validation stage keeps seeing fully routed connections.
+    /// and routed in ONE recalculation at the end instead of a per-connection
+    /// re-route storm — an <c>await ConnectPinsAsync</c> per connection costs a
+    /// full re-route each (O(N²)). The recalculation (when needed at all) runs
+    /// BEFORE this method returns so the validation stage keeps seeing fully
+    /// routed connections.
     /// </summary>
     private async Task<List<WaveguideConnection>> ConnectAllAsync(
         GdsPlacementPlan plan,
@@ -43,11 +44,13 @@ public sealed partial class GdsPlacementExecutor
         GdsPlacementReport report,
         IProgress<string>? progress,
         CancellationToken ct,
-        (double X, double Y) originOffset)
+        (double X, double Y) originOffset,
+        bool rerouteImportedConnections)
     {
         var created = new List<WaveguideConnection>();
         var awaitingRoute = 0;
         var frozenCached = 0;
+        var reroute = ShouldReroute(plan, report, rerouteImportedConnections);
         var stageProgress = StageProgress(progress, "Connecting pins");
         for (var i = 0; i < plan.Connections.Count; i++)
         {
@@ -83,7 +86,11 @@ public sealed partial class GdsPlacementExecutor
             }
 
             WaveguideConnectionViewModel? connectionVm;
-            var cachedRoute = TryBuildCachedRoute(connection, startPin, endPin, originOffset);
+            // Re-routing sends route-derived pairs to the live router; abutment
+            // straights keep their frozen geometry in both modes.
+            var cachedRoute = reroute && connection.IsRouteDerived
+                ? null
+                : TryBuildCachedRoute(connection, startPin, endPin, originOffset);
             if (cachedRoute is not null)
             {
                 connectionVm = _canvas.ConnectPinsWithCachedRoute(startPin, endPin, cachedRoute);
@@ -113,6 +120,7 @@ public sealed partial class GdsPlacementExecutor
         }
 
         report.CachedRouteCount = frozenCached;
+        report.ReroutedCount = awaitingRoute;
         if (frozenCached > 0)
         {
             // ConnectPinsWithCachedRoute does not invalidate per call (unlike
@@ -120,8 +128,28 @@ public sealed partial class GdsPlacementExecutor
             _canvas.InvalidateSimulation();
         }
         if (awaitingRoute > 0)
-            await _canvas.RecalculateRoutesAsync(); // one routing pass for the connections without recovered geometry
+            await _canvas.RecalculateRoutesAsync(); // one routing pass for every connection handed to the router
         return created;
+    }
+
+    /// <summary>
+    /// Whether this execution hands route-derived connections to the live router:
+    /// only when requested AND the plan stays under <see cref="MaxReroutedConnections"/>
+    /// — above the cap the frozen imported geometry is kept and the report says so.
+    /// </summary>
+    private static bool ShouldReroute(
+        GdsPlacementPlan plan, GdsPlacementReport report, bool rerouteImportedConnections)
+    {
+        if (!rerouteImportedConnections)
+            return false;
+        var routeDerived = plan.Connections.Count(c => c.IsRouteDerived);
+        if (routeDerived <= MaxReroutedConnections)
+            return true;
+        report.Warnings.Add(string.Format(CultureInfo.InvariantCulture,
+            "Re-routing was skipped: {0} route-derived connections exceed the limit of {1} " +
+            "— the imported route geometry was kept as frozen paths instead.",
+            routeDerived, MaxReroutedConnections));
+        return false;
     }
 
     /// <summary>
