@@ -28,6 +28,18 @@ namespace CAP_Core.ExternalPorts
                     break;
             }
         }
+
+        /// <summary>
+        /// Creates a laser type at an arbitrary wavelength (Issue #819: spectral
+        /// samples around a source's center wavelength are not restricted to the
+        /// three standard wavelengths). <paramref name="lightColor"/> only drives
+        /// the display hue.
+        /// </summary>
+        public LaserType(LightColor lightColor, int waveLengthInNm)
+        {
+            Color = lightColor;
+            WaveLengthInNm = waveLengthInNm;
+        }
         public LightColor Color { get; }
         public int WaveLengthInNm { get; }
         public override string ToString()

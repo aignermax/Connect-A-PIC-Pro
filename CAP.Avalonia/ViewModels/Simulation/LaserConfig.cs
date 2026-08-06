@@ -1,10 +1,12 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CAP_Core.Components.ComponentHelpers;
+using CAP_Core.ExternalPorts.LaserSpectrum;
 
 namespace CAP.Avalonia.ViewModels.Simulation;
 
 /// <summary>
-/// Configuration for a laser light source (wavelength and input power).
+/// Configuration for a laser light source (wavelength, input power and — Issue
+/// #819 — the spectral model: line shape, linewidth and relative intensity noise).
 /// Applied per light source component (Grating Coupler, Edge Coupler).
 /// </summary>
 public partial class LaserConfig : ObservableObject
@@ -54,13 +56,46 @@ public partial class LaserConfig : ObservableObject
     [ObservableProperty]
     private double _inputPower = 1.0;
 
+    /// <summary>Default linewidth offered when the user switches away from the ideal shape.</summary>
+    public const double DefaultLinewidthFwhmNm = 2.0;
+
+    /// <summary>
+    /// Spectral line shape of the source. <see cref="LaserLineShape.Ideal"/> (the
+    /// default) reproduces today's monochromatic behaviour exactly.
+    /// </summary>
+    [ObservableProperty]
+    private LaserLineShape _lineShape = LaserLineShape.Ideal;
+
+    /// <summary>Linewidth (FWHM) in nm; only applied when <see cref="LineShape"/> is not ideal.</summary>
+    [ObservableProperty]
+    private double _linewidthFwhmNm = DefaultLinewidthFwhmNm;
+
+    /// <summary>Relative intensity noise in dB/Hz, fed into the eye-diagram receiver noise model.</summary>
+    [ObservableProperty]
+    private double _rinDbPerHz = LaserSpectrumModel.DefaultRinDbPerHz;
+
+    /// <summary>True when the source has a finite linewidth (non-ideal shape).</summary>
+    public bool IsSpectralShape => LineShape != LaserLineShape.Ideal;
+
     /// <summary>
     /// Display label for the selected wavelength.
     /// </summary>
     public string WavelengthLabel => WavelengthOption.GetLabel(WavelengthNm);
 
+    /// <summary>Builds the core spectrum model for this configuration.</summary>
+    public LaserSpectrumModel ToSpectrum() => new(
+        WavelengthNm,
+        LineShape,
+        IsSpectralShape ? LinewidthFwhmNm : 0,
+        RinDbPerHz);
+
     partial void OnWavelengthNmChanged(int value)
     {
         OnPropertyChanged(nameof(WavelengthLabel));
+    }
+
+    partial void OnLineShapeChanged(LaserLineShape value)
+    {
+        OnPropertyChanged(nameof(IsSpectralShape));
     }
 }

@@ -115,6 +115,40 @@
                             <Run Text="{loc:Localize SelectedProps.Power}"/>
                             <Run Text="{Binding LaserConfig.InputPower, StringFormat={}{0:F2}}"/>
                         </TextBlock>
+
+                        <!-- Realistic source spectrum (#819): line shape + FWHM linewidth.
+                             "Ideal" keeps today's single-wavelength behaviour. -->
+                        <TextBlock Text="{loc:Localize SelectedProps.LineShape}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+                        <ComboBox ItemsSource="{Binding LineShapeOptions}"
+                                  SelectedValue="{Binding LaserConfig.LineShape, Mode=TwoWay}"
+                                  SelectedValueBinding="{Binding Value}"
+                                  DisplayMemberBinding="{Binding Label}"
+                                  IsEnabled="{Binding LaserConfig.IsEnabled}"
+                                  HorizontalAlignment="Stretch" Margin="0,0,0,4"/>
+                        <StackPanel IsVisible="{Binding LaserConfig.IsSpectralShape}">
+                            <TextBlock Text="{loc:Localize SelectedProps.Linewidth}" Foreground="Gray" FontSize="10" Margin="0,2,0,2"/>
+                            <Grid ColumnDefinitions="*,30">
+                                <NumericUpDown Grid.Column="0"
+                                               Value="{Binding LaserConfig.LinewidthFwhmNm, Mode=TwoWay}"
+                                               Minimum="0.1" Maximum="50" Increment="0.5"
+                                               FormatString="F1" ShowButtonSpinner="False"
+                                               IsEnabled="{Binding LaserConfig.IsEnabled}"/>
+                                <TextBlock Grid.Column="1" Text="nm" Foreground="Gray" FontSize="10"
+                                           VerticalAlignment="Center" Margin="6,0,0,0"/>
+                            </Grid>
+                            <TextBlock Text="{loc:Localize SelectedProps.LinewidthHint}"
+                                       Foreground="Gray" FontSize="9" TextWrapping="Wrap" Margin="0,2,0,2"/>
+                        </StackPanel>
+                        <TextBlock Text="{loc:Localize SelectedProps.Rin}" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <Grid ColumnDefinitions="*,42">
+                            <NumericUpDown Grid.Column="0"
+                                           Value="{Binding LaserConfig.RinDbPerHz, Mode=TwoWay}"
+                                           Minimum="-200" Maximum="-80" Increment="5"
+                                           FormatString="F0" ShowButtonSpinner="False"
+                                           IsEnabled="{Binding LaserConfig.IsEnabled}"/>
+                            <TextBlock Grid.Column="1" Text="dB/Hz" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center" Margin="6,0,0,0"/>
+                        </Grid>
                     </StackPanel>
                 </DataTemplate>
 

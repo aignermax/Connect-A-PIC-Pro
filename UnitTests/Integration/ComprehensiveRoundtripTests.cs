@@ -54,6 +54,9 @@ public class ComprehensiveRoundtripTests
             var gcVm = saveCanvas.AddComponent(gc, gcTemplate.Name);
             gcVm.LaserConfig!.WavelengthNm = 1310;
             gcVm.LaserConfig!.InputPower = 0.8;
+            gcVm.LaserConfig!.LineShape = CAP_Core.ExternalPorts.LaserSpectrum.LaserLineShape.Lorentzian;
+            gcVm.LaserConfig!.LinewidthFwhmNm = 3.5;
+            gcVm.LaserConfig!.RinDbPerHz = -130;
 
             // Arrange: MMI (rotated + locked)
             var mmiTemplate = _library.First(t => t.Name == "1x2 MMI Splitter");
@@ -84,6 +87,13 @@ public class ComprehensiveRoundtripTests
             loadedGcVm.IsLightSource.ShouldBeTrue("Loaded GC must still be a light source");
             loadedGcVm.LaserConfig!.WavelengthNm.ShouldBe(1310, "LaserWavelengthNm must survive roundtrip");
             loadedGcVm.LaserConfig!.InputPower.ShouldBe(0.8, tolerance: 0.001, "LaserPower must survive roundtrip");
+            loadedGcVm.LaserConfig!.LineShape.ShouldBe(
+                CAP_Core.ExternalPorts.LaserSpectrum.LaserLineShape.Lorentzian,
+                "LaserLineShape must survive roundtrip (#819)");
+            loadedGcVm.LaserConfig!.LinewidthFwhmNm.ShouldBe(3.5, tolerance: 0.001,
+                "LaserLinewidthFwhmNm must survive roundtrip (#819)");
+            loadedGcVm.LaserConfig!.RinDbPerHz.ShouldBe(-130, tolerance: 0.001,
+                "LaserRinDbPerHz must survive roundtrip (#819)");
 
             // Assert: Locked MMI
             var loadedMmiVm = loadCanvas.Components.First(c => c.Component.Identifier == "mmi_locked_1");
