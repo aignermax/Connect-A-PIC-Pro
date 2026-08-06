@@ -53,14 +53,15 @@ public class GdsImportButtonViewModelTests : IDisposable
     private GdsImportButtonViewModel CreateButton()
     {
         var canvas = new DesignCanvasViewModel();
-        var groupLibrary = new GroupLibraryManager();
-        // No Initialize(): the button only reads the template list lazily, after a
-        // file was picked — the failure paths tested here never reach that point.
-        var leftPanel = new LeftPanelViewModel(
-            canvas, groupLibrary, new PdkLoader(), new UserPreferencesService(_prefsPath),
-            new HierarchyPanelViewModel(canvas), new PdkManagerViewModel(),
-            new ComponentLibraryViewModel(groupLibrary));
-        return new GdsImportButtonViewModel(canvas, new CommandManager(), leftPanel);
+        // Throwaway service/executor: the failure paths tested here never reach
+        // an actual import — only the dialog hand-off is exercised.
+        var importService = new CAP.Avalonia.Services.GdsImport.GdsImportService(
+            new CAP_DataAccess.Components.AddCustomComponent.UserPdkStore(
+                Path.Combine(Path.GetTempPath(), $"lunima-gdsbtn-pdks-{Guid.NewGuid():N}"),
+                new PdkJsonSaver(), new PdkLoader()));
+        var placementExecutor = new CAP.Avalonia.Services.GdsImport.GdsPlacementExecutor(
+            canvas, new CommandManager(), () => Array.Empty<ComponentTemplate>());
+        return new GdsImportButtonViewModel(importService, placementExecutor);
     }
 
     [Fact]

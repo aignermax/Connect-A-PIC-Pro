@@ -8,7 +8,8 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// Converts imported top-cell route polygons (<see cref="GdsOutlinePolygon"/>,
 /// app-space Y-down outlines) into canvas route geometry. The frozen-path model
 /// holds centerline segments (straight/bend) only — there is no polygon-body
-/// representation, and centerline extraction from outlines is issue #814 — so
+/// representation, and centerline extraction from outlines is deliberately
+/// left to a future iteration — so
 /// the honest v1 geometry is the polygon OUTLINE traced as a ring of straight
 /// segments: the routing silhouette becomes visible (and moves/persists with
 /// the group) without pretending to be a re-routable centerline.

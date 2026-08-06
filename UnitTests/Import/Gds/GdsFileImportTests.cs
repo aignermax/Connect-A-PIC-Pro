@@ -4,13 +4,14 @@ using Shouldly;
 namespace UnitTests.Import.Gds;
 
 /// <summary>
-/// End-to-end tests for <see cref="GdsImporter"/> against temporary files —
-/// the importer's file handling is the only part that needs a real file system.
+/// End-to-end tests for the file-based read+flatten path
+/// (<see cref="GdsReader"/> + <see cref="GdsCellFlattener"/>) against temporary
+/// files — file handling is the only part that needs a real file system.
 /// </summary>
-public class GdsImporterTests
+public class GdsFileImportTests
 {
     [Fact]
-    public async Task ImportAsync_ReturnsResolvedResult()
+    public async Task ReadAndFlatten_ReturnsResolvedResult()
     {
         var gds = GdsTestWriter.Create()
             .StandardPrologue("e2e")
@@ -26,25 +27,27 @@ public class GdsImporterTests
             .ToArray();
 
         using var tmp = WriteTempFile(gds);
-        var result = await new GdsImporter().ImportAsync(tmp.Path, "TOP");
+        var library = await ReadLibraryAsync(tmp.Path);
+        var flattener = new GdsCellFlattener(library);
+        var flattened = flattener.Flatten("TOP");
 
-        result.LibraryName.ShouldBe("e2e");
-        result.CellNames.ShouldBe(new[] { "TOP", "CHILD" });
-        result.TopCellCandidates.ShouldBe(new[] { "TOP" });
-        result.TopCellName.ShouldBe("TOP");
-        result.Polygons.Count.ShouldBe(2);
-        result.Texts.ShouldHaveSingleItem().Text.ShouldBe("PORT1");
-        result.BoundingBox.MinX.ShouldBe(0);
-        result.BoundingBox.MinY.ShouldBe(0);
-        result.BoundingBox.MaxX.ShouldBe(6);
-        result.BoundingBox.MaxY.ShouldBe(6);
-        var instance = result.Instances.ShouldHaveSingleItem();
+        library.Name.ShouldBe("e2e");
+        library.Cells.Keys.ShouldBe(new[] { "TOP", "CHILD" });
+        library.TopCellCandidates.ShouldBe(new[] { "TOP" });
+        flattened.Polygons.Count.ShouldBe(2);
+        flattened.Texts.ShouldHaveSingleItem().Text.ShouldBe("PORT1");
+        var boundingBox = flattener.GetBoundingBox("TOP");
+        boundingBox.MinX.ShouldBe(0);
+        boundingBox.MinY.ShouldBe(0);
+        boundingBox.MaxX.ShouldBe(6);
+        boundingBox.MaxY.ShouldBe(6);
+        var instance = flattener.GetInstanceTree("TOP").ShouldHaveSingleItem();
         instance.CellName.ShouldBe("CHILD");
         instance.Offset.ShouldBe(new GdsPoint(5, 5));
     }
 
     [Fact]
-    public async Task ListTopCellsAsync_ReturnsUnreferencedCells()
+    public async Task Read_ListsUnreferencedCellsAsTopCandidates()
     {
         var gds = GdsTestWriter.Create()
             .StandardPrologue()
@@ -56,28 +59,36 @@ public class GdsImporterTests
             .ToArray();
 
         using var tmp = WriteTempFile(gds);
-        var candidates = await new GdsImporter().ListTopCellsAsync(tmp.Path);
+        var library = await ReadLibraryAsync(tmp.Path);
 
-        candidates.ShouldBe(new[] { "TOP" });
+        library.TopCellCandidates.ShouldBe(new[] { "TOP" });
     }
 
     [Fact]
-    public async Task ImportAsync_MissingFile_Throws()
+    public async Task Read_MissingFile_Throws()
     {
         await Should.ThrowAsync<FileNotFoundException>(() =>
-            new GdsImporter().ImportAsync("/nonexistent/file.gds", "TOP"));
+            ReadLibraryAsync(Path.Combine(Path.GetTempPath(), "nonexistent_gds_test_file.gds")));
     }
 
     [Fact]
-    public async Task ImportAsync_CorruptFile_ThrowsInvalidData()
+    public async Task Read_CorruptFile_ThrowsInvalidData()
     {
         using var tmp = WriteTempFile(new byte[] { 0x00, 0x06, 0x00, 0x02, 0x00 }); // truncated HEADER record
 
-        await Should.ThrowAsync<InvalidDataException>(() =>
-            new GdsImporter().ImportAsync(tmp.Path, "TOP"));
+        await Should.ThrowAsync<InvalidDataException>(() => ReadLibraryAsync(tmp.Path));
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
+
+    /// <summary>Opens the file the same way production does and parses it.</summary>
+    private static async Task<GdsLibrary> ReadLibraryAsync(string path)
+    {
+        await using var stream = new FileStream(
+            path, FileMode.Open, FileAccess.Read, FileShare.Read,
+            bufferSize: 81920, useAsync: true);
+        return await new GdsReader().ReadAsync(stream);
+    }
 
     /// <summary>Writes a temp file whose wrapper deletes it at end-of-scope.</summary>
     private static TempFile WriteTempFile(byte[] content)

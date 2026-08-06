@@ -62,9 +62,9 @@ public static class GdsCellDraftMapper
                 OffsetYMicrometers = p.YUm,
                 AngleDegrees = p.AngleDegrees,
                 // Electrical only when the kind is proven (the detector's
-                // metal-layer/name inference, or the metal-route inference of
-                // issue #682): null/unknown stays absent, which the PDK loader
-                // reads as the optical default — never guessed.
+                // metal-layer/name inference, or the metal-route inference):
+                // null/unknown stays absent, which the PDK loader reads as the
+                // optical default — never guessed.
                 PinKind = p.IsElectrical == true
                     ? CAP_Core.Components.PinKinds.PinKindHelper.ElectricalKindName
                     : null,

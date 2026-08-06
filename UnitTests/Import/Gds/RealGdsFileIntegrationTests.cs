@@ -30,13 +30,11 @@ public class RealGdsFileIntegrationTests
     // ── Analyze ──────────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ListTopCellsAsync_FindsGdsfactoryTopCell()
+    public async Task Read_FindsGdsfactoryTopCell()
     {
-        File.Exists(GdsPath).ShouldBeTrue($"Reference file missing: {GdsPath}");
+        var library = await ReadLibraryAsync();
 
-        var candidates = await new GdsImporter().ListTopCellsAsync(GdsPath);
-
-        candidates.ShouldBe(new[] { TopCell });
+        library.TopCellCandidates.ShouldBe(new[] { TopCell });
     }
 
     [Fact]

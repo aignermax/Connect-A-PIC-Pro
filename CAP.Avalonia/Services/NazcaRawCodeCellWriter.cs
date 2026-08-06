@@ -83,7 +83,7 @@ internal sealed class RawCodeExportPlan
 /// fallback) anchors on. The wrapper declares the app's optical pins
 /// (<c>nd.Pin</c>, same coordinate mapping as the stub cells) plus their port
 /// labels, so exported waveguide routing lands on real pins and a re-import of the
-/// result detects named pins (issue #808).
+/// result detects named pins.
 /// <para>
 /// The raw cell is re-anchored by its own bbox at runtime
 /// (<c>_raw.put(-_bb[0], -_bb[1])</c>), which is idempotent for snippets that
@@ -199,7 +199,7 @@ internal static class NazcaRawCodeCellWriter
             // Pins relative to the cell origin: the same (OffsetX-ox, oy-OffsetY)
             // mapping the stub cells use (NazcaCoordinateMapper.GetPinNazcaPosition
             // contract), so exported waveguides meet the raw cell's pins. nd.Pin is
-            // an optical port — electrical pins are not emitted (#519).
+            // an optical port — electrical pins are never emitted as nd.Pin.
             foreach (var pin in comp.PhysicalPins)
             {
                 if (pin.MatterType != MatterType.Light) continue;
@@ -209,7 +209,7 @@ internal static class NazcaRawCodeCellWriter
                 var py = NazcaCoordinateMapper.NormalizeZero(anchorY - uoy).ToString("F2", ci);
                 var pa = NazcaCoordinateMapper.NormalizeZero(-pin.AngleDegrees).ToString("F0", ci);
                 sb.AppendLine($"    nd.Pin('{pin.Name}').put({px}, {py}, {pa})");
-                // Pin label at the same anchor — re-import detects the named pin there (#808).
+                // Pin label at the same anchor — re-import detects the named pin there.
                 sb.AppendLine($"    nd.Annotation(text='{SimpleNazcaExporter.EscapePythonString(pin.Name)}', layer={SimpleNazcaExporter.PortLabelLayer}).put({px}, {py})");
             }
 

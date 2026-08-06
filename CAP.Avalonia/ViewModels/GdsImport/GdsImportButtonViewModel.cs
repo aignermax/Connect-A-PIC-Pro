@@ -1,18 +1,15 @@
-using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
-using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core;
-using CAP_DataAccess.Components.AddCustomComponent;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.GdsImport;
 
 /// <summary>
-/// ViewModel behind the GDS import entry points (issue #808): the library panel's
+/// ViewModel behind the GDS import entry points: the library panel's
 /// "Import GDS" button, the toolbar's Import button, and the File→Open dialog's
 /// .gds/.gdsii route (<see cref="OpenGdsImportDialogForFileAsync"/>). Kept separate
 /// from <see cref="LeftPanelViewModel"/> on purpose: the left panel already carries
@@ -22,9 +19,8 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 /// </summary>
 public partial class GdsImportButtonViewModel : ObservableObject
 {
-    private readonly DesignCanvasViewModel _canvas;
-    private readonly Commands.CommandManager _commandManager;
-    private readonly LeftPanelViewModel _leftPanel;
+    private readonly GdsImportService _importService;
+    private readonly GdsPlacementExecutor _placementExecutor;
     private readonly ErrorConsoleService? _errorConsole;
 
     /// <summary>Open-file dialog service, injected from the view layer (MainWindow).</summary>
@@ -50,33 +46,34 @@ public partial class GdsImportButtonViewModel : ObservableObject
     /// </summary>
     public Action<double, double>? ZoomToFitAfterImport { get; set; }
 
+    /// <summary>
+    /// Callback to sync the chip-size settings ViewModel when an import
+    /// auto-enlarged the chip to fit the design (same wiring pattern as
+    /// <c>FileOperationsViewModel.ApplyChipSizeAfterLoad</c>). Wired by
+    /// <see cref="MainViewModel"/> and handed through to the dialog ViewModel.
+    /// </summary>
+    public Action<double, double>? ApplyChipSizeAfterImport { get; set; }
+
     /// <summary>Initializes a new <see cref="GdsImportButtonViewModel"/>.</summary>
-    /// <param name="canvas">Canvas the imported circuit is placed onto.</param>
-    /// <param name="commandManager">Undo stack for the placement commands.</param>
-    /// <param name="leftPanel">
-    /// Component library: supplies the loaded templates for known-cell resolution
-    /// and registers the imported components at runtime.
-    /// </param>
+    /// <param name="importService">Import orchestration: analysis, draft mapping, PDK persistence.</param>
+    /// <param name="placementExecutor">Places the imported circuit onto the canvas.</param>
     /// <param name="errorConsole">
     /// Optional error console handed through to the dialog ViewModel, so import
     /// warnings/failures survive as copyable entries after the dialog closes.
     /// </param>
     public GdsImportButtonViewModel(
-        DesignCanvasViewModel canvas,
-        Commands.CommandManager commandManager,
-        LeftPanelViewModel leftPanel,
+        GdsImportService importService,
+        GdsPlacementExecutor placementExecutor,
         ErrorConsoleService? errorConsole = null)
     {
-        _canvas = canvas ?? throw new ArgumentNullException(nameof(canvas));
-        _commandManager = commandManager ?? throw new ArgumentNullException(nameof(commandManager));
-        _leftPanel = leftPanel ?? throw new ArgumentNullException(nameof(leftPanel));
+        _importService = importService ?? throw new ArgumentNullException(nameof(importService));
+        _placementExecutor = placementExecutor ?? throw new ArgumentNullException(nameof(placementExecutor));
         _errorConsole = errorConsole;
     }
 
     /// <summary>
-    /// Picks a .gds file, builds the import service + placement executor, and opens
-    /// the import dialog. The file is chosen BEFORE the dialog opens so the dialog
-    /// can start its analysis immediately.
+    /// Picks a .gds file and opens the import dialog. The file is chosen BEFORE
+    /// the dialog opens so the dialog can start its analysis immediately.
     /// </summary>
     [RelayCommand]
     private async Task OpenGdsImportDialog()
@@ -127,20 +124,12 @@ public partial class GdsImportButtonViewModel : ObservableObject
 
         try
         {
-            var importService = new GdsImportService(
-                UserPdkStore.CreateDefault(),
-                () => _leftPanel.AllTemplates.ToList(),
-                // Lambda, not the method group: the optional savedViaBundledFork
-                // parameter keeps it from matching the 3-argument Action directly.
-                (draft, pdkName, filePath) => _leftPanel.RegisterSavedCustomComponent(draft, pdkName, filePath));
-            var placementExecutor = new GdsPlacementExecutor(
-                _canvas, _commandManager, () => _leftPanel.AllTemplates.ToList());
-
-            var dialogViewModel = new GdsImportDialogViewModel(gdsPath, importService, placementExecutor, _errorConsole);
+            var dialogViewModel = new GdsImportDialogViewModel(gdsPath, _importService, _placementExecutor, _errorConsole);
             // The dialog owns the import's completion point, so it fires the zoom
             // (set by MainViewModel; null in headless runs) once its import task
             // completes with at least one placed component.
             dialogViewModel.ZoomToFitAfterImport = ZoomToFitAfterImport;
+            dialogViewModel.ApplyChipSizeAfterImport = ApplyChipSizeAfterImport;
             await ShowImportDialogAsync(dialogViewModel);
         }
         catch (Exception ex)

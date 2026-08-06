@@ -281,6 +281,7 @@ public partial class MainViewModel : ObservableObject
         Services.UserSMatrixOverrideStore userSMatrixOverrideStore,
         GdsPreviewRenderService gdsPreviewRenderService,
         ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel registryBrowser,
+        ViewModels.GdsImport.GdsImportButtonViewModel gdsImportButton,
         Services.IUrlLauncher? urlLauncher = null,
         Services.IAiGridService? aiGridService = null,
         Services.RecentProjectsService? recentProjectsService = null,
@@ -308,7 +309,7 @@ public partial class MainViewModel : ObservableObject
         BottomPanel = bottomPanel;
         Registry = registryBrowser;
 
-        GdsImport = new ViewModels.GdsImport.GdsImportButtonViewModel(_canvas, commandManager, LeftPanel, errorConsoleService);
+        GdsImport = gdsImportButton;
 
         CanvasInteraction = new CanvasInteractionViewModel(_canvas, commandManager, LeftPanel.ComponentLibrary, previewGenerator, inputDialogService, errorConsoleService);
 
@@ -698,6 +699,9 @@ public partial class MainViewModel : ObservableObject
         };
         FileOperations.ZoomToFitAfterLoad = zoomToFitToViewport;
         GdsImport.ZoomToFitAfterImport = zoomToFitToViewport;
+        // An import that outgrew the chip already resized the canvas; this syncs
+        // the chip-size settings panel (same pattern as ApplyChipSizeAfterLoad).
+        GdsImport.ApplyChipSizeAfterImport = ChipSize.ApplyFromMicrometers;
 
         // Restore chip size from saved file without overwriting the user preference default
         FileOperations.ApplyChipSizeAfterLoad = (widthUm, heightUm) =>

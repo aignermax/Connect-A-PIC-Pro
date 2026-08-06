@@ -17,7 +17,7 @@ namespace CAP.Avalonia.Services;
 /// placed instances stay put. Any failure (klayout or PDK missing, cell unknown)
 /// downgrades to a stderr warning and keeps the stub — the export never breaks.
 /// Parameterized components get a parameters hash in their stub cell name
-/// (<see cref="NazcaStubNaming"/>, issue #783), so the map keys each variant's
+/// (<see cref="NazcaStubNaming"/>), so the map keys each variant's
 /// cell to ITS OWN function name + parameters; a residual stderr warning covers
 /// only a hash collision (two parameter sets, same stub name).
 /// <para>
@@ -25,7 +25,7 @@ namespace CAP.Avalonia.Services;
 /// cell's own frame (often origin-centred — ebeam_BondPad occupies (−50..+50)²)
 /// while the stub frame anchors at the calibrated nazca origin offset (the pad's
 /// is the left-edge middle), so an un-anchored copy lands shifted (the pad sat
-/// exactly 50 µm off, metal routes hitting a pad corner — issue #811). The block
+/// exactly 50 µm off, metal routes hitting a pad corner). The block
 /// translates the copied content so its bbox centre lands on the stub box's bbox
 /// centre — the calibrated offsets derive from the real cells' bounding boxes, so
 /// the shift is ~0 for well-calibrated cells and exactly compensates
@@ -56,7 +56,7 @@ public static class SiepicCellUpgradeWriter
             return;
 
         // stub cell name → (real PDK function name, parameters): the GDS cell to
-        // patch is the hash-suffixed stub (#783), the library lookup needs the
+        // patch is the hash-suffixed stub, the library lookup needs the
         // original function name with THIS variant's parameters.
         var mapLiteral = string.Join(", ", cells.Select(
             kv => $"'{Escape(kv.Key)}': ('{Escape(kv.Value.FuncName)}', '{Escape(kv.Value.Params)}')"));
@@ -74,7 +74,7 @@ public static class SiepicCellUpgradeWriter
 
     /// <summary>
     /// Stub cell names that more than one parameter set hashes to. Distinct parameter
-    /// sets get distinct cells via the name hash (#783), so this fires only on an
+    /// sets get distinct cells via the name hash, so this fires only on an
     /// actual parameters-hash collision — flag it in the script output instead of
     /// silently rendering one variant for all.
     /// </summary>
@@ -162,7 +162,7 @@ public static class SiepicCellUpgradeWriter
         // Cheap routing predicate — anything starting with 'siepic' resolves through
         // the EBeam* KLayout libraries (same split as the editor preview).
         if (comp.NazcaModuleName?.StartsWith("siepic", StringComparison.OrdinalIgnoreCase) != true) return;
-        // The GDS cell to patch is the hash-suffixed stub (#783); the EBeam library
+        // The GDS cell to patch is the hash-suffixed stub; the EBeam library
         // lookup still needs the original function name with this variant's parameters.
         var parameters = comp.NazcaFunctionParameters ?? string.Empty;
         cells.TryAdd(NazcaStubNaming.StubName(funcName, parameters), (funcName, parameters));
@@ -262,7 +262,7 @@ def _lunima_upgrade_siepic_cells(gds_path, cells):
             # occupies (-50..+50)^2) while the stub frame anchors at the
             # calibrated nazca origin offset (the pad's is the left-edge middle),
             # so an un-anchored copy lands shifted (the pad sat 50 um off along
-            # local X, metal routes hitting a pad corner — issue #811). Align the
+            # local X, metal routes hitting a pad corner). Align the
             # real content's bbox CENTRE to the stub box's: the PDK's calibrated
             # nazcaOriginOffset values derive from the real cells' bounding boxes
             # (verified against SiEPIC-Tools 0.5.31: ebeam_BondPad,

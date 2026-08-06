@@ -4,7 +4,7 @@ using CAP.Avalonia.ViewModels.GdsImport;
 namespace CAP.Avalonia.Views.Dialogs;
 
 /// <summary>
-/// Code-behind for the GDS import dialog (issue #808). The .gds file was chosen
+/// Code-behind for the GDS import dialog. The .gds file was chosen
 /// before the dialog opens, so the analysis starts automatically on open —
 /// same pattern as <see cref="PdkImport.PdkImportWizardWindow"/>.
 /// </summary>

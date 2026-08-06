@@ -31,7 +31,7 @@ public sealed record GdsPinDetectionOptions
     /// a label anchor touching one proves the pin ELECTRICAL (metal only carries
     /// electrical signals — the layer-based kind inference). Default: (11, 0)
     /// and (12, 0), the metal trace and bridge-marker layers our own exporters
-    /// use (<c>MetalRoutingSpec</c> defaults, issues #682/#519, mirrored by
+    /// use (<c>MetalRoutingSpec</c> defaults, mirrored by
     /// <see cref="GdsHierarchyImportOptions.MetalRouteLayers"/>), plus (13, 0),
     /// SiEPIC's PAD_OPEN bond-pad layer (siepic-ebeam-pdk.json), so a label
     /// sitting on a pad opening reads as an electrical contact. A pair listed in
