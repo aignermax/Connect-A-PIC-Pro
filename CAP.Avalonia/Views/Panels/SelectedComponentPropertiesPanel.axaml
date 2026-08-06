@@ -66,6 +66,38 @@
                     </StackPanel>
                 </DataTemplate>
 
+                <!-- Parametric components: one labeled, unit-aware row per
+                     named physical parameter (e.g. MMI insertion loss / splitting ratio) -->
+                <DataTemplate x:Key="ParamsTpl" x:DataType="editors:ParametricParametersEditorViewModel">
+                    <ItemsControl ItemsSource="{Binding Rows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="editors:ParameterRowViewModel">
+                                <StackPanel>
+                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
+                                        <TextBlock Text="{Binding Label}" Foreground="Gray" FontSize="10"/>
+                                        <TextBlock Foreground="Gray" FontSize="10"
+                                                   IsVisible="{Binding HasUnit}">
+                                            <Run Text=" ["/><Run Text="{Binding Unit}"/><Run Text="]"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <Grid ColumnDefinitions="*,80">
+                                        <Slider Grid.Column="0"
+                                                Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                                Value="{Binding Value, Mode=TwoWay}"/>
+                                        <NumericUpDown Grid.Column="1"
+                                                       Value="{Binding Value, Mode=TwoWay}"
+                                                       Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                                       Increment="1" FormatString="F2"
+                                                       ShowButtonSpinner="False"
+                                                       VerticalAlignment="Center"
+                                                       Margin="6,0,0,0"/>
+                                    </Grid>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </DataTemplate>
+
                 <!-- Slider-driven components (phase shifter, tunable coupler) -->
                 <DataTemplate x:Key="SliderTpl" x:DataType="editors:SliderEditorViewModel">
                     <StackPanel>
@@ -125,6 +157,7 @@
             </ContentControl.Resources>
             <ContentControl.DataTemplates>
                 <StaticResource ResourceKey="OnaAnalyzerTpl"/>
+                <StaticResource ResourceKey="ParamsTpl"/>
                 <StaticResource ResourceKey="SliderTpl"/>
                 <StaticResource ResourceKey="LightSourceTpl"/>
                 <StaticResource ResourceKey="GenericTpl"/>

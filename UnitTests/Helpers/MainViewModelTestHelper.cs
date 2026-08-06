@@ -157,8 +157,14 @@ public static class MainViewModelTestHelper
             new AiAssistantViewModel(Mock.Of<IAiService>(), preferencesService),
             new OnaSweepViewModel(),
             new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
+            // Production provider order (CanvasAndPanelExtensions): most specific
+            // first, generic fallback last — so panel tests see real editors.
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
+                new OnaAnalyzerEditorProvider(),
+                new LightSourceEditorProvider(),
+                new ParametricParametersEditorProvider(),
+                new SliderEditorProvider(),
                 new GenericComponentEditorProvider()
             }));
     }

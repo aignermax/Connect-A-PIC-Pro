@@ -41,6 +41,12 @@ namespace CAP_Core.Components.Parametric
         public int? SliderNumber { get; }
 
         /// <summary>
+        /// Physical unit shown next to the value in the UI (e.g. "dB", "%").
+        /// Empty when the parameter is dimensionless.
+        /// </summary>
+        public string Unit { get; }
+
+        /// <summary>
         /// Creates a new parameter definition.
         /// </summary>
         public ParameterDefinition(
@@ -49,7 +55,8 @@ namespace CAP_Core.Components.Parametric
             double minValue,
             double maxValue,
             string? label = null,
-            int? sliderNumber = null)
+            int? sliderNumber = null,
+            string? unit = null)
         {
             if (string.IsNullOrWhiteSpace(name))
                 throw new ArgumentException("Parameter name cannot be empty.", nameof(name));
@@ -68,6 +75,7 @@ namespace CAP_Core.Components.Parametric
             MaxValue = maxValue;
             Label = label ?? name;
             SliderNumber = sliderNumber;
+            Unit = unit ?? string.Empty;
         }
     }
 }

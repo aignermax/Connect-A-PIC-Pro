@@ -1256,6 +1256,13 @@ public class ChildComponentData
     public double Y { get; set; }
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
     public bool? IsLocked { get; set; }
@@ -1278,6 +1285,13 @@ public class ComponentData
     public string Identifier { get; set; } = "";
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
 

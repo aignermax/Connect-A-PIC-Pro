@@ -10,7 +10,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace CAP_Core.Components.Core;
-public class Component : ICloneable
+public partial class Component : ICloneable
 {
     public int WidthInTiles => Parts.GetLength(0);
     public int HeightInTiles => Parts.GetLength(1);
@@ -428,6 +428,7 @@ public class Component : ICloneable
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
+        clonedComponent.ParameterDefinitions = ParameterDefinitions;
 
         return clonedComponent;
     }

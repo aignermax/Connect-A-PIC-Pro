@@ -84,6 +84,7 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<IComponentEditorProvider>(
             sp => sp.GetRequiredService<OnaAnalyzerEditorProvider>());
         services.AddSingleton<IComponentEditorProvider, LightSourceEditorProvider>();
+        services.AddSingleton<IComponentEditorProvider, ParametricParametersEditorProvider>();
         services.AddSingleton<IComponentEditorProvider, SliderEditorProvider>();
         services.AddSingleton<IComponentEditorProvider, GenericComponentEditorProvider>();
         services.AddSingleton<ComponentEditorFactory>();

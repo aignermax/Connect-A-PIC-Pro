@@ -149,6 +149,97 @@ and never appear in the process picker.
 
 > **Note:** Only specify connections with non-zero transmission. Reciprocal paths (e.g. `out1 → in`) are automatically handled by the simulator if you omit them.
 
+### Parametric S-Matrices (named physical parameters)
+
+Instead of fixed `magnitude`/`phaseDegrees` values, a component can declare
+**named physical parameters** (e.g. insertion loss, splitting ratio) and
+compute its S-matrix from formulas. Each parameter appears as a labeled,
+unit-aware row in the Properties panel and is editable **per placed instance**;
+values are saved in the design file.
+
+```json
+"sMatrix": {
+  "wavelengthNm": 1550,
+  "connections": [
+    {
+      "fromPin": "in",
+      "toPin": "out1",
+      "magnitude": 0,
+      "phaseDegrees": 0,
+      "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+      "phaseDegreesFormula": "0"
+    },
+    {
+      "fromPin": "in",
+      "toPin": "out2",
+      "magnitude": 0,
+      "phaseDegrees": 0,
+      "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+      "phaseDegreesFormula": "0"
+    }
+  ],
+  "parameters": [
+    {
+      "name": "insertion_loss",
+      "defaultValue": 0.3,
+      "minValue": 0,
+      "maxValue": 3,
+      "label": "Insertion Loss",
+      "unit": "dB",
+      "sliderNumber": 0
+    },
+    {
+      "name": "splitting_ratio",
+      "defaultValue": 50,
+      "minValue": 0,
+      "maxValue": 100,
+      "label": "Splitting Ratio (out1)",
+      "unit": "%",
+      "sliderNumber": 1
+    }
+  ]
+},
+"sliders": [
+  { "sliderNumber": 0, "minVal": 0, "maxVal": 3, "steps": 100, "type": 0 },
+  { "sliderNumber": 1, "minVal": 0, "maxVal": 100, "steps": 100, "type": 0 }
+]
+```
+
+**Parameter fields (`sMatrix.parameters[]`):**
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Variable name used in formulas (letters, digits, `_`) |
+| `defaultValue` | Yes | Value a freshly placed instance starts with |
+| `minValue` / `maxValue` | Yes | Allowed range; edits are clamped to it |
+| `label` | No | Display name in the Properties panel (defaults to `name`) |
+| `unit` | No | Physical unit shown next to the value (e.g. `"dB"`, `"%"`, `"°"`); omit for dimensionless parameters |
+| `sliderNumber` | No | 0-based index into `sliders` that stores this parameter's value; omit for a fixed constant evaluated at `defaultValue` |
+
+**Formula fields (per connection):**
+
+| Field | Description |
+|-------|-------------|
+| `magnitudeFormula` | Amplitude expression; may reference any parameter name |
+| `phaseDegreesFormula` | Phase expression in degrees |
+
+Formulas use NCalc syntax with invariant-culture decimals (`0.5`, never `0,5`).
+Available functions include `Sqrt`, `Pow`, `Sin`, `Cos`, `Abs`, `Exp`, `Log`.
+
+**Rules:**
+
+- Each parameter bound to a slider needs a matching entry in the component's
+  `sliders` list, and the slider's `minVal`/`maxVal` must equal the parameter's
+  `minValue`/`maxValue` (the raw slider value *is* the parameter value).
+- Invalid bindings (e.g. `sliderNumber` out of range) fail at PDK load time
+  with a clear error, not silently at simulation time.
+- Keep formulas physical: total output power should never exceed input power
+  (e.g. always include the insertion-loss factor in every output branch).
+
+Working examples in `demo-pdk.json`: **1x2 MMI Splitter** (insertion loss +
+splitting ratio), **Directional Coupler** (coupling ratio, 90° cross phase),
+**Phase Shifter** (phase).
+
 ---
 
 ## Coordinate System
