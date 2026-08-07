@@ -3,9 +3,12 @@ using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.ExternalPorts;
+using CAP_Core.ExternalPorts.LaserSpectrum;
 using CAP_Core.Grid;
 using CAP_Core.LightCalculation;
+using CAP_Core.LightCalculation.LaserSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Simulation;
 
 namespace CAP.Avalonia.Services;
 
@@ -60,18 +63,22 @@ public class SimulationService
         var gridManager = GridManager.CreateForSimulation(
             tileManager, canvas.ConnectionManager, portManager);
 
-        // Run simulation for each distinct wavelength
+        // Run simulation for each distinct wavelength sample. Sources with a finite
+        // linewidth (#819) contribute several weighted samples around their center.
         var wavelengths = sourceConfigs.Select(s => s.WavelengthNm).Distinct().ToList();
-        var allFieldResults = new Dictionary<Guid, Complex>();
+        var runWavelengths = sourceConfigs
+            .SelectMany(s => s.SampleWavelengthsNm).Distinct().ToList();
+        bool anySpectral = sourceConfigs.Any(s => s.HasSpectralLinewidth);
+        var perWavelengthFields = new List<Dictionary<Guid, Complex>>();
         SMatrix? systemMatrix = null;
 
-        foreach (var wl in wavelengths)
+        foreach (var wl in runWavelengths)
         {
             var builder = new SystemMatrixBuilder(gridManager);
             var calculator = new GridLightCalculator(builder, gridManager);
             var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             var fields = await calculator.CalculateFieldPropagationAsync(cts, wl);
-            MergeFieldResults(allFieldResults, fields);
+            perWavelengthFields.Add(fields);
 
             // Capture the system S-Matrix from the first wavelength for diagnostics
             if (systemMatrix == null)
@@ -79,6 +86,13 @@ public class SimulationService
                 systemMatrix = builder.GetSystemSMatrix(wl);
             }
         }
+
+        // Spectral samples of one source add incoherently (power sum). Distinct
+        // ideal sources keep the legacy complex merge so existing results are
+        // reproduced exactly.
+        var allFieldResults = anySpectral
+            ? IncoherentFieldCombiner.Combine(perWavelengthFields)
+            : MergeAllFieldResults(perWavelengthFields);
 
         var components = canvas.Components.Select(c => c.Component).ToList();
         canvas.PowerFlowVisualizer.UpdateFromSimulation(
@@ -109,6 +123,15 @@ public class SimulationService
         PhysicalExternalPortManager portManager)
     {
         var configs = new List<SourceConfigInfo>();
+
+        // Per-instance LaserConfig only exists on top-level ViewModels; components
+        // inside groups fall back to the default (ideal red) source.
+        var laserConfigs = new Dictionary<Component, LaserConfig>();
+        foreach (var compVm in canvas.Components)
+        {
+            if (compVm.LaserConfig != null)
+                laserConfigs[compVm.Component] = compVm.LaserConfig;
+        }
 
         // Collect all components, including those inside groups (recursively)
         var allComponents = GetAllComponentsRecursively(canvas.Components);
@@ -141,25 +164,36 @@ public class SimulationService
             if (!component.LaserEnabled)
                 continue;
 
-            // For components inside groups, we don't have LaserConfig, so use defaults
-            int wavelengthNm = StandardWaveLengths.RedNM;
-            double power = 1.0;
-            var laserType = GetLaserTypeForWavelength(wavelengthNm);
+            // Use the per-instance LaserConfig when available; components inside
+            // groups have no ViewModel, so they keep the default (ideal red) source.
+            var config = laserConfigs.GetValueOrDefault(component);
+            int wavelengthNm = config?.WavelengthNm ?? StandardWaveLengths.RedNM;
+            double power = config?.InputPower ?? 1.0;
+            var spectrum = config?.ToSpectrum() ?? new LaserSpectrumModel(wavelengthNm);
+            var samples = spectrum.GetSamples();
+            var sampleWavelengths = samples.Select(s => s.WavelengthNm).ToList();
 
             foreach (var pin in component.PhysicalPins)
             {
                 if (pin.LogicalPin?.MatterType != MatterType.Light)
                     continue;
 
-                var input = new ExternalInput(
-                    $"src_{component.Identifier}_{pin.Name}",
-                    laserType,
-                    0,
-                    new Complex(power, 0));
+                foreach (var sample in samples)
+                {
+                    // The center sample keeps the legacy name; side samples are suffixed.
+                    string name = sample.WavelengthNm == wavelengthNm
+                        ? $"src_{component.Identifier}_{pin.Name}"
+                        : $"src_{component.Identifier}_{pin.Name}_{sample.WavelengthNm}nm";
+                    var input = new ExternalInput(
+                        name,
+                        GetLaserTypeForWavelength(sample.WavelengthNm),
+                        0,
+                        new Complex(power * sample.Weight, 0));
+                    portManager.AddLightSource(input, pin.LogicalPin.IDInFlow);
+                }
 
-                portManager.AddLightSource(input, pin.LogicalPin.IDInFlow);
                 configs.Add(new SourceConfigInfo(
-                    component.Identifier, wavelengthNm, power));
+                    component.Identifier, wavelengthNm, power, sampleWavelengths));
             }
         }
 
@@ -270,20 +304,36 @@ public class SimulationService
         if (wavelengthNm == StandardWaveLengths.RedNM) return LaserType.Red;
         if (wavelengthNm == StandardWaveLengths.GreenNM) return LaserType.Green;
         if (wavelengthNm == StandardWaveLengths.BlueNM) return LaserType.Blue;
-        return LaserType.Red;
+        // Spectral samples (#819) sit at arbitrary wavelengths; hue follows the
+        // nearest standard wavelength.
+        return new LaserType(NearestStandardColor(wavelengthNm), wavelengthNm);
     }
 
-    private static void MergeFieldResults(
-        Dictionary<Guid, Complex> target,
-        Dictionary<Guid, Complex> source)
+    private static LightColor NearestStandardColor(int wavelengthNm)
     {
-        foreach (var kvp in source)
+        int redDist = Math.Abs(wavelengthNm - StandardWaveLengths.RedNM);
+        int greenDist = Math.Abs(wavelengthNm - StandardWaveLengths.GreenNM);
+        int blueDist = Math.Abs(wavelengthNm - StandardWaveLengths.BlueNM);
+        if (redDist <= greenDist && redDist <= blueDist) return LightColor.Red;
+        return greenDist <= blueDist ? LightColor.Green : LightColor.Blue;
+    }
+
+    /// <summary>Legacy multi-wavelength merge: complex sum per pin (pre-#819 behaviour).</summary>
+    private static Dictionary<Guid, Complex> MergeAllFieldResults(
+        IReadOnlyList<Dictionary<Guid, Complex>> perWavelengthFields)
+    {
+        var target = new Dictionary<Guid, Complex>();
+        foreach (var fields in perWavelengthFields)
         {
-            if (target.ContainsKey(kvp.Key))
-                target[kvp.Key] += kvp.Value;
-            else
-                target[kvp.Key] = kvp.Value;
+            foreach (var kvp in fields)
+            {
+                if (target.ContainsKey(kvp.Key))
+                    target[kvp.Key] += kvp.Value;
+                else
+                    target[kvp.Key] = kvp.Value;
+            }
         }
+        return target;
     }
 }
 

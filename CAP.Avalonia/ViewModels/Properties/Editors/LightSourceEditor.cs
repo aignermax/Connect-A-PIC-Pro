@@ -29,6 +29,12 @@ public partial class LightSourceEditorViewModel : ObservableObject
     /// </summary>
     public IReadOnlyList<WavelengthOption> WavelengthOptions => WavelengthOption.All;
 
+    /// <summary>
+    /// Selectable spectral line shapes (Issue #819). "Ideal" keeps today's
+    /// monochromatic behaviour; Gaussian/Lorentzian enable the linewidth field.
+    /// </summary>
+    public IReadOnlyList<LineShapeOption> LineShapeOptions { get; } = LineShapeOption.CreateAll();
+
     /// <summary>Creates the editor for the given light-source component.</summary>
     public LightSourceEditorViewModel(ComponentViewModel componentVm)
     {
