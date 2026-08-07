@@ -474,13 +474,55 @@ public partial class FileOperationsViewModel : ObservableObject
             Identifier = c.Component.Identifier,
             Rotation = (int)c.Component.Rotation90CounterClock,
             SliderValue = c.HasSliders ? c.SliderValue : null,
+            SliderValues = SnapshotSliderValues(c.Component),
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
             LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
+            LaserLineShape = c.LaserConfig?.IsSpectralShape == true
+                ? c.LaserConfig.LineShape.ToString() : null,
+            LaserLinewidthFwhmNm = c.LaserConfig?.LinewidthFwhmNm,
+            LaserRinDbPerHz = c.LaserConfig?.RinDbPerHz,
             IsLocked = c.Component.IsLocked ? true : null,
             IsInsertedCrossing = c.Component.IsInsertedCrossing ? true : null,
             HumanReadableName = c.Component.HumanReadableName
         };
+    }
+
+    /// <summary>
+    /// Captures every slider value keyed by slider number, so multi-parameter
+    /// components round-trip all values. Null when the component has no sliders.
+    /// </summary>
+    private static Dictionary<int, double>? SnapshotSliderValues(CAP_Core.Components.Core.Component component)
+    {
+        var sliders = component.GetAllSliders();
+        if (sliders.Count == 0) return null;
+        return sliders.ToDictionary(s => s.Number, s => s.Value);
+    }
+
+    /// <summary>
+    /// Restores saved slider values onto a component. Prefers the multi-slider map
+    ///; falls back to the legacy single value (slider 0) for old files.
+    /// </summary>
+    private static void RestoreSliderValues(
+        CAP_Core.Components.Core.Component component,
+        Dictionary<int, double>? sliderValues,
+        double? legacySliderValue)
+    {
+        if (sliderValues != null)
+        {
+            foreach (var (number, value) in sliderValues)
+            {
+                var slider = component.GetSlider(number);
+                if (slider != null) slider.Value = value;
+            }
+            return;
+        }
+
+        if (legacySliderValue.HasValue)
+        {
+            var slider = component.GetSlider(0);
+            if (slider != null) slider.Value = legacySliderValue.Value;
+        }
     }
 
     /// <summary>
@@ -641,6 +683,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 Rotation = (int)child.Rotation90CounterClock,
                 SliderValue = child.GetAllSliders().Count > 0
                     ? child.GetSlider(0)?.Value : null,
+                SliderValues = SnapshotSliderValues(child),
                 IsLocked = child.IsLocked ? true : null,
                 HumanReadableName = child.HumanReadableName
             });
@@ -1247,9 +1290,8 @@ public partial class FileOperationsViewModel : ObservableObject
 
         var vm = _canvas.AddComponent(component, template.Name, template.PdkSource);
 
-        // Restore slider value
-        if (compData.SliderValue.HasValue && vm.HasSliders)
-            vm.SliderValue = compData.SliderValue.Value;
+        // Restore slider values (all sliders; legacy single value as fallback)
+        RestoreSliderValues(vm.Component, compData.SliderValues, compData.SliderValue);
 
         // Restore laser configuration
         if (vm.LaserConfig != null)
@@ -1260,6 +1302,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
             if (compData.LaserEnabled.HasValue)
                 vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
+            if (compData.LaserLineShape != null
+                && Enum.TryParse<CAP_Core.ExternalPorts.LaserSpectrum.LaserLineShape>(
+                    compData.LaserLineShape, out var lineShape))
+                vm.LaserConfig.LineShape = lineShape;
+            if (compData.LaserLinewidthFwhmNm.HasValue)
+                vm.LaserConfig.LinewidthFwhmNm = compData.LaserLinewidthFwhmNm.Value;
+            if (compData.LaserRinDbPerHz.HasValue)
+                vm.LaserConfig.RinDbPerHz = compData.LaserRinDbPerHz.Value;
         }
 
         // Restore lock state
@@ -1321,12 +1371,8 @@ public partial class FileOperationsViewModel : ObservableObject
                     ApplyRotationToComponent(child);
                 }
 
-                // Restore slider
-                if (childData.SliderValue.HasValue && child.GetAllSliders().Count > 0)
-                {
-                    var slider = child.GetSlider(0);
-                    if (slider != null) slider.Value = childData.SliderValue.Value;
-                }
+                // Restore slider values (all sliders; legacy single value as fallback)
+                RestoreSliderValues(child, childData.SliderValues, childData.SliderValue);
 
                 if (childData.IsLocked == true)
                     child.IsLocked = true;

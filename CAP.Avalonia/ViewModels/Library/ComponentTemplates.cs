@@ -37,7 +37,12 @@ public static class ComponentTemplates
         parts[0, 0] = new Part(logicalPins);
 
         var sliders = new List<Slider>();
-        if (template.HasSlider)
+        if (template.SliderDefinitions.Count > 0)
+        {
+            foreach (var def in template.SliderDefinitions)
+                sliders.Add(new Slider(Guid.NewGuid(), def.Number, def.InitialValue, def.Max, def.Min));
+        }
+        else if (template.HasSlider)
         {
             sliders.Add(new Slider(Guid.NewGuid(), 0, (template.SliderMin + template.SliderMax) / 2, template.SliderMax, template.SliderMin));
         }
@@ -105,7 +110,18 @@ public static class ComponentTemplates
         component.GdsFactoryRoutingCrossSection = template.GdsFactoryRoutingCrossSection;
 
         component.HumanReadableName = template.Name;
+        component.ParameterDefinitions = template.ParameterDefinitions;
         component.OutlinePolygons = template.OutlinePolygons;
+
+        // The Component constructor resets every slider to its range midpoint;
+        // restore the template-defined initial values (parameter defaults) so a
+        // freshly placed parametric component starts at its documented default.
+        foreach (var def in template.SliderDefinitions)
+        {
+            var slider = component.GetSlider(def.Number);
+            if (slider != null)
+                slider.Value = def.InitialValue;
+        }
 
         return component;
     }
@@ -122,6 +138,22 @@ public partial class ComponentTemplate : ObservableObject
     public bool HasSlider { get; set; }
     public double SliderMin { get; set; }
     public double SliderMax { get; set; }
+
+    /// <summary>
+    /// All slider definitions of the component. Supersedes the legacy
+    /// single-slider fields above for multi-parameter components; when empty,
+    /// <see cref="HasSlider"/>/<see cref="SliderMin"/>/<see cref="SliderMax"/>
+    /// still describe the only slider.
+    /// </summary>
+    public IReadOnlyList<SliderDefinition> SliderDefinitions { get; set; } = Array.Empty<SliderDefinition>();
+
+    /// <summary>
+    /// Physical parameter metadata (labels, units, ranges, slider bindings) for
+    /// parametric components; empty otherwise. Copied onto every placed
+    /// instance so the properties panel can render named parameter editors.
+    /// </summary>
+    public IReadOnlyList<CAP_Core.Components.Parametric.ParameterDefinition> ParameterDefinitions { get; set; }
+        = Array.Empty<CAP_Core.Components.Parametric.ParameterDefinition>();
 
     [ObservableProperty]
     private bool _hasUserGlobalSMatrixOverride;
@@ -173,6 +205,12 @@ public partial class ComponentTemplate : ObservableObject
     /// </summary>
     public CAP_DataAccess.Components.ComponentDraftMapper.DTOs.PdkComponentDraft? SourceDraft { get; set; }
 }
+
+/// <summary>
+/// Template-level description of one slider: its index, range, and the value a
+/// freshly placed instance starts at (the bound parameter's default, when any).
+/// </summary>
+public record SliderDefinition(int Number, double Min, double Max, double InitialValue);
 
 public class PinDefinition
 {

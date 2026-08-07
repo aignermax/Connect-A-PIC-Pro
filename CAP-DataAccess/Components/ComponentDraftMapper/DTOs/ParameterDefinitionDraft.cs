@@ -40,6 +40,13 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         public string? Label { get; set; }
 
         /// <summary>
+        /// Optional physical unit shown next to the value in the UI
+        /// (e.g. "dB", "%", "°"). Omit for dimensionless parameters.
+        /// </summary>
+        [JsonPropertyName("unit")]
+        public string? Unit { get; set; }
+
+        /// <summary>
         /// Slider index (0-based) that controls this parameter.
         /// <c>null</c> (or a missing JSON field) means this parameter has no
         /// slider binding — the formula evaluates with the parameter's

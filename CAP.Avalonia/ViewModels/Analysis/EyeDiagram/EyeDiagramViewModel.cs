@@ -266,7 +266,13 @@ public partial class EyeDiagramViewModel : ObservableObject
             trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, timeBins);
         double threshold = histogram.MinAmplitude
             + ThresholdRelative * (histogram.MaxAmplitude - histogram.MinAmplitude);
-        var noise = new NoiseModel { BandwidthHz = ReceiverBandwidthFactor * bitRateHz };
+        // Per-source RIN (#819): the source's LaserConfig drives the amplitude
+        // noise the BER estimator assumes at the receiver.
+        var noise = new NoiseModel
+        {
+            BandwidthHz = ReceiverBandwidthFactor * bitRateHz,
+            RinDbPerHz = TransientCircuitFactory.ResolveRinDbPerHz(_canvas!),
+        };
         var metrics = BerEstimator.Estimate(
             trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, threshold, noise, timeBins);
 

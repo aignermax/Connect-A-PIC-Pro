@@ -3,6 +3,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.ExternalPorts;
+using CAP_Core.ExternalPorts.LaserSpectrum;
 using CAP_Core.Grid;
 using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
@@ -120,6 +121,26 @@ internal static class TransientCircuitFactory
             }
         }
         return pinIds;
+    }
+
+    /// <summary>
+    /// Resolves the laser RIN the eye-diagram noise model should use (#819): the
+    /// noisiest (largest) RIN among the couplers whose laser is switched on, or the
+    /// default DFB value when no source overrides it. Noise contributions add, so
+    /// the worst source dominates the amplitude noise floor.
+    /// </summary>
+    /// <param name="canvas">Canvas providing components.</param>
+    public static double ResolveRinDbPerHz(DesignCanvasViewModel canvas)
+    {
+        double? worst = null;
+        foreach (var compVm in canvas.Components)
+        {
+            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (compVm.IsLaserOff) continue;
+            double rin = compVm.LaserConfig?.RinDbPerHz ?? LaserSpectrumModel.DefaultRinDbPerHz;
+            worst = worst == null ? rin : Math.Max(worst.Value, rin);
+        }
+        return worst ?? LaserSpectrumModel.DefaultRinDbPerHz;
     }
 
     /// <summary>

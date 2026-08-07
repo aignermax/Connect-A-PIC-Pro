@@ -1280,6 +1280,13 @@ public class ChildComponentData
     public double Y { get; set; }
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
     public bool? IsLocked { get; set; }
@@ -1302,11 +1309,27 @@ public class ComponentData
     public string Identifier { get; set; } = "";
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
 
     /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
     public bool? LaserEnabled { get; set; }
+
+    /// <summary>Spectral line shape name (#819). Null in old files — ideal source.</summary>
+    public string? LaserLineShape { get; set; }
+
+    /// <summary>Linewidth (FWHM) in nm (#819). Null in old files — editor default.</summary>
+    public double? LaserLinewidthFwhmNm { get; set; }
+
+    /// <summary>Relative intensity noise in dB/Hz (#819). Null in old files — default RIN.</summary>
+    public double? LaserRinDbPerHz { get; set; }
 
     public bool? IsLocked { get; set; }
 

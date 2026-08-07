@@ -44,6 +44,8 @@ public static class PdkTemplateConverter
             HasSlider = pdkComp.Sliders?.Any() ?? false,
             SliderMin = pdkComp.Sliders?.FirstOrDefault()?.MinVal ?? 0,
             SliderMax = pdkComp.Sliders?.FirstOrDefault()?.MaxVal ?? 100,
+            SliderDefinitions = BuildSliderDefinitions(pdkComp),
+            ParameterDefinitions = ParametricSMatrixMapper.MapParameters(pdkComp.SMatrix?.Parameters),
             PdkSource = pdkName,
             NazcaModuleName = nazcaModuleName,
             NazcaOriginOffsetX = nazcaOriginOffsetX,
@@ -89,6 +91,26 @@ public static class PdkTemplateConverter
         }
 
         return template;
+    }
+
+    /// <summary>
+    /// Builds one <see cref="SliderDefinition"/> per PDK slider. A slider bound
+    /// to a named parameter starts at that parameter's default value (so the
+    /// placed instance matches the documented physics); unbound sliders start
+    /// at the range midpoint, matching the legacy behaviour.
+    /// </summary>
+    private static IReadOnlyList<SliderDefinition> BuildSliderDefinitions(PdkComponentDraft pdkComp)
+    {
+        if (pdkComp.Sliders is not { Count: > 0 } sliderDrafts)
+            return Array.Empty<SliderDefinition>();
+
+        var parameters = pdkComp.SMatrix?.Parameters;
+        return sliderDrafts.Select(s =>
+        {
+            var boundParam = parameters?.FirstOrDefault(p => p.SliderNumber == s.SliderNumber);
+            double initial = boundParam?.DefaultValue ?? (s.MinVal + s.MaxVal) / 2;
+            return new SliderDefinition(s.SliderNumber, s.MinVal, s.MaxVal, initial);
+        }).ToList();
     }
 
     private static SMatrix BuildParametricSMatrix(

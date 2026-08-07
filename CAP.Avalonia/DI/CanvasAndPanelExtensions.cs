@@ -5,6 +5,7 @@ using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
+using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP.Avalonia.ViewModels.Hierarchy;
@@ -76,6 +77,7 @@ internal static class CanvasAndPanelExtensions
         services.AddTransient<PdkConsistencyViewModel>();
         services.AddTransient<TimeDomainViewModel>();
         services.AddTransient<EyeDiagramViewModel>();
+        services.AddTransient<WavelengthSpectrumViewModel>();
         services.AddTransient<MonteCarloViewModel>();
         services.AddTransient<AnalysisOutputPanelViewModel>();
 
@@ -86,6 +88,7 @@ internal static class CanvasAndPanelExtensions
         services.AddSingleton<IComponentEditorProvider>(
             sp => sp.GetRequiredService<OnaAnalyzerEditorProvider>());
         services.AddSingleton<IComponentEditorProvider, LightSourceEditorProvider>();
+        services.AddSingleton<IComponentEditorProvider, ParametricParametersEditorProvider>();
         services.AddSingleton<IComponentEditorProvider, SliderEditorProvider>();
         services.AddSingleton<IComponentEditorProvider, GenericComponentEditorProvider>();
         services.AddSingleton<ComponentEditorFactory>();

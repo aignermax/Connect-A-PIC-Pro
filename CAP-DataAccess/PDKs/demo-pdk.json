@@ -86,17 +86,61 @@
           {
             "fromPin": "in",
             "toPin": "out1",
-            "magnitude": 0.707,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "in",
             "toPin": "out2",
-            "magnitude": 0.707,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (out1)",
+            "unit": "%",
+            "sliderNumber": 1
           }
         ]
-      }
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "2x2 MMI Coupler",
@@ -202,26 +246,45 @@
           {
             "fromPin": "in1",
             "toPin": "out1",
-            "magnitude": 0.707,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(1 - coupling_ratio / 100)",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "in1",
             "toPin": "out2",
-            "magnitude": 0.707,
-            "phaseDegrees": 90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(coupling_ratio / 100)",
+            "phaseDegreesFormula": "90"
           },
           {
             "fromPin": "in2",
             "toPin": "out1",
-            "magnitude": 0.707,
-            "phaseDegrees": 90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(coupling_ratio / 100)",
+            "phaseDegreesFormula": "90"
           },
           {
             "fromPin": "in2",
             "toPin": "out2",
-            "magnitude": 0.707,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(1 - coupling_ratio / 100)",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "coupling_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Coupling Ratio",
+            "unit": "%",
+            "sliderNumber": 0
           }
         ]
       },
@@ -292,7 +355,8 @@
             "defaultValue": 0,
             "minValue": 0,
             "maxValue": 360,
-            "label": "Phase (degrees)",
+            "label": "Phase",
+            "unit": "\u00B0",
             "sliderNumber": 0
           }
         ]

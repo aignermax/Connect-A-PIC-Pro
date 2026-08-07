@@ -9,6 +9,7 @@ using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
 using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
+using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -183,8 +184,14 @@ public static class MainViewModelTestHelper
             new AiAssistantViewModel(Mock.Of<IAiService>(), preferencesService),
             new OnaSweepViewModel(),
             new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
+            // Production provider order (CanvasAndPanelExtensions): most specific
+            // first, generic fallback last — so panel tests see real editors.
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
+                new OnaAnalyzerEditorProvider(),
+                new LightSourceEditorProvider(),
+                new ParametricParametersEditorProvider(),
+                new SliderEditorProvider(),
                 new GenericComponentEditorProvider()
             }));
     }
@@ -209,6 +216,7 @@ public static class MainViewModelTestHelper
             new AnalysisDockViewModel(
                 new TimeDomainViewModel(),
                 new EyeDiagramViewModel(),
+                new WavelengthSpectrumViewModel(),
                 new AnalysisOutputPanelViewModel(),
                 new MonteCarloViewModel()));
     }
