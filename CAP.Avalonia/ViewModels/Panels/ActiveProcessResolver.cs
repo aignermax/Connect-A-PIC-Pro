@@ -21,6 +21,8 @@ public static class ActiveProcessResolver
         Cladding = sel.Fingerprint?.Cladding,
         DesignWavelengthNm = sel.Fingerprint?.DesignWavelengthNm ?? ProcessFingerprint.DefaultDesignWavelengthNm,
         ProcessName = sel.Fingerprint?.ProcessName,
+        WidthToleranceNm = sel.Fingerprint?.Tolerances?.WidthSigmaNm,
+        ThicknessToleranceNm = sel.Fingerprint?.Tolerances?.ThicknessSigmaNm,
         MemberPdkNames = sel.MemberPdkNames.ToList(),
     };
 
@@ -29,8 +31,13 @@ public static class ActiveProcessResolver
     {
         if (data == null) return null;
         if (data.IsPlayground) return ActiveProcessSelection.Playground();
+        var tolerances = data.WidthToleranceNm == null && data.ThicknessToleranceNm == null
+            ? null
+            : new ProcessTolerances(
+                data.WidthToleranceNm ?? ProcessTolerances.DefaultWidthSigmaNm,
+                data.ThicknessToleranceNm ?? ProcessTolerances.DefaultThicknessSigmaNm);
         var fp = new ProcessFingerprint(data.CoreMaterial, data.CoreThicknessNm, data.Cladding,
-            data.DesignWavelengthNm, data.ProcessName);
+            data.DesignWavelengthNm, data.ProcessName, tolerances);
         return new ActiveProcessSelection(data.DisplayName, fp, data.MemberPdkNames, IsPlayground: false);
     }
 

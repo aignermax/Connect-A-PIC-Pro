@@ -128,7 +128,6 @@ namespace UnitTests.Analysis.MonteCarloAnalysis
             var config = new MonteCarloConfiguration();
 
             config.RunCount.ShouldBe(1000);
-            config.SigmaRelative.ShouldBe(0.01);
             config.Seed.ShouldBe(42);
         }
 
@@ -138,15 +137,6 @@ namespace UnitTests.Analysis.MonteCarloAnalysis
         public void Constructor_RejectsInvalidRunCount(int runCount)
         {
             Should.Throw<ArgumentOutOfRangeException>(() => new MonteCarloConfiguration(runCount: runCount));
-        }
-
-        [Theory]
-        [InlineData(-0.1)]
-        [InlineData(double.NaN)]
-        [InlineData(double.PositiveInfinity)]
-        public void Constructor_RejectsInvalidSigma(double sigma)
-        {
-            Should.Throw<ArgumentOutOfRangeException>(() => new MonteCarloConfiguration(sigmaRelative: sigma));
         }
     }
 }

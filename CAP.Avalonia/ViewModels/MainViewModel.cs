@@ -471,6 +471,16 @@ public partial class MainViewModel : ObservableObject
         BottomPanel.Analysis.Eye.RequestOutputPicker = activateOutputPicker;
         BottomPanel.Analysis.Transient.RequestOutputPicker = activateOutputPicker;
 
+        // Monte-Carlo fabrication variance: the sigma inputs pre-fill from the
+        // tolerances declared by the active PDK process.
+        BottomPanel.Analysis.MonteCarlo.ActiveProcessProvider = () => FileOperations.ActiveProcess;
+        BottomPanel.Analysis.MonteCarlo.RefreshTolerancesFromProcess();
+        FileOperations.PropertyChanged += (s, e) =>
+        {
+            if (e.PropertyName == nameof(FileOperationsViewModel.ActiveProcess))
+                BottomPanel.Analysis.MonteCarlo.RefreshTolerancesFromProcess();
+        };
+
         // Wire up callbacks
         CanvasInteraction.OnSelectionChanged = comp =>
         {

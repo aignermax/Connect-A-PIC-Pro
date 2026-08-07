@@ -1,5 +1,5 @@
 using CAP_Core.Analysis.MonteCarloAnalysis;
-using CAP_Core.Components.Core;
+using CAP_Core.Analysis.MonteCarloAnalysis.FabricationVariance;
 using Shouldly;
 using Xunit;
 
@@ -7,79 +7,101 @@ namespace UnitTests.Analysis.MonteCarloAnalysis
 {
     public class MonteCarloRunnerTests
     {
-        private static Slider CreateSlider(double value = 0.5)
-            => new(Guid.NewGuid(), 0, value, maxValue: 1, minValue: 0);
+        /// <summary>
+        /// Variance-source stub: "applying" a sample stores one Gaussian draw as the
+        /// current state; the sampler echoes that state as the metric curve.
+        /// </summary>
+        private sealed class StubVarianceSource : IVarianceSource
+        {
+            public double CurrentOffset { get; private set; }
+            public int ApplyCalls { get; private set; }
+            public bool IsNominal { get; private set; } = true;
 
-        /// <summary>Sampler stub that reports the slider's current value as the "curve".</summary>
-        private static Func<CancellationToken, Task<double[]>> EchoSlider(Slider slider)
-            => _ => Task.FromResult(new[] { slider.Value });
+            public void ApplyVariance(GaussianSampler sampler)
+            {
+                ApplyCalls++;
+                IsNominal = false;
+                CurrentOffset = sampler.NextGaussian();
+            }
+
+            public void RestoreNominal()
+            {
+                IsNominal = true;
+                CurrentOffset = 0;
+            }
+        }
+
+        private static Func<CancellationToken, Task<double[]>> EchoOffset(StubVarianceSource source)
+            => _ => Task.FromResult(new[] { source.CurrentOffset });
 
         [Fact]
         public async Task RunAsync_FixedSeed_ReproducesIdenticalResults()
         {
-            var slider = CreateSlider();
-            var config = new MonteCarloConfiguration(runCount: 25, sigmaRelative: 0.05, seed: 42);
+            var config = new MonteCarloConfiguration(runCount: 25, seed: 42);
             var runner = new MonteCarloRunner();
+            var sourceA = new StubVarianceSource();
+            var sourceB = new StubVarianceSource();
 
-            var first = await runner.RunAsync(config, new[] { slider }, EchoSlider(slider));
-            var second = await runner.RunAsync(config, new[] { slider }, EchoSlider(slider));
+            var first = await runner.RunAsync(config, sourceA, EchoOffset(sourceA));
+            var second = await runner.RunAsync(config, sourceB, EchoOffset(sourceB));
 
             for (int run = 0; run < config.RunCount; run++)
                 second.RunCurves[run][0].ShouldBe(first.RunCurves[run][0]);
         }
 
         [Fact]
-        public async Task RunAsync_NominalCurve_IsUnjittered()
+        public async Task RunAsync_NominalCurve_IsSampledBeforeAnyVariance()
         {
-            var slider = CreateSlider(0.5);
-            var config = new MonteCarloConfiguration(runCount: 5, sigmaRelative: 0.1, seed: 1);
+            var config = new MonteCarloConfiguration(runCount: 5, seed: 1);
+            var source = new StubVarianceSource();
 
-            var result = await new MonteCarloRunner().RunAsync(config, new[] { slider }, EchoSlider(slider));
+            var result = await new MonteCarloRunner().RunAsync(config, source, EchoOffset(source));
 
-            result.NominalCurve[0].ShouldBe(0.5);
+            result.NominalCurve[0].ShouldBe(0.0);
         }
 
         [Fact]
-        public async Task RunAsync_RestoresSliderValues_AfterCompletion()
+        public async Task RunAsync_RestoresNominal_AfterCompletion()
         {
-            var slider = CreateSlider(0.5);
-            var config = new MonteCarloConfiguration(runCount: 10, sigmaRelative: 0.2, seed: 3);
+            var config = new MonteCarloConfiguration(runCount: 10, seed: 3);
+            var source = new StubVarianceSource();
 
-            await new MonteCarloRunner().RunAsync(config, new[] { slider }, EchoSlider(slider));
+            await new MonteCarloRunner().RunAsync(config, source, EchoOffset(source));
 
-            slider.Value.ShouldBe(0.5);
+            source.IsNominal.ShouldBeTrue();
+            source.ApplyCalls.ShouldBe(10);
         }
 
         [Fact]
-        public async Task RunAsync_Cancellation_ThrowsAndRestoresSliders()
+        public async Task RunAsync_Cancellation_ThrowsAndRestoresNominal()
         {
-            var slider = CreateSlider(0.5);
-            var config = new MonteCarloConfiguration(runCount: 100, sigmaRelative: 0.1, seed: 5);
+            var config = new MonteCarloConfiguration(runCount: 100, seed: 5);
+            var source = new StubVarianceSource();
             using var cts = new CancellationTokenSource();
 
             int runsExecuted = 0;
             Func<CancellationToken, Task<double[]>> sampler = _ =>
             {
                 if (++runsExecuted == 4) cts.Cancel();
-                return Task.FromResult(new[] { slider.Value });
+                return Task.FromResult(new[] { source.CurrentOffset });
             };
 
             await Should.ThrowAsync<OperationCanceledException>(
-                () => new MonteCarloRunner().RunAsync(config, new[] { slider }, sampler, null, cts.Token));
+                () => new MonteCarloRunner().RunAsync(config, source, sampler, null, cts.Token));
 
             runsExecuted.ShouldBeLessThan(10);
-            slider.Value.ShouldBe(0.5);
+            source.IsNominal.ShouldBeTrue();
         }
 
         [Fact]
         public async Task RunAsync_ReportsProgressForEveryRun()
         {
-            var slider = CreateSlider();
-            var config = new MonteCarloConfiguration(runCount: 8, sigmaRelative: 0.05, seed: 2);
+            var config = new MonteCarloConfiguration(runCount: 8, seed: 2);
+            var source = new StubVarianceSource();
             var reports = new List<MonteCarloProgress>();
             var progress = new SynchronousProgress(reports.Add);
 
-            await new MonteCarloRunner().RunAsync(config, new[] { slider }, EchoSlider(slider), progress);
+            await new MonteCarloRunner().RunAsync(config, source, EchoOffset(source), progress);
 
             reports.Count.ShouldBe(8);
             reports[^1].CompletedRuns.ShouldBe(8);
@@ -87,15 +109,15 @@ namespace UnitTests.Analysis.MonteCarloAnalysis
         }
 
         [Fact]
-        public async Task RunAsync_JitteredRuns_SpreadAroundNominal()
+        public async Task RunAsync_VariedRuns_SpreadAroundNominal()
         {
-            var slider = CreateSlider(0.5);
-            var config = new MonteCarloConfiguration(runCount: 200, sigmaRelative: 0.05, seed: 42);
+            var config = new MonteCarloConfiguration(runCount: 200, seed: 42);
+            var source = new StubVarianceSource();
 
-            var result = await new MonteCarloRunner().RunAsync(config, new[] { slider }, EchoSlider(slider));
+            var result = await new MonteCarloRunner().RunAsync(config, source, EchoOffset(source));
 
             var samples = result.GetSamplesAtIndex(0);
-            samples.Average().ShouldBe(0.5, 0.01);
+            samples.Average().ShouldBe(0.0, 0.1);
             samples.Distinct().Count().ShouldBeGreaterThan(100);
         }
 

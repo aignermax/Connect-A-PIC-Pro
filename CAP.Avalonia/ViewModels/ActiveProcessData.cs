@@ -18,5 +18,7 @@ public class ActiveProcessData
     public int DesignWavelengthNm { get; set; } =
         CAP_Core.Components.Process.ProcessFingerprint.DefaultDesignWavelengthNm;
     public string? ProcessName { get; set; }
+    public double? WidthToleranceNm { get; set; }
+    public double? ThicknessToleranceNm { get; set; }
     public List<string> MemberPdkNames { get; set; } = new();
 }

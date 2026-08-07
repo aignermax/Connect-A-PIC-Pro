@@ -32,8 +32,14 @@ internal static class TransientCircuitFactory
     /// sweeps many wavelengths — without deduplication the console would repeat the
     /// same component hundreds of times).
     /// </param>
+    /// <param name="decorateBuilder">
+    /// Optional system-matrix decorator; the Monte-Carlo run passes the fabrication
+    /// perturbation here so the transient simulation sees the current
+    /// variance sample.
+    /// </param>
     public static (TimeDomainSimulator Simulator, PhysicalExternalPortManager Ports) Create(
-        DesignCanvasViewModel canvas, Action<PassivityWarning>? onPassivityWarning = null)
+        DesignCanvasViewModel canvas, Action<PassivityWarning>? onPassivityWarning = null,
+        Func<ISystemMatrixBuilder, ISystemMatrixBuilder>? decorateBuilder = null)
     {
         var tileManager = new ComponentListTileManager();
         foreach (var compVm in canvas.Components)
@@ -45,7 +51,9 @@ internal static class TransientCircuitFactory
         var gridManager = GridManager.CreateForSimulation(
             tileManager, canvas.ConnectionManager, portManager);
 
-        var builder = new SystemMatrixBuilder(gridManager);
+        ISystemMatrixBuilder builder = new SystemMatrixBuilder(gridManager);
+        if (decorateBuilder != null)
+            builder = decorateBuilder(builder);
         var context = BuildClosureContext(canvas) with
         {
             PassivityWarningSink = DedupePerComponent(onPassivityWarning),

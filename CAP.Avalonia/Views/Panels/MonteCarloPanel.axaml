@@ -44,9 +44,14 @@
                                Minimum="1" Maximum="100000" Increment="100" Width="130" FormatString="0"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4">
-                <TextBlock Text="{loc:Localize MonteCarlo.Sigma}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
-                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.SigmaPercent}"
-                               Minimum="0" Maximum="50" Increment="0.5" Width="115" FormatString="F1"/>
+                <TextBlock Text="{loc:Localize MonteCarlo.WidthSigma}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.WidthSigmaNm}"
+                               Minimum="0" Maximum="100" Increment="1" Width="115" FormatString="F1"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize MonteCarlo.ThicknessSigma}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.ThicknessSigmaNm}"
+                               Minimum="0" Maximum="100" Increment="1" Width="115" FormatString="F1"/>
             </StackPanel>
             <StackPanel Margin="0,0,12,4">
                 <TextBlock Text="{loc:Localize MonteCarlo.Seed}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>

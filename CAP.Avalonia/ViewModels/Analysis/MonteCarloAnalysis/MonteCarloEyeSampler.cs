@@ -1,4 +1,5 @@
 using CAP_Core.Analysis.EyeDiagram;
+using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
@@ -8,10 +9,10 @@ namespace CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 
 /// <summary>
 /// Per-run metric source for the eye-openness Monte-Carlo mode: each call runs
-/// one PRBS transient simulation with the sliders in their CURRENT (jittered)
-/// state and returns the eye height (vertical eye opening) as a one-element
-/// curve. The simulator is rebuilt per run so the jittered slider values flow
-/// into fresh component S-matrices. Uses the Eye/BER tab's default receiver
+/// one PRBS transient simulation under the CURRENTLY active fabrication-variance
+/// sample and returns the eye height (vertical eye opening) as a one-element
+/// curve. The simulator is rebuilt per run so the current variance sample flows
+/// into fresh system matrices. Uses the Eye/BER tab's default receiver
 /// settings so both views describe the same eye.
 /// </summary>
 internal sealed class MonteCarloEyeSampler
@@ -26,11 +27,21 @@ internal sealed class MonteCarloEyeSampler
     private readonly DesignCanvasViewModel _canvas;
     private readonly HashSet<Guid>? _designatedPinIds;
     private readonly bool _hasMultipleCandidates;
+    private readonly Func<ISystemMatrixBuilder, ISystemMatrixBuilder>? _decorateBuilder;
 
     /// <summary>Creates a sampler bound to the canvas and the resolved analysis output (#754).</summary>
-    public MonteCarloEyeSampler(DesignCanvasViewModel canvas, AnalysisOutputResolution resolution)
+    /// <param name="canvas">Canvas providing components and connections.</param>
+    /// <param name="resolution">Resolved analysis-output designation.</param>
+    /// <param name="decorateBuilder">
+    /// Optional system-matrix decorator; the Monte-Carlo run passes the fabrication
+    /// perturbation here so each transient simulation sees the current variance sample.
+    /// </param>
+    public MonteCarloEyeSampler(
+        DesignCanvasViewModel canvas, AnalysisOutputResolution resolution,
+        Func<ISystemMatrixBuilder, ISystemMatrixBuilder>? decorateBuilder = null)
     {
         _canvas = canvas;
+        _decorateBuilder = decorateBuilder;
         _designatedPinIds = resolution.State == AnalysisOutputState.DesignatedValid
             ? AnalysisOutputResolver.CollectLightPinIds(resolution.Output!)
             : null;
@@ -43,7 +54,7 @@ internal sealed class MonteCarloEyeSampler
 
     private double RunSingleEyeAnalysis()
     {
-        var (simulator, ports) = TransientCircuitFactory.Create(_canvas);
+        var (simulator, ports) = TransientCircuitFactory.Create(_canvas, decorateBuilder: _decorateBuilder);
         var outputPinIds = TransientCircuitFactory.CollectOutputCouplerPinIds(_canvas);
 
         var sweepDef = TimeSignalDefinition.FromWavelengthSweep(
