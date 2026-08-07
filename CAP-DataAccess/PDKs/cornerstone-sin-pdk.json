@@ -1386,11 +1386,35 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
-            "magnitude": 1.0,
-            "phaseDegrees": 0.0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0,
+            "minValue": 0,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
           }
         ]
-      }
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Bend S",
@@ -1420,11 +1444,35 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
-            "magnitude": 1.0,
-            "phaseDegrees": 0.0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0,
+            "minValue": 0,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
           }
         ]
-      }
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Straight",
@@ -1454,11 +1502,35 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
-            "magnitude": 1.0,
-            "phaseDegrees": 0.0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0,
+            "minValue": 0,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
           }
         ]
-      }
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Taper",
@@ -1488,11 +1560,35 @@
           {
             "fromPin": "o1",
             "toPin": "o2",
-            "magnitude": 1.0,
-            "phaseDegrees": 0.0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt(Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
+          }
+        ],
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0,
+            "minValue": 0,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
           }
         ]
-      }
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     }
   ]
 }

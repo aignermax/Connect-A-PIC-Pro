@@ -65,8 +65,14 @@ public class BundledPdkProcessTests
         at1550.Connections.ShouldNotBeEmpty();
         at1550.Connections.ShouldAllBe(c => c.Magnitude > 0.1);
 
+        // Straight is parametric (insertion-loss slider); at its default of
+        // 0 dB it must still pass light through losslessly.
         var straight = draft.Components.Single(c => c.GdsFactoryFunction == "cspdk.sin300.straight");
-        straight.SMatrix!.Connections.ShouldContain(c => c.Magnitude == 1.0);
+        ParametricSMatrixMapper.IsParametric(straight.SMatrix!).ShouldBeTrue();
+        var passThrough = ParametricSMatrixMapper.MapToParametricSMatrix(straight.SMatrix!)
+            .EvaluateConnections()
+            .Single(c => c.FromPin == "o1" && c.ToPin == "o2");
+        passThrough.Value.Magnitude.ShouldBe(1.0, 1e-9);
     }
 
     [Theory]
