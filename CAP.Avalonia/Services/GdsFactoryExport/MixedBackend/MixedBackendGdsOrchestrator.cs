@@ -105,6 +105,12 @@ public class MixedBackendGdsOrchestrator
     /// exported connection flagged by an unresolved sibling crossing that no bridge marker
     /// resolves. Mirrors <see cref="GdsFactoryExporter.Export"/>'s own parameter.
     /// </param>
+    /// <param name="exportWarnings">
+    /// Optional collector: appended with one description per nazca raw-code component whose
+    /// geometry source is missing (a deleted .gds file) and that therefore renders as a
+    /// placeholder box in the nazca partial. Mirrors
+    /// <see cref="SimpleNazcaExporter.Export"/>'s own parameter.
+    /// </param>
     public MixedBackendScriptSet BuildScripts(
         DesignCanvasViewModel canvas,
         GdsFactoryExportOptions options,
@@ -112,14 +118,16 @@ public class MixedBackendGdsOrchestrator
         IEnumerable<ComponentTemplate> library,
         string mainScriptPath,
         List<string>? skippedConnections = null,
-        List<string>? unresolvedCrossings = null)
+        List<string>? unresolvedCrossings = null,
+        List<string>? exportWarnings = null)
     {
         var templates = library.ToList();
         bool IsNazcaNative(Component c) =>
             InherentBackendClassifier.Classify(c, templates) == InherentBackend.Nazca;
 
         var nazcaScript = _nazcaExporter.ExportPartial(
-            canvas, IsNazcaNative, NazcaPartialTopCellName, metalSpec);
+            canvas, IsNazcaNative, NazcaPartialTopCellName, metalSpec,
+            library: templates, exportWarnings: exportWarnings);
 
         var partialGdsFileName = Path.GetFileNameWithoutExtension(
             PartialScriptPathFor(mainScriptPath)) + ".gds";

@@ -1,10 +1,12 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using CAP.Avalonia.Services.AddCustomComponent;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Components.AddCustomComponent;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Export;
@@ -136,7 +138,11 @@ public class NewComponentViewModelMigrationTests : IDisposable
         await vm.SaveCommand.ExecuteAsync(null);
 
         vm.MigratedFromPdkName.ShouldBeNull();
-        vm.StatusText.ShouldContain("different fabrication");
+        // Language-agnostic: compare against the fully formatted localized template (any UI language).
+        var expectedMessage = string.Format(CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("NewComp.CannotMoveDifferentProcess"),
+            "Widget", "PDK B", "SOI", "SiN");
+        vm.StatusText.ShouldContain(expectedMessage);
         var pdkA = store.ListCustomPdks().First(p => p.Name == "PDK A");
         store.ComponentExistsInFile(pdkA.FilePath, "Widget").ShouldBeTrue();
     }

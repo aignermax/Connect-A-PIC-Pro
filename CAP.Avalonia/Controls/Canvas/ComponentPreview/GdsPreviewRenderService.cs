@@ -18,9 +18,9 @@ namespace CAP.Avalonia.Controls.Canvas.ComponentPreview;
 /// is fired on the UI thread so the canvas can call <c>InvalidateVisual()</c>.
 /// </para>
 /// <para>
-/// Failures (Python unavailable, script timeout, 0 polygons) are cached as <c>null</c>
-/// so no further retries are attempted during the session — the component simply stays
-/// as a legacy rectangle.
+/// Failures (Python unavailable, script timeout, 0 polygons) are remembered for the
+/// whole session in a dedicated failure set so no further retries are attempted —
+/// the component simply stays as a legacy rectangle.
 /// </para>
 /// </remarks>
 public sealed class GdsPreviewRenderService
@@ -46,11 +46,19 @@ public sealed class GdsPreviewRenderService
     /// <summary>In-memory LRU of geometry keyed by <see cref="GdsPreviewKey.Hash"/>.</summary>
     private readonly GdsGeometryCache _memGeometry = new();
 
-    /// <summary>Tracks in-flight geometry fetches keyed by render-identity hash.</summary>
+    /// <summary>Tracks in-flight fetches (geometry and canvas previews) by cache key.</summary>
     private readonly ConcurrentDictionary<string, Task> _pending = new();
 
     /// <summary>Tracks keys for which a fetch is currently in flight.</summary>
     private readonly ConcurrentDictionary<string, byte> _pendingFetches = new();
+
+    /// <summary>
+    /// Preview keys whose fetch failed or produced no polygons, remembered for the
+    /// whole session. Kept outside the LRU preview cache on purpose: a large GDS
+    /// import can carry more unique (failing) keys than the LRU holds, and evicting
+    /// a failure marker would re-spawn a doomed Python render for that key forever.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, byte> _failedPreviewKeys = new();
 
     /// <summary>
     /// Raised on the UI thread whenever a previously-pending preview finishes
@@ -100,9 +108,13 @@ public sealed class GdsPreviewRenderService
         if (_cache.TryGet(cacheKey, out var cached))
             return cached;
 
-        // Enqueue a background fetch only once per key
+        if (_failedPreviewKeys.ContainsKey(cacheKey))
+            return null;
+
+        // Enqueue a background fetch only once per key; the task is also tracked in
+        // _pending so WaitForPendingAsync covers canvas preview fetches.
         if (_pendingFetches.TryAdd(cacheKey, 0))
-            _ = FetchAndCacheAsync(cacheKey, comp);
+            _pending[cacheKey] = FetchAndCacheAsync(cacheKey, comp);
 
         return null;
     }
@@ -161,18 +173,14 @@ public sealed class GdsPreviewRenderService
         NazcaPreviewResult result;
         try
         {
-            if (IsGdsFactoryNative(comp.Component))
+            // Same throttle as the geometry path: a large import with many unique
+            // templates must never flood the machine with parallel Python renders.
+            await _renderGate.WaitAsync();
+            try
             {
-                // Precedence over the (possibly synthesized) nazcaFunction — see BuildCacheKey.
-                result = await RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);
+                result = await RenderPreviewAsync(comp);
             }
-            else
-            {
-                var module = comp.Component.NazcaModuleName;
-                var function = comp.Component.NazcaFunctionName;
-                var parameters = comp.Component.NazcaFunctionParameters;
-                result = await _previewService.RenderAsync(module, function, parameters);
-            }
+            finally { _renderGate.Release(); }
         }
         catch
         {
@@ -185,10 +193,13 @@ public sealed class GdsPreviewRenderService
             ? new GdsPreviewData(result, unrotatedW, unrotatedH)
             : null;
 
-        // Cache before removing the pending-fetch marker so a concurrent caller
-        // that arrives between these two lines will find the cached entry rather
-        // than enqueue a duplicate fetch.
-        _cache.Set(cacheKey, data);
+        // Record the outcome before removing the pending-fetch marker so a concurrent
+        // caller that arrives between these two lines will find the cached entry (or
+        // the failure marker) rather than enqueue a duplicate fetch.
+        if (data != null)
+            _cache.Set(cacheKey, data);
+        else
+            _failedPreviewKeys.TryAdd(cacheKey, 0);
         _pendingFetches.TryRemove(cacheKey, out _);
 
         if (data != null)
@@ -202,6 +213,22 @@ public sealed class GdsPreviewRenderService
                 OnPreviewLoaded?.Invoke();
             });
         }
+        _pending.TryRemove(cacheKey, out _);
+    }
+
+    /// <summary>
+    /// Renders the canvas preview via the gdsfactory back-end for gdsfactory-native
+    /// components (precedence over the possibly synthesized nazcaFunction — see
+    /// <see cref="BuildCacheKey"/>), the Nazca back-end otherwise.
+    /// </summary>
+    private Task<NazcaPreviewResult> RenderPreviewAsync(ComponentViewModel comp)
+    {
+        if (IsGdsFactoryNative(comp.Component))
+            return RenderGdsFactoryAsync(comp.Component.GdsFactoryFunction);
+        return _previewService.RenderAsync(
+            comp.Component.NazcaModuleName,
+            comp.Component.NazcaFunctionName,
+            comp.Component.NazcaFunctionParameters);
     }
 
     /// <summary>
@@ -223,7 +250,7 @@ public sealed class GdsPreviewRenderService
         return null;
     }
 
-    /// <summary>Test hook: awaits all in-flight geometry fetches.</summary>
+    /// <summary>Test hook: awaits all in-flight geometry and canvas preview fetches.</summary>
     public Task WaitForPendingAsync() => Task.WhenAll(_pending.Values.ToArray());
 
     private async Task FetchGeometryAsync(GdsPreviewKey key, string cacheKey)

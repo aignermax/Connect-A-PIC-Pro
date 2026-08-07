@@ -113,11 +113,14 @@ and never appear in the process picker.
 | `category` | Yes | Group name for the component library panel |
 | `nazcaFunction` | Yes | Python function name for Nazca export (e.g. `"pdk.mmi1x2"`) |
 | `nazcaParameters` | No | Optional default parameters (e.g. `"length=100"`) |
+| `rawCode` | No | Custom Python cell source inlined into the export — written by the GDS import, not meant to be authored by hand (see the portability note below) |
+| `rawCodeBackend` | No | Export backend the `rawCode` targets: `"nazca"` (GDS imports) or `"gdsfactory"` |
 | `widthMicrometers` | Yes | Component bounding box width in µm |
 | `heightMicrometers` | Yes | Component bounding box height in µm |
 | `nazcaOriginOffsetX` | Yes* | Nazca cell origin measured from the bounding box **left** edge (µm) = `-XMin` of the Nazca bbox |
 | `nazcaOriginOffsetY` | Yes* | Nazca cell origin measured from the bounding box **top** edge (µm) = `YMax` of the Nazca bbox |
 | `pins` | Yes | List of optical port definitions |
+| `outlinePolygons` | No | Imported GDS outline polygons (see below) — when present **and non-empty**, the canvas draws them instead of the plain rectangle body; an empty `[]` falls back to the rectangle |
 | `sMatrix` | No | S-matrix for optical simulation (omit to skip simulation) |
 
 > \* Required for GDS export on the normal load path. Analysis-tool components
@@ -125,6 +128,13 @@ and never appear in the process picker.
 > Don't compute the offsets by hand: open **Tools → PDK Offset Editor** and press
 > **Auto-Calibrate** (or **Try-Fix-All**) — it renders the real Nazca/KLayout cell
 > and writes bbox, offsets, and snapped pin positions back into the JSON.
+
+> **Portability caveat (`rawCode`):** in GDS-imported PDKs the `rawCode` snippet
+> embeds the **absolute, machine-local path** of the imported `.gds` file
+> (`nd.load_gds(filename="…")`). Such a PDK JSON is therefore NOT portable across
+> machines (or user accounts): on another machine the file is missing and the
+> export falls back to a placeholder box with a warning instead of the real
+> geometry. Re-import the GDS on the target machine to restore it.
 
 ### Pin Fields
 
@@ -135,6 +145,41 @@ and never appear in the process picker.
 | `offsetYMicrometers` | Yes | Y position relative to the bounding box **top-left** corner (µm), increasing **down** |
 | `angleDegrees` | Yes | Port direction: `0`=right, `90`=up, `180`=left, `270`=down |
 | `pinKind` | No | Signal domain: `"Optical"` (default when absent) or `"Electrical"`. Electrical pins (heater/modulator contacts, detector anode/cathode, bond pads) can only be connected to other electrical pins — never to optical ports — and are excluded from the optical S-matrix and the optical (Nazca/gdsfactory/photontorch) export. |
+
+### Outline Polygon Fields (`outlinePolygons`)
+
+Optional list of closed outline polygons describing the component's physical
+shape — written automatically by the GDS import, not meant to be authored by
+hand. When present **and non-empty**, the canvas renders these polygons instead
+of the plain rectangle body — the render condition is `Count > 0`, so an empty
+`[]` falls back to the rectangle (pins, labels and rotation keep working either
+way). Coordinates follow the
+app convention: micrometers, **Y-down**, relative to the **top-left corner** of
+the component's unrotated bounding box. Each polygon's `points` form a closed
+ring — the first point is repeated at the end (GDS convention). `layer` and
+`dataType` record the GDS origin; all layers currently share one style.
+
+```json
+"outlinePolygons": [
+  {
+    "layer": 1,
+    "dataType": 0,
+    "points": [
+      { "x": 0,  "y": 10 },
+      { "x": 20, "y": 10 },
+      { "x": 20, "y": 12 },
+      { "x": 0,  "y": 12 },
+      { "x": 0,  "y": 10 }
+    ]
+  }
+]
+```
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `layer` | Yes | GDS layer number the polygon came from |
+| `dataType` | Yes | GDS datatype the polygon came from |
+| `points` | Yes | Closed ring of vertices (`x`, `y` in µm); first point repeated at the end |
 
 ### S-Matrix Fields
 

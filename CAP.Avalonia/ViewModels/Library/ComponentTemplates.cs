@@ -111,6 +111,7 @@ public static class ComponentTemplates
 
         component.HumanReadableName = template.Name;
         component.ParameterDefinitions = template.ParameterDefinitions;
+        component.OutlinePolygons = template.OutlinePolygons;
 
         // The Component constructor resets every slider to its range midpoint;
         // restore the template-defined initial values (parameter defaults) so a
@@ -187,6 +188,14 @@ public partial class ComponentTemplate : ObservableObject
     public string? RawCode { get; set; }
 
     public string? RawCodeBackend { get; set; }
+
+    /// <summary>
+    /// Imported outline polygons of the component shape (e.g. from a GDS-imported
+    /// PDK component), in app-space µm (Y-down, relative to the bbox top-left).
+    /// <c>null</c> for regular components — the canvas then draws the plain
+    /// rectangle body. The list instance is shared with every placed component.
+    /// </summary>
+    public IReadOnlyList<CAP_Core.Components.Core.OutlinePolygon>? OutlinePolygons { get; set; }
 
     public bool IsCustom { get; set; }
 

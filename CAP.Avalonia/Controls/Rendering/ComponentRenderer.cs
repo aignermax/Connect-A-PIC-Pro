@@ -13,62 +13,73 @@ namespace CAP.Avalonia.Controls.Rendering;
 /// <summary>
 /// Renders all components (simple and group) onto the design canvas.
 /// Handles dimming in group-edit mode, lock icons, and group hierarchy display.
-/// Implements <see cref="ICanvasRenderer"/> for world-space rendering.
+/// Items outside the viewport are culled and tiny on-screen items are drawn
+/// body-only (see <see cref="RenderCulling"/>) so huge imported designs stay
+/// responsive. Implements <see cref="ICanvasRenderer"/> for world-space rendering.
 /// </summary>
 public sealed class ComponentRenderer : ICanvasRenderer
 {
     private readonly PinRenderer _pinRenderer = new();
+    private readonly ComponentOutlineRenderer _outlineRenderer = new();
     private readonly ComponentNameLabelComputer _nameLabels = new();
+
+    // Static readonly — never allocate per component per frame (see
+    // ComponentOutlineRenderer). "Dimmed" variants carry the group-edit alpha 128.
+    private static readonly IBrush SelectedFillBrush = new SolidColorBrush(Color.FromArgb(255, 60, 80, 120));
+    private static readonly IBrush SelectedFillBrushDimmed = new SolidColorBrush(Color.FromArgb(128, 60, 80, 120));
+    private static readonly IBrush BodyFillBrush = new SolidColorBrush(Color.FromArgb(255, 40, 50, 70));
+    private static readonly IBrush BodyFillBrushDimmed = new SolidColorBrush(Color.FromArgb(128, 40, 50, 70));
+    private static readonly Pen SelectedBorderPen = new(new SolidColorBrush(Color.FromArgb(255, 0, 255, 255)), 2);
+    private static readonly Pen SelectedBorderPenDimmed = new(new SolidColorBrush(Color.FromArgb(128, 0, 255, 255)), 2);
+    private static readonly Pen NeutralBorderPen = new(new SolidColorBrush(Color.FromArgb(255, 128, 128, 128)), 1);
+    private static readonly Pen NeutralBorderPenDimmed = new(new SolidColorBrush(Color.FromArgb(128, 128, 128, 128)), 1);
+    private static readonly IBrush ChildNameBrush = new SolidColorBrush(Color.FromArgb(255, 255, 255, 255));
+    private static readonly IBrush ChildNameBrushDimmed = new SolidColorBrush(Color.FromArgb(128, 255, 255, 255));
+    private static readonly Typeface LabelTypeface = new("Arial");
 
     /// <inheritdoc/>
     public void Render(DrawingContext context, CanvasRenderContext rc)
     {
-        var viewport = ComputeViewportWorld(rc);
+        var viewport = RenderCulling.ComputeViewportWorld(rc.ViewModel.PanX, rc.ViewModel.PanY, rc.Bounds, rc.Zoom);
+        var cullRect = RenderCulling.InflateForCulling(viewport, rc.Zoom);
         Guid? hoveredComponentId = rc.InteractionState.HoveredComponent?.Component.Id;
         var visibleNameIds = _nameLabels.GetVisibleLabelIds(
             rc.ViewModel.Components, hoveredComponentId, viewport, rc.Zoom);
 
         foreach (var comp in rc.ViewModel.Components)
-            DrawComponent(context, comp, rc, visibleNameIds);
-    }
-
-    /// <summary>Visible canvas area in world (µm) coordinates, used to cull off-screen
-    /// components before measuring their name labels for overlap resolution.</summary>
-    private static Rect ComputeViewportWorld(CanvasRenderContext rc)
-    {
-        double zoom = rc.Zoom <= 0 ? 1.0 : rc.Zoom;
-        var vm = rc.ViewModel;
-        return new Rect(-vm.PanX / zoom, -vm.PanY / zoom,
-                        rc.Bounds.Width / zoom, rc.Bounds.Height / zoom);
+            DrawComponent(context, comp, rc, visibleNameIds, cullRect);
     }
 
     private void DrawComponent(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc,
-        IReadOnlySet<Guid> visibleNameIds)
+        IReadOnlySet<Guid> visibleNameIds, Rect cullRect)
     {
         bool isDimmed = IsComponentDimmedInEditMode(comp, rc.ViewModel);
 
         if (comp.Component is ComponentGroup group)
         {
-            DrawComponentGroup(context, group, comp.IsSelected, rc, isDimmed);
+            DrawComponentGroup(context, group, comp.IsSelected, rc, cullRect, isDimmed);
             return;
         }
 
-        byte alpha = (byte)(isDimmed ? 128 : 255);
         var rect = new Rect(comp.X, comp.Y, comp.Width, comp.Height);
+        if (!cullRect.Intersects(rect))
+            return;
 
-        var fillBrush = comp.IsSelected
-            ? new SolidColorBrush(Color.FromArgb(alpha, 60, 80, 120))
-            : new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70));
-        context.FillRectangle(fillBrush, rect);
+        bool hasOutlines = comp.Component.OutlinePolygons is { Count: > 0 };
+        DrawComponentBody(context, comp, rc, rect, hasOutlines, isDimmed);
 
-        var previewData = rc.GdsPreviewRenderService?.TryGetPreview(comp);
-        if (previewData != null)
-            GdsPolygonRenderer.DrawGdsPreview(context, previewData, comp);
+        if (comp.IsSelected || !hasOutlines)
+        {
+            var borderPen = comp.IsSelected
+                ? (isDimmed ? SelectedBorderPenDimmed : SelectedBorderPen)
+                : (isDimmed ? NeutralBorderPenDimmed : NeutralBorderPen);
+            context.DrawRectangle(borderPen, rect);
+        }
 
-        var borderPen = comp.IsSelected
-            ? new Pen(new SolidColorBrush(Color.FromArgb(alpha, 0, 255, 255)), 2)
-            : new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1);
-        context.DrawRectangle(borderPen, rect);
+        // Below the LOD threshold, pins, labels and icons are sub-pixel noise —
+        // the body drawn above is all that remains visible at that scale.
+        if (RenderCulling.IsBelowLodThreshold(comp.Width, comp.Height, rc.Zoom))
+            return;
 
         _pinRenderer.DrawComponentPins(context, comp, rc, isDimmed);
 
@@ -89,47 +100,73 @@ public sealed class ComponentRenderer : ICanvasRenderer
         }
     }
 
-    private void DrawComponentGroup(DrawingContext context, ComponentGroup group, bool isSelected, CanvasRenderContext rc, bool isDimmed = false)
+    private void DrawComponentBody(DrawingContext context, ComponentViewModel comp, CanvasRenderContext rc,
+        Rect rect, bool hasOutlines, bool isDimmed)
+    {
+        if (hasOutlines)
+        {
+            // GDS-imported component: draw its outline polygons instead of the plain
+            // rectangle body. No Nazca preview is fetched for it — the real imported
+            // geometry is already on screen, and the synthesized import function name
+            // would only spawn a doomed Python render per unique cell.
+            _outlineRenderer.Draw(context, comp, comp.Component.OutlinePolygons!, isDimmed, rc.Zoom);
+            return;
+        }
+
+        var fillBrush = comp.IsSelected
+            ? (isDimmed ? SelectedFillBrushDimmed : SelectedFillBrush)
+            : (isDimmed ? BodyFillBrushDimmed : BodyFillBrush);
+        context.FillRectangle(fillBrush, rect);
+
+        var previewData = rc.GdsPreviewRenderService?.TryGetPreview(comp);
+        if (previewData != null)
+            GdsPolygonRenderer.DrawGdsPreview(context, previewData, comp);
+    }
+
+    private void DrawComponentGroup(DrawingContext context, ComponentGroup group, bool isSelected,
+        CanvasRenderContext rc, Rect cullRect, bool isDimmed = false)
     {
         var vm = rc.ViewModel;
         bool isHovered = rc.InteractionState.HoveredGroup == group;
-        bool isLabelHovered = rc.InteractionState.HoveredGroupLabel == group;
         bool isCurrentEditGroup = vm.CurrentEditGroup == group;
-        byte alpha = (byte)(isDimmed ? 128 : 255);
+
+        var bounds = ComponentGroupRenderer.CalculateGroupBounds(group);
+        if (group.OutlinePolygons is { Count: > 0 } backgroundPolygons && cullRect.Intersects(bounds))
+        {
+            // Imported background geometry (base plates, exclusion zones, logos)
+            // draws beneath the children so components stay legible on top.
+            _outlineRenderer.Draw(context, group.PhysicalX, group.PhysicalY,
+                group.WidthMicrometers, group.HeightMicrometers,
+                group.RotationDegrees, backgroundPolygons, isDimmed, rc.Zoom);
+        }
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
             {
-                DrawComponentGroup(context, nestedGroup, isSelected, rc, isDimmed);
+                DrawComponentGroup(context, nestedGroup, isSelected, rc, cullRect, isDimmed);
                 continue;
             }
 
-            if (isHovered)
-                ComponentGroupRenderer.RenderGroupHoverOverlay(context, child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers);
-
-            context.FillRectangle(new SolidColorBrush(Color.FromArgb(alpha, 40, 50, 70)),
-                new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers));
-            context.DrawRectangle(new Pen(new SolidColorBrush(Color.FromArgb(alpha, 128, 128, 128)), 1),
-                new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers));
-
-            var displayName = child.HumanReadableName ?? child.Identifier;
-            // Deferred to the topmost label pass like every other name label: a top-level
-            // component drawn after this group must never paint over a child name.
-            var nameBrush = new SolidColorBrush(Color.FromArgb(alpha, 255, 255, 255));
-            rc.Labels.Enqueue(
-                new FormattedText(displayName, System.Globalization.CultureInfo.CurrentCulture,
-                    FlowDirection.LeftToRight, new Typeface("Arial"), 10, nameBrush),
-                nameBrush,
-                new Point(child.PhysicalX + 3, child.PhysicalY + 3));
+            var childRect = new Rect(child.PhysicalX, child.PhysicalY, child.WidthMicrometers, child.HeightMicrometers);
+            if (cullRect.Intersects(childRect))
+                DrawGroupChild(context, child, childRect, rc, isHovered, isDimmed);
         }
 
         var powerFlowResult = vm.ShowPowerFlow ? vm.PowerFlowVisualizer.CurrentResult : null;
         var fadeThreshold = vm.PowerFlowVisualizer.FadeThresholdDb;
         foreach (var frozenPath in group.InternalPaths)
-            ComponentGroupRenderer.RenderFrozenWaveguidePath(context, frozenPath, powerFlowResult, fadeThreshold);
+        {
+            // Frozen paths may reach outside the group's child bounds, so each one
+            // is culled individually by its cached bounding box.
+            if (RenderCulling.GetFrozenPathBounds(frozenPath) is { } pathBounds && !cullRect.Intersects(pathBounds))
+                continue;
+            ComponentGroupRenderer.RenderFrozenWaveguidePath(context, frozenPath, powerFlowResult, fadeThreshold, cullRect);
+        }
 
-        var bounds = ComponentGroupRenderer.CalculateGroupBounds(group);
+        if (!cullRect.Intersects(bounds))
+            return;
+
         if (!isCurrentEditGroup)
         {
             if (isSelected)
@@ -137,12 +174,51 @@ public sealed class ComponentRenderer : ICanvasRenderer
             else
                 ComponentGroupRenderer.RenderGroupBorder(context, bounds, isHovered, isDimmed);
 
-            ComponentGroupRenderer.RenderGroupNameLabel(context, bounds, group.GroupName, isDimmed, isLabelHovered);
-            bool isLockIconHovered = rc.InteractionState.HoveredGroupLockIcon == group;
-            ComponentGroupRenderer.RenderGroupLockIcon(context, group, isLockIconHovered);
+            ComponentGroupRenderer.RenderGroupNameLabel(context, bounds, group.GroupName, isDimmed,
+                rc.InteractionState.HoveredGroupLabel == group);
+            ComponentGroupRenderer.RenderGroupLockIcon(context, group,
+                rc.InteractionState.HoveredGroupLockIcon == group);
         }
 
         RenderGroupPins(context, group, isCurrentEditGroup, isHovered, vm, rc.Labels);
+    }
+
+    private void DrawGroupChild(DrawingContext context, Component child, Rect childRect,
+        CanvasRenderContext rc, bool isGroupHovered, bool isDimmed)
+    {
+        if (isGroupHovered)
+            ComponentGroupRenderer.RenderGroupHoverOverlay(context, childRect.X, childRect.Y, childRect.Width, childRect.Height);
+
+        if (child.OutlinePolygons is { Count: > 0 } childOutlines)
+        {
+            // GDS-imported child: draw its outline polygons instead of the plain
+            // rectangle body — the same branch DrawComponent takes for a top-level
+            // outlined component (same renderer, same dimming). Grouped children
+            // keep their thin bbox border below: inside a group the footprint
+            // rectangle is the hover/selection affordance, so it stays visible
+            // just like the selection border does for outlined top-level components.
+            _outlineRenderer.Draw(context, child.PhysicalX, child.PhysicalY,
+                child.WidthMicrometers, child.HeightMicrometers,
+                child.RotationDegrees, childOutlines, isDimmed, rc.Zoom);
+        }
+        else
+        {
+            context.FillRectangle(isDimmed ? BodyFillBrushDimmed : BodyFillBrush, childRect);
+        }
+        context.DrawRectangle(isDimmed ? NeutralBorderPenDimmed : NeutralBorderPen, childRect);
+
+        if (RenderCulling.IsBelowLodThreshold(childRect.Width, childRect.Height, rc.Zoom))
+            return;
+
+        var displayName = child.HumanReadableName ?? child.Identifier;
+        // Deferred to the topmost label pass like every other name label: a top-level
+        // component drawn after this group must never paint over a child name.
+        var nameBrush = isDimmed ? ChildNameBrushDimmed : ChildNameBrush;
+        rc.Labels.Enqueue(
+            new FormattedText(displayName, System.Globalization.CultureInfo.CurrentCulture,
+                FlowDirection.LeftToRight, LabelTypeface, 10, nameBrush),
+            nameBrush,
+            new Point(childRect.X + 3, childRect.Y + 3));
     }
 
     private static void RenderGroupPins(DrawingContext context, ComponentGroup group, bool isCurrentEditGroup, bool isHovered, DesignCanvasViewModel vm, DeferredLabelLayer labels)

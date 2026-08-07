@@ -590,8 +590,8 @@ public class DesignFileGroupPersistenceTests
             // Verify internal paths are preserved
             loadedGroupA.InternalPaths.Count.ShouldBe(1);
             var loadedPath = loadedGroupA.InternalPaths[0];
-            loadedPath.StartPin.Name.ShouldBe("out1");
-            loadedPath.EndPin.Name.ShouldBe("in");
+            loadedPath.StartPin!.Name.ShouldBe("out1");
+            loadedPath.EndPin!.Name.ShouldBe("in");
         }
         finally
         {

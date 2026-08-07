@@ -66,6 +66,28 @@ public class RotateComponentCommand : IUndoableCommand
     private void RotateComponent90()
     {
         var comp = _component.Component;
+        ApplyModelRotation90(comp);
+
+        // Notify the view model of dimension changes
+        _component.NotifyDimensionsChanged();
+
+        // Update obstacle in pathfinding grid
+        _canvas.Router.UpdateComponentObstacle(comp);
+
+        // Recalculate paths asynchronously (pin angles change with rotation)
+        _ = _canvas.RecalculateRoutesAsync();
+    }
+
+    /// <summary>
+    /// Model-level 90° counter-clockwise rotation around the component center:
+    /// physical pin offsets, width/height swap, discrete rotation and
+    /// <c>RotationDegrees</c>. The top-left corner (<c>PhysicalX</c>/<c>PhysicalY</c>)
+    /// is deliberately left untouched. No ViewModel/canvas notifications — shared
+    /// with programmatic placement (GDS import), which rotates the component
+    /// before it is added to the canvas.
+    /// </summary>
+    internal static void ApplyModelRotation90(Component comp)
+    {
         var width = comp.WidthMicrometers;
         var height = comp.HeightMicrometers;
 
@@ -101,14 +123,5 @@ public class RotateComponentCommand : IUndoableCommand
 
         // Update the component's discrete rotation and RotationDegrees
         comp.RotateBy90CounterClockwise();
-
-        // Notify the view model of dimension changes
-        _component.NotifyDimensionsChanged();
-
-        // Update obstacle in pathfinding grid
-        _canvas.Router.UpdateComponentObstacle(comp);
-
-        // Recalculate paths asynchronously (pin angles change with rotation)
-        _ = _canvas.RecalculateRoutesAsync();
     }
 }

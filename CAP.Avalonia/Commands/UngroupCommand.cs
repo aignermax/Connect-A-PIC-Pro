@@ -68,6 +68,12 @@ public class UngroupCommand : IUndoableCommand
             _restoredConnectionViewModels.Clear();
             foreach (var frozenPath in _group.InternalPaths)
             {
+                // Pin-less frozen geometry (GDS-imported route outlines) has no pins
+                // to anchor a connection to — ungrouping cannot restore it (v1;
+                // route reconstruction is #814), so it is skipped here.
+                if (frozenPath.StartPin is null || frozenPath.EndPin is null)
+                    continue;
+
                 var connection = new WaveguideConnection
                 {
                     StartPin = frozenPath.StartPin,

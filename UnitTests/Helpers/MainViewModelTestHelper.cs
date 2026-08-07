@@ -70,6 +70,21 @@ public static class MainViewModelTestHelper
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
         var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
+        // Test-isolated user-PDK store: a unique temp root per call so an import
+        // triggered from a UI-flow test never touches the developer's real PDKs.
+        var gdsImportStore = new CAP_DataAccess.Components.AddCustomComponent.UserPdkStore(
+            Path.Combine(Path.GetTempPath(), $"cap-test-user-pdks-{Guid.NewGuid()}"),
+            new PdkJsonSaver(), pdkLoader);
+        var capturedLeftPanel = leftPanel;
+        var gdsImportButton = new CAP.Avalonia.ViewModels.GdsImport.GdsImportButtonViewModel(
+            new CAP.Avalonia.Services.GdsImport.GdsImportService(
+                gdsImportStore,
+                () => capturedLeftPanel.AllTemplates.ToList(),
+                (draft, pdkName, filePath) => capturedLeftPanel.RegisterSavedCustomComponent(draft, pdkName, filePath),
+                capturedLeftPanel.BeginBatchRegistration),
+            new CAP.Avalonia.Services.GdsImport.GdsPlacementExecutor(
+                canvas, commandManager, () => capturedLeftPanel.AllTemplates.ToList()),
+            errorConsoleService);
 
         return new MainViewModel(
             canvas,
@@ -99,7 +114,8 @@ public static class MainViewModelTestHelper
             new GdsPreviewRenderService(new NazcaComponentPreviewService("python3", "/nonexistent/script.py")),
             // Registry browser backed by the committed fixtures — no network access.
             new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
-                new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()));
+                new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()),
+            gdsImportButton);
     }
 
     /// <summary>
@@ -119,7 +135,7 @@ public static class MainViewModelTestHelper
         preferencesService ??= new UserPreferencesService(
             Path.Combine(Path.GetTempPath(), $"cap-test-prefs-{Guid.NewGuid()}.json"));
 
-        return new LeftPanelViewModel(
+        var leftPanel = new LeftPanelViewModel(
             canvas,
             libraryManager,
             pdkLoader,
@@ -127,6 +143,15 @@ public static class MainViewModelTestHelper
             new HierarchyPanelViewModel(canvas),
             new PdkManagerViewModel(),
             new ComponentLibraryViewModel(libraryManager));
+
+        // Isolate from the developer's real user-PDK folder: the startup reload must scan an
+        // empty temp dir, otherwise template counts/status texts become machine-dependent
+        // (UiFlowTestHost already isolates this way; CI is green only because its folder is empty).
+        var isolatedUserPdkRoot = Path.Combine(Path.GetTempPath(), $"cap-test-userpdks-{Guid.NewGuid()}");
+        Directory.CreateDirectory(isolatedUserPdkRoot);
+        leftPanel.UserPdkStartupRootOverride = isolatedUserPdkRoot;
+
+        return leftPanel;
     }
 
     /// <summary>

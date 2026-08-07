@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
@@ -25,6 +26,9 @@ public sealed class UserPdkStore
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Lunima", "user-pdks");
 
     public static UserPdkStore CreateDefault() => new(DefaultRootDirectory, new PdkJsonSaver(), new PdkLoader());
+
+    /// <summary>The writable root directory every managed user-PDK file (and its sidecar files, e.g. imported .gds) lives in.</summary>
+    public string RootDirectory => _root;
 
     public string ForkBundledPdk(string bundledFilePath, string pdkName)
     {
@@ -109,6 +113,31 @@ public sealed class UserPdkStore
 
     public bool NamedPdkExists(string pdkName) => File.Exists(ResolveNamedPath(pdkName));
 
+    /// <summary>
+    /// Resolves <paramref name="desiredName"/> to a PDK name whose slug-target file is
+    /// safe to write: the name itself when no such file exists or the existing file
+    /// holds the SAME PDK (a re-import merges into it), or a deterministic
+    /// <c>-2</c>, <c>-3</c>, … suffix when the slug collides with a DIFFERENT PDK —
+    /// e.g. "my circuit" and "my-circuit" both slug to the same file name, and the
+    /// second import must never merge into (or overwrite) the first one's file.
+    /// </summary>
+    public string ResolveAvailablePdkName(string desiredName)
+    {
+        for (var n = 1; ; n++)
+        {
+            var candidate = n == 1 ? desiredName : $"{desiredName}-{n}";
+            var path = ResolveNamedPath(candidate);
+            if (!File.Exists(path))
+            {
+                return candidate;
+            }
+            if (string.Equals(LoadExistingForEditing(path).Name, candidate, StringComparison.Ordinal))
+            {
+                return candidate;
+            }
+        }
+    }
+
     public string CreateNamedPdkWithProcess(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection)
     {
         if (NamedPdkExists(pdkName))
@@ -144,6 +173,15 @@ public sealed class UserPdkStore
         return pdk.Components.Exists(c => string.Equals(c.Name, componentName, StringComparison.OrdinalIgnoreCase));
     }
 
+    /// <summary>
+    /// Lists every user-managed PDK in the root directory: process-bound ones and
+    /// process-agnostic ones (e.g. created by a GDS import). Membership in the root
+    /// directory IS the "user-defined" classification — bundled PDKs never live here —
+    /// so a process-agnostic file must not be excluded merely for declaring no
+    /// fabrication process (its <see cref="UserPdkInfo.Process"/> is null then).
+    /// Unreadable files and files with neither a process nor the process-agnostic
+    /// flag are skipped.
+    /// </summary>
     public IReadOnlyList<UserPdkInfo> ListCustomPdks()
     {
         var result = new List<UserPdkInfo>();
@@ -157,7 +195,7 @@ public sealed class UserPdkStore
             try
             {
                 var pdk = _loader.LoadFromFileForEditing(path);
-                if (pdk.Process is not null)
+                if (pdk.Process is not null || pdk.ProcessAgnostic)
                 {
                     result.Add(new UserPdkInfo(pdk.Name, path, pdk.Process));
                 }
@@ -197,6 +235,84 @@ public sealed class UserPdkStore
 
         _saver.SaveToFile(pdk, filePath);
         return filePath;
+    }
+
+    /// <summary>
+    /// Adds or replaces <paramref name="component"/> in a named, process-agnostic user PDK
+    /// (created on first use, one load-modify-save per call). Process-agnostic PDKs declare
+    /// no fabrication process, so the library keeps their components placeable under every
+    /// active process — the right shape for geometry-only imports (e.g. GDS) that no
+    /// foundry PDK claims. Returns the PDK file path.
+    /// </summary>
+    public string SaveToProcessAgnosticNamedPdk(string pdkName, PdkComponentDraft component, string backend)
+    {
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var pdk = File.Exists(path)
+            ? LoadExistingForEditing(path)
+            : new PdkDraft { Name = pdkName, Backend = backend, Components = new() };
+        pdk.Name = pdkName;
+        pdk.ProcessAgnostic = true;
+
+        pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+        pdk.Components.Add(component);
+
+        _saver.SaveToFile(pdk, path);
+        return path;
+    }
+
+    /// <summary>
+    /// Bulk variant of <see cref="SaveToProcessAgnosticNamedPdk"/>: adds or
+    /// replaces ALL <paramref name="components"/> in one load-modify-save cycle.
+    /// The per-component variant rewrites the whole PDK file on every call —
+    /// O(n²) for an n-component batch (a large GDS import registers thousands of
+    /// drafts, where that dominated the import time). Returns the PDK file path,
+    /// or null when <paramref name="components"/> is empty (nothing to save).
+    /// </summary>
+    public string? SaveAllToProcessAgnosticNamedPdk(
+        string pdkName, IReadOnlyList<PdkComponentDraft> components, string backend)
+    {
+        if (components.Count == 0)
+            return null;
+
+        var path = ResolveNamedPath(pdkName);
+        Directory.CreateDirectory(_root);
+
+        var pdk = File.Exists(path)
+            ? LoadExistingForEditing(path)
+            : new PdkDraft { Name = pdkName, Backend = backend, Components = new() };
+        pdk.Name = pdkName;
+        pdk.ProcessAgnostic = true;
+
+        foreach (var component in components)
+        {
+            pdk.Components.RemoveAll(c => string.Equals(c.Name, component.Name, StringComparison.OrdinalIgnoreCase));
+            pdk.Components.Add(component);
+        }
+
+        _saver.SaveToFile(pdk, path);
+        return path;
+    }
+
+    /// <summary>
+    /// Loads an existing managed PDK file for a load-modify-save cycle. A corrupt
+    /// or hand-edited file aborts the operation with a user-presentable
+    /// <see cref="InvalidDataException"/> naming the broken file instead of
+    /// surfacing a raw validation/deserialization error mid-import.
+    /// </summary>
+    private PdkDraft LoadExistingForEditing(string path)
+    {
+        try
+        {
+            return _loader.LoadFromFileForEditing(path);
+        }
+        catch (Exception ex) when (ex is PdkValidationException or JsonException or InvalidOperationException)
+        {
+            throw new InvalidDataException(
+                $"The existing user PDK file '{path}' could not be read (corrupted or hand-edited?): " +
+                $"{ex.Message} Fix or remove the file and try again — the import was aborted.", ex);
+        }
     }
 
     private static PdkDraft NewNamedPdk(string pdkName, ProcessDefinition process, string backend, string? routingCrossSection) => new()

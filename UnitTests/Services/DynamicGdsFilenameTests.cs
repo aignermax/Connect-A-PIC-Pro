@@ -30,7 +30,7 @@ public class DynamicGdsFilenameTests
         script.ShouldContain("import sys");
         script.ShouldContain("script_path = os.path.abspath(__file__)");
         script.ShouldContain("gds_filename = os.path.splitext(script_path)[0] + '.gds'");
-        script.ShouldContain("nd.export_gds(filename=gds_filename)");
+        script.ShouldContain("nd.export_gds(topcells=[design], filename=gds_filename)");
         script.ShouldContain("print(f'GDS exported to: {gds_filename}')");
     }
 
@@ -89,7 +89,7 @@ public class DynamicGdsFilenameTests
             {
                 // If Nazca not installed, script should still be syntactically valid
                 // (will fail at runtime, but that's expected)
-                script.ShouldContain("nd.export_gds(filename=gds_filename)");
+                script.ShouldContain("nd.export_gds(topcells=[design], filename=gds_filename)");
             }
         }
         finally

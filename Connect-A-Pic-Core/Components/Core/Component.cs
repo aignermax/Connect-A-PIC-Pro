@@ -425,6 +425,7 @@ public partial class Component : ICloneable
         clonedComponent.NazcaModuleName = NazcaModuleName;
         clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
         clonedComponent.GdsFactoryRoutingCrossSection = GdsFactoryRoutingCrossSection;
+        clonedComponent.OutlinePolygons = OutlinePolygons;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;

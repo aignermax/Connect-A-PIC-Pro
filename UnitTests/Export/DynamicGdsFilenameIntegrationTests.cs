@@ -204,28 +204,29 @@ public class DynamicGdsFilenameIntegrationTests
         var returnIndex = Array.FindIndex(lines, l => l.Contains("return design"));
         returnIndex.ShouldBeGreaterThan(0);
 
+        // The design cell is exported directly as the GDS top cell (topcells=[design]) —
+        // the old design.put() nested it under nazca's default 'nazca' wrapper cell,
+        // which then became the file's only top-cell candidate on re-import.
         var createIndex = Array.FindIndex(lines, l => l.Contains("design = create_design()"));
-        var putIndex = Array.FindIndex(lines, l => l.Contains("design.put()"));
         var osImportIndex = Array.FindIndex(lines, l => l.Trim() == "import os");
         var sysImportIndex = Array.FindIndex(lines, l => l.Trim() == "import sys");
         var scriptPathIndex = Array.FindIndex(lines, l => l.Contains("script_path = os.path.abspath(__file__)"));
         var gdsFilenameIndex = Array.FindIndex(lines, l => l.Contains("gds_filename = os.path.splitext(script_path)[0] + '.gds'"));
-        var exportIndex = Array.FindIndex(lines, l => l.Contains("nd.export_gds(filename=gds_filename)"));
+        var exportIndex = Array.FindIndex(lines, l => l.Contains("nd.export_gds(topcells=[design], filename=gds_filename)"));
         var printIndex = Array.FindIndex(lines, l => l.Contains("print(f'GDS exported to: {gds_filename}')"));
 
         // All elements should be present
         createIndex.ShouldBeGreaterThan(0);
-        putIndex.ShouldBeGreaterThan(0);
         osImportIndex.ShouldBeGreaterThan(0);
         sysImportIndex.ShouldBeGreaterThan(0);
         scriptPathIndex.ShouldBeGreaterThan(0);
         gdsFilenameIndex.ShouldBeGreaterThan(0);
         exportIndex.ShouldBeGreaterThan(0);
         printIndex.ShouldBeGreaterThan(0);
+        script.ShouldNotContain("design.put()");
 
         // Order should be correct
-        createIndex.ShouldBeLessThan(putIndex);
-        putIndex.ShouldBeLessThan(osImportIndex);
+        createIndex.ShouldBeLessThan(osImportIndex);
         osImportIndex.ShouldBeLessThan(sysImportIndex);
         sysImportIndex.ShouldBeLessThan(scriptPathIndex);
         scriptPathIndex.ShouldBeLessThan(gdsFilenameIndex);

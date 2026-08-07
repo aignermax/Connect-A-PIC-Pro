@@ -52,6 +52,7 @@ public static class PdkTemplateConverter
             NazcaOriginOffsetY = nazcaOriginOffsetY,
             RawCode = pdkComp.RawCode,
             RawCodeBackend = pdkComp.RawCodeBackend,
+            OutlinePolygons = pdkComp.OutlinePolygons,
             SourceDraft = pdkComp,
         };
 

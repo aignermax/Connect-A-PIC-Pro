@@ -115,6 +115,15 @@ public partial class MainWindow : Window
                     };
                 }
 
+                // Wire up the GDS import dialog (#808): the button ViewModel builds the
+                // dialog ViewModel (service + placement executor included), the view layer
+                // only wraps it in a window — same pattern as the PDK wizard above.
+                vm.GdsImport.ShowImportDialogAsync = async dialogVm =>
+                {
+                    var dialog = new Views.Dialogs.GdsImportDialog { DataContext = dialogVm };
+                    await dialog.ShowDialog(this);
+                };
+
                 // Wire up the "New Component" window (issue #656) — non-modal, like the
                 // Fabrication Process and ONA Analyzer tool windows, so the user can keep
                 // iterating on the design while it stays open.

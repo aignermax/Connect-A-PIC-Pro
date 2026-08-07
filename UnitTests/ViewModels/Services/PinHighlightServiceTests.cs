@@ -151,9 +151,35 @@ public class PinHighlightServiceTests
         var excludePin = comp.PhysicalPins[0];
         var pinPos = excludePin.GetAbsolutePosition();
 
-        // Excluding the pin (and same-component pins) should return null
+        // Excluding the pin itself returns null: the waveguide's other pin is
+        // 250 µm away, far beyond the highlight distance (same-component pins
+        // are NO longer excluded — see the in-range test below).
         var result = _service.UpdatePinHighlight(pinPos.Item1, pinPos.Item2, excludePin);
         result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void UpdatePinHighlight_SameComponentPinInRange_IsHighlighted()
+    {
+        // Dragging from one pin of a component must offer its OTHER pins as
+        // targets (feedback loops, ring self-coupling, black-box imports).
+        var comp = TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
+        comp.PhysicalX = 100;
+        comp.PhysicalY = 100;
+        var vm = new ComponentViewModel(comp);
+
+        foreach (var pin in comp.PhysicalPins)
+            _allPins.Add(new PinViewModel(pin, vm));
+
+        var startPin = comp.PhysicalPins[0]; // "in", west side
+        var otherPin = comp.PhysicalPins[1]; // "out", east side
+        var (otherX, otherY) = otherPin.GetAbsolutePosition();
+
+        var result = _service.UpdatePinHighlight(otherX, otherY, startPin);
+
+        result.ShouldNotBeNull("a different pin of the same component is a valid connection target");
+        result.Pin.ShouldBe(otherPin);
+        result.IsHighlighted.ShouldBeTrue();
     }
 
     [Fact]
