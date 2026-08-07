@@ -394,6 +394,7 @@
   "GdsImport.ModeBlackBox": "単一のブラックボックスコンポーネントとしてインポート",
   "GdsImport.ModeExplode": "階層をコンポーネントに展開（推奨）",
   "GdsImport.ModeLabel": "階層モード:",
+  "GdsImport.MetalLayersLabel": "メタルレイヤー（電気）",
   "GdsImport.OpenFileTitle": "GDSレイアウトをインポート",
   "GdsImport.OpenTip": "GDSレイアウトをキャンバスコンポーネントとしてインポート…",
   "GdsImport.PlacedNextToExistingContentFormat": "キャンバスに既存のコンテンツがあったため、インポートはその右側に配置されました（+{0:0.#} µm シフト）。",

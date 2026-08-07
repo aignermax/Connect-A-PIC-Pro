@@ -394,6 +394,7 @@
   "GdsImport.ModeBlackBox": "Importar como un único componente de caja negra",
   "GdsImport.ModeExplode": "Expandir la jerarquía en componentes (recomendado)",
   "GdsImport.ModeLabel": "Modo de jerarquía:",
+  "GdsImport.MetalLayersLabel": "Capas metálicas (eléctricas)",
   "GdsImport.OpenFileTitle": "Importar diseño GDS",
   "GdsImport.OpenTip": "Importar un diseño GDS como componentes del lienzo…",
   "GdsImport.PlacedNextToExistingContentFormat": "El lienzo ya tenía contenido — la importación se colocó a su lado (desplazada +{0:0.#} µm a la derecha).",

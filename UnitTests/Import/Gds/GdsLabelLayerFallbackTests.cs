@@ -191,4 +191,96 @@ public class GdsLabelLayerFallbackTests
             "the multi-line metadata blob is filtered — only the real port label remains");
         port.Name.ShouldBe("in0");
     }
+
+    [Fact]
+    public async Task Explode_FallbackIgnoresAnchorAndParameterLabels()
+    {
+        // nazca stamps bbox anchors (tl/tr/bc/…) and parameter annotations
+        // (R:0.0001) on its cells; the any-layer fallback must not turn them
+        // into ghost pins next to the real ports.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("edge", 0, 0)
+            .EndCell()
+            .BeginCell("edge")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(235, 0, "in", 0, 2000)
+                .Text(235, 0, "out", 10000, 2000)
+                .Text(235, 0, "tl", 0, 4000)
+                .Text(235, 0, "tr", 10000, 4000)
+                .Text(235, 0, "bc", 5000, 0)
+                .Text(235, 0, "R:0.0001", 5000, 3000)
+                .Text(235, 0, "n=1.0", 5000, 1000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Select(p => p.Name).Where(n => !n.StartsWith("heur_", StringComparison.Ordinal))
+            .OrderBy(n => n, StringComparer.Ordinal)
+            .ShouldBe(new[] { "in", "out" });
+        var note = result.Infos.Where(i => i.Contains("helper label(s) ignored")).ShouldHaveSingleItem();
+        note.ShouldContain("'edge'");
+        note.ShouldContain("'tl'");
+        note.ShouldContain("'R:0.0001'");
+    }
+
+    [Fact]
+    public async Task Explode_AnchorOnlyLabels_TriggerNoFallback()
+    {
+        // A cell whose only texts are anchors has nothing port-like: the fallback
+        // must stay silent instead of inventing pins from placement anchors.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("plate", 0, 0)
+            .EndCell()
+            .BeginCell("plate")
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(235, 0, "tl", 0, 4000)
+                .Text(235, 0, "br", 10000, 0)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Where(p => !p.Name.StartsWith("heur_", StringComparison.Ordinal))
+            .ShouldBeEmpty("anchors alone yield no label pins");
+        result.Infos.Where(i => i.Contains("non-standard layer"))
+            .ShouldBeEmpty("no fallback note when nothing port-like was discovered");
+    }
+
+    [Fact]
+    public async Task Explode_ForeignFileWithMetalLayerPolygons_WarnsAboutLayerCollision()
+    {
+        // Foreign file (labels need auto-discovery) whose top cell carries
+        // polygons on our metal default (12,0): the numbers may mean something
+        // optical at that foundry, so the import must say so out loud.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("soa", 0, 0)
+                .Boundary(12, 0, (0, 6000), (10000, 6000), (10000, 6500), (0, 6500), (0, 6000))
+            .EndCell()
+            .BeginCell("soa")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(235, 0, "in", 0, 2000)
+                .Text(235, 0, "out", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var warning = result.Warnings.Where(w => w.Contains("Metal-layer defaults")).ShouldHaveSingleItem();
+        warning.ShouldContain("(12,0)");
+        warning.ShouldContain("import dialog");
+    }
 }
