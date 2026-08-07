@@ -156,19 +156,76 @@ public class GdsOutlineSimplifierTests
     }
 
     [Fact]
-    public void Simplify_PolygonCollapsingBelowTriangle_IsRemoved()
+    public void Simplify_PolygonCollapsingBelowTriangle_KeepsOriginalRing()
     {
         // A tiny ring (all vertices within the tolerance of the anchors)
-        // collapses below 3 distinct points + closing point and is removed.
+        // collapses below 3 distinct points + closing point. It must NOT be
+        // silently removed: it survives with its original, unsimplified points.
         var tiny = Rectangle(layer: 1, 0, 0, 0.001, 0.001);
         var big = Rectangle(layer: 2, 0, 0, 10, 10);
 
         var result = GdsOutlineSimplifier.Simplify(
             new[] { tiny, big }, toleranceUm: 0.05, maxTotalPoints: 2000, out int dropped);
 
-        dropped.ShouldBe(0, "collapse removal is simplification, not cap dropping");
-        result.ShouldHaveSingleItem().Layer.ShouldBe(2);
+        dropped.ShouldBe(0, "nothing is dropped — collapse keeps the original ring");
+        result.Count.ShouldBe(2);
+        result[0].Points.Count.ShouldBe(5, "the collapsed ring falls back to its original geometry");
+        result[0].Layer.ShouldBe(1);
     }
+
+    [Fact]
+    public void Simplify_EscalationCollapsesSmallPolygons_KeepsLastValidLevel_ThenCountsDrops()
+    {
+        // 300 small 25-gon circles (radius 0.5 µm) plus one big rectangle. The
+        // tolerance escalation (0.05 → ×8) collapses every circle below the ring
+        // minimum — each must keep its last valid level (~5 points) instead of
+        // vanishing, so the cap is then enforced by COUNTED drops only:
+        // survivors + dropped always equals the input count.
+        var polygons = Enumerable.Range(0, 300)
+            .Select(i => Circle(layer: 2, radius: 0.5, vertices: 25))
+            .Append(Rectangle(layer: 1, 0, 0, 100, 100))
+            .ToList();
+
+        var result = GdsOutlineSimplifier.Simplify(
+            polygons, toleranceUm: 0.05, maxTotalPoints: 1000, out int dropped);
+
+        (result.Count + dropped).ShouldBe(polygons.Count, "no polygon may vanish uncounted");
+        dropped.ShouldBeGreaterThan(0, "300 rings at ≥4 points cannot fit a 1000-point cap");
+        TotalPoints(result).ShouldBeLessThanOrEqualTo(1000);
+        result.ShouldContain(p => p.Layer == 1, "the largest polygon is always kept");
+        foreach (var survivor in result)
+        {
+            survivor.Points.Count.ShouldBeGreaterThanOrEqualTo(4, "every survivor is a valid ring");
+            survivor.Points.Count.ShouldBeLessThanOrEqualTo(26, "simplification only removes points");
+            survivor.Points[^1].ShouldBe(survivor.Points[0], "every survivor stays a closed ring");
+        }
+    }
+
+    [Fact]
+    public void Simplify_ThousandsOfSmallPolygonsOverCap_NoSilentLoss()
+    {
+        // The production-file shape that exposed the silent-loss bug: 6364 small
+        // residual polygons totaling ~165k points against an 8000-point cap. The
+        // old code escalated the tolerance until thousands collapsed below the
+        // ring minimum in ONE round and removed them without counting — only 12
+        // polygons survived and no warning fired. Now every polygon is either a
+        // valid-ring survivor or a counted drop.
+        var polygons = Enumerable.Range(0, 6364)
+            .Select(_ => Circle(layer: 2, radius: 0.5, vertices: 25))
+            .ToList();
+
+        var result = GdsOutlineSimplifier.Simplify(
+            polygons, toleranceUm: 0.05, maxTotalPoints: 8000, out int dropped);
+
+        (result.Count + dropped).ShouldBe(6364, "no polygon may vanish uncounted");
+        dropped.ShouldBeGreaterThan(0, "6364 rings at ≥4 points each exceed the 8000-point cap");
+        result.Count.ShouldBeGreaterThan(1000, "the cap is filled with survivors, not emptied");
+        TotalPoints(result).ShouldBeLessThanOrEqualTo(8000);
+        result.ShouldAllBe(p => p.Points.Count >= 4, "every survivor is a valid ring");
+    }
+
+    private static int TotalPoints(IReadOnlyList<GdsOutlinePolygon> polygons) =>
+        polygons.Sum(p => p.Points.Count);
 
     [Fact]
     public void Simplify_StraightRing_SimplifiesToEndpoints()

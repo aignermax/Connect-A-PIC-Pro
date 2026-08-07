@@ -313,8 +313,13 @@ public static class GdsHierarchyImporter
             .Concat(metalPolygons
                 .Where((_, index) => !metalRoutes.ConsumedPolygonIndexes.Contains(index)))
             .ToList();
+        // Collected BEFORE the accounting report: the residual polygons are the
+        // render-only background the report announces (and the collector emits
+        // the outline-point-cap drop warning the report deliberately lacks).
+        var residualPolygons = session.GetTopCellResidualPolygons();
         GdsImportReporter.ReportTopLevelGeometry(
-            session, topCellName, waveguideRoutes, metalRoutes, frozenRoutePolygons.Count);
+            session, topCellName, waveguideRoutes, metalRoutes,
+            frozenRoutePolygons.Count, residualPolygons.Count);
 
         var connections = waveguideRoutes.Pairs
             .Concat(metalRoutes.Pairs)
@@ -332,7 +337,7 @@ public static class GdsHierarchyImporter
             Instances = placed,
             Connections = connections,
             TopCellWaveguidePolygons = frozenRoutePolygons,
-            TopCellResidualPolygons = session.GetTopCellResidualPolygons(),
+            TopCellResidualPolygons = residualPolygons,
             Warnings = session.Warnings,
             Infos = session.Infos,
         };

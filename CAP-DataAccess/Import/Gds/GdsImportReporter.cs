@@ -80,16 +80,22 @@ internal static class GdsImportReporter
     /// back as real, re-routable connections (<paramref name="waveguideRoutes"/>),
     /// metal-layer networks as electrical connections (<paramref name="metalRoutes"/>);
     /// the remaining route/metal polygons ride the created group as frozen,
-    /// non-re-routable paths (<paramref name="frozenPolygonCount"/>). All of that
-    /// is normal, fully-reconstructed behavior → reported as INFO; only own
-    /// geometry on UNHANDLED layers (silently dropped in v1) earns a warning.
+    /// non-re-routable paths (<paramref name="frozenPolygonCount"/>), and the
+    /// polygons on all other layers ride it as render-only background geometry
+    /// (<paramref name="backgroundPolygonCount"/>, see
+    /// <see cref="GdsHierarchyImportSession.GetTopCellResidualPolygons"/>). All of
+    /// that is normal, fully-reconstructed behavior → reported as INFO. Background
+    /// polygons dropped to satisfy the outline-point cap are already warned about
+    /// (with their true count) where they are collected — nothing else is dropped,
+    /// so this reporter emits no warning of its own.
     /// </summary>
     public static void ReportTopLevelGeometry(
         GdsHierarchyImportSession session,
         string topCellName,
         GdsRouteConnectivityResult waveguideRoutes,
         GdsRouteConnectivityResult metalRoutes,
-        int frozenPolygonCount)
+        int frozenPolygonCount,
+        int backgroundPolygonCount)
     {
         // Counted in outline-polygon units (a path expands to one quad per
         // segment) — the same units the route matcher and the frozen-path
@@ -101,7 +107,6 @@ internal static class GdsImportReporter
 
         int restoredPolygons =
             waveguideRoutes.ConsumedPolygonIndexes.Count + metalRoutes.ConsumedPolygonIndexes.Count;
-        int remainder = own - restoredPolygons - frozenPolygonCount;
 
         var restoredParts = new List<string>();
         if (waveguideRoutes.Pairs.Count > 0)
@@ -121,20 +126,18 @@ internal static class GdsImportReporter
             restoredParts.Add(
                 $"{frozenPolygonCount} route polygon(s) are imported as frozen paths (not re-routable)");
         }
+        if (backgroundPolygonCount > 0)
+        {
+            restoredParts.Add(
+                $"{backgroundPolygonCount} polygon(s) on other layers are imported as render-only " +
+                "background geometry (not re-routable)");
+        }
 
         if (restoredParts.Count > 0)
         {
             session.Infos.Add(
                 $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
                 $"geometry): {string.Join("; ", restoredParts)}.");
-        }
-
-        if (remainder > 0)
-        {
-            session.Warnings.Add(
-                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
-                $"geometry); the remaining {remainder} polygon(s)/path(s) on other " +
-                "layers are not reconstructed (v1).");
         }
     }
 
