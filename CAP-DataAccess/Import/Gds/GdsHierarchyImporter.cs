@@ -121,6 +121,13 @@ public static class GdsHierarchyImporter
         // zero-geometry cells (note emitted after the loop, with the count).
         var artifactNoted = new HashSet<string>(StringComparer.Ordinal);
         var zeroGeometrySkips = new Dictionary<string, int>();
+        // Dissolved route/interconnect cells (see GdsRouteCellDissolver): their
+        // flattened polygons join the top cell's route polygon sets below so
+        // the route matcher reconstructs the connections they draw; one info
+        // note per cell (with the instance count) is emitted after the loop.
+        var dissolvedWaveguidePolygons = new List<GdsOutlinePolygon>();
+        var dissolvedMetalPolygons = new List<GdsOutlinePolygon>();
+        var dissolvedRouteCells = new Dictionary<string, int>(StringComparer.Ordinal);
 
         // Work list: the top cell's direct children, plus — appended while
         // walking — the device instances carried by an expanded export-artifact
@@ -175,6 +182,24 @@ public static class GdsHierarchyImporter
             }
 
             var known = session.ResolveKnown(cell);
+
+            // Routed interconnects our exporters emit as REFERENCED cells
+            // (instead of flattened top-cell geometry) dissolve into the route
+            // polygon sets: the geometry IS a connection, not a component —
+            // importing it as a "waveguide" draft would leave the circuit
+            // graph disconnected. A deliberate known-component binding wins
+            // over dissolution.
+            if (known is null
+                && GdsRouteCellDissolver.IsRouteCell(cell, session.GetFlattened(cell), session.Options))
+            {
+                GdsRouteCellDissolver.Dissolve(
+                    gdsInstance, session.GetFlattened(cell), session.Options, session.TopBBox,
+                    dissolvedWaveguidePolygons, dissolvedMetalPolygons);
+                dissolvedRouteCells.TryGetValue(cell, out int dissolved);
+                dissolvedRouteCells[cell] = dissolved + 1;
+                continue;
+            }
+
             var cellBBox = session.GetCellBBox(cell);
 
             // Zero-geometry cells (empty flattened bbox — e.g. the zero-length
@@ -262,6 +287,13 @@ public static class GdsHierarchyImporter
                 $"{skipCount} instance(s) skipped.");
         }
 
+        foreach (var (cell, dissolvedCount) in dissolvedRouteCells)
+        {
+            session.Infos.Add(
+                $"Route cell '{cell}' ({dissolvedCount} instance(s)) dissolved into the top-cell " +
+                "routing geometry — reconstructed as connections/route paths instead of a component.");
+        }
+
         if (gdsInstances.Count == 0)
         {
             session.Warnings.Add(
@@ -288,8 +320,12 @@ public static class GdsHierarchyImporter
         // abutment matcher pairs coincident positions — no double-connect.
         // Networks that connect nothing (0/1 pins) or form a junction
         // (>2 pins, noted as info) stay frozen paths on the group.
-        var waveguidePolygons = session.GetTopCellWaveguidePolygons();
-        var metalPolygons = session.GetTopCellMetalPolygons();
+        var waveguidePolygons = session.GetTopCellWaveguidePolygons()
+            .Concat(dissolvedWaveguidePolygons)
+            .ToList();
+        var metalPolygons = session.GetTopCellMetalPolygons()
+            .Concat(dissolvedMetalPolygons)
+            .ToList();
         if (session.LabelFallbackUsed && metalPolygons.Count > 0)
         {
             // The fallback firing means this file does not follow our export
@@ -333,7 +369,8 @@ public static class GdsHierarchyImporter
         var residualPolygons = session.GetTopCellResidualPolygons();
         GdsImportReporter.ReportTopLevelGeometry(
             session, topCellName, waveguideRoutes, metalRoutes,
-            frozenRoutePolygons.Count, residualPolygons.Count);
+            frozenRoutePolygons.Count, residualPolygons.Count,
+            dissolvedWaveguidePolygons.Count + dissolvedMetalPolygons.Count);
 
         var connections = waveguideRoutes.Pairs
             .Concat(metalRoutes.Pairs)

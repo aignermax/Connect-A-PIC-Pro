@@ -87,7 +87,11 @@ internal static class GdsImportReporter
     /// that is normal, fully-reconstructed behavior → reported as INFO. Background
     /// polygons dropped to satisfy the outline-point cap are already warned about
     /// (with their true count) where they are collected — nothing else is dropped,
-    /// so this reporter emits no warning of its own.
+    /// so this reporter emits no warning of its own. Polygons contributed by
+    /// dissolved route cells (<paramref name="dissolvedRoutePolygonCount"/>, see
+    /// <see cref="GdsRouteCellDissolver"/>) count toward the routing geometry the
+    /// report accounts for: they went through the same matcher as the top cell's
+    /// own polygons.
     /// </summary>
     public static void ReportTopLevelGeometry(
         GdsHierarchyImportSession session,
@@ -95,13 +99,15 @@ internal static class GdsImportReporter
         GdsRouteConnectivityResult waveguideRoutes,
         GdsRouteConnectivityResult metalRoutes,
         int frozenPolygonCount,
-        int backgroundPolygonCount)
+        int backgroundPolygonCount,
+        int dissolvedRoutePolygonCount)
     {
         // Counted in outline-polygon units (a path expands to one quad per
         // segment) — the same units the route matcher and the frozen-path
         // collector work in; counting path ELEMENTS instead would let a
         // multi-segment path drive the remainder negative.
-        int own = GdsPathOutliner.ExpandDrawnGeometry(session.Library.Cells[topCellName].Elements).Count();
+        int own = GdsPathOutliner.ExpandDrawnGeometry(session.Library.Cells[topCellName].Elements).Count()
+            + dissolvedRoutePolygonCount;
         if (own == 0)
             return;
 
@@ -135,8 +141,11 @@ internal static class GdsImportReporter
 
         if (restoredParts.Count > 0)
         {
+            string source = dissolvedRoutePolygonCount > 0
+                ? "of its own or from dissolved route cells"
+                : "of its own";
             session.Infos.Add(
-                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) of its own (routing " +
+                $"Top cell '{topCellName}' contains {own} polygon(s)/path(s) {source} (routing " +
                 $"geometry): {string.Join("; ", restoredParts)}.");
         }
     }
