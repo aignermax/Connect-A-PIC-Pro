@@ -332,4 +332,85 @@ public class GroupCollisionDetectorTests
         // Assert - Arc should collide with obstacle
         canPlace.ShouldBeFalse();
     }
+
+    #region Pre-drag overlap grandfathering
+
+    [Fact]
+    public void CanPlaceGroup_PreDragOverlapPartners_AreGrandfathered()
+    {
+        // Arrange - the moved group's child is stacked onto an external component
+        // (deliberate overlap, as an exact GDS import leaves it).
+        var group = CreateGroup("TestGroup", 0, 0);
+        var child = CreateComponent("child", 100, 100, 50, 50);
+        group.AddChild(child);
+        var stacked = CreateComponent("stacked", 120, 100, 50, 50); // overlaps child
+        var allComponents = new List<Component> { group, stacked };
+
+        // Strict check: re-dropping at the same spot collides (5 µm gap rule).
+        _detector.CanPlaceGroup(group, 0, 0, allComponents).ShouldBeFalse();
+
+        // Act - the pair already overlapped when the drag began.
+        var partners = new Dictionary<Component, HashSet<Component>>
+        {
+            [child] = new() { stacked },
+        };
+        bool canPlace = _detector.CanPlaceGroup(group, 0, 0, allComponents, preDragOverlapPartners: partners);
+
+        // Assert
+        canPlace.ShouldBeTrue("re-dropping onto the pre-drag overlap partner is grandfathered");
+    }
+
+    [Fact]
+    public void CanPlaceGroup_PreDragOverlapPartners_DoNotExcuseNewOverlaps()
+    {
+        // Arrange
+        var group = CreateGroup("TestGroup", 0, 0);
+        var child = CreateComponent("child", 100, 100, 50, 50);
+        group.AddChild(child);
+        var stacked = CreateComponent("stacked", 120, 100, 50, 50);
+        var other = CreateComponent("other", 400, 400, 50, 50);
+        var allComponents = new List<Component> { group, stacked, other };
+        var partners = new Dictionary<Component, HashSet<Component>>
+        {
+            [child] = new() { stacked },
+        };
+
+        // Act - moving the group so the child lands on 'other' (a NEW overlap)…
+        bool ontoOther = _detector.CanPlaceGroup(group, 300, 300, allComponents, preDragOverlapPartners: partners);
+        // …and moving it to genuinely free space.
+        bool ontoFree = _detector.CanPlaceGroup(group, -50, 300, allComponents, preDragOverlapPartners: partners);
+
+        // Assert
+        ontoOther.ShouldBeFalse("'other' never overlapped the child before the drag");
+        ontoFree.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void CanPlaceGroup_PreDragOverlapPartners_ApplyAcrossGroupChildren()
+    {
+        // Arrange - the moved group's child is stacked onto a child of ANOTHER group.
+        var movedGroup = CreateGroup("Moved", 0, 0);
+        var movedChild = CreateComponent("movedChild", 100, 100, 50, 50);
+        movedGroup.AddChild(movedChild);
+
+        var hostGroup = CreateGroup("Host", 0, 0);
+        var hostChild = CreateComponent("hostChild", 120, 100, 50, 50); // overlaps movedChild
+        hostGroup.AddChild(hostChild);
+
+        var allComponents = new List<Component> { movedGroup, hostGroup };
+
+        _detector.CanPlaceGroup(movedGroup, 0, 0, allComponents).ShouldBeFalse();
+
+        // Act
+        var partners = new Dictionary<Component, HashSet<Component>>
+        {
+            [movedChild] = new() { hostChild },
+        };
+        bool canPlace = _detector.CanPlaceGroup(movedGroup, 0, 0, allComponents, preDragOverlapPartners: partners);
+
+        // Assert
+        canPlace.ShouldBeTrue("the moved child may re-overlap the OTHER group's child it was stacked with");
+    }
+
+    #endregion
 }

@@ -31,13 +31,21 @@ public class GroupCollisionDetector
     /// <param name="newY">New Y position for the group.</param>
     /// <param name="allComponents">All components in the canvas (including the group being moved).</param>
     /// <param name="excludeFromCollision">Components to exclude from collision checks (e.g., the group itself and members of multi-selection).</param>
+    /// <param name="preDragOverlapPartners">
+    /// Optional grandfather map for re-dropping a dragged group onto deliberately
+    /// stacked placements (e.g. an exact GDS import): keyed by a moved leaf child,
+    /// the components it already overlapped — within the placement gap — when the
+    /// drag began. Those pairs are excluded from the rejection; overlaps with any
+    /// other component still reject.
+    /// </param>
     /// <returns>True if placement is valid (no collisions), false otherwise.</returns>
     public bool CanPlaceGroup(
         ComponentGroup group,
         double newX,
         double newY,
         IEnumerable<Component> allComponents,
-        HashSet<Component>? excludeFromCollision = null)
+        HashSet<Component>? excludeFromCollision = null,
+        IReadOnlyDictionary<Component, HashSet<Component>>? preDragOverlapPartners = null)
     {
         excludeFromCollision ??= new HashSet<Component>();
 
@@ -54,7 +62,7 @@ public class GroupCollisionDetector
             double childNewX = child.PhysicalX + deltaX;
             double childNewY = child.PhysicalY + deltaY;
 
-            if (!CanPlaceChildComponent(child, childNewX, childNewY, allComponents, groupMembers, excludeFromCollision))
+            if (!CanPlaceChildComponent(child, childNewX, childNewY, allComponents, groupMembers, excludeFromCollision, preDragOverlapPartners))
             {
                 return false; // Child component would collide
             }
@@ -82,7 +90,8 @@ public class GroupCollisionDetector
         double childNewY,
         IEnumerable<Component> allComponents,
         HashSet<Component> groupMembers,
-        HashSet<Component> excludeFromCollision)
+        HashSet<Component> excludeFromCollision,
+        IReadOnlyDictionary<Component, HashSet<Component>>? preDragOverlapPartners)
     {
         // If child is a nested ComponentGroup, recursively check its children
         if (child is ComponentGroup nestedGroup)
@@ -95,7 +104,7 @@ public class GroupCollisionDetector
                 double nestedChildNewX = nestedChild.PhysicalX + nestedDeltaX;
                 double nestedChildNewY = nestedChild.PhysicalY + nestedDeltaY;
 
-                if (!CanPlaceChildComponent(nestedChild, nestedChildNewX, nestedChildNewY, allComponents, groupMembers, excludeFromCollision))
+                if (!CanPlaceChildComponent(nestedChild, nestedChildNewX, nestedChildNewY, allComponents, groupMembers, excludeFromCollision, preDragOverlapPartners))
                 {
                     return false;
                 }
@@ -129,11 +138,14 @@ public class GroupCollisionDetector
             // Skip excluded components (e.g., other selected components in multi-select move)
             if (excludeFromCollision.Contains(existing)) continue;
 
+            // Skip grandfathered pairs (already overlapped when the drag began)
+            if (IsPreDragOverlapPartner(preDragOverlapPartners, child, existing)) continue;
+
             // Check collision based on existing component type
             if (existing is ComponentGroup otherGroup)
             {
                 // Check against other group's children (not bounding box!)
-                if (DoesCollideWithGroup(childBounds, otherGroup))
+                if (DoesCollideWithGroup(childBounds, otherGroup, child, preDragOverlapPartners))
                 {
                     return false; // Collision with another group's children
                 }
@@ -158,22 +170,43 @@ public class GroupCollisionDetector
     }
 
     /// <summary>
-    /// Checks if a rectangle collides with any child component of a group.
+    /// True when the pair (<paramref name="movedChild"/>, <paramref name="partner"/>)
+    /// is grandfathered: the two already overlapped (within the placement gap) when
+    /// the current drag began, so re-dropping onto that same overlap is allowed.
     /// </summary>
-    private bool DoesCollideWithGroup(Rect testRect, ComponentGroup group)
+    private static bool IsPreDragOverlapPartner(
+        IReadOnlyDictionary<Component, HashSet<Component>>? preDragOverlapPartners,
+        Component movedChild,
+        Component partner) =>
+        preDragOverlapPartners is not null
+        && preDragOverlapPartners.TryGetValue(movedChild, out var partners)
+        && partners.Contains(partner);
+
+    /// <summary>
+    /// Checks if a rectangle collides with any child component of a group.
+    /// Grandfathered pairs (<paramref name="movedChild"/> vs a child that already
+    /// overlapped it when the drag began) are skipped.
+    /// </summary>
+    private bool DoesCollideWithGroup(
+        Rect testRect,
+        ComponentGroup group,
+        Component movedChild,
+        IReadOnlyDictionary<Component, HashSet<Component>>? preDragOverlapPartners)
     {
         // Check each child component (recursively for nested groups)
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
             {
-                if (DoesCollideWithGroup(testRect, nestedGroup))
+                if (DoesCollideWithGroup(testRect, nestedGroup, movedChild, preDragOverlapPartners))
                 {
                     return true;
                 }
             }
             else
             {
+                if (IsPreDragOverlapPartner(preDragOverlapPartners, movedChild, child)) continue;
+
                 var childBounds = new Rect(
                     child.PhysicalX,
                     child.PhysicalY,

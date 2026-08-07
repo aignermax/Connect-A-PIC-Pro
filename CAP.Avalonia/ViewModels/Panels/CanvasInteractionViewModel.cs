@@ -372,9 +372,11 @@ public partial class CanvasInteractionViewModel : ObservableObject
         }
         else
         {
-            if (_connectionStartPin == pin || _connectionStartPin.ParentComponent == pin.ParentComponent)
+            if (_connectionStartPin == pin)
             {
-                UpdateStatus?.Invoke("Cannot connect pin to itself or same component");
+                // A different pin of the same component IS allowed (feedback
+                // loops, ring self-coupling, black-box GDS imports).
+                UpdateStatus?.Invoke("Cannot connect pin to itself");
             }
             else if (!PinKindHelper.AreKindsCompatible(_connectionStartPin, pin))
             {

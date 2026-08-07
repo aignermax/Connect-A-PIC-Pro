@@ -55,6 +55,10 @@ public static class ComponentGroupSerializer
             dto.ExternalPins.Add(ToGroupPinDto(pin));
         }
 
+        // Render-only background geometry (GDS-imported base plates, logos, …)
+        if (group.OutlinePolygons is { Count: > 0 })
+            dto.BackgroundPolygons = group.OutlinePolygons.ToList();
+
         return dto;
     }
 
@@ -113,7 +117,9 @@ public static class ComponentGroupSerializer
             Identifier = dto.Identifier,
             PhysicalX = dto.PhysicalX,
             PhysicalY = dto.PhysicalY,
-            Rotation90CounterClock = (DiscreteRotation)dto.Rotation90CounterClock
+            Rotation90CounterClock = (DiscreteRotation)dto.Rotation90CounterClock,
+            // Null in files that predate background geometry — stays null.
+            OutlinePolygons = dto.BackgroundPolygons
         };
 
         // Add child components - prefer Guid lookup, fall back to name lookup
@@ -182,19 +188,20 @@ public static class ComponentGroupSerializer
     }
 
     /// <summary>
-    /// Converts a FrozenWaveguidePath to a DTO.
+    /// Converts a FrozenWaveguidePath to a DTO. Pin-less paths (GDS-imported route
+    /// outlines) serialize with empty component/pin references.
     /// </summary>
     private static FrozenPathDto ToFrozenPathDto(FrozenWaveguidePath frozenPath)
     {
         var dto = new FrozenPathDto
         {
             PathId = frozenPath.PathId.ToString(),
-            StartComponentId = frozenPath.StartPin.ParentComponent.Identifier,
-            StartComponentGuid = frozenPath.StartPin.ParentComponent.Id.ToString(),
-            StartPinName = frozenPath.StartPin.Name,
-            EndComponentId = frozenPath.EndPin.ParentComponent.Identifier,
-            EndComponentGuid = frozenPath.EndPin.ParentComponent.Id.ToString(),
-            EndPinName = frozenPath.EndPin.Name,
+            StartComponentId = frozenPath.StartPin?.ParentComponent?.Identifier ?? "",
+            StartComponentGuid = frozenPath.StartPin?.ParentComponent?.Id.ToString(),
+            StartPinName = frozenPath.StartPin?.Name ?? "",
+            EndComponentId = frozenPath.EndPin?.ParentComponent?.Identifier ?? "",
+            EndComponentGuid = frozenPath.EndPin?.ParentComponent?.Id.ToString(),
+            EndPinName = frozenPath.EndPin?.Name ?? "",
             IsBlockedFallback = frozenPath.Path.IsBlockedFallback,
             IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry,
             IsPlaceholderGeometry = frozenPath.Path.IsPlaceholderGeometry,
@@ -226,28 +233,40 @@ public static class ComponentGroupSerializer
 
     /// <summary>
     /// Reconstructs a FrozenWaveguidePath from a DTO with dual-lookup support.
+    /// A DTO with ALL pin references empty is pin-less geometry (GDS-imported route
+    /// outline, see <see cref="FrozenPathDto.StartComponentId"/>) and is restored
+    /// without pins; a partially-referenced path still fails loudly like before.
     /// </summary>
     private static FrozenWaveguidePath FromFrozenPathDto(
         FrozenPathDto dto,
         Dictionary<Guid, Component>? guidLookup,
         Dictionary<string, Component>? nameLookup)
     {
-        var startComp = ResolveComponent(dto.StartComponentGuid, dto.StartComponentId, guidLookup, nameLookup);
-        var endComp = ResolveComponent(dto.EndComponentGuid, dto.EndComponentId, guidLookup, nameLookup);
-
-        var startPin = startComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.StartPinName);
-        var endPin = endComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.EndPinName);
-
-        if (startPin == null)
+        PhysicalPin? startPin = null;
+        PhysicalPin? endPin = null;
+        bool pinLess = string.IsNullOrEmpty(dto.StartComponentId) && dto.StartComponentGuid is null
+            && string.IsNullOrEmpty(dto.StartPinName)
+            && string.IsNullOrEmpty(dto.EndComponentId) && dto.EndComponentGuid is null
+            && string.IsNullOrEmpty(dto.EndPinName);
+        if (!pinLess)
         {
-            throw new InvalidOperationException(
-                $"Start pin '{dto.StartPinName}' not found on component '{dto.StartComponentId}'.");
-        }
+            var startComp = ResolveComponent(dto.StartComponentGuid, dto.StartComponentId, guidLookup, nameLookup);
+            var endComp = ResolveComponent(dto.EndComponentGuid, dto.EndComponentId, guidLookup, nameLookup);
 
-        if (endPin == null)
-        {
-            throw new InvalidOperationException(
-                $"End pin '{dto.EndPinName}' not found on component '{dto.EndComponentId}'.");
+            startPin = startComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.StartPinName);
+            endPin = endComp.PhysicalPins.FirstOrDefault(p => p.Name == dto.EndPinName);
+
+            if (startPin == null)
+            {
+                throw new InvalidOperationException(
+                    $"Start pin '{dto.StartPinName}' not found on component '{dto.StartComponentId}'.");
+            }
+
+            if (endPin == null)
+            {
+                throw new InvalidOperationException(
+                    $"End pin '{dto.EndPinName}' not found on component '{dto.EndComponentId}'.");
+            }
         }
 
         // Reconstruct path

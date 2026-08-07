@@ -415,12 +415,12 @@ public class GroupPowerFlowIntegrationTests
     {
         var fields = new Dictionary<Guid, Complex>();
 
-        if (path.StartPin.LogicalPin != null)
+        if (path.StartPin!.LogicalPin != null)
         {
             fields[path.StartPin.LogicalPin.IDOutFlow] = new Complex(1.0, 0);
         }
 
-        if (path.EndPin.LogicalPin != null)
+        if (path.EndPin!.LogicalPin != null)
         {
             fields[path.EndPin.LogicalPin.IDInFlow] = new Complex(0.9, 0);
         }

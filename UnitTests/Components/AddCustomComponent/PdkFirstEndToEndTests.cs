@@ -36,7 +36,7 @@ public class PdkFirstEndToEndTests : IDisposable
 
         var list = store.ListCustomPdks();
 
-        list.ShouldContain(i => i.Name == "My Lib" && i.Process.Name == "P");
+        list.ShouldContain(i => i.Name == "My Lib" && i.Process!.Name == "P");
     }
 
     [Fact]

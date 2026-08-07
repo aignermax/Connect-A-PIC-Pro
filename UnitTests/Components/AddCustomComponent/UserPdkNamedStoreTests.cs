@@ -38,7 +38,7 @@ public class UserPdkNamedStoreTests : IDisposable
         s.SaveToNamedPdk("Lib B", Proc("P2"), Comp("y"), "gdsfactory", null);
         var list = s.ListCustomPdks();
         list.Count.ShouldBe(2);
-        list.ShouldContain(i => i.Name == "Lib A" && i.Process.Name == "P1");
+        list.ShouldContain(i => i.Name == "Lib A" && i.Process!.Name == "P1");
     }
 
     [Fact]

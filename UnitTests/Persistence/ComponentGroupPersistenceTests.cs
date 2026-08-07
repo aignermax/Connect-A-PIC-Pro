@@ -218,6 +218,88 @@ public class ComponentGroupPersistenceTests
     }
 
     [Fact]
+    public void PinLessFrozenPath_RoundTripsWithEmptyPinReferences()
+    {
+        // A GDS-imported route outline has no endpoint pins: it serializes with
+        // empty component/pin references and must come back pin-less (not dropped,
+        // not resolved against a wrong component).
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var comp2 = CreateTestComponent("comp2", 100, 0);
+
+        var group = new ComponentGroup("ImportGroup");
+        group.AddChild(comp1);
+        group.AddChild(comp2);
+
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(10, 2, 20, 2, 0));
+        path.Segments.Add(new StraightSegment(20, 2, 20, 3, 90));
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            Path = path,
+            StartPin = null,
+            EndPin = null,
+        });
+
+        // Act: DTO shape, then the reconstruction from that DTO.
+        var dto = ComponentGroupSerializer.ToDto(group);
+        var pathDto = dto.InternalPaths.ShouldHaveSingleItem();
+        pathDto.StartComponentId.ShouldBeEmpty();
+        pathDto.StartComponentGuid.ShouldBeNull();
+        pathDto.StartPinName.ShouldBeEmpty();
+        pathDto.EndComponentId.ShouldBeEmpty();
+        pathDto.EndComponentGuid.ShouldBeNull();
+        pathDto.EndPinName.ShouldBeEmpty();
+        pathDto.Segments.Count.ShouldBe(2);
+
+        var componentLookup = new Dictionary<string, Component>
+        {
+            { "comp1", comp1 },
+            { "comp2", comp2 }
+        };
+        var reconstructed = ComponentGroupSerializer.FromDto(dto, componentLookup);
+
+        var frozenPath = reconstructed.InternalPaths.ShouldHaveSingleItem();
+        frozenPath.StartPin.ShouldBeNull();
+        frozenPath.EndPin.ShouldBeNull();
+        frozenPath.Path.Segments.Count.ShouldBe(2);
+        frozenPath.Path.Segments[0].StartPoint.ShouldBe((10.0, 2.0));
+        frozenPath.Path.Segments[0].EndPoint.ShouldBe((20.0, 2.0));
+        frozenPath.Path.Segments[1].StartPoint.ShouldBe((20.0, 2.0));
+        frozenPath.Path.Segments[1].EndPoint.ShouldBe((20.0, 3.0));
+    }
+
+    [Fact]
+    public void FromDto_PartiallyReferencedFrozenPath_StillFailsLoudly()
+    {
+        // Only an ALL-empty reference triple is pin-less geometry; a path that
+        // references a component but loses its pin is corrupt data and must keep
+        // failing loudly instead of silently degrading to pin-less.
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var componentLookup = new Dictionary<string, Component> { { "comp1", comp1 } };
+
+        var dto = new ComponentGroupDto
+        {
+            GroupName = "TestGroup",
+            Identifier = "group_test",
+            ChildComponentIds = new List<string> { "comp1" },
+            InternalPaths = new List<FrozenPathDto>
+            {
+                new FrozenPathDto
+                {
+                    PathId = Guid.NewGuid().ToString(),
+                    StartComponentId = "comp1",
+                    StartPinName = "missing_pin",
+                    EndComponentId = "comp1",
+                    EndPinName = "o1",
+                }
+            }
+        };
+
+        Should.Throw<InvalidOperationException>(() =>
+            ComponentGroupSerializer.FromDto(dto, componentLookup));
+    }
+
+    [Fact]
     public void FromDto_LegacyBlockedSingleStraightFrozenPath_MigratesToPlaceholderGeometry()
     {
         // A design file saved between the router's self-crossing degrade-to-blocked-fallback

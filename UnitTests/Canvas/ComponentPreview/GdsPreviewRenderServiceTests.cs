@@ -163,6 +163,77 @@ public sealed class GdsPreviewRenderServiceTests
         result.ShouldBeNull();
     }
 
+    // ── TryGetPreview — failure caching + render throttle ──────────────────
+
+    [Fact]
+    public async Task TryGetPreview_FailingRender_IsFetchedOnlyOncePerSession()
+    {
+        // A synthesized import function name ("nazca_<cell>") fails every render;
+        // the failure must be remembered so the Python subprocess is spawned at
+        // most once per key, not once per frame.
+        var mock = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        mock.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NazcaPreviewResult.Fail("unknown function"));
+        var svc = new GdsPreviewRenderService(mock.Object);
+        var comp = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_imported_cell");
+
+        svc.TryGetPreview(comp).ShouldBeNull();
+        await svc.WaitForPendingAsync();
+        svc.TryGetPreview(comp).ShouldBeNull();
+        svc.TryGetPreview(comp).ShouldBeNull();
+        await svc.WaitForPendingAsync();
+
+        mock.Verify(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TryGetPreview_FailureMarker_SurvivesLruEviction()
+    {
+        // A large import carries more unique failing keys than the LRU preview cache
+        // holds; the failure markers live outside the LRU so an evicted key must not
+        // re-spawn a render.
+        var mock = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        mock.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(NazcaPreviewResult.Fail("unknown function"));
+        var svc = new GdsPreviewRenderService(mock.Object);
+        var first = TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: "nazca_cell_first");
+
+        svc.TryGetPreview(first);
+        await svc.WaitForPendingAsync();
+        for (int i = 0; i < GdsPreviewCache.MaxEntries + 10; i++)
+            svc.TryGetPreview(TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: $"nazca_cell_{i}"));
+        await svc.WaitForPendingAsync();
+
+        svc.TryGetPreview(first).ShouldBeNull();
+        await svc.WaitForPendingAsync();
+        mock.Verify(s => s.RenderAsync(It.IsAny<string?>(), "nazca_cell_first", It.IsAny<string?>(), It.IsAny<CancellationToken>()), Times.Once);
+    }
+
+    [Fact]
+    public async Task TryGetPreview_ManyUniqueKeys_RendersAtMostThreeConcurrently()
+    {
+        var tracker = new object();
+        int active = 0, maxActive = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var mock = new Mock<NazcaComponentPreviewService>("py", "s.py", (TimeSpan?)null, (ProcessLaunchFactory?)null);
+        mock.Setup(s => s.RenderAsync(It.IsAny<string?>(), It.IsAny<string>(), It.IsAny<string?>(), It.IsAny<CancellationToken>()))
+            .Returns(async (string? _, string _, string? _, CancellationToken _) =>
+            {
+                lock (tracker) { active++; maxActive = Math.Max(maxActive, active); }
+                await release.Task;
+                lock (tracker) { active--; }
+                return NazcaPreviewResult.Fail("blocked");
+            });
+        var svc = new GdsPreviewRenderService(mock.Object);
+
+        for (int i = 0; i < 10; i++)
+            svc.TryGetPreview(TestComponentFactory.CreateComponentViewModel(nazcaFunctionName: $"nazca_gate_{i}"));
+        release.SetResult();
+        await svc.WaitForPendingAsync();
+
+        maxActive.ShouldBeLessThanOrEqualTo(3);
+    }
+
     // ── TryGetGeometry — key-based lookup with disk cache + render throttle ──
 
     private static NazcaPreviewResult Ok() => new()

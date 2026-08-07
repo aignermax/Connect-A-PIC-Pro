@@ -89,8 +89,8 @@ public class GroupTemplateSerializerTests
         result!.InternalPaths.Count.ShouldBe(1);
 
         var loadedPath = result.InternalPaths[0];
-        loadedPath.StartPin.Name.ShouldBe("b0");
-        loadedPath.EndPin.Name.ShouldBe("a0");
+        loadedPath.StartPin!.Name.ShouldBe("b0");
+        loadedPath.EndPin!.Name.ShouldBe("a0");
         loadedPath.StartPin.ParentComponent.ShouldBe(result.ChildComponents[0]);
         loadedPath.EndPin.ParentComponent.ShouldBe(result.ChildComponents[1]);
 
@@ -98,6 +98,39 @@ public class GroupTemplateSerializerTests
         var seg = loadedPath.Path.Segments[0].ShouldBeOfType<StraightSegment>();
         seg.StartPoint.X.ShouldBe(50, tolerance: 0.01);
         seg.EndPoint.X.ShouldBe(100, tolerance: 0.01);
+    }
+
+    [Fact]
+    public void SerializeAndDeserialize_WithPinLessFrozenPath_PreservesGeometryWithoutPins()
+    {
+        // A GDS-imported route outline (no endpoint pins) must survive a group
+        // template round-trip instead of being dropped as unresolvable.
+        var group = CreateGroupWithChildren(2);
+
+        var routedPath = new RoutedPath();
+        routedPath.Segments.Add(new StraightSegment(10, 2, 20, 2, 0));
+        routedPath.Segments.Add(new StraightSegment(20, 2, 20, 3, 90));
+
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            PathId = Guid.NewGuid(),
+            StartPin = null,
+            EndPin = null,
+            Path = routedPath
+        });
+
+        // Act
+        var json = GroupTemplateSerializer.Serialize(group);
+        var result = GroupTemplateSerializer.Deserialize(json);
+
+        // Assert
+        result.ShouldNotBeNull();
+        var loadedPath = result!.InternalPaths.ShouldHaveSingleItem();
+        loadedPath.StartPin.ShouldBeNull();
+        loadedPath.EndPin.ShouldBeNull();
+        loadedPath.Path.Segments.Count.ShouldBe(2);
+        loadedPath.Path.Segments[0].StartPoint.ShouldBe((10.0, 2.0));
+        loadedPath.Path.Segments[1].EndPoint.ShouldBe((20.0, 3.0));
     }
 
     [Fact]

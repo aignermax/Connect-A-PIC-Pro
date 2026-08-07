@@ -1,2 +1,5 @@
 # Normalize EOL for all files that Git considers text files.
 * text=auto eol=lf
+
+# GDSII layout files are binary — never EOL-convert (test assets in Tools/gds-test-data).
+*.gds binary

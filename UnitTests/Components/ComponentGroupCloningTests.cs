@@ -125,9 +125,9 @@ public class ComponentGroupCloningTests
             "Cloned path's RoutedPath should be a different instance");
 
         // Verify the cloned path references the cloned components
-        clonedPath.StartPin.ParentComponent.ShouldBe(cloned.ChildComponents[0],
+        clonedPath.StartPin!.ParentComponent.ShouldBe(cloned.ChildComponents[0],
             "Cloned path should reference cloned child components");
-        clonedPath.EndPin.ParentComponent.ShouldBe(cloned.ChildComponents[1],
+        clonedPath.EndPin!.ParentComponent.ShouldBe(cloned.ChildComponents[1],
             "Cloned path should reference cloned child components");
     }
 
