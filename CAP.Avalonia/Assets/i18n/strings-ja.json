@@ -97,6 +97,7 @@
   "AnalysisDock.ResizeTip": "ドラッグして解析ドックのサイズを変更",
   "AnalysisDock.TabEyeBer": "アイ / BER",
   "AnalysisDock.TabMonteCarlo": "モンテカルロ",
+  "AnalysisDock.TabOptimization": "最適化",
   "AnalysisDock.TabSpectrum": "スペクトル",
   "AnalysisDock.TabTransient": "過渡解析",
   "AnalysisDock.Title": "解析",

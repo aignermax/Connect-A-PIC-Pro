@@ -97,6 +97,7 @@
   "AnalysisDock.ResizeTip": "Arrastra para cambiar el tamaño del panel de análisis",
   "AnalysisDock.TabEyeBer": "Ojo / BER",
   "AnalysisDock.TabMonteCarlo": "Monte Carlo",
+  "AnalysisDock.TabOptimization": "Optimización",
   "AnalysisDock.TabSpectrum": "Espectro",
   "AnalysisDock.TabTransient": "Transitorio",
   "AnalysisDock.Title": "Análisis",

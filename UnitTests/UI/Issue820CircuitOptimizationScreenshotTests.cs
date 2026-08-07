@@ -34,7 +34,7 @@ public class Issue820CircuitOptimizationScreenshotTests
         Directory.CreateDirectory(outputDir);
 
         var vm = MainViewModelTestHelper.CreateMainViewModel();
-        var optimization = vm.RightPanel.Optimization;
+        var optimization = vm.BottomPanel.Analysis.Optimization;
         SeedReadyState(optimization);
         Capture(vm, outputDir, "01-panel-ready.png");
 

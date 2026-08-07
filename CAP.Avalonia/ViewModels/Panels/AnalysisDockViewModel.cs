@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.CircuitOptimization;
 using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -23,6 +24,13 @@ public partial class AnalysisDockViewModel : ObservableObject
 
     /// <summary>Monte-Carlo fabrication-variance tab.</summary>
     public MonteCarloViewModel MonteCarlo { get; }
+
+    /// <summary>
+    /// Circuit-optimization tab: end-of-design tuning pass over all slider
+    /// parameters — a whole-circuit workflow like the sibling analysis tabs,
+    /// deliberately NOT a per-component properties section.
+    /// </summary>
+    public CircuitOptimizationViewModel Optimization { get; }
 
     /// <summary>Shared analysis-output header (#754): shows/picks/clears THE output coupler.</summary>
     public AnalysisOutputPanelViewModel Output { get; }
@@ -57,13 +65,14 @@ public partial class AnalysisDockViewModel : ObservableObject
     public AnalysisDockViewModel(
         TimeDomainViewModel transient, EyeDiagramViewModel eye,
         WavelengthSpectrumViewModel spectrum, AnalysisOutputPanelViewModel output,
-        MonteCarloViewModel monteCarlo)
+        MonteCarloViewModel monteCarlo, CircuitOptimizationViewModel optimization)
     {
         Transient = transient;
         Eye = eye;
         Spectrum = spectrum;
         Output = output;
         MonteCarlo = monteCarlo;
+        Optimization = optimization;
     }
 
     /// <summary>Wires all tabs and the shared output header to the active design canvas.</summary>
@@ -74,6 +83,7 @@ public partial class AnalysisDockViewModel : ObservableObject
         Spectrum.Configure(canvas);
         Output.Configure(canvas);
         MonteCarlo.Configure(canvas);
+        Optimization.ConfigureForCanvas(canvas);
     }
 
     /// <summary>Opens the dock on the Transient tab (called when Run is invoked in Transient mode).</summary>

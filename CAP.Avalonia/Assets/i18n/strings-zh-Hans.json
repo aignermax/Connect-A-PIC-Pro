@@ -97,6 +97,7 @@
   "AnalysisDock.ResizeTip": "拖动以调整分析停靠面板的大小",
   "AnalysisDock.TabEyeBer": "眼图 / BER",
   "AnalysisDock.TabMonteCarlo": "蒙特卡罗",
+  "AnalysisDock.TabOptimization": "优化",
   "AnalysisDock.TabSpectrum": "光谱",
   "AnalysisDock.TabTransient": "瞬态",
   "AnalysisDock.Title": "分析",

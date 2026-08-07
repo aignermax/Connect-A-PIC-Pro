@@ -171,7 +171,6 @@ public static class MainViewModelTestHelper
             canvas,
             preferencesService,
             new ParameterSweepViewModel(),
-            new CAP.Avalonia.ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel(new CommandManager()),
             new RoutingDiagnosticsViewModel(),
             new DesignValidationViewModel(),
             new ComponentDimensionDiagnosticsViewModel(canvas),
@@ -219,6 +218,7 @@ public static class MainViewModelTestHelper
                 new EyeDiagramViewModel(),
                 new WavelengthSpectrumViewModel(),
                 new AnalysisOutputPanelViewModel(),
-                new MonteCarloViewModel()));
+                new MonteCarloViewModel(),
+                new CAP.Avalonia.ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel(new CommandManager())));
     }
 }

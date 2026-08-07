@@ -97,6 +97,7 @@
   "AnalysisDock.ResizeTip": "Drag to resize the analysis dock",
   "AnalysisDock.TabEyeBer": "Eye / BER",
   "AnalysisDock.TabMonteCarlo": "Monte Carlo",
+  "AnalysisDock.TabOptimization": "Optimization",
   "AnalysisDock.TabSpectrum": "Spectrum",
   "AnalysisDock.TabTransient": "Transient",
   "AnalysisDock.Title": "Analysis",
