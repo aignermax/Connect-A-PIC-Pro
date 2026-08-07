@@ -24,7 +24,22 @@ public static class ProcessFingerprintFactory
             CoreThicknessNm: process?.CoreThicknessNm,
             Cladding: cladding,
             DesignWavelengthNm: draft.DefaultWavelengthNm,
-            ProcessName: string.IsNullOrWhiteSpace(process?.Name) ? null : process!.Name);
+            ProcessName: string.IsNullOrWhiteSpace(process?.Name) ? null : process!.Name,
+            Tolerances: TolerancesFrom(process));
+    }
+
+    /// <summary>
+    /// Maps the PDK's declared fabrication tolerances. A missing axis falls
+    /// back to the typical MPW default; a PDK that declares neither axis yields null so
+    /// callers can distinguish "declared" from "defaulted".
+    /// </summary>
+    private static ProcessTolerances? TolerancesFrom(ProcessDefinition? process)
+    {
+        if (process?.WidthToleranceNm == null && process?.ThicknessToleranceNm == null)
+            return null;
+        return new ProcessTolerances(
+            process!.WidthToleranceNm ?? ProcessTolerances.DefaultWidthSigmaNm,
+            process.ThicknessToleranceNm ?? ProcessTolerances.DefaultThicknessSigmaNm);
     }
 
     private static string? MaterialByRole(ProcessDefinition? process, string role) =>

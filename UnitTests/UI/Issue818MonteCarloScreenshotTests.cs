@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.Views.Panels;
 using CAP_Core.Analysis.MonteCarloAnalysis;
@@ -27,6 +28,7 @@ public class Issue818MonteCarloScreenshotTests
 {
     private const int WindowWidth = 1000;
     private const int WindowHeight = 620;
+    private const int MonteCarloTabIndex = 3;
     private const int CaptureAttempts = 3;
     private const int RunCount = 200;
     private const int StartNm = 1500;
@@ -47,7 +49,7 @@ public class Issue818MonteCarloScreenshotTests
 
         var vm = MainViewModelTestHelper.CreateMainViewModel();
         vm.BottomPanel.Analysis.IsVisible = true;
-        vm.BottomPanel.Analysis.SelectedTabIndex = 2;
+        vm.BottomPanel.Analysis.SelectedTabIndex = MonteCarloTabIndex;
         vm.BottomPanel.Analysis.SetDockHeight(420);
         var mc = vm.BottomPanel.Analysis.MonteCarlo;
 
@@ -55,6 +57,11 @@ public class Issue818MonteCarloScreenshotTests
         var window = new Window { Width = WindowWidth, Height = WindowHeight, Content = dock };
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // Guard against tab reordering silently producing screenshots of the wrong panel.
+        dock.GetVisualDescendants().OfType<MonteCarloPanel>()
+            .Any(p => p.IsEffectivelyVisible)
+            .ShouldBeTrue("The Monte Carlo panel is not the visible analysis tab — update MonteCarloTabIndex.");
 
         try
         {
@@ -66,7 +73,8 @@ public class Issue818MonteCarloScreenshotTests
             var spectrumResult = BuildSyntheticSpectrumResult(out var wavelengths);
             mc.PlotModel = MonteCarloPlotBuilder.BuildEnvelopePlot(wavelengths, spectrumResult, "GC out.o1");
             mc.SummaryText = string.Join(Environment.NewLine,
-                "Jittered parameters:  6",
+                "Varied components:    6",
+                "Wafer sigma:          Δw 10.0 nm / Δt 5.0 nm",
                 "Nominal worst IL:     -5.02 dB",
                 "Monte-Carlo worst IL: -6.31 dB");
             mc.StatusText = $"Monte Carlo complete: {RunCount} runs";
@@ -79,7 +87,8 @@ public class Issue818MonteCarloScreenshotTests
             var (histogram, nominalEye) = BuildSyntheticEyeDistribution();
             mc.PlotModel = MonteCarloPlotBuilder.BuildHistogramPlot(histogram, nominalEye);
             mc.SummaryText = string.Join(Environment.NewLine,
-                "Jittered parameters: 6",
+                "Varied components:   6",
+                "Wafer sigma:         Δw 10.0 nm / Δt 5.0 nm",
                 "Nominal eye height:  8.120E-004",
                 "p5 / p50 / p95:      6.905E-004 / 8.101E-004 / 9.288E-004",
                 "Open-eye yield:      100.0 %");
@@ -139,7 +148,7 @@ public class Issue818MonteCarloScreenshotTests
     {
         const string manifest = """
         [
-          {"file": "01-monte-carlo-tab.png", "caption": "New Monte Carlo tab in the analysis dock: metric, runs, sigma, seed and the wavelength range shown for the spectrum-envelope metric."},
+          {"file": "01-monte-carlo-tab.png", "caption": "Monte Carlo tab in the analysis dock: metric, runs, width/thickness sigma (nm, from the process tolerances), seed and the wavelength range shown for the spectrum-envelope metric."},
           {"file": "02-spectrum-envelope.png", "caption": "Finished spectrum run: nominal curve with the p5-p95 fabrication band and dashed min/max extremes (no 1000-curve overplot) plus the numeric spread summary."},
           {"file": "03-eye-openness-histogram.png", "caption": "Eye-openness metric: distribution histogram with the nominal eye height marked; the wavelength inputs disappear because they only apply to the spectrum metric."}
         ]

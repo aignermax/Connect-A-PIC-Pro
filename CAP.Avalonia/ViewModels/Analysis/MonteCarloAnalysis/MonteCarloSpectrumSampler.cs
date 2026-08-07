@@ -11,8 +11,8 @@ namespace CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 
 /// <summary>
 /// Per-run metric source for the spectrum-envelope Monte-Carlo mode: each call
-/// sweeps the wavelength range with the sliders in their CURRENT (jittered)
-/// state and returns the insertion-loss curve at the design's output pin.
+/// sweeps the wavelength range under the CURRENTLY active fabrication-variance
+/// sample and returns the insertion-loss curve at the design's output pin.
 /// The output pin is chosen once, on the first (nominal) run, and kept stable
 /// across all jittered runs so the curves are comparable.
 /// </summary>
@@ -53,8 +53,15 @@ internal sealed class MonteCarloSpectrumSampler
     /// Builds the simulation circuit for the given canvas. Returns an error
     /// message instead of a sampler when the design has no light source.
     /// </summary>
+    /// <param name="canvas">Canvas providing components and connections.</param>
+    /// <param name="config">Sweep range and step count.</param>
+    /// <param name="decorateBuilder">
+    /// Optional system-matrix decorator; the Monte-Carlo run passes the fabrication
+    /// perturbation here so each sweep sees the current variance sample.
+    /// </param>
     public static (MonteCarloSpectrumSampler? Sampler, string? Error) Create(
-        DesignCanvasViewModel canvas, WavelengthSweepConfiguration config)
+        DesignCanvasViewModel canvas, WavelengthSweepConfiguration config,
+        Func<ISystemMatrixBuilder, ISystemMatrixBuilder>? decorateBuilder = null)
     {
         var tileManager = new ComponentListTileManager();
         foreach (var compVm in canvas.Components)
@@ -67,13 +74,16 @@ internal sealed class MonteCarloSpectrumSampler
 
         var gridManager = GridManager.CreateForSimulation(
             tileManager, canvas.ConnectionManager, portManager);
-        var sweeper = new WavelengthSweeper(new SystemMatrixBuilder(gridManager), portManager);
+        ISystemMatrixBuilder builder = new SystemMatrixBuilder(gridManager);
+        if (decorateBuilder != null)
+            builder = decorateBuilder(builder);
+        var sweeper = new WavelengthSweeper(builder, portManager);
         var outputPins = TransientCircuitFactory.CollectOutputCouplerPinIds(canvas);
 
         return (new MonteCarloSpectrumSampler(sweeper, gridManager, config, outputPins, pinNames), null);
     }
 
-    /// <summary>Runs one wavelength sweep in the sliders' current state and returns the IL curve (dB).</summary>
+    /// <summary>Runs one wavelength sweep under the current variance sample and returns the IL curve (dB).</summary>
     public async Task<double[]> SampleAsync(CancellationToken cancellationToken)
     {
         var result = await _sweeper.RunSweepAsync(_config, _gridManager, cancellationToken);

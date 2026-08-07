@@ -9,12 +9,14 @@ namespace CAP_Core.Components.Process;
 /// <param name="Cladding">Cladding material name (e.g. "SiO2"); null if unspecified.</param>
 /// <param name="DesignWavelengthNm">Representative design wavelength in nm.</param>
 /// <param name="ProcessName">Human-readable process label for display; not used for matching.</param>
+/// <param name="Tolerances">Fabrication tolerances declared by the PDK; null when unspecified. Not used for matching.</param>
 public sealed record ProcessFingerprint(
     string? CoreMaterial,
     double? CoreThicknessNm,
     string? Cladding,
     int DesignWavelengthNm,
-    string? ProcessName)
+    string? ProcessName,
+    ProcessTolerances? Tolerances = null)
 {
     /// <summary>Fallback design wavelength (C-band) for PDKs that don't declare one.</summary>
     public const int DefaultDesignWavelengthNm = 1550;

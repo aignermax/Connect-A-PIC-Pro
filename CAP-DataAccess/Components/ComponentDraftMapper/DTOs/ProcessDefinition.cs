@@ -32,6 +32,20 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("coreThicknessNm")]
         public double? CoreThicknessNm { get; set; }
 
+        /// <summary>
+        /// 1-sigma fabrication deviation of the waveguide core width in nm.
+        /// Nullable so PDKs written before this field existed round-trip byte-identically.
+        /// </summary>
+        [JsonPropertyName("widthToleranceNm")]
+        public double? WidthToleranceNm { get; set; }
+
+        /// <summary>
+        /// 1-sigma fabrication deviation of the core layer thickness in nm.
+        /// Nullable so PDKs written before this field existed round-trip byte-identically.
+        /// </summary>
+        [JsonPropertyName("thicknessToleranceNm")]
+        public double? ThicknessToleranceNm { get; set; }
+
         /// <summary>GDS layer stack.</summary>
         [JsonPropertyName("layers")]
         public List<ProcessLayer> Layers { get; set; } = new();

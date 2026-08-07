@@ -1,5 +1,5 @@
 [
-  {"file": "01-monte-carlo-tab.png", "caption": "New Monte Carlo tab in the analysis dock: metric, runs, sigma, seed and the wavelength range shown for the spectrum-envelope metric."},
+  {"file": "01-monte-carlo-tab.png", "caption": "Monte Carlo tab in the analysis dock: metric, runs, width/thickness sigma (nm, from the process tolerances), seed and the wavelength range shown for the spectrum-envelope metric."},
   {"file": "02-spectrum-envelope.png", "caption": "Finished spectrum run: nominal curve with the p5-p95 fabrication band and dashed min/max extremes (no 1000-curve overplot) plus the numeric spread summary."},
   {"file": "03-eye-openness-histogram.png", "caption": "Eye-openness metric: distribution histogram with the nominal eye height marked; the wavelength inputs disappear because they only apply to the spectrum metric."}
 ]
