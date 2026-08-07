@@ -82,7 +82,8 @@ internal sealed class MonteCarloEyeSampler
             signals, timeDef,
             TimeDomainSimulator.DefaultCenterWavelengthNm,
             TimeDomainSimulator.DefaultSpanNm,
-            TimeDomainSimulator.DefaultNPoints);
+            TimeDomainSimulator.DefaultNPoints,
+            TransientCircuitFactory.BuildPhaseNoiseSettings(_canvas));
 
         var selection = EyeTraceSelector.Select(
             result, outputPinIds, _designatedPinIds,

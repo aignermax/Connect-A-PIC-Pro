@@ -1,4 +1,5 @@
 using System.Numerics;
+using CAP_Core.LightCalculation.TimeDomainSimulation.PhaseNoise;
 
 namespace CAP_Core.LightCalculation.TimeDomainSimulation;
 
@@ -54,6 +55,13 @@ public class TimeDomainSimulator : ILightCalculator
     /// <param name="centerWavelengthNm">Centre wavelength for the IFFT sweep (nm).</param>
     /// <param name="spanNm">Wavelength span for the IFFT sweep (nm).</param>
     /// <param name="nFreqPoints">Number of frequency sweep points.</param>
+    /// <param name="phaseNoise">
+    /// Optional laser phase-noise model (issue #834). When any source has a finite
+    /// linewidth, each input is modulated by its Wiener phase factor e^{iφ(t)} and
+    /// contributions per output pin are summed as complex FIELDS (coherent), so
+    /// interferometric dephasing and multi-laser beat noise emerge naturally.
+    /// Null (or all-zero linewidths) preserves today's behaviour exactly.
+    /// </param>
     /// <returns>
     /// A <see cref="TimeDomainResult"/> with per-output-pin intensity traces.
     /// Only output pins that receive signal from at least one active input are included.
@@ -63,7 +71,8 @@ public class TimeDomainSimulator : ILightCalculator
         TimeSignalDefinition timeDef,
         double centerWavelengthNm = DefaultCenterWavelengthNm,
         double spanNm = DefaultSpanNm,
-        int nFreqPoints = DefaultNPoints)
+        int nFreqPoints = DefaultNPoints,
+        PhaseNoiseSettings? phaseNoise = null)
     {
         if (inputSignals == null) throw new ArgumentNullException(nameof(inputSignals));
         if (timeDef == null) throw new ArgumentNullException(nameof(timeDef));
@@ -74,17 +83,26 @@ public class TimeDomainSimulator : ILightCalculator
         var impulseResponses = _irBuilder.Build(
             centerWavelengthNm, spanNm, nFreqPoints, inputSignals.Keys, _circuitContext);
 
-        var outputPinIds = impulseResponses
-            .Select(ir => ir.OutputPinId)
-            .Distinct()
-            .ToList();
+        var outputTraces = phaseNoise?.HasAnyNoise == true
+            ? ConvolveCoherent(impulseResponses, inputSignals, timeDef, phaseNoise)
+            : ConvolveIncoherent(impulseResponses, inputSignals, timeDef);
 
+        return new TimeDomainResult(timeDef.TimeAxis, outputTraces);
+    }
+
+    /// <summary>
+    /// Legacy path (no phase noise): per output pin, sums the intensities of each
+    /// input's convolved contribution.
+    /// </summary>
+    private static Dictionary<Guid, double[]> ConvolveIncoherent(
+        IReadOnlyList<ImpulseResponse> impulseResponses,
+        Dictionary<Guid, double[]> inputSignals,
+        TimeSignalDefinition timeDef)
+    {
         var outputTraces = new Dictionary<Guid, double[]>();
-
-        foreach (var outputPin in outputPinIds)
+        foreach (var outputPin in impulseResponses.Select(ir => ir.OutputPinId).Distinct())
         {
             double[]? combinedIntensity = null;
-
             foreach (var ir in impulseResponses.Where(r => r.OutputPinId == outputPin))
             {
                 if (!inputSignals.TryGetValue(ir.InputPinId, out var inputSignal))
@@ -98,12 +116,65 @@ public class TimeDomainSimulator : ILightCalculator
                     ? trimmed
                     : SumArrays(combinedIntensity, trimmed);
             }
-
             if (combinedIntensity != null)
                 outputTraces[outputPin] = combinedIntensity;
         }
+        return outputTraces;
+    }
 
-        return new TimeDomainResult(timeDef.TimeAxis, outputTraces);
+    /// <summary>
+    /// Phase-noise path (issue #834): inputs carry their Wiener phase factor and are
+    /// summed per output pin as complex fields before taking |y(t)|², so the beat of
+    /// independent lasers and delay-induced dephasing appear in the intensity trace.
+    /// </summary>
+    private static Dictionary<Guid, double[]> ConvolveCoherent(
+        IReadOnlyList<ImpulseResponse> impulseResponses,
+        Dictionary<Guid, double[]> inputSignals,
+        TimeSignalDefinition timeDef,
+        PhaseNoiseSettings phaseNoise)
+    {
+        var noisyInputs = BuildNoisyInputs(inputSignals, timeDef, phaseNoise);
+        var outputTraces = new Dictionary<Guid, double[]>();
+        foreach (var outputPin in impulseResponses.Select(ir => ir.OutputPinId).Distinct())
+        {
+            Complex[]? combinedField = null;
+            foreach (var ir in impulseResponses.Where(r => r.OutputPinId == outputPin))
+            {
+                if (!noisyInputs.TryGetValue(ir.InputPinId, out var inputField))
+                    continue;
+
+                var field = TimeDomainConvolver.Convolve(inputField, ir.Samples);
+                combinedField = combinedField == null
+                    ? TrimToLength(field, timeDef.NSamples)
+                    : SumFields(combinedField, field, timeDef.NSamples);
+            }
+            if (combinedField != null)
+                outputTraces[outputPin] = combinedField
+                    .Select(c => c.Real * c.Real + c.Imaginary * c.Imaginary)
+                    .ToArray();
+        }
+        return outputTraces;
+    }
+
+    /// <summary>Multiplies each real input envelope by its source's unit phase factor e^{iφ(t)}.</summary>
+    private static Dictionary<Guid, Complex[]> BuildNoisyInputs(
+        Dictionary<Guid, double[]> inputSignals,
+        TimeSignalDefinition timeDef,
+        PhaseNoiseSettings phaseNoise)
+    {
+        var phaseFactors = phaseNoise.BuildPhaseFactors(timeDef.TimeStepSeconds, timeDef.NSamples);
+        var noisyInputs = new Dictionary<Guid, Complex[]>();
+        foreach (var (pinId, signal) in inputSignals)
+        {
+            var field = new Complex[signal.Length];
+            var factors = phaseFactors.TryGetValue(pinId, out var f) ? f : null;
+            for (int n = 0; n < signal.Length; n++)
+                field[n] = factors != null && n < factors.Length
+                    ? signal[n] * factors[n]
+                    : new Complex(signal[n], 0);
+            noisyInputs[pinId] = field;
+        }
+        return noisyInputs;
     }
 
     /// <summary>
@@ -122,6 +193,23 @@ public class TimeDomainSimulator : ILightCalculator
         var result = new double[length];
         Array.Copy(source, result, Math.Min(length, source.Length));
         return result;
+    }
+
+    /// <summary>Trims or zero-pads a complex field to exactly <paramref name="length"/> samples.</summary>
+    private static Complex[] TrimToLength(Complex[] source, int length)
+    {
+        if (source.Length == length) return source;
+        var result = new Complex[length];
+        Array.Copy(source, result, Math.Min(length, source.Length));
+        return result;
+    }
+
+    /// <summary>Adds field <paramref name="b"/> onto <paramref name="a"/>, trimmed to <paramref name="length"/>.</summary>
+    private static Complex[] SumFields(Complex[] a, Complex[] b, int length)
+    {
+        for (int i = 0; i < length && i < b.Length; i++)
+            a[i] += b[i];
+        return a;
     }
 
     private static double[] SumArrays(double[] a, double[] b)

@@ -245,7 +245,10 @@ public partial class EyeDiagramViewModel : ObservableObject
                 ? "No laser is switched on — turn the laser on at your input coupler."
                 : "No light source found — place an input coupler (e.g. a grating/edge coupler).");
 
-        var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
+        // Laser phase noise (#834): interferometric noise from finite linewidth
+        // flows into the eye/BER metrics automatically.
+        var phaseNoise = TransientCircuitFactory.BuildPhaseNoiseSettings(_canvas!);
+        var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints, phaseNoise);
         if (result.PinTraces.Count == 0)
             return new EyeRunOutcome(null, null,
                 "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
