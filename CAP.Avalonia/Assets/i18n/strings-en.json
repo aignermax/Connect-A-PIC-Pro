@@ -394,6 +394,7 @@
   "GdsImport.ModeBlackBox": "Import as single black-box component",
   "GdsImport.ModeExplode": "Explode hierarchy into components (recommended)",
   "GdsImport.ModeLabel": "Hierarchy mode:",
+  "GdsImport.MetalLayersLabel": "Metal layers (electrical)",
   "GdsImport.OpenFileTitle": "Import GDS layout",
   "GdsImport.OpenTip": "Import a GDS layout as canvas components…",
   "GdsImport.PlacedNextToExistingContentFormat": "Canvas already had content — the import was placed next to it (shifted +{0:0.#} µm to the right).",

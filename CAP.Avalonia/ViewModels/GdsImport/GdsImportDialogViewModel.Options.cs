@@ -30,14 +30,26 @@ public partial class GdsImportDialogViewModel
                 LocalizationService.Instance.Translate("GdsImport.ErrorLayerSyntax"), WaveguideLayersText);
             return false;
         }
+        var metalLayers = ParseLayerPairs(MetalLayersText);
+        if (metalLayers is null)
+        {
+            error = string.Format(
+                LocalizationService.Instance.Translate("GdsImport.ErrorLayerSyntax"), MetalLayersText);
+            return false;
+        }
 
         options = options with
         {
             Mode = IsExplodeMode ? GdsHierarchyImportMode.ExplodeHierarchy : GdsHierarchyImportMode.BlackBox,
+            // One field drives both metal roles: route reconstruction and the
+            // electrical pin-kind inference — split semantics would only invite
+            // half-corrected foundry imports.
+            MetalRouteLayers = metalLayers,
             PinDetection = new GdsPinDetectionOptions
             {
                 PortLayers = portLayers,
                 WaveguideLayers = waveguideLayers,
+                ElectricalLayers = metalLayers,
             },
         };
         return true;

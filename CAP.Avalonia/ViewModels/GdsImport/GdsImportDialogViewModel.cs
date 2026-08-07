@@ -88,6 +88,17 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private string _waveguideLayersText = "1,0";
 
     /// <summary>
+    /// METAL layers as "layer,datatype" pairs, ';'-separated. Polygons on these
+    /// layers count as electrical: top-cell routes on them reconstruct as metal
+    /// connections, and label pins touching them classify electrical. Defaults
+    /// to our own exporter's trace/bridge layers plus SiEPIC's pad opening —
+    /// foundry files that assign these numbers differently import their optical
+    /// routing as electrical until corrected here.
+    /// </summary>
+    [ObservableProperty]
+    private string _metalLayersText = "11,0; 12,0; 13,0";
+
+    /// <summary>
     /// Recreate the detected connections with Lunima's own routing (default: on).
     /// The flag flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>: the
     /// route-derived connections become real router-generated waveguides/metal

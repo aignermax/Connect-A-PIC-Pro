@@ -290,6 +290,20 @@ public static class GdsHierarchyImporter
         // (>2 pins, noted as info) stay frozen paths on the group.
         var waveguidePolygons = session.GetTopCellWaveguidePolygons();
         var metalPolygons = session.GetTopCellMetalPolygons();
+        if (session.LabelFallbackUsed && metalPolygons.Count > 0)
+        {
+            // The fallback firing means this file does not follow our export
+            // conventions — then our metal layer NUMBERS are guesses too, and a
+            // foundry that assigns them differently gets every optical route
+            // reconstructed as electrical (straight metal traces, no bends).
+            var metalLayerList = string.Join(", ",
+                session.Options.MetalRouteLayers.Select(l => $"({l.Layer},{l.Datatype})"));
+            session.Warnings.Add(
+                $"Metal-layer defaults {metalLayerList} matched {metalPolygons.Count} top-cell " +
+                "polygon(s) in a file whose pin labels needed auto-discovery — if this foundry " +
+                "assigns those layers differently, connections import as electrical: correct the " +
+                "metal layers in the import dialog.");
+        }
         var waveguideRoutes = GdsRouteConnectivityMatcher.Match(
             waveguidePolygons, pinsPerInstance, topPorts,
             session.Options.PinTouchToleranceUm, session.Options.PolygonChainToleranceUm, session.Infos);

@@ -301,6 +301,21 @@ public class GdsImportDialogViewModelTests : IDisposable
         pairs[1].ShouldBe((501, 1));
     }
 
+    [Fact]
+    public void MetalLayersText_Default_CoversExporterAndSiepicPadLayers()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+
+        // Our exporter's trace/bridge layers plus SiEPIC's pad opening — the dialog
+        // default mirrors the detector defaults so an unchanged dialog changes nothing.
+        var pairs = GdsImportDialogViewModel.ParseLayerPairs(vm.MetalLayersText)
+            .ShouldNotBeNull("the default text must stay valid layer syntax");
+        pairs.Count.ShouldBe(3);
+        pairs[0].ShouldBe((11, 0));
+        pairs[1].ShouldBe((12, 0));
+        pairs[2].ShouldBe((13, 0));
+    }
+
     // ── End-to-end: analyze → import → place on canvas ───────────────────────
 
     [Fact]

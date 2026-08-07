@@ -394,6 +394,7 @@
   "GdsImport.ModeBlackBox": "Als einzelne Black-Box-Komponente importieren",
   "GdsImport.ModeExplode": "Hierarchie in Komponenten auflösen (empfohlen)",
   "GdsImport.ModeLabel": "Hierarchiemodus:",
+  "GdsImport.MetalLayersLabel": "Metall-Layer (elektrisch)",
   "GdsImport.OpenFileTitle": "GDS-Layout importieren",
   "GdsImport.OpenTip": "GDS-Layout als Canvas-Komponenten importieren…",
   "GdsImport.PlacedNextToExistingContentFormat": "Die Zeichenfläche enthielt bereits Inhalte — der Import wurde daneben platziert (+{0:0.#} µm nach rechts verschoben).",
