@@ -41,9 +41,11 @@ public partial class GdsImportDialogViewModel
         options = options with
         {
             Mode = IsExplodeMode ? GdsHierarchyImportMode.ExplodeHierarchy : GdsHierarchyImportMode.BlackBox,
-            // One field drives both metal roles: route reconstruction and the
-            // electrical pin-kind inference — split semantics would only invite
-            // half-corrected foundry imports.
+            // Each layer field drives BOTH of its roles — pin detection and route
+            // reconstruction. Split semantics would invite half-corrected foundry
+            // imports: metal cleared but the optical routes still invisible to the
+            // route matcher (field finding).
+            RouteLayers = waveguideLayers,
             MetalRouteLayers = metalLayers,
             PinDetection = new GdsPinDetectionOptions
             {

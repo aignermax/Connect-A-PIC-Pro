@@ -83,9 +83,16 @@ public partial class GdsImportDialogViewModel : ObservableObject
     [ObservableProperty]
     private string _portLayersText = "1,10;501,1";
 
-    /// <summary>Waveguide-core layers as "layer,datatype" pairs, ';'-separated (gdsfactory default: 1,0).</summary>
+    /// <summary>
+    /// Waveguide-core layers as "layer,datatype" pairs, ';'-separated. One field,
+    /// two roles: pin detection (edge heuristic, direction rule) AND optical
+    /// route reconstruction of the top cell's drawn routes — a foundry whose
+    /// optical routing lives on its own layer needs it entered here to get
+    /// optical connections back. Default: gdsfactory's core (1,0) plus nazca's
+    /// interconnect layer (1111,0), mirroring the importer defaults.
+    /// </summary>
     [ObservableProperty]
-    private string _waveguideLayersText = "1,0";
+    private string _waveguideLayersText = "1,0; 1111,0";
 
     /// <summary>
     /// METAL layers as "layer,datatype" pairs, ';'-separated. Polygons on these

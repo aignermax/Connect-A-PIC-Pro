@@ -415,6 +415,38 @@ public class GdsImportDialogViewModelTests : IDisposable
                 customMessage: "frozen mode hands nothing to the router");
     }
 
+    [Fact]
+    public async Task ImportAsync_WaveguideLayersField_DrivesRouteReconstruction()
+    {
+        // Foundry files draw optical routes on their own layer numbers; the
+        // dialog's waveguide field must reach the ROUTE matcher, not only pin
+        // detection — otherwise clearing the metal layers just makes the
+        // connections vanish instead of turning optical (field finding).
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Boundary(77, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray();
+        var (vm, canvas, _) = CreateDialog(WriteGds(gds));
+        await vm.StartAnalysisAsync();
+        vm.WaveguideLayersText = "1,0; 77,0";
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        var group = canvas.Components.ShouldHaveSingleItem().Component
+            .ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
+        var path = group.InternalPaths.ShouldHaveSingleItem(
+            "the foreign-layer route stripe is consumed by route derivation once its layer is listed");
+        path.StartPin.ShouldNotBeNull("the reconstructed connection is optical and pinned");
+    }
+
     // ── Error-console mirroring ──────────────────────────────────────────────
 
     [Fact]
