@@ -17,14 +17,18 @@ public class FrozenWaveguidePath : ICloneable
     public RoutedPath Path { get; set; }
 
     /// <summary>
-    /// Physical pin where this frozen path starts.
+    /// Physical pin where this frozen path starts, or null for pin-less geometry
+    /// (e.g. a GDS-imported route outline): pin-less paths render, move with the
+    /// group and persist, but never re-expand into a live connection (group edit
+    /// mode and ungroup skip them) and do not participate in simulation.
     /// </summary>
-    public PhysicalPin StartPin { get; set; }
+    public PhysicalPin? StartPin { get; set; }
 
     /// <summary>
-    /// Physical pin where this frozen path ends.
+    /// Physical pin where this frozen path ends (null under the same conditions
+    /// as <see cref="StartPin"/>; a path is pin-less only when BOTH pins are null).
     /// </summary>
-    public PhysicalPin EndPin { get; set; }
+    public PhysicalPin? EndPin { get; set; }
 
     /// <summary>
     /// Unique identifier for this frozen path.

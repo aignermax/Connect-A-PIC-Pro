@@ -10,32 +10,72 @@ namespace CAP.Avalonia.Controls.Rendering;
 
 /// <summary>
 /// Renders waveguide connections (routed paths with power flow visualization).
-/// Skips connections that are internal to component groups.
+/// Skips connections that are internal to component groups and connections whose
+/// bounds lie fully outside the (inflated) viewport — see <see cref="RenderCulling"/>.
 /// Implements <see cref="ICanvasRenderer"/> for world-space rendering.
 /// </summary>
 public sealed class WaveguideConnectionRenderer : ICanvasRenderer
 {
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): connections drawn since the last
+    /// <see cref="ResetDrawCounters"/> — the viewport-culling tests assert this against
+    /// <see cref="CulledConnectionCount"/>.</summary>
+    internal long IssuedConnectionCount { get; private set; }
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): connections skipped by the
+    /// viewport cull since the last <see cref="ResetDrawCounters"/>.</summary>
+    internal long CulledConnectionCount { get; private set; }
+
+    /// <summary>Test seam (InternalsVisibleTo UnitTests): zeroes both counters.</summary>
+    internal void ResetDrawCounters() => (IssuedConnectionCount, CulledConnectionCount) = (0, 0);
+
     /// <inheritdoc/>
     public void Render(DrawingContext context, CanvasRenderContext rc)
     {
         var vm = rc.ViewModel;
         var allGroups = WaveguideFilteringHelper.CollectAllGroups(vm.Components.Select(c => c.Component));
+        var cullRect = RenderCulling.InflateForCulling(
+            RenderCulling.ComputeViewportWorld(vm.PanX, vm.PanY, rc.Bounds, rc.Zoom), rc.Zoom);
 
         var hovered = rc.InteractionState.HoveredConnection;
         foreach (var conn in vm.Connections)
         {
-            if (!WaveguideFilteringHelper.IsConnectionInternalToAnyGroup(conn.Connection, allGroups))
-                DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered), rc.Zoom, rc.Labels);
+            if (WaveguideFilteringHelper.IsConnectionInternalToAnyGroup(conn.Connection, allGroups))
+                continue;
+
+            var segments = conn.Connection.GetPathSegments();
+            if (!cullRect.Intersects(GetConnectionBounds(conn, segments)))
+            {
+                CulledConnectionCount++;
+                continue;
+            }
+
+            IssuedConnectionCount++;
+            DrawWaveguideConnection(context, conn, vm, ReferenceEquals(conn, hovered), rc.Zoom, rc.Labels, segments);
         }
 
         if (vm.ShowPowerFlow && rc.InteractionState.HoveredConnection != null)
             DrawPowerHoverLabel(context, rc.InteractionState.HoveredConnection, vm);
     }
 
-    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn,
-        DesignCanvasViewModel vm, bool isHovered, double zoom, DeferredLabelLayer labels)
+    /// <summary>
+    /// World-space bounds covering everything a connection can paint this frame: the routed
+    /// segments (bend circles included, see <see cref="RenderCulling"/>) UNION the straight
+    /// endpoint-to-endpoint fallback line, which is what gets drawn when the path is
+    /// missing or stale — culling must never drop a visible fallback.
+    /// </summary>
+    private static Rect GetConnectionBounds(WaveguideConnectionViewModel conn, IReadOnlyList<CAP_Core.Routing.PathSegment> segments)
     {
-        var segments = conn.Connection.GetPathSegments();
+        double minX = Math.Min(conn.StartX, conn.EndX);
+        double minY = Math.Min(conn.StartY, conn.EndY);
+        var bounds = new Rect(minX, minY,
+            Math.Max(conn.StartX, conn.EndX) - minX, Math.Max(conn.StartY, conn.EndY) - minY);
+        return segments.Count > 0 ? bounds.Union(RenderCulling.ComputeSegmentBounds(segments)) : bounds;
+    }
+
+    private static void DrawWaveguideConnection(DrawingContext context, WaveguideConnectionViewModel conn,
+        DesignCanvasViewModel vm, bool isHovered, double zoom, DeferredLabelLayer labels,
+        IReadOnlyList<CAP_Core.Routing.PathSegment> segments)
+    {
         var pen = CreateWaveguidePen(conn, vm, isHovered);
         bool pathIsStale = segments.Count > 0 && UsesStaleFallback(conn) && IsPathStale(segments, conn);
 

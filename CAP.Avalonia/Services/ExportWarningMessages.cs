@@ -31,6 +31,21 @@ public static class ExportWarningMessages
         Build(unresolvedCrossings, "Export.UnresolvedCrossings.Warning");
 
     /// <summary>
+    /// Builds the "N components exported as placeholder boxes" warning for raw-code
+    /// components whose geometry source (the .gds their raw code loads) is missing,
+    /// or null when there are none. Unlike the connection warnings the per-component
+    /// descriptions are NOT repeated here — each was already logged to the Error Console
+    /// individually where the exporter collected it; the status line carries only the
+    /// count and the pointer so it stays readable.
+    /// </summary>
+    public static string? BuildMissingGdsSources(IReadOnlyList<string> exportWarnings) =>
+        exportWarnings.Count == 0
+            ? null
+            : string.Format(
+                LocalizationService.Instance.Translate("Export.MissingGdsSources.Warning"),
+                exportWarnings.Count);
+
+    /// <summary>
     /// Caps the named connections so a design with many flagged routes still produces a
     /// readable message, then formats it under the given localization key.
     /// </summary>

@@ -89,12 +89,13 @@ public class PowerFlowAnalyzer
 
     /// <summary>
     /// Calculates power flow between a pair of physical pins.
-    /// Works for both regular connections and frozen paths.
+    /// Works for both regular connections and frozen paths. A null pin (pin-less
+    /// frozen geometry, e.g. a GDS-imported route outline) contributes zero power.
     /// </summary>
     private static ConnectionPowerFlow CalculatePinPairFlow(
         Guid flowId,
-        PhysicalPin startPin,
-        PhysicalPin endPin,
+        PhysicalPin? startPin,
+        PhysicalPin? endPin,
         IReadOnlyDictionary<Guid, Complex> fieldResults)
     {
         // Check both directions: waveguide connections are bidirectional.
@@ -122,10 +123,10 @@ public class PowerFlowAnalyzer
     /// Gets the outflow amplitude at a physical pin (light leaving the component).
     /// </summary>
     private static Complex GetPinOutputAmplitude(
-        PhysicalPin pin,
+        PhysicalPin? pin,
         IReadOnlyDictionary<Guid, Complex> fieldResults)
     {
-        if (pin.LogicalPin == null) return Complex.Zero;
+        if (pin?.LogicalPin == null) return Complex.Zero;
 
         return fieldResults.TryGetValue(pin.LogicalPin.IDOutFlow, out var value)
             ? value
@@ -136,10 +137,10 @@ public class PowerFlowAnalyzer
     /// Gets the inflow amplitude at a physical pin (light entering the component).
     /// </summary>
     private static Complex GetPinInputAmplitude(
-        PhysicalPin pin,
+        PhysicalPin? pin,
         IReadOnlyDictionary<Guid, Complex> fieldResults)
     {
-        if (pin.LogicalPin == null) return Complex.Zero;
+        if (pin?.LogicalPin == null) return Complex.Zero;
 
         return fieldResults.TryGetValue(pin.LogicalPin.IDInFlow, out var value)
             ? value

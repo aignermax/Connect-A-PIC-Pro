@@ -18,6 +18,19 @@ public class ComponentPlacementService
     private const double MinComponentGapMicrometers = 5.0;
 
     /// <summary>
+    /// Overlap partners of the component being dragged, captured at drag start
+    /// (<see cref="BeginDrag"/>): imported layouts can hold deliberate stacked
+    /// placements (the GDS importer places exactly, bypassing the gap rule), so
+    /// pairs that ALREADY overlapped — within the placement gap — when the drag
+    /// began are grandfathered: re-dropping the dragged component where it
+    /// overlaps those same partners is allowed, overlaps with any other
+    /// component still reject. Keyed by the moved component (a moved group's
+    /// leaf children); consulted only while <see cref="IsDragging"/>, cleared on
+    /// <see cref="EndDrag"/>.
+    /// </summary>
+    private readonly Dictionary<Component, HashSet<Component>> _preDragOverlapPartners = new();
+
+    /// <summary>
     /// Chip boundary in micrometers.
     /// </summary>
     public double ChipMinX { get; set; } = 0;
@@ -34,6 +47,28 @@ public class ComponentPlacementService
     /// Whether a command (undo/redo) is executing (skips collision checks).
     /// </summary>
     public bool IsExecutingCommand { get; set; }
+
+    /// <summary>
+    /// Begins a drag of <paramref name="component"/>: remembers which components
+    /// it already overlaps (within the placement gap) so the drop check can
+    /// grandfather exactly those pairs — see <see cref="_preDragOverlapPartners"/>.
+    /// </summary>
+    public void BeginDrag(Component component)
+    {
+        IsDragging = true;
+        _preDragOverlapPartners.Clear();
+        if (component is ComponentGroup group)
+            CaptureGroupOverlapPartners(group);
+        else
+            CaptureComponentOverlapPartners(component);
+    }
+
+    /// <summary>Ends the drag and forgets the pre-drag overlap partners.</summary>
+    public void EndDrag()
+    {
+        IsDragging = false;
+        _preDragOverlapPartners.Clear();
+    }
 
     /// <summary>
     /// Initializes the placement service.
@@ -134,6 +169,8 @@ public class ComponentPlacementService
 
     /// <summary>
     /// Checks if a component can be placed without overlapping others and within chip boundaries.
+    /// Pairs that already overlapped when the current drag began are grandfathered
+    /// (<see cref="_preDragOverlapPartners"/>); genuinely new overlaps reject.
     /// </summary>
     public bool CanPlaceComponent(double x, double y, double width, double height,
         ComponentViewModel? excludeComponent = null)
@@ -142,15 +179,14 @@ public class ComponentPlacementService
             x + width > ChipMaxX || y + height > ChipMaxY)
             return false;
 
-        var testRect = new Rect(
-            x - MinComponentGapMicrometers,
-            y - MinComponentGapMicrometers,
-            width + MinComponentGapMicrometers * 2,
-            height + MinComponentGapMicrometers * 2);
+        var testRect = GapInflatedRect(x, y, width, height);
 
         foreach (var comp in _components)
         {
             if (comp == excludeComponent) continue;
+            if (IsDragging && excludeComponent is not null &&
+                IsPreDragOverlapPartner(excludeComponent.Component, comp.Component))
+                continue; // grandfathered: this pair already overlapped when the drag began.
             var compRect = new Rect(comp.X, comp.Y, comp.Width, comp.Height);
             if (RectsOverlap(testRect, compRect))
                 return false;
@@ -200,7 +236,8 @@ public class ComponentPlacementService
             excludeSet.Add(excludeComponent.Component);
 
         var detector = new CAP_Core.Grid.GroupCollisionDetector();
-        return detector.CanPlaceGroup(group, x, y, allComponents, excludeSet);
+        return detector.CanPlaceGroup(group, x, y, allComponents, excludeSet,
+            IsDragging ? _preDragOverlapPartners : null);
     }
 
     private bool MoveComponentGroup(
@@ -273,6 +310,81 @@ public class ComponentPlacementService
                 conn.NotifyPathChanged();
         }
     }
+
+    /// <summary>
+    /// Records every canvas component <paramref name="component"/> overlaps at
+    /// drag start, using the same gap-inflated rectangle test as
+    /// <see cref="CanPlaceComponent"/> so every pair that COULD reject a re-drop
+    /// at the original position is grandfathered.
+    /// </summary>
+    private void CaptureComponentOverlapPartners(Component component)
+    {
+        var testRect = GapInflatedRect(
+            component.PhysicalX, component.PhysicalY,
+            component.WidthMicrometers, component.HeightMicrometers);
+        var partners = new HashSet<Component>();
+        foreach (var comp in _components)
+        {
+            if (comp.Component == component) continue;
+            if (RectsOverlap(testRect, new Rect(comp.X, comp.Y, comp.Width, comp.Height)))
+                partners.Add(comp.Component);
+        }
+        if (partners.Count > 0)
+            _preDragOverlapPartners[component] = partners;
+    }
+
+    /// <summary>
+    /// Records, per leaf child of the moved <paramref name="group"/>, the
+    /// components it overlaps at drag start — at the granularity
+    /// <see cref="CAP_Core.Grid.GroupCollisionDetector"/> checks: regular
+    /// top-level components, and the leaf children of OTHER groups.
+    /// </summary>
+    private void CaptureGroupOverlapPartners(ComponentGroup group)
+    {
+        var members = new HashSet<Component>(group.GetAllComponentsRecursive()) { group };
+        foreach (var leaf in group.GetAllComponentsRecursive())
+        {
+            if (leaf is ComponentGroup) continue;
+            var testRect = GapInflatedRect(
+                leaf.PhysicalX, leaf.PhysicalY, leaf.WidthMicrometers, leaf.HeightMicrometers);
+            var partners = new HashSet<Component>();
+            foreach (var comp in _components)
+            {
+                if (members.Contains(comp.Component)) continue;
+                if (comp.Component is ComponentGroup otherGroup)
+                {
+                    foreach (var otherLeaf in otherGroup.GetAllComponentsRecursive())
+                    {
+                        if (otherLeaf is ComponentGroup) continue;
+                        if (RectsOverlap(testRect, RectOf(otherLeaf)))
+                            partners.Add(otherLeaf);
+                    }
+                }
+                else if (RectsOverlap(testRect, RectOf(comp.Component)))
+                {
+                    partners.Add(comp.Component);
+                }
+            }
+            if (partners.Count > 0)
+                _preDragOverlapPartners[leaf] = partners;
+        }
+    }
+
+    /// <summary>
+    /// True when <paramref name="moved"/> and <paramref name="partner"/> already
+    /// overlapped (within the placement gap) when the current drag began — a
+    /// grandfathered pair the drop check must not reject.
+    /// </summary>
+    private bool IsPreDragOverlapPartner(Component moved, Component partner) =>
+        _preDragOverlapPartners.TryGetValue(moved, out var partners) && partners.Contains(partner);
+
+    private static Rect GapInflatedRect(double x, double y, double width, double height) =>
+        new(x - MinComponentGapMicrometers, y - MinComponentGapMicrometers,
+            width + MinComponentGapMicrometers * 2, height + MinComponentGapMicrometers * 2);
+
+    private static Rect RectOf(Component component) =>
+        new(component.PhysicalX, component.PhysicalY,
+            component.WidthMicrometers, component.HeightMicrometers);
 
     private static bool RectsOverlap(Rect a, Rect b)
     {

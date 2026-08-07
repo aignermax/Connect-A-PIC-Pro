@@ -284,6 +284,12 @@ public class GroupEditService
 
             foreach (var frozenPath in group.InternalPaths)
             {
+                // Pin-less frozen geometry (GDS-imported route outlines) cannot become
+                // a live connection — it stays stored on the group and is re-attached
+                // untouched by SaveSubCanvasToGroup on exit.
+                if (frozenPath.StartPin is null || frozenPath.EndPin is null)
+                    continue;
+
                 // DeepCopy: the group's stored InternalPaths must stay immutable while
                 // the sub-canvas connection is live — bend-handle edits mutate the
                 // segment objects in place and would otherwise leak into the stored
@@ -323,6 +329,13 @@ public class GroupEditService
                 group.AddChild(compVm.Component);
         }
 
+        // Pin-less frozen paths (GDS-imported route outlines) never entered the
+        // sub-canvas as live connections, so the clear-and-rebuild below would
+        // silently drop them — capture and re-attach them unchanged.
+        var pinLessPaths = group.InternalPaths
+            .Where(p => p.StartPin is null || p.EndPin is null)
+            .ToList();
+
         group.InternalPaths.Clear();
         foreach (var connVm in _connections.ToList())
         {
@@ -341,6 +354,9 @@ public class GroupEditService
                 group.AddInternalPath(frozenPath);
             }
         }
+
+        foreach (var pinLessPath in pinLessPaths)
+            group.AddInternalPath(pinLessPath);
 
         group.UpdateGroupBounds();
     }

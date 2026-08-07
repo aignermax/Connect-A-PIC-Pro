@@ -82,6 +82,13 @@ public class ComponentGroupDto
     public List<GroupPinDto> ExternalPins { get; set; } = new();
 
     /// <summary>
+    /// Render-only background geometry of the group (GDS-imported base plates,
+    /// exclusion zones, logos — the top cell's own non-routing polygons),
+    /// relative to the group's top-left. Null for files that predate it.
+    /// </summary>
+    public List<CAP_Core.Components.Core.OutlinePolygon>? BackgroundPolygons { get; set; }
+
+    /// <summary>
     /// Identifier of parent group (null if top-level).
     /// </summary>
     public string? ParentGroupId { get; set; }
@@ -99,6 +106,9 @@ public class FrozenPathDto
 
     /// <summary>
     /// Identifier of the start pin's parent component (human-readable, for old files).
+    /// Empty — together with null <see cref="StartComponentGuid"/>, an empty
+    /// <see cref="StartPinName"/> and the same triple on the end side — marks a
+    /// pin-less path (GDS-imported route outline): geometry without endpoint pins.
     /// </summary>
     public string StartComponentId { get; set; } = "";
 
@@ -114,6 +124,7 @@ public class FrozenPathDto
 
     /// <summary>
     /// Identifier of the end pin's parent component (human-readable, for old files).
+    /// Empty for a pin-less path (see <see cref="StartComponentId"/>).
     /// </summary>
     public string EndComponentId { get; set; } = "";
 

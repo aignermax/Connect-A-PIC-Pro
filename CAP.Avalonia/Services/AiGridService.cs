@@ -308,8 +308,8 @@ public class AiGridService : IAiGridService
             }).ToList(),
             internal_connections = group.InternalPaths.Select(path => new
             {
-                from = $"{path.StartPin.ParentComponent?.Identifier}:{path.StartPin.Name}",
-                to = $"{path.EndPin.ParentComponent?.Identifier}:{path.EndPin.Name}"
+                from = $"{path.StartPin?.ParentComponent?.Identifier}:{path.StartPin?.Name}",
+                to = $"{path.EndPin?.ParentComponent?.Identifier}:{path.EndPin?.Name}"
             }).ToList(),
             external_pins = group.ExternalPins.Select(pin => new
             {

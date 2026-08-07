@@ -21,6 +21,8 @@ public class ComponentGroup : Component, INotifyPropertyChanged
 
     /// <summary>
     /// Frozen waveguide paths between child components (don't recalculate during group moves).
+    /// May also carry pin-less geometry (GDS-imported route outlines — see
+    /// <see cref="FrozenWaveguidePath.StartPin"/>).
     /// </summary>
     public List<FrozenWaveguidePath> InternalPaths { get; private set; } = new();
 
@@ -174,7 +176,8 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Adds a frozen waveguide path between two child components.
+    /// Adds a frozen waveguide path between two child components, or pin-less
+    /// frozen geometry (a GDS-imported route outline).
     /// </summary>
     /// <param name="path">The frozen path to add.</param>
     public void AddInternalPath(FrozenWaveguidePath path)
@@ -515,7 +518,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             PhysicalY = PhysicalY,
             WidthMicrometers = WidthMicrometers,
             HeightMicrometers = HeightMicrometers,
-            Rotation90CounterClock = Rotation90CounterClock
+            Rotation90CounterClock = Rotation90CounterClock,
+            // Immutable records — sharing the list is safe (same rule as Component.DeepCopy).
+            OutlinePolygons = OutlinePolygons
         };
 
         // Map old component Ids (Guid) to new cloned components
@@ -554,19 +559,32 @@ public class ComponentGroup : Component, INotifyPropertyChanged
         // Clone frozen waveguide paths
         foreach (var frozenPath in InternalPaths)
         {
-            var startComp = componentMap[frozenPath.StartPin.ParentComponent.Id];
-            var endComp = componentMap[frozenPath.EndPin.ParentComponent.Id];
-
-            var newStartPin = startComp.PhysicalPins.First(p => p.Name == frozenPath.StartPin.Name);
-            var newEndPin = endComp.PhysicalPins.First(p => p.Name == frozenPath.EndPin.Name);
-
-            var clonedPath = new FrozenWaveguidePath
+            FrozenWaveguidePath clonedPath;
+            if (frozenPath.StartPin is null || frozenPath.EndPin is null)
             {
-                PathId = Guid.NewGuid(),
-                Path = CloneRoutedPath(frozenPath.Path),
-                StartPin = newStartPin,
-                EndPin = newEndPin
-            };
+                // Pin-less geometry (e.g. GDS-imported route outlines): no pins to remap.
+                clonedPath = new FrozenWaveguidePath
+                {
+                    PathId = Guid.NewGuid(),
+                    Path = CloneRoutedPath(frozenPath.Path),
+                };
+            }
+            else
+            {
+                var startComp = componentMap[frozenPath.StartPin.ParentComponent.Id];
+                var endComp = componentMap[frozenPath.EndPin.ParentComponent.Id];
+
+                var newStartPin = startComp.PhysicalPins.First(p => p.Name == frozenPath.StartPin.Name);
+                var newEndPin = endComp.PhysicalPins.First(p => p.Name == frozenPath.EndPin.Name);
+
+                clonedPath = new FrozenWaveguidePath
+                {
+                    PathId = Guid.NewGuid(),
+                    Path = CloneRoutedPath(frozenPath.Path),
+                    StartPin = newStartPin,
+                    EndPin = newEndPin
+                };
+            }
             // Carry the per-connection routing settings into the copy so template
             // instantiation and copy/paste keep the configured styles.
             clonedPath.CopySettingsFrom(frozenPath);

@@ -83,6 +83,20 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("nazcaOriginOffsetY")]
         public double? NazcaOriginOffsetY { get; set; }
 
+        /// <summary>
+        /// Imported GDS outline polygons (µm, Y-down, relative to the component
+        /// bbox top-left). Optional: absent in all hand-written PDKs, so null must
+        /// stay valid — the canvas falls back to rectangle rendering then.
+        /// <para>
+        /// Contract: the list is treated as immutable after construction. The
+        /// preview renderer caches built geometry by LIST IDENTITY, so mutating
+        /// an instance in place would leave stale geometry on screen — always
+        /// assign a new list instead of editing an existing one.
+        /// </para>
+        /// </summary>
+        [JsonPropertyName("outlinePolygons")]
+        public List<CAP_Core.Components.Core.OutlinePolygon>? OutlinePolygons { get; set; }
+
         [JsonPropertyName("pins")]
         public List<PhysicalPinDraft> Pins { get; set; } = new();
 

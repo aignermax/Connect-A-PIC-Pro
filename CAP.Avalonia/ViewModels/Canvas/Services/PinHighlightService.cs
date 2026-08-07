@@ -58,7 +58,8 @@ public class PinHighlightService
             if (excludePin != null)
             {
                 if (pinVm.Pin == excludePin) continue;
-                if (pinVm.Pin.ParentComponent == excludePin.ParentComponent) continue;
+                // Other pins of the SAME component stay highlightable: feedback
+                // loops and ring self-coupling connect two pins of one instance.
                 // Polarization-incompatible pins (TE↔TM) are never valid
                 // connection targets, so don't highlight them during a drag.
                 if (!PolarizationRules.CanConnect(excludePin.Polarization, pinVm.Pin.Polarization)) continue;

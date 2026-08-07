@@ -59,7 +59,7 @@ public class CreateCustomPdkViewModelTests : IDisposable
         vm.CreatedFilePath.ShouldNotBeNull();
         raisedPath.ShouldBe(vm.CreatedFilePath);
         var listed = store.ListCustomPdks();
-        listed.ShouldContain(p => p.Name == "My Custom Lib" && p.Process.Name == "CornerStone SiN 300");
+        listed.ShouldContain(p => p.Name == "My Custom Lib" && p.Process!.Name == "CornerStone SiN 300");
     }
 
     [Fact]

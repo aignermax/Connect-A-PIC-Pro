@@ -53,8 +53,11 @@ public static class InherentBackendClassifier
     /// as <see cref="ComponentPdkSourceResolver"/>: the module-qualified gdsfactory
     /// factory name first (unique across PDKs), the Nazca function name otherwise
     /// (including the synthesized <c>nazca_&lt;name&gt;</c> fallback of raw-code components).
+    /// Internal so the Nazca exporter's raw-code inlining
+    /// (<see cref="CAP.Avalonia.Services.NazcaRawCodeCellWriter"/>) resolves templates through this one
+    /// implementation instead of duplicating the matching rules.
     /// </summary>
-    private static ComponentTemplate? ResolveTemplate(
+    internal static ComponentTemplate? ResolveTemplate(
         Component component, IEnumerable<ComponentTemplate> library)
     {
         var templates = library as IReadOnlyCollection<ComponentTemplate> ?? library.ToList();
