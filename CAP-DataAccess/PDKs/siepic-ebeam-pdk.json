@@ -8810,20 +8810,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -8840,8 +8846,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -8856,8 +8864,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Y-Branch 895",
@@ -8900,20 +8947,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -8930,8 +8983,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -8946,8 +9001,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Y-Branch TE 1310",
@@ -8990,20 +9084,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -9020,8 +9120,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -9036,8 +9138,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Y-Branch Adiabatic",
@@ -9080,20 +9221,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -9110,8 +9257,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -9126,8 +9275,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Y-Branch Adiabatic 500nm",
@@ -9170,20 +9358,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -9200,8 +9394,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -9216,8 +9412,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "SWG Splitter TE 1310",
@@ -9266,20 +9501,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -9296,8 +9537,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -9312,8 +9555,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "SWG Splitter TE 1550",
@@ -9362,20 +9644,26 @@
           {
             "fromPin": "port 1",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 2",
@@ -9392,8 +9680,10 @@
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -45
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - splitting_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-45"
           },
           {
             "fromPin": "port 3",
@@ -9408,8 +9698,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.25,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "splitting_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Splitting Ratio (port 2)",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.25,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "DC 2-1 TE 895",
@@ -9464,14 +9793,18 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
@@ -9488,26 +9821,34 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 3",
@@ -9524,14 +9865,18 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 4",
@@ -9546,8 +9891,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.3,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "coupling_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Coupling Ratio",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.3,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "DC TE 895",
@@ -9602,14 +9986,18 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
@@ -9626,26 +10014,34 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 3",
@@ -9662,14 +10058,18 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 4",
@@ -9684,8 +10084,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.3,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "coupling_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Coupling Ratio",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.3,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "MMI 2x2 50/50 TE 1310",
@@ -9740,14 +10179,18 @@
           {
             "fromPin": "port 1",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 1",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
@@ -9764,26 +10207,34 @@
           {
             "fromPin": "port 2",
             "toPin": "port 3",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 2",
             "toPin": "port 4",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 3",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 3",
@@ -9800,14 +10251,18 @@
           {
             "fromPin": "port 4",
             "toPin": "port 1",
-            "magnitude": 0.69,
-            "phaseDegrees": 0
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((1 - coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "0"
           },
           {
             "fromPin": "port 4",
             "toPin": "port 2",
-            "magnitude": 0.69,
-            "phaseDegrees": -90
+            "magnitude": 0,
+            "phaseDegrees": 0,
+            "magnitudeFormula": "Sqrt((coupling_ratio / 100) * Pow(10, -insertion_loss / 10))",
+            "phaseDegreesFormula": "-90"
           },
           {
             "fromPin": "port 4",
@@ -9822,8 +10277,47 @@
             "phaseDegrees": 180
           }
         ],
-        "wavelengthData": []
-      }
+        "parameters": [
+          {
+            "name": "insertion_loss",
+            "defaultValue": 0.3,
+            "minValue": 0.3,
+            "maxValue": 3,
+            "label": "Insertion Loss",
+            "unit": "dB",
+            "sliderNumber": 0
+          },
+          {
+            "name": "coupling_ratio",
+            "defaultValue": 50,
+            "minValue": 0,
+            "maxValue": 100,
+            "label": "Coupling Ratio",
+            "unit": "%",
+            "sliderNumber": 1
+          }
+        ]
+      },
+      "sliders": [
+        {
+          "sliderNumber": 0,
+          "godotSliderName": "slider0",
+          "godotSliderLabelName": "label0",
+          "minVal": 0.3,
+          "maxVal": 3,
+          "steps": 100,
+          "type": 0
+        },
+        {
+          "sliderNumber": 1,
+          "godotSliderName": "slider1",
+          "godotSliderLabelName": "label1",
+          "minVal": 0,
+          "maxVal": 100,
+          "steps": 100,
+          "type": 0
+        }
+      ]
     },
     {
       "name": "Adiabatic Coupler TE 1550",

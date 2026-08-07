@@ -67,35 +67,43 @@
                 </DataTemplate>
 
                 <!-- Parametric components: one labeled, unit-aware row per
-                     named physical parameter (e.g. MMI insertion loss / splitting ratio) -->
+                     named physical parameter (e.g. MMI insertion loss / splitting ratio).
+                     The header makes explicit that edits drive the SIMULATION MODEL
+                     only — the GDS layout/geometry is never touched by these values. -->
                 <DataTemplate x:Key="ParamsTpl" x:DataType="editors:ParametricParametersEditorViewModel">
-                    <ItemsControl ItemsSource="{Binding Rows}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate x:DataType="editors:ParameterRowViewModel">
-                                <StackPanel>
-                                    <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
-                                        <TextBlock Text="{Binding Label}" Foreground="Gray" FontSize="10"/>
-                                        <TextBlock Foreground="Gray" FontSize="10"
-                                                   IsVisible="{Binding HasUnit}">
-                                            <Run Text=" ["/><Run Text="{Binding Unit}"/><Run Text="]"/>
-                                        </TextBlock>
+                    <StackPanel>
+                        <TextBlock Text="{loc:Localize SelectedProps.SimulationParams}"
+                                   Foreground="LightBlue" FontSize="11" FontWeight="SemiBold" Margin="0,6,0,0"/>
+                        <TextBlock Text="{loc:Localize SelectedProps.SimulationParamsHint}"
+                                   Foreground="Gray" FontSize="9" TextWrapping="Wrap" Margin="0,1,0,2"/>
+                        <ItemsControl ItemsSource="{Binding Rows}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="editors:ParameterRowViewModel">
+                                    <StackPanel>
+                                        <StackPanel Orientation="Horizontal" Margin="0,4,0,2">
+                                            <TextBlock Text="{Binding Label}" Foreground="Gray" FontSize="10"/>
+                                            <TextBlock Foreground="Gray" FontSize="10"
+                                                       IsVisible="{Binding HasUnit}">
+                                                <Run Text=" ["/><Run Text="{Binding Unit}"/><Run Text="]"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <Grid ColumnDefinitions="*,80">
+                                            <Slider Grid.Column="0"
+                                                    Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                                    Value="{Binding Value, Mode=TwoWay}"/>
+                                            <NumericUpDown Grid.Column="1"
+                                                           Value="{Binding Value, Mode=TwoWay}"
+                                                           Minimum="{Binding Min}" Maximum="{Binding Max}"
+                                                           Increment="1" FormatString="F2"
+                                                           ShowButtonSpinner="False"
+                                                           VerticalAlignment="Center"
+                                                           Margin="6,0,0,0"/>
+                                        </Grid>
                                     </StackPanel>
-                                    <Grid ColumnDefinitions="*,80">
-                                        <Slider Grid.Column="0"
-                                                Minimum="{Binding Min}" Maximum="{Binding Max}"
-                                                Value="{Binding Value, Mode=TwoWay}"/>
-                                        <NumericUpDown Grid.Column="1"
-                                                       Value="{Binding Value, Mode=TwoWay}"
-                                                       Minimum="{Binding Min}" Maximum="{Binding Max}"
-                                                       Increment="1" FormatString="F2"
-                                                       ShowButtonSpinner="False"
-                                                       VerticalAlignment="Center"
-                                                       Margin="6,0,0,0"/>
-                                    </Grid>
-                                </StackPanel>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
                 </DataTemplate>
 
                 <!-- Slider-driven components (phase shifter, tunable coupler) -->
@@ -184,9 +192,15 @@
                     </StackPanel>
                 </DataTemplate>
 
-                <!-- Fallback: PDK function only (name/position/size come from the readout above) -->
+                <!-- Fallback: PDK function only (name/position/size come from the readout above).
+                     An explicit hint replaces the previously-empty section so users know the
+                     component's S-matrix is fixed rather than suspecting a broken editor. -->
                 <DataTemplate x:Key="GenericTpl" x:DataType="editors:GenericComponentEditorViewModel">
-                    <TextBlock Text="{Binding NazcaFunction}" Foreground="#888" FontSize="9" Margin="0,2,0,4"/>
+                    <StackPanel>
+                        <TextBlock Text="{Binding NazcaFunction}" Foreground="#888" FontSize="9" Margin="0,2,0,4"/>
+                        <TextBlock Text="{loc:Localize SelectedProps.NoSimulationParams}"
+                                   Foreground="Gray" FontSize="9" TextWrapping="Wrap" Margin="0,0,0,4"/>
+                    </StackPanel>
                 </DataTemplate>
             </ContentControl.Resources>
             <ContentControl.DataTemplates>

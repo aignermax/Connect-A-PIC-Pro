@@ -285,6 +285,51 @@ Working examples in `demo-pdk.json`: **1x2 MMI Splitter** (insertion loss +
 splitting ratio), **Directional Coupler** (coupling ratio, 90° cross phase),
 **Phase Shifter** (phase).
 
+### Bundled-PDK parametric coverage
+
+Parameters drive the **simulation model only** — the GDS layout/geometry never
+changes (the Properties panel says so explicitly). Geometry-parametric
+components (PCells, e.g. splitting ratio → MMI length) are a separate future
+feature; the schema stays forward-compatible with it.
+
+**Parametric (editable in the Properties panel):**
+
+| PDK | Components | Parameters |
+|-----|------------|------------|
+| Demo | 1x2 MMI Splitter, Y-Junction | insertion loss [dB], splitting ratio [%] |
+| Demo | Directional Coupler | coupling ratio [%] |
+| Demo | 2x2 MMI Coupler | insertion loss [dB], coupling ratio [%] |
+| Demo | Phase Shifter | phase [°] |
+| Demo | Straight Waveguide 100µm, 90° Bend | insertion loss [dB] |
+| CornerStone SiN | Bend Euler, Bend S, Straight, Taper | insertion loss [dB] |
+| SiEPIC | MMI 1x2 TE 1550 3dB, Y-Branch 895 / TE 1310 / Adiabatic / Adiabatic 500nm, SWG Splitter TE 1310 / 1550 | insertion loss [dB], splitting ratio [%] |
+| SiEPIC | MMI 2x2 50/50 TE 1310, DC TE 895, DC 2-1 TE 895 | insertion loss [dB], coupling ratio [%] |
+
+The parametrized SiEPIC components keep their fixed parasitic terms (back
+reflection 0.02–0.03, port crosstalk 0.01–0.05). Because those terms add to
+the split arms, the insertion-loss minimum is floored (0.25 dB for 1x2,
+0.3 dB for 2x2) so the S-matrix stays passive (σ_max ≤ 1) at **every** slider
+position, including ratio extremes.
+
+**Deliberately NOT parametric (and why):**
+
+- **Measured multi-wavelength S-matrices** (`wavelengthData`): CornerStone
+  Coupler, Coupler Straight, Mmi1x2, Mmi2x2, MZI, grating couplers — sampled
+  from cspdk's sax compact models per wavelength; formulas cannot reproduce
+  the measured dispersion, and the schema does not mix `wavelengthData` with
+  formulas.
+- **Measured SiEPIC components** (Y-Branch 1550, Directional Coupler TE 1550
+  variants, Broadband DC, DC Halfring, Contra-DC, tapers, terminators,
+  crossings, polarizer): magnitudes/phases come from Lumerical simulations of
+  the fixed layout; a scalar knob would misrepresent the measured response.
+- **Light-source I/O** (grating/edge couplers): the Properties panel shows the
+  laser editor (wavelength, power, line shape) instead of parameter rows.
+- **Photodetector, probe/bond pads, terminators**: terminal elements without a
+  meaningful transmission parameter.
+- **DBR Filter (demo)**: its defining behaviour is wavelength-selective
+  reflection, which the single-wavelength bundled S-matrix does not model; a
+  loss slider would suggest a tunability the model doesn't have.
+
 ---
 
 ## Coordinate System
