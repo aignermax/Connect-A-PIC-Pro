@@ -4,7 +4,9 @@ namespace CAP_Core.LightCalculation.TimeDomainSimulation;
 
 /// <summary>
 /// Orchestrates circuit-level time-domain simulation via IFFT of S-parameters.
-/// Phase 1: linear circuits only (nonlinear connections cause an exception).
+/// Phase 1: linear circuits only. Parameter-only (slider-driven) formula connections are
+/// evaluated once into the linear matrix; only field-dependent (truly nonlinear)
+/// connections cause an exception.
 /// Implements <see cref="ILightCalculator"/> for polymorphic registration alongside
 /// <see cref="GridLightCalculator"/>; steady-state field propagation is not applicable
 /// for time-domain mode — use <see cref="Run"/> instead.

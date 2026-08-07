@@ -99,9 +99,9 @@ public class ImpulseResponseBuilderTests
     }
 
     [Fact]
-    public void Build_WithNonlinearConnections_ThrowsInvalidOperationException()
+    public void Build_WithFieldDependentConnection_ThrowsInvalidOperationException()
     {
-        // Arrange: system matrix has a nonlinear connection
+        // Arrange: system matrix has a truly nonlinear (field-dependent) connection
         var inputPinId = Guid.NewGuid();
         var outputPinId = Guid.NewGuid();
         var allPins = new List<Guid> { inputPinId, outputPinId };
@@ -113,10 +113,10 @@ public class ImpulseResponseBuilderTests
                 var matrix = new SMatrix(allPins, new());
                 var key = (inputPinId, outputPinId);
                 var nonLinFn = new ConnectionFunction(
-                    _ => Complex.One,
-                    "1",
-                    new List<Guid>(),
-                    IsInnerLoopFunction: false);
+                    weights => (Complex)weights[0],
+                    "PIN1 * 2",
+                    new List<Guid> { inputPinId },
+                    IsInnerLoopFunction: true);
                 matrix.NonLinearConnections.Add(key, nonLinFn);
                 return matrix;
             });
@@ -124,8 +124,53 @@ public class ImpulseResponseBuilderTests
         var builder = new ImpulseResponseBuilder(mockBuilder.Object);
 
         // Act & Assert
-        Should.Throw<InvalidOperationException>(() =>
+        var ex = Should.Throw<InvalidOperationException>(() =>
             builder.Build(CenterWavelengthNm, SpanNm, NPoints));
+        ex.Message.ShouldContain("linear circuits only");
+    }
+
+    [Fact]
+    public void Build_WithParameterOnlyConnection_EvaluatesSliderValueIntoLinearMatrix()
+    {
+        // Arrange: a slider-driven formula connection is constant for a fixed slider
+        // value, so it must be evaluated into the linear matrix instead of rejected.
+        var inputPinId = Guid.NewGuid();
+        var outputPinId = Guid.NewGuid();
+        var sliderId = Guid.NewGuid();
+        const double sliderValue = 0.5;
+        var allPins = new List<Guid> { inputPinId, outputPinId };
+
+        var mockBuilder = new Mock<ISystemMatrixBuilder>();
+        mockBuilder.Setup(b => b.GetSystemSMatrix(It.IsAny<int>()))
+            .Returns((int _) =>
+            {
+                // fresh matrix per call, like the real builder — the connection must be
+                // evaluated on every wavelength's matrix, not just the reference one.
+                var matrix = new SMatrix(allPins, new List<(Guid sliderID, double value)> { (sliderId, sliderValue) });
+                var key = (inputPinId, outputPinId);
+                var formulaFn = new ConnectionFunction(
+                    weights => new Complex((double)weights[0], 0),
+                    "SLIDER1",
+                    new List<Guid> { sliderId },
+                    IsInnerLoopFunction: false);
+                matrix.NonLinearConnections.Add(key, formulaFn);
+                return matrix;
+            });
+
+        var builder = new ImpulseResponseBuilder(mockBuilder.Object);
+
+        // Act: must not throw, and the evaluated S_21 = sliderValue at all frequencies
+        // gives an impulse response peaked at t=0 with that magnitude.
+        var impulseResponses = builder.Build(CenterWavelengthNm, SpanNm, NPoints);
+
+        // Assert
+        impulseResponses.Count.ShouldBe(1);
+        impulseResponses[0].InputPinId.ShouldBe(inputPinId);
+        impulseResponses[0].OutputPinId.ShouldBe(outputPinId);
+        var h = impulseResponses[0].Samples;
+        int peakIdx = h.Select((v, i) => (Mag: v.Magnitude, Idx: i)).MaxBy(x => x.Mag).Idx;
+        peakIdx.ShouldBe(0);
+        h[0].Magnitude.ShouldBe(sliderValue, tolerance: 0.05);
     }
 
     [Fact]
