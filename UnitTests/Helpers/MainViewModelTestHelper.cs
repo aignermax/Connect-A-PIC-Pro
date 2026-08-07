@@ -8,6 +8,7 @@ using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -216,6 +217,7 @@ public static class MainViewModelTestHelper
                 new TimeDomainViewModel(),
                 new EyeDiagramViewModel(),
                 new WavelengthSpectrumViewModel(),
-                new AnalysisOutputPanelViewModel()));
+                new AnalysisOutputPanelViewModel(),
+                new MonteCarloViewModel()));
     }
 }

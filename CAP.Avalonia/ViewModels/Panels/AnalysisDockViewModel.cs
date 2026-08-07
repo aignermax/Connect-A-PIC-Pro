@@ -3,6 +3,7 @@ using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
 
@@ -17,8 +18,11 @@ public partial class AnalysisDockViewModel : ObservableObject
     /// <summary>Eye-diagram / BER analysis tab.</summary>
     public EyeDiagramViewModel Eye { get; }
 
-    /// <summary>Transmission-vs-wavelength spectrum tab (#816).</summary>
+    /// <summary>Transmission-vs-wavelength spectrum tab.</summary>
     public WavelengthSpectrumViewModel Spectrum { get; }
+
+    /// <summary>Monte-Carlo fabrication-variance tab.</summary>
+    public MonteCarloViewModel MonteCarlo { get; }
 
     /// <summary>Shared analysis-output header (#754): shows/picks/clears THE output coupler.</summary>
     public AnalysisOutputPanelViewModel Output { get; }
@@ -49,14 +53,17 @@ public partial class AnalysisDockViewModel : ObservableObject
     /// <param name="eye">Eye-diagram / BER analysis tab ViewModel.</param>
     /// <param name="spectrum">Transmission spectrum tab ViewModel (#816).</param>
     /// <param name="output">Shared analysis-output header ViewModel (#754).</param>
+    /// <param name="monteCarlo">Monte-Carlo fabrication-variance tab ViewModel (#818).</param>
     public AnalysisDockViewModel(
         TimeDomainViewModel transient, EyeDiagramViewModel eye,
-        WavelengthSpectrumViewModel spectrum, AnalysisOutputPanelViewModel output)
+        WavelengthSpectrumViewModel spectrum, AnalysisOutputPanelViewModel output,
+        MonteCarloViewModel monteCarlo)
     {
         Transient = transient;
         Eye = eye;
         Spectrum = spectrum;
         Output = output;
+        MonteCarlo = monteCarlo;
     }
 
     /// <summary>Wires all tabs and the shared output header to the active design canvas.</summary>
@@ -66,6 +73,7 @@ public partial class AnalysisDockViewModel : ObservableObject
         Eye.Configure(canvas);
         Spectrum.Configure(canvas);
         Output.Configure(canvas);
+        MonteCarlo.Configure(canvas);
     }
 
     /// <summary>Opens the dock on the Transient tab (called when Run is invoked in Transient mode).</summary>
