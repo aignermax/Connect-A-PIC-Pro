@@ -74,14 +74,47 @@ public sealed record GdsHierarchyImportOptions
     /// two pins becomes an ELECTRICAL connection (not a waveguide connection —
     /// the pins' signal domains decide the created connection's kind, with
     /// unknown-kind pins inferred electrical); unconsumed metal polygons are
-    /// imported as frozen paths like their waveguide counterparts. Default:
-    /// (11, 0) and (12, 0) — the metal trace and bridge-marker layers our own
-    /// exporters use (<c>MetalRoutingSpec</c> defaults), so
-    /// re-importing a Lunima export reconstructs its electrical routing out of
-    /// the box. Kept separate from <see cref="RouteLayers"/>: optical and metal
-    /// polygon networks must never merge into one connection.
+    /// imported as frozen paths like their waveguide counterparts. Kept
+    /// separate from <see cref="RouteLayers"/>: optical and metal polygon
+    /// networks must never merge into one connection.
+    ///
+    /// Default: null = AUTO. Our exporters' metal layer numbers are NOT
+    /// universal truth (a real foundry file carried optical routes on
+    /// (12, 0) and every reconstructed connection came back electrical), so
+    /// the importer applies <see cref="LunimaMetalRouteLayers"/> only when the
+    /// file is recognizably our own export (<see cref="GdsOwnExportSentinel"/>)
+    /// and treats foreign files as having NO metal route layers until the user
+    /// supplies a mapping (import dialog / options).
     /// </summary>
-    public IReadOnlyList<(int Layer, int Datatype)> MetalRouteLayers { get; init; } = [(11, 0), (12, 0)];
+    public IReadOnlyList<(int Layer, int Datatype)>? MetalRouteLayers { get; init; }
+
+    /// <summary>
+    /// The metal route layers OUR OWN exporters flatten electrical routing
+    /// into: (11, 0) metal traces and (12, 0) bridge markers
+    /// (<c>MetalRoutingSpec</c> defaults). Applied for
+    /// <see cref="MetalRouteLayers"/> = AUTO on recognizably-own exports only.
+    /// </summary>
+    public static readonly IReadOnlyList<(int Layer, int Datatype)> LunimaMetalRouteLayers =
+        [(11, 0), (12, 0)];
+
+    /// <summary>
+    /// Replaces AUTO (null) layer lists with their concrete values:
+    /// <see cref="LunimaMetalRouteLayers"/> /
+    /// <see cref="GdsPinDetectionOptions.LunimaElectricalLayers"/> when
+    /// <paramref name="isOwnExport"/> (the file carries the Lunima export
+    /// sentinel), empty lists otherwise. Explicitly configured lists are
+    /// returned verbatim — a user-supplied layer mapping always wins.
+    /// </summary>
+    public GdsHierarchyImportOptions ResolveLayerDefaults(bool isOwnExport) => this with
+    {
+        MetalRouteLayers = MetalRouteLayers
+            ?? (isOwnExport ? LunimaMetalRouteLayers : []),
+        PinDetection = PinDetection with
+        {
+            ElectricalLayers = PinDetection.ElectricalLayers
+                ?? (isOwnExport ? GdsPinDetectionOptions.LunimaElectricalLayers : []),
+        },
+    };
 
     /// <summary>
     /// Maximum distance in micrometers between two absolute pin positions for

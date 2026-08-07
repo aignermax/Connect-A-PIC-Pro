@@ -88,6 +88,18 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private string _waveguideLayersText = "1,0";
 
     /// <summary>
+    /// Metal-route (electrical) layers as "layer,datatype" pairs, ';'-separated.
+    /// Empty (default) = AUTO: Lunima's own exports get the exporter metal
+    /// defaults (11,0)/(12,0), foreign files get none — foundry layer tables
+    /// assign those numbers differently, and treating them as metal turned
+    /// optical routes electrical. A non-empty value is an explicit
+    /// mapping and feeds both the metal route matching and the electrical pin
+    /// inference.
+    /// </summary>
+    [ObservableProperty]
+    private string _metalLayersText = "";
+
+    /// <summary>
     /// Recreate the detected connections with Lunima's own routing (default: on).
     /// The flag flows into <see cref="GdsPlacementExecutor.ExecuteAsync"/>: the
     /// route-derived connections become real router-generated waveguides/metal

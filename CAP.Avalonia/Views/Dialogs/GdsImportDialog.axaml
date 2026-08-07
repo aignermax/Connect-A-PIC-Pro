@@ -110,6 +110,18 @@
                     </StackPanel>
                 </Grid>
 
+                <!-- Metal-route (electrical) layers: empty = auto via the Lunima export sentinel -->
+                <Grid ColumnDefinitions="*,12,*">
+                    <StackPanel Grid.Column="0" Spacing="4">
+                        <TextBlock Text="{loc:Localize GdsImport.MetalLayersLabel}" Foreground="LightGray"
+                                   FontSize="11" TextWrapping="Wrap"/>
+                        <TextBox Text="{Binding MetalLayersText}"
+                                 Watermark="{loc:Localize GdsImport.MetalLayersWatermark}"
+                                 Background="#2d2d2d" Foreground="White" FontSize="11"
+                                 ToolTip.Tip="{loc:Localize GdsImport.MetalLayersTip}"/>
+                    </StackPanel>
+                </Grid>
+
                 <!-- Recreate detected connections with Lunima routing -->
                 <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"
                           Content="{loc:Localize GdsImport.RerouteConnections}"

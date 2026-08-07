@@ -32,7 +32,9 @@ internal sealed partial class GdsHierarchyImportSession
     {
         Library = library;
         _topCellName = topCellName;
-        _options = options;
+        bool isOwnExport = GdsOwnExportSentinel.IsOwnExport(library);
+        _options = options.ResolveLayerDefaults(isOwnExport);
+        _metalDefaultsAutoDisabled = !isOwnExport && options.MetalRouteLayers is null;
         Flattener = new GdsCellFlattener(library);
     }
 
@@ -136,7 +138,7 @@ internal sealed partial class GdsHierarchyImportSession
     /// app-space frame <see cref="GetTopCellWaveguidePolygons"/> uses.
     /// </summary>
     public IReadOnlyList<GdsOutlinePolygon> GetTopCellMetalPolygons() =>
-        GetTopCellPolygonsOnLayers(_options.MetalRouteLayers);
+        GetTopCellPolygonsOnLayers(_options.MetalRouteLayers!); // resolved non-null in the ctor
 
     /// <summary>
     /// The top cell's OWN polygons on every layer that is NEITHER optical routing
@@ -151,8 +153,9 @@ internal sealed partial class GdsHierarchyImportSession
     public IReadOnlyList<GdsOutlinePolygon> GetTopCellResidualPolygons()
     {
         var routingLayers = new HashSet<(int, int)>(
-            _options.RouteLayers.Concat(_options.MetalRouteLayers));
+            _options.RouteLayers.Concat(_options.MetalRouteLayers!));
         var converted = ConvertTopCellPolygons(p => !routingLayers.Contains((p.Layer, p.DataType)));
+        NoteSkippedMetalDefaults(converted);
         if (converted.Count == 0)
             return converted;
 

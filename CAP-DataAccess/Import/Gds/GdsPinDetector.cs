@@ -73,6 +73,12 @@ public static partial class GdsPinDetector
     {
         ArgumentNullException.ThrowIfNull(flattened);
         options ??= new GdsPinDetectionOptions();
+        // Standalone detection has no library context to resolve the AUTO
+        // (null) electrical layers against the own-export sentinel; the Lunima
+        // defaults keep single-cell detection behaving as before. The
+        // hierarchy importer resolves BEFORE calling in (foreign file → none).
+        if (options.ElectricalLayers is null)
+            options = options with { ElectricalLayers = GdsPinDetectionOptions.LunimaElectricalLayers };
         options.Validate();
 
         var result = new List<DetectedPin>();

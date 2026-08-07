@@ -29,16 +29,31 @@ public sealed record GdsPinDetectionOptions
     /// (Layer, Datatype) pairs whose polygons count as METAL (electrical): they
     /// join <see cref="WaveguideLayers"/> for the label-pin direction rule, and
     /// a label anchor touching one proves the pin ELECTRICAL (metal only carries
-    /// electrical signals — the layer-based kind inference). Default: (11, 0)
-    /// and (12, 0), the metal trace and bridge-marker layers our own exporters
-    /// use (<c>MetalRoutingSpec</c> defaults, mirrored by
-    /// <see cref="GdsHierarchyImportOptions.MetalRouteLayers"/>), plus (13, 0),
-    /// SiEPIC's PAD_OPEN bond-pad layer (siepic-ebeam-pdk.json), so a label
-    /// sitting on a pad opening reads as an electrical contact. A pair listed in
+    /// electrical signals — the layer-based kind inference). A pair listed in
     /// BOTH this and <see cref="WaveguideLayers"/> counts as metal (the stronger
     /// evidence wins).
+    ///
+    /// Default: null = AUTO. Foundry layer tables assign numbers freely, so a
+    /// hardcoded metal default misreads foreign files (a real foundry file's
+    /// optical routes on (12, 0) imported as electrical). The hierarchy
+    /// importer resolves AUTO via the Lunima export sentinel
+    /// (<see cref="GdsOwnExportSentinel"/>): our own exports get
+    /// <see cref="LunimaElectricalLayers"/>, foreign files get NONE until the
+    /// user supplies a mapping. Standalone <see cref="GdsPinDetector"/> calls
+    /// (no library context) fall back to <see cref="LunimaElectricalLayers"/>.
     /// </summary>
-    public IReadOnlyList<(int Layer, int Datatype)> ElectricalLayers { get; init; } = [(11, 0), (12, 0), (13, 0)];
+    public IReadOnlyList<(int Layer, int Datatype)>? ElectricalLayers { get; init; }
+
+    /// <summary>
+    /// The metal layers OUR OWN exporters write: (11, 0) and (12, 0), the metal
+    /// trace and bridge-marker layers (<c>MetalRoutingSpec</c> defaults,
+    /// mirrored by <see cref="GdsHierarchyImportOptions.LunimaMetalRouteLayers"/>),
+    /// plus (13, 0), SiEPIC's PAD_OPEN bond-pad layer (siepic-ebeam-pdk.json).
+    /// Applied for <see cref="ElectricalLayers"/> = AUTO on recognizably-own
+    /// exports only.
+    /// </summary>
+    public static readonly IReadOnlyList<(int Layer, int Datatype)> LunimaElectricalLayers =
+        [(11, 0), (12, 0), (13, 0)];
 
     /// <summary>
     /// Distance in micrometers within which a segment endpoint or text anchor is

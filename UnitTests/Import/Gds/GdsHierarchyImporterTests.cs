@@ -446,7 +446,9 @@ public class GdsHierarchyImporterTests
         // outer left edge) and read electrical from the metal layer alone ("m1"
         // matches no electrical name); the waveguide pin stays optical; the top
         // cell's own "anode" label has no geometry near and falls back to the
-        // bbox direction plus the name-based kind.
+        // bbox direction plus the name-based kind. The fixture is a FOREIGN
+        // file (no Lunima sentinel), so its metal layer is supplied as an
+        // explicit mapping — the (11, 0) default no longer applies here.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
@@ -464,7 +466,11 @@ public class GdsHierarchyImporterTests
             .ToArray());
 
         var result = await GdsHierarchyImporter.ImportAsync(
-            library, "TOP", new GdsHierarchyImportOptions { Mode = GdsHierarchyImportMode.BlackBox });
+            library, "TOP", new GdsHierarchyImportOptions
+            {
+                Mode = GdsHierarchyImportMode.BlackBox,
+                PinDetection = new GdsPinDetectionOptions { ElectricalLayers = [(11, 0)] },
+            });
 
         var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
         result.Warnings.ShouldBeEmpty();

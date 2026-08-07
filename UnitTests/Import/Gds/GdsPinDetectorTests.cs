@@ -912,7 +912,9 @@ public class GdsPinDetectorTests
 
             foreach (var polygon in polygons)
             {
-                bool isMetal = ContainsLayer(options.ElectricalLayers, polygon.Layer, polygon.DataType);
+                bool isMetal = ContainsLayer(
+                    options.ElectricalLayers ?? GdsPinDetectionOptions.LunimaElectricalLayers,
+                    polygon.Layer, polygon.DataType);
                 bool isWaveguide = !isMetal && ContainsLayer(options.WaveguideLayers, polygon.Layer, polygon.DataType);
                 if (!isMetal && !isWaveguide)
                     continue;

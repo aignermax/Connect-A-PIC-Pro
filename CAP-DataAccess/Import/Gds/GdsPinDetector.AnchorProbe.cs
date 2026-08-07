@@ -93,7 +93,8 @@ public static partial class GdsPinDetector
         {
             // A layer pair configured as both waveguide and metal counts as
             // metal — metal is the stronger (direct electrical) evidence.
-            bool isMetal = ContainsLayer(options.ElectricalLayers, polygon.Layer, polygon.DataType);
+            bool isMetal = ContainsLayer(
+                options.ElectricalLayers!, polygon.Layer, polygon.DataType); // AUTO resolved in Detect
             bool isWaveguide = !isMetal && ContainsLayer(options.WaveguideLayers, polygon.Layer, polygon.DataType);
             if ((!isMetal && !isWaveguide) || polygon.Points.Count == 0)
                 continue;

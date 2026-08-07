@@ -10,8 +10,11 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 /// </summary>
 public partial class GdsImportDialogViewModel
 {
-    /// <summary>Builds the import options from the mode radio and the layer text fields.</summary>
-    private bool TryBuildOptions(out GdsHierarchyImportOptions options, out string? error)
+    /// <summary>
+    /// Builds the import options from the mode radio and the layer text fields.
+    /// Internal as a test seam (InternalsVisibleTo UnitTests).
+    /// </summary>
+    internal bool TryBuildOptions(out GdsHierarchyImportOptions options, out string? error)
     {
         options = new GdsHierarchyImportOptions();
         error = null;
@@ -31,13 +34,31 @@ public partial class GdsImportDialogViewModel
             return false;
         }
 
+        // Empty = AUTO (null): the importer resolves the metal layers via the
+        // Lunima export sentinel — own exports get the exporter defaults,
+        // foreign files get none. A non-empty value is the user's explicit
+        // mapping and feeds both route matching and electrical pin inference.
+        List<(int Layer, int Datatype)>? metalLayers = null;
+        if (!string.IsNullOrWhiteSpace(MetalLayersText))
+        {
+            metalLayers = ParseLayerPairs(MetalLayersText);
+            if (metalLayers is null)
+            {
+                error = string.Format(
+                    LocalizationService.Instance.Translate("GdsImport.ErrorLayerSyntax"), MetalLayersText);
+                return false;
+            }
+        }
+
         options = options with
         {
             Mode = IsExplodeMode ? GdsHierarchyImportMode.ExplodeHierarchy : GdsHierarchyImportMode.BlackBox,
+            MetalRouteLayers = metalLayers,
             PinDetection = new GdsPinDetectionOptions
             {
                 PortLayers = portLayers,
                 WaveguideLayers = waveguideLayers,
+                ElectricalLayers = metalLayers,
             },
         };
         return true;

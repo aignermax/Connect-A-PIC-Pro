@@ -301,6 +301,45 @@ public class GdsImportDialogViewModelTests : IDisposable
         pairs[1].ShouldBe((501, 1));
     }
 
+    [Fact]
+    public void TryBuildOptions_MetalLayersEmpty_LeavesMetalOnAuto()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+
+        vm.MetalLayersText.ShouldBe("", "the default is AUTO — foreign foundry files must not " +
+            "inherit Lunima's exporter metal layers");
+        vm.TryBuildOptions(out var options, out var error).ShouldBeTrue();
+
+        error.ShouldBeNull();
+        options.MetalRouteLayers.ShouldBeNull("null = AUTO (own-export sentinel decides)");
+        options.PinDetection.ElectricalLayers.ShouldBeNull();
+    }
+
+    [Fact]
+    public void TryBuildOptions_MetalLayersSet_FeedsRouteMatchingAndPinInference()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        vm.MetalLayersText = "12,0; 41,0";
+
+        vm.TryBuildOptions(out var options, out _).ShouldBeTrue();
+
+        options.MetalRouteLayers.ShouldBe(new[] { (12, 0), (41, 0) });
+        options.PinDetection.ElectricalLayers.ShouldBe(new[] { (12, 0), (41, 0) },
+            "an explicit mapping drives the electrical pin inference too");
+    }
+
+    [Fact]
+    public void TryBuildOptions_MetalLayersMalformed_ReturnsError()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        vm.MetalLayersText = "12";
+
+        vm.TryBuildOptions(out _, out var error).ShouldBeFalse();
+
+        error.ShouldNotBeNull();
+        error.ShouldContain("12");
+    }
+
     // ── End-to-end: analyze → import → place on canvas ───────────────────────
 
     [Fact]
