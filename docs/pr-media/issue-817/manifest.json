@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-initial.png",
+    "caption": "Properties panel with a freshly placed 1x2 MMI Splitter: two labeled, unit-aware parameter rows (Insertion Loss [dB] = 0.30, Splitting Ratio (out1) [%] = 50) at their PDK defaults."
+  },
+  {
+    "file": "02-mmi-edited.png",
+    "caption": "Same MMI instance after editing: Insertion Loss set to 1.50 dB and Splitting Ratio to 80 % via slider/numeric input; values write through to the instance sliders and re-trigger the simulation."
+  },
+  {
+    "file": "03-directional-coupler.png",
+    "caption": "Directional Coupler selected: its single Coupling Ratio [%] parameter (default 50) rendered through the same parametric editor schema."
+  }
+]

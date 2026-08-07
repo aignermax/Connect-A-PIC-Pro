@@ -69,14 +69,19 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                 draft.Connections, componentName, paramNames, pinNames);
         }
 
-        private static List<ParameterDefinition> MapParameters(
+        /// <summary>
+        /// Maps parameter drafts to core <see cref="ParameterDefinition"/>s.
+        /// Public so the template converter can expose the same metadata
+        /// (labels, units, ranges) to the properties-panel editor.
+        /// </summary>
+        public static List<ParameterDefinition> MapParameters(
             List<ParameterDefinitionDraft>? drafts)
         {
             if (drafts == null || drafts.Count == 0)
                 return new List<ParameterDefinition>();
 
             return drafts.Select(d => new ParameterDefinition(
-                d.Name, d.DefaultValue, d.MinValue, d.MaxValue, d.Label, d.SliderNumber
+                d.Name, d.DefaultValue, d.MinValue, d.MaxValue, d.Label, d.SliderNumber, d.Unit
             )).ToList();
         }
 
