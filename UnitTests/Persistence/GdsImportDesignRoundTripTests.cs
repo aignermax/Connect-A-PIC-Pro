@@ -166,10 +166,12 @@ public class GdsImportDesignRoundTripTests : IDisposable
         routePath.DataType.ShouldBe(0);
 
         // …and the reloaded design exports the outline back on its OWN layer, not
-        // the process default — one tagged segment per traced outline edge.
+        // the process default — as ONE verbatim polygon (the path holds the polygon's
+        // outline ring, not a centerline — per-edge waveguides would double the lines
+        // on every re-import, see GdsReexportIdempotencyTests).
         var script = new SimpleNazcaExporter().Export(loadCanvas, library: sink.Templates.ToList());
-        script.ShouldContain("nd.strt(length=2.00, layer=(1, 0)).put(");
-        script.ShouldContain("nd.strt(length=0.50, layer=(1, 0)).put(");
+        script.ShouldContain(
+            "nd.Polygon(points=[(10.00,-3.75),(12.00,-3.75),(12.00,-3.25),(10.00,-3.25)], layer=(1, 0)).put(0, 0)");
 
         // The pinned abutment connection survived the same round-trip unchanged.
         var abutment = group.InternalPaths.Single(p => p.StartPin is not null);

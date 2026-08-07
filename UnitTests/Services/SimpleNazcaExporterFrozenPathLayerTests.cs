@@ -15,7 +15,10 @@ namespace UnitTests.Services;
 /// tagged with the (layer, datatype) of the polygon it was imported from must export
 /// its segments on THAT layer — optical geometry on the tag itself, a metal trace with
 /// the tag winning over the process metal default — while untagged paths keep the
-/// historical default emission exactly.
+/// historical default emission exactly. A PIN-LESS tagged path is an imported route
+/// polygon's outline ring (no centerline exists for it) and exports as one verbatim
+/// polygon on the tagged layer — per-edge waveguides would double every route on
+/// re-import.
 /// </summary>
 public class SimpleNazcaExporterFrozenPathLayerTests
 {
@@ -75,12 +78,71 @@ public class SimpleNazcaExporterFrozenPathLayerTests
         script.ShouldContain("width=10.00, layer=(11, 0)");
     }
 
+    [Fact]
+    public void Export_PinLessTaggedRingPath_EmitsVerbatimPolygonOnSourceLayer()
+    {
+        // A pin-less tagged frozen path holds an imported route polygon's OUTLINE ring —
+        // the honest round-trip is the polygon itself, not one waveguide per ring edge
+        // (which doubles every route on re-import, see GdsReexportIdempotencyTests).
+        var canvas = CanvasWith(CreateGroup(path: RingPath(), layer: 31, dataType: 5));
+
+        var script = new SimpleNazcaExporter().Export(canvas);
+
+        script.ShouldContain(
+            "nd.Polygon(points=[(0.00,0.00),(10.00,0.00),(10.00,-1.00),(0.00,-1.00)], layer=(31, 5)).put(0, 0)");
+        script.ShouldNotContain("nd.strt(length=10.00, layer=(31, 5))");
+    }
+
+    [Fact]
+    public void Export_PinLessUntaggedRingPath_KeepsSegmentEmission()
+    {
+        // Without the import's source-layer tag the ring shape stays historical:
+        // per-segment waveguides on the default layer (a hand-built pin-less path
+        // has no claim to being a polygon outline).
+        var canvas = CanvasWith(CreateGroup(path: RingPath(), layer: null, dataType: null));
+
+        var script = new SimpleNazcaExporter().Export(canvas);
+
+        script.ShouldContain("nd.strt(length=10.00).put(0.00, 0.00, 0.00)");
+        script.ShouldNotContain("nd.Polygon(");
+    }
+
+    [Fact]
+    public void Export_PinnedRingPath_KeepsSegmentEmission()
+    {
+        // A frozen CONNECTION (both pins set) is centerline geometry even when its
+        // cached route happens to chain into a ring — it keeps the segment emission.
+        var child = CreateChild("splitter_1x2");
+        var startPin = OpticalPin("in", child, offsetX: 0);
+        var endPin = OpticalPin("out", child, offsetX: 10);
+        var group = CreateGroup(path: RingPath(), layer: 31, dataType: 5,
+            child: child, startPin: startPin, endPin: endPin);
+        var canvas = CanvasWith(group);
+
+        var script = new SimpleNazcaExporter().Export(canvas);
+
+        script.ShouldContain("nd.strt(length=10.00, layer=(31, 5))");
+        script.ShouldNotContain("nd.Polygon(points=[(0.00,0.00),(10.00,0.00)");
+    }
+
     // ── Helpers ──────────────────────────────────────────────────────────────
 
     private static RoutedPath StraightPath()
     {
         var path = new RoutedPath();
         path.Segments.Add(new StraightSegment(0, 0, 10, 0, 0));
+        return path;
+    }
+
+    /// <summary>A closed 10×1 µm rectangle outline — the shape
+    /// <c>GdsFrozenRoutePathFactory.Create</c> traces from an imported route polygon.</summary>
+    private static RoutedPath RingPath()
+    {
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(0, 0, 10, 0, 0));
+        path.Segments.Add(new StraightSegment(10, 0, 10, 1, 90));
+        path.Segments.Add(new StraightSegment(10, 1, 0, 1, 180));
+        path.Segments.Add(new StraightSegment(0, 1, 0, 0, -90));
         return path;
     }
 
@@ -117,6 +179,17 @@ public class SimpleNazcaExporterFrozenPathLayerTests
             OffsetYMicrometers = 0,
             AngleDegrees = 0,
             LogicalPin = new Pin(name, 0, MatterType.Electricity, RectSide.Up),
+        };
+
+    private static PhysicalPin OpticalPin(string name, Component parent, double offsetX) =>
+        new()
+        {
+            Name = name,
+            ParentComponent = parent,
+            OffsetXMicrometers = offsetX,
+            OffsetYMicrometers = 0,
+            AngleDegrees = 0,
+            LogicalPin = new Pin(name, 0, MatterType.Light, RectSide.Up),
         };
 
     private static Component CreateChild(string nazcaFunctionName)
