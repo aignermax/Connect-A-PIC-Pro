@@ -1,4 +1,4 @@
-﻿using CAP_Core.Components;
+using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.FormulaReading;
 using MathNet.Numerics;
@@ -68,6 +68,7 @@ namespace CAP_Core.Grid.FormulaReading
             var matches = regex.Matches(expressionDraft);
 
             Dictionary<string, Guid> usedParameterGuids = new();
+            IsPinsInvolved = false;
             foreach (Match match in matches)
             {
                 string parameterName = match.Value;
@@ -79,14 +80,12 @@ namespace CAP_Core.Grid.FormulaReading
                 else if (sliderParameterNameToGuidMap.TryGetValue(parameterName, out parameterGuid))
                 {
                     usedParameterGuids.TryAdd(parameterName, parameterGuid);
-                    IsPinsInvolved = false;
                 }
                 else
                 {
                     throw new InvalidOperationException($"Parameter name '{parameterName}' could not be found in any provided parameter name to Guid map.");
                 }
             }
-            IsPinsInvolved = false;
             return usedParameterGuids;
         }
         public static ConnectionFunction ConvertToDelegate(string expressionDraft,

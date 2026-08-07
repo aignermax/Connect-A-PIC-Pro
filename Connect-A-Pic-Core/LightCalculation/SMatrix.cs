@@ -200,7 +200,7 @@ namespace CAP_Core.LightCalculation
             // error-handling layer can log and surface it.
         }
 
-        private List<object> GetWeightParameters(IEnumerable<Guid> parameterGuids, MathNet.Numerics.LinearAlgebra.Vector<Complex> inputVector)
+        private List<object> GetWeightParameters(IEnumerable<Guid> parameterGuids, MathNet.Numerics.LinearAlgebra.Vector<Complex>? inputVector)
         {
             List<object> usedParameterValues = new();
             foreach (var paramGuid in parameterGuids)
@@ -208,6 +208,10 @@ namespace CAP_Core.LightCalculation
                 // first check if the parameterGuid is in the pin-Dict
                 if (PinReference.TryGetValue(paramGuid, out int pinNumber))
                 {
+                    if (inputVector == null)
+                        throw new InvalidOperationException(
+                            "Field-dependent formula connection needs the current field vector; " +
+                            "only parameter-only connections may be evaluated without one.");
                     usedParameterValues.Add(inputVector[pinNumber]);
                 }
                 // check if parameterGuid is in the slider Dict
@@ -218,6 +222,26 @@ namespace CAP_Core.LightCalculation
             }
 
             return usedParameterValues;
+        }
+
+        /// <summary>
+        /// Evaluates every parameter-only (slider-driven) formula connection once and writes
+        /// the resulting constant into the linear matrix. Such connections depend on design
+        /// parameters, not on the optical field, so the circuit stays linear for a fixed
+        /// parameter set — callers that require a purely linear system (e.g. the time-domain
+        /// simulation) can use this to resolve them instead of rejecting the design.
+        /// Field-dependent (inner-loop) connections are left untouched.
+        /// </summary>
+        public void EvaluateParameterOnlyConnections()
+        {
+            foreach (var connection in NonLinearConnections)
+            {
+                if (connection.Value.IsInnerLoopFunction)
+                    continue;
+                var weightParameters = GetWeightParameters(connection.Value.UsedParameterGuids, inputVector: null);
+                var calculatedWeight = connection.Value.CalcConnectionWeightAsync(weightParameters);
+                SMat[PinReference[connection.Key.PinIdEnd], PinReference[connection.Key.PinIdStart]] = calculatedWeight;
+            }
         }
         private async Task RecomputeSMatNonLinearPartsAsync(MathNet.Numerics.LinearAlgebra.Vector<Complex> inputVector, bool SkipOuterLoopFunctions = true)
         {

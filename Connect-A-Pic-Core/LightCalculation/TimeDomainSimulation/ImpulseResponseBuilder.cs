@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Numerics;
 using MathNet.Numerics.IntegralTransforms;
 
@@ -53,8 +54,10 @@ public class ImpulseResponseBuilder
     /// in per closure call.
     /// </param>
     /// <exception cref="InvalidOperationException">
-    /// Thrown when any nonlinear connection is found (Phase 1 gate) or the closure's
-    /// pair count exceeds the memory gate.
+    /// Thrown when a field-dependent (truly nonlinear) connection is found (Phase 1 gate)
+    /// or the closure's pair count exceeds the memory gate. Parameter-only (slider-driven)
+    /// formula connections are constant for a fixed parameter set and are evaluated into
+    /// the linear matrix instead of being rejected.
     /// </exception>
     /// <exception cref="NonConvergentCircuitException">
     /// A component's S-matrix data is non-passive, a lossless feedback loop sits exactly
@@ -72,14 +75,17 @@ public class ImpulseResponseBuilder
 
         var (freqGrid, dt) = BuildFrequencyGrid(centerWavelengthNm, spanNm, nPoints);
 
-        // Check for nonlinear connections — Phase 1 only supports linear circuits.
+        // Parameter-only (slider-driven) formula connections are constant for a fixed
+        // parameter set — evaluate them once into the linear matrix instead of rejecting
+        // the design. Only field-dependent (inner-loop) connections are truly nonlinear.
         int referenceNm = FreqToWavelengthNmInt(freqGrid[nPoints / 2]);
         var referenceMatrix = _matrixBuilder.GetSystemSMatrix(referenceNm);
-        if (referenceMatrix.NonLinearConnections.Count > 0)
+        referenceMatrix.EvaluateParameterOnlyConnections();
+        if (referenceMatrix.NonLinearConnections.Any(c => c.Value.IsInnerLoopFunction))
         {
             throw new InvalidOperationException(
                 "Time-domain simulation (Phase 1) supports linear circuits only. " +
-                "The design contains nonlinear connections. Remove or linearize them before running transient analysis.");
+                "The design contains field-dependent (nonlinear) connections. Remove or linearize them before running transient analysis.");
         }
 
         // Cache S-matrix results by rounded wavelength nm to avoid duplicate calls.
@@ -115,6 +121,9 @@ public class ImpulseResponseBuilder
                 // pair must include the transitive multi-hop closure, otherwise light
                 // never crosses a component boundary in the transient simulation.
                 var sMatrix = _matrixBuilder.GetSystemSMatrix(wavelengthNm);
+                // Same parameter-only evaluation as for the reference matrix (see Build):
+                // fresh matrices from the builder carry the formula connections again.
+                sMatrix.EvaluateParameterOnlyConnections();
                 values = ComputeTransitiveValues(sMatrix, activeInputPinIds, circuitContext, wavelengthNm);
                 matrixCache[wavelengthNm] = values;
             }

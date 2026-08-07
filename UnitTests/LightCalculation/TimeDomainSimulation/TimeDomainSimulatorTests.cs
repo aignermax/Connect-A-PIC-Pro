@@ -136,8 +136,9 @@ public class TimeDomainSimulatorTests
             .Returns((int _) =>
             {
                 var matrix = new SMatrix(allPins, new());
+                // truly nonlinear: the transfer depends on the pin's field amplitude
                 var nonLinFn = new ConnectionFunction(
-                    _ => Complex.One, "1", new List<Guid>(), IsInnerLoopFunction: false);
+                    weights => (Complex)weights[0], "PIN1 * 2", new List<Guid> { inputPin }, IsInnerLoopFunction: true);
                 matrix.NonLinearConnections.Add((inputPin, outputPin), nonLinFn);
                 return matrix;
             });
