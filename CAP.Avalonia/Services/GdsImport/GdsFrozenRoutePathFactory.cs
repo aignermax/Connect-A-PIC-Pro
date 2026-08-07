@@ -52,6 +52,11 @@ public static class GdsFrozenRoutePathFactory
             Path = path,
             StartPin = null,
             EndPin = null,
+            // The source polygon's (layer, datatype) rides along so the export can
+            // put the geometry back on the layer it came from (manufacturing needs
+            // the original layers; without the tag it landed on the process default).
+            Layer = polygon.Layer,
+            DataType = polygon.DataType,
         };
     }
 

@@ -160,6 +160,19 @@ public class GdsImportDesignRoundTripTests : IDisposable
                 (10.0, 3.25, 10.0, 3.75),
             });
 
+        // The source polygon's (layer, datatype) rode along the whole way: import →
+        // frozen path → .lun → reload (the fixture's route stub sits on (1, 0)).
+        routePath.Layer.ShouldBe(1);
+        routePath.DataType.ShouldBe(0);
+
+        // …and the reloaded design exports the outline back on its OWN layer, not
+        // the process default — as ONE verbatim polygon (the path holds the polygon's
+        // outline ring, not a centerline — per-edge waveguides would double the lines
+        // on every re-import, see GdsReexportIdempotencyTests).
+        var script = new SimpleNazcaExporter().Export(loadCanvas, library: sink.Templates.ToList());
+        script.ShouldContain(
+            "nd.Polygon(points=[(10.00,-3.75),(12.00,-3.75),(12.00,-3.25),(10.00,-3.25)], layer=(1, 0)).put(0, 0)");
+
         // The pinned abutment connection survived the same round-trip unchanged.
         var abutment = group.InternalPaths.Single(p => p.StartPin is not null);
         abutment.StartPin!.Name.ShouldBe("out");

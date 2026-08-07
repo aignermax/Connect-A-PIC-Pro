@@ -4,6 +4,7 @@ using CAP_Core.Analysis;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Routing;
+using CAP_DataAccess.Import.Gds;
 
 namespace CAP.Avalonia.Services.GdsImport;
 
@@ -112,6 +113,15 @@ public sealed partial class GdsPlacementExecutor
 
             if (connectionVm is not null)
             {
+                // Route-derived connections keep a tag of the layer their source
+                // polygons were drawn on — but only when that layer is unambiguous
+                // (every source polygon shares one (layer, datatype)): a re-created
+                // Lunima route then exports on the ORIGINAL layer instead of the
+                // process default, and the tag survives grouping (it is captured
+                // into the frozen path, see FrozenWaveguidePath.CaptureSettingsFrom).
+                if (connection.IsRouteDerived)
+                    TagSourceLayer(connectionVm.Connection, connection.SourcePolygons);
+
                 created.Add(connectionVm.Connection);
                 report.ConnectedCount++;
                 if (connection.IsRouteDerived)
@@ -130,6 +140,24 @@ public sealed partial class GdsPlacementExecutor
         if (awaitingRoute > 0)
             await _canvas.RecalculateRoutesAsync(); // one routing pass for every connection handed to the router
         return created;
+    }
+
+    /// <summary>
+    /// Tags a route-derived connection with its source polygons' (layer, datatype)
+    /// when every polygon agrees on one layer; mixed-layer (or polygon-less) sources
+    /// stay untagged and export on the process defaults, exactly like before.
+    /// </summary>
+    private static void TagSourceLayer(
+        WaveguideConnection connection, IReadOnlyList<GdsOutlinePolygon> sourcePolygons)
+    {
+        if (sourcePolygons.Count == 0)
+            return;
+        var layer = sourcePolygons[0].Layer;
+        var dataType = sourcePolygons[0].DataType;
+        if (sourcePolygons.Any(p => p.Layer != layer || p.DataType != dataType))
+            return;
+        connection.SourceGdsLayer = layer;
+        connection.SourceGdsDataType = dataType;
     }
 
     /// <summary>

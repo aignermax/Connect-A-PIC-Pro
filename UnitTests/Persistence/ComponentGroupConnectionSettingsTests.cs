@@ -111,6 +111,88 @@ public class ComponentGroupConnectionSettingsTests
         restoredPath.BendRadiusOverrides.ShouldBeEmpty();
     }
 
+    [Fact]
+    public void RoundTrip_FrozenPathWithLayerTag_PreservesSourceLayer()
+    {
+        // Arrange — a GDS-imported route outline (pin-less) tagged with its source layer.
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var comp2 = CreateTestComponent("comp2", 100, 0);
+        var group = new ComponentGroup("TestGroup");
+        group.AddChild(comp1);
+        group.AddChild(comp2);
+
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(0, 0, 100, 0, 0));
+
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            Path = path,
+            StartPin = null,
+            EndPin = null,
+            Layer = 31,
+            DataType = 5
+        });
+
+        var lookup = new Dictionary<string, Component>
+        {
+            { "comp1", comp1 },
+            { "comp2", comp2 }
+        };
+
+        // Act
+        var dto = ComponentGroupSerializer.ToDto(group);
+        var restored = ComponentGroupSerializer.FromDto(dto, lookup);
+
+        // Assert
+        var restoredPath = restored.InternalPaths.ShouldHaveSingleItem();
+        restoredPath.Layer.ShouldBe(31);
+        restoredPath.DataType.ShouldBe(5);
+    }
+
+    [Fact]
+    public void FromDto_LegacyDtoWithoutLayerTag_LoadsNullLayer()
+    {
+        // Arrange — a DTO shaped like an old design file (no layer fields set): the
+        // missing tag must load as null, leaving the process-default export unchanged.
+        var comp1 = CreateTestComponent("comp1", 0, 0);
+        var comp2 = CreateTestComponent("comp2", 100, 0);
+        var lookup = new Dictionary<string, Component>
+        {
+            { "comp1", comp1 },
+            { "comp2", comp2 }
+        };
+
+        var dto = new ComponentGroupDto
+        {
+            GroupName = "LegacyGroup",
+            Identifier = "group_legacy",
+            ChildComponentIds = new List<string> { "comp1", "comp2" },
+            InternalPaths = new List<FrozenPathDto>
+            {
+                new()
+                {
+                    PathId = Guid.NewGuid().ToString(),
+                    StartComponentId = "comp1",
+                    StartPinName = "o1",
+                    EndComponentId = "comp2",
+                    EndPinName = "o1",
+                    Segments = new List<PathSegmentDto>
+                    {
+                        new() { Type = "straight", StartX = 0, StartY = 0, EndX = 100, EndY = 0 }
+                    }
+                }
+            }
+        };
+
+        // Act
+        var group = ComponentGroupSerializer.FromDto(dto, lookup);
+
+        // Assert
+        var restoredPath = group.InternalPaths.ShouldHaveSingleItem();
+        restoredPath.Layer.ShouldBeNull();
+        restoredPath.DataType.ShouldBeNull();
+    }
+
     /// <summary>
     /// Creates a test component with a single pin named "o1".
     /// </summary>

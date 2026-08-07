@@ -7,6 +7,13 @@ namespace CAP_DataAccess.Import.Gds;
 internal sealed partial class GdsHierarchyImportSession
 {
     /// <summary>
+    /// Multi-line texts are metadata blobs (e.g. nazca's "cellname: …\nfoundry_pdk: …"),
+    /// never port labels — a pin name cannot span lines. Applied everywhere texts
+    /// become pin candidates: top-level ports, draft pins and black-box pins.
+    /// </summary>
+    private static bool IsSingleLineLabel(GdsText text) => !text.Text.Contains('\n');
+
+    /// <summary>
     /// Runs <see cref="GdsPinDetector"/> with the configured port layers. When
     /// that yields ZERO label pins although the cell carries text labels on
     /// OTHER layers, retries once with every text label treated as a pin label:

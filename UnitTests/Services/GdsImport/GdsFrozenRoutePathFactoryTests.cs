@@ -30,6 +30,32 @@ public class GdsFrozenRoutePathFactoryTests
         };
 
     [Fact]
+    public void Create_TagsFrozenPathWithSourcePolygonLayer()
+    {
+        // The (layer, datatype) of the imported polygon must survive onto the frozen
+        // path — it is what lets the export put the geometry back on its own layer.
+        var polygon = new GdsOutlinePolygon
+        {
+            Layer = 3,
+            DataType = 1,
+            Points = new[]
+            {
+                new GdsOutlinePoint(0, 0),
+                new GdsOutlinePoint(10, 0),
+                new GdsOutlinePoint(10, 1),
+                new GdsOutlinePoint(0, 0),
+            },
+        };
+
+        var path = GdsFrozenRoutePathFactory.Create(polygon);
+
+        path.Layer.ShouldBe(3);
+        path.DataType.ShouldBe(1);
+        path.StartPin.ShouldBeNull("imported route geometry stays pin-less");
+        path.Path.Segments.Count.ShouldBe(3, "one segment per polygon edge");
+    }
+
+    [Fact]
     public void CreateConnectionRoute_SingleStripe_AnchorsAtPinsAndTracesTheOutline()
     {
         // The 10 µm bridge between wgA.out (10, 2) and wgB.in (20, 2).

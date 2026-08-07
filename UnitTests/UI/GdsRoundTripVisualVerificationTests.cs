@@ -555,8 +555,10 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     {
         AssertFileIsRealPng(path);
 
-        CountWhere(panel, probes.AroundPlacedMmiCenter(), IsOutlineFill)
-            .ShouldBeGreaterThan(30, "the placed mmi1 renders its imported GDS outline fill");
+        CountWhere(panel, probes.AroundPlacedMmiCenter(), IsDemofabBodyFill)
+            .ShouldBeGreaterThan(30, "the placed mmi1 renders its imported GDS outline fills " +
+                "(per-layer palette: the demofab cell has no (1,0) polygon, so its stacked " +
+                "foundry layers paint in their hashed hues, not the waveguide blue)");
         CountExternalPinPixels(panel, size)
             .ShouldBeGreaterThan(30, "the unoccupied pins render green (route-derived connections occupy some)");
         probes.ImportedRouteProbes.ShouldNotBeEmpty(
@@ -564,11 +566,11 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         for (var polyIndex = 0; polyIndex < probes.ImportedRouteProbes.Count; polyIndex++)
         {
             probes.ImportedRouteProbes[polyIndex]
-                .Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsRouteOrange) > 0)
-                .ShouldBeTrue($"imported route polygon #{polyIndex} renders as an orange frozen outline " +
-                    "— the routing is visible again");
+                .Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsImportedRouteGreen) > 0)
+                .ShouldBeTrue($"imported route polygon #{polyIndex} renders as a frozen outline " +
+                    "in the hashed (1111, 0) green — the routing is visible again");
         }
-        CountWhere(panel, Full(size), IsFrozenOrange)
+        CountWhere(panel, Full(size), IsImportedRouteGreen)
             .ShouldBeGreaterThan(50, "the imported route outlines render as frozen group paths");
         AssertEmptyCorner(panel, size);
     }
@@ -598,13 +600,14 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         rerouted.ShouldAllBe(p => !p.IsRouteFrozen,
             "re-routed connections are live Lunima routes, not frozen imported polygons");
 
-        CountWhere(panel, probes.AroundPlacedMmiCenter(), IsOutlineFill)
+        CountWhere(panel, probes.AroundPlacedMmiCenter(), IsDemofabBodyFill)
             .ShouldBeGreaterThan(30, "component bodies sit at the same pixels as in panel 03");
         foreach (var points in probes.ImportedRouteProbes)
-            points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsRouteOrange) > 0)
+            points.Any(p => CountWhere(panel, probes.AroundImportedRoute(p), IsImportedRouteGreen) > 0)
                 .ShouldBeTrue("the pin-less imported outlines render identically in both modes");
-        CountWhere(panel, Full(size), IsFrozenOrange)
-            .ShouldBeGreaterThan(50, "the re-routed connections and the imported outlines are drawn");
+        CountWhere(panel, Full(size), IsImportedRouteGreen)
+            .ShouldBeGreaterThan(50, "the imported pin-less outlines are drawn (the re-routed " +
+                "connections' geometry is the router's choice and is pinned at model level only)");
         CountExternalPinPixels(panel, size)
             .ShouldBeGreaterThan(30, "the unoccupied pins render green");
         AssertEmptyCorner(panel, size);
@@ -649,32 +652,36 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         r >= 245 && g >= 130 && g <= 190 && b <= 60;
 
     /// <summary>
-    /// Core pixels of the frozen group-internal path pen (ARGB 200,255,140,0
-    /// over the dark background ≈ (206,116,7)). The blue ceiling is the
-    /// discriminator against text fringes ((195,120,34) and friends all carry
-    /// b ≥ 20); the frozen stroke is wide enough to always leave full-coverage
-    /// core pixels.
+    /// Core pixels of the imported frozen paths: the export flattens the routed
+    /// waveguides into the top cell on nazca's fallback layer (1111, 0) (the
+    /// default interconnect xsection carries no layer), so the per-layer palette
+    /// paints them in the hashed (1111, 0) hue (≈(140,204,112)) — at the frozen-path
+    /// alpha 200 a ≈(116,166,94) core over the dark background, with multi-stroke
+    /// overlap blends up to ≈(135,196,107). The blue cap keeps the light-green
+    /// free-pin fill (144,238,144) out; the green floor keeps the muted demofab
+    /// body fills (g ≤ 120) out.
     /// </summary>
-    private static bool IsFrozenOrange(byte r, byte g, byte b) =>
-        r >= 195 && r <= 220 && g >= 105 && g <= 130 && b <= 15;
+    private static bool IsImportedRouteGreen(byte r, byte g, byte b) =>
+        g >= 130 && g >= r + 25 && g >= b + 40 && b <= 140;
 
     /// <summary>Blocked-fallback route pixels (red pen #FF0000, dashed).</summary>
     private static bool IsBlockedRed(byte r, byte g, byte b) =>
         r >= 200 && g <= 70 && b <= 70;
 
-    /// <summary>Any top-level canvas route pixel, healthy or blocked (live-connection absence checks).</summary>
+    /// <summary>Any live top-level canvas route pixel, healthy or blocked (live-connection absence checks).</summary>
     private static bool IsRoutePixel(byte r, byte g, byte b) =>
         IsCanvasOrange(r, g, b) || IsBlockedRed(r, g, b);
 
     /// <summary>
-    /// Any orange route-stroke pixel — the frozen-pen core (206,116,7), the
-    /// multi-stroke overlap blends toward full orange (255,165,0) that thin
-    /// outline rings inevitably produce, and the anti-aliased fringes in between.
-    /// Used for visibility probes only ("a route renders here"); the
-    /// frozen-vs-live shade distinction lives in the frozen-core counts.
+    /// The placed mmi1's outline fill: the demofab cell carries no (1, 0) waveguide
+    /// polygon, so the per-layer palette paints its stacked foundry layers in muted
+    /// hashed hues — at the footprint centre the (20, 0) slab over (1004, 0) blends
+    /// to ≈(68,82,74), a green-dominant gray. The bands exclude the red etched name
+    /// stubs ((21, 0) ≈ (153,100,100), r-dominant), the waveguide-blue SiEPIC fills
+    /// (b-dominant), and every route/pin green (all g ≥ 130).
     /// </summary>
-    private static bool IsRouteOrange(byte r, byte g, byte b) =>
-        r >= 195 && g >= 105 && g <= 190 && b <= 60;
+    private static bool IsDemofabBodyFill(byte r, byte g, byte b) =>
+        g >= r + 4 && g >= b + 4 && g <= 120;
 
     /// <summary>White-ish text pixels (name labels, pin labels).</summary>
     private static bool IsWhiteishText(byte r, byte g, byte b) => r >= 200 && g >= 200 && b >= 200;
@@ -694,15 +701,6 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     /// </summary>
     private static bool IsBronzeWaveguide(byte r, byte g, byte b) =>
         r >= 100 && r >= b + 30 && g >= b + 10 && g <= 170 && b <= 130;
-
-    /// <summary>
-    /// GDS outline fill (ARGB 46,100,160,220) over the dark background blends to
-    /// ≈(43,53,64); overlapping outline polygons push it toward ≈(53,73,92).
-    /// Blue-dominant, brighter than the background, distinct from the plain
-    /// body fill (which panel 3/4 never draws — every placed child is outlined).
-    /// </summary>
-    private static bool IsOutlineFill(byte r, byte g, byte b) =>
-        b >= r + 15 && g >= r && b >= 55 && b <= 170;
 
     /// <summary>Light-green unoccupied group pin fill (144,238,144).</summary>
     private static bool IsExternalPinGreen(byte r, byte g, byte b) =>
@@ -872,11 +870,13 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
                 caption = "The re-imported design (GdsImportService + GdsPlacementExecutor, re-routing OFF): "
                     + "the 'ConnectAPIC_Design' group (cyan selection border — the group lands selected, as "
                     + "after a real import) wraps the 7 placed instances, each drawn from its imported GDS "
-                    + "outline polygons (blue fill, incl. the demofab 'mmi2x2_dp' name stubs etched into the "
-                    + "MMI cells) with its name; light-green dots = the free group pins. Every drawn route is "
+                    + "outline polygons in the per-layer palette (the SiEPIC cells in waveguide blue; the "
+                    + "demofab MMIs in muted hashed hues with the red 'mmi2x2_dp' name stubs etched into the "
+                    + "cells) with its name; light-green dots = the free group pins. Every drawn route is "
                     + "imported geometry: the 4 route-derived connections (2 MMI braids, crossing↔crossing, "
                     + "halfring↔adiabatic) keep their imported polygons as frozen cached routes, and the "
-                    + "junction network rides the group as pin-less frozen paths — pixel-aligned with 02. "
+                    + "junction network rides the group as pin-less frozen paths — all in the hashed green "
+                    + "of the export's (1111, 0) fallback layer, pixel-aligned with 02. "
                     + "Same window/scale as 01 (uniform re-origin shift removed): every component must align "
                     + "with the original render within ~1 µm. Child name labels overlap where instances "
                     + "cluster — group children get no label decluttering.",

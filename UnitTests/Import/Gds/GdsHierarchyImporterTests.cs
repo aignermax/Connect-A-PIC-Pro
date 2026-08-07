@@ -639,11 +639,17 @@ public class GdsHierarchyImporterTests
         });
 
         // Restored/frozen accounting is INFO (fully reconstructed geometry);
-        // only the devrec halo — on neither the route nor the metal layers —
-        // earns the not-reconstructed WARNING.
+        // the devrec halo — on neither the route nor the metal layers — comes
+        // back as render-only background geometry (also INFO, not a warning).
         result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
-        var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+        result.Infos.ShouldContain(i => i.Contains("render-only background geometry"));
+        result.Warnings.ShouldBeEmpty();
+        var residual = result.TopCellResidualPolygons.ShouldHaveSingleItem();
+        residual.Layer.ShouldBe(68);
+        residual.Points.Select(p => (p.X, p.Y)).ShouldBe(new[]
+        {
+            (0.0, 4.0), (25.0, 4.0), (25.0, 0.0), (0.0, 0.0), (0.0, 4.0),
+        });
     }
 
     [Fact]
@@ -681,10 +687,11 @@ public class GdsHierarchyImporterTests
         connection.YUm.ShouldBe(2.0, Tolerance);
 
         // The restored connection is INFO (normal, fully-reconstructed
-        // behavior); only the devrec halo earns the not-reconstructed WARNING.
+        // behavior); the devrec halo comes back as background geometry (INFO).
         result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
-        var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+        result.Infos.ShouldContain(i => i.Contains("render-only background geometry"));
+        result.Warnings.ShouldBeEmpty();
+        result.TopCellResidualPolygons.ShouldHaveSingleItem().Layer.ShouldBe(68);
     }
 
     [Fact]
@@ -723,12 +730,13 @@ public class GdsHierarchyImporterTests
         connection.YUm.ShouldBe(2.0, Tolerance);
 
         result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
-        var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("remaining 1 polygon(s)/path(s) on other layers are not reconstructed (v1)");
+        result.Infos.ShouldContain(i => i.Contains("render-only background geometry"));
+        result.Warnings.ShouldBeEmpty();
+        result.TopCellResidualPolygons.ShouldHaveSingleItem().Layer.ShouldBe(68);
     }
 
     [Fact]
-    public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_KeepsNotReconstructedWarning()
+    public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_BecomesBackgroundGeometry()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
@@ -743,9 +751,12 @@ public class GdsHierarchyImporterTests
         var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
 
         result.TopCellWaveguidePolygons.ShouldBeEmpty("a devrec halo is not routing geometry");
-        var warning = result.Warnings.ShouldHaveSingleItem();
-        warning.ShouldContain("on other layers are not reconstructed (v1)");
-        warning.ShouldNotContain("imported as frozen paths");
+        // The halo is not lost: it rides the created group as render-only
+        // background geometry — an INFO, not the stale "not reconstructed" warning.
+        result.Infos.ShouldContain(i =>
+            i.Contains("1 polygon(s) on other layers are imported as render-only background geometry"));
+        result.Warnings.ShouldBeEmpty();
+        result.TopCellResidualPolygons.ShouldHaveSingleItem().Layer.ShouldBe(68);
     }
 
     [Fact]
@@ -807,9 +818,37 @@ public class GdsHierarchyImporterTests
             (0.0, 4.0), (10.0, 4.0), (10.0, 3.5), (0.0, 3.5), (0.0, 4.0),
         });
         // The (3,0) polygon comes back as a frozen path (INFO); the (1,0)
-        // polygon is on no configured route layer — the not-reconstructed WARNING.
+        // polygon is on no configured route layer — render-only background (INFO).
         result.Infos.ShouldContain(i => i.Contains("imported as frozen paths (not re-routable)"));
-        result.Warnings.ShouldHaveSingleItem().ShouldContain("on other layers are not reconstructed (v1)");
+        result.Infos.ShouldContain(i => i.Contains("render-only background geometry"));
+        result.Warnings.ShouldBeEmpty();
+        result.TopCellResidualPolygons.ShouldHaveSingleItem().Layer.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task Explode_ResidualPolygonsOverOutlineCap_DroppedWithTrueCountWarning()
+    {
+        // 2500 tiny (68,0) squares = 12500 outline points against the 8000-point
+        // cap. A square never simplifies below its 5 ring points (and must not
+        // silently vanish when the escalated tolerance overshoots it), so the cap
+        // is enforced by counted drops only: 1600 × 5 = 8000 points exactly fill
+        // the cap, 900 are dropped, and the warning reports that true count.
+        var writer = GdsTestWriter.Create().StandardPrologue().BeginCell("TOP");
+        for (int i = 0; i < 2500; i++)
+        {
+            int x = (i % 50) * 1000;
+            int y = (i / 50) * 1000;
+            writer.Boundary(68, 0, (x, y), (x + 500, y), (x + 500, y + 500), (x, y + 500), (x, y));
+        }
+        var library = await ReadLibraryAsync(writer.EndCell().EndLibrary().ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellResidualPolygons.Count.ShouldBe(1600,
+            "1600 squares × 5 points exactly fill the 8000-point cap");
+        result.Warnings.ShouldContain(w => w.Contains("dropped 900 background polygon(s)"),
+            "the warning reports the true dropped count (2500 − 1600 kept)");
+        result.Infos.ShouldContain(i => i.Contains("render-only background geometry"));
     }
 
     // ── Zero-geometry / export-artifact cells ────────────────────────────────
@@ -1224,6 +1263,96 @@ public class GdsHierarchyImporterTests
         draft.Pins.Select(p => p.Name).ShouldBe(new[] { "o1", "heur_1", "o1_2", "heur_1_2" });
         result.Warnings.ShouldContain(w => w.Contains("duplicate pin name 'o1'") && w.Contains("o1_2"));
         result.Warnings.ShouldContain(w => w.Contains("duplicate pin name 'heur_1'") && w.Contains("heur_1_2"));
+    }
+
+    // ── Multi-line metadata labels ───────────────────────────────────────────
+
+    [Fact]
+    public async Task Explode_MultiLineMetadataLabelOnPortLayer_DoesNotBecomeDraftPin()
+    {
+        // Foundry files carry metadata blobs as TEXT records — nazca writes
+        // "cellname: …\nfoundry_pdk: …" into every cell. Even on the configured
+        // port layer such a blob is not a port label: a pin name cannot span
+        // lines (the top-level-port path already filters these).
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 0, 0)
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(1, 10, "in", 0, 2000)
+                .Text(1, 10, "out", 10000, 2000)
+                .Text(1, 10, "cellname: dev\nfoundry_pdk: test_pdk", 5000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Select(p => p.Name).ShouldBe(new[] { "in", "out" },
+            "the multi-line metadata blob must not become a pin");
+        draft.Pins.ShouldNotContain(p => p.Name.Contains('\n'));
+    }
+
+    [Fact]
+    public async Task Explode_MultiLineMetadataLabelOnOddLayer_FallbackIgnoresIt()
+    {
+        // The any-layer label fallback sweeps EVERY text when no configured port
+        // layer yields a label — without the multi-line filter it promoted the
+        // metadata blob to a pin with embedded newlines in its name (seen on a
+        // real production file).
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 0, 0)
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(66, 0, "cellname: dev\nfoundry_pdk: test_pdk", 5000, 1000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.ShouldNotContain(p => p.Name.Contains('\n'),
+            "the fallback must skip multi-line metadata blobs");
+        draft.Pins.ShouldNotContain(p => p.Name.Contains("cellname"));
+        draft.Pins.Count.ShouldBe(2, "the waveguide stripe's two edge-heuristic pins remain");
+        result.Infos.ShouldNotContain(i => i.Contains("non-standard layer"),
+            "no label fallback ran — the blob is the only text and is not a label");
+    }
+
+    [Fact]
+    public async Task BlackBox_MultiLineMetadataLabel_DoesNotBecomePin()
+    {
+        // Black-box mode promotes every nested label to a context-prefixed pin —
+        // the same multi-line filter must apply before prefixing.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 0, 0)
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Text(1, 10, "o1", 0, 2000)
+                .Text(1, 10, "cellname: dev\nfoundry_pdk: test_pdk", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(
+            library, "TOP", new GdsHierarchyImportOptions { Mode = GdsHierarchyImportMode.BlackBox });
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Select(p => p.Name).ShouldContain("dev_o1");
+        draft.Pins.ShouldNotContain(p => p.Name.Contains('\n'),
+            "the multi-line metadata blob must not become a black-box pin");
     }
 
     // ── Warning quality ──────────────────────────────────────────────────────
