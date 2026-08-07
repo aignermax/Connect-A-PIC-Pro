@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 
 namespace CAP_Core.Components.Core;
 
@@ -19,4 +20,20 @@ public partial class Component
     [JsonIgnore]
     public IReadOnlyList<Parametric.ParameterDefinition> ParameterDefinitions { get; set; }
         = Array.Empty<Parametric.ParameterDefinition>();
+
+    /// <summary>
+    /// Substitutes SLIDER&lt;n&gt; placeholders in a nazca parameter string with the
+    /// bound sliders' current values (invariant culture) — how slider-driven
+    /// parameters reach the generated export code.
+    /// </summary>
+    public string InsertSliderValue(string nazcaFunctionParameterString)
+    {
+        if (SliderMap?.Values == null) return nazcaFunctionParameterString;
+        foreach (var slider in SliderMap.Values)
+        {
+            string pattern = "SLIDER" + slider.Number;
+            nazcaFunctionParameterString = Regex.Replace(nazcaFunctionParameterString, Regex.Escape(pattern), slider.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), RegexOptions.IgnoreCase);
+        }
+        return nazcaFunctionParameterString;
+    }
 }
