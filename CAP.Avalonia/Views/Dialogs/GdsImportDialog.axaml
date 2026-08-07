@@ -97,14 +97,14 @@
                     <StackPanel Grid.Column="0" Spacing="4">
                         <TextBlock Text="{loc:Localize GdsImport.PortLayersLabel}" Foreground="LightGray"
                                    FontSize="11" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding PortLayersText}"
+                        <TextBox Text="{Binding PortLayersText}" GotFocus="OnPortLayersGotFocus"
                                  Background="#2d2d2d" Foreground="White" FontSize="11"
                                  ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
                     </StackPanel>
                     <StackPanel Grid.Column="2" Spacing="4">
                         <TextBlock Text="{loc:Localize GdsImport.WaveguideLayersLabel}" Foreground="LightGray"
                                    FontSize="11" TextWrapping="Wrap"/>
-                        <TextBox Text="{Binding WaveguideLayersText}"
+                        <TextBox Text="{Binding WaveguideLayersText}" GotFocus="OnWaveguideLayersGotFocus"
                                  Background="#2d2d2d" Foreground="White" FontSize="11"
                                  ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
                     </StackPanel>
@@ -116,10 +116,79 @@
                 <StackPanel Spacing="4">
                     <TextBlock Text="{loc:Localize GdsImport.MetalLayersLabel}" Foreground="LightGray"
                                FontSize="11" TextWrapping="Wrap"/>
-                    <TextBox Text="{Binding MetalLayersText}"
+                    <TextBox Text="{Binding MetalLayersText}" GotFocus="OnMetalLayersGotFocus"
                              Background="#2d2d2d" Foreground="White" FontSize="11"
                              ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
                 </StackPanel>
+
+                <!-- Suggested layer assignments: labeled guesses the user accepts
+                     with a click — never prefilled silently. An accepted chip shows
+                     a checkmark so applied suggestions stay distinguishable from
+                     hand-entered values. -->
+                <StackPanel Spacing="4" IsVisible="{Binding HasSuggestions}">
+                    <TextBlock Text="{loc:Localize GdsImport.SuggestionsHeader}" Foreground="LightGray"
+                               FontSize="11" TextWrapping="Wrap"/>
+                    <ItemsControl ItemsSource="{Binding SuggestionChips}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <WrapPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="vm:GdsLayerSuggestionChip">
+                                <Button Margin="0,0,6,6" Padding="8,3" CornerRadius="10"
+                                        Background="#2d3d4d" Foreground="White"
+                                        Command="{Binding $parent[Window].((vm:GdsImportDialogViewModel)DataContext).AcceptSuggestionCommand}"
+                                        CommandParameter="{Binding}"
+                                        ToolTip.Tip="{Binding Tooltip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="5">
+                                        <TextBlock Text="✓" Foreground="#7dd87d" FontSize="10"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsAccepted}"/>
+                                        <TextBlock Text="{Binding ChipText}" FontSize="10"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+
+                <!-- Layer census: the file's (layer, datatype) facts, so the user
+                     never types layer numbers blind. Clicking a row appends the pair
+                     to the layer field that last had focus. -->
+                <Expander IsVisible="{Binding HasCensus}" Background="#252526" CornerRadius="4">
+                    <Expander.Header>
+                        <TextBlock Text="{loc:Localize GdsImport.CensusHeader}" Foreground="LightGray"
+                                   FontSize="11"/>
+                    </Expander.Header>
+                    <StackPanel Spacing="4" Margin="4">
+                        <TextBlock Text="{Binding CensusHintText}" Foreground="Gray"
+                                   FontSize="10" FontStyle="Italic" TextWrapping="Wrap"/>
+                        <ScrollViewer MaxHeight="160" VerticalScrollBarVisibility="Auto">
+                            <ItemsControl ItemsSource="{Binding CensusRows}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="vm:GdsLayerCensusRow">
+                                        <Button HorizontalAlignment="Stretch" Padding="6,2" Margin="0,1"
+                                                Background="Transparent"
+                                                Command="{Binding $parent[Window].((vm:GdsImportDialogViewModel)DataContext).AppendCensusRowCommand}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding PairText}" Foreground="White"
+                                                           FontSize="10" FontFamily="Consolas, Courier New, monospace"
+                                                           MinWidth="70"/>
+                                                <TextBlock Text="{Binding CountsText}" Foreground="LightGray"
+                                                           FontSize="10"/>
+                                                <TextBlock Text="{Binding TextCellsText}" Foreground="Gray"
+                                                           FontSize="10" IsVisible="{Binding HasTextCells}"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Expander>
 
                 <!-- Recreate detected connections with Lunima routing -->
                 <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"

@@ -225,6 +225,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         ImportCompleted = false;
         Warnings.Clear();
         Infos.Clear();
+        PopulateCensus(Array.Empty<CAP_DataAccess.Import.Gds.LayerCensus.GdsLayerCensusEntry>());
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
         // Capture the token BEFORE the first await: a window close mid-run
         // disposes the source, and CancellationTokenSource.Token throws
@@ -236,6 +237,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         {
             var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, token);
             _analyzedLibrary = analysis.Library;
+            PopulateCensus(analysis.LayerCensus);
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
                 TopCells.Add(topCell);

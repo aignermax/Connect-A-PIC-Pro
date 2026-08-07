@@ -2,6 +2,7 @@ using CAP.Avalonia.Services.GdsImport.DesignScope;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
+using CAP_DataAccess.Import.Gds.LayerCensus;
 
 namespace CAP.Avalonia.Services.GdsImport;
 
@@ -71,9 +72,15 @@ public sealed partial class GdsImportService
     /// </exception>
     public static async Task<GdsImportAnalysis> AnalyzeAsync(string gdsPath, CancellationToken ct = default)
     {
-        // Parse on a thread-pool thread: the record loop is CPU-bound and would
-        // otherwise pin the caller's (UI) context for the whole file.
-        var library = await Task.Run(() => ReadLibraryAsync(gdsPath, ct), ct);
+        // Parse (and census-count) on a thread-pool thread: the record loop is
+        // CPU-bound and would otherwise pin the caller's (UI) context for the
+        // whole file — the census is one more pass over every element.
+        var (library, layerCensus) = await Task.Run(async () =>
+        {
+            var lib = await ReadLibraryAsync(gdsPath, ct).ConfigureAwait(false);
+            ct.ThrowIfCancellationRequested();
+            return (lib, GdsLayerCensus.Build(lib));
+        }, ct);
         var candidates = library.TopCellCandidates
             .Select(name => UnwrapPassThroughTopCell(library, name))
             .Where(name => !IsMetadataSentinelCell(name))
@@ -89,6 +96,7 @@ public sealed partial class GdsImportService
             TopCells = candidates
                 .Select(name => new GdsTopCellSummary(name, CountDirectInstances(library, name)))
                 .ToList(),
+            LayerCensus = layerCensus,
             Library = library,
         };
     }
