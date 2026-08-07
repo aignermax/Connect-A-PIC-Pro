@@ -4,14 +4,21 @@ namespace CAP_DataAccess.Import.Gds;
 /// Simplifies draft outline polygons with the Ramer-Douglas-Peucker algorithm
 /// and enforces the per-cell point cap: when the simplified polygons still
 /// exceed the cap, the tolerance is raised adaptively (×4 per round, up to 8
-/// rounds); as a last resort the smallest-area polygons are dropped.
+/// rounds); as a last resort the smallest-area polygons are dropped (and
+/// counted). A polygon that would collapse below the ring minimum at a raised
+/// tolerance keeps its last valid simplification level instead of vanishing,
+/// so the drop count is the ONLY removal and is always exact.
 /// </summary>
 internal static class GdsOutlineSimplifier
 {
     /// <summary>
     /// Simplifies app-space outline polygons. <paramref name="droppedPolygonCount"/>
-    /// reports how many polygons were dropped to satisfy the cap (0 = none).
-    /// Polygons that collapse below a triangle under simplification are removed.
+    /// reports how many polygons were dropped to satisfy the cap (0 = none) and is
+    /// always exact: polygons are never silently removed — one whose simplification
+    /// collapses below the 4-point ring minimum (3 distinct points + closing point)
+    /// keeps its last valid level, falling back to its original ring when even the
+    /// base tolerance collapses it. Only <see cref="DropSmallestPolygons"/> removes
+    /// polygons, and it counts every one.
     /// </summary>
     public static IReadOnlyList<GdsOutlinePolygon> Simplify(
         IReadOnlyList<GdsOutlinePolygon> polygons,
@@ -20,14 +27,21 @@ internal static class GdsOutlineSimplifier
         out int droppedPolygonCount)
     {
         droppedPolygonCount = 0;
-        IReadOnlyList<GdsOutlinePolygon> current = SimplifyAll(polygons, Math.Max(0, toleranceUm));
+
+        // Per-polygon working level, starting at the ORIGINAL ring: each round
+        // re-simplifies from the original and adopts the result only when it is
+        // still a valid ring, so one overshooting tolerance round can never wipe
+        // out thousands of small polygons in a single step.
+        var refined = new List<GdsOutlinePolygon>(polygons);
+        RefineAll(polygons, refined, Math.Max(0, toleranceUm));
         double grownTolerance = Math.Max(toleranceUm, 1e-6);
-        for (int round = 0; round < 8 && TotalPoints(current) > maxTotalPoints; round++)
+        for (int round = 0; round < 8 && TotalPoints(refined) > maxTotalPoints; round++)
         {
             grownTolerance *= 4;
-            current = SimplifyAll(polygons, grownTolerance);
+            RefineAll(polygons, refined, grownTolerance);
         }
 
+        IReadOnlyList<GdsOutlinePolygon> current = refined;
         if (TotalPoints(current) > maxTotalPoints)
         {
             current = DropSmallestPolygons(current, maxTotalPoints, out droppedPolygonCount);
@@ -35,19 +49,25 @@ internal static class GdsOutlineSimplifier
         return current;
     }
 
-    private static List<GdsOutlinePolygon> SimplifyAll(
-        IReadOnlyList<GdsOutlinePolygon> polygons, double toleranceUm)
+    /// <summary>
+    /// Re-simplifies every polygon from its ORIGINAL ring at
+    /// <paramref name="toleranceUm"/> and adopts the result as the polygon's new
+    /// working level — unless the ring would collapse below the 4-point minimum,
+    /// in which case the polygon keeps its previous level: the collapse means the
+    /// tolerance has overshot the polygon's size, not that the polygon is noise,
+    /// and removing it would silently destroy geometry.
+    /// </summary>
+    private static void RefineAll(
+        IReadOnlyList<GdsOutlinePolygon> originals,
+        List<GdsOutlinePolygon> current,
+        double toleranceUm)
     {
-        var result = new List<GdsOutlinePolygon>(polygons.Count);
-        foreach (var polygon in polygons)
+        for (int i = 0; i < originals.Count; i++)
         {
-            var points = RamerDouglasPeucker(polygon.Points, toleranceUm);
-            // A closed ring needs at least a triangle: 3 distinct points + closing point.
-            if (points.Count < 4)
-                continue;
-            result.Add(polygon with { Points = points });
+            var points = RamerDouglasPeucker(originals[i].Points, toleranceUm);
+            if (points.Count >= 4)
+                current[i] = originals[i] with { Points = points };
         }
-        return result;
     }
 
     private static int TotalPoints(IReadOnlyList<GdsOutlinePolygon> polygons)

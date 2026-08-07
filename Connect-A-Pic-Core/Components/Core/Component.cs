@@ -162,17 +162,6 @@ public partial class Component : ICloneable
             physicalPin.ParentComponent = this;
         }
     }
-    public string InsertSliderValue(string nazcaFunctionParameterString)
-    {
-        if (SliderMap?.Values == null) return nazcaFunctionParameterString;
-        foreach (var slider in SliderMap.Values)
-        {
-            string pattern = "SLIDER" + slider.Number;
-            nazcaFunctionParameterString = Regex.Replace(nazcaFunctionParameterString, Regex.Escape(pattern), slider.Value.ToString(System.Globalization.CultureInfo.InvariantCulture), RegexOptions.IgnoreCase);
-        }
-        return nazcaFunctionParameterString;
-    }
-
     // adds the slider to the component and its SMatrices
     public void AddSlider(int sliderNr , Slider slider)
     {
@@ -429,6 +418,7 @@ public partial class Component : ICloneable
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
+        clonedComponent.ParameterDefinitions = ParameterDefinitions;
 
         return clonedComponent;
     }

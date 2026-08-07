@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-spectrum-tab-initial.png",
+    "caption": "The new Spectrum tab in the analysis dock: wavelength range and step count next to Run \u2014 no plot until the first sweep."
+  },
+  {
+    "file": "02-mzi-sweep-result.png",
+    "caption": "MZI sweep 1500\u20131600 nm: one transmission curve per output pin with legend, periodic pass/dip fringes, and the dashed design-wavelength marker at 1550 nm."
+  },
+  {
+    "file": "03-live-parameter-update.png",
+    "caption": "Changing the end wavelength to 1700 nm re-runs the sweep automatically: axes rescale to the wider range and more fringes appear \u2014 no reload needed."
+  }
+]

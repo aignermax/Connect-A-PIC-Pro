@@ -1281,6 +1281,13 @@ public class ChildComponentData
     public double Y { get; set; }
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
     public bool? IsLocked { get; set; }
@@ -1303,6 +1310,13 @@ public class ComponentData
     public string Identifier { get; set; } = "";
     public int Rotation { get; set; }
     public double? SliderValue { get; set; }
+
+    /// <summary>
+    /// All slider values keyed by slider number. Supersedes
+    /// <see cref="SliderValue"/> for multi-parameter components; null in old files.
+    /// </summary>
+    public Dictionary<int, double>? SliderValues { get; set; }
+
     public int? LaserWavelengthNm { get; set; }
     public double? LaserPower { get; set; }
 
@@ -1388,6 +1402,16 @@ public class ConnectionData
 
     /// <summary>Manual straight-segment shifts (straight index → offset µm, issue #791); null = none.</summary>
     public Dictionary<int, double>? StraightShiftOffsets { get; set; }
+
+    /// <summary>
+    /// GDS layer of the import source route polygons (route-derived GDS connections),
+    /// paired with <see cref="SourceGdsDataType"/>. Null for app-created connections
+    /// and in files that predate the field — the export then uses the process defaults.
+    /// </summary>
+    public int? SourceGdsLayer { get; set; }
+
+    /// <summary>GDS datatype of the import source route polygons — see <see cref="SourceGdsLayer"/>.</summary>
+    public int? SourceGdsDataType { get; set; }
 }
 
 /// <summary>

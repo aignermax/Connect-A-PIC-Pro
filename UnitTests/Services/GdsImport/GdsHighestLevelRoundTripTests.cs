@@ -3,6 +3,7 @@ using System.Globalization;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
 using CAP_Core.Export.Netlist;
@@ -317,7 +318,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// add ≤0.5 µm of bounding-box slack (real foundry cell vs. app template).
     /// Pairing is by component class + position rank.
     /// </summary>
-    private static void AssertPlacementsMatchOriginals(
+    internal static void AssertPlacementsMatchOriginals(
         DesignCanvasViewModel originalCanvas,
         IReadOnlyList<Component> placedChildren,
         double positionToleranceUm)
@@ -481,7 +482,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
     // ── Harness ──────────────────────────────────────────────────────────────
 
-    private sealed record ExportResult(
+    /// <summary>Internal for <see cref="GdsReexportIdempotencyTests"/> (the re-export generation loop).</summary>
+    internal sealed record ExportResult(
         DesignCanvasViewModel Canvas,
         string Script,
         string GdsPath,
@@ -491,13 +493,19 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         List<string> ExportWarnings,
         string StdErr);
 
+    /// <summary>Instance wrapper over the shared static harness, bound to this fixture's temp root.</summary>
+    private async Task<ExportResult> ExportUserDesignAsync(string subdir, bool stripSiepicUpgrade) =>
+        await ExportUserDesignAsync(_root, subdir, stripSiepicUpgrade);
+
     /// <summary>
     /// Builds the user's design, exports it with the app's exporter and runs the
     /// script with real nazca. <paramref name="stripSiepicUpgrade"/> removes the
     /// klayout upgrade CALL (the def stays, unused) — exactly the GDS a
-    /// bare-nazca python would write (stub boxes + (1,10) pin labels).
+    /// bare-nazca python would write (stub boxes + (1,10) pin labels). Internal
+    /// static with an explicit temp root so <see cref="GdsReexportIdempotencyTests"/>
+    /// reuses the same harness.
     /// </summary>
-    private async Task<ExportResult> ExportUserDesignAsync(string subdir, bool stripSiepicUpgrade)
+    internal static async Task<ExportResult> ExportUserDesignAsync(string root, string subdir, bool stripSiepicUpgrade)
     {
         var python = await GdsUserDesignFixture.FindNazcaPythonAsync();
         Skip.If(python == null, "No Python with nazca available — the round trip needs the real engine.");
@@ -515,7 +523,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             script.ShouldNotContain("_lunima_upgrade_siepic_cells(gds_filename");
         }
 
-        var exportDir = Path.Combine(_root, subdir);
+        var exportDir = Path.Combine(root, subdir);
         Directory.CreateDirectory(exportDir);
         var scriptPath = Path.Combine(exportDir, "user_design.py");
         await File.WriteAllTextAsync(scriptPath, script);
@@ -530,16 +538,27 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     }
 
     /// <summary>Analyze + explode-import through the same service path the GDS-import button uses.</summary>
-    private async Task<(GdsImportOutcome Outcome, GdsUserDesignFixture.LibrarySink Sink)> ImportExplodeAsync(
-        string gdsPath, string tag)
+    private Task<(GdsImportOutcome Outcome, GdsUserDesignFixture.LibrarySink Sink)> ImportExplodeAsync(
+        string gdsPath, string tag) =>
+        ImportExplodeAsync(_root, gdsPath, tag);
+
+    /// <summary>
+    /// Analyze + explode-import through the same service path the GDS-import button uses.
+    /// Internal static with an explicit temp root so <see cref="GdsReexportIdempotencyTests"/>
+    /// reuses the same harness; <paramref name="templateProvider"/> overrides the known-component
+    /// library the resolver sees (default: only this import's own fresh sink).
+    /// </summary>
+    internal static async Task<(GdsImportOutcome Outcome, GdsUserDesignFixture.LibrarySink Sink)> ImportExplodeAsync(
+        string root, string gdsPath, string tag, Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null)
     {
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         analysis.TopCellCandidates.ShouldBe(new[] { "ConnectAPIC_Design" });
         analysis.TopCells.ShouldBe(new[] { new GdsTopCellSummary("ConnectAPIC_Design", 7) });
 
-        var sink = new GdsUserDesignFixture.LibrarySink(Path.Combine(_root, $"prefs-{tag}.json"));
+        var sink = new GdsUserDesignFixture.LibrarySink(Path.Combine(root, $"prefs-{tag}.json"));
         var service = new GdsImportService(
-            GdsUserDesignFixture.CreateStore(_root, $"pdks-{tag}"), () => sink.Templates.ToList(), sink.Register);
+            GdsUserDesignFixture.CreateStore(root, $"pdks-{tag}"),
+            templateProvider ?? (() => sink.Templates.ToList()), sink.Register);
         var dialogOptions = new GdsHierarchyImportOptions
         {
             // The dialog's default port-layer field ("1,10;501,1").
@@ -586,8 +605,9 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         return null;
     }
 
-    /// <summary>Derives the gdsfactory YAML netlist of a canvas exactly like the Netlist panel does.</summary>
-    private static string DeriveYaml(DesignCanvasViewModel canvas, string designName)
+    /// <summary>Derives the gdsfactory YAML netlist of a canvas exactly like the Netlist panel does.
+    /// Internal for <see cref="GdsReexportIdempotencyTests"/>.</summary>
+    internal static string DeriveYaml(DesignCanvasViewModel canvas, string designName)
     {
         var netlist = new NetlistDeriver().Derive(
             canvas.Components.Select(vm => vm.Component),
@@ -605,7 +625,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// class summary for the documented mapping); the imported side is already
     /// in it.
     /// </summary>
-    private static NetlistTopology ParseTopology(string yaml, bool mapOriginalPinNames)
+    internal static NetlistTopology ParseTopology(string yaml, bool mapOriginalPinNames)
     {
         var stream = new YamlStream();
         stream.Load(new StringReader(yaml));
@@ -662,7 +682,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         return new NetlistTopology(instanceCounts, edges, ports);
     }
 
-    private sealed record NetlistTopology(
+    internal sealed record NetlistTopology(
         Dictionary<string, int> InstanceCountsByClass,
         HashSet<string> Edges,
         HashSet<string> Ports);
@@ -674,7 +694,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// components, and folds the halfring's parameter-hash stub cell name back
     /// to the plain cell name.
     /// </summary>
-    private static string ClassKeyOf(string componentRef)
+    internal static string ClassKeyOf(string componentRef)
     {
         var name = componentRef;
         if (name.StartsWith("nazca_", StringComparison.Ordinal))
@@ -684,8 +704,9 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         return name == "ebeam_dc_halfring_straight_7357fa" ? "ebeam_dc_halfring_straight" : name;
     }
 
-    /// <summary>The original template pin name → re-imported pin name per component class (see class summary).</summary>
-    private static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> OriginalToImportedPinNames =
+    /// <summary>The original template pin name → re-imported pin name per component class (see class summary).
+    /// Internal for <see cref="GdsReexportIdempotencyTests"/>.</summary>
+    internal static readonly IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> OriginalToImportedPinNames =
         new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal)
         {
             ["mmi2x2_dp"] = new Dictionary<string, string>(StringComparer.Ordinal)
@@ -712,7 +733,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         };
 
     /// <summary>The original canvas template name → GDS cell name.</summary>
-    private static string CellNameOfOriginal(Component original) => original.HumanReadableName switch
+    internal static string CellNameOfOriginal(Component original) => original.HumanReadableName switch
     {
         "2x2 MMI Coupler" => "mmi2x2_dp",
         "Adiabatic Coupler TE 1550" => "ebeam_adiabatic_te1550",
@@ -728,7 +749,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// (asserted) and within a class the source layout's relative order is
     /// preserved by the export.
     /// </summary>
-    private static IReadOnlyList<(Component original, Component placed)> PairByClassAndRank(
+    internal static IReadOnlyList<(Component original, Component placed)> PairByClassAndRank(
         DesignCanvasViewModel originalCanvas, IReadOnlyList<Component> placedChildren)
     {
         var originals = originalCanvas.Components.Select(vm => vm.Component).ToList();

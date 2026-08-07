@@ -1,0 +1,79 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:oxy="using:OxyPlot.Avalonia"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.WavelengthSpectrumPanel"
+             x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <!-- Dark hover-tracker, same values as the Transient / Eye tabs for consistency. -->
+        <Style Selector="oxy|TrackerControl">
+            <Setter Property="Background" Value="#2a2a2a"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="LineStroke" Value="#A0A0A0"/>
+        </Style>
+        <Style Selector="NumericUpDown">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.analysis">
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="6,4">
+        <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"
+                   Text="{loc:Localize Spectrum.Description}"/>
+
+        <!-- Sweep parameters + Run: horizontal, wrapping responsively.
+             Changing any value after a first run re-sweeps automatically. -->
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize Spectrum.StartNm}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Spectrum.StartNm}"
+                               Minimum="200" Maximum="20000" Increment="10" Width="120" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize Spectrum.EndNm}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Spectrum.EndNm}"
+                               Minimum="200" Maximum="20000" Increment="10" Width="120" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize Spectrum.Steps}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Spectrum.StepCount}"
+                               Minimum="2" Maximum="500" Increment="10" Width="120" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="{loc:Localize Spectrum.RunButton}" Classes="analysis" Background="#5d3d5d"
+                        Command="{Binding BottomPanel.Analysis.Spectrum.RunSweepCommand}"
+                        IsEnabled="{Binding BottomPanel.Analysis.Spectrum.IsSweeping, Converter={x:Static BoolConverters.Not}}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom"
+                        IsVisible="{Binding BottomPanel.Analysis.Spectrum.IsSweeping}">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="{loc:Localize Common.Cancel}" Classes="analysis" Background="#3d3d3d"
+                        Command="{Binding BottomPanel.Analysis.Spectrum.CancelSweepCommand}"/>
+            </StackPanel>
+        </WrapPanel>
+
+        <!-- Status -->
+        <TextBlock Text="{Binding BottomPanel.Analysis.Spectrum.StatusText}"
+                   Foreground="Gray" FontSize="9" Margin="0,2,0,2"
+                   IsVisible="{Binding BottomPanel.Analysis.Spectrum.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Transmission spectrum. Plain wheel scrolls the analysis dock;
+             Ctrl(/Cmd)+wheel zooms (see ScrollFriendlyPlotController in code-behind). -->
+        <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
+                Height="200" Margin="0,2,0,0"
+                IsVisible="{Binding BottomPanel.Analysis.Spectrum.HasResult}"
+                ToolTip.Tip="{loc:Localize Analysis.Chart.ZoomHint}">
+            <oxy:PlotView x:Name="SpectrumPlot"
+                          Model="{Binding BottomPanel.Analysis.Spectrum.PlotModel}" Background="Transparent"/>
+        </Border>
+    </StackPanel>
+
+</UserControl>

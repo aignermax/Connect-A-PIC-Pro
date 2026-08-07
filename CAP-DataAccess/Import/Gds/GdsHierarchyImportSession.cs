@@ -85,7 +85,8 @@ internal sealed partial class GdsHierarchyImportSession
 
         var detectionCell = new FlattenedGdsCell { CellName = cellName };
         detectionCell.Polygons.AddRange(GetFlattened(cellName).Polygons);
-        detectionCell.Texts.AddRange(Library.Cells[cellName].Elements.OfType<GdsText>());
+        detectionCell.Texts.AddRange(Library.Cells[cellName].Elements.OfType<GdsText>()
+            .Where(IsSingleLineLabel));
         var pins = GdsPinNameNormalizer.Normalize(
             DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
@@ -108,10 +109,8 @@ internal sealed partial class GdsHierarchyImportSession
     public IReadOnlyList<DetectedPin> GetTopLevelPorts()
     {
         var detectionCell = new FlattenedGdsCell { CellName = _topCellName };
-        // Multi-line texts are metadata blobs (e.g. nazca's "cellname: …\nfoundry_pdk: …"),
-        // never port labels — a pin name cannot span lines.
         detectionCell.Texts.AddRange(Library.Cells[_topCellName].Elements.OfType<GdsText>()
-            .Where(t => !t.Text.Contains('\n')));
+            .Where(IsSingleLineLabel));
         return GdsPinDetector.Detect(detectionCell, TopBBox, _options.PinDetection);
     }
 
@@ -267,6 +266,8 @@ internal sealed partial class GdsHierarchyImportSession
         for (int i = 0; i < flat.Texts.Count; i++)
         {
             var text = flat.Texts[i];
+            if (!IsSingleLineLabel(text))
+                continue;
             var origin = flat.TextOrigins[i];
             string label = origin.CellName == cellName
                 ? text.Text

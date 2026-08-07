@@ -154,33 +154,43 @@ public class BundledPdkPassivityTests
 
     /// <summary>
     /// Pins the demo-PDK Directional Coupler (the component named by the round-4 field
-    /// crash, netlist function <c>demo.mmi2x2_dp</c>): its bundled S-matrix must be
-    /// strictly passive across the full 1500–1600 nm raster including the crash
-    /// wavelength 1546 nm. With the current single-stop data σ_max = 0.70711·√2
-    /// ≈ 0.99985 everywhere — this test freezes that upper bound so a future data edit
-    /// (or added wavelength stops) cannot reintroduce the crash vector silently.
+    /// crash, netlist function <c>demo.mmi2x2_dp</c>): it must stay strictly passive.
+    /// The coupler is now parametric (cross = √(c/100)·e^{i90°}, bar = √(1−c/100),
+    /// wavelength-independent), so the old per-wavelength raster collapses to a sweep
+    /// over the coupling-ratio range — the guard holds at every slider position a user
+    /// can set, including the extremes, so a future formula edit cannot reintroduce
+    /// the crash vector silently.
     /// </summary>
-    [Fact]
-    public void DemoPdk_DirectionalCoupler_IsPassiveAcrossFullWavelengthRaster()
+    [Theory]
+    [InlineData(0.0)]
+    [InlineData(25.0)]
+    [InlineData(50.0)]
+    [InlineData(75.0)]
+    [InlineData(100.0)]
+    public async Task DemoPdk_DirectionalCoupler_IsPassiveAcrossCouplingRange(double couplingRatio)
     {
         var pdkFile = Path.Combine(PdkDirectory(), "demo-pdk.json");
         var pdk = new PdkLoader().LoadFromFile(pdkFile);
         var coupler = pdk.Components.Single(c => c.Name == "Directional Coupler");
         coupler.SMatrix.ShouldNotBeNull();
+        ParametricSMatrixMapper.IsParametric(coupler.SMatrix!).ShouldBeTrue();
 
-        var pins = CreatePins(coupler);
         var template = PdkTemplateConverter.ConvertToTemplate(coupler, "demo-pdk", nazcaModuleName: null);
-        var map = EnumerateProductionMatrices(template, coupler, pins)
-            .ToDictionary(e => e.WavelengthNm, e => e.Matrix);
-        map.ShouldNotBeEmpty();
+        var component = ComponentTemplates.CreateFromTemplate(template, 0, 0);
+        component.GetSlider(0)!.Value = couplingRatio;
 
-        for (int wavelengthNm = 1500; wavelengthNm <= 1600; wavelengthNm++)
+        foreach (var (wavelengthNm, sMatrix) in component.WaveLengthToSMatrixMap)
         {
-            var matrix = WavelengthInterpolator.GetMatrix(map, wavelengthNm, out _);
-            double sigma = LargestSingularValue(matrix);
+            // Materialize the formula-driven entries exactly as production does
+            // before the Neumann iteration reads the matrix.
+            var zeroInput = MathNet.Numerics.LinearAlgebra.Vector<Complex>.Build.Dense(sMatrix.PinReference.Count);
+            await sMatrix.CalcFieldAtPinsAfterStepsAsync(zeroInput, 1, new CancellationTokenSource());
+
+            double sigma = LargestSingularValue(sMatrix);
             sigma.ShouldBeLessThanOrEqualTo(
                 1.0 + PassivityTolerance,
-                $"demo Directional Coupler must be passive at {wavelengthNm} nm (σ_max = {sigma:F6})");
+                $"demo Directional Coupler must be passive at coupling ratio {couplingRatio} % " +
+                $"@ {wavelengthNm} nm (σ_max = {sigma:F6})");
         }
     }
 

@@ -1,6 +1,8 @@
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
+using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Panels;
 using Shouldly;
 
@@ -9,7 +11,9 @@ namespace UnitTests.ViewModels.Panels;
 public class AnalysisDockViewModelTests
 {
     private static AnalysisDockViewModel Make() =>
-        new(new TimeDomainViewModel(), new EyeDiagramViewModel(), new AnalysisOutputPanelViewModel());
+        new(new TimeDomainViewModel(), new EyeDiagramViewModel(),
+            new WavelengthSpectrumViewModel(), new AnalysisOutputPanelViewModel(),
+            new MonteCarloViewModel());
 
     [Fact]
     public void StartsCollapsed_OnTransientTab()

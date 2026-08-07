@@ -1,0 +1,116 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:oxy="using:OxyPlot.Avalonia"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.MonteCarloPanel"
+             x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <!-- Same dark tracker + compact input styling as the sibling analysis tabs. -->
+        <Style Selector="oxy|TrackerControl">
+            <Setter Property="Background" Value="#2a2a2a"/>
+            <Setter Property="Foreground" Value="#E0E0E0"/>
+            <Setter Property="BorderBrush" Value="#555555"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="LineStroke" Value="#A0A0A0"/>
+        </Style>
+        <Style Selector="NumericUpDown">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="ComboBox">
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style Selector="Button.analysis">
+            <Setter Property="FontSize" Value="11"/>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel Margin="6,4">
+        <TextBlock Foreground="Gray" FontSize="9" Margin="0,0,0,4" TextWrapping="Wrap"
+                   Text="{loc:Localize MonteCarlo.Description}"/>
+
+        <!-- Parameters + Run/Cancel, wrapping responsively like the Eye tab. -->
+        <WrapPanel Orientation="Horizontal">
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize MonteCarlo.Metric}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <ComboBox ItemsSource="{Binding BottomPanel.Analysis.MonteCarlo.Metrics}"
+                          SelectedItem="{Binding BottomPanel.Analysis.MonteCarlo.SelectedMetric}"
+                          Width="175"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize MonteCarlo.Runs}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.RunCount}"
+                               Minimum="1" Maximum="100000" Increment="100" Width="130" FormatString="0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize MonteCarlo.Sigma}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.SigmaPercent}"
+                               Minimum="0" Maximum="50" Increment="0.5" Width="115" FormatString="F1"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4">
+                <TextBlock Text="{loc:Localize MonteCarlo.Seed}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.Seed}"
+                               Minimum="0" Maximum="2147483647" Increment="1" Width="115" FormatString="0"/>
+            </StackPanel>
+            <!-- Wavelength range: only relevant for the spectrum-envelope metric. -->
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.IsSpectrumMetric}">
+                <TextBlock Text="{loc:Localize MonteCarlo.StartNm}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.StartNm}"
+                               Minimum="200" Maximum="20000" Increment="10" Width="120" FormatString="0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.IsSpectrumMetric}">
+                <TextBlock Text="{loc:Localize MonteCarlo.EndNm}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.EndNm}"
+                               Minimum="200" Maximum="20000" Increment="10" Width="120" FormatString="0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4"
+                        IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.IsSpectrumMetric}">
+                <TextBlock Text="{loc:Localize MonteCarlo.Steps}" Foreground="Gray" FontSize="9" Margin="0,0,0,1"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.MonteCarlo.StepCount}"
+                               Minimum="2" Maximum="500" Increment="5" Width="110" FormatString="0"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="{loc:Localize MonteCarlo.RunButton}" Classes="analysis" Background="#5d3d5d"
+                        Command="{Binding BottomPanel.Analysis.MonteCarlo.RunAnalysisCommand}"
+                        IsEnabled="{Binding BottomPanel.Analysis.MonteCarlo.IsRunning, Converter={x:Static BoolConverters.Not}}"/>
+            </StackPanel>
+            <StackPanel Margin="0,0,12,4" VerticalAlignment="Bottom"
+                        IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.IsRunning}">
+                <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
+                <Button Content="{loc:Localize Common.Cancel}" Classes="analysis" Background="#3d3d3d"
+                        Command="{Binding BottomPanel.Analysis.MonteCarlo.CancelAnalysisCommand}"/>
+            </StackPanel>
+        </WrapPanel>
+
+        <!-- Progress: determinate bar driven by per-run progress reports. -->
+        <ProgressBar Value="{Binding BottomPanel.Analysis.MonteCarlo.ProgressPercent}"
+                     Maximum="100" Height="4" Margin="0,2,0,2"
+                     IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.IsRunning}"/>
+
+        <!-- Status -->
+        <TextBlock Text="{Binding BottomPanel.Analysis.MonteCarlo.StatusText}"
+                   Foreground="Gray" FontSize="9" Margin="0,2,0,2"
+                   IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                   TextWrapping="Wrap"/>
+
+        <!-- Envelope / histogram plot -->
+        <Border Background="#1a1a1a" BorderBrush="#3d3d3d" BorderThickness="1"
+                Height="200" Margin="0,2,0,0"
+                IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.HasResult}"
+                ToolTip.Tip="{loc:Localize Analysis.Chart.ZoomHint}">
+            <oxy:PlotView x:Name="MonteCarloPlot"
+                          Model="{Binding BottomPanel.Analysis.MonteCarlo.PlotModel}" Background="Transparent"/>
+        </Border>
+
+        <!-- Numeric spread summary -->
+        <TextBlock Text="{Binding BottomPanel.Analysis.MonteCarlo.SummaryText}"
+                   Foreground="Orchid" FontFamily="Consolas" FontSize="10" Margin="0,2,0,0"
+                   IsVisible="{Binding BottomPanel.Analysis.MonteCarlo.HasResult}"
+                   TextWrapping="NoWrap"/>
+    </StackPanel>
+
+</UserControl>
