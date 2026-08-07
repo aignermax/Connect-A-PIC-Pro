@@ -1322,6 +1322,15 @@ public class ComponentData
     /// <summary>Per-coupler laser on/off (#690). Null in old files — treated as on.</summary>
     public bool? LaserEnabled { get; set; }
 
+    /// <summary>Spectral line shape name (#819). Null in old files — ideal source.</summary>
+    public string? LaserLineShape { get; set; }
+
+    /// <summary>Linewidth (FWHM) in nm (#819). Null in old files — editor default.</summary>
+    public double? LaserLinewidthFwhmNm { get; set; }
+
+    /// <summary>Relative intensity noise in dB/Hz (#819). Null in old files — default RIN.</summary>
+    public double? LaserRinDbPerHz { get; set; }
+
     public bool? IsLocked { get; set; }
 
     /// <summary>

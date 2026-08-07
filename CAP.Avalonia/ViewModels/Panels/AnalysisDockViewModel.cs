@@ -3,11 +3,12 @@ using CommunityToolkit.Mvvm.Input;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
 
 namespace CAP.Avalonia.ViewModels.Panels;
 
-/// <summary>Bottom analysis dock: collapsible host for the Transient and Eye/BER tabs (#570/#535).</summary>
+/// <summary>Bottom analysis dock: collapsible host for the Transient, Eye/BER and Spectrum tabs (#570/#535/#816).</summary>
 public partial class AnalysisDockViewModel : ObservableObject
 {
     /// <summary>Transient (time-domain) analysis tab.</summary>
@@ -15,6 +16,9 @@ public partial class AnalysisDockViewModel : ObservableObject
 
     /// <summary>Eye-diagram / BER analysis tab.</summary>
     public EyeDiagramViewModel Eye { get; }
+
+    /// <summary>Transmission-vs-wavelength spectrum tab (#816).</summary>
+    public WavelengthSpectrumViewModel Spectrum { get; }
 
     /// <summary>Shared analysis-output header (#754): shows/picks/clears THE output coupler.</summary>
     public AnalysisOutputPanelViewModel Output { get; }
@@ -43,20 +47,24 @@ public partial class AnalysisDockViewModel : ObservableObject
     /// <summary>Initializes a new instance of <see cref="AnalysisDockViewModel"/>.</summary>
     /// <param name="transient">Transient (time-domain) analysis tab ViewModel.</param>
     /// <param name="eye">Eye-diagram / BER analysis tab ViewModel.</param>
+    /// <param name="spectrum">Transmission spectrum tab ViewModel (#816).</param>
     /// <param name="output">Shared analysis-output header ViewModel (#754).</param>
     public AnalysisDockViewModel(
-        TimeDomainViewModel transient, EyeDiagramViewModel eye, AnalysisOutputPanelViewModel output)
+        TimeDomainViewModel transient, EyeDiagramViewModel eye,
+        WavelengthSpectrumViewModel spectrum, AnalysisOutputPanelViewModel output)
     {
         Transient = transient;
         Eye = eye;
+        Spectrum = spectrum;
         Output = output;
     }
 
-    /// <summary>Wires both tabs and the shared output header to the active design canvas.</summary>
+    /// <summary>Wires all tabs and the shared output header to the active design canvas.</summary>
     public void Configure(DesignCanvasViewModel canvas)
     {
         Transient.Configure(canvas);
         Eye.Configure(canvas);
+        Spectrum.Configure(canvas);
         Output.Configure(canvas);
     }
 

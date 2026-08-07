@@ -478,6 +478,10 @@ public partial class FileOperationsViewModel : ObservableObject
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
             LaserPower = c.LaserConfig?.InputPower,
             LaserEnabled = c.LaserConfig?.IsEnabled == false ? false : null,
+            LaserLineShape = c.LaserConfig?.IsSpectralShape == true
+                ? c.LaserConfig.LineShape.ToString() : null,
+            LaserLinewidthFwhmNm = c.LaserConfig?.LinewidthFwhmNm,
+            LaserRinDbPerHz = c.LaserConfig?.RinDbPerHz,
             IsLocked = c.Component.IsLocked ? true : null,
             IsInsertedCrossing = c.Component.IsInsertedCrossing ? true : null,
             HumanReadableName = c.Component.HumanReadableName
@@ -1298,6 +1302,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 vm.LaserConfig.InputPower = compData.LaserPower.Value;
             if (compData.LaserEnabled.HasValue)
                 vm.LaserConfig.IsEnabled = compData.LaserEnabled.Value;
+            if (compData.LaserLineShape != null
+                && Enum.TryParse<CAP_Core.ExternalPorts.LaserSpectrum.LaserLineShape>(
+                    compData.LaserLineShape, out var lineShape))
+                vm.LaserConfig.LineShape = lineShape;
+            if (compData.LaserLinewidthFwhmNm.HasValue)
+                vm.LaserConfig.LinewidthFwhmNm = compData.LaserLinewidthFwhmNm.Value;
+            if (compData.LaserRinDbPerHz.HasValue)
+                vm.LaserConfig.RinDbPerHz = compData.LaserRinDbPerHz.Value;
         }
 
         // Restore lock state
