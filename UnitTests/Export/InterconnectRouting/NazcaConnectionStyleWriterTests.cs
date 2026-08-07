@@ -64,6 +64,17 @@ public class NazcaConnectionStyleWriterTests
     }
 
     [Fact]
+    public void Format_WithSourceLayer_EmitsTupleWinningOverGdsLayer()
+    {
+        var conn = CreateConnection(WaveguideType.SBend, endOffsetY: 20);
+
+        var line = NazcaConnectionStyleWriter.Format(conn, gdsLayer: 1, sourceLayer: (3, 0));
+
+        // The import source layer wins over the process default interconnect layer.
+        line.ShouldBe("        nd.sinebend(width=0.50, distance=50.00, offset=-20.00, layer=(3, 0)).put(50.00, -25.00, 0.00)");
+    }
+
+    [Fact]
     public void Format_MissingPins_ReturnsNull()
     {
         var conn = new WaveguideConnection { Type = WaveguideType.SBend };

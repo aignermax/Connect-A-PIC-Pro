@@ -475,6 +475,7 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.OnSelectionChanged = comp =>
         {
             RightPanel.Sweep.ConfigureForComponent(comp, Canvas);
+            BottomPanel.Analysis.Optimization.RefreshFromCanvas();
             LeftPanel.HierarchyPanel.SyncSelectionFromCanvas(comp);
         };
 
@@ -1401,6 +1402,16 @@ public class ConnectionData
 
     /// <summary>Manual straight-segment shifts (straight index → offset µm, issue #791); null = none.</summary>
     public Dictionary<int, double>? StraightShiftOffsets { get; set; }
+
+    /// <summary>
+    /// GDS layer of the import source route polygons (route-derived GDS connections),
+    /// paired with <see cref="SourceGdsDataType"/>. Null for app-created connections
+    /// and in files that predate the field — the export then uses the process defaults.
+    /// </summary>
+    public int? SourceGdsLayer { get; set; }
+
+    /// <summary>GDS datatype of the import source route polygons — see <see cref="SourceGdsLayer"/>.</summary>
+    public int? SourceGdsDataType { get; set; }
 }
 
 /// <summary>

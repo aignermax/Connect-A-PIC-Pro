@@ -88,6 +88,16 @@
                             <panels:WavelengthSpectrumPanel/>
                         </ScrollViewer>
                     </TabItem>
+                    <TabItem Header="{loc:Localize AnalysisDock.TabMonteCarlo}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <panels:MonteCarloPanel/>
+                        </ScrollViewer>
+                    </TabItem>
+                    <TabItem Header="{loc:Localize AnalysisDock.TabOptimization}">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <panels:CircuitOptimizationPanel/>
+                        </ScrollViewer>
+                    </TabItem>
                 </TabControl>
             </Border>
         </StackPanel>

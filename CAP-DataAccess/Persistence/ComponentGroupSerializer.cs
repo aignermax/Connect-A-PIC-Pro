@@ -205,6 +205,8 @@ public static class ComponentGroupSerializer
             IsBlockedFallback = frozenPath.Path.IsBlockedFallback,
             IsInvalidGeometry = frozenPath.Path.IsInvalidGeometry,
             IsPlaceholderGeometry = frozenPath.Path.IsPlaceholderGeometry,
+            Layer = frozenPath.Layer,
+            DataType = frozenPath.DataType,
             ConnectionType = frozenPath.ConnectionType.ToString(),
             BendRadiusMicrometers = frozenPath.BendRadiusMicrometers,
             WidthMicrometers = frozenPath.WidthMicrometers,
@@ -291,7 +293,10 @@ public static class ComponentGroupSerializer
             PathId = Guid.Parse(dto.PathId),
             Path = path,
             StartPin = startPin,
-            EndPin = endPin
+            EndPin = endPin,
+            // Null in files that predate layer persistence — stays null (no tag).
+            Layer = dto.Layer,
+            DataType = dto.DataType
         };
         ApplyConnectionSettings(dto, frozenPath);
         return frozenPath;

@@ -100,6 +100,21 @@ namespace CAP_Core.Components.Connections
         public double BendLossDbPer90Deg { get; set; } = 0.05;
 
         /// <summary>
+        /// GDS layer of the route polygons this connection was derived from during a
+        /// GDS import (paired with <see cref="SourceGdsDataType"/>), when ALL source
+        /// polygons share one layer — the layer the connection's geometry returns to
+        /// on export (manufacturing needs the original layers, not the process
+        /// default). Null for connections created inside the app and for ambiguous
+        /// multi-layer sources; exports then use the process defaults, unchanged.
+        /// </summary>
+        public int? SourceGdsLayer { get; set; }
+
+        /// <summary>
+        /// GDS datatype of the import source polygons — see <see cref="SourceGdsLayer"/>.
+        /// </summary>
+        public int? SourceGdsDataType { get; set; }
+
+        /// <summary>
         /// The actual routed path with all segments (straights and bends).
         /// Populated after calling RecalculateTransmission().
         /// </summary>

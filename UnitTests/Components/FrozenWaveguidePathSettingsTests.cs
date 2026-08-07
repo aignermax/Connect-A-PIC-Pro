@@ -16,6 +16,27 @@ namespace UnitTests.Components;
 public class FrozenWaveguidePathSettingsTests
 {
     [Fact]
+    public void Clone_CarriesSourceLayerTag()
+    {
+        // Arrange — an imported (pin-less) route outline tagged with its source layer.
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(0, 0, 10, 0, 0));
+        var frozenPath = new FrozenWaveguidePath
+        {
+            Path = path,
+            Layer = 31,
+            DataType = 5,
+        };
+
+        // Act
+        var clone = (FrozenWaveguidePath)frozenPath.Clone();
+
+        // Assert — group duplication (DeepCopy/Clone) must not drop the import's layer.
+        clone.Layer.ShouldBe(31);
+        clone.DataType.ShouldBe(5);
+    }
+
+    [Fact]
     public void CaptureSettingsFrom_CopiesAllConnectionSettings()
     {
         // Arrange
@@ -58,6 +79,43 @@ public class FrozenWaveguidePathSettingsTests
         target.BendRadiusOverrides.Count.ShouldBe(2);
         target.BendRadiusOverrides[0].ShouldBe(12.5);
         target.BendRadiusOverrides[2].ShouldBe(30.0);
+    }
+
+    [Fact]
+    public void CaptureApply_SourceLayerTag_RoundTripsThroughFreeze()
+    {
+        // A route-derived GDS connection tagged with its source layer must keep the
+        // tag while frozen inside a group (Capture) and regain it when the group
+        // expands back into a live connection (Apply).
+        var connection = CreateConfiguredConnection();
+        connection.SourceGdsLayer = 3;
+        connection.SourceGdsDataType = 1;
+        var frozenPath = new FrozenWaveguidePath { Path = new RoutedPath() };
+
+        frozenPath.CaptureSettingsFrom(connection);
+
+        frozenPath.Layer.ShouldBe(3);
+        frozenPath.DataType.ShouldBe(1);
+
+        var restored = new WaveguideConnection();
+        frozenPath.ApplySettingsTo(restored);
+
+        restored.SourceGdsLayer.ShouldBe(3);
+        restored.SourceGdsDataType.ShouldBe(1);
+    }
+
+    [Fact]
+    public void CaptureSettingsFrom_UntaggedConnection_ClearsPreviouslyStoredLayer()
+    {
+        // Arrange — a frozen path that already carries a tag (e.g. reused instance).
+        var frozenPath = new FrozenWaveguidePath { Path = new RoutedPath(), Layer = 31, DataType = 5 };
+
+        // Act — an app-routed connection has no source layer: the stale tag must go.
+        frozenPath.CaptureSettingsFrom(new WaveguideConnection());
+
+        // Assert
+        frozenPath.Layer.ShouldBeNull();
+        frozenPath.DataType.ShouldBeNull();
     }
 
     [Fact]

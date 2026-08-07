@@ -110,6 +110,17 @@
                     </StackPanel>
                 </Grid>
 
+                <!-- Metal layers: drives route reconstruction as electrical AND the
+                     electrical pin-kind inference — foundry files often assign these
+                     numbers differently than our exporter defaults. -->
+                <StackPanel Spacing="4">
+                    <TextBlock Text="{loc:Localize GdsImport.MetalLayersLabel}" Foreground="LightGray"
+                               FontSize="11" TextWrapping="Wrap"/>
+                    <TextBox Text="{Binding MetalLayersText}"
+                             Background="#2d2d2d" Foreground="White" FontSize="11"
+                             ToolTip.Tip="{loc:Localize GdsImport.LayerSyntaxTip}"/>
+                </StackPanel>
+
                 <!-- Recreate detected connections with Lunima routing -->
                 <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"
                           Content="{loc:Localize GdsImport.RerouteConnections}"

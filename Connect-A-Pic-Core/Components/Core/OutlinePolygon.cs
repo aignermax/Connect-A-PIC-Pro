@@ -16,8 +16,8 @@ public readonly record struct OutlinePoint(
 /// from GDS): a ring of vertices with the first point repeated at the end
 /// (GDS convention), in app-space coordinates — micrometers, Y-down, relative
 /// to the top-left corner of the component's unrotated bounding box.
-/// Layer/datatype are kept so future renderers can style per layer; v1 draws
-/// all layers with a single style.
+/// Layer/datatype drive the per-layer canvas styling (muted hue per layer class)
+/// and round-trip back into GDS exports.
 /// </summary>
 /// <remarks>
 /// This type doubles as the PDK JSON DTO (<c>PdkComponentDraft.OutlinePolygons</c>)

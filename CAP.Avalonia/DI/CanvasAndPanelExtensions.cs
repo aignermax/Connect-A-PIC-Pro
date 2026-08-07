@@ -3,6 +3,7 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Analysis;
 using CAP.Avalonia.ViewModels.Analysis.AnalysisOutput;
 using CAP.Avalonia.ViewModels.Analysis.EyeDiagram;
+using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.WavelengthSpectrum;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -63,6 +64,7 @@ internal static class CanvasAndPanelExtensions
         // Right panel sub-ViewModels
         services.AddSingleton<ChipSizeViewModel>();
         services.AddTransient<ParameterSweepViewModel>();
+        services.AddTransient<ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel>();
         services.AddTransient<OnaSweepViewModel>();
         services.AddTransient<RoutingDiagnosticsViewModel>();
         services.AddTransient<DesignValidationViewModel>();
@@ -77,6 +79,7 @@ internal static class CanvasAndPanelExtensions
         services.AddTransient<TimeDomainViewModel>();
         services.AddTransient<EyeDiagramViewModel>();
         services.AddTransient<WavelengthSpectrumViewModel>();
+        services.AddTransient<MonteCarloViewModel>();
         services.AddTransient<AnalysisOutputPanelViewModel>();
 
         // Selection-driven component property editors (right panel). Order matters:

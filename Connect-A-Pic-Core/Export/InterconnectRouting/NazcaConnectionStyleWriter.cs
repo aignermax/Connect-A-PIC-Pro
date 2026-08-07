@@ -31,8 +31,14 @@ public static class NazcaConnectionStyleWriter
     /// </summary>
     /// <param name="connection">Connection carrying style, width and bend radius.</param>
     /// <param name="gdsLayer">Optional GDS layer appended to the primitive call.</param>
+    /// <param name="sourceLayer">
+    /// Optional import source (layer, datatype) tag — emitted as a <c>layer=(L, D)</c>
+    /// tuple and wins over <paramref name="gdsLayer"/>: manufacturing needs the original
+    /// layer back, not the process default.
+    /// </param>
     /// <returns>A single Python line, or null for segment-exported styles.</returns>
-    public static string? Format(WaveguideConnection connection, int? gdsLayer = null)
+    public static string? Format(
+        WaveguideConnection connection, int? gdsLayer = null, (int Layer, int DataType)? sourceLayer = null)
     {
         if (connection.Type is WaveguideType.Auto or WaveguideType.Bend ||
             connection.StartPin == null || connection.EndPin == null)
@@ -47,7 +53,9 @@ public static class NazcaConnectionStyleWriter
 
         var ci = CultureInfo.InvariantCulture;
         string w = connection.WidthMicrometers.ToString("F2", ci);
-        string layer = gdsLayer.HasValue ? $", layer={gdsLayer.Value}" : string.Empty;
+        string layer = sourceLayer is { } s
+            ? $", layer=({s.Layer.ToString(ci)}, {s.DataType.ToString(ci)})"
+            : gdsLayer.HasValue ? $", layer={gdsLayer.Value}" : string.Empty;
         string primitive = FormatPrimitive(connection.Type, geometry, w, layer, ci);
         return $"{Indent}{primitive}.put({Fmt(geometry.StartX, ci)}, {Fmt(geometry.StartY, ci)}, {Fmt(geometry.StartAngle, ci)})";
     }

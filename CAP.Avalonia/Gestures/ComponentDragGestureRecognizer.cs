@@ -263,7 +263,14 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
     private void ApplyMove(double dx, double dy, DesignCanvasViewModel canvas, bool isGroup)
     {
         if (Math.Abs(dx) < 0.001 && Math.Abs(dy) < 0.001) return;
-        if (isGroup) foreach (var c in canvas.Selection.SelectedComponents) canvas.MoveComponent(c, dx, dy);
+        if (isGroup)
+        {
+            foreach (var c in canvas.Selection.SelectedComponents) canvas.MoveComponent(c, dx, dy);
+            // The release-time snap correction shifts the whole group just like a pointer
+            // move does — internal waveguides must follow synchronously, or they are left
+            // off their pins until the async drop re-route happens to repair them.
+            canvas.TranslateInternalConnectionRoutes(canvas.Selection.SelectedComponents, dx, dy);
+        }
         else canvas.MoveComponent(_state.DraggingComponent!, dx, dy);
     }
 
@@ -274,6 +281,16 @@ public class ComponentDragGestureRecognizer : IGestureRecognizer
             foreach (var c in canvas.Selection.SelectedComponents)
                 if (_state.GroupDragStartPositions.TryGetValue(c, out var pos))
                 { double rdx = pos.x - c.X, rdy = pos.y - c.Y; if (Math.Abs(rdx) > 0.001 || Math.Abs(rdy) > 0.001) canvas.MoveComponent(c, rdx, rdy); }
+            // Routes that followed the live drag must snap back with the components (all
+            // members were translated by the same cumulative delta, so the dragging
+            // component's revert delta is the group's).
+            if (_state.DraggingComponent != null &&
+                _state.GroupDragStartPositions.TryGetValue(_state.DraggingComponent, out var start))
+            {
+                double rdx = start.x - _state.DraggingComponent.X, rdy = start.y - _state.DraggingComponent.Y;
+                if (Math.Abs(rdx) > 0.001 || Math.Abs(rdy) > 0.001)
+                    canvas.TranslateInternalConnectionRoutes(canvas.Selection.SelectedComponents, rdx, rdy);
+            }
         }
         else
         {

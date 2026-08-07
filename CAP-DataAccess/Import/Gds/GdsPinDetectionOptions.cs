@@ -43,7 +43,11 @@ public sealed record GdsPinDetectionOptions
     /// <summary>
     /// Distance in micrometers within which a segment endpoint or text anchor is
     /// considered to lie on a bounding-box edge line. Default: 0.001 µm = 1 nm
-    /// (one database unit in a typical 1 nm grid).
+    /// (one database unit in a typical 1 nm grid). The same tolerance also gates
+    /// the coincident-label merging of the import session
+    /// (<c>GdsHierarchyImportSession.CollapseCoincidentLabels</c>): stacked pin
+    /// labels share their database-unit anchor, so labels closer than this
+    /// collapse into ONE label before pin detection runs.
     /// </summary>
     public double EdgeTouchToleranceUm { get; init; } = 0.001;
 

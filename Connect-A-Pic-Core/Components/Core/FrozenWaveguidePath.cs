@@ -31,6 +31,20 @@ public class FrozenWaveguidePath : ICloneable
     public PhysicalPin? EndPin { get; set; }
 
     /// <summary>
+    /// GDS layer of the source geometry this path was imported from (e.g. the
+    /// top-cell route polygon's layer), paired with <see cref="DataType"/>. Null for
+    /// connections routed inside the app (no source layer) and for .lun files that
+    /// predate the field — exports then fall back to the process default layers,
+    /// exactly like before. The tag is meaningful only when BOTH values are set.
+    /// </summary>
+    public int? Layer { get; set; }
+
+    /// <summary>
+    /// GDS datatype of the source geometry — see <see cref="Layer"/>.
+    /// </summary>
+    public int? DataType { get; set; }
+
+    /// <summary>
     /// Unique identifier for this frozen path.
     /// </summary>
     public Guid PathId { get; set; } = Guid.NewGuid();
@@ -79,10 +93,15 @@ public class FrozenWaveguidePath : ICloneable
     /// Captures the per-connection routing settings (style, radius, width, freeze
     /// flag, bend overrides, segment shifts, propagation loss) from a live connection
     /// so they survive while the connection only exists as a frozen path inside a group.
+    /// The import source-layer tag (<see cref="WaveguideConnection.SourceGdsLayer"/>)
+    /// rides along into <see cref="Layer"/>/<see cref="DataType"/>, so a re-routed
+    /// GDS connection that gets grouped still exports on its original layer.
     /// </summary>
     /// <param name="connection">The live connection to capture settings from.</param>
     public void CaptureSettingsFrom(WaveguideConnection connection)
     {
+        Layer = connection.SourceGdsLayer;
+        DataType = connection.SourceGdsDataType;
         ConnectionType = connection.Type;
         BendRadiusMicrometers = connection.BendRadiusMicrometers;
         WidthMicrometers = connection.WidthMicrometers;
@@ -98,11 +117,15 @@ public class FrozenWaveguidePath : ICloneable
 
     /// <summary>
     /// Applies the stored routing settings back onto a live connection, used when
-    /// the group is expanded again (group edit mode or ungroup).
+    /// the group is expanded again (group edit mode or ungroup). The source-layer
+    /// tag is restored too (null when the frozen path carries none, e.g. a
+    /// connection routed inside the app).
     /// </summary>
     /// <param name="connection">The live connection to restore settings onto.</param>
     public void ApplySettingsTo(WaveguideConnection connection)
     {
+        connection.SourceGdsLayer = Layer;
+        connection.SourceGdsDataType = DataType;
         connection.Type = ConnectionType;
         connection.BendRadiusMicrometers = BendRadiusMicrometers;
         connection.WidthMicrometers = WidthMicrometers;
@@ -118,11 +141,14 @@ public class FrozenWaveguidePath : ICloneable
 
     /// <summary>
     /// Copies the stored routing settings from another frozen path (deep-copy and
-    /// clone support).
+    /// clone support) — including the source-layer tag: group template
+    /// instantiation and copy/paste must keep the imported geometry's layer.
     /// </summary>
     /// <param name="source">The frozen path to copy settings from.</param>
     public void CopySettingsFrom(FrozenWaveguidePath source)
     {
+        Layer = source.Layer;
+        DataType = source.DataType;
         ConnectionType = source.ConnectionType;
         BendRadiusMicrometers = source.BendRadiusMicrometers;
         WidthMicrometers = source.WidthMicrometers;
