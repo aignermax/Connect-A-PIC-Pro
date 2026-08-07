@@ -78,14 +78,35 @@ public class DesignScopedGdsComponentServiceTests : IDisposable
     [Fact]
     public void CaptureForSave_ReturnsNullWhenNoImports_SoUntouchedDesignsStayLean()
     {
-        _host.Scope.CaptureForSave().ShouldBeNull();
+        _host.Scope.CaptureForSave(Array.Empty<string>()).ShouldBeNull();
+    }
+
+    [Fact]
+    public void CaptureForSave_DropsSetsNoPlacedComponentReferences_ButKeepsThemInMemory()
+    {
+        _host.Scope.AddAndRegister(Set("GDS Import - used"));
+        _host.Scope.AddAndRegister(Set("GDS Import - gone"));
+
+        var payload = _host.Scope.CaptureForSave(new[] { "GDS Import - used" });
+
+        payload.ShouldHaveSingleItem().PdkName.ShouldBe("GDS Import - used");
+        _host.Scope.Sets.Count.ShouldBe(2,
+            "only the file is pruned — the library entries survive the session (undo can re-reference them)");
+    }
+
+    [Fact]
+    public void CaptureForSave_AllSetsUnreferenced_ReturnsNull()
+    {
+        _host.Scope.AddAndRegister(Set("GDS Import - gone"));
+
+        _host.Scope.CaptureForSave(Array.Empty<string>()).ShouldBeNull();
     }
 
     [Fact]
     public void CaptureForSave_ThenRestoreOnFreshService_RoundTripsSetsAndReregisters()
     {
         _host.Scope.AddAndRegister(Set("GDS Import - chip"));
-        var payload = _host.Scope.CaptureForSave();
+        var payload = _host.Scope.CaptureForSave(new[] { "GDS Import - chip" });
         payload.ShouldNotBeNull();
 
         using var reopened = new GdsDesignScopeTestHost();
@@ -120,7 +141,7 @@ public class DesignScopedGdsComponentServiceTests : IDisposable
         var payload = new GdsDesignScopeTestHost();
         payload.Scope.AddAndRegister(Set("GDS Import - new"));
 
-        _host.Scope.RestoreDesignScope(payload.Scope.CaptureForSave());
+        _host.Scope.RestoreDesignScope(payload.Scope.CaptureForSave(new[] { "GDS Import - new" }));
 
         _host.Scope.Sets.ShouldHaveSingleItem().PdkName.ShouldBe("GDS Import - new");
         _host.Templates.ShouldAllBe(t => t.PdkSource == "GDS Import - new");
@@ -132,7 +153,7 @@ public class DesignScopedGdsComponentServiceTests : IDisposable
     {
         var good = _host.Scope;
         good.AddAndRegister(Set("GDS Import - good"));
-        var payload = good.CaptureForSave()!;
+        var payload = good.CaptureForSave(new[] { "GDS Import - good" })!;
         payload.Insert(0, new ImportedGdsComponentSetData
         {
             PdkName = "GDS Import - broken",

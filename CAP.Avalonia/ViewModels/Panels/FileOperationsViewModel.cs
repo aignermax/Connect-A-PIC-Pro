@@ -430,7 +430,12 @@ public partial class FileOperationsViewModel : ObservableObject
             designData.FormatVersion = CurrentFormatVersion;
             // GDS-imported components travel inside the .lun (issue #830) so the
             // design stays self-contained; null when the design imported nothing.
-            designData.ImportedGdsComponents = DesignScopedGdsComponents?.CaptureForSave();
+            // Only sets still referenced by a placed component are embedded — an
+            // import whose components were all deleted drops out of the file here.
+            var referencedPdkSources = designData.Components.Select(c => c.PdkSource)
+                .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                        ?? Enumerable.Empty<string?>());
+            designData.ImportedGdsComponents = DesignScopedGdsComponents?.CaptureForSave(referencedPdkSources);
             designData.Metadata = BuildMetadataForSave();
             if (StoredSMatrices.Count > 0)
             {

@@ -165,7 +165,7 @@ public class GdsImportDesignRoundTripTests : IDisposable
         // the process default — as ONE verbatim polygon (the path holds the polygon's
         // outline ring, not a centerline — per-edge waveguides would double the lines
         // on every re-import, see GdsReexportIdempotencyTests).
-        var script = new SimpleNazcaExporter().Export(loadCanvas, library: sink.Templates.ToList());
+        var script = new SimpleNazcaExporter().Export(loadCanvas, library: loadHost.Templates.ToList());
         script.ShouldContain(
             "nd.Polygon(points=[(10.00,-3.75),(12.00,-3.75),(12.00,-3.25),(10.00,-3.25)], layer=(1, 0)).put(0, 0)");
 

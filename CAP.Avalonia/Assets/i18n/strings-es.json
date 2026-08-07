@@ -627,6 +627,7 @@
   "Overlay.PowerFlowOn": "Superposición de flujo de potencia: ACTIVADA (se actualiza automáticamente con los cambios)",
   "Pdk.Bundled": "Incluido",
   "Pdk.User": "Usuario",
+  "Pdk.Design": "Diseño",
   "PdkCheck.CopyFailingList": "📋 Copiar lista de fallos",
   "PdkCheck.CopyFailingListTip": "Copiar todas las referencias muertas y advertencias — pegar en un PR de corrección de PDK JSON",
   "PdkCheck.Description": "Verifica que la función de exportación de cada componente — nazcaFunction, o gdsFactoryFunction para los PDK nativos de gdsfactory — se resuelva con los paquetes de Python instalados (nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk). De lo contrario, las referencias muertas solo se manifiestan al renderizar o exportar.",

@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Library;
 using Shouldly;
 
@@ -163,5 +164,54 @@ public class PdkManagerViewModelTests
         vm.LoadedPdks[0].IsEnabled = false;
 
         callbackInvoked.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void RegisterPdk_DesignScopedSetWithoutFile_IsDesignScoped()
+    {
+        var vm = new PdkManagerViewModel();
+
+        vm.RegisterPdk("GDS Import - test", null, false, 3);
+
+        var pdk = vm.LoadedPdks[0];
+        pdk.IsDesignScoped.ShouldBeTrue(
+            "a non-bundled PDK without a file lives in the open design (#830) — no edit/delete buttons");
+        pdk.SourceBadge.ShouldContain(LocalizationService.Instance.Translate("Pdk.Design"));
+    }
+
+    [Fact]
+    public void RegisterPdk_FileBackedUserPdk_IsNotDesignScoped()
+    {
+        var vm = new PdkManagerViewModel();
+
+        vm.RegisterPdk("User PDK", "/path/pdk.json", false, 10);
+
+        vm.LoadedPdks[0].IsDesignScoped.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void RegisterPdk_BundledPdkWithoutPath_IsNotDesignScoped()
+    {
+        var vm = new PdkManagerViewModel();
+
+        vm.RegisterPdk("Bundled PDK", null, true, 5);
+
+        vm.LoadedPdks[0].IsDesignScoped.ShouldBeFalse(
+            "bundled entries can register without a path but stay bundled, not design-scoped");
+    }
+
+    [Fact]
+    public void CanDelete_TrueOnlyForFileBackedUserPdks()
+    {
+        var vm = new PdkManagerViewModel();
+        vm.RegisterPdk("User PDK", "/path/pdk.json", false, 10);
+        vm.RegisterPdk("Design Set", null, false, 3);
+        vm.RegisterPdk("Bundled PDK", null, true, 5);
+        vm.RegisterPdk("Bundled With Path", "/path/bundled.json", true, 5);
+
+        vm.LoadedPdks[0].CanDelete.ShouldBeTrue();
+        vm.LoadedPdks[1].CanDelete.ShouldBeFalse("design-scoped sets have no file to trash (#830)");
+        vm.LoadedPdks[2].CanDelete.ShouldBeFalse("bundled PDKs are read-only");
+        vm.LoadedPdks[3].CanDelete.ShouldBeFalse("a path does not make a bundled PDK deletable");
     }
 }

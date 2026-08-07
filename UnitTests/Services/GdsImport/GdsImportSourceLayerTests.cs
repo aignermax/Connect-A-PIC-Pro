@@ -1,13 +1,8 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Import.Gds;
@@ -28,13 +23,12 @@ public class GdsImportSourceLayerTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-sourcelayer-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-sourcelayer-prefs-{Guid.NewGuid():N}.json");
+    private readonly List<GdsDesignScopeTestHost> _hosts = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        foreach (var host in _hosts) host.Dispose();
     }
 
     [Fact]
@@ -96,15 +90,16 @@ public class GdsImportSourceLayerTests : IDisposable
     private async Task<(DesignCanvasViewModel Canvas, GdsPlacementReport Report)> ImportAndPlace(
         string gdsPath, bool rerouteImportedConnections = true)
     {
-        var sink = new LibrarySink(_prefsPath + Guid.NewGuid().ToString("N")[..6]);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var host = new GdsDesignScopeTestHost();
+        _hosts.Add(host);
+        var service = host.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(
             gdsPath, "TOP",
             new GdsHierarchyImportOptions { RouteLayers = [(1, 0), (3, 0)] }, null);
         outcome.Warnings.ShouldBeEmpty();
 
         var canvas = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas, null, () => host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome),
                 rerouteImportedConnections: rerouteImportedConnections);
         report.GroupCreated.ShouldBeTrue();
@@ -152,30 +147,6 @@ public class GdsImportSourceLayerTests : IDisposable
         var path = Path.Combine(_root, fileName);
         File.WriteAllBytes(path, content);
         return path;
-    }
-
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
     }
 }
 

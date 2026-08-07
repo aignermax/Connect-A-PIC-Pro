@@ -108,14 +108,23 @@ public sealed partial class DesignScopedGdsComponentService
     }
 
     /// <summary>
-    /// The .lun payload of the current design scope, or null when the design
-    /// has no imported sets (so untouched designs serialize without the field).
+    /// The .lun payload of the current design scope, restricted to the sets still
+    /// referenced by at least one placed component, or null when none are (so
+    /// untouched designs — and designs whose imported components were all deleted —
+    /// serialize without the field). Only the FILE is pruned: the in-memory scope
+    /// keeps every set, so the library entries stay available for the rest of the
+    /// session and an undo that places a deleted component back re-embeds its set
+    /// on the next save.
     /// </summary>
-    public List<ImportedGdsComponentSetData>? CaptureForSave()
+    /// <param name="referencedPdkSources">The <c>PdkSource</c> values of the design's placed components.</param>
+    public List<ImportedGdsComponentSetData>? CaptureForSave(IEnumerable<string?> referencedPdkSources)
     {
-        if (_sets.Count == 0)
+        var referenced = new HashSet<string>(
+            referencedPdkSources.OfType<string>(), StringComparer.OrdinalIgnoreCase);
+        var kept = _sets.Where(s => referenced.Contains(s.PdkName)).ToList();
+        if (kept.Count == 0)
             return null;
-        return _sets.Select(s => new ImportedGdsComponentSetData
+        return kept.Select(s => new ImportedGdsComponentSetData
         {
             PdkName = s.PdkName,
             GdsFileName = s.GdsFileName,

@@ -627,6 +627,7 @@
   "Overlay.PowerFlowOn": "Power flow overlay: ON (auto-updates on changes)",
   "Pdk.Bundled": "Bundled",
   "Pdk.User": "User",
+  "Pdk.Design": "Design",
   "PdkCheck.CopyFailingList": "📋 Copy Failing List",
   "PdkCheck.CopyFailingListTip": "Copy all dead references and warnings — paste into a PDK-JSON-fix PR",
   "PdkCheck.Description": "Verifies that every component's export function — nazcaFunction, or gdsFactoryFunction for gdsfactory-native PDKs — resolves against the installed Python packages (nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk). Dead references only surface at render or export time otherwise.",
