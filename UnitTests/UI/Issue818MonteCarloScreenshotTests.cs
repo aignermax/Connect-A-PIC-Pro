@@ -3,6 +3,7 @@ using Avalonia.Headless;
 using Avalonia.Headless.XUnit;
 using Avalonia.Media.Imaging;
 using Avalonia.Threading;
+using Avalonia.VisualTree;
 using CAP.Avalonia.ViewModels.Analysis.MonteCarloAnalysis;
 using CAP.Avalonia.Views.Panels;
 using CAP_Core.Analysis.MonteCarloAnalysis;
@@ -27,6 +28,7 @@ public class Issue818MonteCarloScreenshotTests
 {
     private const int WindowWidth = 1000;
     private const int WindowHeight = 620;
+    private const int MonteCarloTabIndex = 3;
     private const int CaptureAttempts = 3;
     private const int RunCount = 200;
     private const int StartNm = 1500;
@@ -47,7 +49,7 @@ public class Issue818MonteCarloScreenshotTests
 
         var vm = MainViewModelTestHelper.CreateMainViewModel();
         vm.BottomPanel.Analysis.IsVisible = true;
-        vm.BottomPanel.Analysis.SelectedTabIndex = 2;
+        vm.BottomPanel.Analysis.SelectedTabIndex = MonteCarloTabIndex;
         vm.BottomPanel.Analysis.SetDockHeight(420);
         var mc = vm.BottomPanel.Analysis.MonteCarlo;
 
@@ -55,6 +57,11 @@ public class Issue818MonteCarloScreenshotTests
         var window = new Window { Width = WindowWidth, Height = WindowHeight, Content = dock };
         window.Show();
         Dispatcher.UIThread.RunJobs();
+
+        // Guard against tab reordering silently producing screenshots of the wrong panel.
+        dock.GetVisualDescendants().OfType<MonteCarloPanel>()
+            .Any(p => p.IsEffectivelyVisible)
+            .ShouldBeTrue("The Monte Carlo panel is not the visible analysis tab — update MonteCarloTabIndex.");
 
         try
         {
