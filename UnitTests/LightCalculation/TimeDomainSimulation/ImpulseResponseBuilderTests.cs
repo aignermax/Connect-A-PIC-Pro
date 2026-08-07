@@ -165,6 +165,8 @@ public class ImpulseResponseBuilderTests
 
         // Assert
         impulseResponses.Count.ShouldBe(1);
+        impulseResponses[0].InputPinId.ShouldBe(inputPinId);
+        impulseResponses[0].OutputPinId.ShouldBe(outputPinId);
         var h = impulseResponses[0].Samples;
         int peakIdx = h.Select((v, i) => (Mag: v.Magnitude, Idx: i)).MaxBy(x => x.Mag).Idx;
         peakIdx.ShouldBe(0);
