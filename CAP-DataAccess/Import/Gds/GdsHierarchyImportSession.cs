@@ -74,9 +74,10 @@ internal sealed partial class GdsHierarchyImportSession
     /// are normalized (<see cref="GdsPinNameNormalizer"/>) BEFORE caching, so
     /// the draft pins and the names used for connection reconstruction can
     /// never diverge (blank/duplicate names would otherwise mis-wire or poison
-    /// the persisted PDK). When no configured port layer yields any label pin,
-    /// the any-layer fallback retries with every text label
-    /// (<see cref="DetectWithAnyLayerFallback"/>).
+    /// the persisted PDK). Coincident label stacks collapse into one label
+    /// first (<see cref="CollapseCoincidentLabels"/>). When no configured port
+    /// layer yields any label pin, the any-layer fallback retries with every
+    /// text label (<see cref="DetectWithAnyLayerFallback"/>).
     /// </summary>
     public IReadOnlyList<DetectedPin> GetCellPins(string cellName, GdsBoundingBox bbox)
     {
@@ -85,8 +86,9 @@ internal sealed partial class GdsHierarchyImportSession
 
         var detectionCell = new FlattenedGdsCell { CellName = cellName };
         detectionCell.Polygons.AddRange(GetFlattened(cellName).Polygons);
-        detectionCell.Texts.AddRange(Library.Cells[cellName].Elements.OfType<GdsText>()
-            .Where(IsSingleLineLabel));
+        detectionCell.Texts.AddRange(CollapseCoincidentLabels(
+            Library.Cells[cellName].Elements.OfType<GdsText>().Where(IsSingleLineLabel).ToList(),
+            cellName));
         var pins = GdsPinNameNormalizer.Normalize(
             DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
@@ -245,6 +247,9 @@ internal sealed partial class GdsHierarchyImportSession
     /// doubled <c>c0</c> label on its eopm cell) collapse into ONE pin
     /// silently: two identical label records describe one physical pin, and
     /// keeping both would only trigger the duplicate-name rename warning.
+    /// Coincident stacks of DIFFERENT labels (real pin label plus helper
+    /// labels) collapse via <see cref="CollapseCoincidentLabels"/> before
+    /// detection, exactly like explode-mode draft pins.
     /// </summary>
     private IReadOnlyList<DetectedPin> GetBlackBoxPins(string cellName, GdsBoundingBox bbox)
     {
@@ -263,6 +268,7 @@ internal sealed partial class GdsHierarchyImportSession
         }
 
         var seenLabels = new HashSet<string>(StringComparer.Ordinal);
+        var labels = new List<GdsText>();
         for (int i = 0; i < flat.Texts.Count; i++)
         {
             var text = flat.Texts[i];
@@ -283,8 +289,10 @@ internal sealed partial class GdsHierarchyImportSession
             if (!seenLabels.Add(fingerprint))
                 continue;
 
-            detectionCell.Texts.Add(text with { Text = label });
+            labels.Add(text with { Text = label });
         }
+
+        detectionCell.Texts.AddRange(CollapseCoincidentLabels(labels, cellName));
 
         return GdsPinNameNormalizer.Normalize(
             DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
