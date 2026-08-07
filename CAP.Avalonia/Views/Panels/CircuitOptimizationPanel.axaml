@@ -1,0 +1,89 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:opt="using:CAP.Avalonia.ViewModels.Analysis.CircuitOptimization"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.CircuitOptimizationPanel"
+             x:DataType="vm:MainViewModel">
+
+    <!-- Circuit optimization: seeded hill-climb over all sliders, ranked top-N
+         improved variants with undo-safe one-click apply. Laid out for the WIDE
+         analysis dock: a narrow config column on the left, the variant cards
+         wrapping into as many columns as fit on the right. -->
+    <Grid ColumnDefinitions="300,16,*" Margin="8,6"
+          IsVisible="{Binding BottomPanel.Analysis.Optimization.HasParameters}">
+
+        <StackPanel Grid.Column="0">
+            <TextBlock Text="{loc:Localize Optimize.Title}" Foreground="Orange" Margin="0,0,0,3" FontWeight="SemiBold"/>
+            <TextBlock Text="{loc:Localize Optimize.Hint}" Foreground="Gray" FontSize="10"
+                       TextWrapping="Wrap" Margin="0,0,0,8"/>
+
+            <TextBlock Text="{loc:Localize Optimize.Target}" Foreground="Gray" Margin="0,0,0,3"/>
+            <ComboBox ItemsSource="{Binding BottomPanel.Analysis.Optimization.Targets}"
+                      SelectedItem="{Binding BottomPanel.Analysis.Optimization.SelectedTarget}"
+                      HorizontalAlignment="Stretch" Margin="0,0,0,5"/>
+            <CheckBox IsChecked="{Binding BottomPanel.Analysis.Optimization.Maximize}"
+                      Content="{loc:Localize Optimize.Maximize}" FontSize="11" Margin="0,0,0,5"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                <TextBlock Text="{loc:Localize Optimize.Budget}" Foreground="Gray" VerticalAlignment="Center" Width="60"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Optimization.EvaluationBudget}"
+                               Minimum="2" Maximum="2000" Increment="10" Width="130" FormatString="F0"/>
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
+                <TextBlock Text="{loc:Localize Optimize.Seed}" Foreground="Gray" VerticalAlignment="Center" Width="60"/>
+                <NumericUpDown Value="{Binding BottomPanel.Analysis.Optimization.Seed}"
+                               Minimum="0" Maximum="99999" Increment="1" Width="130" FormatString="F0"/>
+            </StackPanel>
+
+            <StackPanel Orientation="Horizontal" Margin="0,5,0,5" Spacing="8">
+                <Button Content="{loc:Localize Optimize.Run}"
+                        Command="{Binding BottomPanel.Analysis.Optimization.RunOptimizationCommand}"
+                        Background="#3d5d3d"
+                        IsEnabled="{Binding BottomPanel.Analysis.Optimization.IsOptimizing, Converter={x:Static BoolConverters.Not}}"/>
+                <Button Content="{loc:Localize Optimize.Cancel}"
+                        Command="{Binding BottomPanel.Analysis.Optimization.CancelOptimizationCommand}"
+                        Background="#5d3d3d"
+                        IsVisible="{Binding BottomPanel.Analysis.Optimization.IsOptimizing}"/>
+            </StackPanel>
+
+            <TextBlock Text="{Binding BottomPanel.Analysis.Optimization.StatusText}" Foreground="Gray" FontSize="10" Margin="0,0,0,3"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding BottomPanel.Analysis.Optimization.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            <TextBlock Text="{Binding BottomPanel.Analysis.Optimization.BaselineText}" Foreground="LightGreen" FontSize="10"
+                       TextWrapping="Wrap"
+                       IsVisible="{Binding BottomPanel.Analysis.Optimization.BaselineText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        </StackPanel>
+
+        <ItemsControl Grid.Column="2" ItemsSource="{Binding BottomPanel.Analysis.Optimization.Variants}"
+                      VerticalAlignment="Top">
+            <ItemsControl.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <WrapPanel Orientation="Horizontal"/>
+                </ItemsPanelTemplate>
+            </ItemsControl.ItemsPanel>
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="opt:OptimizationVariantViewModel">
+                    <Border Background="#2d2d30" CornerRadius="3" Padding="6" Margin="0,0,6,6" Width="340">
+                        <StackPanel>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="{loc:Localize Optimize.Apply}"
+                                        Command="{Binding ApplyCommand}" FontSize="10" Padding="6,2"
+                                        Background="#3d5d3d"/>
+                                <TextBlock VerticalAlignment="Center" Foreground="White" FontSize="11">
+                                    <Run Text="#"/><Run Text="{Binding Rank}"/>
+                                    <Run Text="  "/><Run Text="{Binding ScoreText}" Foreground="LightGreen"/>
+                                    <Run Text=" ("/><Run Text="{Binding ImprovementText}" Foreground="Orange"/><Run Text=")"/>
+                                </TextBlock>
+                            </DockPanel>
+                            <TextBlock Text="{Binding ParameterSummary}" Foreground="Gray" FontSize="10"
+                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                            <TextBlock Text="{loc:Localize Optimize.AppliedBadge}" Foreground="LightGreen" FontSize="10"
+                                       IsVisible="{Binding IsApplied}" Margin="0,2,0,0"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </Grid>
+</UserControl>

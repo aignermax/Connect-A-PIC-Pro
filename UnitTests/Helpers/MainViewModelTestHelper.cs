@@ -218,6 +218,7 @@ public static class MainViewModelTestHelper
                 new EyeDiagramViewModel(),
                 new WavelengthSpectrumViewModel(),
                 new AnalysisOutputPanelViewModel(),
-                new MonteCarloViewModel()));
+                new MonteCarloViewModel(),
+                new CAP.Avalonia.ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel(new CommandManager())));
     }
 }
