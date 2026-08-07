@@ -137,7 +137,8 @@ public class TimeDomainSimulatorTests
             {
                 var matrix = new SMatrix(allPins, new());
                 var nonLinFn = new ConnectionFunction(
-                    _ => Complex.One, "1", new List<Guid>(), IsInnerLoopFunction: false);
+                    _ => Complex.One, "abs(P1)", new List<Guid> { inputPin },
+                    IsInnerLoopFunction: false);
                 matrix.NonLinearConnections.Add((inputPin, outputPin), nonLinFn);
                 return matrix;
             });
@@ -152,6 +153,70 @@ public class TimeDomainSimulatorTests
 
         Should.Throw<InvalidOperationException>(() =>
             simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, NPoints));
+    }
+
+    [Fact]
+    public void Run_ParametricSplitter_MatchesFixedValueDesignBitExactly()
+    {
+        // Arrange: a slider-bound MMI-style splitter (parametric like the demo PDK
+        // since #825) vs. the same splitter with fixed values — transient traces
+        // must be identical because slider parameters are constants during a run.
+        var inputPin = Guid.NewGuid();
+        var outputPin1 = Guid.NewGuid();
+        var outputPin2 = Guid.NewGuid();
+        var sliderId = Guid.NewGuid();
+        const double splittingRatioPercent = 65.0;
+        var allPins = new List<Guid> { inputPin, outputPin1, outputPin2 };
+
+        var parametricBuilder = new Mock<ISystemMatrixBuilder>();
+        parametricBuilder.Setup(b => b.GetSystemSMatrix(It.IsAny<int>()))
+            .Returns((int _) =>
+            {
+                var matrix = new SMatrix(allPins, new() { (sliderId, splittingRatioPercent) });
+                var toOut1 = new ConnectionFunction(
+                    p => new Complex(Math.Sqrt((double)p[0] / 100.0), 0),
+                    "sqrt(SR/100)", new List<Guid> { sliderId }, IsInnerLoopFunction: false);
+                var toOut2 = new ConnectionFunction(
+                    p => new Complex(Math.Sqrt(1.0 - (double)p[0] / 100.0), 0),
+                    "sqrt(1-SR/100)", new List<Guid> { sliderId }, IsInnerLoopFunction: false);
+                matrix.NonLinearConnections.Add((inputPin, outputPin1), toOut1);
+                matrix.NonLinearConnections.Add((inputPin, outputPin2), toOut2);
+                return matrix;
+            });
+
+        var fixedBuilder = new Mock<ISystemMatrixBuilder>();
+        fixedBuilder.Setup(b => b.GetSystemSMatrix(It.IsAny<int>()))
+            .Returns((int _) =>
+            {
+                var matrix = new SMatrix(allPins, new());
+                matrix.SetValues(new Dictionary<(Guid, Guid), Complex>
+                {
+                    { (inputPin, outputPin1), new Complex(Math.Sqrt(splittingRatioPercent / 100.0), 0) },
+                    { (inputPin, outputPin2), new Complex(Math.Sqrt(1.0 - splittingRatioPercent / 100.0), 0) },
+                });
+                return matrix;
+            });
+
+        var timeDef = TimeSignalDefinition.FromWavelengthSweep(CenterWavelengthNm, SpanNm, NPoints);
+        var inputSignal = timeDef.CreateGaussianPulse(
+            20 * timeDef.TimeStepSeconds, 3 * timeDef.TimeStepSeconds);
+        var inputSignals = new Dictionary<Guid, double[]> { { inputPin, inputSignal } };
+
+        // Act
+        var parametricResult = new TimeDomainSimulator(parametricBuilder.Object)
+            .Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, NPoints);
+        var fixedResult = new TimeDomainSimulator(fixedBuilder.Object)
+            .Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, NPoints);
+
+        // Assert: bit-exact traces at both outputs
+        foreach (var outputPin in new[] { outputPin1, outputPin2 })
+        {
+            parametricResult.PinTraces.ShouldContainKey(outputPin);
+            var parametricTrace = parametricResult.PinTraces[outputPin];
+            var fixedTrace = fixedResult.PinTraces[outputPin];
+            for (int i = 0; i < parametricTrace.Length; i++)
+                parametricTrace[i].ShouldBe(fixedTrace[i]);
+        }
     }
 
     [Fact]

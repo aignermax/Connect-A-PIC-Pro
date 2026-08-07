@@ -72,10 +72,12 @@ public class ImpulseResponseBuilder
 
         var (freqGrid, dt) = BuildFrequencyGrid(centerWavelengthNm, spanNm, nPoints);
 
-        // Check for nonlinear connections — Phase 1 only supports linear circuits.
+        // Check for TRULY nonlinear connections — Phase 1 only supports linear circuits.
+        // Parametric (slider-only) formulas are constants during a run and stay eligible;
+        // they are pre-evaluated into concrete weights in ComputeTransitiveValues.
         int referenceNm = FreqToWavelengthNmInt(freqGrid[nPoints / 2]);
         var referenceMatrix = _matrixBuilder.GetSystemSMatrix(referenceNm);
-        if (referenceMatrix.NonLinearConnections.Count > 0)
+        if (ParametricConnectionEvaluator.CountTrulyNonLinear(referenceMatrix) > 0)
         {
             throw new InvalidOperationException(
                 "Time-domain simulation (Phase 1) supports linear circuits only. " +
@@ -143,6 +145,9 @@ public class ImpulseResponseBuilder
         SMatrix sMatrix, IReadOnlyCollection<Guid>? activeInputPinIds,
         TransitiveClosureContext? circuitContext, int wavelengthNm)
     {
+        // Slider-bound formulas are constants at simulation time: bake them into
+        // the S-matrix so the closure (and reachability) sees their transfers.
+        ParametricConnectionEvaluator.EvaluateParametricConnections(sMatrix);
         var scoped = activeInputPinIds == null
             ? sMatrix
             : ReachableSubMatrixExtractor.ExtractReachable(sMatrix, activeInputPinIds);
