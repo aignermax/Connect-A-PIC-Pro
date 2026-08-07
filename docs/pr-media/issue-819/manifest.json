@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-ideal-default.png",
+    "caption": "Default \u0027Ideal (single wavelength)\u0027 preset: no linewidth field \u2014 the simulation behaves identically to pre-#819. RIN stays editable for the eye-diagram noise model."
+  },
+  {
+    "file": "02-gaussian-linewidth.png",
+    "caption": "Gaussian line shape selected: the linewidth (FWHM, nm) editor appears with the hint that the spectrum is sampled at weighted 1 nm steps."
+  },
+  {
+    "file": "03-lorentzian-rin.png",
+    "caption": "Lorentzian line shape with 6 nm FWHM and RIN raised to -130 dB/Hz \u2014 the RIN feeds the eye-diagram receiver noise model."
+  }
+]

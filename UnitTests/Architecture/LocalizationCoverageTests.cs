@@ -39,6 +39,8 @@ public class LocalizationCoverageTests
         // Proper noun, technical notation, symbol+unit labels, and a key-format placeholder —
         // language-neutral, deliberately not translated.
         "Lunima", "S-matrix", "n_eff:", "n_eff", "MFD:", "λ (nm):", "sk-ant-...",
+        // Physical unit for relative intensity noise — language-neutral like "nm".
+        "dB/Hz",
     };
 
     /// <summary>Read-only code snippets shown as examples are source, not UI copy — never localized.</summary>

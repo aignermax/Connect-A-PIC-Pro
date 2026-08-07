@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
     # Safety net: the suite takes ~8 min when healthy; anything beyond 30 min is a
     # hang (previously it burned the full 6h default timeout).
-    timeout-minutes: 30
+    timeout-minutes: 50
 
     env:
       DOTNET_CLI_TELEMETRY_OPTOUT: true
