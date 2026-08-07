@@ -136,6 +136,29 @@ public class GdsImportCancellationLifecycleTests : IDisposable
     }
 
     [Fact]
+    public async Task CloseWhileImportServiceRuns_UnwindsWithoutDisposedException()
+    {
+        var console = new ErrorConsoleService();
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        await vm.StartAnalysisAsync();
+
+        // Deterministic replay of the load-dependent race in CloseMidImport_…:
+        // the window close (cancel + dispose of the run's source) lands while
+        // the service import runs, BEFORE the continuation that hands the
+        // token to the placement executor. Reading cts.Token there after the
+        // dispose used to throw ObjectDisposedException instead of unwinding
+        // as a handled cancellation.
+        vm.ImportServiceCompletedTestHook = vm.OnWindowClosed;
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.IsBusy.ShouldBeFalse();
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeFalse("the close cancelled the run before placement");
+        canvas.Components.ShouldBeEmpty();
+        AssertNoDisposedSourceError(console, vm);
+    }
+
+    [Fact]
     public async Task CloseMidAnalysis_ThenRetryAnalysis_NoDisposedException()
     {
         var console = new ErrorConsoleService();
