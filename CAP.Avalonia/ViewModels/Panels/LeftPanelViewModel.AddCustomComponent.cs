@@ -44,64 +44,8 @@ public partial class LeftPanelViewModel
             return;
         }
 
-        // While a batch scope is open, the expensive per-registration tail (process
-        // re-application, full list re-filter, preferences write) is deferred to the
-        // scope's dispose; the catalog itself (AllTemplates/Categories) still updates per call.
-        Action reapply = ReapplyActiveProcessAfterPdkChange;
-        Action filter = FilterComponents;
-        if (_batchRegistrationDepth > 0)
-        {
-            _batchRegistrationRefreshPending = true;
-            reapply = filter = static () => { };
-        }
-        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, reapply, filter);
+        CustomComponentLibraryRegistrar.Register(draft, pdkName, filePath, AllTemplates, Categories, PdkManager, _preferencesService, _pdkLoader, _loadedPdkDrafts, ReapplyActiveProcessAfterPdkChange, FilterComponents);
         NotifyTemplateDefinitionSaved(pdkName, draft.Name);
-    }
-
-    private int _batchRegistrationDepth;
-    private bool _batchRegistrationRefreshPending;
-
-    /// <summary>
-    /// Defers the per-registration library refresh (process re-application, filtered-list
-    /// rebuild and the preferences disk write inside it) until the returned scope is
-    /// disposed, where it runs exactly once. Wrap bulk registrations in this scope —
-    /// e.g. a GDS import registering hundreds of drafts — because per call the refresh
-    /// re-sorts and re-publishes the whole filtered list and rewrites the preferences
-    /// file on the UI thread. Scopes are ref-counted rather than rejected when nested:
-    /// two composing bulk callers both just mean "defer until the outermost scope
-    /// closes", so throwing would turn a harmless composition into a UI-thread crash.
-    /// UI-thread only, like registration itself.
-    /// </summary>
-    public IDisposable BeginBatchRegistration()
-    {
-        _batchRegistrationDepth++;
-        return new BatchRegistrationScope(this);
-    }
-
-    private void EndBatchRegistration()
-    {
-        _batchRegistrationDepth--;
-        if (_batchRegistrationDepth > 0 || !_batchRegistrationRefreshPending)
-            return;
-
-        _batchRegistrationRefreshPending = false;
-        ReapplyActiveProcessAfterPdkChange();
-        FilterComponents();
-    }
-
-    /// <summary>Closes its batch level exactly once — extra Dispose calls must not unbalance the depth counter.</summary>
-    private sealed class BatchRegistrationScope : IDisposable
-    {
-        private LeftPanelViewModel? _owner;
-
-        public BatchRegistrationScope(LeftPanelViewModel owner) => _owner = owner;
-
-        public void Dispose()
-        {
-            var owner = _owner;
-            _owner = null;
-            owner?.EndBatchRegistration();
-        }
     }
 
     private void NotifyTemplateDefinitionSaved(string pdkName, string componentName)
@@ -139,16 +83,23 @@ public partial class LeftPanelViewModel
         FilterComponents();
     }
 
+    /// <summary>
+    /// Whether the component editor applies: the template's PDK must be loaded
+    /// and either bundled (edits fork on save) or file-backed. A design-scoped
+    /// (GDS-imported) PDK — non-bundled with no file — has nowhere to save
+    /// edits to, so its components are not editable.
+    /// </summary>
     public bool CanEditTemplate(ComponentTemplate template) =>
-        PdkManager.LoadedPdks.Any(p => p.Name == template.PdkSource);
+        PdkManager.LoadedPdks.Any(p => p.Name == template.PdkSource && (p.IsBundled || p.FilePath != null));
 
     /// <summary>
     /// Whether the ✕ (delete / Restore Original) applies: the PDK must be a loaded non-bundled
-    /// PDK AND the component must diverge from the bundled original — on a fork, untouched
+    /// FILE-BACKED PDK (design-scoped GDS imports live in the .lun, not in a deletable file)
+    /// AND the component must diverge from the bundled original — on a fork, untouched
     /// components have nothing to delete or restore.
     /// </summary>
     public bool CanDeleteTemplate(ComponentTemplate template) =>
-        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false }
+        PdkManager.LoadedPdks.FirstOrDefault(p => p.Name == template.PdkSource) is { IsBundled: false, FilePath: not null }
         && ComponentDivergesFromBundledOriginal(template);
 
     [RelayCommand]

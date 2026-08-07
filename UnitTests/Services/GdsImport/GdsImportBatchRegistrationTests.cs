@@ -1,7 +1,5 @@
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
 using Shouldly;
 using UnitTests.Import.Gds;
 using Xunit;
@@ -9,19 +7,22 @@ using Xunit;
 namespace UnitTests.Services.GdsImport;
 
 /// <summary>
-/// Covers the registration batching seam of <see cref="GdsImportService"/>: the
-/// service must open exactly one batch scope around the whole per-draft
-/// registration loop — the scope is what keeps the component library from
-/// re-filtering and rewriting preferences once per imported cell.
+/// Covers the registration seam of <see cref="GdsImportService"/> after issue
+/// #830: the design scope registers each imported set with EXACTLY ONE
+/// callback invocation carrying ALL drafts — the successor of the old
+/// per-draft batch scope, keeping the component library from re-filtering
+/// and rewriting state once per imported cell.
 /// </summary>
 public class GdsImportBatchRegistrationTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdsbatch-" + Guid.NewGuid().ToString("N"));
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        _host.Dispose();
     }
 
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>
@@ -44,57 +45,18 @@ public class GdsImportBatchRegistrationTests : IDisposable
         return path;
     }
 
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
     [Fact]
-    public async Task ImportAsync_RegistersEveryDraftInsideASingleBatchScope()
+    public async Task ImportAsync_RegistersAllDraftsWithASingleCallbackInvocation()
     {
         var path = WriteGds(TwoWaveguideLibrary());
-        int scopeOpens = 0, scopeDepth = 0, registrations = 0, registrationsInsideScope = 0;
-        var service = new GdsImportService(
-            Store(),
-            () => Array.Empty<ComponentTemplate>(),
-            (_, _, _) =>
-            {
-                registrations++;
-                if (scopeDepth > 0) registrationsInsideScope++;
-            },
-            () =>
-            {
-                scopeOpens++;
-                scopeDepth++;
-                return new ScopeProbe(() => scopeDepth--);
-            });
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         await service.ImportAsync(path, "TOP", null, null);
 
-        registrations.ShouldBe(2);
-        scopeOpens.ShouldBe(1, "one batch scope per import, not per draft");
-        registrationsInsideScope.ShouldBe(2, "every registration must happen inside the scope");
-        scopeDepth.ShouldBe(0, "the scope must be closed by the time the import returns");
-    }
-
-    [Fact]
-    public async Task ImportAsync_WithoutBatchFactory_StillRegistersEveryDraft()
-    {
-        var path = WriteGds(TwoWaveguideLibrary());
-        var registrations = 0;
-        var service = new GdsImportService(
-            Store(),
-            () => Array.Empty<ComponentTemplate>(),
-            (_, _, _) => registrations++);
-
-        await service.ImportAsync(path, "TOP", null, null);
-
-        registrations.ShouldBe(2, "a null batch factory means unbatched registration, never none");
-    }
-
-    private sealed class ScopeProbe : IDisposable
-    {
-        private readonly Action _onDispose;
-        public ScopeProbe(Action onDispose) => _onDispose = onDispose;
-        public void Dispose() => _onDispose();
+        var registered = _host.LoadedDrafts.ShouldHaveSingleItem(
+            "one register-callback invocation per import, not one per draft");
+        registered.Components.Count.ShouldBe(2, "the single invocation carries every draft");
+        _host.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA", "wgB" }, ignoreOrder: true);
     }
 }
 

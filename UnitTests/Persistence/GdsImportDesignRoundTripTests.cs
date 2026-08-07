@@ -1,7 +1,5 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -11,25 +9,23 @@ using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Moq;
 using Shouldly;
 using UnitTests.Import.Gds;
+using UnitTests.Services.GdsImport;
 using Xunit;
 
 namespace UnitTests.Persistence;
 
 /// <summary>
 /// The .lun round-trip of a GDS-imported circuit (issue #808): import a GDS
-/// (components registered into a user PDK), place it on the canvas through the
-/// real placement executor, save the design, then load it into a fresh canvas —
-/// every component must resolve back to its imported template
-/// (<c>TemplateName</c> + <c>PdkSource</c> of the user PDK, not a dropped or
-/// fallback component), with positions, rotation, and the grouped (frozen)
-/// abutment connection intact. Save/Load wiring mirrors
+/// (components registered into the design scope), place it on the canvas through
+/// the real placement executor, save the design (the imported GDS sets ride the
+/// .lun), then load it into a FRESH design scope — every component must resolve
+/// back to its imported template (<c>TemplateName</c> + <c>PdkSource</c> of the
+/// import pdk, not a dropped or fallback component), with positions, rotation,
+/// and the grouped (frozen) abutment connection intact. Save/Load wiring mirrors
 /// <c>SkippedRouteConnectionPersistenceTests</c>, the import harness mirrors
 /// <c>GdsImportServiceTests</c>.
 /// </summary>
@@ -37,39 +33,38 @@ public class GdsImportDesignRoundTripTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-roundtrip-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-roundtrip-prefs-{Guid.NewGuid():N}.json");
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
     }
 
     [Fact]
     public async Task ImportPlaceSaveLoad_ComponentsResolveFromUserPdk_ConnectionRestored()
     {
         var gdsPath = WriteGds();
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        using var saveHost = new GdsDesignScopeTestHost();
+        var service = saveHost.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
         outcome.Warnings.ShouldBeEmpty();
 
         // Place through the real executor: two abutting waveguides, connected, grouped as 'TOP'.
         var saveCanvas = new DesignCanvasViewModel();
         var plan = GdsPlacementPlan.FromOutcome(outcome);
-        var report = await new GdsPlacementExecutor(saveCanvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => saveHost.Templates.ToList())
             .ExecuteAsync(plan);
         report.PlacedCount.ShouldBe(2);
         report.ConnectedCount.ShouldBe(1);
         report.GroupCreated.ShouldBeTrue();
 
         var savePath = Path.Combine(_root, "circuit.lun");
-        await SaveToFile(CreateFileOperations(saveCanvas, sink.Templates, out _), savePath);
+        await SaveToFile(CreateFileOperations(saveCanvas, saveHost, out _), savePath);
 
-        // Close → reopen into a fresh canvas against the same library (the user PDK is loaded).
+        // Close → reopen into a fresh canvas with a FRESH design scope: the imported
+        // GDS sets ride the .lun and re-register the templates before placements resolve.
+        using var loadHost = new GdsDesignScopeTestHost();
         var loadCanvas = new DesignCanvasViewModel();
-        await LoadFromFile(CreateFileOperations(loadCanvas, sink.Templates, out _), savePath);
+        await LoadFromFile(CreateFileOperations(loadCanvas, loadHost, out _), savePath);
 
         // The design round-trips as the 'TOP' group with both imported components.
         var groupVm = loadCanvas.Components.ShouldHaveSingleItem();
@@ -96,7 +91,7 @@ public class GdsImportDesignRoundTripTests : IDisposable
             var outlines = child.OutlinePolygons.ShouldNotBeNull();
             outlines.Count.ShouldBeGreaterThan(0);
             outlines.Select(o => o.Layer).ShouldBe(new[] { 1, 111 }, ignoreOrder: true);
-            sink.Templates.Single(t =>
+            loadHost.Templates.Single(t =>
                 t.Name == expectedName && t.PdkSource == "GDS Import - circuit")
                 .RawCode.ShouldContain($"cellname=\"{expectedName}\"");
         }
@@ -109,7 +104,7 @@ public class GdsImportDesignRoundTripTests : IDisposable
 
         // And the reloaded design still exports through the raw-code inlining —
         // the resolved templates carry their RawCode across the round trip.
-        var script = new SimpleNazcaExporter().Export(loadCanvas, library: sink.Templates.ToList());
+        var script = new SimpleNazcaExporter().Export(loadCanvas, library: loadHost.Templates.ToList());
         script.ShouldContain("component_wgA().put('org'");
         script.ShouldContain("component_wgB().put('org'");
     }
@@ -120,8 +115,8 @@ public class GdsImportDesignRoundTripTests : IDisposable
     public async Task ImportPlaceSaveLoad_TopCellRoutePolygon_RoundTripsAsPinLessFrozenPath()
     {
         var gdsPath = WriteGdsWithRoutePolygon();
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        using var saveHost = new GdsDesignScopeTestHost();
+        var service = saveHost.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
 
         // The top cell's own (1,0) polygon comes back as frozen route geometry.
@@ -134,16 +129,17 @@ public class GdsImportDesignRoundTripTests : IDisposable
         // Place: the polygon becomes a pin-less frozen path on the 'TOP' group.
         var saveCanvas = new DesignCanvasViewModel();
         var plan = GdsPlacementPlan.FromOutcome(outcome);
-        var report = await new GdsPlacementExecutor(saveCanvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => saveHost.Templates.ToList())
             .ExecuteAsync(plan);
         report.GroupCreated.ShouldBeTrue();
 
         var savePath = Path.Combine(_root, "circuit-routes.lun");
-        await SaveToFile(CreateFileOperations(saveCanvas, sink.Templates, out _), savePath);
+        await SaveToFile(CreateFileOperations(saveCanvas, saveHost, out _), savePath);
 
-        // Close → reopen into a fresh canvas against the same library.
+        // Close → reopen into a fresh canvas with a FRESH design scope.
+        using var loadHost = new GdsDesignScopeTestHost();
         var loadCanvas = new DesignCanvasViewModel();
-        await LoadFromFile(CreateFileOperations(loadCanvas, sink.Templates, out _), savePath);
+        await LoadFromFile(CreateFileOperations(loadCanvas, loadHost, out _), savePath);
 
         var group = loadCanvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.InternalPaths.Count.ShouldBe(2, "the frozen abutment connection plus the imported route outline");
@@ -186,22 +182,23 @@ public class GdsImportDesignRoundTripTests : IDisposable
         // geometry-only component must survive the .lun round-trip like any
         // other — resolving back to its imported template with its outlines.
         var gdsPath = WriteGdsMixedWithPinlessCell();
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        using var saveHost = new GdsDesignScopeTestHost();
+        var service = saveHost.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
         outcome.Warnings.ShouldContain(w => w.Contains("'logo'") && w.Contains("geometry-only"));
 
         var saveCanvas = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(saveCanvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => saveHost.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         report.PlacedCount.ShouldBe(2);
         report.GroupCreated.ShouldBeTrue();
 
         var savePath = Path.Combine(_root, "circuit-geomonly.lun");
-        await SaveToFile(CreateFileOperations(saveCanvas, sink.Templates, out _), savePath);
+        await SaveToFile(CreateFileOperations(saveCanvas, saveHost, out _), savePath);
 
+        using var loadHost = new GdsDesignScopeTestHost();
         var loadCanvas = new DesignCanvasViewModel();
-        await LoadFromFile(CreateFileOperations(loadCanvas, sink.Templates, out _), savePath);
+        await LoadFromFile(CreateFileOperations(loadCanvas, loadHost, out _), savePath);
 
         var group = loadCanvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.ChildComponents.Count.ShouldBe(2);
@@ -209,7 +206,7 @@ public class GdsImportDesignRoundTripTests : IDisposable
         logo.HumanReadableName.ShouldBe("logo");
         logo.PhysicalPins.ShouldBeEmpty("a geometry-only component round-trips with zero pins");
         logo.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
-        sink.Templates.Single(t => t.Name == "logo" && t.PdkSource == "GDS Import - circuit-geomonly")
+        loadHost.Templates.Single(t => t.Name == "logo" && t.PdkSource == "GDS Import - circuit-geomonly")
             .RawCode.ShouldNotBeNull().ShouldContain("cellname=\"logo\"");
 
         // The top-cell route stub (touches no pins) survived as a pin-less frozen path.
@@ -293,33 +290,14 @@ public class GdsImportDesignRoundTripTests : IDisposable
         return path;
     }
 
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
-
+    /// <summary>
+    /// File-operations VM wired to the host's design scope: saving embeds the
+    /// scope's imported GDS sets in the .lun, loading restores them into the
+    /// host (re-registering the templates) before placements resolve.
+    /// </summary>
     private static FileOperationsViewModel CreateFileOperations(
         DesignCanvasViewModel canvas,
-        ObservableCollection<ComponentTemplate> library,
+        GdsDesignScopeTestHost host,
         out ErrorConsoleService errorConsole)
     {
         errorConsole = new ErrorConsoleService();
@@ -328,11 +306,14 @@ public class GdsImportDesignRoundTripTests : IDisposable
             new CommandManager(),
             new SimpleNazcaExporter(),
             new SaxExporter(),
-            library,
+            host.Templates,
             new GdsExportViewModel(new GdsExportService()),
             new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas),
             null!,
-            errorConsole: errorConsole);
+            errorConsole: errorConsole)
+        {
+            DesignScopedGdsComponents = host.Scope,
+        };
     }
 
     private static async Task SaveToFile(FileOperationsViewModel vm, string filePath)

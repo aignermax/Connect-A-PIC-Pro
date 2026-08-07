@@ -32,10 +32,11 @@ public static class GdsCellDraftMapper
     /// <see cref="GdsCellDraft.RawCode"/>. Must be ABSOLUTE: the raw-code
     /// executor (<c>NazcaComponentPreviewService.RenderRawCodeAsync</c>) writes
     /// the snippet to a temp .py file and runs Python with the preview script's
-    /// directory as the working directory, so a bare file name would resolve
-    /// against neither the user-PDK folder nor the copied .gds. The caller
-    /// (GdsImportService) passes the path of the .gds copy next to the user-PDK
-    /// JSON. Backslashes and quotes are escaped for the Python string literal.
+    /// directory as the working directory, so a bare file name would not
+    /// resolve. At runtime the caller passes the materialized .gds cache path;
+    /// GdsImportService passes the token itself to keep the stored drafts
+    /// portable (the substitution is then the identity). Backslashes and
+    /// quotes are escaped for the Python string literal.
     /// </param>
     /// <param name="warnings">
     /// Optional warning sink (the import's warning list) receiving one entry per

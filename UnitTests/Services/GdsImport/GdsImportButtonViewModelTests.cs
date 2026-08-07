@@ -20,16 +20,8 @@ namespace UnitTests.Services.GdsImport;
 /// the status callback instead. Also covers the hand-off of the zoom-to-fit
 /// callback to the dialog ViewModel (the dialog owns the import's completion point).
 /// </summary>
-public class GdsImportButtonViewModelTests : IDisposable
+public class GdsImportButtonViewModelTests
 {
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdsbtn-prefs-{Guid.NewGuid():N}.json");
-
-    public void Dispose()
-    {
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
-    }
-
     /// <summary>File-dialog stub whose picks throw, like a broken dialog backend.</summary>
     private sealed class ThrowingFileDialogService : IFileDialogService
     {
@@ -50,15 +42,12 @@ public class GdsImportButtonViewModelTests : IDisposable
             => Task.FromResult<string?>(path);
     }
 
-    private GdsImportButtonViewModel CreateButton()
+    private static GdsImportButtonViewModel CreateButton()
     {
         var canvas = new DesignCanvasViewModel();
         // Throwaway service/executor: the failure paths tested here never reach
         // an actual import — only the dialog hand-off is exercised.
-        var importService = new CAP.Avalonia.Services.GdsImport.GdsImportService(
-            new CAP_DataAccess.Components.AddCustomComponent.UserPdkStore(
-                Path.Combine(Path.GetTempPath(), $"lunima-gdsbtn-pdks-{Guid.NewGuid():N}"),
-                new PdkJsonSaver(), new PdkLoader()));
+        var importService = new CAP.Avalonia.Services.GdsImport.GdsImportService();
         var placementExecutor = new CAP.Avalonia.Services.GdsImport.GdsPlacementExecutor(
             canvas, new CommandManager(), () => Array.Empty<ComponentTemplate>());
         return new GdsImportButtonViewModel(importService, placementExecutor);

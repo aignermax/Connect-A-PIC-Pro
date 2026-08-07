@@ -226,11 +226,15 @@ public partial class GdsImportDialogViewModel : ObservableObject
         Warnings.Clear();
         Infos.Clear();
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
-        var cts = ResetCancellationSource();
+        // Capture the token BEFORE the first await: a window close mid-run
+        // disposes the source, and CancellationTokenSource.Token throws
+        // ObjectDisposedException afterwards — the token itself stays valid
+        // and observes the cancel that preceded the dispose.
+        var token = ResetCancellationSource().Token;
 
         try
         {
-            var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, cts.Token);
+            var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, token);
             _analyzedLibrary = analysis.Library;
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
@@ -281,18 +285,22 @@ public partial class GdsImportDialogViewModel : ObservableObject
         ErrorText = "";
         Warnings.Clear();
         Infos.Clear();
-        var cts = ResetCancellationSource();
+        // Token captured before the first await — see StartAnalysisAsync: a close
+        // mid-run disposes the source, and reading cts.Token after an await would
+        // throw ObjectDisposedException instead of unwinding as a cancellation.
+        var token = ResetCancellationSource().Token;
 
         try
         {
             var progress = new Progress<string>(msg => StatusText = msg);
             var outcome = await _importService.ImportAsync(
-                GdsFilePath, SelectedTopCell.CellName, options, progress, cts.Token,
+                GdsFilePath, SelectedTopCell.CellName, options, progress, token,
                 preParsedLibrary: _analyzedLibrary);
 
+            token.ThrowIfCancellationRequested();
             var plan = GdsPlacementPlan.FromOutcome(outcome);
             var report = await _placementExecutor.ExecuteAsync(
-                plan, progress, cts.Token, RerouteConnectionsRequested);
+                plan, progress, token, RerouteConnectionsRequested);
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);

@@ -58,11 +58,11 @@ public class GdsMziElectricalProbeTests
         File.Move(gdsPath, stubCopy, overwrite: true);
         _output.WriteLine($"upgraded={upgraded}; stub gds + upgraded gds written under {dir}");
 
-        await DumpImport("STUB", stubCopy, root);
-        await DumpImport(upgraded ? "UPGRADED" : "UPGRADED(same-as-stub?)", upgradedCopy, root);
+        await DumpImport("STUB", stubCopy);
+        await DumpImport(upgraded ? "UPGRADED" : "UPGRADED(same-as-stub?)", upgradedCopy);
     }
 
-    private async Task DumpImport(string label, string gdsPath, string root)
+    private async Task DumpImport(string label, string gdsPath)
     {
         _output.WriteLine($"══ SCENARIO {label} ══");
         GdsLibrary library;
@@ -73,11 +73,9 @@ public class GdsMziElectricalProbeTests
         foreach (var g in designCell.Elements.OfType<GdsPolygon>().GroupBy(p => (p.Layer, p.DataType)))
             _output.WriteLine($"  top polys {g.Key}: {g.Count()}");
 
-        var sink = new GdsUserDesignFixture.LibrarySink(Path.Combine(root, $"prefs-{label}.json"));
+        using var host = new GdsDesignScopeTestHost();
         var bundled = TestPdkLoader.LoadAllTemplates();
-        var service = new GdsImportService(
-            GdsUserDesignFixture.CreateStore(root, $"user-pdks-{label}"),
-            () => bundled.Concat(sink.Templates).ToList(), sink.Register);
+        var service = host.CreateService(() => bundled.Concat(host.Templates).ToList());
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         var dialogOptions = new GdsHierarchyImportOptions
         {
@@ -97,7 +95,7 @@ public class GdsMziElectricalProbeTests
         foreach (var i in outcome.Infos) _output.WriteLine($"  I: {i}");
 
         var canvas2 = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(sink.Templates).ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(host.Templates).ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         _output.WriteLine($"placed={report.PlacedCount} connected={report.ConnectedCount} routeDerived={report.RouteDerivedCount} skipped={string.Join("|", report.SkippedPlacements)}");
         _output.WriteLine($"report warnings: {string.Join("|", report.Warnings)}");
@@ -113,17 +111,15 @@ public class GdsMziElectricalProbeTests
                     $"{p.EndPin?.ParentComponent?.Identifier}.{p.EndPin?.Name} elec={p.StartPin.MatterType == CAP_Core.Components.Core.MatterType.Electricity}");
         }
 
-        var sink2 = new GdsUserDesignFixture.LibrarySink(Path.Combine(root, $"prefs-bb-{label}.json"));
-        var service2 = new GdsImportService(
-            GdsUserDesignFixture.CreateStore(root, $"user-pdks-bb-{label}"),
-            () => bundled.Concat(sink2.Templates).ToList(), sink2.Register);
+        using var hostBlackBox = new GdsDesignScopeTestHost();
+        var service2 = hostBlackBox.CreateService(() => bundled.Concat(hostBlackBox.Templates).ToList());
         var bbOutcome = await service2.ImportAsync(
             gdsPath, analysis.TopCellCandidates[0],
             dialogOptions with { Mode = GdsHierarchyImportMode.BlackBox }, null);
         _output.WriteLine($"── BLACKBOX {label} ──");
         _output.WriteLine($"registered: {string.Join(", ", bbOutcome.RegisteredComponents.Select(r => r.ComponentName))}");
         _output.WriteLine($"warnings: {string.Join("|", bbOutcome.Warnings)}");
-        var bbTemplate = sink2.Templates.FirstOrDefault();
+        var bbTemplate = hostBlackBox.Templates.FirstOrDefault();
         if (bbTemplate != null)
         {
             _output.WriteLine($"bb '{bbTemplate.Name}' {bbTemplate.WidthMicrometers:F1}x{bbTemplate.HeightMicrometers:F1} pins={bbTemplate.PinDefinitions.Length}");

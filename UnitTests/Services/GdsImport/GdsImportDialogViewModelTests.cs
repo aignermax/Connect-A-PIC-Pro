@@ -1,7 +1,5 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -9,10 +7,6 @@ using CAP.Avalonia.ViewModels.GdsImport;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core;
 using CAP_Contracts.Logger;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Import.Gds;
 using Xunit;
@@ -28,37 +22,15 @@ public class GdsImportDialogViewModelTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdsdlg-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdsdlg-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     // ── Fixtures ─────────────────────────────────────────────────────────────
-
-    /// <summary>Wires the real registrar with throwaway library state (from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
 
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>
     private static byte[] TwoWaveguideLibrary() => GdsTestWriter.Create()
@@ -166,17 +138,36 @@ public class GdsImportDialogViewModelTests : IDisposable
         return path;
     }
 
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, LibrarySink sink) CreateDialog(
+    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, GdsDesignScopeTestHost host) CreateDialog(
         string gdsPath, ErrorConsoleService? errorConsole = null)
     {
-        var sink = new LibrarySink(_prefsPath);
         var canvas = new DesignCanvasViewModel();
-        var service = new GdsImportService(Store(), () => sink.Templates.ToList(), sink.Register);
-        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => sink.Templates.ToList());
-        return (new GdsImportDialogViewModel(gdsPath, service, executor, errorConsole), canvas, sink);
+        var service = _host.CreateService();
+        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => _host.Templates.ToList());
+        return (new GdsImportDialogViewModel(gdsPath, service, executor, errorConsole), canvas, _host);
+    }
+
+    /// <summary>
+    /// A dialog whose import cancels itself deterministically: the service
+    /// invokes the template provider synchronously inside ImportAsync BEFORE
+    /// the background handoff, so a cancel issued there always lands before
+    /// any parse or placement. (A cancel issued from the test thread right
+    /// after ExecuteAsync races the — now persistence-free — import of a tiny
+    /// fixture file and occasionally loses.)
+    /// </summary>
+    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas) CreateSelfCancellingDialog(
+        string gdsPath, ErrorConsoleService? errorConsole = null)
+    {
+        var canvas = new DesignCanvasViewModel();
+        GdsImportDialogViewModel? vm = null;
+        var service = _host.CreateService(() =>
+        {
+            vm!.CurrentCts?.Cancel();
+            return Array.Empty<ComponentTemplate>();
+        });
+        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => _host.Templates.ToList());
+        vm = new GdsImportDialogViewModel(gdsPath, service, executor, errorConsole);
+        return (vm, canvas);
     }
 
     // ── Analysis ─────────────────────────────────────────────────────────────
@@ -321,7 +312,7 @@ public class GdsImportDialogViewModelTests : IDisposable
     [Fact]
     public async Task ImportAsync_EndToEnd_PlacesGroupedCircuitOnCanvas()
     {
-        var (vm, canvas, sink) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        var (vm, canvas, host) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
         await vm.StartAnalysisAsync();
 
         await vm.ImportCommand.ExecuteAsync(null);
@@ -330,8 +321,8 @@ public class GdsImportDialogViewModelTests : IDisposable
         vm.ImportCompleted.ShouldBeTrue();
         vm.ResultSummaryText.ShouldContain("2");
 
-        // Both cells were registered into the sink library and placed as a group.
-        sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA", "wgB" }, ignoreOrder: true);
+        // Both cells were registered into the host library and placed as a group.
+        host.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA", "wgB" }, ignoreOrder: true);
         var groupVm = canvas.Components.ShouldHaveSingleItem();
         var group = groupVm.Component.ShouldBeOfType<CAP_Core.Components.Core.ComponentGroup>();
         group.GroupName.ShouldBe("TOP");
@@ -474,8 +465,8 @@ public class GdsImportDialogViewModelTests : IDisposable
     public async Task ImportAsync_KnownComponentResolution_MirroredViaLogInfoNotWarning()
     {
         var console = new ErrorConsoleService();
-        var (vm, _, sink) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
-        sink.Templates.Add(new ComponentTemplate
+        var (vm, _, host) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        host.Templates.Add(new ComponentTemplate
         {
             Name = "wgA",
             Category = "Test",
@@ -582,14 +573,12 @@ public class GdsImportDialogViewModelTests : IDisposable
     public async Task ImportAsync_Cancelled_LogsThePlacedNoteToTheErrorConsole()
     {
         var console = new ErrorConsoleService();
-        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        // Self-cancelling: the cancel lands before any placement (see the
+        // CreateSelfCancellingDialog doc), so the logged count is 0.
+        var (vm, _) = CreateSelfCancellingDialog(WriteGds(TwoWaveguideLibrary()), console);
         await vm.StartAnalysisAsync();
 
-        var import = vm.ImportCommand.ExecuteAsync(null);
-        // Same determinism argument as ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy:
-        // the cancel lands before any placement, so the logged count is 0.
-        vm.CurrentCts.ShouldNotBeNull().Cancel();
-        await import;
+        await vm.ImportCommand.ExecuteAsync(null);
 
         var expectedNote = string.Format(
             LocalizationService.Instance.Translate("GdsImport.StatusCancelledAfterPlacement"), 0);
@@ -665,16 +654,14 @@ public class GdsImportDialogViewModelTests : IDisposable
     [Fact]
     public async Task ImportAsync_Cancelled_DoesNotFireZoomToFit()
     {
-        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        // Self-cancelling: the cancel lands before any placement (see the
+        // CreateSelfCancellingDialog doc).
+        var (vm, _) = CreateSelfCancellingDialog(WriteGds(TwoWaveguideLibrary()));
         var calls = 0;
         vm.ZoomToFitAfterImport = (_, _) => calls++;
         await vm.StartAnalysisAsync();
 
-        var import = vm.ImportCommand.ExecuteAsync(null);
-        // Same determinism argument as ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy:
-        // the cancel lands before any placement.
-        vm.CurrentCts.ShouldNotBeNull().Cancel();
-        await import;
+        await vm.ImportCommand.ExecuteAsync(null);
 
         vm.ImportCompleted.ShouldBeFalse();
         calls.ShouldBe(0, "a cancelled import must not move the viewport");
@@ -685,16 +672,13 @@ public class GdsImportDialogViewModelTests : IDisposable
     [Fact]
     public async Task ImportAsync_Cancelled_StatusNamesPlacedCountAndRemedy()
     {
-        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
-        await vm.StartAnalysisAsync();
-
-        var import = vm.ImportCommand.ExecuteAsync(null);
-        // The cancellation source is assigned synchronously before ImportAsync's
-        // first await, so this cancel deterministically lands before any
+        // Self-cancelling: the cancel deterministically lands before any
         // placement (the placed count in the message is 0 here; the executor
         // tests cover the mid-placement count).
-        vm.CurrentCts.ShouldNotBeNull().Cancel();
-        await import;
+        var (vm, _) = CreateSelfCancellingDialog(WriteGds(TwoWaveguideLibrary()));
+        await vm.StartAnalysisAsync();
+
+        await vm.ImportCommand.ExecuteAsync(null);
 
         vm.HasError.ShouldBeFalse();
         vm.ImportCompleted.ShouldBeFalse();

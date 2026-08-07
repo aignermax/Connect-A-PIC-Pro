@@ -33,10 +33,12 @@ public class GdsReexportIdempotencyTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-reexport-" + Guid.NewGuid().ToString("N"));
+    private readonly List<GdsDesignScopeTestHost> _hosts = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        foreach (var host in _hosts) host.Dispose();
     }
 
     [SkippableFact]
@@ -49,11 +51,12 @@ public class GdsReexportIdempotencyTests : IDisposable
         // deterministic, router-independent mode the netlist comparisons use) ──
         var export1 = await GdsHighestLevelRoundTripTests.ExportUserDesignAsync(
             _root, "export1", stripSiepicUpgrade: false);
-        var (outcome1, sink1) = await GdsHighestLevelRoundTripTests.ImportExplodeAsync(
-            _root, export1.GdsPath, "gen1");
+        var host1 = new GdsDesignScopeTestHost();
+        _hosts.Add(host1);
+        var outcome1 = await GdsHighestLevelRoundTripTests.ImportExplodeAsync(host1, export1.GdsPath);
         var canvas1 = new DesignCanvasViewModel();
         canvas1.InitializeAStarRouting(150, -700, 950, -250);
-        var report1 = await new GdsPlacementExecutor(canvas1, null, () => sink1.Templates.ToList())
+        var report1 = await new GdsPlacementExecutor(canvas1, null, () => host1.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome1), rerouteImportedConnections: false);
         report1.PlacedCount.ShouldBe(7);
         report1.GroupCreated.ShouldBeTrue();
@@ -66,18 +69,20 @@ public class GdsReexportIdempotencyTests : IDisposable
         var skipped2 = new List<string>();
         var warnings2 = new List<string>();
         var script2 = new SimpleNazcaExporter().Export(canvas1,
-            skippedConnections: skipped2, exportWarnings: warnings2, library: sink1.Templates);
+            skippedConnections: skipped2, exportWarnings: warnings2, library: host1.Templates);
         skipped2.ShouldBeEmpty("every generation-1 frozen path and connection exports as real geometry");
-        warnings2.ShouldBeEmpty("the generation-1 raw-code sources still exist inside the test's store");
+        warnings2.ShouldBeEmpty("the generation-1 raw-code sources still exist inside the test's design scope");
         var gds2Path = await RunScriptAsync(python, "export2", script2);
 
         // The resolver sees generation 1's library — the user's session still has
         // yesterday's import registered when he re-imports the re-export.
-        var (outcome2, sink2) = await GdsHighestLevelRoundTripTests.ImportExplodeAsync(
-            _root, gds2Path, "gen2", templateProvider: () => sink1.Templates.ToList());
+        var host2 = new GdsDesignScopeTestHost();
+        _hosts.Add(host2);
+        var outcome2 = await GdsHighestLevelRoundTripTests.ImportExplodeAsync(
+            host2, gds2Path, templateProvider: () => host1.Templates.ToList());
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
-        var report2 = await new GdsPlacementExecutor(canvas2, null, () => sink2.Templates.ToList())
+        var report2 = await new GdsPlacementExecutor(canvas2, null, () => host2.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome2), rerouteImportedConnections: false);
         report2.PlacedCount.ShouldBe(7);
         report2.GroupCreated.ShouldBeTrue();

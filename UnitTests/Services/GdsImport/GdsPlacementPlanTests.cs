@@ -27,7 +27,6 @@ public class GdsPlacementPlanTests
         Warnings = new[] { "some import warning" },
         Infos = new[] { "some import info" },
         UserPdkName = "GDS Import - circuit",
-        UserPdkPath = "/pdks/gds-import-circuit.json",
         GdsFileName = "circuit.gds",
     };
 

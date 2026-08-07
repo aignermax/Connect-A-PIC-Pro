@@ -47,13 +47,10 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-mzi-elec-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-mzi-elec-prefs-{Guid.NewGuid():N}.json");
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
     }
 
     // His design, keyed by instance name for the position/rotation congruence checks.
@@ -143,13 +140,13 @@ public class GdsMziElectricalRoundTripTests : IDisposable
             .ShouldBe(0, "nothing dissolves into the top cell anymore (the straight keeps its cell)");
 
         // ── 4. Explode import of the FORCED-STUB GDS: the deterministic scenario ──
-        var stub = await ExplodeAsync(stubGds, "stub");
+        var stub = await ExplodeAsync(stubGds);
         AssertExplodeStubScenario(stub);
 
         // ── 5. Explode import of the upgraded GDS (when klayout+siepic ran) ──
         if (upgradedGds is not null)
         {
-            var upgraded = await ExplodeAsync(upgradedGds, "upgraded");
+            var upgraded = await ExplodeAsync(upgradedGds);
             AssertExplodeUpgradedScenario(upgraded);
         }
     }
@@ -166,7 +163,7 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 
         // Stub scenario: the black box exposes the FULL flattened pin set,
         // including the four pad labels of the stub cells.
-        var stub = await BlackBoxAsync(stubGds, "stub-bb");
+        var stub = await BlackBoxAsync(stubGds);
         var stubTemplate = stub.Template;
         stubTemplate.PinDefinitions.Length.ShouldBe(31);
         stubTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("Photodetector#0_anode");
@@ -214,7 +211,7 @@ public class GdsMziElectricalRoundTripTests : IDisposable
             // after re-anchoring (fix #811), so the pads keep their 'elec' pins —
             // the FULL pin set, same 31 as the stub scenario (pre-fix the label
             // wipe dropped the four pad pins: 27).
-            var upgraded = await BlackBoxAsync(upgradedGds, "upgraded-bb");
+            var upgraded = await BlackBoxAsync(upgradedGds);
             upgraded.Template.PinDefinitions.Length.ShouldBe(31);
             upgraded.Template.PinDefinitions.Select(p => p.Name).ShouldContain("ebeam_BondPad#0_elec");
             upgraded.Outcome.Warnings.ShouldBeEmpty();
@@ -416,14 +413,13 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         return (stubCopy, upgradedCopy);
     }
 
-    private async Task<ExplodeResult> ExplodeAsync(string gdsPath, string tag)
+    private static async Task<ExplodeResult> ExplodeAsync(string gdsPath)
     {
-        var sink = new GdsUserDesignFixture.LibrarySink(_prefsPath + tag);
+        using var host = new GdsDesignScopeTestHost();
         var bundled = TestPdkLoader.LoadAllTemplates();
         // Wired like the app (GdsImportButtonViewModel): the full loaded library
         // resolves known cells; newly imported drafts join it.
-        var service = new GdsImportService(
-            Store($"user-pdks-{tag}"), () => bundled.Concat(sink.Templates).ToList(), sink.Register);
+        var service = host.CreateService(() => bundled.Concat(host.Templates).ToList());
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         analysis.TopCellCandidates.ShouldBe(new[] { "ConnectAPIC_Design" });
         var dialogOptions = new GdsHierarchyImportOptions
@@ -436,17 +432,16 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         // Frozen mode: these round-trip assertions pin the traced-geometry
         // contract (frozen path counts, the traced-outline validation artifact)
         // and must stay deterministic and router-independent.
-        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(sink.Templates).ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(host.Templates).ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
         return new ExplodeResult(outcome, report, canvas2);
     }
 
-    private async Task<BlackBoxResult> BlackBoxAsync(string gdsPath, string tag)
+    private static async Task<BlackBoxResult> BlackBoxAsync(string gdsPath)
     {
-        var sink = new GdsUserDesignFixture.LibrarySink(_prefsPath + tag);
+        using var host = new GdsDesignScopeTestHost();
         var bundled = TestPdkLoader.LoadAllTemplates();
-        var service = new GdsImportService(
-            Store($"user-pdks-{tag}"), () => bundled.Concat(sink.Templates).ToList(), sink.Register);
+        var service = host.CreateService(() => bundled.Concat(host.Templates).ToList());
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         var outcome = await service.ImportAsync(
             gdsPath, analysis.TopCellCandidates[0],
@@ -458,14 +453,11 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 
         var canvas2 = new DesignCanvasViewModel();
         // Frozen mode, for the same determinism reason as the explode path.
-        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(sink.Templates).ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => bundled.Concat(host.Templates).ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
-        var template = sink.Templates.ShouldHaveSingleItem("the black box registers exactly one component");
+        var template = host.Templates.ShouldHaveSingleItem("the black box registers exactly one component");
         return new BlackBoxResult(outcome, report, template);
     }
-
-    private CAP_DataAccess.Components.AddCustomComponent.UserPdkStore Store(string name) =>
-        GdsUserDesignFixture.CreateStore(_root, name);
 
     private static int CountLines(string script, string marker) =>
         GdsUserDesignFixture.CountLines(script, marker);

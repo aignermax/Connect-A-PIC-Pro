@@ -2,7 +2,6 @@ using CAP.Avalonia.Services;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Export;
@@ -48,13 +47,10 @@ public class GdsUserDesignRoundTripTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-userdesign-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-userdesign-prefs-{Guid.NewGuid():N}.json");
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
     }
 
     [SkippableFact]
@@ -172,8 +168,8 @@ public class GdsUserDesignRoundTripTests : IDisposable
         analysis.TopCells.ShouldBe(new[] { new GdsTopCellSummary("ConnectAPIC_Design", 7) });
 
         // ── 5. Explode import through the button's service path ──
-        var sink = new GdsUserDesignFixture.LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store("user-pdks"), () => sink.Templates.ToList(), sink.Register);
+        using var host = new GdsDesignScopeTestHost();
+        var service = host.CreateService();
         var dialogOptions = new GdsHierarchyImportOptions
         {
             // The dialog's default port-layer field ("1,10;501,1").
@@ -231,7 +227,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // the MMI via demofab's (501, 1) labels (a0/a1/b0/b1 — demofab's names for
         // what the app template calls in1/in2/out1/out2), the ebeam cells via
         // (1, 10) labels. Every draft also keeps outline polygons for the renderer.
-        var mmiTemplate = sink.Templates.First(t => t.Name == "mmi2x2_dp");
+        var mmiTemplate = host.Templates.First(t => t.Name == "mmi2x2_dp");
         mmiTemplate.PinDefinitions.Select(p => p.Name).ShouldBe(new[] { "a0", "a1", "b0", "b1" });
         mmiTemplate.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
 
@@ -263,7 +259,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
             };
         foreach (var (cellName, expectedPins) in expectedEbeamPins)
         {
-            var template = sink.Templates.First(t => t.Name == cellName);
+            var template = host.Templates.First(t => t.Name == cellName);
             template.PinDefinitions.Select(p => p.Name).ShouldBe(expectedPins,
                 $"pin set of the re-imported '{cellName}' ({(siepicUpgraded ? "real foundry cell" : "stub box")})");
             template.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
@@ -271,7 +267,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
 
         // ── 6. Placement: exactly 7 placements, 0 skipped, one named group ──
         var canvas2 = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
@@ -304,8 +300,8 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // simulation concept and were never exported as labels), but the nested
         // labels give the black box a complete, unique pin set — 28 pins here —
         // so it registers and places like any other imported component.
-        var sink2 = new GdsUserDesignFixture.LibrarySink(Path.Combine(_root, "prefs-blackbox.json"));
-        var service2 = new GdsImportService(Store("user-pdks-blackbox"), () => sink2.Templates.ToList(), sink2.Register);
+        using var hostBlackBox = new GdsDesignScopeTestHost();
+        var service2 = hostBlackBox.CreateService();
         var blackBoxOutcome = await service2.ImportAsync(
             gdsPath, analysis.TopCellCandidates[0],
             dialogOptions with { Mode = GdsHierarchyImportMode.BlackBox }, null);
@@ -313,14 +309,14 @@ public class GdsUserDesignRoundTripTests : IDisposable
         var blackBoxComponent = blackBoxOutcome.RegisteredComponents.ShouldHaveSingleItem();
         blackBoxComponent.CellDraftName.ShouldBe("ConnectAPIC_Design");
         blackBoxOutcome.Warnings.ShouldBeEmpty();
-        var blackBoxTemplate = sink2.Templates.ShouldHaveSingleItem();
+        var blackBoxTemplate = hostBlackBox.Templates.ShouldHaveSingleItem();
         blackBoxTemplate.PinDefinitions.Length.ShouldBe(28);
         blackBoxTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("mmi2x2_dp#0_a0");
         blackBoxTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("mmi2x2_dp#1_b1");
         blackBoxTemplate.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
 
         var canvas3 = new DesignCanvasViewModel();
-        var blackBoxReport = await new GdsPlacementExecutor(canvas3, null, () => sink2.Templates.ToList())
+        var blackBoxReport = await new GdsPlacementExecutor(canvas3, null, () => hostBlackBox.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(blackBoxOutcome));
         blackBoxReport.PlacedCount.ShouldBe(1);
         blackBoxReport.SkippedPlacements.ShouldBeEmpty();
@@ -335,8 +331,6 @@ public class GdsUserDesignRoundTripTests : IDisposable
 
     private static DesignCanvasViewModel BuildUserDesignCanvas() =>
         GdsUserDesignFixture.BuildUserDesignCanvas();
-
-    private UserPdkStore Store(string name) => GdsUserDesignFixture.CreateStore(_root, name);
 
     private static Task<string?> FindNazcaPythonAsync() => GdsUserDesignFixture.FindNazcaPythonAsync();
 }

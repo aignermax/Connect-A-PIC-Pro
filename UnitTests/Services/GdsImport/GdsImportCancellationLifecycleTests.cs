@@ -1,16 +1,9 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.GdsImport;
-using CAP.Avalonia.ViewModels.Library;
 using CAP_Core;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Import.Gds;
 using Xunit;
@@ -29,13 +22,12 @@ public class GdsImportCancellationLifecycleTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdscts-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdscts-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     private static byte[] TwoWaveguideLibrary() => GdsTestWriter.Create()
@@ -57,36 +49,13 @@ public class GdsImportCancellationLifecycleTests : IDisposable
         return path;
     }
 
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
-
-    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, LibrarySink sink) CreateDialog(
+    private (GdsImportDialogViewModel vm, DesignCanvasViewModel canvas, GdsDesignScopeTestHost host) CreateDialog(
         string gdsPath, ErrorConsoleService console)
     {
-        var sink = new LibrarySink(_prefsPath);
         var canvas = new DesignCanvasViewModel();
-        var service = new GdsImportService(
-            new UserPdkStore(Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader()),
-            () => sink.Templates.ToList(), sink.Register);
-        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => sink.Templates.ToList());
-        return (new GdsImportDialogViewModel(gdsPath, service, executor, console), canvas, sink);
+        var service = _host.CreateService();
+        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => _host.Templates.ToList());
+        return (new GdsImportDialogViewModel(gdsPath, service, executor, console), canvas, _host);
     }
 
     private static void AssertNoDisposedSourceError(ErrorConsoleService console, GdsImportDialogViewModel vm)
@@ -118,14 +87,23 @@ public class GdsImportCancellationLifecycleTests : IDisposable
     public async Task CancelMidImport_ThenSecondImportRun_CompletesWithoutDisposedException()
     {
         var console = new ErrorConsoleService();
-        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        // Cancel from inside the FIRST run's template provider: it is invoked
+        // synchronously before the background handoff, so the cancel
+        // deterministically lands mid-run (a cancel from the test thread races
+        // the — now persistence-free — import of the tiny fixture file).
+        var canvas = new DesignCanvasViewModel();
+        GdsImportDialogViewModel? built = null;
+        var firstRun = true;
+        var service = _host.CreateService(() =>
+        {
+            if (firstRun) { firstRun = false; built!.CurrentCts?.Cancel(); }
+            return _host.Templates.ToList();
+        });
+        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => _host.Templates.ToList());
+        var vm = built = new GdsImportDialogViewModel(WriteGds(TwoWaveguideLibrary()), service, executor, console);
         await vm.StartAnalysisAsync();
 
-        var first = vm.ImportCommand.ExecuteAsync(null);
-        // The cancellation source is assigned synchronously before ImportAsync's
-        // first await, so this cancel deterministically lands mid-run.
-        vm.CurrentCts.ShouldNotBeNull().Cancel();
-        await first;
+        await vm.ImportCommand.ExecuteAsync(null);
 
         // The second run's reset disposes the first run's source: the exact
         // moment a surviving token reference would hit the disposed source.

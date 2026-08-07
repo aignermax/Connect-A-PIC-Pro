@@ -1,14 +1,8 @@
-using System.Collections.ObjectModel;
-using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Import.Gds;
 using Xunit;
@@ -26,13 +20,12 @@ public class GdsGeometryOnlyComponentTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-geomonly-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-geomonly-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     // ── Fixtures ─────────────────────────────────────────────────────────────
@@ -77,37 +70,12 @@ public class GdsGeometryOnlyComponentTests : IDisposable
         return path;
     }
 
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
-
-    // ── Service level: register, warn, persist, reload ───────────────────────
+    // ── Service level: register, warn, store in the design scope ─────────────
 
     [Fact]
-    public async Task ImportAsync_GeometryOnlyCell_RegistersWithOutlinesWarningAndValidatingPdk()
+    public async Task ImportAsync_GeometryOnlyCell_RegistersWithOutlinesWarningAndDesignScopedDraft()
     {
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => sink.Templates.ToList(), sink.Register);
+        var service = _host.CreateService();
 
         var outcome = await service.ImportAsync(WriteGds(PinlessOnlyLibrary()), "TOP", null, null);
 
@@ -118,16 +86,14 @@ public class GdsGeometryOnlyComponentTests : IDisposable
         outcome.Warnings.ShouldNotContain(w => w.Contains("was not registered"));
 
         // The registered template carries outlines and no pins; the raw-code
-        // snippet still points at the copied .gds (component body source).
-        var template = sink.Templates.ShouldHaveSingleItem();
+        // snippet still points at the materialized cache .gds (component body source).
+        var template = _host.Templates.ShouldHaveSingleItem();
         template.PinDefinitions.ShouldBeEmpty();
         template.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
 
-        // The persisted user PDK validates on reload (the registration path
-        // already re-validated it once via LoadFromFileForEditing).
-        outcome.UserPdkPath.ShouldNotBeNull();
-        var reloaded = new PdkLoader().LoadFromFile(outcome.UserPdkPath!);
-        var component = reloaded.Components.ShouldHaveSingleItem();
+        // The design-scoped set keeps the pin-less draft with its outlines.
+        var set = _host.Scope.Sets.ShouldHaveSingleItem();
+        var component = set.Drafts.ShouldHaveSingleItem();
         component.Pins.ShouldBeEmpty();
         component.OutlinePolygons.ShouldNotBeNull().ShouldNotBeEmpty();
     }
@@ -137,14 +103,13 @@ public class GdsGeometryOnlyComponentTests : IDisposable
     [Fact]
     public async Task ExecuteAsync_MixedPinnedAndPinless_BothPlaced_GroupHoldsFrozenRoutePath()
     {
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => sink.Templates.ToList(), sink.Register);
+        var service = _host.CreateService();
         var outcome = await service.ImportAsync(WriteGds(MixedLibrary()), "TOP", null, null);
         outcome.RegisteredComponents.Count.ShouldBe(2);
         outcome.Warnings.ShouldContain(w => w.Contains("'logo'") && w.Contains("geometry-only"));
 
         var canvas = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas, null, () => _host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
 
         report.PlacedCount.ShouldBe(2, "the pin-less instance places like any other");
@@ -183,13 +148,12 @@ public class GdsGeometryOnlyComponentTests : IDisposable
             .EndCell()
             .EndLibrary()
             .ToArray();
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => sink.Templates.ToList(), sink.Register);
+        var service = _host.CreateService();
         var outcome = await service.ImportAsync(WriteGds(library), "TOP", null, null);
         outcome.RegisteredComponents.ShouldContain(r => r.CellDraftName == "logo");
 
         var canvas = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas, null, () => _host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
 
         report.PlacedCount.ShouldBe(2);

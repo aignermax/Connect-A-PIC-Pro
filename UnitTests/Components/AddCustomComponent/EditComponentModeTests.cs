@@ -41,6 +41,21 @@ public class EditComponentModeTests : IDisposable
 
     private UserPdkStore Store() => new(_root, new PdkJsonSaver(), new PdkLoader());
 
+    /// <summary>Writes a process-agnostic PDK file into the managed root (the pre-#830 GDS-import shape).</summary>
+    private string SeedProcessAgnosticPdk(UserPdkStore store, string pdkName, PdkComponentDraft component)
+    {
+        Directory.CreateDirectory(_root);
+        var path = store.ResolveNamedPath(pdkName);
+        new PdkJsonSaver().SaveToFile(new PdkDraft
+        {
+            Name = pdkName,
+            Backend = "nazca",
+            ProcessAgnostic = true,
+            Components = new List<PdkComponentDraft> { component },
+        }, path);
+        return path;
+    }
+
     private (NewComponentViewModel vm, Mock<IFdtdSMatrixService> fdtd) Build(
         UserPdkStore store, IReadOnlyList<ProcessDefinition> processes)
     {
@@ -279,7 +294,7 @@ public class EditComponentModeTests : IDisposable
         // wrongly refused them as "not a custom PDK" because they declare no process.
         var store = Store();
         const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
-        var pdkPath = store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", SeedComponent("comp1", rawCode), "nazca");
+        var pdkPath = SeedProcessAgnosticPdk(store, "GDS Import - demo", SeedComponent("comp1", rawCode));
         var (vm, _) = Build(store, new List<ProcessDefinition>());
         var template = BuildTemplate(rawCode);
         template.PdkSource = "GDS Import - demo";
@@ -298,7 +313,7 @@ public class EditComponentModeTests : IDisposable
     {
         var store = Store();
         const string rawCode = "import gdsfactory as gf\ncomponent = gf.components.coupler()";
-        var pdkPath = store.SaveToProcessAgnosticNamedPdk("GDS Import - demo", SeedComponent("comp1", rawCode), "nazca");
+        var pdkPath = SeedProcessAgnosticPdk(store, "GDS Import - demo", SeedComponent("comp1", rawCode));
         var (vm, _) = Build(store, new List<ProcessDefinition>());
         var template = BuildTemplate(rawCode);
         template.PdkSource = "GDS Import - demo";

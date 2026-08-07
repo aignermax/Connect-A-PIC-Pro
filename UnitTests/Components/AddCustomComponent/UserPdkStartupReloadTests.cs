@@ -160,6 +160,29 @@ public class UserPdkStartupReloadTests : IDisposable
     }
 
     [Fact]
+    public async Task ReloadUserPdksAtStartupAsync_skips_legacy_gdsImport_pdk_files_without_deleting_them()
+    {
+        SeedRoot();
+        // A pre-#830 GDS-import PDK file: imports are design-scoped now, so the
+        // stale global file must neither load at startup nor be deleted.
+        Directory.CreateDirectory(_userPdkRoot);
+        var legacyPath = Path.Combine(_userPdkRoot, "gds-import-chip.json");
+        new PdkJsonSaver().SaveToFile(new PdkDraft
+        {
+            Name = "GDS Import - chip",
+            Backend = "nazca",
+            ProcessAgnostic = true,
+            Components = new List<PdkComponentDraft> { SimpleComponent("Legacy WG") },
+        }, legacyPath);
+
+        await _leftPanel.ReloadUserPdksAtStartupAsync(_userPdkRoot);
+
+        _leftPanel.PdkManager.LoadedPdks.ShouldNotContain(p => p.Name == "GDS Import - chip");
+        _leftPanel.AllTemplates.ShouldNotContain(t => t.Name == "Legacy WG");
+        File.Exists(legacyPath).ShouldBeTrue("skipped silently, never deleted");
+    }
+
+    [Fact]
     public async Task ReloadUserPdksAtStartupAsync_reappliesProcessLock_and_refiltersOnce()
     {
         SeedRoot();

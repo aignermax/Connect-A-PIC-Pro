@@ -1,14 +1,8 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
-using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using Xunit;
@@ -22,9 +16,8 @@ namespace UnitTests.Services.GdsImport;
 /// reported broken. See <c>Tools/gds-test-data/README.md</c> for the file's
 /// origin and structure. Runs the full stack: <see cref="GdsImportService"/> →
 /// <see cref="GdsPlacementPlan"/> → <see cref="GdsPlacementExecutor"/> with a
-/// temp-root <see cref="UserPdkStore"/> and the real
-/// <see cref="CustomComponentLibraryRegistrar"/> (same harness as
-/// <see cref="GdsImportServiceTests"/>).
+/// <see cref="GdsDesignScopeTestHost"/> standing in for the open design's
+/// component scope (same harness as <see cref="GdsImportServiceTests"/>).
 /// </summary>
 public class MixedBackendReimportIntegrationTests : IDisposable
 {
@@ -68,40 +61,9 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     private const int ReconstructedConnectionCount = 30;
     private const int RouteDeviceConnectionCount = 10;
 
-    private readonly string _root =
-        Path.Combine(Path.GetTempPath(), "lunima-gdsreimport-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdsreimport-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
-    public void Dispose()
-    {
-        if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
-    }
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
-    }
-
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
+    public void Dispose() => _host.Dispose();
 
     // ── Explode: first import (every cell unknown) ───────────────────────────
 
@@ -109,8 +71,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     public async Task Explode_FirstImport_PlacesRouteCellsAndPartialDevices()
     {
         File.Exists(GdsPath).ShouldBeTrue($"Reference file missing: {GdsPath}");
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         var outcome = await service.ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
 
@@ -174,7 +135,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         // Execution: 36 components on the canvas, 30 frozen connections, one group.
         var canvas = new DesignCanvasViewModel();
         var executor = new GdsPlacementExecutor(
-            canvas, new CommandManager(), () => sink.Templates.ToList());
+            canvas, new CommandManager(), () => _host.Templates.ToList());
         var report = await executor.ExecuteAsync(plan);
 
         report.PlacedCount.ShouldBe(PlacedInstanceCount);
@@ -196,9 +157,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
     public async Task Explode_SecondImport_AllCellsKnown_StillPlacesInstances()
     {
         // First import populates the library (the 13:26 user run).
-        var sink = new LibrarySink(_prefsPath);
-        var store = Store();
-        var first = await new GdsImportService(store, () => Array.Empty<ComponentTemplate>(), sink.Register)
+        var first = await _host.CreateService(() => Array.Empty<ComponentTemplate>())
             .ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
         first.RegisteredComponents.Count.ShouldBe(RouteCellCount + DeviceCellCount);
 
@@ -207,7 +166,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         // import must still produce all instance placements (no "nothing was
         // registered" misfire, no black-box fallback; those only apply to true
         // black-box mode).
-        var second = await new GdsImportService(store, () => sink.Templates.ToList(), sink.Register)
+        var second = await _host.CreateService()
             .ImportAsync(GdsPath, TopCell, new GdsHierarchyImportOptions());
 
         second.RegisteredComponents.ShouldBeEmpty("every cell resolved to the existing library");
@@ -223,7 +182,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
 
         var canvas = new DesignCanvasViewModel();
         var executor = new GdsPlacementExecutor(
-            canvas, new CommandManager(), () => sink.Templates.ToList());
+            canvas, new CommandManager(), () => _host.Templates.ToList());
         var report = await executor.ExecuteAsync(plan);
         report.PlacedCount.ShouldBe(PlacedInstanceCount);
         report.ConnectedCount.ShouldBe(ReconstructedConnectionCount);
@@ -240,8 +199,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         // become texts at their absolute positions after flattening, so the
         // whole design registers as ONE component with real pins instead of
         // failing "no pins" (the 15:05 user report).
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         var outcome = await service.ImportAsync(
             GdsPath, TopCell, new GdsHierarchyImportOptions { Mode = GdsHierarchyImportMode.BlackBox });
@@ -250,7 +208,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         var registered = outcome.RegisteredComponents.ShouldHaveSingleItem();
         registered.ComponentName.ShouldBe(TopCell);
 
-        var template = sink.Templates.ShouldHaveSingleItem(
+        var template = _host.Templates.ShouldHaveSingleItem(
             "the black-box draft registers as one library component");
         template.PinDefinitions.ShouldNotBeEmpty();
         template.PinDefinitions.Select(p => p.Name).ShouldContain(n => n.EndsWith("_a0"),
@@ -259,7 +217,7 @@ public class MixedBackendReimportIntegrationTests : IDisposable
         var plan = GdsPlacementPlan.FromOutcome(outcome);
         var canvas = new DesignCanvasViewModel();
         var executor = new GdsPlacementExecutor(
-            canvas, new CommandManager(), () => sink.Templates.ToList());
+            canvas, new CommandManager(), () => _host.Templates.ToList());
         var report = await executor.ExecuteAsync(plan);
         report.PlacedCount.ShouldBe(1);
         report.SkippedPlacements.ShouldBeEmpty();
