@@ -23,8 +23,11 @@ public class GdsCoincidentLabelDedupTests
     [Fact]
     public async Task GetCellPins_CoincidentLabels_ConfiguredLayerWinsWithNote()
     {
-        // Helper "lc" on (99,0) is written FIRST, but the configured (1,10)
-        // label "o1" at the same anchor must win the stack.
+        // Helper "lc" on (99,0) is written FIRST, then TWO configured labels —
+        // (501,1) "x1" and (1,10) "o1" — share its anchor. The first configured
+        // label in file order wins the stack. Without the dedup both configured
+        // labels become pins and the count reads 3, not 2 — the count gates the
+        // feature.
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
@@ -34,6 +37,7 @@ public class GdsCoincidentLabelDedupTests
                 .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
                 .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
                 .Text(99, 0, "lc", 0, 2000)
+                .Text(501, 1, "x1", 0, 2000)
                 .Text(1, 10, "o1", 0, 2000)
                 .Text(1, 10, "i1", 10000, 2000)
             .EndCell()
@@ -43,13 +47,13 @@ public class GdsCoincidentLabelDedupTests
 
         var pins = session.GetCellPins("soa", session.GetCellBBox("soa"));
 
-        pins.Count.ShouldBe(2, "the stack collapses into one pin; the labels suppress the edge heuristic");
-        pins[0].Name.ShouldBe("o1");
+        pins.Count.ShouldBe(2, "the 3-label stack collapses into one pin; the labels suppress the edge heuristic");
+        pins[0].Name.ShouldBe("x1");
         pins[0].Source.ShouldBe(DetectedPinSource.Label);
         pins[1].Name.ShouldBe("i1");
         var note = session.Infos.Where(i => i.Contains("coincident labels merged")).ShouldHaveSingleItem();
-        note.ShouldContain("'o1' kept from layer (1,10)");
-        note.ShouldContain("1 helper label ignored");
+        note.ShouldContain("'x1' kept from layer (501,1)");
+        note.ShouldContain("2 labels ignored");
     }
 
     [Fact]
@@ -117,6 +121,82 @@ public class GdsCoincidentLabelDedupTests
     }
 
     [Fact]
+    public async Task GetCellPins_LabelsBeyondMergeTolerance_NotMergedNoNote()
+    {
+        // "lc" sits 2 nm (0.002 µm > EdgeTouchToleranceUm) from "o1": beyond the
+        // merge tolerance it is NOT a stacked label. It never becomes a pin
+        // (its layer is not configured and a configured pin exists, so no
+        // fallback) — the observable is the absent merge note: a stack wrongly
+        // spanning 2 nm would report a dropped label.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("soa", 0, 0)
+            .EndCell()
+            .BeginCell("soa")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(1, 10, "o1", 0, 2000)
+                .Text(99, 0, "lc", 2, 2000)
+                .Text(1, 10, "i1", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+        var session = new GdsHierarchyImportSession(library, "TOP", new GdsHierarchyImportOptions());
+
+        var pins = session.GetCellPins("soa", session.GetCellBBox("soa"));
+
+        pins.Count.ShouldBe(2, "labels 2 nm apart do not merge");
+        pins[0].Name.ShouldBe("o1");
+        pins[1].Name.ShouldBe("i1");
+        session.Infos.ShouldNotContain(i => i.Contains("coincident labels merged"),
+            "anchors beyond EdgeTouchToleranceUm form no stack — nothing was dropped");
+    }
+
+    [Fact]
+    public async Task Explode_RouteNetworkWithDoubledIdenticalLabel_ConnectionRestored()
+    {
+        // The exporter wrote the "out" label twice, byte-identical (same layer,
+        // text and anchor). Kept, the second copy would be renamed as a
+        // duplicate pin at the same anchor: the route network between
+        // dev#0.out and dev#1.in would count 3 touching pins — a junction, left
+        // frozen with 0 connections. The verbatim copy must collapse silently.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 0, 0)
+                .SRef("dev", 20000, 0)
+                .Boundary(1, 0, (10000, 1750), (20000, 1750), (20000, 2250), (10000, 2250), (10000, 1750))
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(235, 0, "in", 0, 2000)
+                .Text(235, 0, "out", 10000, 2000)
+                .Text(235, 0, "out", 10000, 2000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Count.ShouldBe(2, "the doubled identical label collapses into one pin");
+        var connection = result.Connections.ShouldHaveSingleItem(
+            "the 2-pin route network becomes a connection again, not a junction-frozen path");
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.A.PinName.ShouldBe("out");
+        connection.B.PinName.ShouldBe("in");
+        connection.XUm.ShouldBe(15.0, Tolerance);
+        connection.YUm.ShouldBe(2.0, Tolerance);
+        result.Warnings.ShouldNotContain(w => w.Contains("duplicate pin name"),
+            "one physical pin must not trigger the duplicate-name rename warning");
+        result.Infos.ShouldNotContain(i => i.Contains("coincident labels merged"),
+            "verbatim-identical labels collapse silently — no different label was merged away");
+        result.Infos.ShouldNotContain(i => i.Contains("junction"));
+    }
+
+    [Fact]
     public async Task Explode_RouteNetworkWithStackedHelperLabels_ConnectionRestored()
     {
         // Foundry shape: every pin anchor carries the real label on (235,0)
@@ -152,8 +232,9 @@ public class GdsCoincidentLabelDedupTests
         connection.B.PinName.ShouldBe("in");
         connection.XUm.ShouldBe(15.0, Tolerance);
         connection.YUm.ShouldBe(2.0, Tolerance);
-        result.Infos.ShouldContain(i => i.Contains("coincident labels merged"),
+        var note = result.Infos.Where(i => i.Contains("coincident labels merged")).ShouldHaveSingleItem(
             "one aggregated note for the cell (fired once although the cell is placed twice)");
+        note.ShouldContain("coincident labels merged into one pin at 2 stacked anchors");
         result.Infos.ShouldNotContain(i => i.Contains("junction"));
     }
 
