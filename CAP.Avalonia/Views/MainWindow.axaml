@@ -797,15 +797,19 @@
                                                 <!-- Edits this PDK's own fabrication process (layer
                                                      stack, cross-sections, materials). Bundled PDKs stay
                                                      read-only: saving there implicitly writes a custom
-                                                     fork copy instead of touching the bundled file. -->
-                                                <Button Content="✏"
+                                                     fork copy instead of touching the bundled file.
+                                                     Design-scoped sets (#830) have no file to fork or
+                                                     overwrite, so the button stays hidden for them. -->
+                                                <Button Content="✏" IsVisible="{Binding !IsDesignScoped}"
                                                         Click="PdkEditProcess_Click"
                                                         FontSize="11" Padding="5,1" MinWidth="0" Background="#3d3d3d" Foreground="#c9c9c9"
                                                         ToolTip.Tip="{loc:Localize LeftPanel.EditPdkTip}"/>
                                                 <!-- Moves this custom PDK's file to user-pdks/.trash after a
                                                      confirm prompt (LC-T5). Bundled PDKs are read-only and have
-                                                     no Delete button. -->
-                                                <Button Content="✕" IsVisible="{Binding !IsBundled}"
+                                                     no Delete button. Design-scoped sets (#830) live in the open
+                                                     .lun design — nothing on disk to trash and their lifecycle
+                                                     belongs to the design, so no Delete button either. -->
+                                                <Button Content="✕" IsVisible="{Binding CanDelete}"
                                                         Click="PdkDelete_Click"
                                                         FontSize="11" Padding="5,1" MinWidth="0" Background="#3d3d3d" Foreground="#e08a8a" Margin="4,0,0,0"
                                                         ToolTip.Tip="{loc:Localize LeftPanel.DeletePdkTip}"/>

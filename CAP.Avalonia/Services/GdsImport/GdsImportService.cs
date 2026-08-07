@@ -1,5 +1,5 @@
+using CAP.Avalonia.Services.GdsImport.DesignScope;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 
@@ -7,70 +7,55 @@ namespace CAP.Avalonia.Services.GdsImport;
 
 /// <summary>
 /// Orchestrates a GDS layout import end to end: parse → hierarchy import →
-/// map unknown cells to <see cref="PdkComponentDraft"/>s → persist them into a
-/// process-agnostic user PDK → register them with the runtime component
-/// library. The result (<see cref="GdsImportOutcome"/>) is pure data; turning
-/// it into canvas placements is the caller's job (see <see cref="GdsPlacementPlan"/>).
+/// map unknown cells to <see cref="PdkComponentDraft"/>s → add them to the
+/// DESIGN-SCOPED component store (issue #830: imported components live in the
+/// .lun design, never in a global user PDK) and register them with the runtime
+/// component library. The result (<see cref="GdsImportOutcome"/>) is pure
+/// data; turning it into canvas placements is the caller's job (see
+/// <see cref="GdsPlacementPlan"/>).
 /// <para>
-/// Runtime seams are constructor-injected with production defaults, following
-/// the codebase's service pattern (cf. <c>PdkImportService</c>): the user-PDK
-/// store defaults to the managed root, the template provider feeds the
-/// known-component resolver from the loaded library, and the registration
-/// callback mirrors <c>LeftPanelViewModel.RegisterSavedCustomComponent</c>
-/// (null = skip runtime registration, e.g. headless runs).
+/// Runtime seams are constructor-injected with production defaults: the
+/// design-scope store defaults to a callback-less instance (headless runs —
+/// components are collected but not registered in any library), and the
+/// template provider feeds the known-component resolver from the loaded
+/// library.
 /// </para>
 /// <para>
 /// Threading: the heavy stages (file read, parse, flatten, pin detection,
-/// matching, persistence) run inside <see cref="Task.Run{TResult}"/> so a large
-/// file cannot freeze the caller's (UI) thread — and the dialog's Cancel stays
-/// clickable. The awaits do NOT use <c>ConfigureAwait(false)</c>: the
-/// continuations resume on the caller's context, so the component-registration
-/// callback — which mutates UI-bound ObservableCollections — runs exactly where
-/// it did before (the same rule <see cref="GdsPlacementExecutor"/> documents
-/// for the canvas). The template provider is invoked BEFORE the handoff: it
-/// reads UI-bound library collections and must not run on the background
-/// thread.
+/// matching) run inside <see cref="Task.Run{TResult}"/> so a large file cannot
+/// freeze the caller's (UI) thread — and the dialog's Cancel stays clickable.
+/// The awaits do NOT use <c>ConfigureAwait(false)</c>: the continuations
+/// resume on the caller's context, so the design-scope registration — which
+/// mutates UI-bound ObservableCollections — runs exactly where it did before
+/// (the same rule <see cref="GdsPlacementExecutor"/> documents for the
+/// canvas). The template provider is invoked BEFORE the handoff: it reads
+/// UI-bound library collections and must not run on the background thread.
 /// </para>
 /// </summary>
 public sealed partial class GdsImportService
 {
-    /// <summary>Display-name prefix of the per-file user PDK an import writes ("GDS Import - &lt;file stem&gt;").</summary>
+    /// <summary>Display-name prefix of the per-file design-scoped set an import creates ("GDS Import - &lt;file stem&gt;").</summary>
     public const string ImportPdkNamePrefix = "GDS Import - ";
 
-    private readonly UserPdkStore _userPdkStore;
+    private readonly DesignScopedGdsComponentService _designScope;
     private readonly Func<IReadOnlyList<ComponentTemplate>>? _templateProvider;
-    private readonly Action<PdkComponentDraft, string, string>? _registerComponent;
-    private readonly Func<IDisposable>? _beginRegistrationBatch;
 
     /// <summary>Initializes a new <see cref="GdsImportService"/>.</summary>
-    /// <param name="userPdkStore">User-PDK persistence; defaults to the managed root under %LocalAppData%.</param>
+    /// <param name="designScope">
+    /// The open design's imported-component store; defaults to a callback-less
+    /// instance that collects the sets without library registration (headless).
+    /// </param>
     /// <param name="templateProvider">
     /// Supplies the currently loaded component templates for known-component
     /// resolution (e.g. <c>() => leftPanel.AllTemplates</c>); null/empty treats
     /// every cell as unknown (all become drafts).
     /// </param>
-    /// <param name="registerComponent">
-    /// Runtime library registration callback with the same contract as
-    /// <c>LeftPanelViewModel.RegisterSavedCustomComponent</c>: (draft, pdkName,
-    /// filePath). Null skips runtime registration (persistence still happens).
-    /// </param>
-    /// <param name="beginRegistrationBatch">
-    /// Opens a deferral scope around the whole per-draft registration loop
-    /// (e.g. <c>LeftPanelViewModel.BeginBatchRegistration</c>), so the library
-    /// refreshes once per import instead of once per draft — with hundreds of
-    /// imported cells the per-draft refresh froze the UI thread for minutes.
-    /// Null registers each draft with an immediate refresh.
-    /// </param>
     public GdsImportService(
-        UserPdkStore? userPdkStore = null,
-        Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null,
-        Action<PdkComponentDraft, string, string>? registerComponent = null,
-        Func<IDisposable>? beginRegistrationBatch = null)
+        DesignScopedGdsComponentService? designScope = null,
+        Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null)
     {
-        _userPdkStore = userPdkStore ?? UserPdkStore.CreateDefault();
+        _designScope = designScope ?? new DesignScopedGdsComponentService();
         _templateProvider = templateProvider;
-        _registerComponent = registerComponent;
-        _beginRegistrationBatch = beginRegistrationBatch;
     }
 
     /// <summary>
@@ -172,10 +157,11 @@ public sealed partial class GdsImportService
 
     /// <summary>
     /// Imports <paramref name="topCellName"/> from <paramref name="gdsPath"/>:
-    /// unknown cells become registered user-library components; known cells
-    /// (matched against the loaded templates) reference existing components.
-    /// The source .gds is copied next to the user-PDK JSON (content-aware name
-    /// collision handling) so the components' raw code keeps resolving.
+    /// unknown cells become DESIGN-SCOPED library components (stored with the
+    /// open design, serialized into its .lun file); known cells (matched
+    /// against the loaded templates) reference existing components. The source
+    /// .gds bytes are embedded in the design's set so the .lun stays
+    /// self-contained.
     /// </summary>
     /// <param name="gdsPath">Absolute path to the .gds file.</param>
     /// <param name="topCellName">Cell to import; pick from <see cref="AnalyzeAsync"/>.</param>
@@ -219,22 +205,23 @@ public sealed partial class GdsImportService
         }
 
         // Heavy stages on a thread-pool thread (see the class remarks); the await
-        // resumes on the caller's context, so the registration callback below
+        // resumes on the caller's context, so the design-scope registration below
         // mutates the UI-bound library exactly where it did before.
         var prepared = await Task.Run(
-            () => ParseImportAndPersistAsync(gdsPath, topCellName, options, warnings, infos, progress, ct, preParsedLibrary), ct);
+            () => ParseAndPrepareAsync(gdsPath, topCellName, options, warnings, infos, progress, ct, preParsedLibrary), ct);
 
-        if (prepared.PdkDrafts.Count > 0 && _registerComponent is not null)
+        if (prepared.PdkDrafts.Count > 0)
         {
             progress?.Report("Registering components in the library…");
-            // One batch scope around the whole loop: the library defers its
-            // per-registration refresh work until the scope closes (see the
-            // beginRegistrationBatch constructor doc).
-            using var registrationBatch = _beginRegistrationBatch?.Invoke();
-            foreach (var pdkDraft in prepared.PdkDrafts)
-                _registerComponent(pdkDraft, prepared.PdkName, prepared.UserPdkPath!);
+            _designScope.AddAndRegister(new DesignScopedGdsSet
+            {
+                PdkName = prepared.PdkName,
+                GdsFileName = prepared.GdsFileName!,
+                GdsBytes = prepared.GdsBytes!,
+                Drafts = prepared.PdkDrafts,
+            });
         }
-        else if (prepared.PdkDrafts.Count == 0 && prepared.Import.ImportedCellDrafts.Count > 0)
+        else if (prepared.Import.ImportedCellDrafts.Count > 0)
         {
             warnings.Add("No importable component drafts remained — nothing was registered.");
         }
@@ -251,17 +238,17 @@ public sealed partial class GdsImportService
             Warnings = warnings,
             Infos = infos,
             UserPdkName = prepared.PdkName,
-            UserPdkPath = prepared.UserPdkPath,
             GdsFileName = prepared.GdsFileName,
         };
     }
 
     /// <summary>
     /// The off-thread body of <see cref="ImportAsync"/>: read → validate →
-    /// hierarchy import → persist. Pure data and file IO only — nothing here may
-    /// touch UI-bound state (the registration callback stays with the caller).
+    /// hierarchy import → draft mapping. Pure data and file IO only — nothing
+    /// here may touch UI-bound state (the design-scope registration stays with
+    /// the caller).
     /// </summary>
-    private async Task<PreparedImport> ParseImportAndPersistAsync(
+    private async Task<PreparedImport> ParseAndPrepareAsync(
         string gdsPath,
         string topCellName,
         GdsHierarchyImportOptions options,
@@ -288,36 +275,34 @@ public sealed partial class GdsImportService
         var pdkDrafts = new List<PdkComponentDraft>();
         var registered = new List<GdsRegisteredComponent>();
         string? gdsFileName = null;
-        string? userPdkPath = null;
+        byte[]? gdsBytes = null;
 
         if (persistable.Count > 0)
         {
-            progress?.Report("Copying the GDS file into the user component library…");
+            progress?.Report("Embedding the GDS file into the design…");
             ct.ThrowIfCancellationRequested();
-            gdsFileName = CopyGdsIntoStoreRoot(gdsPath);
-            pdkName = _userPdkStore.ResolveAvailablePdkName(
-                ImportPdkNamePrefix + Path.GetFileNameWithoutExtension(gdsFileName));
-            var gdsCopyPath = Path.Combine(_userPdkStore.RootDirectory, gdsFileName);
+            gdsBytes = await File.ReadAllBytesAsync(gdsPath, ct).ConfigureAwait(false);
+            gdsFileName = Path.GetFileName(gdsPath);
+            pdkName = _designScope.ResolveAvailablePdkName(pdkName);
 
-            progress?.Report($"Saving {persistable.Count} component(s) to '{pdkName}'…");
+            progress?.Report($"Preparing {persistable.Count} component(s) for '{pdkName}'…");
             var usedNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
             for (var i = 0; i < persistable.Count; i++)
             {
                 ct.ThrowIfCancellationRequested();
                 var cellDraft = persistable[i];
-                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, gdsCopyPath, warnings);
+                // The token is passed as its own "path": it contains no character
+                // the Python-literal escaping touches, so Map's substitution is the
+                // identity and the stored drafts keep the portable token form —
+                // the runtime path is substituted only into the registration
+                // copies (see DesignScopedGdsComponentService.AddAndRegister).
+                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, GdsHierarchyImporter.GdsFileNameToken, warnings);
                 pdkDraft.Name = DeduplicateName(pdkDraft.Name, cellDraft.CellName, usedNames, warnings);
                 pdkDrafts.Add(pdkDraft);
                 registered.Add(new GdsRegisteredComponent(cellDraft.CellName, pdkDraft.Name));
                 if ((i + 1) % 100 == 0 && i + 1 < persistable.Count)
-                    progress?.Report($"Saving components to '{pdkName}'… {i + 1}/{persistable.Count}");
+                    progress?.Report($"Preparing components for '{pdkName}'… {i + 1}/{persistable.Count}");
             }
-
-            // One load-modify-save for the whole batch: the per-draft variant
-            // rewrites the entire PDK file on every call (O(n²) — it dominated
-            // large imports). All-or-nothing also means a cancelled import never
-            // leaves a half-written PDK behind.
-            userPdkPath = _userPdkStore.SaveAllToProcessAgnosticNamedPdk(pdkName, pdkDrafts, "nazca");
         }
 
         return new PreparedImport
@@ -326,35 +311,35 @@ public sealed partial class GdsImportService
             PdkDrafts = pdkDrafts,
             Registered = registered,
             PdkName = pdkName,
-            UserPdkPath = userPdkPath,
             GdsFileName = gdsFileName,
+            GdsBytes = gdsBytes,
         };
     }
 
     /// <summary>
     /// Intermediate result of the off-thread stages: the hierarchy import plus
-    /// the persisted drafts awaiting runtime registration on the caller's
-    /// context.
+    /// the token-form drafts awaiting design-scope registration on the
+    /// caller's context.
     /// </summary>
     private sealed record PreparedImport
     {
         /// <summary>The hierarchy import result (drafts, instances, connections).</summary>
         public required GdsCircuitImport Import { get; init; }
 
-        /// <summary>Persisted PDK drafts, in persist order (empty when nothing was importable).</summary>
+        /// <summary>Token-form PDK drafts, in import order (empty when nothing was importable).</summary>
         public required List<PdkComponentDraft> PdkDrafts { get; init; }
 
         /// <summary>Cell-name → registered-component-name pairs, parallel to <see cref="PdkDrafts"/>.</summary>
         public required List<GdsRegisteredComponent> Registered { get; init; }
 
-        /// <summary>Final (collision-resolved) user-PDK name.</summary>
+        /// <summary>Final (collision-resolved) design-scoped set name.</summary>
         public required string PdkName { get; init; }
 
-        /// <summary>Path of the user-PDK JSON the drafts were saved to, or null when nothing persisted.</summary>
-        public string? UserPdkPath { get; init; }
-
-        /// <summary>File name of the .gds copy in the user-PDK root, or null when nothing persisted.</summary>
+        /// <summary>Original .gds file name, or null when nothing was importable.</summary>
         public string? GdsFileName { get; init; }
+
+        /// <summary>The source .gds bytes to embed, or null when nothing was importable.</summary>
+        public byte[]? GdsBytes { get; init; }
     }
 
     /// <summary>

@@ -627,6 +627,7 @@
   "Overlay.PowerFlowOn": "パワーフローオーバーレイ: オン（変更時に自動更新）",
   "Pdk.Bundled": "同梱",
   "Pdk.User": "ユーザー",
+  "Pdk.Design": "デザイン",
   "PdkCheck.CopyFailingList": "📋 失敗リストをコピー",
   "PdkCheck.CopyFailingListTip": "すべての無効な参照と警告をコピー — PDK-JSON 修正 PR に貼り付け",
   "PdkCheck.Description": "各コンポーネントのエクスポート関数 — nazcaFunction、または gdsfactory ネイティブ PDK の場合は gdsFactoryFunction — がインストール済みの Python パッケージ（nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk）に対して解決されるか検証します。そうでなければ無効な参照はレンダリングまたはエクスポート時にのみ表面化します。",

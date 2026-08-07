@@ -155,9 +155,8 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         // ── 6. Analyze + explode-import through the button's service path ──
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         analysis.TopCellCandidates.ShouldBe(new[] { TopCellName });
-        var sink = new GdsUserDesignFixture.LibrarySink(Path.Combine(_root, "prefs.json"));
-        var service = new GdsImportService(
-            GdsUserDesignFixture.CreateStore(_root, "pdks"), () => sink.Templates.ToList(), sink.Register);
+        using var host = new GdsDesignScopeTestHost();
+        var service = host.CreateService();
         var dialogOptions = new GdsHierarchyImportOptions
         {
             PinDetection = new GdsPinDetectionOptions { PortLayers = [(1, 10), (501, 1)] },
@@ -169,12 +168,12 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         // ── 7. Place twice on fresh canvases: re-routing OFF (frozen imported geometry) vs ON (Lunima routing) ──
         var canvasOff = new DesignCanvasViewModel();
         canvasOff.InitializeAStarRouting(150, -700, 950, -250);
-        var reportOff = await new GdsPlacementExecutor(canvasOff, null, () => sink.Templates.ToList())
+        var reportOff = await new GdsPlacementExecutor(canvasOff, null, () => host.Templates.ToList())
             .ExecuteAsync(plan, rerouteImportedConnections: false);
 
         var canvasOn = new DesignCanvasViewModel();
         canvasOn.InitializeAStarRouting(150, -700, 950, -250);
-        var reportOn = await new GdsPlacementExecutor(canvasOn, null, () => sink.Templates.ToList())
+        var reportOn = await new GdsPlacementExecutor(canvasOn, null, () => host.Templates.ToList())
             .ExecuteAsync(plan, rerouteImportedConnections: true);
 
         // ── 8. Panels 03/04 in the same window, translated by the re-origin shift ──

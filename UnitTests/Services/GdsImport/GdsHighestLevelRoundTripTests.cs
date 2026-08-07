@@ -72,10 +72,12 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-highlevel-" + Guid.NewGuid().ToString("N"));
+    private readonly List<GdsDesignScopeTestHost> _hosts = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        foreach (var host in _hosts) host.Dispose();
     }
 
     // ── The full loop ────────────────────────────────────────────────────────
@@ -91,7 +93,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             "the seven canvas components are placed in the export script");
 
         // ── 3. Analyze + explode-import through the button's service path ──
-        var (outcome, sink) = await ImportExplodeAsync(export.GdsPath, "loop");
+        var (outcome, host) = await ImportExplodeAsync(export.GdsPath);
         outcome.RegisteredComponents.Select(r => r.CellDraftName).ShouldBe(new[]
         {
             "mmi2x2_dp", "ebeam_adiabatic_te1550", "ebeam_bdc_te1550",
@@ -117,7 +119,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // router-independent (the re-route path is covered elsewhere) ──
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
-        var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
 
         report.PlacedCount.ShouldBe(7);
@@ -265,7 +267,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         var export = await ExportUserDesignAsync("export-stub", stripSiepicUpgrade: true);
         export.SiepicUpgraded.ShouldBeFalse("the upgrade call was stripped — the stubs survive");
 
-        var (outcome, sink) = await ImportExplodeAsync(export.GdsPath, "stub");
+        var (outcome, host) = await ImportExplodeAsync(export.GdsPath);
         outcome.Instances.Count.ShouldBe(7);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived,
             "structural restoration only — nothing guessed");
@@ -278,7 +280,7 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // deterministic and router-independent.
         var canvas2 = new DesignCanvasViewModel();
         canvas2.InitializeAStarRouting(150, -700, 950, -250);
-        var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome), rerouteImportedConnections: false);
 
         report.PlacedCount.ShouldBe(7);
@@ -538,34 +540,34 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     }
 
     /// <summary>Analyze + explode-import through the same service path the GDS-import button uses.</summary>
-    private Task<(GdsImportOutcome Outcome, GdsUserDesignFixture.LibrarySink Sink)> ImportExplodeAsync(
-        string gdsPath, string tag) =>
-        ImportExplodeAsync(_root, gdsPath, tag);
+    private async Task<(GdsImportOutcome Outcome, GdsDesignScopeTestHost Host)> ImportExplodeAsync(
+        string gdsPath)
+    {
+        var host = new GdsDesignScopeTestHost();
+        _hosts.Add(host);
+        return (await ImportExplodeAsync(host, gdsPath), host);
+    }
 
     /// <summary>
     /// Analyze + explode-import through the same service path the GDS-import button uses.
-    /// Internal static with an explicit temp root so <see cref="GdsReexportIdempotencyTests"/>
+    /// Internal static with an explicit host so <see cref="GdsReexportIdempotencyTests"/>
     /// reuses the same harness; <paramref name="templateProvider"/> overrides the known-component
-    /// library the resolver sees (default: only this import's own fresh sink).
+    /// library the resolver sees (default: only this import's own registered templates).
     /// </summary>
-    internal static async Task<(GdsImportOutcome Outcome, GdsUserDesignFixture.LibrarySink Sink)> ImportExplodeAsync(
-        string root, string gdsPath, string tag, Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null)
+    internal static async Task<GdsImportOutcome> ImportExplodeAsync(
+        GdsDesignScopeTestHost host, string gdsPath, Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null)
     {
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
         analysis.TopCellCandidates.ShouldBe(new[] { "ConnectAPIC_Design" });
         analysis.TopCells.ShouldBe(new[] { new GdsTopCellSummary("ConnectAPIC_Design", 7) });
 
-        var sink = new GdsUserDesignFixture.LibrarySink(Path.Combine(root, $"prefs-{tag}.json"));
-        var service = new GdsImportService(
-            GdsUserDesignFixture.CreateStore(root, $"pdks-{tag}"),
-            templateProvider ?? (() => sink.Templates.ToList()), sink.Register);
+        var service = host.CreateService(templateProvider);
         var dialogOptions = new GdsHierarchyImportOptions
         {
             // The dialog's default port-layer field ("1,10;501,1").
             PinDetection = new GdsPinDetectionOptions { PortLayers = [(1, 10), (501, 1)] },
         };
-        var outcome = await service.ImportAsync(gdsPath, analysis.TopCellCandidates[0], dialogOptions, null);
-        return (outcome, sink);
+        return await service.ImportAsync(gdsPath, analysis.TopCellCandidates[0], dialogOptions, null);
     }
 
     /// <summary>Runs a process through <see cref="ProcessLaunchFactory"/> — the app's external-tool launch pattern.</summary>

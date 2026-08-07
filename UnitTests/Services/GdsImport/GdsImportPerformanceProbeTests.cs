@@ -1,14 +1,7 @@
-using System.Collections.ObjectModel;
 using System.Diagnostics;
 using CAP.Avalonia.Commands;
-using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
-using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using Xunit;
@@ -34,8 +27,7 @@ public class GdsImportPerformanceProbeTests : IDisposable
     private readonly ITestOutputHelper _output;
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdsprobe-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdsprobe-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     private static int ChainedInstances =>
         int.TryParse(Environment.GetEnvironmentVariable("GDS_PROBE_CHAINED"), out int v) ? v : 2500;
@@ -51,7 +43,7 @@ public class GdsImportPerformanceProbeTests : IDisposable
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     [Fact]
@@ -89,11 +81,8 @@ public class GdsImportPerformanceProbeTests : IDisposable
                 library, "TOP", new GdsHierarchyImportOptions());
         }
 
-        // ── Stage: full service import (re-parses; persists + registers) ────
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(
-            new UserPdkStore(Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader()),
-            () => sink.Templates, sink.Register);
+        // ── Stage: full service import (re-parses; stores + registers) ──────
+        var service = _host.CreateService(() => _host.Templates);
         GdsImportOutcome outcome;
         using (Stage(timings, "service ImportAsync total"))
         {
@@ -109,7 +98,7 @@ public class GdsImportPerformanceProbeTests : IDisposable
 
         // ── Stage: canvas placement + connect + group ────────────────────────
         var canvas = new DesignCanvasViewModel();
-        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => sink.Templates);
+        var executor = new GdsPlacementExecutor(canvas, new CommandManager(), () => _host.Templates);
         GdsPlacementReport report;
         using (Stage(timings, "executor ExecuteAsync"))
         {
@@ -147,25 +136,5 @@ public class GdsImportPerformanceProbeTests : IDisposable
         private readonly Action _action;
         public OnDispose(Action action) => _action = action;
         public void Dispose() => _action();
-    }
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            var preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            var categories = new ObservableCollection<string>();
-            var pdkManager = new PdkManagerViewModel();
-            var loadedDrafts = new List<PdkDraft>();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, categories, pdkManager,
-                    preferences, loader, loadedDrafts, () => { }, () => { });
-        }
     }
 }

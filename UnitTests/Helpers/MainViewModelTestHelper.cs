@@ -72,18 +72,18 @@ public static class MainViewModelTestHelper
         var photonTorchVm = new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas);
         var verilogAVm = new VerilogAExportViewModel(new VerilogAExporter(), new VerilogAFileWriter(), canvas);
         var gdsFactoryVm = new GdsFactoryExportViewModel(canvas, new GdsExportService(), errorConsole: errorConsoleService);
-        // Test-isolated user-PDK store: a unique temp root per call so an import
-        // triggered from a UI-flow test never touches the developer's real PDKs.
-        var gdsImportStore = new CAP_DataAccess.Components.AddCustomComponent.UserPdkStore(
-            Path.Combine(Path.GetTempPath(), $"cap-test-user-pdks-{Guid.NewGuid()}"),
-            new PdkJsonSaver(), pdkLoader);
+        // Test-isolated design-scoped GDS components (#830): registers imported
+        // sets on the LeftPanel and caches .gds bytes in a unique temp dir so a
+        // UI-flow import never touches the developer's real cache or PDKs.
         var capturedLeftPanel = leftPanel;
+        var designScope = new CAP.Avalonia.Services.GdsImport.DesignScope.DesignScopedGdsComponentService(
+            capturedLeftPanel.RegisterDesignScopedPdk,
+            capturedLeftPanel.RemoveDesignScopedPdk,
+            Path.Combine(Path.GetTempPath(), $"cap-test-gds-cache-{Guid.NewGuid()}"));
         var gdsImportButton = new CAP.Avalonia.ViewModels.GdsImport.GdsImportButtonViewModel(
             new CAP.Avalonia.Services.GdsImport.GdsImportService(
-                gdsImportStore,
-                () => capturedLeftPanel.AllTemplates.ToList(),
-                (draft, pdkName, filePath) => capturedLeftPanel.RegisterSavedCustomComponent(draft, pdkName, filePath),
-                capturedLeftPanel.BeginBatchRegistration),
+                designScope,
+                () => capturedLeftPanel.AllTemplates.ToList()),
             new CAP.Avalonia.Services.GdsImport.GdsPlacementExecutor(
                 canvas, commandManager, () => capturedLeftPanel.AllTemplates.ToList()),
             errorConsoleService);
@@ -117,7 +117,8 @@ public static class MainViewModelTestHelper
             // Registry browser backed by the committed fixtures — no network access.
             new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
                 new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()),
-            gdsImportButton);
+            gdsImportButton,
+            designScopedGdsComponents: designScope);
     }
 
     /// <summary>

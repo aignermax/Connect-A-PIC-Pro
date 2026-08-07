@@ -189,9 +189,25 @@ public partial class PdkInfoViewModel : ObservableObject
     public bool IsBundled { get; }
     public int ComponentCount { get; }
 
-    /// <summary>Localized source label ("Bundled"/"User"), re-read on language switch.</summary>
+    /// <summary>
+    /// True for design-scoped component sets (GDS imports, issue #830): they live in
+    /// the open .lun design and have no file on disk, so the manager offers neither an
+    /// edit nor a delete button for them — their lifecycle belongs to the design, and
+    /// there is nothing on disk to fork, overwrite or move to the trash.
+    /// </summary>
+    public bool IsDesignScoped => !IsBundled && FilePath is null;
+
+    /// <summary>
+    /// True only for file-backed user PDKs — the sole rows with a Delete button,
+    /// since deletion means moving their file to the trash (or deregistering an
+    /// external file). Bundled PDKs are read-only; design-scoped sets have no file.
+    /// </summary>
+    public bool CanDelete => !IsBundled && FilePath is not null;
+
+    /// <summary>Localized source label ("Bundled"/"User"/"Design"), re-read on language switch.</summary>
     public string SourceType =>
-        LocalizationService.Instance.Translate(IsBundled ? "Pdk.Bundled" : "Pdk.User");
+        LocalizationService.Instance.Translate(
+            IsBundled ? "Pdk.Bundled" : IsDesignScoped ? "Pdk.Design" : "Pdk.User");
 
     public PdkInfoViewModel(string name, string? filePath, bool isBundled, int componentCount)
     {
@@ -207,7 +223,9 @@ public partial class PdkInfoViewModel : ObservableObject
     /// <summary>Localized source badge with an emoji prefix; re-read on language switch.</summary>
     public string SourceBadge => IsBundled
         ? $"📦 {LocalizationService.Instance.Translate("Pdk.Bundled")}"
-        : $"📂 {LocalizationService.Instance.Translate("Pdk.User")}";
+        : IsDesignScoped
+            ? $"📄 {LocalizationService.Instance.Translate("Pdk.Design")}"
+            : $"📂 {LocalizationService.Instance.Translate("Pdk.User")}";
 
     /// <summary>
     /// Re-raises the localized badge properties when the UI language switches. The subscription

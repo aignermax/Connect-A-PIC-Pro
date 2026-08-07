@@ -1,12 +1,6 @@
-using System.Collections.ObjectModel;
-using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
-using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
+using CAP.Avalonia.ViewModels.Library;
 using Shouldly;
 using UnitTests.Import.Gds;
 using Xunit;
@@ -15,20 +9,20 @@ namespace UnitTests.Services.GdsImport;
 
 /// <summary>
 /// End-to-end tests for <see cref="GdsImportService"/> with real parsing
-/// (temp .gds files via <see cref="GdsTestWriter"/>), a temp-root
-/// <see cref="UserPdkStore"/> and the real <see cref="CustomComponentLibraryRegistrar"/>.
+/// (temp .gds files via <see cref="GdsTestWriter"/>) and a
+/// <see cref="GdsDesignScopeTestHost"/> standing in for the open design's
+/// component scope (issue #830: imports are design-scoped, no user-PDK files).
 /// </summary>
 public class GdsImportServiceTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdsimport-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gdsimport-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     // ── Fixtures ─────────────────────────────────────────────────────────────
@@ -51,30 +45,6 @@ public class GdsImportServiceTests : IDisposable
         var path = Path.Combine(_root, fileName);
         File.WriteAllBytes(path, content);
         return path;
-    }
-
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from RegistrarPdkNameCasingTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
     }
 
     private sealed class ListProgress : IProgress<string>
@@ -184,12 +154,11 @@ public class GdsImportServiceTests : IDisposable
     // ── Happy path ───────────────────────────────────────────────────────────
 
     [Fact]
-    public async Task ImportAsync_RegistersDraftsCopiesGdsAndReturnsOutcome()
+    public async Task ImportAsync_RegistersDraftsIntoDesignScopeAndReturnsOutcome()
     {
         var path = WriteGds(TwoWaveguideLibrary());
-        var sink = new LibrarySink(_prefsPath);
         var progress = new ListProgress();
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         var outcome = await service.ImportAsync(path, "TOP", null, progress);
 
@@ -207,37 +176,35 @@ public class GdsImportServiceTests : IDisposable
         outcome.UserPdkName.ShouldBe("GDS Import - circuit");
         progress.Messages.ShouldNotBeEmpty();
 
-        // The .gds was copied next to the user-PDK JSON.
-        var storeRoot = Store().RootDirectory;
-        File.Exists(Path.Combine(storeRoot, "circuit.gds")).ShouldBeTrue();
-
-        // The user PDK round-trips through the loader (validation included).
-        outcome.UserPdkPath.ShouldNotBeNull();
-        var pdk = new PdkLoader().LoadFromFileForEditing(outcome.UserPdkPath);
-        pdk.Name.ShouldBe("GDS Import - circuit");
-        pdk.ProcessAgnostic.ShouldBeTrue();
-        pdk.Process.ShouldBeNull();
-        pdk.Components.Count.ShouldBe(2);
-        var wgA = pdk.Components.Single(c => c.Name == "wgA");
+        // The set lives in the DESIGN scope: embedded .gds bytes plus
+        // portable token-form drafts (no user-PDK file anywhere).
+        var set = _host.Scope.Sets.ShouldHaveSingleItem();
+        set.PdkName.ShouldBe("GDS Import - circuit");
+        set.GdsFileName.ShouldBe("circuit.gds");
+        set.GdsBytes.ShouldBe(File.ReadAllBytes(path));
+        set.Drafts.Count.ShouldBe(2);
+        var wgA = set.Drafts.Single(c => c.Name == "wgA");
         wgA.Pins.Count.ShouldBe(2);
         wgA.SMatrix.ShouldBeNull();
         wgA.RawCodeBackend.ShouldBe("nazca");
         wgA.RawCode.ShouldContain("cellname=\"wgA\"");
-        wgA.RawCode.ShouldNotContain(GdsHierarchyImporterToken());
+        // Stored drafts keep the portable token form.
+        wgA.RawCode.ShouldContain(GdsFileNameToken());
         wgA.OutlinePolygons.ShouldNotBeNull();
 
-        // Runtime registration happened through the registrar seam.
-        sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA", "wgB" }, ignoreOrder: true);
-        sink.Templates.ShouldAllBe(t => t.PdkSource == "GDS Import - circuit" && t.IsCustom);
-        sink.PdkManager.LoadedPdks.ShouldContain(p => p.Name == "GDS Import - circuit");
-        sink.Preferences.GetUserPdkPaths().ShouldContain(outcome.UserPdkPath);
+        // Runtime registration happened with the materialized cache path.
+        _host.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA", "wgB" }, ignoreOrder: true);
+        _host.Templates.ShouldAllBe(t => t.PdkSource == "GDS Import - circuit" && t.IsCustom);
+        _host.PdkManager.LoadedPdks.ShouldContain(p => p.Name == "GDS Import - circuit" && p.FilePath == null);
+        var cacheFile = Directory.GetFiles(_host.GdsCacheDirectory, "*.gds").ShouldHaveSingleItem();
+        _host.Templates.ShouldAllBe(t => t.RawCode != null && !t.RawCode.Contains(GdsFileNameToken()));
+        _host.Templates.First().RawCode.ShouldContain(Path.GetFileName(cacheFile));
     }
 
     [Fact]
     public async Task ImportAsync_KnownTemplateCell_ResolvesInsteadOfRegistering()
     {
         var path = WriteGds(TwoWaveguideLibrary());
-        var sink = new LibrarySink(_prefsPath);
         var wgATemplate = new ComponentTemplate
         {
             Name = "wgA",
@@ -250,15 +217,14 @@ public class GdsImportServiceTests : IDisposable
                 new PinDefinition("out", 10, 2, 0),
             },
         };
-        var service = new GdsImportService(
-            Store(), () => new[] { wgATemplate }, sink.Register);
+        var service = _host.CreateService(() => new[] { wgATemplate });
 
         var outcome = await service.ImportAsync(path, "TOP", null, null);
 
         outcome.Instances[0].KnownComponentIdentifier.ShouldBe("wgA");
         outcome.Instances[0].PdkSource.ShouldBe("testpdk");
         outcome.RegisteredComponents.ShouldBe(new[] { new GdsRegisteredComponent("wgB", "wgB") });
-        sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgB" });
+        _host.Templates.Select(t => t.Name).ShouldBe(new[] { "wgB" });
 
         // The resolution note is informational, not a warning.
         outcome.Infos.ShouldContain(i => i.Contains("resolved to existing component 'wgA'"));
@@ -277,7 +243,7 @@ public class GdsImportServiceTests : IDisposable
         var path = WriteGds(GdsImportBenchmark.CreateLibrary(chainedInstances: 200, abutmentPairs: 0));
         using var cts = new CancellationTokenSource();
         var progress = new CancelOnFirstReport(cts);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), null);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         await Should.ThrowAsync<OperationCanceledException>(
             () => service.ImportAsync(path, "TOP", null, progress, cts.Token));
@@ -302,91 +268,27 @@ public class GdsImportServiceTests : IDisposable
         public void Report(string value) => _cts.Cancel();
     }
 
-    // ── .gds copy collision handling ─────────────────────────────────────────
+    // ── Set-name collisions / idempotency ────────────────────────────────────
 
     [Fact]
-    public async Task ImportAsync_SameNameDifferentContent_GdsCopyGetsSuffixed()
-    {
-        var path = WriteGds(TwoWaveguideLibrary());
-        var storeRoot = Store().RootDirectory;
-        Directory.CreateDirectory(storeRoot);
-        var colliding = Path.Combine(storeRoot, "circuit.gds");
-        File.WriteAllBytes(colliding, new byte[] { 1, 2, 3, 4 });
-
-        var outcome = await new GdsImportService(Store()).ImportAsync(path, "TOP", null, null);
-
-        outcome.GdsFileName.ShouldBe("circuit-2.gds");
-        outcome.UserPdkName.ShouldBe("GDS Import - circuit-2");
-        File.ReadAllBytes(colliding).ShouldBe(new byte[] { 1, 2, 3, 4 },
-            "a different file with the same name must never be overwritten");
-        File.Exists(Path.Combine(storeRoot, "circuit-2.gds")).ShouldBeTrue();
-    }
-
-    [Fact]
-    public async Task ImportAsync_SameNameIdenticalContent_ReusesExistingCopy()
-    {
-        var path = WriteGds(TwoWaveguideLibrary());
-        var storeRoot = Store().RootDirectory;
-        Directory.CreateDirectory(storeRoot);
-        File.Copy(path, Path.Combine(storeRoot, "circuit.gds"));
-
-        var outcome = await new GdsImportService(Store()).ImportAsync(path, "TOP", null, null);
-
-        outcome.GdsFileName.ShouldBe("circuit.gds");
-        Directory.GetFiles(storeRoot, "*.gds").ShouldHaveSingleItem()
-            .ShouldBe(Path.Combine(storeRoot, "circuit.gds"));
-    }
-
-    // ── PDK-name slug collisions ─────────────────────────────────────────────
-
-    [Theory]
-    [InlineData("my circuit.gds", "my-circuit.gds", "GDS Import - my circuit", "GDS Import - my-circuit-2")]
-    [InlineData("my-circuit.gds", "my circuit.gds", "GDS Import - my-circuit", "GDS Import - my circuit-2")]
-    public async Task ImportAsync_PdkNamesCollidingOnSlug_SecondImportGetsSuffixedPdk(
-        string firstFile, string secondFile, string expectedFirstPdk, string expectedSecondPdk)
-    {
-        // "GDS Import - my circuit" and "GDS Import - my-circuit" are DIFFERENT
-        // PDK names whose slugs collide (gds-import-my-circuit.json) — the
-        // second import must not merge into the first one's file.
-        var firstPath = WriteGds(TwoWaveguideLibrary(), firstFile);
-        var secondPath = WriteGds(TwoWaveguideLibrary(), secondFile);
-        var service = new GdsImportService(Store());
-
-        var first = await service.ImportAsync(firstPath, "TOP", null, null);
-        var second = await service.ImportAsync(secondPath, "TOP", null, null);
-
-        first.UserPdkName.ShouldBe(expectedFirstPdk);
-        second.UserPdkName.ShouldBe(expectedSecondPdk);
-        second.UserPdkPath.ShouldNotBe(first.UserPdkPath);
-
-        // Both files keep their own PDK — the first import is untouched.
-        new PdkLoader().LoadFromFileForEditing(first.UserPdkPath!).Name.ShouldBe(expectedFirstPdk);
-        var secondPdk = new PdkLoader().LoadFromFileForEditing(second.UserPdkPath!);
-        secondPdk.Name.ShouldBe(expectedSecondPdk);
-        secondPdk.Components.Count.ShouldBe(2);
-    }
-
-    // ── Idempotency ──────────────────────────────────────────────────────────
-
-    [Fact]
-    public async Task ImportAsync_SameFileTwice_ReplacesComponentsAndKeepsSingleGdsCopy()
+    public async Task ImportAsync_SameFileTwice_SecondSetGetsSuffixedNameAndCacheIsShared()
     {
         var path = WriteGds(TwoWaveguideLibrary());
         // No template provider: on the second import the cells are detected as
-        // unknown AGAIN and re-persisted (with templates supplied they would
-        // resolve as KNOWN components and skip persistence entirely — see
-        // ImportAsync_KnownTemplateCell_ResolvesInsteadOfRegistering). The
-        // store's replace semantics must keep exactly one component per name.
-        var service = new GdsImportService(Store());
+        // unknown AGAIN and become a second design-scoped set (with templates
+        // supplied they would resolve as KNOWN components — see
+        // ImportAsync_KnownTemplateCell_ResolvesInsteadOfRegistering). The two
+        // sets must never merge, so the second gets a -2 name.
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
-        await service.ImportAsync(path, "TOP", null, null);
+        var first = await service.ImportAsync(path, "TOP", null, null);
         var second = await service.ImportAsync(path, "TOP", null, null);
 
-        second.GdsFileName.ShouldBe("circuit.gds");
-        Directory.GetFiles(Store().RootDirectory, "*.gds").ShouldHaveSingleItem(
-            "identical content reuses the existing .gds copy");
-        var pdk = new PdkLoader().LoadFromFileForEditing(second.UserPdkPath!);
-        pdk.Components.Count.ShouldBe(2, "components are replaced, not duplicated");
+        first.UserPdkName.ShouldBe("GDS Import - circuit");
+        second.UserPdkName.ShouldBe("GDS Import - circuit-2");
+        _host.Scope.Sets.Count.ShouldBe(2);
+        Directory.GetFiles(_host.GdsCacheDirectory, "*.gds").ShouldHaveSingleItem(
+            "identical content is materialized once (content-addressed cache)");
     }
 
     // ── Info notes vs. warnings ──────────────────────────────────────────────
@@ -415,15 +317,14 @@ public class GdsImportServiceTests : IDisposable
             .EndLibrary()
             .ToArray();
         var path = WriteGds(library);
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         var outcome = await service.ImportAsync(path, "TOP", null, null);
 
         // Only the real cell is registered and placed.
         outcome.RegisteredComponents.ShouldBe(new[] { new GdsRegisteredComponent("wgA", "wgA") });
         outcome.Instances.ShouldHaveSingleItem().CellDraftName.ShouldBe("wgA");
-        sink.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA" });
+        _host.Templates.Select(t => t.Name).ShouldBe(new[] { "wgA" });
 
         outcome.Warnings.ShouldBeEmpty(
             "no empty-bbox / not-registered / placement-skip cascade for skipped cells");
@@ -439,7 +340,6 @@ public class GdsImportServiceTests : IDisposable
         // Two PDKs provide 'wgA': the first wins (deterministic) and the pick is
         // an info note, not a warning.
         var path = WriteGds(TwoWaveguideLibrary());
-        var sink = new LibrarySink(_prefsPath);
         ComponentTemplate WgA(string pdk) => new()
         {
             Name = "wgA",
@@ -452,8 +352,7 @@ public class GdsImportServiceTests : IDisposable
                 new PinDefinition("out", 10, 2, 0),
             },
         };
-        var service = new GdsImportService(
-            Store(), () => new[] { WgA("pdk1"), WgA("pdk2") }, sink.Register);
+        var service = _host.CreateService(() => new[] { WgA("pdk1"), WgA("pdk2") });
 
         var outcome = await service.ImportAsync(path, "TOP", null, null);
 
@@ -469,7 +368,7 @@ public class GdsImportServiceTests : IDisposable
     {
         var missing = Path.Combine(_root, "nope.gds");
         var ex = await Should.ThrowAsync<FileNotFoundException>(
-            () => new GdsImportService(Store()).ImportAsync(missing, "TOP", null, null));
+            () => _host.CreateService().ImportAsync(missing, "TOP", null, null));
         ex.Message.ShouldContain("nope.gds");
     }
 
@@ -479,7 +378,7 @@ public class GdsImportServiceTests : IDisposable
         var path = WriteGds(TwoWaveguideLibrary());
 
         var ex = await Should.ThrowAsync<InvalidDataException>(
-            () => new GdsImportService(Store()).ImportAsync(path, "MISSING", null, null));
+            () => _host.CreateService().ImportAsync(path, "MISSING", null, null));
 
         ex.Message.ShouldContain("MISSING");
         ex.Message.ShouldContain("TOP"); // lists the top-cell candidates
@@ -490,10 +389,10 @@ public class GdsImportServiceTests : IDisposable
     {
         // "flat" spans 10×0 µm — a degenerate, zero-height bbox: the importer's
         // zero-geometry skip (which requires BOTH dimensions to be empty) does
-        // not catch it, so the draft is built but the service refuses to persist
-        // a zero-size component (the PDK loader would reject it). Pin-LESS
-        // drafts, by contrast, are persistable since geometry-only components
-        // became legal (see GdsGeometryOnlyComponentTests).
+        // not catch it, so the draft is built but the service refuses to keep
+        // a zero-size component. Pin-LESS drafts, by contrast, are persistable
+        // since geometry-only components became legal (see
+        // GdsGeometryOnlyComponentTests).
         var library = GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
@@ -505,31 +404,29 @@ public class GdsImportServiceTests : IDisposable
             .EndLibrary()
             .ToArray();
         var path = WriteGds(library);
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
 
         var outcome = await service.ImportAsync(path, "TOP", null, null);
 
         outcome.RegisteredComponents.ShouldBeEmpty();
-        outcome.UserPdkPath.ShouldBeNull();
-        outcome.GdsFileName.ShouldBeNull("no draft needs the .gds copy when nothing is registered");
+        outcome.GdsFileName.ShouldBeNull("no draft needs the .gds bytes when nothing is registered");
         outcome.Warnings.ShouldContain(w => w.Contains("flat") && w.Contains("not registered: zero size"));
         outcome.Warnings.ShouldContain(w => w.Contains("flat") && w.Contains("empty bounding box"),
             "the importer's zero-size note fires alongside (pre-existing reporter behavior)");
         outcome.Infos.ShouldBeEmpty(
             "an unpersistable draft is a real problem — it stays a warning, not an info note");
-        sink.Templates.ShouldBeEmpty();
-        Directory.Exists(Store().RootDirectory).ShouldBeFalse(
-            "no PDK and no .gds copy — the store root is never created");
+        _host.Templates.ShouldBeEmpty();
+        _host.Scope.Sets.ShouldBeEmpty();
+        Directory.Exists(_host.GdsCacheDirectory).ShouldBeFalse(
+            "no set and no .gds bytes — the cache directory is never created");
     }
 
     [Fact]
-    public async Task ImportAsync_BlankPinLabel_PersistsRenamedPinThatReloadsCleanly()
+    public async Task ImportAsync_BlankPinLabel_StoresRenamedPinInDesignScope()
     {
         // An empty STRING label is legal GDS. The blank pin name must never
-        // reach the user PDK: the loader rejects blank pin names, so the NEXT
-        // save of the same file would throw mid-import and every later app
-        // start would silently skip the poisoned file.
+        // reach the stored drafts: the PDK component validation rejects blank
+        // pin names, so a poisoned draft would break every later .lun load.
         var library = GdsTestWriter.Create()
             .StandardPrologue()
             .BeginCell("TOP")
@@ -547,20 +444,17 @@ public class GdsImportServiceTests : IDisposable
             .ToArray();
         var path = WriteGds(library);
 
-        var outcome = await new GdsImportService(Store()).ImportAsync(path, "TOP", null, null);
+        var outcome = await _host.CreateService().ImportAsync(path, "TOP", null, null);
 
         outcome.Warnings.ShouldContain(w => w.Contains("pin_1"));
-        outcome.UserPdkPath.ShouldNotBeNull();
-        // The reload-with-validation path is exactly what the next save (and
-        // every app start) runs — it must not throw.
-        var pdk = new PdkLoader().LoadFromFileForEditing(outcome.UserPdkPath);
-        pdk.Components.ShouldHaveSingleItem().Pins.Select(p => p.Name)
+        var set = _host.Scope.Sets.ShouldHaveSingleItem();
+        set.Drafts.ShouldHaveSingleItem().Pins.Select(p => p.Name)
             .ShouldBe(new[] { "pin_1", "out" });
     }
 
     // ── Helpers ──────────────────────────────────────────────────────────────
 
-    private static string GdsHierarchyImporterToken() => "{GdsFileName}";
+    private static string GdsFileNameToken() => "{GdsFileName}";
 }
 
 /// <summary>GDS fixture cell builders for the service tests.</summary>

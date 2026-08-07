@@ -1,12 +1,7 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using CAP_Core.Components.Core;
 using Shouldly;
@@ -41,13 +36,12 @@ public class GdsRoundTripImportTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-roundtrip-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-roundtrip-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     // ── Wrapper unwrapping (files exported before the footer fix) ───────────
@@ -113,8 +107,7 @@ public class GdsRoundTripImportTests : IDisposable
             ("wgB", WaveguideCell));
 
         var analysis = await GdsImportService.AnalyzeAsync(gdsPath);
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, analysis.TopCellCandidates[0], null, null);
 
         outcome.Warnings.ShouldBeEmpty();
@@ -164,8 +157,7 @@ public class GdsRoundTripImportTests : IDisposable
                 .Text(501, 1, "b0", 79700, 2000)
                 .Text(501, 1, "b1", 79700, -2000)));
 
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
         var dialogDefaultOptions = new GdsHierarchyImportOptions
         {
             PinDetection = new GdsPinDetectionOptions { PortLayers = [(1, 10)] },
@@ -174,8 +166,8 @@ public class GdsRoundTripImportTests : IDisposable
 
         outcome.Warnings.ShouldNotContain(w => w.Contains("was not registered", StringComparison.Ordinal));
         outcome.RegisteredComponents.ShouldContain(r => r.CellDraftName == "mmi1x2_sh");
-        sink.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
-        var mmiTemplate = sink.Templates.First(t => t.Name == "mmi1x2_sh");
+        _host.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
+        var mmiTemplate = _host.Templates.First(t => t.Name == "mmi1x2_sh");
         mmiTemplate.PinDefinitions.Select(p => p.Name).ShouldBe(new[] { "a0", "b0", "b1" });
     }
 
@@ -231,8 +223,7 @@ public class GdsRoundTripImportTests : IDisposable
 
         // 5. Explode import: both demofab components come back as drafts — the
         // MMI with its (501, 1) pin labels a0/b0/b1, not dropped as pinless.
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, "ConnectAPIC_Design", null, null);
 
         outcome.Warnings.ShouldNotContain(w => w.Contains("was not registered", StringComparison.Ordinal));
@@ -268,13 +259,13 @@ public class GdsRoundTripImportTests : IDisposable
             "the junction network's polygons ride the group as frozen, non-re-routable paths");
 
         // The registered MMI template carries the demofab pin names.
-        sink.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
-        var mmiTemplate = sink.Templates.First(t => t.Name == "mmi1x2_sh");
+        _host.Templates.ShouldContain(t => t.Name == "mmi1x2_sh");
+        var mmiTemplate = _host.Templates.First(t => t.Name == "mmi1x2_sh");
         mmiTemplate.PinDefinitions.Select(p => p.Name).ShouldBe(new[] { "a0", "b0", "b1" });
 
         // 6. Placement: all three components land on the canvas — none missing.
         var canvas2 = new DesignCanvasViewModel();
-        var report = await new GdsPlacementExecutor(canvas2, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas2, null, () => _host.Templates.ToList())
             .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
         report.SkippedPlacements.ShouldBeEmpty();
         report.PlacedCount.ShouldBe(3);
@@ -344,30 +335,6 @@ public class GdsRoundTripImportTests : IDisposable
             });
         }
         return component;
-    }
-
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
     }
 
     private static async Task<string?> FindNazcaPythonAsync()

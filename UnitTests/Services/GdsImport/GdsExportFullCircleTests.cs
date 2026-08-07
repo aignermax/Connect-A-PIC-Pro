@@ -1,12 +1,7 @@
-using System.Collections.ObjectModel;
 using CAP.Avalonia.Services;
-using CAP.Avalonia.Services.AddCustomComponent;
 using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
 using UnitTests.Export;
@@ -34,13 +29,12 @@ public class GdsExportFullCircleTests : IDisposable
 
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gds-fullcircle-" + Guid.NewGuid().ToString("N"));
-    private readonly string _prefsPath =
-        Path.Combine(Path.GetTempPath(), $"lunima-gds-fullcircle-prefs-{Guid.NewGuid():N}.json");
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
-        if (File.Exists(_prefsPath)) File.Delete(_prefsPath);
+        _host.Dispose();
     }
 
     [SkippableFact]
@@ -51,8 +45,7 @@ public class GdsExportFullCircleTests : IDisposable
 
         // 1. Import: TOP with two abutting 10×4 µm waveguide cells (wgA → wgB).
         var gdsPath = WriteFixtureGds();
-        var sink = new LibrarySink(_prefsPath);
-        var service = new GdsImportService(Store(), () => Array.Empty<ComponentTemplate>(), sink.Register);
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
         var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
         outcome.Warnings.ShouldBeEmpty();
         outcome.RegisteredComponents.Count.ShouldBe(2);
@@ -60,16 +53,18 @@ public class GdsExportFullCircleTests : IDisposable
         // 2. Place: executor maps the plan onto the canvas (positions, connection, group).
         var canvas = new DesignCanvasViewModel();
         var plan = GdsPlacementPlan.FromOutcome(outcome);
-        var report = await new GdsPlacementExecutor(canvas, null, () => sink.Templates.ToList())
+        var report = await new GdsPlacementExecutor(canvas, null, () => _host.Templates.ToList())
             .ExecuteAsync(plan);
         report.PlacedCount.ShouldBe(2);
         report.ConnectedCount.ShouldBe(1);
 
         // 3. Export with raw-code inlining: the load_gds cells replace the box stubs.
+        // The registered templates' RawCode carries the absolute path of the
+        // materialized .gds in the design scope's cache — no fallback may trigger.
         var warnings = new List<string>();
         var script = new SimpleNazcaExporter().Export(
-            canvas, library: sink.Templates.ToList(), exportWarnings: warnings);
-        warnings.ShouldBeEmpty("the .gds copy sits next to the user PDK — no fallback may trigger");
+            canvas, library: _host.Templates.ToList(), exportWarnings: warnings);
+        warnings.ShouldBeEmpty("the materialized .gds cache copy backs the raw code");
         script.ShouldContain("component_wgA().put('org'");
         script.ShouldContain("component_wgB().put('org'");
 
@@ -144,30 +139,6 @@ public class GdsExportFullCircleTests : IDisposable
             .ToArray();
         File.WriteAllBytes(path, content);
         return path;
-    }
-
-    private UserPdkStore Store() => new(
-        Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-
-    /// <summary>Wires the real registrar with throwaway library state (pattern from GdsImportServiceTests).</summary>
-    private sealed class LibrarySink
-    {
-        public readonly ObservableCollection<ComponentTemplate> Templates = new();
-        public readonly ObservableCollection<string> Categories = new();
-        public readonly PdkManagerViewModel PdkManager = new();
-        public readonly List<PdkDraft> LoadedDrafts = new();
-        public readonly UserPreferencesService Preferences;
-        public readonly Action<PdkComponentDraft, string, string> Register;
-
-        public LibrarySink(string prefsPath)
-        {
-            Preferences = new UserPreferencesService(prefsPath);
-            var loader = new PdkLoader();
-            Register = (draft, pdkName, filePath) =>
-                CustomComponentLibraryRegistrar.Register(
-                    draft, pdkName, filePath, Templates, Categories, PdkManager,
-                    Preferences, loader, LoadedDrafts, () => { }, () => { });
-        }
     }
 
     /// <summary>

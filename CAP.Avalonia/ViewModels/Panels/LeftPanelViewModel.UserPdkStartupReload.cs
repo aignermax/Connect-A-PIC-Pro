@@ -46,6 +46,13 @@ public partial class LeftPanelViewModel
                     $"Skipped malformed user-PDK path '{rawPath}' at startup: {ex.Message}");
                 return;
             }
+            // Legacy GDS-import PDKs are design-scoped since #830: their components
+            // load from the referencing .lun (after a one-time migration), so the
+            // stale global files must not flood every session's library — nor spam
+            // the error console when they no longer validate (#829). Skipped
+            // silently, never deleted: an unmigrated old design may still need them.
+            if (IsLegacyGdsImportPdkFile(fullPath))
+                return;
             if (seen.Add(fullPath))
                 result.Add(fullPath);
         }
@@ -61,6 +68,14 @@ public partial class LeftPanelViewModel
 
         return result;
     }
+
+    /// <summary>
+    /// True for user-PDK files written by pre-#830 GDS imports: their names are
+    /// the slug of "GDS Import - &lt;file stem&gt;". Name-based on purpose — the
+    /// point is to skip these files WITHOUT parsing them (many are broken, #829).
+    /// </summary>
+    private static bool IsLegacyGdsImportPdkFile(string fullPath) =>
+        Path.GetFileName(fullPath).StartsWith("gds-import-", StringComparison.OrdinalIgnoreCase);
 
     /// <summary>
     /// Loads and registers one user PDK file; returns false when the file could not be loaded

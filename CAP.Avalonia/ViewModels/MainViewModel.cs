@@ -287,7 +287,8 @@ public partial class MainViewModel : ObservableObject
         Services.RecentProjectsService? recentProjectsService = null,
         HomeViewModel? homeViewModel = null,
         ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
-        ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null)
+        ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null,
+        Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         // Injected for activation: constructing the binder wires the adaptive
@@ -315,6 +316,9 @@ public partial class MainViewModel : ObservableObject
 
         var recentProjects = recentProjectsService ?? new Services.RecentProjectsService(preferencesService);
         FileOperations = new FileOperationsViewModel(_canvas, commandManager, nazcaExporter, saxExporter, LeftPanel.AllTemplates, gdsExportViewModel, photonTorchExport, verilogAExport, errorConsoleService, userSMatrixOverrideStore, recentProjects: recentProjects);
+        // Design-scoped GDS imports (#830): save embeds them in the .lun, load
+        // restores/migrates them, New Project clears them.
+        FileOperations.DesignScopedGdsComponents = designScopedGdsComponents;
         ViewportControl = viewportControl;
 
         // Home screen: shown at startup; delegates project I/O to FileOperations
@@ -1218,6 +1222,15 @@ public class DesignFileData
     /// selection). Older files without this field load with no designation.
     /// </summary>
     public string? AnalysisOutputCoupler { get; set; }
+
+    /// <summary>
+    /// GDS-imported component sets scoped to this design (issue #830): the
+    /// component drafts AND the source .gds (base64) travel inside the .lun so
+    /// it stays self-contained and portable. Null for designs without GDS
+    /// imports; older files reference legacy global import PDKs instead and
+    /// are migrated on load.
+    /// </summary>
+    public List<Services.GdsImport.DesignScope.ImportedGdsComponentSetData>? ImportedGdsComponents { get; set; }
 
     /// <summary>
     /// Chip width in micrometers as configured in the Chip Size settings.

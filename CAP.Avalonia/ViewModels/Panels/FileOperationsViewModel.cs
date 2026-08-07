@@ -115,6 +115,14 @@ public partial class FileOperationsViewModel : ObservableObject
     public Action<string>? OnProcessMigrationWarning { get; set; }
 
     /// <summary>
+    /// The open design's GDS-imported component sets (issue #830). Wired by
+    /// MainViewModel; null in headless contexts. Captured into the .lun on
+    /// save, restored (with legacy global import-PDK migration) on load, and
+    /// cleared on New Project so imported components never leak across designs.
+    /// </summary>
+    public Services.GdsImport.DesignScope.DesignScopedGdsComponentService? DesignScopedGdsComponents { get; set; }
+
+    /// <summary>
     /// ViewModel for GDS export functionality.
     /// </summary>
     public GdsExportViewModel GdsExport { get; }
@@ -420,6 +428,14 @@ public partial class FileOperationsViewModel : ObservableObject
             }
 
             designData.FormatVersion = CurrentFormatVersion;
+            // GDS-imported components travel inside the .lun (issue #830) so the
+            // design stays self-contained; null when the design imported nothing.
+            // Only sets still referenced by a placed component are embedded — an
+            // import whose components were all deleted drops out of the file here.
+            var referencedPdkSources = designData.Components.Select(c => c.PdkSource)
+                .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                        ?? Enumerable.Empty<string?>());
+            designData.ImportedGdsComponents = DesignScopedGdsComponents?.CaptureForSave(referencedPdkSources);
             designData.Metadata = BuildMetadataForSave();
             if (StoredSMatrices.Count > 0)
             {
@@ -958,6 +974,23 @@ public partial class FileOperationsViewModel : ObservableObject
                 _commandManager.ClearHistory();
                 _pinCalibrationMigratedComponents.Clear();
 
+                // Design-scoped imported components (#830): restore the sets embedded
+                // in this .lun (replacing the previous design's) and migrate any legacy
+                // global "GDS Import - *" PDKs the file still references — BOTH must
+                // happen before the placements below resolve their templates.
+                var migratedGdsSets = 0;
+                if (DesignScopedGdsComponents != null)
+                {
+                    DesignScopedGdsComponents.RestoreDesignScope(
+                        designData.ImportedGdsComponents, w => _errorConsole?.LogWarning(w));
+                    var referencedPdkSources = designData.Components.Select(c => c.PdkSource)
+                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                                ?? Enumerable.Empty<string?>())
+                        .OfType<string>();
+                    migratedGdsSets = DesignScopedGdsComponents.MigrateLegacyImportPdks(
+                        referencedPdkSources, w => _errorConsole?.LogWarning(w));
+                }
+
                 // Load standalone components
                 foreach (var compData in designData.Components)
                 {
@@ -1097,6 +1130,15 @@ public partial class FileOperationsViewModel : ObservableObject
 
                 CurrentFilePath = filePath;
                 HasUnsavedChanges = false;
+                if (migratedGdsSets > 0)
+                {
+                    // The design must be re-saved to embed the migrated components —
+                    // until then it still depends on the legacy user-PDK files.
+                    _errorConsole?.LogWarning(
+                        $"Migrated {migratedGdsSets} legacy imported GDS component set(s) into this design. " +
+                        "Save the design to embed them in the .lun file.");
+                    HasUnsavedChanges = true;
+                }
                 if (recordRecent)
                 {
                     _recentProjects?.RecordProject(filePath);
@@ -1217,6 +1259,9 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
         StoredSMatrices.Clear();
+        // Imported GDS components are design-scoped (#830): a fresh project must
+        // not inherit the previous design's imported library entries.
+        DesignScopedGdsComponents?.ClearDesignScope();
     }
 
     /// <summary>

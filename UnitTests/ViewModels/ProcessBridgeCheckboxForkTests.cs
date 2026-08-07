@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels;
 using CAP_DataAccess.Components.AddCustomComponent;
 using CAP_DataAccess.Components.ComponentDraftMapper;
@@ -17,6 +18,16 @@ namespace UnitTests.ViewModels;
 /// </summary>
 public class ProcessBridgeCheckboxForkTests : IDisposable
 {
+    /// <summary>
+    /// The fork status text reads the localized <c>LocalizationService.Instance</c>,
+    /// so these tests pin English to stay culture-independent regardless of the CI/dev OS
+    /// language. The only test that live-switches the shared instance is isolated in the
+    /// "LocalizationSingleton" collection, so it never flips the language concurrently here.
+    /// </summary>
+    public ProcessBridgeCheckboxForkTests()
+    {
+        LocalizationService.Instance.SetLanguage(SupportedLanguage.English.Code);
+    }
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), "bridge-fork-" + Guid.NewGuid().ToString("N"));
 
     public void Dispose()

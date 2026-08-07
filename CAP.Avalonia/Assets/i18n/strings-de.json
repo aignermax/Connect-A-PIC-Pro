@@ -627,6 +627,7 @@
   "Overlay.PowerFlowOn": "Leistungsfluss-Overlay: EIN (aktualisiert sich bei Änderungen automatisch)",
   "Pdk.Bundled": "Mitgeliefert",
   "Pdk.User": "Benutzer",
+  "Pdk.Design": "Design",
   "PdkCheck.CopyFailingList": "📋 Fehlerliste kopieren",
   "PdkCheck.CopyFailingListTip": "Alle toten Referenzen und Warnungen kopieren — in einen PDK-JSON-Fix-PR einfügen",
   "PdkCheck.Description": "Prüft, ob die Exportfunktion jeder Komponente — nazcaFunction bzw. gdsFactoryFunction bei gdsfactory-nativen PDKs — gegen die installierten Python-Pakete (nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk) aufgelöst werden kann. Andernfalls treten tote Referenzen erst beim Rendern oder Exportieren zutage.",

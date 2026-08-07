@@ -71,21 +71,17 @@ public sealed record GdsImportOutcome
     public IReadOnlyList<string> Infos { get; init; } = Array.Empty<string>();
 
     /// <summary>
-    /// Name of the user PDK the drafts were persisted to and registered from
-    /// ("GDS Import - &lt;file stem&gt;"), even when nothing was registered.
+    /// Name of the DESIGN-SCOPED component set the drafts were registered
+    /// under ("GDS Import - &lt;file stem&gt;", suffixed <c>-2</c>, <c>-3</c>, …
+    /// when the design already holds a same-named set), even when nothing was
+    /// registered. The set lives in the open design and serializes into its
+    /// .lun file — no global user-PDK file is written (issue #830).
     /// </summary>
     public string UserPdkName { get; init; } = string.Empty;
 
     /// <summary>
-    /// Path of the user-PDK JSON file, or null when no drafts were registered
-    /// (all cells known) and no PDK file was written.
-    /// </summary>
-    public string? UserPdkPath { get; init; }
-
-    /// <summary>
-    /// Final file name of the .gds copy next to the user-PDK JSON (possibly
-    /// suffixed <c>-2</c>, <c>-3</c>, … on a name collision with different
-    /// content), or null when no copy was needed (no drafts).
+    /// Original file name of the imported .gds (embedded into the design's
+    /// set), or null when no drafts were registered (all cells known).
     /// </summary>
     public string? GdsFileName { get; init; }
 }

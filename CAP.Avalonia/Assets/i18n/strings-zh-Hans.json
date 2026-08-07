@@ -627,6 +627,7 @@
   "Overlay.PowerFlowOn": "功率流叠加层：开启（更改时自动更新）",
   "Pdk.Bundled": "内置",
   "Pdk.User": "用户",
+  "Pdk.Design": "设计",
   "PdkCheck.CopyFailingList": "📋 复制失败列表",
   "PdkCheck.CopyFailingListTip": "复制所有失效引用和警告 — 粘贴到 PDK JSON 修复 PR 中",
   "PdkCheck.Description": "验证每个组件的导出函数（nazcaFunction，或 gdsfactory 原生 PDK 的 gdsFactoryFunction）能否针对已安装的 Python 包（nazca / klayout / siepic_ebeam_pdk / gdsfactory / cspdk）成功解析。否则失效引用只会在渲染或导出时才暴露出来。",
