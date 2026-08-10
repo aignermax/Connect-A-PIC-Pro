@@ -31,10 +31,18 @@ public enum GdsSuggestionConfidence
     /// <summary>Geometry heuristic only (e.g. route-like strokes, kind unknown).</summary>
     Low,
 
-    /// <summary>Structural evidence (e.g. the pair carries single-line text labels).</summary>
+    /// <summary>
+    /// Convention guess: the layer number matches a known metal/waveguide
+    /// table — but numbers collide across foundries (one foundry's M1 is
+    /// another's core etch), so optical vs electrical from a bare number stays
+    /// a guess the user confirms.
+    /// </summary>
     Medium,
 
-    /// <summary>The pair matches a known tool/foundry layer convention.</summary>
+    /// <summary>
+    /// Strong, auto-appliable evidence: a text-backed port-label layer (a known
+    /// port convention whose layer bears texts, or single-line text labels).
+    /// </summary>
     High,
 }
 

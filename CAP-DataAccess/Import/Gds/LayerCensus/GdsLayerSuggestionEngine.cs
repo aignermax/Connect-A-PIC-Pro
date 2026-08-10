@@ -2,11 +2,14 @@ namespace CAP_DataAccess.Import.Gds.LayerCensus;
 
 /// <summary>
 /// Derives visible, user-confirmable layer-assignment suggestions from a layer
-/// census: known tool/foundry conventions (high confidence), text-bearing
-/// layers as port-label candidates (medium), and top-cell layers with
-/// route-like strokes as "routing, kind unknown" (low — optical vs metal is
-/// undecidable from geometry alone). Facts stay in the census; everything
-/// produced here is a labeled guess the user must accept explicitly.
+/// census: text-backed port-label layers (high confidence — a known port
+/// convention with texts, or single-line text labels alone), metal/waveguide
+/// claims from the union of known tool/foundry tables (medium — layer numbers
+/// collide across foundries: one foundry's M1 is another's core etch, so
+/// optical vs electrical from a bare number stays a human-confirmed guess),
+/// and top-cell layers with route-like strokes as "routing, kind unknown"
+/// (low). Facts stay in the census; only high-confidence suggestions are
+/// auto-applied by the dialog — everything else waits for a click.
 /// </summary>
 public static class GdsLayerSuggestionEngine
 {
@@ -57,11 +60,24 @@ public static class GdsLayerSuggestionEngine
                 {
                     suggestions.Add(new GdsLayerSuggestion(
                         entry.Layer, entry.Datatype, known.Role,
-                        GdsSuggestionConfidence.High, known.Source));
+                        ConfidenceFor(known.Role), known.Source));
                 }
             }
         }
     }
+
+    /// <summary>
+    /// Port-label conventions carry double evidence (the number matches a known
+    /// table AND the layer actually bears texts) — high. Metal/waveguide claims
+    /// from the union table are only medium: layer numbers collide across
+    /// foundries, so a bare-number optical/electrical claim is a convention
+    /// guess the user confirms — it must never silently misroute waveguides
+    /// onto the metal field.
+    /// </summary>
+    private static GdsSuggestionConfidence ConfidenceFor(GdsLayerRole role) =>
+        role == GdsLayerRole.PortLabels
+            ? GdsSuggestionConfidence.High
+            : GdsSuggestionConfidence.Medium;
 
     /// <summary>A convention only applies when the pair actually carries matching content.</summary>
     private static bool RoleFitsContent(GdsLayerRole role, GdsLayerCensusEntry entry) => role switch
@@ -79,9 +95,12 @@ public static class GdsLayerSuggestionEngine
         {
             if (!covered.Add((entry.Layer, entry.Datatype, GdsLayerRole.PortLabels)))
                 continue;
+            // Single-line text labels on a layer ARE the port-label evidence —
+            // strong enough to auto-apply (helper/anchor labels are filtered
+            // downstream at pin detection, so a wrong accept stays harmless).
             suggestions.Add(new GdsLayerSuggestion(
                 entry.Layer, entry.Datatype, GdsLayerRole.PortLabels,
-                GdsSuggestionConfidence.Medium,
+                GdsSuggestionConfidence.High,
                 $"{entry.SingleLineTextCount} text label(s) in {FormatCellList(entry.TextCellNames)}"));
         }
     }

@@ -6,10 +6,11 @@ using Xunit;
 namespace UnitTests.Import.Gds.LayerCensus;
 
 /// <summary>
-/// Tests for <see cref="GdsLayerSuggestionEngine"/>: known conventions surface
-/// as high-confidence suggestions, text-bearing layers become port-label
-/// candidates, and top-cell route strokes become "routing, kind unknown" —
-/// never a silently resolved optical/metal guess.
+/// Tests for <see cref="GdsLayerSuggestionEngine"/>: text-backed port labels
+/// surface as high-confidence (auto-appliable) suggestions, metal/waveguide
+/// claims from the union of known tables stay medium (layer numbers collide
+/// across foundries — never silently resolved), and top-cell route strokes
+/// become "routing, kind unknown".
 /// </summary>
 public class GdsLayerSuggestionEngineTests
 {
@@ -60,15 +61,31 @@ public class GdsLayerSuggestionEngineTests
         GdsLayerSuggestionEngine.Build(library, TopCell, GdsLayerCensus.Build(library));
 
     [Fact]
-    public void KnownConvention_WaveguidePolygons_SuggestedHighWithNamedSource()
+    public void KnownConvention_WaveguidePolygons_SuggestedMediumWithNamedSource()
     {
         var library = Library(Cell(TopCell), Cell("wg", Rectangle(1, 0, 10, 0.5)));
 
         var suggestion = Suggest(library)
             .Single(s => s is { Layer: 1, Datatype: 0, Role: GdsLayerRole.Waveguide });
 
-        suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.High);
+        // union-table claims are convention guesses — never high confidence:
+        // another foundry may use the same number for metal or a marker layer
+        suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.Medium);
         suggestion.Reason.ShouldContain("gdsfactory");
+    }
+
+    [Fact]
+    public void KnownConvention_MetalClaim_IsMediumToo_NumbersCollideAcrossFoundries()
+    {
+        // Regression guard for the field report "waveguides detected as metal":
+        // (11,0) is SiEPIC M1 in our table but an optical etch layer elsewhere —
+        // the claim must stay a human-confirmed guess, never auto-applied.
+        var library = Library(Cell(TopCell), Cell("trace", Rectangle(11, 0, 100, 2)));
+
+        var suggestion = Suggest(library)
+            .Single(s => s is { Layer: 11, Datatype: 0, Role: GdsLayerRole.Metal });
+
+        suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.Medium);
     }
 
     [Fact]
@@ -80,14 +97,15 @@ public class GdsLayerSuggestionEngineTests
     }
 
     [Fact]
-    public void TextBearingUnknownLayer_BecomesMediumPortLabelCandidate_NamingCells()
+    public void TextBearingUnknownLayer_BecomesHighPortLabelCandidate_NamingCells()
     {
         var library = Library(Cell(TopCell), Cell("dev", Text(56, 0, "opt_1"), Text(56, 0, "opt_2")));
 
         var suggestion = Suggest(library)
             .Single(s => s is { Layer: 56, Datatype: 0, Role: GdsLayerRole.PortLabels });
 
-        suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.Medium);
+        // single-line text labels are the port-label evidence itself — high:
+        suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.High);
         suggestion.Reason.ShouldContain("2 text label(s)");
         suggestion.Reason.ShouldContain("'dev'");
     }

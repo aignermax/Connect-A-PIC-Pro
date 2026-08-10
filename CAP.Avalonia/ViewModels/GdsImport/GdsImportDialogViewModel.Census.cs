@@ -12,8 +12,10 @@ namespace CAP.Avalonia.ViewModels.GdsImport;
 /// The layer-census and layer-suggestion half of
 /// <see cref="GdsImportDialogViewModel"/>: shows the file's (layer, datatype)
 /// facts next to the layer fields and renders assignment suggestions as
-/// explicitly labeled chips. Census = facts, suggestions = labeled guesses,
-/// fields = user decision — nothing is written into a field without a click.
+/// explicitly labeled chips. Census = facts, suggestions = labeled guesses.
+/// Confident suggestions (foundry-table / text-evidence) are auto-applied to
+/// the fields; undecidable ones stay manual. Every field value remains
+/// user-editable, and clicking a chip toggles its pair in/out.
 /// </summary>
 public partial class GdsImportDialogViewModel
 {
@@ -116,6 +118,16 @@ public partial class GdsImportDialogViewModel
             foreach (var suggestion in suggestions)
                 SuggestionChips.Add(new GdsLayerSuggestionChip(suggestion));
         }
+        // Auto-apply only what the engine can decide reliably: high-confidence
+        // (text-backed port-label) suggestions write their pairs into the
+        // fields directly. Metal/waveguide table claims (medium — layer numbers
+        // collide across foundries) and "routing, kind unknown" (low) wait for
+        // a click: a silent wrong metal/waveguide call misroutes the import.
+        // Appends are idempotent; a pair the user removed by hand is only
+        // re-applied on the next rebuild (re-analysis or top-cell change).
+        foreach (var chip in SuggestionChips)
+            if (chip.IsAcceptable && chip.Suggestion.Confidence == GdsSuggestionConfidence.High)
+                AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
         OnPropertyChanged(nameof(HasSuggestions));
         RefreshAcceptedStates();
     }

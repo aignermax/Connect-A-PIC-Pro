@@ -1,3 +1,4 @@
+using Avalonia.Controls;
 using Avalonia.Headless.XUnit;
 using Avalonia.Threading;
 using CAP.Avalonia.Commands;
@@ -68,7 +69,13 @@ public class GdsImportDialogRenderTests : IDisposable
 
         var dialog = new GdsImportDialog { DataContext = vm };
         dialog.Show();
-        Dispatcher.UIThread.RunJobs(); // builds the deferred templates — the crash site
+        Dispatcher.UIThread.RunJobs();
+
+        // The layer-assignment section is collapsed by default — expanding it
+        // builds the deferred chip/census templates (the runtime-cast crash site).
+        dialog.FindControl<Expander>("LayerAssignmentExpander")
+            .ShouldNotBeNull().IsExpanded = true;
+        Dispatcher.UIThread.RunJobs();
 
         dialog.Close();
         Dispatcher.UIThread.RunJobs();

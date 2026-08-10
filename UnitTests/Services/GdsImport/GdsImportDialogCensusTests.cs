@@ -81,7 +81,7 @@ public class GdsImportDialogCensusTests : IDisposable
     }
 
     [Fact]
-    public async Task Analysis_PopulatesSuggestions_WithoutTouchingTheFields()
+    public async Task Analysis_AutoAppliesConfidentSuggestions_LeavesUnknownToTheUser()
     {
         var vm = await AnalyzedDialog();
 
@@ -90,7 +90,10 @@ public class GdsImportDialogCensusTests : IDisposable
             c.Suggestion.Layer == 56 && c.Suggestion.Role == GdsLayerRole.PortLabels);
         vm.SuggestionChips.ShouldContain(c =>
             c.Suggestion.Layer == 37 && c.Suggestion.Role == GdsLayerRole.RoutingUnknown);
-        vm.PortLayersText.ShouldBe("1,10;501,1");
+        // confident suggestions (foundry table / text evidence) are auto-applied:
+        vm.PortLayersText.ShouldBe("1,10;501,1; 56,0");
+        vm.SuggestionChips.Single(c => c.Suggestion.Layer == 56).IsAccepted.ShouldBeTrue();
+        // "routing, kind unknown" is never auto-applied:
         vm.WaveguideLayersText.ShouldBe("1,0; 1111,0");
         vm.MetalLayersText.ShouldBe("11,0; 12,0; 13,0");
     }
@@ -119,20 +122,23 @@ public class GdsImportDialogCensusTests : IDisposable
         vm.AppendCensusRowCommand.Execute(row);
 
         vm.MetalLayersText.ShouldBe("11,0; 12,0; 13,0; 37,0");
-        vm.PortLayersText.ShouldBe("1,10;501,1");
+        vm.PortLayersText.ShouldNotContain("37,0"); // the click went to Metal, not Ports
     }
 
     [Fact]
-    public async Task AcceptSuggestion_WritesIntoItsRoleField_AndMarksTheChip()
+    public async Task AcceptSuggestion_TogglesTheAutoAppliedPairInAndOut()
     {
         var vm = await AnalyzedDialog();
         var chip = vm.SuggestionChips.Single(c =>
             c.Suggestion.Layer == 56 && c.Suggestion.Role == GdsLayerRole.PortLabels);
-        chip.IsAccepted.ShouldBeFalse();
+        chip.IsAccepted.ShouldBeTrue("confident suggestions are auto-applied on analysis");
 
         vm.AcceptSuggestionCommand.Execute(chip);
+        vm.PortLayersText.ShouldBe("1,10; 501,1"); // remove normalizes the separator
+        chip.IsAccepted.ShouldBeFalse("first click undoes the auto-accept");
 
-        vm.PortLayersText.ShouldEndWith("56,0");
+        vm.AcceptSuggestionCommand.Execute(chip);
+        vm.PortLayersText.ShouldBe("1,10; 501,1; 56,0");
         chip.IsAccepted.ShouldBeTrue();
     }
 
@@ -142,8 +148,7 @@ public class GdsImportDialogCensusTests : IDisposable
         var vm = await AnalyzedDialog();
         var chip = vm.SuggestionChips.Single(c =>
             c.Suggestion.Layer == 56 && c.Suggestion.Role == GdsLayerRole.PortLabels);
-        vm.AcceptSuggestionCommand.Execute(chip);
-        chip.IsAccepted.ShouldBeTrue();
+        chip.IsAccepted.ShouldBeTrue("auto-applied on analysis");
 
         vm.PortLayersText = "1,10";
 
@@ -166,36 +171,20 @@ public class GdsImportDialogCensusTests : IDisposable
     }
 
     [Fact]
-    public async Task AcceptSuggestion_Twice_TogglesThePairBackOut()
+    public async Task AcceptAllSuggestions_ReAppliesManuallyRemovedPairs_SkipsUnknown()
     {
         var vm = await AnalyzedDialog();
-        var chip = vm.SuggestionChips.Single(c =>
-            c.Suggestion.Layer == 56 && c.Suggestion.Role == GdsLayerRole.PortLabels);
+        // auto-apply already accepted every confident chip — the button starts disabled:
+        vm.AcceptAllSuggestionsCommand.CanExecute(null).ShouldBeFalse();
 
-        vm.AcceptSuggestionCommand.Execute(chip);
-        vm.PortLayersText.ShouldEndWith("56,0");
-        chip.IsAccepted.ShouldBeTrue();
-
-        vm.AcceptSuggestionCommand.Execute(chip);
-
-        vm.PortLayersText.ShouldBe("1,10; 501,1"); // remove normalizes the separator
-        chip.IsAccepted.ShouldBeFalse("a second click undoes the accept");
-    }
-
-    [Fact]
-    public async Task AcceptAllSuggestions_AcceptsEveryAcceptableChip_SkipsUnknown()
-    {
-        var vm = await AnalyzedDialog();
+        vm.PortLayersText = "1,10"; // user strips the auto-applied port layer
+        vm.AcceptAllSuggestionsCommand.CanExecute(null).ShouldBeTrue();
 
         vm.AcceptAllSuggestionsCommand.Execute(null);
 
-        foreach (var chip in vm.SuggestionChips.Where(c => c.IsAcceptable))
-            chip.IsAccepted.ShouldBeTrue($"acceptable chip {chip.ChipText} is applied");
         vm.PortLayersText.ShouldContain("56,0");
-        // the routing-unknown suggestion is not bulk-acceptable:
+        // the routing-unknown suggestion is never bulk-acceptable:
         vm.WaveguideLayersText.ShouldNotContain("37,0");
-        // nothing left to accept disables the button:
-        vm.AcceptAllSuggestionsCommand.CanExecute(null).ShouldBeFalse();
     }
 
     [Fact]
@@ -209,5 +198,7 @@ public class GdsImportDialogCensusTests : IDisposable
 
         vm.CensusRows.Count.ShouldBe(rowsAfterFirst);
         vm.SuggestionChips.Count.ShouldBe(chipsAfterFirst);
+        vm.PortLayersText.ShouldBe("1,10;501,1; 56,0",
+            "auto-apply is idempotent across re-analysis");
     }
 }
