@@ -2,14 +2,16 @@ namespace CAP_DataAccess.Import.Gds.LayerCensus;
 
 /// <summary>
 /// Derives visible, user-confirmable layer-assignment suggestions from a layer
-/// census: text-backed port-label layers (high confidence — a known port
-/// convention with texts, or single-line text labels alone), metal/waveguide
-/// claims from the union of known tool/foundry tables (medium — layer numbers
-/// collide across foundries: one foundry's M1 is another's core etch, so
-/// optical vs electrical from a bare number stays a human-confirmed guess),
-/// and top-cell layers with route-like strokes as "routing, kind unknown"
-/// (low). Facts stay in the census; only high-confidence suggestions are
-/// auto-applied by the dialog — everything else waits for a click.
+/// census, strongest evidence first: port-attachment proof (port labels
+/// resting on a layer's shapes make it optical — high, and vetoes any
+/// metal convention claim on the same pair), text-backed port-label layers
+/// (high), metal/waveguide claims from the union of known tool/foundry tables
+/// (medium — layer numbers collide across foundries: one foundry's M1 is
+/// another's core etch, so optical vs electrical from a bare number stays a
+/// human-confirmed guess), and top-cell layers with route-like strokes as
+/// "routing, kind unknown" (low). Facts stay in the census; only
+/// high-confidence suggestions are auto-applied by the dialog — everything
+/// else waits for a click.
 /// </summary>
 public static class GdsLayerSuggestionEngine
 {
@@ -39,21 +41,57 @@ public static class GdsLayerSuggestionEngine
         var suggestions = new List<GdsLayerSuggestion>();
         var covered = new HashSet<(int Layer, int Datatype, GdsLayerRole Role)>();
 
-        AddKnownConventionMatches(census, suggestions, covered);
+        var opticalProven = AddPortAttachmentSuggestions(library, suggestions, covered);
+        AddKnownConventionMatches(census, suggestions, covered, opticalProven);
         AddTextBearingLayers(census, suggestions, covered);
         AddTopCellRouteCandidates(library, topCellName, suggestions, covered);
         return suggestions;
     }
 
+    /// <summary>
+    /// The strongest evidence available: port labels resting on a layer's
+    /// shapes prove it optical (a label sits at the end of the shape it names)
+    /// — configuration-independent, so it stays right when the convention
+    /// tables and defaults are wrong for the file. Returns the proven-optical
+    /// pairs so the convention matcher can veto its metal claims on them.
+    /// </summary>
+    private static HashSet<(int, int)> AddPortAttachmentSuggestions(
+        GdsLibrary library,
+        List<GdsLayerSuggestion> suggestions,
+        HashSet<(int, int, GdsLayerRole)> covered)
+    {
+        var optical = new HashSet<(int, int)>();
+        foreach (var (pair, labels) in GdsPortAttachmentProbe.Scan(library))
+        {
+            if (!covered.Add((pair.Layer, pair.Datatype, GdsLayerRole.Waveguide)))
+                continue;
+            optical.Add(pair);
+            suggestions.Add(new GdsLayerSuggestion(
+                pair.Layer, pair.Datatype, GdsLayerRole.Waveguide,
+                GdsSuggestionConfidence.High,
+                $"port label(s) {FormatLabelSample(labels)} rest on this layer's shapes"));
+        }
+        return optical;
+    }
+
+    private static string FormatLabelSample(IReadOnlyList<string> labels) =>
+        string.Join(", ", labels.Select(l => $"'{l}'"));
+
     private static void AddKnownConventionMatches(
         IReadOnlyList<GdsLayerCensusEntry> census,
         List<GdsLayerSuggestion> suggestions,
-        HashSet<(int, int, GdsLayerRole)> covered)
+        HashSet<(int, int, GdsLayerRole)> covered,
+        HashSet<(int, int)> opticalProven)
     {
         foreach (var entry in census)
         {
             foreach (var known in GdsKnownLayerTables.Match(entry.Layer, entry.Datatype))
             {
+                // Port attachment beats convention: a layer the ports rest on is
+                // optical, whatever number another foundry uses for its metal.
+                if (known.Role == GdsLayerRole.Metal
+                    && opticalProven.Contains((entry.Layer, entry.Datatype)))
+                    continue;
                 if (!RoleFitsContent(known.Role, entry))
                     continue;
                 if (covered.Add((entry.Layer, entry.Datatype, known.Role)))

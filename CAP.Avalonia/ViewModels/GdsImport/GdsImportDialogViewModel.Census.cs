@@ -119,15 +119,24 @@ public partial class GdsImportDialogViewModel
                 SuggestionChips.Add(new GdsLayerSuggestionChip(suggestion));
         }
         // Auto-apply only what the engine can decide reliably: high-confidence
-        // (text-backed port-label) suggestions write their pairs into the
-        // fields directly. Metal/waveguide table claims (medium — layer numbers
-        // collide across foundries) and "routing, kind unknown" (low) wait for
-        // a click: a silent wrong metal/waveguide call misroutes the import.
-        // Appends are idempotent; a pair the user removed by hand is only
-        // re-applied on the next rebuild (re-analysis or top-cell change).
+        // (text-backed port-label / port-attachment waveguide) suggestions
+        // write their pairs into the fields directly. Metal/waveguide table
+        // claims (medium — layer numbers collide across foundries) and
+        // "routing, kind unknown" (low) wait for a click: a silent wrong
+        // metal/waveguide call misroutes the import. Appends are idempotent; a
+        // pair the user removed by hand is only re-applied on the next rebuild
+        // (re-analysis or top-cell change).
         foreach (var chip in SuggestionChips)
-            if (chip.IsAcceptable && chip.Suggestion.Confidence == GdsSuggestionConfidence.High)
-                AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+        {
+            if (!chip.IsAcceptable || chip.Suggestion.Confidence != GdsSuggestionConfidence.High)
+                continue;
+            if (chip.Suggestion.Role == GdsLayerRole.Waveguide)
+                // Attachment-proven optical: the same pair in the metal field is
+                // a wrong default/convention entry — pull it, otherwise the
+                // layer's routes import as electrical.
+                RemoveLayerPair(GdsLayerFieldTarget.Metal, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+            AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+        }
         OnPropertyChanged(nameof(HasSuggestions));
         RefreshAcceptedStates();
     }

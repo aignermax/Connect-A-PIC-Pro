@@ -89,6 +89,73 @@ public class GdsLayerSuggestionEngineTests
     }
 
     [Fact]
+    public void PortLabelRestingOnALayer_ProvesItWaveguideHigh_AndVetoesMetalConvention()
+    {
+        // (11,0) is "SiEPIC M1" in the convention table — but the port label
+        // rests on this layer's core, which is the stronger, content-based
+        // evidence: the metal claim is vetoed, the waveguide claim is high.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(11, 0, 10, 0.5),
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(5, 0.25) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 11 && s.Datatype == 0 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
+        suggestions.ShouldNotContain(s => s.Layer == 11 && s.Role == GdsLayerRole.Metal);
+    }
+
+    [Fact]
+    public void ElectricalNamedLabel_ProvesNothingOptical_MetalConventionStaysMedium()
+    {
+        // "pad1" names a bond pad: it must never mark the layer it rests on as
+        // optical — the bare metal convention claim remains a medium guess.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(11, 0, 10, 2),
+            new GdsText { Layer = 56, TextType = 0, Text = "pad1", Position = new GdsPoint(5, 1) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldNotContain(s => s.Layer == 11 && s.Role == GdsLayerRole.Waveguide);
+        suggestions.ShouldContain(s =>
+            s.Layer == 11 && s.Role == GdsLayerRole.Metal
+            && s.Confidence == GdsSuggestionConfidence.Medium);
+    }
+
+    [Fact]
+    public void LabelAwayFromAnyShape_AttachesNothing()
+    {
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(11, 0, 10, 0.5),
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(100, 100) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldNotContain(s =>
+            s.Layer == 11 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
+    }
+
+    [Fact]
+    public void LabelTouchingNestedShapes_AttachesToTheSmallestOnly()
+    {
+        // keepout/bbox rectangle enclosing the core: the label rests on both,
+        // but only the specific (smallest) shape earns the attachment.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(111, 0, 20, 10),
+            Rectangle(11, 0, 10, 0.5),
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(5, 0.25) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 11 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
+        suggestions.ShouldNotContain(s => s.Layer == 111 && s.Role == GdsLayerRole.Waveguide);
+    }
+
+    [Fact]
     public void KnownPortConvention_RequiresSingleLineTexts()
     {
         var library = Library(Cell(TopCell, Text(1, 10, "meta\nblob")));

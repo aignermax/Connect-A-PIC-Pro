@@ -108,22 +108,21 @@ public class GdsFoundryStyleFileTests : IDisposable
     }
 
     [Fact]
-    public async Task Suggestions_CollisionLayerMetalClaim_StaysMedium_NeverHigh()
+    public async Task Suggestions_PortAttachment_ProvesOptical_AndVetoesTheMetalConvention()
     {
         var library = await ReadLibraryAsync(SyntheticFoundryLibrary());
         var suggestions = GdsLayerSuggestionEngine.Build(
             library, "TOP", GdsLayerCensus.Build(library));
 
-        // (11,0) carries the waveguide core + an optical route in this file,
-        // yet the union table calls it metal — a bare-number convention guess
-        // that must never become an auto-applied high-confidence claim.
-        var collision = suggestions.Single(s =>
-            s.Layer == WaveguideLayer && s.Datatype == 0 && s.Role == GdsLayerRole.Metal);
-        collision.Confidence.ShouldBe(GdsSuggestionConfidence.Medium);
-        suggestions.ShouldNotContain(s => s.Layer == WaveguideLayer && s.Role == GdsLayerRole.Waveguide);
+        // o1/o2 rest on the (11,0) core: the layer is proven optical — the
+        // union table's metal claim is vetoed outright, no guess is shown.
+        suggestions.ShouldNotContain(s => s.Layer == WaveguideLayer && s.Role == GdsLayerRole.Metal);
+        suggestions.ShouldContain(s =>
+            s.Layer == WaveguideLayer && s.Datatype == 0 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
 
-        // The text-backed port layer is the reliable, auto-appliable one; the
-        // real metal trace is a confirmable convention claim.
+        // The text-backed port layer is reliable too; the real metal trace (no
+        // labels on it) stays a confirmable convention claim.
         suggestions.ShouldContain(s =>
             s.Layer == TextLayer && s.Role == GdsLayerRole.PortLabels
             && s.Confidence == GdsSuggestionConfidence.High);
@@ -133,16 +132,14 @@ public class GdsFoundryStyleFileTests : IDisposable
     }
 
     [Fact]
-    public async Task Dialog_Analysis_AutoAppliesPorts_ButNeverTheCollisionMetal()
+    public async Task Dialog_Analysis_ProvesOpticalFromAttachment_PullsItOutOfTheMetalDefault()
     {
         var vm = await AnalyzedDialog();
 
         vm.PortLayersText.ShouldContain($"{TextLayer},0");
-        vm.MetalLayersText.ShouldBe("11,0; 12,0; 13,0");
-        vm.WaveguideLayersText.ShouldBe("1,0; 1111,0");
-
-        var chip = vm.SuggestionChips.Single(c =>
-            c.Suggestion.Layer == WaveguideLayer && c.Suggestion.Role == GdsLayerRole.Metal);
-        chip.Suggestion.Confidence.ShouldBe(GdsSuggestionConfidence.Medium);
+        // attachment-proven optical: auto-applied to waveguide AND pulled out
+        // of the metal field's colliding default entry:
+        vm.WaveguideLayersText.ShouldBe("1,0; 1111,0; 11,0");
+        vm.MetalLayersText.ShouldBe("12,0; 13,0");
     }
 }
