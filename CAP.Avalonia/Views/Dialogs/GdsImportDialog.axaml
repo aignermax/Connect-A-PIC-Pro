@@ -1,7 +1,7 @@
 <Window xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:system="clr-namespace:System;assembly=System.Runtime"
-        xmlns:vm="using:CAP.Avalonia.ViewModels.GdsImport"
+        xmlns:vm="clr-namespace:CAP.Avalonia.ViewModels.GdsImport"
         xmlns:gds="using:CAP.Avalonia.Services.GdsImport"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.GdsImportDialog"
@@ -126,8 +126,15 @@
                      a checkmark so applied suggestions stay distinguishable from
                      hand-entered values. -->
                 <StackPanel Spacing="4" IsVisible="{Binding HasSuggestions}">
-                    <TextBlock Text="{loc:Localize GdsImport.SuggestionsHeader}" Foreground="LightGray"
-                               FontSize="11" TextWrapping="Wrap"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{loc:Localize GdsImport.SuggestionsHeader}" Foreground="LightGray"
+                                   FontSize="11" TextWrapping="Wrap" VerticalAlignment="Center"/>
+                        <Button Content="{loc:Localize GdsImport.SuggestionsAcceptAll}"
+                                Command="{Binding AcceptAllSuggestionsCommand}"
+                                FontSize="10" Padding="8,2" CornerRadius="4"
+                                Background="#3d3d3d" Foreground="LightGray"
+                                VerticalAlignment="Center"/>
+                    </StackPanel>
                     <ItemsControl ItemsSource="{Binding SuggestionChips}">
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
@@ -138,6 +145,7 @@
                             <DataTemplate x:DataType="vm:GdsLayerSuggestionChip">
                                 <Button Margin="0,0,6,6" Padding="8,3" CornerRadius="10"
                                         Background="#2d3d4d" Foreground="White"
+                                        IsEnabled="{Binding IsAcceptable}"
                                         Command="{Binding $parent[Window].((vm:GdsImportDialogViewModel)DataContext).AcceptSuggestionCommand}"
                                         CommandParameter="{Binding}"
                                         ToolTip.Tip="{Binding Tooltip}">

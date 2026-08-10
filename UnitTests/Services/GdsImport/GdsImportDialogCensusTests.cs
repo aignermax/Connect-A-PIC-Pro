@@ -3,9 +3,6 @@ using CAP.Avalonia.Services.GdsImport;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.GdsImport;
 using CAP.Avalonia.ViewModels.Library;
-using CAP_DataAccess.Components.AddCustomComponent;
-using CAP_DataAccess.Components.ComponentDraftMapper;
-using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using CAP_DataAccess.Import.Gds.LayerCensus;
 using Shouldly;
 using UnitTests.Import.Gds;
@@ -23,10 +20,12 @@ public class GdsImportDialogCensusTests : IDisposable
 {
     private readonly string _root =
         Path.Combine(Path.GetTempPath(), "lunima-gdscensus-" + Guid.NewGuid().ToString("N"));
+    private readonly GdsDesignScopeTestHost _host = new();
 
     public void Dispose()
     {
         if (Directory.Exists(_root)) Directory.Delete(_root, true);
+        _host.Dispose();
     }
 
     /// <summary>
@@ -54,9 +53,7 @@ public class GdsImportDialogCensusTests : IDisposable
         Directory.CreateDirectory(_root);
         var gdsPath = Path.Combine(_root, "census.gds");
         File.WriteAllBytes(gdsPath, gdsBytes);
-        var store = new UserPdkStore(
-            Path.Combine(_root, "user-pdks"), new PdkJsonSaver(), new PdkLoader());
-        var service = new GdsImportService(store, () => new List<ComponentTemplate>());
+        var service = _host.CreateService();
         var executor = new GdsPlacementExecutor(
             new DesignCanvasViewModel(), new CommandManager(), () => new List<ComponentTemplate>());
         return new GdsImportDialogViewModel(gdsPath, service, executor);
@@ -154,15 +151,51 @@ public class GdsImportDialogCensusTests : IDisposable
     }
 
     [Fact]
-    public async Task RoutingUnknownSuggestion_TargetsTheWaveguideField()
+    public async Task RoutingUnknownChip_IsNotAcceptable_AcceptLeavesTheFieldsUntouched()
     {
         var vm = await AnalyzedDialog();
         var chip = vm.SuggestionChips.Single(c =>
             c.Suggestion.Layer == 37 && c.Suggestion.Role == GdsLayerRole.RoutingUnknown);
 
-        chip.TargetField.ShouldBe(GdsLayerFieldTarget.Waveguide);
+        chip.IsAcceptable.ShouldBeFalse("undecidable suggestions inform but are never auto-assignable");
+
         vm.AcceptSuggestionCommand.Execute(chip);
-        vm.WaveguideLayersText.ShouldBe("1,0; 1111,0; 37,0");
+
+        vm.WaveguideLayersText.ShouldBe("1,0; 1111,0");
+        chip.IsAccepted.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task AcceptSuggestion_Twice_TogglesThePairBackOut()
+    {
+        var vm = await AnalyzedDialog();
+        var chip = vm.SuggestionChips.Single(c =>
+            c.Suggestion.Layer == 56 && c.Suggestion.Role == GdsLayerRole.PortLabels);
+
+        vm.AcceptSuggestionCommand.Execute(chip);
+        vm.PortLayersText.ShouldEndWith("56,0");
+        chip.IsAccepted.ShouldBeTrue();
+
+        vm.AcceptSuggestionCommand.Execute(chip);
+
+        vm.PortLayersText.ShouldBe("1,10; 501,1"); // remove normalizes the separator
+        chip.IsAccepted.ShouldBeFalse("a second click undoes the accept");
+    }
+
+    [Fact]
+    public async Task AcceptAllSuggestions_AcceptsEveryAcceptableChip_SkipsUnknown()
+    {
+        var vm = await AnalyzedDialog();
+
+        vm.AcceptAllSuggestionsCommand.Execute(null);
+
+        foreach (var chip in vm.SuggestionChips.Where(c => c.IsAcceptable))
+            chip.IsAccepted.ShouldBeTrue($"acceptable chip {chip.ChipText} is applied");
+        vm.PortLayersText.ShouldContain("56,0");
+        // the routing-unknown suggestion is not bulk-acceptable:
+        vm.WaveguideLayersText.ShouldNotContain("37,0");
+        // nothing left to accept disables the button:
+        vm.AcceptAllSuggestionsCommand.CanExecute(null).ShouldBeFalse();
     }
 
     [Fact]

@@ -98,6 +98,27 @@ public class GdsPinDetectorTests
         pins.ShouldBeEmpty();
     }
 
+    [Fact]
+    public void AnchorAndParameterLabels_OnConfiguredPortLayer_NeverBecomePins()
+    {
+        // nazca stamps bbox anchors (tl/tr/bc/…) and parameter annotations on
+        // text layers — possibly the same layer the real port labels live on.
+        // Even with that layer configured as a port layer, they are never
+        // ports (GdsGhostLabelFilter applies on every path, not just the
+        // any-layer fallback).
+        var cell = Cell(
+            Label(1, 10, "o1", x: 0, y: 2),
+            Label(1, 10, "tl", x: 0, y: 4),
+            Label(1, 10, "br", x: 10, y: 0),
+            Label(1, 10, "R:0.0001", x: 5, y: 2),
+            Label(1, 10, "n=1.0", x: 5, y: 3));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Name.ShouldBe("o1");
+    }
+
     // ── Edge heuristic ───────────────────────────────────────────────────────
 
     [Fact]

@@ -25,7 +25,10 @@ public enum GdsLayerFieldTarget
 /// ("(1,10) → port labels — high confidence") the user accepts into a layer
 /// field with a click. Nothing is prefilled silently: the fields only change
 /// on an explicit accept, and an accepted chip shows a checkmark so applied
-/// suggestions stay distinguishable from hand-entered values.
+/// suggestions stay distinguishable from hand-entered values. Accepting is
+/// reversible — clicking an accepted chip again removes its pair. Chips whose
+/// role is undecidable ("routing, kind unknown") are not acceptable at all:
+/// they inform, but the layer is assigned deliberately via a census-row click.
 /// </summary>
 public sealed partial class GdsLayerSuggestionChip : ObservableObject
 {
@@ -35,30 +38,52 @@ public sealed partial class GdsLayerSuggestionChip : ObservableObject
     /// <summary>The field an accept writes into ("routing, kind unknown" targets the waveguide field).</summary>
     public GdsLayerFieldTarget TargetField { get; }
 
+    /// <summary>False for "routing, kind unknown" — undecidable suggestions inform but cannot be accepted.</summary>
+    public bool IsAcceptable { get; }
+
     /// <summary>Chip label, e.g. <c>(1,10) → port labels</c>.</summary>
     public string ChipText { get; }
 
-    /// <summary>Provenance + confidence, shown as the chip's tooltip.</summary>
-    public string Tooltip { get; }
+    /// <summary>
+    /// Provenance + confidence, shown as the chip's tooltip — plus a toggle hint
+    /// while accepted, or a deliberate-assignment hint when not acceptable.
+    /// </summary>
+    public string Tooltip
+    {
+        get
+        {
+            var text = string.Format(
+                LocalizationService.Instance.Translate("GdsImport.SuggestionTooltipFormat"),
+                Suggestion.Reason, ConfidenceText(Suggestion.Confidence));
+            if (!IsAcceptable)
+                return text + " " + LocalizationService.Instance.Translate("GdsImport.SuggestionUnknownHint");
+            if (IsAccepted)
+                return text + " " + LocalizationService.Instance.Translate("GdsImport.SuggestionAcceptedHint");
+            return text;
+        }
+    }
 
     /// <summary>True while the target field contains the chip's pair (drives the checkmark).</summary>
     [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(Tooltip))]
     private bool _isAccepted;
 
     /// <summary>Initializes a chip from one suggestion.</summary>
     public GdsLayerSuggestionChip(GdsLayerSuggestion suggestion)
     {
         Suggestion = suggestion ?? throw new ArgumentNullException(nameof(suggestion));
+        IsAcceptable = suggestion.Role != GdsLayerRole.RoutingUnknown;
         TargetField = suggestion.Role switch
         {
             GdsLayerRole.PortLabels => GdsLayerFieldTarget.PortLabels,
             GdsLayerRole.Metal => GdsLayerFieldTarget.Metal,
             _ => GdsLayerFieldTarget.Waveguide,
         };
-        ChipText = $"({suggestion.Layer},{suggestion.Datatype}) → {RoleText(suggestion.Role)}";
-        Tooltip = string.Format(
-            LocalizationService.Instance.Translate("GdsImport.SuggestionTooltipFormat"),
-            suggestion.Reason, ConfidenceText(suggestion.Confidence));
+        // No arrow for undecidable suggestions: the arrow implies an assignment
+        // target the chip deliberately does not offer.
+        ChipText = IsAcceptable
+            ? $"({suggestion.Layer},{suggestion.Datatype}) → {RoleText(suggestion.Role)}"
+            : $"({suggestion.Layer},{suggestion.Datatype}) — {RoleText(suggestion.Role)}";
     }
 
     private static string RoleText(GdsLayerRole role) => LocalizationService.Instance.Translate(role switch

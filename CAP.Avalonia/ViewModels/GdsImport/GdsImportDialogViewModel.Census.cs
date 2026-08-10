@@ -65,10 +65,34 @@ public partial class GdsImportDialogViewModel
     private void AppendCensusRow(GdsLayerCensusRow row) =>
         AppendLayerPair(ActiveLayerField, row.Entry.Layer, row.Entry.Datatype);
 
-    /// <summary>Accepts a suggestion chip: appends its pair to the chip's target field.</summary>
+    /// <summary>
+    /// Toggles a suggestion chip: accepting appends its pair to the chip's
+    /// target field, clicking an accepted chip again removes the pair.
+    /// "Routing, kind unknown" chips are not acceptable — the user assigns
+    /// those layers deliberately via a census-row click.
+    /// </summary>
     [RelayCommand]
-    private void AcceptSuggestion(GdsLayerSuggestionChip chip) =>
-        AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+    private void AcceptSuggestion(GdsLayerSuggestionChip chip)
+    {
+        if (!chip.IsAcceptable)
+            return;
+        if (chip.IsAccepted)
+            RemoveLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+        else
+            AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+    }
+
+    /// <summary>Accepts every acceptable, not-yet-accepted suggestion chip in one click.</summary>
+    [RelayCommand(CanExecute = nameof(CanAcceptAllSuggestions))]
+    private void AcceptAllSuggestions()
+    {
+        foreach (var chip in SuggestionChips)
+            if (chip.IsAcceptable && !chip.IsAccepted)
+                AppendLayerPair(chip.TargetField, chip.Suggestion.Layer, chip.Suggestion.Datatype);
+    }
+
+    private bool CanAcceptAllSuggestions() =>
+        SuggestionChips.Any(c => c.IsAcceptable && !c.IsAccepted);
 
     /// <summary>
     /// Suggestions depend on the selected top cell (its drawn routes feed the
@@ -114,6 +138,23 @@ public partial class GdsImportDialogViewModel
         SetFieldText(target, trimmed.Length == 0 ? pairText : $"{trimmed}; {pairText}");
     }
 
+    /// <summary>
+    /// Removes "layer,datatype" from the target field (all occurrences — a
+    /// hand-edited field may list it twice) and normalizes the remaining text.
+    /// A malformed field text is left untouched: there is nothing reliable to
+    /// remove from it.
+    /// </summary>
+    private void RemoveLayerPair(GdsLayerFieldTarget target, int layer, int datatype)
+    {
+        var existing = ParseLayerPairs(GetFieldText(target));
+        if (existing is null)
+            return;
+        if (existing.RemoveAll(p => p.Layer == layer && p.Datatype == datatype) == 0)
+            return;
+        SetFieldText(target, string.Join("; ", existing.Select(p =>
+            string.Format(CultureInfo.InvariantCulture, "{0},{1}", p.Layer, p.Datatype))));
+    }
+
     /// <summary>An accepted chip shows a checkmark while its pair is present in its target field.</summary>
     private void RefreshAcceptedStates()
     {
@@ -122,6 +163,7 @@ public partial class GdsImportDialogViewModel
             var pairs = ParseLayerPairs(GetFieldText(chip.TargetField));
             chip.IsAccepted = pairs?.Contains((chip.Suggestion.Layer, chip.Suggestion.Datatype)) == true;
         }
+        AcceptAllSuggestionsCommand.NotifyCanExecuteChanged();
     }
 
     private string GetFieldText(GdsLayerFieldTarget target) => target switch

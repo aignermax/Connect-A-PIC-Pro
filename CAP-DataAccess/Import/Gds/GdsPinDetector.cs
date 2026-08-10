@@ -89,6 +89,10 @@ public static partial class GdsPinDetector
         {
             if (!ContainsLayer(options.PortLayers, text.Layer, text.TextType))
                 continue;
+            // nazca placement anchors / parameter annotations are never ports —
+            // filtered on every path, configured port layers included.
+            if (GdsGhostLabelFilter.IsGhost(text))
+                continue;
 
             // Built once per run, on the first port label — cells without port
             // labels never pay for the spatial index.
