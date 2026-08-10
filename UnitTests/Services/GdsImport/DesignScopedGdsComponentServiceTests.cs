@@ -49,7 +49,10 @@ public class DesignScopedGdsComponentServiceTests : IDisposable
 
         var registered = _host.LoadedDrafts.ShouldHaveSingleItem().Components.ShouldHaveSingleItem();
         registered.RawCode.ShouldNotContain(GdsHierarchyImporter.GdsFileNameToken);
-        registered.RawCode.ShouldContain(_host.GdsCacheDirectory);
+        // The path lands inside a Python string literal, so backslashes are escaped
+        // (GdsCellDraftMapper.SubstituteGdsFileName) — on Windows the raw directory
+        // text never appears verbatim; on Linux the replace is a no-op.
+        registered.RawCode.ShouldContain(_host.GdsCacheDirectory.Replace("\\", "\\\\"));
         registered.ShouldNotBeSameAs(stored.Drafts.Single(),
             "registration copies must never alias the stored drafts");
     }
