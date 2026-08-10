@@ -131,8 +131,8 @@ public static class BoundingBoxCalculator
         BoundingBox box,
         double viewportWidth,
         double viewportHeight,
-        double minZoom = 0.1,
-        double maxZoom = 10.0)
+        double minZoom = CanvasZoomLimits.Min,
+        double maxZoom = CanvasZoomLimits.Max)
     {
         double zoomX = viewportWidth / box.Width;
         double zoomY = viewportHeight / box.Height;
