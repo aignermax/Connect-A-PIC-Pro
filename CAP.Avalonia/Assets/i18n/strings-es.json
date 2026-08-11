@@ -952,6 +952,7 @@
   "SelectedProps.OpenOnaSweep": "Abrir barrido ONA…",
   "SelectedProps.Power": "Potencia: ",
   "SelectedProps.Rin": "RIN (ruido de intensidad relativa)",
+  "SelectedProps.RinHint": "Fluctuaciones de potencia del láser en dB/Hz. Solo afecta al diagrama de ojo / BER (ruido del receptor), no a la forma de la curva transitoria — el ruido de fase lo controla el ancho de línea. Típico: −140…−160 dB/Hz (invisible frente al ruido térmico/de disparo); efectos visibles solo con valores extremos (≈ −100 dB/Hz o más).",
   "SelectedProps.SimulationParams": "Parámetros de simulación",
   "SelectedProps.SimulationParamsHint": "Afecta solo al modelo de simulación — el diseño GDS no cambia.",
   "SelectedProps.Wavelength": "Longitud de onda",

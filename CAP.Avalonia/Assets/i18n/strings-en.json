@@ -952,6 +952,7 @@
   "SelectedProps.OpenOnaSweep": "Open ONA Sweep…",
   "SelectedProps.Power": "Power: ",
   "SelectedProps.Rin": "RIN (relative intensity noise)",
+  "SelectedProps.RinHint": "Laser power fluctuations in dB/Hz. Only affects the eye diagram / BER (receiver noise), not the transient curve shape — phase noise is driven by the linewidth. Typical lasers: −140…−160 dB/Hz (invisible against thermal/shot noise); visible effects need extreme values (≈ −100 dB/Hz and above).",
   "SelectedProps.SimulationParams": "Simulation parameters",
   "SelectedProps.SimulationParamsHint": "Affects the simulation model only — the GDS layout stays unchanged.",
   "SelectedProps.Wavelength": "Wavelength",

@@ -952,6 +952,7 @@
   "SelectedProps.OpenOnaSweep": "ONA スイープを開く…",
   "SelectedProps.Power": "パワー: ",
   "SelectedProps.Rin": "RIN（相対強度雑音）",
+  "SelectedProps.RinHint": "レーザーのパワーゆらぎ（dB/Hz）。アイダイアグラム/BER（受信機雑音）にのみ影響し、トランジェント波形には影響しません。位相雑音は線幅が制御します。一般的なレーザー: −140…−160 dB/Hz（熱雑音・ショット雑音に埋もれる）。目に見える効果は ≈ −100 dB/Hz 以上の極端な値でのみ。",
   "SelectedProps.SimulationParams": "シミュレーションパラメータ",
   "SelectedProps.SimulationParamsHint": "シミュレーションモデルのみに影響します — GDSレイアウトは変更されません。",
   "SelectedProps.Wavelength": "波長",

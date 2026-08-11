@@ -179,7 +179,13 @@
                             <TextBlock Text="{loc:Localize SelectedProps.LinewidthHint}"
                                        Foreground="Gray" FontSize="9" TextWrapping="Wrap" Margin="0,2,0,2"/>
                         </StackPanel>
-                        <TextBlock Text="{loc:Localize SelectedProps.Rin}" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,4,0,2">
+                            <TextBlock Text="{loc:Localize SelectedProps.Rin}" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="?" Foreground="#7FB2E5" FontSize="10" FontWeight="Bold"
+                                       VerticalAlignment="Center"
+                                       ToolTip.Tip="{loc:Localize SelectedProps.RinHint}"/>
+                        </StackPanel>
                         <Grid ColumnDefinitions="*,42">
                             <NumericUpDown Grid.Column="0"
                                            Value="{Binding LaserConfig.RinDbPerHz, Mode=TwoWay}"

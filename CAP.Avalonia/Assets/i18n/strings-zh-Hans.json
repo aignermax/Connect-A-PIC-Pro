@@ -952,6 +952,7 @@
   "SelectedProps.OpenOnaSweep": "打开 ONA 扫描…",
   "SelectedProps.Power": "功率：",
   "SelectedProps.Rin": "RIN（相对强度噪声）",
+  "SelectedProps.RinHint": "激光器功率波动(dB/Hz)。仅影响眼图/BER(接收机噪声),不影响瞬态曲线形状——相位噪声由线宽控制。典型激光器:−140…−160 dB/Hz(被热噪声/散粒噪声淹没);只有在 ≈ −100 dB/Hz 以上的极端值时才能看到明显效果。",
   "SelectedProps.SimulationParams": "仿真参数",
   "SelectedProps.SimulationParamsHint": "仅影响仿真模型 — GDS 版图保持不变。",
   "SelectedProps.Wavelength": "波长",

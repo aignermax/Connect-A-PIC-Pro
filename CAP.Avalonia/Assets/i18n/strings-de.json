@@ -952,6 +952,7 @@
   "SelectedProps.OpenOnaSweep": "ONA-Sweep öffnen…",
   "SelectedProps.Power": "Leistung: ",
   "SelectedProps.Rin": "RIN (relatives Intensitätsrauschen)",
+  "SelectedProps.RinHint": "Leistungsschwankungen des Lasers in dB/Hz. Wirkt nur auf Eye-Diagramm/BER (Empfängerrauschen), nicht auf die Transient-Kurvenform — das Phasenrauschen steuert die Linienbreite. Typisch: −140…−160 dB/Hz (gegen thermisches/Shot-Rauschen unsichtbar); sichtbar erst bei extremen Werten ab ≈ −100 dB/Hz.",
   "SelectedProps.SimulationParams": "Simulationsparameter",
   "SelectedProps.SimulationParamsHint": "Wirkt nur auf das Simulationsmodell — das GDS-Layout bleibt unverändert.",
   "SelectedProps.Wavelength": "Wellenlänge",
