@@ -182,9 +182,18 @@
                         <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,4,0,2">
                             <TextBlock Text="{loc:Localize SelectedProps.Rin}" Foreground="Gray" FontSize="10"
                                        VerticalAlignment="Center"/>
-                            <TextBlock Text="?" Foreground="#7FB2E5" FontSize="10" FontWeight="Bold"
-                                       VerticalAlignment="Center"
-                                       ToolTip.Tip="{loc:Localize SelectedProps.RinHint}"/>
+                            <Button Content="?" Padding="6,1" FontSize="10" FontWeight="Bold"
+                                    Background="Transparent" Foreground="#7FB2E5" BorderThickness="0"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="{loc:Localize SelectedProps.RinHint}">
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <TextBlock Text="{loc:Localize SelectedProps.RinHint}"
+                                                   MaxWidth="340" TextWrapping="Wrap"
+                                                   Foreground="White" FontSize="11"/>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
                         </StackPanel>
                         <Grid ColumnDefinitions="*,42">
                             <NumericUpDown Grid.Column="0"
