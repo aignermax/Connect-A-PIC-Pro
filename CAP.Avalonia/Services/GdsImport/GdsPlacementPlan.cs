@@ -104,8 +104,11 @@ public sealed record GdsConnectionInstruction
     /// <summary>
     /// True when the connection was derived from a top-cell METAL-layer polygon
     /// network — an electrical (metal trace) connection, not an optical
-    /// waveguide. Reporting only; the created connection's kind follows from
-    /// the connected pins either way.
+    /// waveguide. Besides reporting, this exempts the connection from the
+    /// re-route cap (issue #854): straight-cornered traced metal outlines are
+    /// electrically unacceptable at RF, so metal is always live-routed when
+    /// re-routing is requested. The created connection's kind still follows
+    /// from the connected pins.
     /// </summary>
     public bool IsElectrical { get; init; }
 

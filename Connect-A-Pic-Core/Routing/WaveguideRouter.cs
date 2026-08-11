@@ -24,6 +24,17 @@ public partial class WaveguideRouter
     /// </summary>
     public double ProcessMinBendRadiusMicrometers { get; set; }
 
+    /// <summary>
+    /// Bend-radius floor (µm) for ELECTRICAL (metal trace) connections, sourced from the
+    /// process metal cross-section via <c>MetalRoutingSpecFactory</c> (issue #854). RF metal
+    /// routing needs curved bends just like waveguides — often LARGER than the optical floor —
+    /// so electrical pin pairs use this floor instead of
+    /// <see cref="ProcessMinBendRadiusMicrometers"/>. Defaults to the RF fallback
+    /// (3 × the default 10 µm trace width); 0 means no metal constraint.
+    /// </summary>
+    public double MetalProcessMinBendRadiusMicrometers { get; set; } =
+        MetalRouting.MetalRoutingSpec.DefaultMinBendRadiusMicrometers;
+
     /// <summary>Tolerance (µm) below which two bend radii count as equal.</summary>
     private const double RadiusToleranceMicrometers = 1e-6;
 
@@ -201,7 +212,7 @@ public partial class WaveguideRouter
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
         double connectionRadius = MinBendRadiusMicrometers;
-        double effectiveRadius = Math.Max(connectionRadius, ProcessMinBendRadiusMicrometers);
+        double effectiveRadius = Math.Max(connectionRadius, ProcessFloorFor(startPin, endPin));
         bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
 
         if (PathfindingGrid != null)
@@ -232,6 +243,17 @@ public partial class WaveguideRouter
         return RouteManhattanFallback(startX, startY, startAngle, endX, endY, endInputAngle,
                                       connectionRadius, effectiveRadius, floorRaisesRadius);
     }
+
+    /// <summary>
+    /// The process bend-radius floor governing this pin pair: the metal floor for
+    /// electrical pins (RF traces must bend at the metal cross-section radius),
+    /// the optical floor otherwise. Checking one pin is authoritative — cross-kind
+    /// pairs are rejected at connection creation time.
+    /// </summary>
+    private double ProcessFloorFor(PhysicalPin startPin, PhysicalPin endPin) =>
+        startPin.MatterType == MatterType.Electricity || endPin.MatterType == MatterType.Electricity
+            ? MetalProcessMinBendRadiusMicrometers
+            : ProcessMinBendRadiusMicrometers;
 
     /// <summary>
     /// Manhattan (CSC) fallback when all A* attempts fail. Tries the process floor radius

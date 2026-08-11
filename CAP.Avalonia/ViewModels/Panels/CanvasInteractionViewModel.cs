@@ -69,15 +69,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private WaveguideConnectionViewModel? _selectedWaveguideConnection;
 
     /// <summary>
-    /// True when the selected connection is an optical waveguide. Electrical connections are
-    /// metal traces (#682): they get no routing style and no bend handles, so the routing
-    /// panel binds its visibility to this instead of the raw selection.
+    /// True when a connection is selected. Metal traces route with curved bends like
+    /// waveguides (#854), so routing styles and bend handles apply to electrical
+    /// connections too — the routing panel binds its visibility to this.
     /// </summary>
-    public bool IsOpticalConnectionSelected =>
-        SelectedWaveguideConnection is { } conn && !conn.Connection.IsElectrical;
+    public bool IsConnectionSelected => SelectedWaveguideConnection is not null;
 
     partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
-        OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+        OnPropertyChanged(nameof(IsConnectionSelected));
 
     private PhysicalPin? _connectionStartPin;
     private double _moveStartX;
@@ -136,6 +135,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
     /// </summary>
     public Func<double>? GetMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Callback returning the minimum allowed METAL bend radius (µm) of the design's active
+    /// fabrication process (issue #854), consulted by the bend-handle drag on electrical
+    /// connections. Wired by <c>MainViewModel</c> to the metal routing spec provider; when
+    /// unwired the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
+    /// </summary>
+    public Func<double>? GetMetalMinBendRadiusMicrometers { get; set; }
 
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
