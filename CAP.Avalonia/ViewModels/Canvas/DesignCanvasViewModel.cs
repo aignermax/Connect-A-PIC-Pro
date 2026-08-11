@@ -22,6 +22,14 @@ public partial class DesignCanvasViewModel : ObservableObject
     public ObservableCollection<WaveguideConnectionViewModel> Connections { get; } = new();
     public ObservableCollection<PinViewModel> AllPins { get; } = new();
 
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856).
+    /// Populated when ungrouping releases GDS-imported route geometry that has no
+    /// pins to re-expand into a live connection. Rendered and persisted like
+    /// group-internal paths; never simulated.
+    /// </summary>
+    public ObservableCollection<CanvasFrozenPathViewModel> CanvasFrozenPaths { get; } = new();
+
     // ── Core dependencies ─────────────────────────────────────────────────
     public WaveguideConnectionManager ConnectionManager { get; }
     public WaveguideRouter Router { get; }

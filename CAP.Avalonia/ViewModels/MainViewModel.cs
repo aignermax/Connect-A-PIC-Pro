@@ -1249,6 +1249,13 @@ public class DesignFileData
     /// Null for legacy files saved before single-process support; migrated on load.
     /// </summary>
     public ActiveProcessData? ActiveProcess { get; set; }
+
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856):
+    /// GDS-imported route geometry released by ungrouping its import group. Null for
+    /// files saved before canvas-level frozen paths existed.
+    /// </summary>
+    public List<CAP_DataAccess.Persistence.DTOs.FrozenPathDto>? CanvasFrozenPaths { get; set; }
 }
 
 /// <summary>
