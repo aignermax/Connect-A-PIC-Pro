@@ -52,6 +52,14 @@ public class RoutedPath
     public bool PassesThroughComponent { get; set; } = false;
 
     /// <summary>
+    /// True when this Auto route was produced by the direct/S-bend-first policy (issue #860):
+    /// a smooth styled geometry verified against the obstacle grid, not an A* grid path.
+    /// The pin-lead collapse pass skips such routes — their entry/exit stubs are intended
+    /// styled geometry, not the forced grid-escape leads the collapse exists to remove.
+    /// </summary>
+    public bool IsDirectStyledRoute { get; set; } = false;
+
+    /// <summary>
     /// Debug information: The raw A* grid path used to generate this path.
     /// Only populated when A* routing is used.
     /// </summary>
@@ -93,7 +101,8 @@ public class RoutedPath
             IsInvalidGeometry = IsInvalidGeometry,
             IsPlaceholderGeometry = IsPlaceholderGeometry,
             ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
-            PassesThroughComponent = PassesThroughComponent
+            PassesThroughComponent = PassesThroughComponent,
+            IsDirectStyledRoute = IsDirectStyledRoute
         };
 
         foreach (var segment in Segments)

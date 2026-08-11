@@ -1010,6 +1010,8 @@
   "Settings.Routing.CrossingDescription": "布线后，在能降低插入损耗的位置用真实的 PDK 交叉元件替换绕行波导。关闭后使用经典的仅避让布线 — 大型设计更快，且不插入交叉。",
   "Settings.Routing.CrossingsTitle": "交叉",
   "Settings.Routing.DiagonalDescription": "带 45° 对角的八向 A* 生成更短、更紧凑的路径，但每次重新布线需要更多计算量。禁用时使用快速的四方向（曼哈顿）搜索。切换后会立即重新布设所有连接。",
+  "Settings.Routing.DirectFirst": "直接布线优先（S 弯，A* 仅用于绕开障碍）",
+  "Settings.Routing.DirectFirstDescription": "新建和重新布线的连接会首先尝试直接的平滑几何 — 根据引脚布局选择直线、S 弯、正弦或眼镜蛇曲线 — 仅当障碍物确实挡住样式化路径时才回退到 A* 网格搜索。关闭后始终使用网格布线器。手动编辑和冻结的路径绝不会被重新样式化。",
   "Settings.Routing.EnableDiagonal": "启用对角布线（45° 波导）",
   "Settings.Routing.Title": "布线",
   "Settings.Section.AiAssistant": "AI 助手",

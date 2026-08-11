@@ -148,7 +148,8 @@ public class FrozenAndStyledRouteCollisionTests
         right.PhysicalY = 360;
         var components = new List<Component> { left, right };
 
-        var router = new WaveguideRouter();
+        // These tests edit/freeze the multi-segment grid route, so force the A* pipeline.
+        var router = new WaveguideRouter { PreferDirectStyledRoutes = false };
         router.InitializePathfindingGrid(-100, -100, 1100, 900, components);
         var manager = new WaveguideConnectionManager(router);
         var connection = new WaveguideConnection

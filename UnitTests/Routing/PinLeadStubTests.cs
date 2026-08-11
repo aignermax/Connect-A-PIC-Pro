@@ -215,12 +215,14 @@ public class PinLeadStubTests
     }
 
     /// <summary>Router with deterministic settings: cardinal-only turns make the first bend a
-    /// 90° arc whose tangent length equals the bend radius.</summary>
+    /// 90° arc whose tangent length equals the bend radius. Direct-first is disabled because
+    /// these tests target the pin-lead stubs of the A* grid pipeline specifically.</summary>
     private static WaveguideRouter CreateRouter() => new()
     {
         MinBendRadiusMicrometers = Radius,
         MinWaveguideSpacingMicrometers = 2.0,
         UseDiagonalRouting = false,
+        PreferDirectStyledRoutes = false,
     };
 
     private static PhysicalPin Pin(Component parent, double offsetX, double offsetY, double angle) => new()

@@ -76,6 +76,15 @@ public partial class WaveguideRouter
     public bool UseHierarchicalPathfinding { get; set; } = false;
 
     /// <summary>
+    /// Routing policy (issue #860): when true, <see cref="Route"/> first tries the DIRECT
+    /// styled geometry (straight / arc-S / sine / cobra per pin geometry, built by
+    /// <see cref="InterconnectRouting.DirectRouteFirstPolicy"/>) and only falls back to A*
+    /// when obstacles actually block the styled path. A* is never the first choice — it is
+    /// the obstacle-avoidance fallback. Disable to force grid routing for every connection.
+    /// </summary>
+    public bool PreferDirectStyledRoutes { get; set; } = true;
+
+    /// <summary>
     /// Whether the A* search may use 45° diagonal moves (octile routing).
     /// Diagonals yield shorter, more compact routes but roughly double the
     /// per-cell state space, making every re-route noticeably more expensive.
@@ -178,7 +187,9 @@ public partial class WaveguideRouter
         PathfindingGrid?.AddComponentObstacle(component);
 
     /// <summary>
-    /// Routes a waveguide between two pins using two-phase A* pathfinding.
+    /// Routes a waveguide between two pins. With <see cref="PreferDirectStyledRoutes"/> (the
+    /// default) the DIRECT styled geometry is tried first and A* only runs when obstacles
+    /// actually block the styled path (issue #860). The A* attempt itself is two-phase.
     /// The first attempt honors the process bend-radius floor
     /// (<see cref="ProcessMinBendRadiusMicrometers"/>); when no clean path exists at the floor,
     /// it retries at the connection radius and marks the result with
@@ -203,6 +214,13 @@ public partial class WaveguideRouter
         double connectionRadius = MinBendRadiusMicrometers;
         double effectiveRadius = Math.Max(connectionRadius, ProcessMinBendRadiusMicrometers);
         bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
+
+        if (PreferDirectStyledRoutes)
+        {
+            var direct = TryRouteDirect(startPin, endPin, effectiveRadius);
+            if (direct != null)
+                return direct;
+        }
 
         if (PathfindingGrid != null)
         {
@@ -231,6 +249,28 @@ public partial class WaveguideRouter
 
         return RouteManhattanFallback(startX, startY, startAngle, endX, endY, endInputAngle,
                                       connectionRadius, effectiveRadius, floorRaisesRadius);
+    }
+
+    /// <summary>
+    /// Direct/S-bend-first policy (issue #860): builds the styled candidate for the pin
+    /// geometry and accepts it only when it is clean AND clear of the SAME obstacle grid A*
+    /// uses (component bodies, frozen paths, registered sibling waveguides). Returns null
+    /// when no styled geometry fits or the candidate is blocked — A* then routes as before.
+    /// </summary>
+    private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
+    {
+        var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildCandidate(
+            startPin, endPin, bendRadius);
+        if (candidate == null
+            || !candidate.IsValid
+            || PathIntersectionDetector.HasSelfIntersection(candidate)
+            || IsPathBlocked(candidate.Segments))
+        {
+            return null;
+        }
+
+        candidate.IsDirectStyledRoute = true;
+        return candidate;
     }
 
     /// <summary>

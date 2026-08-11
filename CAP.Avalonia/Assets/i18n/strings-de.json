@@ -1010,6 +1010,8 @@
   "Settings.Routing.CrossingDescription": "Ersetzt nach dem Routing einen Umweg-Wellenleiter durch eine echte PDK-Kreuzungskomponente, wo das die Einfügedämpfung senkt. Für klassisches Nur-Ausweichen-Routing deaktivieren — schneller bei großen Designs, es werden keine Kreuzungen eingefügt.",
   "Settings.Routing.CrossingsTitle": "Kreuzungen",
   "Settings.Routing.DiagonalDescription": "Oktiles A* mit 45°-Diagonalen erzeugt kürzere, kompaktere Routen, aber jedes Neu-Routing braucht deutlich mehr Rechenzeit. Wenn deaktiviert, wird die schnelle 4-Richtungen-Suche (Manhattan) verwendet. Das Umschalten routet alle Verbindungen sofort neu.",
+  "Settings.Routing.DirectFirst": "Direkte Routen zuerst (S-Bend, A* nur um Hindernisse)",
+  "Settings.Routing.DirectFirstDescription": "Neue und neu geroutete Verbindungen versuchen zuerst die direkte glatte Geometrie — Gerade, S-Bend, Sinus oder Cobra je nach Pin-Lage — und weichen nur dann auf die A*-Rastersuche aus, wenn Hindernisse den gestylten Pfad tatsächlich blockieren. Deaktivieren, um immer den Raster-Router zu verwenden. Manuell bearbeitete und eingefrorene Routen werden nie umgestylt.",
   "Settings.Routing.EnableDiagonal": "Diagonales Routing aktivieren (45°-Wellenleiter)",
   "Settings.Routing.Title": "Routing",
   "Settings.Section.AiAssistant": "KI-Assistent",

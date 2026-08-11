@@ -132,7 +132,12 @@ public class FlatComponentProcessMinRadiusTests
         bottom.PhysicalX = 60;
         bottom.PhysicalY = top.PhysicalY + top.HeightMicrometers + gapMicrometers;
 
-        var router = new WaveguideRouter { ProcessMinBendRadiusMicrometers = processFloor };
+        // Direct-first is disabled: these tests verify the A* pipeline's floor handling.
+        var router = new WaveguideRouter
+        {
+            ProcessMinBendRadiusMicrometers = processFloor,
+            PreferDirectStyledRoutes = false,
+        };
         router.InitializePathfindingGrid(-100, -100, 1100, 900, new[] { top, bottom });
 
         var manager = new WaveguideConnectionManager(router);
