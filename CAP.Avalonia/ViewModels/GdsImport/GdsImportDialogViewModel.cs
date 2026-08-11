@@ -298,6 +298,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
             var outcome = await _importService.ImportAsync(
                 GdsFilePath, SelectedTopCell.CellName, options, progress, token,
                 preParsedLibrary: _analyzedLibrary);
+            ImportServiceCompletedTestHook?.Invoke();
 
             token.ThrowIfCancellationRequested();
             var plan = GdsPlacementPlan.FromOutcome(outcome);
@@ -438,6 +439,13 @@ public partial class GdsImportDialogViewModel : ObservableObject
 
     /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
     internal CancellationTokenSource? CurrentCts => _cts;
+
+    /// <summary>
+    /// Test seam (InternalsVisibleTo UnitTests): invoked between the import
+    /// service completing and canvas placement starting, so tests can land a
+    /// window close deterministically inside that otherwise load-dependent gap.
+    /// </summary>
+    internal Action? ImportServiceCompletedTestHook { get; set; }
 
     private static string BuildSummary(GdsPlacementReport report)
     {

@@ -158,6 +158,38 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Adds multiple child components in one batch, recomputing the group bounds
+    /// and invalidating the S-Matrix only once. Per-item <see cref="AddChild"/>
+    /// rescans every child and path segment on each call, which is quadratic at
+    /// GDS-import scale (hundreds of children and segment-rich frozen paths).
+    /// </summary>
+    /// <param name="components">Components to add; none may already be a child.</param>
+    public void AddChildren(IReadOnlyCollection<Component> components)
+    {
+        if (components == null)
+            throw new ArgumentNullException(nameof(components));
+        if (components.Count == 0)
+            return;
+
+        var existing = new HashSet<Component>(ChildComponents);
+        foreach (var component in components)
+        {
+            if (component == null)
+                throw new ArgumentNullException(nameof(components), "Collection contains a null component.");
+            if (!existing.Add(component))
+                throw new InvalidOperationException("Component is already a child of this group.");
+
+            component.ParentGroup = this;
+            if (component is ComponentGroup childGroup)
+                childGroup.ParentGroup = this;
+            ChildComponents.Add(component);
+        }
+
+        UpdateGroupBounds();
+        InvalidateSMatrix();
+    }
+
+    /// <summary>
     /// Removes a child component from this group.
     /// </summary>
     /// <param name="component">Component to remove.</param>
@@ -176,6 +208,33 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Removes multiple child components in one batch, recomputing the group
+    /// bounds only once (see <see cref="AddChildren"/> for why per-item calls
+    /// are quadratic at GDS-import scale).
+    /// </summary>
+    /// <param name="components">Components to remove; non-children are ignored.</param>
+    public void RemoveChildren(IReadOnlyCollection<Component> components)
+    {
+        if (components == null || components.Count == 0)
+            return;
+
+        var toRemove = new HashSet<Component>(components);
+        bool removedAny = false;
+        for (int i = ChildComponents.Count - 1; i >= 0; i--)
+        {
+            if (!toRemove.Contains(ChildComponents[i]))
+                continue;
+
+            ChildComponents[i].ParentGroup = null;
+            ChildComponents.RemoveAt(i);
+            removedAny = true;
+        }
+
+        if (removedAny)
+            UpdateGroupBounds();
+    }
+
+    /// <summary>
     /// Adds a frozen waveguide path between two child components, or pin-less
     /// frozen geometry (a GDS-imported route outline).
     /// </summary>
@@ -186,6 +245,30 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             throw new ArgumentNullException(nameof(path));
 
         InternalPaths.Add(path);
+        UpdateGroupBounds();
+        InvalidateSMatrix();
+    }
+
+    /// <summary>
+    /// Adds multiple frozen waveguide paths in one batch, recomputing the group
+    /// bounds and invalidating the S-Matrix only once (see <see cref="AddChildren"/>
+    /// for why per-item calls are quadratic at GDS-import scale).
+    /// </summary>
+    /// <param name="paths">The frozen paths to add.</param>
+    public void AddInternalPaths(IReadOnlyCollection<FrozenWaveguidePath> paths)
+    {
+        if (paths == null)
+            throw new ArgumentNullException(nameof(paths));
+        if (paths.Count == 0)
+            return;
+
+        foreach (var path in paths)
+        {
+            if (path == null)
+                throw new ArgumentNullException(nameof(paths), "Collection contains a null path.");
+            InternalPaths.Add(path);
+        }
+
         UpdateGroupBounds();
         InvalidateSMatrix();
     }
