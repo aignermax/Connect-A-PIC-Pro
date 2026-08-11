@@ -932,6 +932,7 @@
   "Routing.Connection.BendRadius": "Bend Radius (µm):",
   "Routing.Connection.BendsInPath": "Bends in path: ",
   "Routing.Connection.FreezeRoute": "Freeze Route",
+  "Routing.Connection.BatchApply": "Applies to {0} selected connections",
   "Routing.Connection.Radius": "Radius",
   "Routing.Connection.Style": "Style:",
   "Routing.Connection.EffectiveStyleFormat": "Auto (effective: {0})",

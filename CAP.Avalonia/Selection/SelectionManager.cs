@@ -15,6 +15,12 @@ public class SelectionManager
     public ObservableCollection<ComponentViewModel> SelectedComponents { get; } = new();
 
     /// <summary>
+    /// Currently selected waveguide connections (issue #862): rubber-band selection collects
+    /// optical connections here so the routing-style control can restyle them all at once.
+    /// </summary>
+    public ObservableCollection<WaveguideConnectionViewModel> SelectedConnections { get; } = new();
+
+    /// <summary>
     /// Whether a box-selection drag is currently in progress.
     /// </summary>
     public bool IsBoxSelecting { get; set; }
@@ -110,6 +116,19 @@ public class SelectionManager
             comp.IsSelected = false;
         }
         SelectedComponents.Clear();
+        ClearConnectionSelection();
+    }
+
+    /// <summary>
+    /// Clears all selected connections without touching the component selection.
+    /// </summary>
+    public void ClearConnectionSelection()
+    {
+        foreach (var conn in SelectedConnections)
+        {
+            conn.IsSelected = false;
+        }
+        SelectedConnections.Clear();
     }
 
     /// <summary>

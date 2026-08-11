@@ -932,6 +932,7 @@
   "Routing.Connection.BendRadius": "Biegeradius (µm):",
   "Routing.Connection.BendsInPath": "Biegungen im Pfad: ",
   "Routing.Connection.FreezeRoute": "Route einfrieren",
+  "Routing.Connection.BatchApply": "Gilt für {0} ausgewählte Verbindungen",
   "Routing.Connection.Radius": "Radius",
   "Routing.Connection.Style": "Stil:",
   "Routing.Connection.EffectiveStyleFormat": "Auto (effektiv: {0})",

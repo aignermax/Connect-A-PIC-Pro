@@ -932,6 +932,7 @@
   "Routing.Connection.BendRadius": "弯曲半径 (µm)：",
   "Routing.Connection.BendsInPath": "路径中的弯曲： ",
   "Routing.Connection.FreezeRoute": "冻结布线",
+  "Routing.Connection.BatchApply": "应用于 {0} 个选定的连接",
   "Routing.Connection.Radius": "半径",
   "Routing.Connection.Style": "样式：",
   "Routing.Connection.EffectiveStyleFormat": "自动（实际:{0}）",
