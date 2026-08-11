@@ -234,15 +234,14 @@
                                 </Button.Flyout>
                             </Button>
                         </StackPanel>
-                        <Grid ColumnDefinitions="*,42">
-                            <NumericUpDown Grid.Column="0"
-                                           Value="{Binding LaserConfig.RinDbPerHz, Mode=TwoWay}"
-                                           Minimum="-200" Maximum="-80" Increment="5"
-                                           FormatString="F0" ShowButtonSpinner="False"
-                                           IsEnabled="{Binding LaserConfig.IsEnabled}"/>
-                            <TextBlock Grid.Column="1" Text="dB/Hz" Foreground="Gray" FontSize="10"
-                                       VerticalAlignment="Center" Margin="6,0,0,0"/>
-                        </Grid>
+                        <Slider Minimum="-200" Maximum="-80"
+                                Value="{Binding LaserConfig.RinDbPerHz, Mode=TwoWay}"
+                                IsEnabled="{Binding LaserConfig.IsEnabled}"
+                                TickFrequency="5" IsSnapToTickEnabled="True"/>
+                        <TextBlock Foreground="#cccccc" FontSize="10">
+                            <Run Text="{Binding LaserConfig.RinDbPerHz, StringFormat={}{0:F0}}"/>
+                            <Run Text="dB/Hz"/>
+                        </TextBlock>
                     </StackPanel>
                 </DataTemplate>
 
