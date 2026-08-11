@@ -297,7 +297,8 @@ public class SimulationService
     }
 
     public static bool IsLightSource(Component component) =>
-        LightSourceClassifier.IsLightInjectingCoupler(component);
+        LightSourceClassifier.IsLightInjectingCoupler(component)
+        || component.IsUserMarkedLightSource;
 
     internal static LaserType GetLaserTypeForWavelength(int wavelengthNm)
     {

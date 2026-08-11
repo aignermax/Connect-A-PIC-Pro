@@ -78,6 +78,15 @@ public partial class Component : ICloneable
     public bool LaserEnabled { get; set; } = true;
 
     /// <summary>
+    /// User override marking ANY component as a light source (laser coupler) —
+    /// for imported GDS cells the name-based classifier can never know the
+    /// role (a foundry cell name says nothing). Runtime-only in v1 (not
+    /// persisted in the .lun).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsUserMarkedLightSource { get; set; }
+
+    /// <summary>
     /// Reference to the parent ComponentGroup if this component is part of a group.
     /// Null if this is a top-level component.
     /// </summary>
