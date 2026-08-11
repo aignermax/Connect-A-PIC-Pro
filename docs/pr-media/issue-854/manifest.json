@@ -1,0 +1,10 @@
+[
+  {
+    "file": "01-curved-metal-with-handles.png",
+    "caption": "A selected metal (electrical) connection routes with curved bends at the process metal bend radius (RF rule: at least 3\u00D7 trace width) and now shows the bend-radius circles and segment-shift diamond that were optical-only before."
+  },
+  {
+    "file": "02-routing-panel-for-metal.png",
+    "caption": "Selecting the metal connection also reveals the Routing section \u2014 style presets (Auto/SBend/\u2026) apply to electrical traces the same way as to waveguides."
+  }
+]
