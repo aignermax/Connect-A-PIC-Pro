@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-group-with-imported-route.png",
+    "caption": "GDS import wrapped the placed components in a group; the top-cell route polygon rides along as pin-less frozen geometry, drawn in its source-layer color."
+  },
+  {
+    "file": "02-after-ungroup-geometry-preserved.png",
+    "caption": "Ctrl\u002BShift\u002BG ungroups: the components are released AND the imported route geometry survives on the canvas (previously it vanished permanently). Undo restores the group with its original path."
+  },
+  {
+    "file": "03-selected-route-geometry.png",
+    "caption": "Clicking the released route selects it (yellow highlight, same visual language as waveguide connections); Delete/Backspace removes it undoably."
+  },
+  {
+    "file": "04-moved-route-geometry.png",
+    "caption": "The released geometry stays a first-class canvas citizen: dragging moves it as one undoable command, and it persists in the .lun file and GDS export."
+  }
+]
