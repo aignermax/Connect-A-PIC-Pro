@@ -96,7 +96,8 @@ public class GdsLayerSuggestionEngineTests
         // evidence: the metal claim is vetoed, the waveguide claim is high.
         var library = Library(Cell(TopCell), Cell("dev",
             Rectangle(11, 0, 10, 0.5),
-            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(5, 0.25) }));
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(0.5, 0.25) },
+            new GdsText { Layer = 56, TextType = 0, Text = "o2", Position = new GdsPoint(9.5, 0.25) }));
 
         var suggestions = Suggest(library);
 
@@ -138,14 +139,16 @@ public class GdsLayerSuggestionEngineTests
     }
 
     [Fact]
-    public void LabelTouchingNestedShapes_AttachesToTheSmallestOnly()
+    public void LabelTouchingNestedShapes_AttachesToTheRouteLikeOne()
     {
         // keepout/bbox rectangle enclosing the core: the label rests on both,
-        // but only the specific (smallest) shape earns the attachment.
+        // but the frame covers the whole cell (background) and the core is
+        // the route-like shape — only the core earns the attachment.
         var library = Library(Cell(TopCell), Cell("dev",
             Rectangle(111, 0, 20, 10),
             Rectangle(11, 0, 10, 0.5),
-            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(5, 0.25) }));
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(5, 0.25) },
+            new GdsText { Layer = 56, TextType = 0, Text = "o2", Position = new GdsPoint(9.5, 0.25) }));
 
         var suggestions = Suggest(library);
 
@@ -153,6 +156,75 @@ public class GdsLayerSuggestionEngineTests
             s.Layer == 11 && s.Role == GdsLayerRole.Waveguide
             && s.Confidence == GdsSuggestionConfidence.High);
         suggestions.ShouldNotContain(s => s.Layer == 111 && s.Role == GdsLayerRole.Waveguide);
+    }
+
+    [Fact]
+    public void LabelOnStackedEqualSquares_PrefersTheDeviceContentLayer()
+    {
+        // An annotation backing square stacked exactly on the pin square:
+        // same size, same spot — the layer that carries device geometry
+        // throughout the file wins the tie, the annotation layer gets nothing.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(59, 0, 2, 2),      // annotation backing square at the pin
+            Rectangle(11, 0, 2, 2),      // pin square on the waveguide layer
+            Rectangle(11, 0, 10, 0.5),   // more device content on that layer
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(0.5, 0.25) },
+            new GdsText { Layer = 56, TextType = 0, Text = "o2", Position = new GdsPoint(1.5, 1.5) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 11 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
+        suggestions.ShouldNotContain(s => s.Layer == 59 && s.Role == GdsLayerRole.Waveguide);
+    }
+
+    [Fact]
+    public void GhostOnlyTextLayer_YieldsNoPortLabelSuggestion()
+    {
+        // nazca stamps bbox anchors / parameter annotations on their own text
+        // layers — a layer carrying ONLY helper labels is not a port candidate.
+        var library = Library(Cell(TopCell), Cell("dev",
+            new GdsText { Layer = 233, TextType = 0, Text = "tl", Position = new GdsPoint(0, 4) },
+            new GdsText { Layer = 233, TextType = 0, Text = "R:0.0001", Position = new GdsPoint(5, 2) },
+            Rectangle(1, 0, 10, 0.5)));
+
+        Suggest(library).ShouldNotContain(s => s.Layer == 233 && s.Role == GdsLayerRole.PortLabels);
+    }
+
+    [Fact]
+    public void LabelTouchingMarkerChevronAndPinSquare_AttachesToTheSquareNotTheMarkerLayer()
+    {
+        // The chevron is smaller than the pin square and sits right on the
+        // label — but marker layers never take attachments.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Chevron(232, 0.4, 0.25),
+            Chevron(232, 0.4, 0.25, mirror: true),
+            Rectangle(11, 0, 2, 2),
+            Rectangle(11, 0, 10, 0.5),
+            new GdsText { Layer = 56, TextType = 0, Text = "o1", Position = new GdsPoint(0.5, 0.25) },
+            new GdsText { Layer = 56, TextType = 0, Text = "o2", Position = new GdsPoint(1.5, 1.5) }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 11 && s.Role == GdsLayerRole.Waveguide
+            && s.Confidence == GdsSuggestionConfidence.High);
+        suggestions.ShouldNotContain(s => s.Layer == 232 && s.Role == GdsLayerRole.Waveguide);
+    }
+
+    /// <summary>The nazca pin chevron (7 vertices, tip at the origin, ~0.35×0.5 µm).</summary>
+    private static GdsPolygon Chevron(int layer, double tipX, double tipY, bool mirror = false)
+    {
+        (double X, double Y)[] shape =
+            { (0.25, -0.25), (0, 0), (0.25, 0.25), (0.25, 0.125), (0.35, 0.125), (0.35, -0.125), (0.25, -0.125) };
+        var sign = mirror ? -1 : 1;
+        return new GdsPolygon
+        {
+            Layer = layer,
+            DataType = 0,
+            Points = shape.Select(p => new GdsPoint(tipX + sign * p.X, tipY + p.Y)).ToList(),
+        };
     }
 
     [Fact]

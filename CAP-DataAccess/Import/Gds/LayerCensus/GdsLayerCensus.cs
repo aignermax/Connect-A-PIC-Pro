@@ -31,6 +31,15 @@ public sealed record GdsLayerCensusEntry
     /// </summary>
     public int SingleLineTextCount { get; init; }
 
+    /// <summary>
+    /// Single-line TEXT elements that additionally survive the ghost filter
+    /// (<c>GdsGhostLabelFilter</c>): no bbox anchors (tl/tr/…), no parameter
+    /// annotations (R:0.0001), no empty strings. This is the count that backs
+    /// port-label suggestions — a layer carrying ONLY helper labels must not
+    /// become a port-layer suggestion.
+    /// </summary>
+    public int PortLikeTextCount { get; init; }
+
     /// <summary>Names of the cells that carry TEXT elements on this pair, sorted.</summary>
     public IReadOnlyList<string> TextCellNames { get; init; } = Array.Empty<string>();
 }
@@ -66,6 +75,7 @@ public static class GdsLayerCensus
                 PathCount = kv.Value.Paths,
                 TextCount = kv.Value.Texts,
                 SingleLineTextCount = kv.Value.SingleLineTexts,
+                PortLikeTextCount = kv.Value.PortLikeTexts,
                 TextCellNames = kv.Value.TextCells.OrderBy(n => n, StringComparer.Ordinal).ToList(),
             })
             .ToList();
@@ -86,7 +96,11 @@ public static class GdsLayerCensus
                 var entry = Get(stats, (text.Layer, text.TextType));
                 entry.Texts++;
                 if (!text.Text.Contains('\n'))
+                {
                     entry.SingleLineTexts++;
+                    if (text.Text.Trim().Length > 0 && !GdsGhostLabelFilter.IsGhost(text))
+                        entry.PortLikeTexts++;
+                }
                 entry.TextCells.Add(cellName);
                 break;
         }
@@ -108,6 +122,7 @@ public static class GdsLayerCensus
         public int Paths;
         public int Texts;
         public int SingleLineTexts;
+        public int PortLikeTexts;
         public readonly HashSet<string> TextCells = new(StringComparer.Ordinal);
     }
 }

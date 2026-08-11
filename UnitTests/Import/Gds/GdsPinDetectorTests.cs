@@ -184,6 +184,24 @@ public class GdsPinDetectorTests
         pins.Count(p => p.Source == DetectedPinSource.EdgeHeuristic).ShouldBe(2);
     }
 
+    [Fact]
+    public void ArrowPair_AcrossDifferentMarkerLayers_AlsoMarksAPin()
+    {
+        // Some conventions stamp one chevron per pin per marker layer: tips
+        // meeting across two DIFFERENT layers still mark the pin.
+        var cell = Cell(
+            Poly(1, 0, (0, 1.75), (10, 1.75), (10, 2.25), (0, 2.25), (0, 1.75)),
+            Chevron(232, 0, 2, bodyDirX: +1),
+            Chevron(234, 0, 2, bodyDirX: -1));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var arrowPin = pins.Single(p => p.Source == DetectedPinSource.ArrowMarker);
+        arrowPin.XUm.ShouldBe(0, Tolerance);
+        arrowPin.YUm.ShouldBe(2, Tolerance);
+        arrowPin.AngleDegrees.ShouldBe(180, Tolerance);
+    }
+
     // ── Edge heuristic ───────────────────────────────────────────────────────
 
     [Fact]

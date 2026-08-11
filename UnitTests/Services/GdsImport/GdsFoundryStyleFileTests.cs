@@ -45,37 +45,48 @@ public class GdsFoundryStyleFileTests : IDisposable
     /// labels (anchors "tl"/"tr"/… and parameter annotations "R:0.0001"/"n:1.0")
     /// on the foundry text layer. (1 db unit = 1 nm.)
     /// </summary>
-    private static byte[] SyntheticFoundryLibrary() => GdsTestWriter.Create()
-        .StandardPrologue()
-        .BeginCell("TOP")
-            .SRef("dev", 0, 0)
-            .SRef("dev", 60000, 0)
-            .Path(WaveguideLayer, 0, 500, 0, (10000, 2000), (50000, 2000))
-            .Path(MetalLayer, 0, 20000, 0, (10000, 20000), (50000, 20000))
-        .EndCell()
-        .BeginCell("dev")
-            .Boundary(WaveguideLayer, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
-            .Boundary(BboxLayer, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
-            .Text(TextLayer, 0, "o1", 0, 2000)
-            .Text(TextLayer, 0, "o2", 10000, 2000)
-            .Text(TextLayer, 0, "tl", 0, 4000)
-            .Text(TextLayer, 0, "tr", 10000, 4000)
-            .Text(TextLayer, 0, "bl", 0, 0)
-            .Text(TextLayer, 0, "br", 10000, 0)
-            .Text(TextLayer, 0, "R:0.0001", 5000, 3000)
-            .Text(TextLayer, 0, "n:1.0", 5000, 1000)
-        .EndCell()
-        .EndLibrary()
-        .ToArray();
+    private static byte[] SyntheticFoundryLibrary(bool withNazcaMetadata = false)
+    {
+        var writer = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("dev", 0, 0)
+                .SRef("dev", 60000, 0)
+                .Path(WaveguideLayer, 0, 500, 0, (10000, 2000), (50000, 2000))
+                .Path(MetalLayer, 0, 20000, 0, (10000, 20000), (50000, 20000))
+            .EndCell()
+            .BeginCell("dev")
+                .Boundary(WaveguideLayer, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(BboxLayer, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Text(TextLayer, 0, "o1", 0, 2000)
+                .Text(TextLayer, 0, "o2", 10000, 2000);
+        if (withNazcaMetadata)
+        {
+            // nazca's per-cell metadata stamp marks the file as foreign-made:
+            // Lunima's own layer defaults must not be pre-filled then.
+            writer = writer.Text(59, 0,
+                "cellname: dev\nfoundry_pdk: TEST_PDK\nnazca_pdk_version: 0.0", 0, 0);
+        }
+        return writer
+                .Text(TextLayer, 0, "tl", 0, 4000)
+                .Text(TextLayer, 0, "tr", 10000, 4000)
+                .Text(TextLayer, 0, "bl", 0, 0)
+                .Text(TextLayer, 0, "br", 10000, 0)
+                .Text(TextLayer, 0, "R:0.0001", 5000, 3000)
+                .Text(TextLayer, 0, "n:1.0", 5000, 1000)
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+    }
 
     private static async Task<GdsLibrary> ReadLibraryAsync(byte[] gds) =>
         await new GdsReader().ReadAsync(new MemoryStream(gds));
 
-    private async Task<GdsImportDialogViewModel> AnalyzedDialog()
+    private async Task<GdsImportDialogViewModel> AnalyzedDialog(bool withNazcaMetadata = false)
     {
         Directory.CreateDirectory(_root);
         var gdsPath = Path.Combine(_root, "foundry.gds");
-        File.WriteAllBytes(gdsPath, SyntheticFoundryLibrary());
+        File.WriteAllBytes(gdsPath, SyntheticFoundryLibrary(withNazcaMetadata));
         var service = _host.CreateService();
         var executor = new GdsPlacementExecutor(
             new DesignCanvasViewModel(), new CommandManager(), () => new List<ComponentTemplate>());
@@ -141,5 +152,19 @@ public class GdsFoundryStyleFileTests : IDisposable
         // of the metal field's colliding default entry:
         vm.WaveguideLayersText.ShouldBe("1,0; 1111,0; 11,0");
         vm.MetalLayersText.ShouldBe("12,0; 13,0");
+    }
+
+    [Fact]
+    public async Task Dialog_Analysis_OfForeignFile_StartsWithEmptyFields_FilledByEvidenceOnly()
+    {
+        // nazca-stamped files: Lunima's own default numbers would collide with
+        // the file's layer map — the fields start empty and fill from file
+        // evidence only (ports from texts, waveguide from port attachment;
+        // metal stays a manual choice).
+        var vm = await AnalyzedDialog(withNazcaMetadata: true);
+
+        vm.PortLayersText.ShouldBe($"{TextLayer},0");
+        vm.WaveguideLayersText.ShouldBe("11,0");
+        vm.MetalLayersText.ShouldBe("");
     }
 }
