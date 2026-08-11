@@ -167,9 +167,33 @@
                                     ToolTip.Tip="{loc:Localize SelectedProps.LineShapeHint}">
                                 <Button.Flyout>
                                     <Flyout>
-                                        <TextBlock Text="{loc:Localize SelectedProps.LineShapeHint}"
-                                                   MaxWidth="340" TextWrapping="Wrap"
-                                                   Foreground="White" FontSize="11"/>
+                                        <StackPanel MaxWidth="360" Spacing="6">
+                                            <TextBlock Text="{loc:Localize SelectedProps.LineShapeHint}"
+                                                       TextWrapping="Wrap" Foreground="#DDDDDD" FontSize="11"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                                <StackPanel Spacing="2">
+                                                    <Canvas Width="110" Height="34" Background="#252526">
+                                                        <Polyline Points="0,32 52.9,32 55,4 57.1,32 110,32"
+                                                                  Stroke="#9CDCFE" StrokeThickness="1.5"/>
+                                                    </Canvas>
+                                                    <TextBlock Text="{loc:Localize SelectedProps.LineShapeIdeal}" Foreground="Gray" FontSize="9" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Spacing="2">
+                                                    <Canvas Width="110" Height="34" Background="#252526">
+                                                        <Polyline Points="0.0,26.4 2.8,25.9 5.5,25.4 8.3,24.8 11.0,24.1 13.8,23.4 16.5,22.5 19.2,21.6 22.0,20.5 24.7,19.3 27.5,18.0 30.3,16.5 33.0,14.9 35.8,13.2 38.5,11.4 41.2,9.6 44.0,7.9 46.8,6.3 49.5,5.1 52.2,4.3 55.0,4.0 57.8,4.3 60.5,5.1 63.2,6.3 66.0,7.9 68.8,9.6 71.5,11.4 74.2,13.2 77.0,14.9 79.8,16.5 82.5,18.0 85.2,19.3 88.0,20.5 90.8,21.6 93.5,22.5 96.2,23.4 99.0,24.1 101.8,24.8 104.5,25.4 107.2,25.9 110.0,26.4"
+                                                                  Stroke="#9CDCFE" StrokeThickness="1.5"/>
+                                                    </Canvas>
+                                                    <TextBlock Text="{loc:Localize SelectedProps.LineShapeLorentzian}" Foreground="Gray" FontSize="9" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                                <StackPanel Spacing="2">
+                                                    <Canvas Width="110" Height="34" Background="#252526">
+                                                        <Polyline Points="0.0,32.0 2.8,32.0 5.5,32.0 8.3,32.0 11.0,32.0 13.8,31.9 16.5,31.9 19.2,31.7 22.0,31.5 24.7,31.0 27.5,30.2 30.3,29.0 33.0,27.3 35.8,24.8 38.5,21.7 41.2,18.0 44.0,14.0 46.8,10.2 49.5,6.9 52.2,4.8 55.0,4.0 57.8,4.8 60.5,6.9 63.2,10.2 66.0,14.0 68.8,18.0 71.5,21.7 74.2,24.8 77.0,27.3 79.8,29.0 82.5,30.2 85.2,31.0 88.0,31.5 90.8,31.7 93.5,31.9 96.2,31.9 99.0,32.0 101.8,32.0 104.5,32.0 107.2,32.0 110.0,32.0"
+                                                                  Stroke="#9CDCFE" StrokeThickness="1.5"/>
+                                                    </Canvas>
+                                                    <TextBlock Text="{loc:Localize SelectedProps.LineShapeGaussian}" Foreground="Gray" FontSize="9" HorizontalAlignment="Center"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </StackPanel>
                                     </Flyout>
                                 </Button.Flyout>
                             </Button>
@@ -205,7 +229,7 @@
                                     <Flyout>
                                         <TextBlock Text="{loc:Localize SelectedProps.RinHint}"
                                                    MaxWidth="340" TextWrapping="Wrap"
-                                                   Foreground="White" FontSize="11"/>
+                                                   Foreground="#DDDDDD" FontSize="11"/>
                                     </Flyout>
                                 </Button.Flyout>
                             </Button>
