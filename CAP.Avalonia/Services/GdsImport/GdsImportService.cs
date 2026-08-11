@@ -209,7 +209,11 @@ public sealed partial class GdsImportService
         if (options.ResolveKnownComponent is null)
         {
             var templates = _templateProvider?.Invoke() ?? (IReadOnlyList<ComponentTemplate>)Array.Empty<ComponentTemplate>();
-            options = options with { ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, infos) };
+            options = options with
+            {
+                ResolveKnownComponent = GdsTemplateResolver.BuildKnownComponentResolver(templates, infos),
+                ResolveKnownComponentCandidates = GdsTemplateResolver.BuildKnownComponentCandidatesResolver(templates, infos),
+            };
         }
 
         // Heavy stages on a thread-pool thread (see the class remarks); the await

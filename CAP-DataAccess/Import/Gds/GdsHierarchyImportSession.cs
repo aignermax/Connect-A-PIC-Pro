@@ -338,28 +338,41 @@ internal sealed partial class GdsHierarchyImportSession
             return cached;
 
         KnownComponent? result = null;
-        var resolver = _options.ResolveKnownComponent;
-        if (resolver is not null)
+        var candidatesResolver = _options.ResolveKnownComponentCandidates;
+        if (candidatesResolver is not null)
         {
-            result = resolver(cellName);
-            if (result is null)
+            result = ResolveViaCandidates(cellName, candidatesResolver);
+        }
+        else
+        {
+            var resolver = _options.ResolveKnownComponent;
+            if (resolver is not null)
             {
-                var hits = HashStrippedCandidates(cellName)
-                    .Select(candidate => resolver(candidate))
-                    .Where(hit => hit is not null)
-                    .DistinctBy(hit => (hit!.Identifier, hit.PdkSource))
-                    .ToList();
-                if (hits.Count == 1)
+                result = resolver(cellName);
+                if (result is null)
                 {
-                    result = hits[0];
-                }
-                else if (hits.Count > 1)
-                {
-                    Warnings.Add(
-                        $"Cell name '{cellName}' matches {hits.Count} known components after " +
-                        "stripping the gdsfactory hash suffix " +
-                        $"({string.Join(", ", hits.Select(h => $"'{h!.Identifier}'"))}); " +
-                        "ambiguous — treated as a new component draft.");
+                    var hits = HashStrippedCandidates(cellName)
+                        .Select(candidate => resolver(candidate))
+                        .Where(hit => hit is not null)
+                        // A hash-stripped name proves nothing about a parametric
+                        // template's settings — only exact (bare-name) hits may bind
+                        // those (bare name = default parameters in both nazca and
+                        // gdsfactory naming).
+                        .Where(hit => !hit!.IsParametric)
+                        .DistinctBy(hit => (hit!.Identifier, hit.PdkSource))
+                        .ToList();
+                    if (hits.Count == 1)
+                    {
+                        result = hits[0];
+                    }
+                    else if (hits.Count > 1)
+                    {
+                        Warnings.Add(
+                            $"Cell name '{cellName}' matches {hits.Count} known components after " +
+                            "stripping the gdsfactory hash suffix " +
+                            $"({string.Join(", ", hits.Select(h => $"'{h!.Identifier}'"))}); " +
+                            "ambiguous — treated as a new component draft.");
+                    }
                 }
             }
         }
@@ -376,6 +389,94 @@ internal sealed partial class GdsHierarchyImportSession
 
         _known[cellName] = result;
         return result;
+    }
+
+    /// <summary>
+    /// Resolves via the candidate-list resolver: exact hits first, then
+    /// hash-stripped candidates (parametric templates excluded there — a hash
+    /// proves nothing about settings). Multiple distinct candidates are
+    /// disambiguated by PIN-LAYOUT fit against the cell's detected pins; no
+    /// fit within tolerance means unknown — never a guess.
+    /// </summary>
+    private KnownComponent? ResolveViaCandidates(
+        string cellName, Func<string, IReadOnlyList<KnownComponent>> candidatesResolver)
+    {
+        var candidates = candidatesResolver(cellName);
+        if (candidates.Count == 0)
+        {
+            candidates = HashStrippedCandidates(cellName)
+                .SelectMany(candidate => candidatesResolver(candidate))
+                .Where(hit => !hit.IsParametric)
+                .DistinctBy(hit => (hit.Identifier, hit.PdkSource))
+                .ToList();
+        }
+        if (candidates.Count == 0)
+            return null;
+        if (candidates.Count == 1)
+            return candidates[0];
+
+        var bbox = GetCellBBox(cellName);
+        var pins = GetCellPins(cellName, bbox);
+        KnownComponent? best = null;
+        double bestDeviation = double.PositiveInfinity;
+        foreach (var candidate in candidates)
+        {
+            double deviation = PositionalFitDeviation(candidate, pins);
+            if (deviation < bestDeviation)
+            {
+                bestDeviation = deviation;
+                best = candidate;
+            }
+        }
+        if (best is not null && bestDeviation <= PinMismatchToleranceUm)
+            return best;
+
+        Warnings.Add(
+            $"Cell name '{cellName}' matches {candidates.Count} known components " +
+            $"({string.Join(", ", candidates.Select(c => $"'{c.Identifier}'"))}) and none fits the " +
+            "cell's pin layout within tolerance — treated as a new component draft.");
+        return null;
+    }
+
+    /// <summary>
+    /// Name-free pin-layout fit: the smallest achievable worst-pin residual
+    /// (µm) when the template's pin offsets are translated onto the cell's
+    /// label-pin positions. Export paths rename pins (template "in/out1/out2"
+    /// vs. cell labels "a0/b0/b1"), so names cannot disambiguate — positions
+    /// can. Every template pin must land near a label; surplus labels are
+    /// tolerated. O(pins²) — pin counts are tiny.
+    /// </summary>
+    private static double PositionalFitDeviation(KnownComponent candidate, IReadOnlyList<DetectedPin> cellPins)
+    {
+        var templatePoints = candidate.Pins.Select(p => (p.XUm, p.YUm)).ToList();
+        var labelPoints = cellPins
+            .Where(p => p.Source == DetectedPinSource.Label)
+            .Select(p => (p.XUm, p.YUm))
+            .ToList();
+        if (templatePoints.Count == 0 || labelPoints.Count == 0)
+            return double.PositiveInfinity;
+
+        double best = double.PositiveInfinity;
+        foreach (var t in templatePoints)
+        {
+            foreach (var c in labelPoints)
+            {
+                double dx = c.XUm - t.XUm, dy = c.YUm - t.YUm;
+                double maxResidual = 0;
+                foreach (var tp in templatePoints)
+                {
+                    double px = tp.XUm + dx, py = tp.YUm + dy;
+                    double nearest = labelPoints.Min(cp =>
+                    {
+                        double ddx = cp.XUm - px, ddy = cp.YUm - py;
+                        return Math.Sqrt(ddx * ddx + ddy * ddy);
+                    });
+                    maxResidual = Math.Max(maxResidual, nearest);
+                }
+                best = Math.Min(best, maxResidual);
+            }
+        }
+        return best;
     }
 
     /// <summary>

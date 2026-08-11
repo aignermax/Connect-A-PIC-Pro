@@ -240,9 +240,10 @@ public class GdsTemplateResolverTests
 
         resolver("Phase Shifter").ShouldNotBeNull().Identifier.ShouldBe("Phase Shifter");
         resolver("Phase_Shifter").ShouldNotBeNull().Identifier.ShouldBe("Phase Shifter");
-        resolver("eopm_dc").ShouldBeNull(
-            "a parameterized template registers no function-name keys — the cell name " +
-            "cannot prove which length the geometry carries");
+        resolver("eopm_dc").ShouldNotBeNull(
+            "a bare function name implies DEFAULT parameters in both nazca and gdsfactory " +
+            "naming (non-default values change the cell name) — it binds the parametric template")
+            .IsParametric.ShouldBeTrue();
     }
 
     [Fact]

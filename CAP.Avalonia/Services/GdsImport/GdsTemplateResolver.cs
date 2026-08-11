@@ -95,14 +95,13 @@ public static class GdsTemplateResolver
         // with a note, mirroring the long-standing first-wins behavior.
         var byName = GroupByKey(templateList, t => t.Name);
 
-        // Function-derived keys: parameterless templates only (see above). The
-        // last dot segment covers demofab module calls (demo.mmi2x2_dp lands in
-        // the GDS as mmi2x2_dp); single-segment names register no segment key
-        // (it would duplicate the full-name key).
-        var parameterless = templateList
-            .Where(t => string.IsNullOrWhiteSpace(t.NazcaParameters))
-            .ToList();
-        var withFunction = parameterless
+        // Function-derived keys cover parametric templates too: a BARE function
+        // name implies default parameters in both naming ecosystems (nazca bakes
+        // non-default values into the cell name, gdsfactory hashes changed
+        // settings — either way the name changes). Parametric hits are refused
+        // for hash-stripped candidates by the session (a stripped hash proves
+        // nothing about the settings).
+        var withFunction = templateList
             .Where(t => !string.IsNullOrEmpty(t.NazcaFunctionName))
             .ToList();
         var byFunctionName = UnambiguousGroupByKey(withFunction, t => t.NazcaFunctionName!);
@@ -110,7 +109,7 @@ public static class GdsTemplateResolver
             withFunction.Where(t => t.NazcaFunctionName!.Contains('.', StringComparison.Ordinal)),
             t => LastFunctionSegment(t.NazcaFunctionName!));
         var bySynthesizedName = UnambiguousGroupByKey(
-            parameterless.Where(t => string.IsNullOrEmpty(t.NazcaFunctionName)),
+            templateList.Where(t => string.IsNullOrEmpty(t.NazcaFunctionName)),
             t => $"nazca_{t.Name.ToLower().Replace(" ", "_")}");
 
         // Sanitized display names: keys that collide only AFTER folding
@@ -167,6 +166,71 @@ public static class GdsTemplateResolver
     }
 
     /// <summary>
+    /// Returns a resolver listing ALL distinct candidates for a cell name,
+    /// precedence-ordered (bundled PDKs, user PDKs, prior GDS imports; then by
+    /// key-shape evidence strength) — including same-key collisions (e.g. the
+    /// demo PDK's "1x2 MMI Splitter" and "Y-Junction" share the nazca function
+    /// demo.mmi1x2_sh). The import session disambiguates by pin-layout fit.
+    /// </summary>
+    public static Func<string, IReadOnlyList<KnownComponent>> BuildKnownComponentCandidatesResolver(
+        IEnumerable<ComponentTemplate> templates,
+        IList<string>? resolutionNotes = null)
+    {
+        ArgumentNullException.ThrowIfNull(templates);
+        var templateList = templates.ToList();
+        var noted = new HashSet<string>(StringComparer.Ordinal);
+
+        // The full key set with collisions kept — the candidates resolver's job
+        // is to enumerate, the session's to disambiguate.
+        var keySources = new Dictionary<string, List<ComponentTemplate>>[]
+        {
+            GroupByKey(templateList, t => t.Name),
+            GroupByKey(templateList.Where(t => !string.IsNullOrEmpty(t.NazcaFunctionName)), t => t.NazcaFunctionName!),
+            GroupByKey(templateList, t => SanitizeGdsCellName(t.Name)),
+            GroupByKey(
+                templateList.Where(t => !string.IsNullOrEmpty(t.NazcaFunctionName)
+                    && t.NazcaFunctionName!.Contains('.', StringComparison.Ordinal)),
+                t => LastFunctionSegment(t.NazcaFunctionName!)),
+            GroupByKey(
+                templateList.Where(t => string.IsNullOrEmpty(t.NazcaFunctionName)),
+                t => $"nazca_{t.Name.ToLower().Replace(" ", "_")}"),
+        };
+
+        return cellName =>
+        {
+            if (cellName is null)
+                return Array.Empty<KnownComponent>();
+            var candidates = new List<(ComponentTemplate Template, int Shape)>();
+            for (var shape = 0; shape < keySources.Length; shape++)
+            {
+                if (keySources[shape].TryGetValue(cellName, out var hits))
+                    candidates.AddRange(hits.Select(t => (t, shape)));
+            }
+            var ordered = candidates
+                .DistinctBy(c => (c.Template.Name, c.Template.PdkSource))
+                .OrderBy(c => PrecedenceTier(c.Template))
+                .ThenBy(c => c.Shape)
+                .ToList();
+
+            if (resolutionNotes is not null && ordered.Count > 0 && noted.Add(cellName))
+            {
+                var pdkSources = ordered.Select(c => c.Template.PdkSource).Distinct(StringComparer.Ordinal).ToList();
+                if (pdkSources.Count > 1)
+                {
+                    var pick = ordered[0].Template;
+                    resolutionNotes.Add(
+                        $"Cell name '{cellName}' is provided by {pdkSources.Count} PDKs " +
+                        $"({string.Join(", ", pdkSources.Select(s => $"'{s}'"))}); resolved to " +
+                        $"'{pick.Name}' (PDK '{pick.PdkSource}') — precedence: bundled PDKs, then " +
+                        "user PDKs, then earlier GDS imports; library order breaks ties within a tier.");
+                }
+            }
+
+            return ordered.Select(c => ToKnownComponent(c.Template)).ToList();
+        };
+    }
+
+    /// <summary>
     /// The PDK precedence tier of a template: 0 = bundled PDK, 1 = user PDK,
     /// 2 = a prior "GDS Import - *" PDK (a re-import prefers the real PDK over
     /// yesterday's black-box import of the same file).
@@ -218,5 +282,8 @@ public static class GdsTemplateResolver
                 WidthUm = 0,
                 Source = DetectedPinSource.Label,
                 IsElectrical = p.Kind == CAP_Core.Components.Core.MatterType.Electricity,
-            }).ToList());
+            }).ToList())
+        {
+            IsParametric = !string.IsNullOrWhiteSpace(template.NazcaParameters),
+        };
 }
