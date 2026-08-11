@@ -158,7 +158,22 @@
 
                         <!-- Realistic source spectrum (#819): line shape + FWHM linewidth.
                              "Ideal" keeps today's single-wavelength behaviour. -->
-                        <TextBlock Text="{loc:Localize SelectedProps.LineShape}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+                        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,8,0,2">
+                            <TextBlock Text="{loc:Localize SelectedProps.LineShape}" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center"/>
+                            <Button Content="?" Padding="6,1" FontSize="10" FontWeight="Bold"
+                                    Background="Transparent" Foreground="#7FB2E5" BorderThickness="0"
+                                    VerticalAlignment="Center"
+                                    ToolTip.Tip="{loc:Localize SelectedProps.LineShapeHint}">
+                                <Button.Flyout>
+                                    <Flyout>
+                                        <TextBlock Text="{loc:Localize SelectedProps.LineShapeHint}"
+                                                   MaxWidth="340" TextWrapping="Wrap"
+                                                   Foreground="White" FontSize="11"/>
+                                    </Flyout>
+                                </Button.Flyout>
+                            </Button>
+                        </StackPanel>
                         <ComboBox ItemsSource="{Binding LineShapeOptions}"
                                   SelectedValue="{Binding LaserConfig.LineShape, Mode=TwoWay}"
                                   SelectedValueBinding="{Binding Value}"

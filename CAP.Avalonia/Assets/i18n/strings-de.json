@@ -942,6 +942,7 @@
   "SelectedProps.LaserOff": "Aus — Ausgang",
   "SelectedProps.LaserOn": "Ein — Eingang",
   "SelectedProps.LineShape": "Linienform",
+  "SelectedProps.LineShapeHint": "Spektralform der Quelle. Ideal = monochromatisch (kein Phasenrauschen). Lorentzian = DFB-Laserlinie — treibt zusammen mit der Linienbreite (FWHM) das Phasenrauschen in Transient/Eye (Dekohärenz über Laufzeitunterschiede). Gauß = inhomogen verbreiterte Quelle (z. B. SLED). Das Linienbreiten-Feld erscheint bei nicht-idealer Form.",
   "SelectedProps.LineShapeGaussian": "Gauß",
   "SelectedProps.LineShapeIdeal": "Ideal (eine Wellenlänge)",
   "SelectedProps.LineShapeLorentzian": "Lorentz",

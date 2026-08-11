@@ -942,6 +942,7 @@
   "SelectedProps.LaserOff": "关 — 输出",
   "SelectedProps.LaserOn": "开 — 输入",
   "SelectedProps.LineShape": "线型",
+  "SelectedProps.LineShapeHint": "光源的光谱线型。Ideal = 单色(无相位噪声)。Lorentzian = DFB激光器线型——与FWHM线宽一起驱动瞬态/眼图中的相位噪声(延迟差导致退相干)。Gaussian = 非均匀加宽光源(如SLED)。选择非理想线型后会显示线宽字段。",
   "SelectedProps.LineShapeGaussian": "高斯",
   "SelectedProps.LineShapeIdeal": "理想（单一波长）",
   "SelectedProps.LineShapeLorentzian": "洛伦兹",

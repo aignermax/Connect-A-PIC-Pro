@@ -942,6 +942,7 @@
   "SelectedProps.LaserOff": "Off — output",
   "SelectedProps.LaserOn": "On — input",
   "SelectedProps.LineShape": "Line shape",
+  "SelectedProps.LineShapeHint": "Spectral line shape of the source. Ideal = monochromatic (no phase noise). Lorentzian = DFB-laser line — with the FWHM linewidth it drives the phase noise in transient/eye runs (decoherence over delay differences). Gaussian = inhomogeneously broadened source (e.g. SLED). The linewidth field appears when a non-ideal shape is selected.",
   "SelectedProps.LineShapeGaussian": "Gaussian",
   "SelectedProps.LineShapeIdeal": "Ideal (single wavelength)",
   "SelectedProps.LineShapeLorentzian": "Lorentzian",

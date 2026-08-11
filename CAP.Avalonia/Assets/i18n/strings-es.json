@@ -942,6 +942,7 @@
   "SelectedProps.LaserOff": "Apagado — salida",
   "SelectedProps.LaserOn": "Encendido — entrada",
   "SelectedProps.LineShape": "Forma de línea",
+  "SelectedProps.LineShapeHint": "Forma de la línea espectral de la fuente. Ideal = monocromática (sin ruido de fase). Lorentziana = línea de láser DFB — con el ancho de línea (FWHM) impulsa el ruido de fase en transitorio/ojo (decoherencia por diferencias de retardo). Gaussiana = fuente con ensanchamiento inhomogéneo (p. ej. SLED). El campo de ancho de línea aparece al elegir una forma no ideal.",
   "SelectedProps.LineShapeGaussian": "Gaussiana",
   "SelectedProps.LineShapeIdeal": "Ideal (una sola longitud de onda)",
   "SelectedProps.LineShapeLorentzian": "Lorentziana",

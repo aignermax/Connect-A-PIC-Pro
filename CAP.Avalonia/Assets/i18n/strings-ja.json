@@ -942,6 +942,7 @@
   "SelectedProps.LaserOff": "オフ — 出力",
   "SelectedProps.LaserOn": "オン — 入力",
   "SelectedProps.LineShape": "線形状",
+  "SelectedProps.LineShapeHint": "光源のスペクトル線形。Ideal = 単色（位相雑音なし）。Lorentzian = DFBレーザー線形 — FWHM線幅とともにトランジェント/アイの位相雑音を駆動します（遅延差によるデコヒーレンス）。Gaussian = 不均一に広がった光源（SLEDなど）。非理想形状を選ぶと線幅フィールドが表示されます。",
   "SelectedProps.LineShapeGaussian": "ガウス型",
   "SelectedProps.LineShapeIdeal": "理想（単一波長）",
   "SelectedProps.LineShapeLorentzian": "ローレンツ型",
