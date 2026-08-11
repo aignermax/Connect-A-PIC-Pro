@@ -10,6 +10,7 @@ using Xunit.Abstractions;
 namespace UnitTests.Services.GdsImport;
 
 /// <summary>SCRATCH probe — user-design import numbers after the network-merging change. Will be removed.</summary>
+[Trait("Category", "Slow")] // runs real Python/nazca subprocesses (43 s) — CI covers it, local default runs skip it
 public class GdsUserDesignProbeTests
 {
     private readonly ITestOutputHelper _output;
