@@ -250,7 +250,6 @@ public class GdsImportDialogViewModelTests : IDisposable
     }
 
     [Theory]
-    [InlineData("")]
     [InlineData("abc")]
     [InlineData("1")]
     [InlineData("1,2,3")]
@@ -260,6 +259,15 @@ public class GdsImportDialogViewModelTests : IDisposable
     public void ParseLayerPairs_Malformed_ReturnsNull(string text)
     {
         GdsImportDialogViewModel.ParseLayerPairs(text).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ParseLayerPairs_Empty_ReturnsEmptyList(string text)
+    {
+        // an empty field is valid: no layers configured (foreign files start this way)
+        GdsImportDialogViewModel.ParseLayerPairs(text).ShouldNotBeNull().ShouldBeEmpty();
     }
 
     [Fact]

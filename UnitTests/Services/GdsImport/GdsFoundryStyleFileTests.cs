@@ -167,4 +167,19 @@ public class GdsFoundryStyleFileTests : IDisposable
         vm.WaveguideLayersText.ShouldBe("11,0");
         vm.MetalLayersText.ShouldBe("");
     }
+
+    [Fact]
+    public async Task ForeignFile_EmptyMetalField_ImportsWithoutSyntaxError()
+    {
+        // Regression: an empty layer field used to fail validation ("Ungültige
+        // Layer-Syntax: ''") — empty means "no layers configured", which is
+        // exactly right for a foreign file's untouched metal field.
+        var vm = await AnalyzedDialog(withNazcaMetadata: true);
+        vm.MetalLayersText.ShouldBe("");
+
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeTrue();
+    }
 }
