@@ -30,7 +30,9 @@ public partial class WaveguideRouter
     /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
     /// If empty, any radius >= MinBendRadiusMicrometers is allowed.
-    /// When set, bends will snap to the smallest allowed radius that fits.
+    /// When set, each corner snaps to the LARGEST allowed radius the free space around it
+    /// permits (larger radii mean lower bend loss), shrinking toward the minimum only when
+    /// straight runs or obstacles force it.
     /// </summary>
     public List<double> AllowedBendRadii { get; set; } = new() { 5, 10, 20, 50 };
 

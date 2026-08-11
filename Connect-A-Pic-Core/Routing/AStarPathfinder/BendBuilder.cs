@@ -37,6 +37,9 @@ public enum BendMode
 /// </summary>
 public class BendBuilder
 {
+    /// <summary>Sweep angle above which the tangent length formula is clamped (tan(45°) = 1).</summary>
+    private const double MaxTangentSweepDegrees = 90.0;
+
     private readonly double _minBendRadius;
     private readonly List<double> _allowedRadii;
 
@@ -64,6 +67,50 @@ public class BendBuilder
                 best = r;
         }
         return best;
+    }
+
+    /// <summary>
+    /// Selects the LARGEST allowed radius whose arc fits the available straight runs on both
+    /// sides of a corner — photonic bend loss shrinks rapidly with radius, so generous space
+    /// should yield the gentlest bend. A radius fits when its tangent length
+    /// (r·tan(sweep/2)) does not exceed either available run. Radii below the minimum are
+    /// never chosen; when nothing larger fits, falls back to the classic smallest-viable
+    /// selection so tight layouts keep their previous behavior.
+    /// </summary>
+    /// <param name="sweepDegrees">Turn angle of the corner in degrees.</param>
+    /// <param name="incomingAvailableMicrometers">Free straight run before the corner apex.</param>
+    /// <param name="outgoingAvailableMicrometers">Free straight run after the corner apex.</param>
+    /// <param name="isRadiusRejected">Optional veto (e.g. obstacle collision) per candidate radius.</param>
+    public double SelectLargestRadiusThatFits(
+        double sweepDegrees,
+        double incomingAvailableMicrometers,
+        double outgoingAvailableMicrometers,
+        Func<double, bool>? isRadiusRejected = null)
+    {
+        double fallback = SelectRadius(_minBendRadius);
+        if (_allowedRadii.Count == 0)
+            return fallback;
+
+        double halfSweepRadians =
+            Math.Min(Math.Abs(sweepDegrees), MaxTangentSweepDegrees) * Math.PI / 360.0;
+        double available = Math.Min(incomingAvailableMicrometers, outgoingAvailableMicrometers);
+
+        for (int i = _allowedRadii.Count - 1; i >= 0; i--)
+        {
+            double radius = _allowedRadii[i];
+            if (radius <= fallback || radius < _minBendRadius)
+                break;
+
+            double tangentLength = radius * Math.Tan(halfSweepRadians);
+            if (tangentLength > available)
+                continue;
+            if (isRadiusRejected?.Invoke(radius) == true)
+                continue;
+
+            return radius;
+        }
+
+        return fallback;
     }
 
     /// <summary>
