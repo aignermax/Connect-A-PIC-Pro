@@ -47,6 +47,8 @@ internal static class GdsImportFeatureExtensions
             sp.GetRequiredService<GdsImportService>(),
             sp.GetRequiredService<GdsPlacementExecutor>(),
             sp.GetService<CAP_Core.ErrorConsoleService>()));
+        services.AddSingleton(sp => new ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel(
+            sp.GetRequiredService<DesignCanvasViewModel>()));
         return services;
     }
 }

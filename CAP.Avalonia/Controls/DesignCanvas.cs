@@ -158,7 +158,8 @@ public class DesignCanvas : Control
             InteractionState = _interactionState,
             Zoom = Zoom,
             Bounds = Bounds,
-            GdsPreviewRenderService = MainViewModel?.GdsPreviewRenderService
+            GdsPreviewRenderService = MainViewModel?.GdsPreviewRenderService,
+            LayerVisibility = MainViewModel?.LayerVisibility.State
         };
 
         context.FillRectangle(Brushes.Black, Bounds);

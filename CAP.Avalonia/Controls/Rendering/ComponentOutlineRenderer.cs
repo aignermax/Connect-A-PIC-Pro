@@ -2,6 +2,7 @@ using System.Runtime.CompilerServices;
 using Avalonia;
 using Avalonia.Media;
 using CAP.Avalonia.Controls.Canvas.ComponentPreview;
+using CAP.Avalonia.Services.GdsImport.LayerVisibility;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 
@@ -53,9 +54,12 @@ internal sealed class ComponentOutlineRenderer
     /// </summary>
     /// <param name="zoom">Current canvas zoom, used only for the per-polygon LOD cull
     /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
-    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom) =>
+    /// <param name="layerVisibility">Per-design layer view filter (issue #858);
+    /// null renders every layer fully visible.</param>
+    public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom,
+        GdsLayerVisibilityState? layerVisibility = null) =>
         Draw(context, comp.X, comp.Y, comp.Width, comp.Height,
-            comp.Component.RotationDegrees, outlines, isDimmed, zoom);
+            comp.Component.RotationDegrees, outlines, isDimmed, zoom, layerVisibility);
 
     /// <summary>
     /// Pose-based overload for callers that have no <see cref="ComponentViewModel"/>:
@@ -66,8 +70,12 @@ internal sealed class ComponentOutlineRenderer
     /// </summary>
     /// <param name="zoom">Current canvas zoom, used only for the per-polygon LOD cull
     /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
+    /// <param name="layerVisibility">Per-design layer view filter (issue #858):
+    /// polygons on hidden layers are skipped, faded layers draw with reduced
+    /// opacity. Null renders every layer fully visible.</param>
     public void Draw(DrawingContext context, double x, double y, double width, double height,
-        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom)
+        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom,
+        GdsLayerVisibilityState? layerVisibility = null)
     {
         var geometries = _geometryCache.GetValue(outlines, BuildGeometries);
 
@@ -82,6 +90,13 @@ internal sealed class ComponentOutlineRenderer
         {
             foreach (var cached in geometries)
             {
+                // Pure view filter (#858): a hidden layer draws nothing, a faded
+                // layer draws through an extra opacity push. Deliberately outside
+                // the LOD counters — hiding is a user choice, not a perf cull.
+                double layerOpacity = layerVisibility?.EffectiveOpacity(cached.Layer, cached.DataType) ?? 1.0;
+                if (layerOpacity <= 0)
+                    continue;
+
                 // The pushed transform is rigid, so the local-frame bbox × zoom is a
                 // conservative on-screen size: at full zoom-out on a huge import most
                 // polygons are sub-pixel specks whose DrawGeometry call costs far more
@@ -92,7 +107,15 @@ internal sealed class ComponentOutlineRenderer
                     continue;
                 }
                 IssuedGeometryCount++;
-                context.DrawGeometry(cached.Fill, cached.Outline, cached.Geometry);
+                if (layerOpacity < 1.0)
+                {
+                    using (context.PushOpacity(layerOpacity))
+                        context.DrawGeometry(cached.Fill, cached.Outline, cached.Geometry);
+                }
+                else
+                {
+                    context.DrawGeometry(cached.Fill, cached.Outline, cached.Geometry);
+                }
             }
         }
     }
@@ -153,7 +176,8 @@ internal sealed class ComponentOutlineRenderer
                 ctx.EndFigure(true);
             }
             var (fill, outline) = OutlineLayerPalette.OutlineStyleFor(polygon.Layer, polygon.DataType);
-            geometries.Add(new CachedGeometry(geometry, ComputeLocalBounds(polygon), fill, outline));
+            geometries.Add(new CachedGeometry(geometry, ComputeLocalBounds(polygon), fill, outline,
+                polygon.Layer, polygon.DataType));
         }
         return geometries.ToArray();
     }
@@ -173,20 +197,26 @@ internal sealed class ComponentOutlineRenderer
     }
 
     /// <summary>One cached polygon: its geometry, the local-frame bounding box the
-    /// per-polygon LOD cull scales by the current zoom, and its per-layer style.</summary>
+    /// per-polygon LOD cull scales by the current zoom, its per-layer style, and
+    /// its source (layer, datatype) for the per-layer view filter (#858).</summary>
     private sealed class CachedGeometry
     {
-        public CachedGeometry(StreamGeometry geometry, Rect bounds, IBrush fill, Pen outline)
+        public CachedGeometry(StreamGeometry geometry, Rect bounds, IBrush fill, Pen outline,
+            int layer, int dataType)
         {
             Geometry = geometry;
             Bounds = bounds;
             Fill = fill;
             Outline = outline;
+            Layer = layer;
+            DataType = dataType;
         }
 
         public StreamGeometry Geometry { get; }
         public Rect Bounds { get; }
         public IBrush Fill { get; }
         public Pen Outline { get; }
+        public int Layer { get; }
+        public int DataType { get; }
     }
 }
