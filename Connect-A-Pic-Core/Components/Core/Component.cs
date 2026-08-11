@@ -93,6 +93,16 @@ public partial class Component : ICloneable
     [JsonIgnore]
     public object? ParentGroup { get; set; }
 
+    /// <summary>
+    /// Whether this component blocks routing (default: true). The GDS import
+    /// clears it for geometry-only (pin-less) components — imported die
+    /// frames, logos and ground plates must never wall off the routing grid.
+    /// Runtime-only: not persisted in the .lun (v1; a reloaded pin-less
+    /// background component becomes an obstacle again until re-imported).
+    /// </summary>
+    [JsonIgnore]
+    public bool IsRoutingObstacle { get; set; } = true;
+
     public Part[,] Parts { get; protected set; }
     public List<PhysicalPin> PhysicalPins { get; protected set; } = new();
     public Dictionary<int, SMatrix> WaveLengthToSMatrixMap { get; set; }

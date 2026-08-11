@@ -24,8 +24,8 @@ internal static class GdsPinArrowMarkers
     /// <summary>One pin position derived from an arrow-marker pair (GDS space, µm).</summary>
     internal sealed record Marker(GdsPoint Position, int Layer, int Datatype);
 
-    /// <summary>Marker chevrons are sub-µm to few-µm; larger shapes are real geometry.</summary>
-    private const double MaxMarkerSpanUm = 3.0;
+    /// <summary>Marker chevrons are sub-µm to a few µm (electrical pin markers reach 5 µm); larger shapes are real geometry.</summary>
+    private const double MaxMarkerSpanUm = 6.0;
 
     /// <summary>Markers have few vertices (the nazca chevron has 7).</summary>
     private const int MaxMarkerVertices = 12;
@@ -71,9 +71,10 @@ internal static class GdsPinArrowMarkers
                 continue;
             for (int j = i + 1; j < candidates.Count; j++)
             {
-                if (paired[j] || candidates[j].Layer != candidates[i].Layer
-                    || candidates[j].Datatype != candidates[i].Datatype)
+                if (paired[j])
                     continue;
+                // Pairs may span DIFFERENT marker layers — some conventions
+                // place one chevron per pin per layer, meeting tip-to-tip.
                 if (!ClosestVertices(candidates[i].Points, candidates[j].Points,
                         out var onA, out var onB, out double distance)
                     || distance > PairingToleranceUm)
@@ -101,6 +102,10 @@ internal static class GdsPinArrowMarkers
     }
 
     /// <summary>The marker shape rule: few vertices, small span, one sharp convex corner.</summary>
+    /// <summary>True when every polygon on the layer is marker-shaped — a dedicated marker layer.</summary>
+    internal static bool IsMarkerLayer(IReadOnlyList<GdsPolygon> layerPolygons) =>
+        layerPolygons.Count > 0 && layerPolygons.All(p => IsMarkerShaped(Normalize(p.Points)));
+
     private static bool IsMarkerShaped(List<GdsPoint> points)
     {
         if (points.Count is < 3 or > MaxMarkerVertices)

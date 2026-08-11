@@ -225,6 +225,17 @@ public sealed partial class GdsPlacementExecutor
                 mirrorPinsHorizontally: instruction.Reflected);
             Execute(command);
 
+            // Geometry-only import (die frame, logo, ground plate): pure
+            // background — as a routing obstacle it would wall off the grid.
+            // The flag keeps it out of group-obstacle recursion later; the
+            // explicit removal undoes the registration that placement did.
+            var createdComponent = command.CreatedViewModel.Component;
+            if (createdComponent.PhysicalPins.Count == 0)
+            {
+                createdComponent.IsRoutingObstacle = false;
+                _canvas.Router.RemoveComponentObstacle(createdComponent);
+            }
+
             placedViewModels.Add(command.CreatedViewModel);
             report.PlacedCount++;
             PlacedCountSoFar++;
