@@ -228,9 +228,16 @@ public partial class PathfindingGrid
 
     /// <summary>
     /// Adds obstacle cells for a single (non-group) component.
+    /// Components flagged <see cref="Component.IsRoutingObstacle">IsRoutingObstacle
+    /// = false</see> are skipped: pin-less imported geometry (die frames,
+    /// logos, ground plates) is pure background — a die-covering cell would
+    /// otherwise wall off the entire routing grid and block every route.
     /// </summary>
     private void AddSingleComponentObstacle(Component component)
     {
+        if (!component.IsRoutingObstacle)
+            return;
+
         double padding = ObstaclePaddingMicrometers;
         double x1 = component.PhysicalX - padding;
         double y1 = component.PhysicalY - padding;
