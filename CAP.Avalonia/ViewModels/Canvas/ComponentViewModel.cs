@@ -50,7 +50,7 @@ public partial class ComponentViewModel : ObservableObject
     /// <summary>
     /// Laser configuration for light source components (null for non-sources).
     /// </summary>
-    public LaserConfig? LaserConfig { get; }
+    public LaserConfig? LaserConfig { get; private set; }
 
     /// <summary>
     /// Whether this component is a light source (see <see cref="LightSourceClassifier"/>).
@@ -62,6 +62,33 @@ public partial class ComponentViewModel : ObservableObject
     /// The single predicate every simulation consumer must use to skip the source.
     /// </summary>
     public bool IsLaserOff => LaserConfig is { IsEnabled: false };
+
+    /// <summary>True when the name-based classifier recognized this component (grating/edge coupler).</summary>
+    public bool IsAutoClassifiedLightSource { get; }
+
+    /// <summary>Show the "treat as light source" toggle only for components the classifier does not know.</summary>
+    public bool ShowLightSourceMarkToggle => !IsAutoClassifiedLightSource;
+
+    /// <summary>
+    /// User override for imported/unknown components: marks the component as a
+    /// light source, which creates the <see cref="LaserConfig"/> (laser editor,
+    /// simulation input) — the name-based classifier can never know a foundry
+    /// cell's role. Unmarking a name-classified coupler is a no-op by design.
+    /// </summary>
+    public bool IsUserMarkedLightSource
+    {
+        get => Component.IsUserMarkedLightSource;
+        set
+        {
+            if (Component.IsUserMarkedLightSource == value) return;
+            Component.IsUserMarkedLightSource = value;
+            LaserConfig = (value || IsAutoClassifiedLightSource) ? new LaserConfig(Component) : null;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(LaserConfig));
+            OnPropertyChanged(nameof(IsLightSource));
+            OnPropertyChanged(nameof(IsLaserOff));
+        }
+    }
 
     public double Width => Component.WidthMicrometers;
     public double Height => Component.HeightMicrometers;
@@ -160,8 +187,9 @@ public partial class ComponentViewModel : ObservableObject
         _x = component.PhysicalX;
         _y = component.PhysicalY;
 
-        if (LightSourceClassifier.IsLightInjectingCoupler(templateName)
-            || LightSourceClassifier.IsLightInjectingCoupler(component))
+        IsAutoClassifiedLightSource = LightSourceClassifier.IsLightInjectingCoupler(templateName)
+            || LightSourceClassifier.IsLightInjectingCoupler(component);
+        if (IsAutoClassifiedLightSource || component.IsUserMarkedLightSource)
             LaserConfig = new LaserConfig(component);
     }
 

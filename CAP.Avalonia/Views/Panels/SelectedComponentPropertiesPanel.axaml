@@ -46,6 +46,14 @@
                            Foreground="White"/>
                 <TextBlock Text=" µm" Foreground="Gray"/>
             </StackPanel>
+
+            <!-- Manual light-source mark: imported GDS cells can't be recognized by name —
+                 the toggle gives them the laser editor and the simulation-source role. -->
+            <ToggleSwitch Content="{loc:Localize Properties.MarkAsLightSource}"
+                          IsChecked="{Binding CanvasInteraction.SelectedComponent.IsUserMarkedLightSource, Mode=TwoWay, FallbackValue=False}"
+                          IsVisible="{Binding CanvasInteraction.SelectedComponent.ShowLightSourceMarkToggle, FallbackValue=False}"
+                          FontSize="11" Margin="0,8,0,0"
+                          ToolTip.Tip="{loc:Localize Properties.MarkAsLightSourceTip}"/>
         </StackPanel>
 
         <!-- Editor host: DataTemplates pick the right view per editor VM type.

@@ -144,7 +144,7 @@ internal static class TransientCircuitFactory
         double? worst = null;
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
             double rin = compVm.LaserConfig?.RinDbPerHz ?? LaserSpectrumModel.DefaultRinDbPerHz;
             worst = worst == null ? rin : Math.Max(worst.Value, rin);
@@ -167,7 +167,7 @@ internal static class TransientCircuitFactory
         int laserIndex = 0;
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
 
             var config = compVm.LaserConfig;
@@ -196,7 +196,7 @@ internal static class TransientCircuitFactory
     {
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
 
             var laserConfig = compVm.LaserConfig;

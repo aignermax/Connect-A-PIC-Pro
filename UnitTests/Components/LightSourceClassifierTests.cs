@@ -66,4 +66,43 @@ public class LightSourceClassifierTests
         vm.IsLightSource.ShouldBeFalse();
         vm.LaserConfig.ShouldBeNull();
     }
+
+    [Fact]
+    public void UserMarkTurnsAnyComponentIntoALightSource_AndUnmarkRevertsIt()
+    {
+        // Imported GDS cells carry no role in their name — the user marks the
+        // laser couplers manually (foundry field wish). The mark must create the
+        // LaserConfig (editor + simulation role) and the unmark must undo it.
+        var component = TestComponentFactory.CreateStraightWaveGuide();
+        var vm = new ComponentViewModel(component, "nazca_foundry_cell_1234");
+
+        vm.IsAutoClassifiedLightSource.ShouldBeFalse();
+        vm.ShowLightSourceMarkToggle.ShouldBeTrue();
+        vm.IsLightSource.ShouldBeFalse();
+
+        vm.IsUserMarkedLightSource = true;
+
+        vm.IsLightSource.ShouldBeTrue();
+        vm.LaserConfig.ShouldNotBeNull("the mark must surface the laser editor");
+        CAP.Avalonia.Services.SimulationService.IsLightSource(component).ShouldBeTrue(
+            "the model-level gate must agree (simulation input)");
+
+        vm.IsUserMarkedLightSource = false;
+
+        vm.IsLightSource.ShouldBeFalse();
+        vm.LaserConfig.ShouldBeNull();
+        CAP.Avalonia.Services.SimulationService.IsLightSource(component).ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Unmarking_ANameClassifiedCoupler_KeepsTheLaserConfig()
+    {
+        var component = TestComponentFactory.CreateStraightWaveGuide();
+        var vm = new ComponentViewModel(component, "Grating Coupler TE 1550");
+
+        vm.IsUserMarkedLightSource = false;
+
+        vm.IsLightSource.ShouldBeTrue("name-classified couplers stay sources regardless of the manual mark");
+        vm.ShowLightSourceMarkToggle.ShouldBeFalse();
+    }
 }

@@ -69,7 +69,7 @@ internal static class SpectrumSweepCircuitFactory
         int? designWavelengthNm = null;
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
 
             var laserConfig = compVm.LaserConfig;

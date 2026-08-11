@@ -20,7 +20,7 @@ public static class OptimizationTargetFactory
         var singleOptions = new List<OptimizationTargetOption>();
         foreach (var componentVm in components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(componentVm.TemplateName)) continue;
+            if (!componentVm.IsLightSource) continue;
             CollectCouplerTargets(componentVm, outputPins, singleOptions);
         }
 
