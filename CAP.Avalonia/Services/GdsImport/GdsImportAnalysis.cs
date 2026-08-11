@@ -1,4 +1,5 @@
 using CAP_DataAccess.Import.Gds;
+using CAP_DataAccess.Import.Gds.LayerCensus;
 
 namespace CAP.Avalonia.Services.GdsImport;
 
@@ -35,6 +36,13 @@ public sealed record GdsImportAnalysis
 
     /// <summary>Per-candidate instance counts, aligned with <see cref="TopCellCandidates"/>.</summary>
     public IReadOnlyList<GdsTopCellSummary> TopCells { get; init; } = Array.Empty<GdsTopCellSummary>();
+
+    /// <summary>
+    /// The file's layer census: every (layer, datatype) pair present with
+    /// polygon/path/text counts — the facts the dialog shows next to the layer
+    /// fields so the user never types layer numbers blind.
+    /// </summary>
+    public IReadOnlyList<GdsLayerCensusEntry> LayerCensus { get; init; } = Array.Empty<GdsLayerCensusEntry>();
 
     /// <summary>
     /// The parsed library behind this analysis. The import dialog hands it back

@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Avalonia.Input;
 using CAP.Avalonia.ViewModels.GdsImport;
 
 namespace CAP.Avalonia.Views.Dialogs;
@@ -26,6 +27,24 @@ public partial class GdsImportDialog : Window
 
         vm.OnClose = Close;
         _ = vm.StartAnalysisAsync();
+    }
+
+    /// <summary>Marks the port-label field as the census click target.</summary>
+    private void OnPortLayersGotFocus(object? sender, GotFocusEventArgs e) =>
+        SetActiveLayerField(GdsLayerFieldTarget.PortLabels);
+
+    /// <summary>Marks the waveguide field as the census click target.</summary>
+    private void OnWaveguideLayersGotFocus(object? sender, GotFocusEventArgs e) =>
+        SetActiveLayerField(GdsLayerFieldTarget.Waveguide);
+
+    /// <summary>Marks the metal field as the census click target.</summary>
+    private void OnMetalLayersGotFocus(object? sender, GotFocusEventArgs e) =>
+        SetActiveLayerField(GdsLayerFieldTarget.Metal);
+
+    private void SetActiveLayerField(GdsLayerFieldTarget target)
+    {
+        if (DataContext is GdsImportDialogViewModel vm)
+            vm.ActiveLayerField = target;
     }
 
     /// <inheritdoc/>

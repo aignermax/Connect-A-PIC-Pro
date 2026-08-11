@@ -35,13 +35,13 @@ public partial class ViewportControlViewModel : ObservableObject
     [RelayCommand]
     private void ZoomIn()
     {
-        ZoomLevel = Math.Min(ZoomLevel * 1.2, 10.0);
+        ZoomLevel = Math.Min(ZoomLevel * 1.2, CanvasZoomLimits.Max);
     }
 
     [RelayCommand]
     private void ZoomOut()
     {
-        ZoomLevel = Math.Max(ZoomLevel / 1.2, 0.1);
+        ZoomLevel = Math.Max(ZoomLevel / 1.2, CanvasZoomLimits.Min);
     }
 
     [RelayCommand]

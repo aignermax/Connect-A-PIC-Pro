@@ -283,7 +283,7 @@ public class DesignCanvas : Control
     {
         base.OnPointerWheelChanged(e);
         var delta = e.Delta.Y > 0 ? 1.1 : 0.9;
-        var newZoom = Math.Clamp(Zoom * delta, 0.1, 10.0);
+        var newZoom = Math.Clamp(Zoom * delta, CanvasZoomLimits.Min, CanvasZoomLimits.Max);
         var point = e.GetPosition(this);
         var vm = ViewModel;
         if (vm != null)

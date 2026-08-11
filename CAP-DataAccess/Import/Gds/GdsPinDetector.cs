@@ -85,22 +85,32 @@ public static partial class GdsPinDetector
         var labelAnchors = new List<GdsPoint>();
         var candidates = new List<Candidate>();
         AnchorGeometryIndex? geometryIndex = null;
+        // nazca-style arrow markers carry exact pin positions for this cell.
+        var markers = GdsPinArrowMarkers.Find(flattened, cellBBox);
         foreach (var text in flattened.Texts)
         {
             if (!ContainsLayer(options.PortLayers, text.Layer, text.TextType))
+                continue;
+            // nazca placement anchors / parameter annotations are never ports —
+            // filtered on every path, configured port layers included.
+            if (GdsGhostLabelFilter.IsGhost(text))
                 continue;
 
             // Built once per run, on the first port label — cells without port
             // labels never pay for the spatial index.
             geometryIndex ??= BuildAnchorGeometryIndex(flattened.Polygons, options);
-            CellEdge edge = NearestEdge(text.Position, cellBBox);
-            var geometry = ProbeAnchorGeometry(text.Position, geometryIndex, options);
-            labelAnchors.Add(text.Position);
+            // An arrow marker near the label holds the exact pin position:
+            // re-anchor to its tip so direction and material are probed where
+            // the pin really is, not where the label happened to be placed.
+            var anchor = NearestMarkerTip(text.Position, markers, MarkerSnapToleranceUm) ?? text.Position;
+            CellEdge edge = NearestEdge(anchor, cellBBox);
+            var geometry = ProbeAnchorGeometry(anchor, geometryIndex, options);
+            labelAnchors.Add(anchor);
             candidates.Add(new Candidate(edge, new DetectedPin
             {
                 Name = text.Text,
-                XUm = ToAppX(text.Position.X, cellBBox),
-                YUm = ToAppY(text.Position.Y, cellBBox),
+                XUm = ToAppX(anchor.X, cellBBox),
+                YUm = ToAppY(anchor.Y, cellBBox),
                 AngleDegrees = geometry is { Polygon: { } directionPolygon }
                     ? SegmentOutwardAngleDegrees(directionPolygon, geometry.P1, geometry.P2)
                     : OutwardAngleDegrees(edge),
@@ -108,6 +118,37 @@ public static partial class GdsPinDetector
                 Source = DetectedPinSource.Label,
                 IsElectrical = InferLabelPinKind(text.Text, geometry),
             }));
+        }
+
+        // ── 1b. Arrow-marker pins ────────────────────────────────────────────
+        // Markers without a nearby label still yield a pin — but only when
+        // route geometry lies at the tip: floating orientation chevrons (they
+        // merely indicate "outside" for an edge) never become pins.
+        if (markers.Count > 0)
+        {
+            geometryIndex ??= BuildAnchorGeometryIndex(flattened.Polygons, options);
+            foreach (var marker in markers)
+            {
+                if (IsCoveredByLabel(marker.Position, labelAnchors, MarkerSnapToleranceUm))
+                    continue;
+                var geometry = ProbeAnchorGeometry(marker.Position, geometryIndex, options);
+                if (geometry is null)
+                    continue;
+                CellEdge edge = NearestEdge(marker.Position, cellBBox);
+                labelAnchors.Add(marker.Position);
+                candidates.Add(new Candidate(edge, new DetectedPin
+                {
+                    Name = string.Empty,
+                    XUm = ToAppX(marker.Position.X, cellBBox),
+                    YUm = ToAppY(marker.Position.Y, cellBBox),
+                    AngleDegrees = geometry is { Polygon: { } markerPolygon }
+                        ? SegmentOutwardAngleDegrees(markerPolygon, geometry.P1, geometry.P2)
+                        : OutwardAngleDegrees(edge),
+                    WidthUm = 0,
+                    Source = DetectedPinSource.ArrowMarker,
+                    IsElectrical = InferLabelPinKind(string.Empty, geometry),
+                }));
+            }
         }
 
         // ── 2. Edge heuristic ────────────────────────────────────────────────
@@ -165,12 +206,34 @@ public static partial class GdsPinDetector
             .ThenBy(c => c.Edge is CellEdge.Left or CellEdge.Right ? c.Pin.YUm : c.Pin.XUm))
         {
             var pin = candidate.Pin;
-            if (pin.Source == DetectedPinSource.EdgeHeuristic)
+            if (pin.Source is DetectedPinSource.EdgeHeuristic or DetectedPinSource.ArrowMarker)
                 pin = pin with { Name = $"heur_{++heuristicCount}" };
             result.Add(pin);
         }
 
         return result;
+    }
+
+    /// <summary>How far a label anchor may sit from an arrow-marker tip to adopt its exact position.</summary>
+    private const double MarkerSnapToleranceUm = 2.0;
+
+    /// <summary>The nearest arrow-marker tip within <paramref name="toleranceUm"/>, else null.</summary>
+    private static GdsPoint? NearestMarkerTip(
+        GdsPoint anchor, IReadOnlyList<GdsPinArrowMarkers.Marker> markers, double toleranceUm)
+    {
+        GdsPoint? best = null;
+        double bestDistanceSquared = toleranceUm * toleranceUm;
+        foreach (var marker in markers)
+        {
+            double dx = marker.Position.X - anchor.X, dy = marker.Position.Y - anchor.Y;
+            double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared <= bestDistanceSquared)
+            {
+                bestDistanceSquared = distanceSquared;
+                best = marker.Position;
+            }
+        }
+        return best;
     }
 
     // ── Edge helpers ─────────────────────────────────────────────────────────

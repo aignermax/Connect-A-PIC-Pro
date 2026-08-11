@@ -42,9 +42,11 @@ public static partial class GdsPinDetector
     /// (our own exports and the demofab eopm), bond/supply pads (pad, gnd, vcc,
     /// vdd). Kept deliberately short: every entry must be unambiguous enough
     /// that an OPTICAL port never carries it ("o1", "in", "out", "port0" match
-    /// nothing here).
+    /// nothing here). Internal (not private) so
+    /// <c>LayerCensus.GdsPortAttachmentProbe</c> can use the same markers the
+    /// other way around: pad-labeled shapes never prove a layer optical.
     /// </summary>
-    private static readonly string[] ElectricalLabelMarkers =
+    internal static readonly string[] ElectricalLabelMarkers =
         ["anode", "cathode", "elec", "pad", "gnd", "vcc", "vdd"];
 
     /// <summary>One indexed outline segment: endpoints plus the owning polygon's ordinal.</summary>

@@ -10,6 +10,9 @@ public enum DetectedPinSource
 
     /// <summary>Derived from a waveguide polygon edge touching the cell bounding box; unnamed until numbered.</summary>
     EdgeHeuristic,
+
+    /// <summary>Derived from a nazca-style arrow pin marker (paired chevron tips or an edge-side single).</summary>
+    ArrowMarker,
 }
 
 /// <summary>
