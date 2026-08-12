@@ -934,6 +934,7 @@
   "Routing.Connection.FreezeRoute": "ルートを固定",
   "Routing.Connection.Radius": "半径",
   "Routing.Connection.Style": "スタイル：",
+  "Routing.Connection.EffectiveStyleFormat": "自動（実効: {0}）",
   "Routing.Connection.Title": "ルーティング：",
   "Routing.Connection.Width": "幅 (µm)：",
   "RoutingDiag.AnalyzeButton": "ルートを解析",

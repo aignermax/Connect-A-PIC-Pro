@@ -37,6 +37,10 @@ public partial class ConnectionRoutingViewModel : ObservableObject
     [ObservableProperty]
     private WaveguideType _selectedStyle = WaveguideType.Auto;
 
+    /// <summary>Names the effective geometry of a direct-styled Auto route ("" when not applicable).</summary>
+    [ObservableProperty]
+    private string _effectiveStyleText = "";
+
     /// <summary>Initializes a new instance bound to the design canvas.</summary>
     public ConnectionRoutingViewModel(DesignCanvasViewModel canvas)
     {
@@ -49,6 +53,12 @@ public partial class ConnectionRoutingViewModel : ObservableObject
         try
         {
             SelectedStyle = SelectedConnection?.Connection.Type ?? WaveguideType.Auto;
+            var path = SelectedConnection?.Connection.RoutedPath;
+            EffectiveStyleText = path is { IsDirectStyledRoute: true, DirectStyle: { } style }
+                ? string.Format(
+                    CAP.Avalonia.Services.Localization.LocalizationService.Instance.Translate("Routing.Connection.EffectiveStyleFormat"),
+                    style)
+                : "";
         }
         finally
         {

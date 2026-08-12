@@ -934,6 +934,7 @@
   "Routing.Connection.FreezeRoute": "Route einfrieren",
   "Routing.Connection.Radius": "Radius",
   "Routing.Connection.Style": "Stil:",
+  "Routing.Connection.EffectiveStyleFormat": "Auto (effektiv: {0})",
   "Routing.Connection.Title": "Routing:",
   "Routing.Connection.Width": "Breite (µm):",
   "RoutingDiag.AnalyzeButton": "Routen analysieren",

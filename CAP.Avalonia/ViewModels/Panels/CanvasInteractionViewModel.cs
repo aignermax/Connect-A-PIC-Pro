@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using CAP_Core;
@@ -8,6 +9,7 @@ using CAP_Core.Components.Creation;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Process;
 using CAP.Avalonia.Commands;
+using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.Services;
@@ -642,63 +644,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
     private WaveguideConnectionViewModel? FindConnectionAt(double x, double y)
     {
-        const double hitTolerance = 10.0;
-
-        // Hit-test the ACTUAL routed path (its segments), not the straight endpoint
-        // line — otherwise a bent/L-shaped route can't be clicked where it's drawn.
-        // Pick the closest connection within tolerance so overlapping paths resolve
-        // to the one nearest the cursor.
-        WaveguideConnectionViewModel? closest = null;
-        var closestDistance = hitTolerance;
-        foreach (var conn in _canvas.Connections)
-        {
-            var distance = DistanceToConnectionPath(conn, x, y);
-            if (distance <= closestDistance)
-            {
-                closestDistance = distance;
-                closest = conn;
-            }
-        }
-        return closest;
-    }
-
-    /// <summary>
-    /// Shortest distance from a canvas point to a connection's drawn path: the minimum
-    /// over its routed segments (arcs approximated by their chord — fine at the 10 px
-    /// hit tolerance), or the straight endpoint line when the connection isn't routed yet.
-    /// </summary>
-    private static double DistanceToConnectionPath(WaveguideConnectionViewModel conn, double x, double y)
-    {
-        var segments = conn.Connection.GetPathSegments();
-        if (segments.Count == 0)
-            return PointToLineDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
-
-        var min = double.MaxValue;
-        foreach (var seg in segments)
-        {
-            var d = PointToLineDistance(
-                x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
-            if (d < min) min = d;
-        }
-        return min;
-    }
-
-    private static double PointToLineDistance(double px, double py, double x1, double y1, double x2, double y2)
-    {
-        var dx = x2 - x1;
-        var dy = y2 - y1;
-        var lengthSq = dx * dx + dy * dy;
-
-        if (lengthSq < 0.0001)
-        {
-            return Math.Sqrt((px - x1) * (px - x1) + (py - y1) * (py - y1));
-        }
-
-        var t = Math.Max(0, Math.Min(1, ((px - x1) * dx + (py - y1) * dy) / lengthSq));
-        var projX = x1 + t * dx;
-        var projY = y1 + t * dy;
-
-        return Math.Sqrt((px - projX) * (px - projX) + (py - projY) * (py - projY));
+        // Hover and click share ONE hit test (arc-accurate) — a second,
+        // chord-approximated copy of this logic produced the field report
+        // "hover lights it up, but the click misses".
+        return DesignCanvasHitTesting.HitTestConnection(new Point(x, y), _canvas);
     }
 
     /// <summary>

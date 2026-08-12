@@ -259,8 +259,8 @@ public partial class WaveguideRouter
     /// </summary>
     private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
     {
-        var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildCandidate(
-            startPin, endPin, bendRadius);
+        var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildWithStyle(
+            startPin, endPin, bendRadius, out var directStyle);
         if (candidate == null
             || !candidate.IsValid
             || PathIntersectionDetector.HasSelfIntersection(candidate)
@@ -270,6 +270,7 @@ public partial class WaveguideRouter
         }
 
         candidate.IsDirectStyledRoute = true;
+        candidate.DirectStyle = directStyle;
         return candidate;
     }
 

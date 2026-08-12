@@ -60,6 +60,13 @@ public class RoutedPath
     public bool IsDirectStyledRoute { get; set; } = false;
 
     /// <summary>
+    /// The style a direct-styled route was built with (straight/S-bend/cobra), null for
+    /// A*/fallback routes. Display-only: lets the UI name the effective geometry while the
+    /// connection's own Type stays Auto.
+    /// </summary>
+    public CAP_Core.Components.Connections.WaveguideType? DirectStyle { get; set; }
+
+    /// <summary>
     /// Debug information: The raw A* grid path used to generate this path.
     /// Only populated when A* routing is used.
     /// </summary>
@@ -102,7 +109,8 @@ public class RoutedPath
             IsPlaceholderGeometry = IsPlaceholderGeometry,
             ViolatesProcessMinBendRadius = ViolatesProcessMinBendRadius,
             PassesThroughComponent = PassesThroughComponent,
-            IsDirectStyledRoute = IsDirectStyledRoute
+            IsDirectStyledRoute = IsDirectStyledRoute,
+            DirectStyle = DirectStyle
         };
 
         foreach (var segment in Segments)

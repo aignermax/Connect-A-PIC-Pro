@@ -934,6 +934,7 @@
   "Routing.Connection.FreezeRoute": "冻结布线",
   "Routing.Connection.Radius": "半径",
   "Routing.Connection.Style": "样式：",
+  "Routing.Connection.EffectiveStyleFormat": "自动（实际:{0}）",
   "Routing.Connection.Title": "布线：",
   "Routing.Connection.Width": "宽度 (µm)：",
   "RoutingDiag.AnalyzeButton": "分析布线",

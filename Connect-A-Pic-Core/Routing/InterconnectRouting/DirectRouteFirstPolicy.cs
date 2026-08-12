@@ -53,19 +53,34 @@ public static class DirectRouteFirstPolicy
     /// of the connection radius and the fabrication process minimum. 0 applies no floor.</param>
     /// <returns>The candidate path (unverified against obstacles), or null.</returns>
     public static RoutedPath? TryBuildCandidate(
-        PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers)
+        PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers) =>
+        TryBuildWithStyle(startPin, endPin, minBendRadiusMicrometers, out _);
+
+    /// <summary>Like <see cref="TryBuildCandidate"/>, also reporting the chosen style.</summary>
+    public static RoutedPath? TryBuildWithStyle(
+        PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers,
+        out CAP_Core.Components.Connections.WaveguideType style)
     {
         var arcPath = ConnectionStyleRouteBuilder.Build(
             startPin, endPin, WaveguideType.Bend, minBendRadiusMicrometers);
         if (MeetsRadiusFloor(arcPath, minBendRadiusMicrometers))
+        {
+            style = WaveguideType.Bend;
             return arcPath;
+        }
 
         var smoothStyle = PinAxesAreParallel(startPin, endPin)
             ? WaveguideType.SBend
             : WaveguideType.Cobra;
         var smoothPath = ConnectionStyleRouteBuilder.Build(
             startPin, endPin, smoothStyle, minBendRadiusMicrometers);
-        return MeetsRadiusFloor(smoothPath, minBendRadiusMicrometers) ? smoothPath : null;
+        if (MeetsRadiusFloor(smoothPath, minBendRadiusMicrometers))
+        {
+            style = smoothStyle;
+            return smoothPath;
+        }
+        style = WaveguideType.Auto;
+        return null;
     }
 
     /// <summary>True when the start heading and the end pin's arrival heading are parallel

@@ -934,6 +934,7 @@
   "Routing.Connection.FreezeRoute": "Congelar ruta",
   "Routing.Connection.Radius": "Radio",
   "Routing.Connection.Style": "Estilo:",
+  "Routing.Connection.EffectiveStyleFormat": "Auto (efectivo: {0})",
   "Routing.Connection.Title": "Enrutamiento:",
   "Routing.Connection.Width": "Ancho (µm):",
   "RoutingDiag.AnalyzeButton": "Analizar rutas",
