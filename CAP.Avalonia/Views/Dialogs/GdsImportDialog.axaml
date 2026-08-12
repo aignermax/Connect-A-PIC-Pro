@@ -37,6 +37,9 @@
             </StackPanel>
         </Border>
 
+        <!-- Scrollable: with the census/suggestions sections the content can
+             exceed MaxHeight — never let it spill past the window. -->
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
         <StackPanel Spacing="10">
 
             <!-- Busy indicator + status -->
@@ -254,5 +257,6 @@
             </StackPanel>
 
         </StackPanel>
+        </ScrollViewer>
     </DockPanel>
 </Window>

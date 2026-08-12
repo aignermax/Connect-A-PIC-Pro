@@ -3,6 +3,7 @@ using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
+using CAP_Core.Routing;
 
 namespace CAP.Avalonia.Controls;
 
@@ -341,8 +342,10 @@ public class DesignCanvasHitTesting
 
     /// <summary>
     /// Shortest distance from a canvas point to a connection's drawn path: the minimum over its
-    /// routed segments (arcs approximated by their chord — fine at the 10 px tolerance), or the
-    /// straight endpoint line when the connection has not been routed yet.
+    /// routed segments — arcs sampled to short chords (<see cref="ArcSampling"/>); a bare chord
+    /// cuts the corner of larger bends, so the highlight used to trigger visibly off the curve
+    /// (field report). Falls back to the straight endpoint line when the connection has not
+    /// been routed yet.
     /// </summary>
     private static double DistanceToConnectionPath(WaveguideConnectionViewModel conn, double x, double y)
     {
@@ -353,12 +356,37 @@ public class DesignCanvasHitTesting
         double min = double.MaxValue;
         foreach (var seg in segments)
         {
-            double d = PointToSegmentDistance(
-                x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
-            if (d < min) min = d;
+            if (seg is BendSegment bend)
+            {
+                // Sample the arc: the chord's sagitta error grows with radius/sweep and
+                // easily exceeds the 10 px tolerance for real bend radii.
+                var samples = ArcSampling.SamplePoints(bend, ArcChordStepMicrometers);
+                Point previous = default;
+                bool first = true;
+                foreach (var sample in samples)
+                {
+                    if (!first)
+                    {
+                        double d = PointToSegmentDistance(
+                            x, y, previous.X, previous.Y, sample.X, sample.Y);
+                        if (d < min) min = d;
+                    }
+                    previous = new Point(sample.X, sample.Y);
+                    first = false;
+                }
+            }
+            else
+            {
+                double d = PointToSegmentDistance(
+                    x, y, seg.StartPoint.X, seg.StartPoint.Y, seg.EndPoint.X, seg.EndPoint.Y);
+                if (d < min) min = d;
+            }
         }
         return min;
     }
+
+    /// <summary>Chord length used when sampling arcs for the hover hit test (µm).</summary>
+    private const double ArcChordStepMicrometers = 1.0;
 
     /// <summary>
     /// Calculates the minimum distance from a point to a line segment.
