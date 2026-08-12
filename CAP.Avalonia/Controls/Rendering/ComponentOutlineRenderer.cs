@@ -55,7 +55,8 @@ internal sealed class ComponentOutlineRenderer
     /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
     public void Draw(DrawingContext context, ComponentViewModel comp, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom) =>
         Draw(context, comp.X, comp.Y, comp.Width, comp.Height,
-            comp.Component.RotationDegrees, outlines, isDimmed, zoom);
+            comp.Component.RotationDegrees, outlines, isDimmed, zoom,
+            comp.Component.UnrotatedWidthMicrometers, comp.Component.UnrotatedHeightMicrometers);
 
     /// <summary>
     /// Pose-based overload for callers that have no <see cref="ComponentViewModel"/>:
@@ -66,14 +67,19 @@ internal sealed class ComponentOutlineRenderer
     /// </summary>
     /// <param name="zoom">Current canvas zoom, used only for the per-polygon LOD cull
     /// (see <see cref="RenderCulling.IsBelowOutlineLodThreshold"/>).</param>
+    /// <param name="recordedUnrotatedWidth">Recorded pre-rotation footprint width (0 when
+    /// never rotated or legacy); see <c>Component.UnrotatedWidthMicrometers</c>.</param>
+    /// <param name="recordedUnrotatedHeight">Recorded pre-rotation footprint height.</param>
     public void Draw(DrawingContext context, double x, double y, double width, double height,
-        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom)
+        double rotationDegrees, IReadOnlyList<OutlinePolygon> outlines, bool isDimmed, double zoom,
+        double recordedUnrotatedWidth = 0, double recordedUnrotatedHeight = 0)
     {
         var geometries = _geometryCache.GetValue(outlines, BuildGeometries);
 
         double centerX = x + width / 2.0;
         double centerY = y + height / 2.0;
-        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(x, y, width, height, rotationDegrees);
+        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(
+            x, y, width, height, rotationDegrees, recordedUnrotatedWidth, recordedUnrotatedHeight);
         var transform = Matrix.CreateTranslation(destRect.X, destRect.Y)
                       * GdsPolygonRenderer.BuildRotationMatrix(rotationDegrees, centerX, centerY);
 
@@ -107,9 +113,12 @@ internal sealed class ComponentOutlineRenderer
         OutlinePoint point,
         double compX, double compY,
         double compWidth, double compHeight,
-        double rotationDegrees)
+        double rotationDegrees,
+        double recordedUnrotatedWidth = 0, double recordedUnrotatedHeight = 0)
     {
-        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(compX, compY, compWidth, compHeight, rotationDegrees);
+        var destRect = GdsPolygonRenderer.GetUnrotatedDestRect(
+            compX, compY, compWidth, compHeight, rotationDegrees,
+            recordedUnrotatedWidth, recordedUnrotatedHeight);
         var rotation = GdsPolygonRenderer.BuildRotationMatrix(
             rotationDegrees, compX + compWidth / 2.0, compY + compHeight / 2.0);
         return new Point(destRect.X + point.X, destRect.Y + point.Y).Transform(rotation);
@@ -124,11 +133,14 @@ internal sealed class ComponentOutlineRenderer
         OutlinePolygon polygon,
         double compX, double compY,
         double compWidth, double compHeight,
-        double rotationDegrees)
+        double rotationDegrees,
+        double recordedUnrotatedWidth = 0, double recordedUnrotatedHeight = 0)
     {
         var points = new Point[polygon.Points.Count];
         for (int i = 0; i < polygon.Points.Count; i++)
-            points[i] = TransformOutlinePoint(polygon.Points[i], compX, compY, compWidth, compHeight, rotationDegrees);
+            points[i] = TransformOutlinePoint(
+                polygon.Points[i], compX, compY, compWidth, compHeight, rotationDegrees,
+                recordedUnrotatedWidth, recordedUnrotatedHeight);
         return points;
     }
 

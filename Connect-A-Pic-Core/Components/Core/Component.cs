@@ -374,6 +374,8 @@ public partial class Component : ICloneable
         clonedComponent.GdsFactoryFunction = GdsFactoryFunction;
         clonedComponent.GdsFactoryRoutingCrossSection = GdsFactoryRoutingCrossSection;
         clonedComponent.OutlinePolygons = OutlinePolygons;
+        clonedComponent.UnrotatedWidthMicrometers = UnrotatedWidthMicrometers;
+        clonedComponent.UnrotatedHeightMicrometers = UnrotatedHeightMicrometers;
         clonedComponent.IsLocked = false;  // Cloned components should always be unlocked
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;

@@ -56,11 +56,11 @@ public class GdsRotatedFanoutTests : IDisposable
         .EndCell()
         .BeginCell("bend94_route")
             .Boundary(1, 0, AnnulusPoints(0, 0, 20250, 19750, 180, 274.02))
-            .Boundary(68, 0, (-20750, -20698), (1919, -20698), (1919, 500), (-20750, 500), (-20750, -20698))
+            .Boundary(68, 0, (2500, 500), (3000, 500), (3000, 1000), (2500, 1000), (2500, 500))
         .EndCell()
         .BeginCell("straight_route")
             .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
-            .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+            .Boundary(111, 0, (0, 3000), (500, 3000), (500, 3500), (0, 3500), (0, 3000))
         .EndCell()
         .EndLibrary()
         .ToArray();

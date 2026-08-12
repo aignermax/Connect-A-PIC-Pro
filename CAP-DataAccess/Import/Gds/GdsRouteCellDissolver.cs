@@ -33,11 +33,19 @@ internal static class GdsRouteCellDissolver
     /// <summary>
     /// Whether the cell is a routed-interconnect cell that should be dissolved
     /// instead of imported as a component draft. All criteria must hold:
-    /// route-style name prefix, at least one polygon, ALL flattened polygons on
-    /// the configured optical/metal route layers, and no text labels anywhere
-    /// in the subtree (device cells — including gdsfactory's label-free
+    /// route-style name prefix, at least one polygon, all ROUTE content on the
+    /// configured optical/metal route layers, and no text labels anywhere in
+    /// the subtree (device cells — including gdsfactory's label-free
     /// <c>stub_*</c> rectangles by name, and every labeled PDK cell by texts —
     /// never qualify).
+    /// <para>
+    /// Envelope tolerance: gdsfactory emits its route cells with a DEVREC-style
+    /// envelope polygon (e.g. layer (68,0)) wrapping the core — structurally an
+    /// envelope, not device geometry. Non-route polygons are therefore allowed
+    /// when each of their bounding boxes fully CONTAINS the route geometry's
+    /// bounding box; any polygon that adds its own geometry outside disqualifies
+    /// the cell (real device content).
+    /// </para>
     /// </summary>
     public static bool IsRouteCell(
         string cellName, FlattenedGdsCell flattened, GdsHierarchyImportOptions options)
@@ -49,15 +57,29 @@ internal static class GdsRouteCellDissolver
 
         var routeLayers = new HashSet<(int, int)>(
             options.RouteLayers.Concat(options.MetalRouteLayers));
-        return flattened.Polygons.All(p => routeLayers.Contains((p.Layer, p.DataType)));
+        var routePolygons = flattened.Polygons
+            .Where(p => routeLayers.Contains((p.Layer, p.DataType)))
+            .ToList();
+        if (routePolygons.Count == 0)
+            return false;
+        if (routePolygons.Count == flattened.Polygons.Count)
+            return true;
+
+        var routeBBox = BoundingUnion(routePolygons);
+        const double envelopeToleranceUm = 0.01;
+        return flattened.Polygons
+            .Where(p => !routeLayers.Contains((p.Layer, p.DataType)))
+            .All(p => Contains(BoundingUnion(p), routeBBox, envelopeToleranceUm));
     }
 
     /// <summary>
-    /// Transforms the cell's flattened polygons through the instance's true GDS
-    /// transform into top-cell app space (Y-down, origin at the top bbox
-    /// top-left — the frame the route matcher works in) and appends them to
-    /// <paramref name="waveguideSink"/> or <paramref name="metalSink"/> by
-    /// layer, so optical and metal networks never merge.
+    /// Transforms the cell's flattened ROUTE-LAYER polygons through the
+    /// instance's true GDS transform into top-cell app space (Y-down, origin at
+    /// the top bbox top-left — the frame the route matcher works in) and appends
+    /// them to <paramref name="waveguideSink"/> or <paramref name="metalSink"/>
+    /// by layer, so optical and metal networks never merge. Envelope/marker
+    /// polygons (non-route layers, see <see cref="IsRouteCell"/>) are skipped —
+    /// they wrap the route, they are not part of it.
     /// </summary>
     public static void Dissolve(
         GdsInstance instance,
@@ -68,10 +90,14 @@ internal static class GdsRouteCellDissolver
         List<GdsOutlinePolygon> metalSink)
     {
         var metalLayers = new HashSet<(int, int)>(options.MetalRouteLayers);
+        var routeLayers = new HashSet<(int, int)>(
+            options.RouteLayers.Concat(options.MetalRouteLayers));
         var transform = GdsInstancePinProjector.TrueTransform(instance);
 
         foreach (var polygon in flattened.Polygons)
         {
+            if (!routeLayers.Contains((polygon.Layer, polygon.DataType)))
+                continue;
             var sink = metalLayers.Contains((polygon.Layer, polygon.DataType))
                 ? metalSink
                 : waveguideSink;
@@ -92,4 +118,30 @@ internal static class GdsRouteCellDissolver
 
     private static GdsOutlinePoint ToAppSpace(GdsPoint placed, GdsBoundingBox topBBox) =>
         new(placed.X - topBBox.MinX, topBBox.MaxY - placed.Y);
+
+    private static GdsBoundingBox BoundingUnion(GdsPolygon polygon) =>
+        BoundingUnion(new[] { polygon });
+
+    private static GdsBoundingBox BoundingUnion(IReadOnlyList<GdsPolygon> polygons)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        foreach (var polygon in polygons)
+        {
+            foreach (var point in polygon.Points)
+            {
+                minX = Math.Min(minX, point.X);
+                minY = Math.Min(minY, point.Y);
+                maxX = Math.Max(maxX, point.X);
+                maxY = Math.Max(maxY, point.Y);
+            }
+        }
+        return new GdsBoundingBox(minX, minY, maxX, maxY);
+    }
+
+    /// <summary>True when <paramref name="outer"/> contains <paramref name="inner"/>
+    /// within <paramref name="toleranceUm"/> on every side.</summary>
+    private static bool Contains(GdsBoundingBox outer, GdsBoundingBox inner, double toleranceUm) =>
+        outer.MinX <= inner.MinX + toleranceUm && outer.MinY <= inner.MinY + toleranceUm
+        && outer.MaxX >= inner.MaxX - toleranceUm && outer.MaxY >= inner.MaxY - toleranceUm;
 }

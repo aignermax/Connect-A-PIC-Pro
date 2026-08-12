@@ -208,6 +208,63 @@ public class GdsRouteCellDissolveTests
         result.Infos.ShouldNotContain(i => i.Contains("dissolved"));
     }
 
+    [Fact]
+    public async Task Explode_RouteCellWithEnvelopeLayer_StillDissolves()
+    {
+        // gdsfactory route cells carry a DEVREC-style envelope polygon (68,0)
+        // that merely WRAPS the core — structurally an envelope, not device
+        // geometry. The cell must still dissolve, and the envelope must not
+        // feed the route matcher.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("straight_9", 10000, 0)
+                .SRef("wgB", 20000, 0)
+            .EndCell()
+            .DeviceCell("wgA")
+            .DeviceCell("wgB")
+            .BeginCell("straight_9")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(68, 0, (-500, 0), (10500, 0), (10500, 4000), (-500, 4000), (-500, 0))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.Select(d => d.CellName).ShouldBe(new[] { "wgA", "wgB" });
+        result.Instances.ShouldAllBe(i => i.CellName != "straight_9");
+        var connection = result.Connections.ShouldHaveSingleItem();
+        EndpointNames(result, connection).ShouldBe(new[] { "wgA#0.out", "wgB#0.in" }, ignoreOrder: true);
+        result.TopCellWaveguidePolygons.ShouldBeEmpty("the core was consumed by the matcher");
+        result.Infos.ShouldContain(i => i.Contains("dissolved"));
+    }
+
+    [Fact]
+    public async Task Explode_RouteCellWithOwnDeviceGeometry_IsNotDissolved()
+    {
+        // An extra polygon that does NOT wrap the route geometry is device
+        // content, not an envelope — the cell stays a component draft.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("straight_9", 0, 0)
+            .EndCell()
+            .BeginCell("straight_9")
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 3000), (500, 3000), (500, 3500), (0, 3500), (0, 3000))
+            .EndCell()
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.ImportedCellDrafts.ShouldHaveSingleItem().CellName.ShouldBe("straight_9");
+        result.Instances.ShouldHaveSingleItem().CellName.ShouldBe("straight_9");
+        result.Infos.ShouldNotContain(i => i.Contains("dissolved"));
+    }
+
     // ── Fixture helpers ──────────────────────────────────────────────────────
 
     private static async Task<GdsLibrary> ReadLibraryAsync(byte[] gds) =>

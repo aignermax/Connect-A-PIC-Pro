@@ -88,6 +88,7 @@ public class RotateComponentCommand : IUndoableCommand
     /// </summary>
     internal static void ApplyModelRotation90(Component comp)
     {
+        RecordUnrotatedDimensions(comp);
         var width = comp.WidthMicrometers;
         var height = comp.HeightMicrometers;
 
@@ -144,6 +145,7 @@ public class RotateComponentCommand : IUndoableCommand
     /// </summary>
     internal static void ApplyModelRotation(Component comp, double degrees)
     {
+        RecordUnrotatedDimensions(comp);
         var radians = degrees * Math.PI / 180.0;
         var cos = Math.Cos(radians);
         var sin = Math.Sin(radians);
@@ -172,5 +174,20 @@ public class RotateComponentCommand : IUndoableCommand
         comp.RotationDegrees = (comp.RotationDegrees + degrees) % 360;
         if (comp.RotationDegrees < 0)
             comp.RotationDegrees += 360;
+    }
+
+    /// <summary>
+    /// Records the pre-rotation footprint dims ONCE as the unrotated outline
+    /// frame (<see cref="Component.UnrotatedWidthMicrometers"/>). Idempotent by
+    /// design: the unrotated frame is invariant under further rotations, and
+    /// undo/redo cycles must never overwrite it with already-rotated dims.
+    /// </summary>
+    private static void RecordUnrotatedDimensions(Component comp)
+    {
+        if (comp.UnrotatedWidthMicrometers <= 0 || comp.UnrotatedHeightMicrometers <= 0)
+        {
+            comp.UnrotatedWidthMicrometers = comp.WidthMicrometers;
+            comp.UnrotatedHeightMicrometers = comp.HeightMicrometers;
+        }
     }
 }
