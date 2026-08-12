@@ -42,7 +42,17 @@ public sealed record KnownComponent(
     string PdkSource,
     double WidthUm,
     double HeightUm,
-    IReadOnlyList<DetectedPin> Pins);
+    IReadOnlyList<DetectedPin> Pins)
+{
+    /// <summary>
+    /// True when the matched template carries parameters (sliders). A bare
+    /// cell-name hit implies DEFAULT parameters in both nazca and gdsfactory
+    /// naming (non-default values change the cell name), so exact matches are
+    /// safe; hash-stripped lookup candidates must NOT bind parametric
+    /// templates — a stripped gdsfactory hash proves nothing about settings.
+    /// </summary>
+    public bool IsParametric { get; init; }
+}
 
 /// <summary>
 /// Tunables for <see cref="GdsHierarchyImporter"/>.
@@ -54,6 +64,14 @@ public sealed record GdsHierarchyImportOptions
 
     /// <summary>Pin detection configuration forwarded to <see cref="GdsPinDetector"/>.</summary>
     public GdsPinDetectionOptions PinDetection { get; init; } = new();
+
+    /// <summary>
+    /// Optional candidate-list resolver (all distinct matches for a cell name,
+    /// precedence-ordered, INCLUDING same-key collisions). When set, the
+    /// session prefers it over <see cref="ResolveKnownComponent"/> and
+    /// disambiguates multiple candidates by pin-layout fit — never a guess.
+    /// </summary>
+    public Func<string, IReadOnlyList<KnownComponent>>? ResolveKnownComponentCandidates { get; init; }
 
     /// <summary>
     /// (Layer, Datatype) pairs whose top-cell-OWN polygons are imported as frozen
