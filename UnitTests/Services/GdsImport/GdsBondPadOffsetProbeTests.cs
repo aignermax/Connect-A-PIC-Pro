@@ -162,7 +162,7 @@ public class GdsBondPadOffsetProbeTests : IDisposable
             // Rotate like the app's RotateComponentCommand (90° CCW about the box
             // centre, pin offsets included) — same precedent as GdsMziElectricalFixture.
             for (var q = (int)Math.Round(rot / 90.0); q > 0; q--)
-                CAP.Avalonia.Commands.RotateComponentCommand.ApplyModelRotation90(comp);
+                CAP_Core.Components.Core.ComponentPoseTransform.Rotate90CounterClockwise(comp);
             canvas.AddComponent(comp, template.Name, template.PdkSource);
             var placement = NazcaCoordinateMapper.GetCellPlacement(comp, rawOverrideAnchor: null);
             expected.Add((id,

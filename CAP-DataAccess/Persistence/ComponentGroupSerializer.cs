@@ -32,6 +32,7 @@ public static class ComponentGroupSerializer
             PhysicalX = group.PhysicalX,
             PhysicalY = group.PhysicalY,
             Rotation90CounterClock = (int)group.Rotation90CounterClock,
+            RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(group),
             ParentGroupId = group.ParentGroup?.Identifier,
             ParentGroupIdGuid = group.ParentGroup?.Id.ToString()
         };
@@ -121,6 +122,11 @@ public static class ComponentGroupSerializer
             // Null in files that predate background geometry — stays null.
             OutlinePolygons = dto.BackgroundPolygons
         };
+
+        // The exact continuous angle (non-cardinal GDS placements) supersedes the
+        // discrete quarter-turn value the property setter above applied.
+        if (dto.RotationDegrees is double exactRotation)
+            ComponentPoseTransform.ApplyExactRotation(group, exactRotation);
 
         // Add child components - prefer Guid lookup, fall back to name lookup
         var useGuids = guidLookup != null && dto.ChildComponentGuids.Count == dto.ChildComponentIds.Count

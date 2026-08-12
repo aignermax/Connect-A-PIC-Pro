@@ -1305,11 +1305,18 @@ public class ChildComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>
@@ -1341,11 +1348,18 @@ public class ComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>
