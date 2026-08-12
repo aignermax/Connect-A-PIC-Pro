@@ -254,8 +254,9 @@ public partial class WaveguideRouter
     /// <summary>
     /// Direct/S-bend-first policy (issue #860): builds the styled candidate for the pin
     /// geometry and accepts it only when it is clean AND clear of the SAME obstacle grid A*
-    /// uses (component bodies, frozen paths, registered sibling waveguides). Returns null
-    /// when no styled geometry fits or the candidate is blocked — A* then routes as before.
+    /// uses (component bodies, frozen paths, registered sibling waveguides) — with the same
+    /// pin corridors cleared that A* would clear. Returns null when no styled geometry fits
+    /// or the candidate is blocked — A* then routes as before.
     /// </summary>
     private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
     {
@@ -264,7 +265,7 @@ public partial class WaveguideRouter
         if (candidate == null
             || !candidate.IsValid
             || PathIntersectionDetector.HasSelfIntersection(candidate)
-            || IsDirectCandidateBlocked(candidate.Segments, startPin.ParentComponent, endPin.ParentComponent))
+            || IsDirectCandidateBlocked(candidate.Segments, startPin, endPin, bendRadius))
         {
             return null;
         }
@@ -275,26 +276,46 @@ public partial class WaveguideRouter
     }
 
     /// <summary>
-    /// Blocked-cell test for the direct styled candidate: like <see cref="IsPathBlocked(IEnumerable{PathSegment})"/>,
-    /// but the endpoint components' OWN obstacle cells don't count — A* clears a
-    /// pin corridor through them, and the styled candidate needs the same
-    /// allowance or every laterally offset S-bend defers to A* (field report:
-    /// only 10–20 % of clear channels got the styled route).
+    /// Blocked-cell test for the direct styled candidate, on the SAME grid state A*
+    /// would route on: the pin corridors <see cref="TryRouteAStar"/> clears (start
+    /// outward, end facing and end terminal — 3·radius long, radius wide) are cleared
+    /// for the test and restored afterwards. A styled path may therefore dip into the
+    /// endpoint components' own cells at the pin exit/entry — but a path that keeps
+    /// running THROUGH a component body beyond the corridor (field report: the S-bend
+    /// flowed straight through the target component whose pin faced away) stays
+    /// blocked and defers to A*, which routes around the body. Waveguide and frozen-path
+    /// obstacles are never cleared (corridors only clear component cells), matching the
+    /// previous policy for sibling routes.
     /// </summary>
     private bool IsDirectCandidateBlocked(
-        IEnumerable<PathSegment> segments, Component? startComponent, Component? endComponent)
+        IReadOnlyList<PathSegment> segments, PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
     {
         if (PathfindingGrid == null) return false;
-        bool IsBlockedForDirect(int gx, int gy)
+
+        var (startX, startY) = startPin.GetAbsolutePosition();
+        var (endX, endY) = endPin.GetAbsolutePosition();
+        double startAngle = startPin.GetAbsoluteAngle();
+        double endFacingAngle = endPin.GetAbsoluteAngle();
+        double endInputAngle = AngleUtilities.NormalizeAngle(endFacingAngle + 180);
+        double corridorLength = bendRadius * 3;
+        double corridorWidth = bendRadius;
+
+        var clearedStart = PathfindingGrid.ClearPinCorridor(
+            startX, startY, startAngle, corridorLength, corridorWidth);
+        var clearedEndApproach = PathfindingGrid.ClearPinCorridor(
+            endX, endY, endFacingAngle, corridorLength, corridorWidth);
+        var clearedEndTerminal = PathfindingGrid.ClearPinCorridor(
+            endX, endY, endInputAngle, corridorLength, corridorWidth);
+        try
         {
-            if (!PathfindingGrid.IsBlocked(gx, gy)) return false;
-            if (startComponent is not null && PathfindingGrid.IsCellOwnedBy(gx, gy, startComponent))
-                return false;
-            if (endComponent is not null && PathfindingGrid.IsCellOwnedBy(gx, gy, endComponent))
-                return false;
-            return true;
+            return IsPathBlocked(segments, PathfindingGrid.IsBlocked);
         }
-        return IsPathBlocked(segments, IsBlockedForDirect);
+        finally
+        {
+            PathfindingGrid.RestoreCells(clearedStart);
+            PathfindingGrid.RestoreCells(clearedEndApproach);
+            PathfindingGrid.RestoreCells(clearedEndTerminal);
+        }
     }
 
     /// <summary>

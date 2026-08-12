@@ -203,6 +203,68 @@ public class DirectRouteFirstPolicyTests
     }
 
     [Fact]
+    public void Route_DirectPathThroughStartBodyBeyondCorridor_RejectedHonestlyBlocked()
+    {
+        // The pin-corridor allowance must END at the corridor (3·radius × radius,
+        // same as A* clears) — a styled path that keeps running through the start
+        // component's body BEYOND the corridor must not be accepted. Here the pin
+        // sits inside a thin, wide body deeper than the corridor reaches, so even
+        // A* cannot get there: the connection must be HONESTLY flagged blocked,
+        // never silently drawn through the body as if everything was fine.
+        var router = CreateRouter();
+        var startComp = CreateBlockComponent(x: 0, y: 8, width: 100, height: 4);
+        var endComp = CreateBlockComponent(x: 200, y: 10, width: 20, height: 30);
+        router.InitializePathfindingGrid(-60, -60, 340, 160, new[] { startComp, endComp });
+
+        var start = new PhysicalPin
+        {
+            Name = "out", OffsetXMicrometers = 20, OffsetYMicrometers = 2,
+            AngleDegrees = 0, ParentComponent = startComp,
+        };
+        var end = new PhysicalPin
+        {
+            Name = "in", OffsetXMicrometers = 0, OffsetYMicrometers = 15,
+            AngleDegrees = 180, ParentComponent = endComp,
+        };
+
+        var path = router.Route(start, end);
+
+        path.IsDirectStyledRoute.ShouldBeFalse(
+            "a styled path through the component body (beyond the pin corridor) must be rejected");
+        path.IsBlockedFallback.ShouldBeTrue(
+            "the pin is buried deeper than the A* pin corridor reaches — honestly flagged");
+    }
+
+    [Fact]
+    public void Route_DirectPathThroughEndBodyBeyondCorridor_RejectedHonestlyBlocked()
+    {
+        // Mirror image on the target side: the collinear straight would run
+        // through the END component's body to reach a pin seated past its corridor.
+        var router = CreateRouter();
+        var startComp = CreateBlockComponent(x: 0, y: 0, width: 20, height: 30);
+        var endComp = CreateBlockComponent(x: 100, y: 8, width: 100, height: 4);
+        router.InitializePathfindingGrid(-60, -60, 340, 160, new[] { startComp, endComp });
+
+        var start = new PhysicalPin
+        {
+            Name = "out", OffsetXMicrometers = 20, OffsetYMicrometers = 15,
+            AngleDegrees = 0, ParentComponent = startComp,
+        };
+        var end = new PhysicalPin
+        {
+            Name = "in", OffsetXMicrometers = 50, OffsetYMicrometers = 2,
+            AngleDegrees = 180, ParentComponent = endComp,
+        };
+
+        var path = router.Route(start, end);
+
+        path.IsDirectStyledRoute.ShouldBeFalse(
+            "a styled path through the target component's body must be rejected");
+        path.IsBlockedFallback.ShouldBeTrue(
+            "the pin is buried deeper than the A* pin corridor reaches — honestly flagged");
+    }
+
+    [Fact]
     public void Route_WithoutGrid_StillPrefersDirectRoute()
     {
         var router = CreateRouter();

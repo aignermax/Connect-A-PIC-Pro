@@ -514,21 +514,6 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
-    /// True when the cell is part of the given component's registered obstacle
-    /// region. Used by the direct-route policy: the endpoint components' own
-    /// cells are legitimately crossed at the pin exit/entry (A* clears pin
-    /// corridors for them), so they must not count as blockers there.
-    /// </summary>
-    public bool IsCellOwnedBy(int gridX, int gridY, Component component)
-    {
-        lock (_componentCellsLock)
-        {
-            return _componentCells.TryGetValue(component, out var cells)
-                && cells.Contains((gridX, gridY));
-        }
-    }
-
-    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>
