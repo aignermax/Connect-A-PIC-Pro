@@ -475,29 +475,4 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// window close deterministically inside that otherwise load-dependent gap.
     /// </summary>
     internal Action? ImportServiceCompletedTestHook { get; set; }
-
-    private static string BuildSummary(GdsPlacementReport report)
-    {
-        var summary = string.Format(
-            LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
-            report.PlacedCount, report.ConnectedCount);
-        if (report.RouteDerivedCount > 0 || report.FrozenRoutePathCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultRouteReconstructionSuffix"),
-                report.RouteDerivedCount, report.FrozenRoutePathCount);
-        }
-        if (report.ReroutedCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"),
-                report.ReroutedCount);
-        }
-        if (report.GroupCreated)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultGroupSuffix"), report.GroupName);
-        }
-        return summary;
-    }
 }
