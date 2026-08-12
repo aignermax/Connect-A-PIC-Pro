@@ -300,7 +300,7 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
-    public async Task Explode_NonCardinalAngle_SnappedToNearestCardinalWithWarning()
+    public async Task Explode_NonCardinalAngle_KeptExactlyWithWarning()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
@@ -313,10 +313,12 @@ public class GdsHierarchyImporterTests
 
         var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
 
-        result.Instances.ShouldHaveSingleItem().RotationDegrees.ShouldBe(270, Tolerance); // 45° → 90° → app −90°
+        // GDS +45° ≡ app −45° ≡ 315° — kept exactly, not snapped to a cardinal:
+        // snapping would move the placed pins off the true projected joints.
+        result.Instances.ShouldHaveSingleItem().RotationDegrees.ShouldBe(315, Tolerance);
         result.Warnings.ShouldContain(w =>
-            w.Contains("45") && w.Contains("90") && w.Contains("Manhattan"));
-        result.Infos.ShouldBeEmpty("the rotation snap is a caveat, not an informational note");
+            w.Contains("45") && w.Contains("kept exactly") && w.Contains("Manhattan"));
+        result.Infos.ShouldBeEmpty("the non-cardinal rotation note is a caveat, not an informational note");
     }
 
     // ── Abutment edge cases ──────────────────────────────────────────────────

@@ -124,4 +124,53 @@ public class RotateComponentCommand : IUndoableCommand
         // Update the component's discrete rotation and RotationDegrees
         comp.RotateBy90CounterClockwise();
     }
+
+    /// <summary>
+    /// Model-level rotation around the component center by an ARBITRARY angle, in
+    /// the same convention <see cref="ApplyModelRotation90"/> uses (0° = east,
+    /// positive toward south in the Y-down plane — for θ = 90° the math below
+    /// reduces exactly to <see cref="ApplyModelRotation90"/>). Physical pin
+    /// offsets rotate around the old center; width/height become the axis-aligned
+    /// bounding box of the rotated footprint, so an unchanged top-left corner
+    /// (<c>PhysicalX</c>/<c>PhysicalY</c>) is the rotated AABB's top-left — the
+    /// same frame the GDS projector computes for the true instance transform.
+    /// Pin angles stay relative to the component (<c>GetAbsoluteAngle()</c> adds
+    /// <c>RotationDegrees</c>). The discrete tile matrix (<c>Parts</c>) and
+    /// <c>Rotation90CounterClock</c> cannot represent non-cardinal angles and are
+    /// deliberately left untouched — rendering and absolute pin angles follow the
+    /// continuous <c>RotationDegrees</c>. Used by programmatic placement (GDS
+    /// import), where snapping a non-Manhattan instance angle to a cardinal would
+    /// move its pins off the true joints; interactive rotation stays cardinal.
+    /// </summary>
+    internal static void ApplyModelRotation(Component comp, double degrees)
+    {
+        var radians = degrees * Math.PI / 180.0;
+        var cos = Math.Cos(radians);
+        var sin = Math.Sin(radians);
+
+        var width = comp.WidthMicrometers;
+        var height = comp.HeightMicrometers;
+        var cx = width / 2;
+        var cy = height / 2;
+
+        // Axis-aligned bounding box of the rotated footprint
+        var newWidth = width * Math.Abs(cos) + height * Math.Abs(sin);
+        var newHeight = width * Math.Abs(sin) + height * Math.Abs(cos);
+
+        foreach (var pin in comp.PhysicalPins)
+        {
+            var x = pin.OffsetXMicrometers - cx;
+            var y = pin.OffsetYMicrometers - cy;
+            pin.OffsetXMicrometers = x * cos - y * sin + newWidth / 2;
+            pin.OffsetYMicrometers = x * sin + y * cos + newHeight / 2;
+            // NOTE: Pin angles stay relative to the component — see ApplyModelRotation90.
+        }
+
+        comp.WidthMicrometers = newWidth;
+        comp.HeightMicrometers = newHeight;
+
+        comp.RotationDegrees = (comp.RotationDegrees + degrees) % 360;
+        if (comp.RotationDegrees < 0)
+            comp.RotationDegrees += 360;
+    }
 }
