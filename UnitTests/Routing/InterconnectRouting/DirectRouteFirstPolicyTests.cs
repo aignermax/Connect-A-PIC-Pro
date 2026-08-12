@@ -172,6 +172,37 @@ public class DirectRouteFirstPolicyTests
     }
 
     [Fact]
+    public void Route_EndpointComponentsOwnPaddedCells_DoNotDeferToAStar()
+    {
+        // The styled candidate leaves/enters the pin THROUGH the endpoint
+        // component's own padded obstacle cells — the same allowance A* gets
+        // via the pin corridor. Field report on a dense array import: only
+        // 10–20 % of clear channels got the styled route without this.
+        var router = CreateRouter();
+        var startComp = CreateBlockComponent(x: 0, y: 0, width: 20, height: 30);
+        var endComp = CreateBlockComponent(x: 180, y: 40, width: 20, height: 30);
+        router.InitializePathfindingGrid(-60, -60, 340, 220, new[] { startComp, endComp });
+
+        var start = new PhysicalPin
+        {
+            Name = "out", OffsetXMicrometers = 20, OffsetYMicrometers = 15,
+            AngleDegrees = 0, ParentComponent = startComp,
+        };
+        var end = new PhysicalPin
+        {
+            Name = "in", OffsetXMicrometers = 0, OffsetYMicrometers = 15,
+            AngleDegrees = 180, ParentComponent = endComp,
+        };
+
+        var path = router.Route(start, end);
+
+        path.IsDirectStyledRoute.ShouldBeTrue(
+            "exiting through the endpoint's own padded cells must not defer the styled route to A*");
+        path.IsValid.ShouldBeTrue();
+        AssertEndpointsMatchPins(path, start, end);
+    }
+
+    [Fact]
     public void Route_WithoutGrid_StillPrefersDirectRoute()
     {
         var router = CreateRouter();

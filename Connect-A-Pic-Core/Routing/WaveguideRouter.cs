@@ -264,13 +264,36 @@ public partial class WaveguideRouter
         if (candidate == null
             || !candidate.IsValid
             || PathIntersectionDetector.HasSelfIntersection(candidate)
-            || IsPathBlocked(candidate.Segments))
+            || IsDirectCandidateBlocked(candidate.Segments, startPin.ParentComponent, endPin.ParentComponent))
         {
             return null;
         }
 
         candidate.IsDirectStyledRoute = true;
         return candidate;
+    }
+
+    /// <summary>
+    /// Blocked-cell test for the direct styled candidate: like <see cref="IsPathBlocked(IEnumerable{PathSegment})"/>,
+    /// but the endpoint components' OWN obstacle cells don't count — A* clears a
+    /// pin corridor through them, and the styled candidate needs the same
+    /// allowance or every laterally offset S-bend defers to A* (field report:
+    /// only 10–20 % of clear channels got the styled route).
+    /// </summary>
+    private bool IsDirectCandidateBlocked(
+        IEnumerable<PathSegment> segments, Component? startComponent, Component? endComponent)
+    {
+        if (PathfindingGrid == null) return false;
+        bool IsBlockedForDirect(int gx, int gy)
+        {
+            if (!PathfindingGrid.IsBlocked(gx, gy)) return false;
+            if (startComponent is not null && PathfindingGrid.IsCellOwnedBy(gx, gy, startComponent))
+                return false;
+            if (endComponent is not null && PathfindingGrid.IsCellOwnedBy(gx, gy, endComponent))
+                return false;
+            return true;
+        }
+        return IsPathBlocked(segments, IsBlockedForDirect);
     }
 
     /// <summary>
