@@ -527,35 +527,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     private (double MinX, double MinY, double MaxX, double MaxY) GetSegmentBounds(PathSegment segment)
     {
         const double WaveguideWidthPadding = 2.0; // Typical waveguide width in micrometers
-
-        if (segment is StraightSegment straight)
-        {
-            double minX = Math.Min(straight.StartPoint.X, straight.EndPoint.X) - WaveguideWidthPadding;
-            double minY = Math.Min(straight.StartPoint.Y, straight.EndPoint.Y) - WaveguideWidthPadding;
-            double maxX = Math.Max(straight.StartPoint.X, straight.EndPoint.X) + WaveguideWidthPadding;
-            double maxY = Math.Max(straight.StartPoint.Y, straight.EndPoint.Y) + WaveguideWidthPadding;
-            return (minX, minY, maxX, maxY);
-        }
-        else if (segment is BendSegment bend)
-        {
-            // For arcs, the bounding box depends on which quadrants the arc passes through
-            // Conservative approach: use center +/- radius + padding
-            double minX = bend.Center.X - bend.RadiusMicrometers - WaveguideWidthPadding;
-            double minY = bend.Center.Y - bend.RadiusMicrometers - WaveguideWidthPadding;
-            double maxX = bend.Center.X + bend.RadiusMicrometers + WaveguideWidthPadding;
-            double maxY = bend.Center.Y + bend.RadiusMicrometers + WaveguideWidthPadding;
-
-            // Refine bounds by checking start and end points
-            minX = Math.Min(minX, Math.Min(bend.StartPoint.X, bend.EndPoint.X) - WaveguideWidthPadding);
-            minY = Math.Min(minY, Math.Min(bend.StartPoint.Y, bend.EndPoint.Y) - WaveguideWidthPadding);
-            maxX = Math.Max(maxX, Math.Max(bend.StartPoint.X, bend.EndPoint.X) + WaveguideWidthPadding);
-            maxY = Math.Max(maxY, Math.Max(bend.StartPoint.Y, bend.EndPoint.Y) + WaveguideWidthPadding);
-
-            return (minX, minY, maxX, maxY);
-        }
-
-        // Unknown segment type - return zero bounds
-        return (0, 0, 0, 0);
+        // Tight bounds: arcs contribute their swept extent only — the full-circle
+        // superset inflated group collision footprints far past the geometry.
+        return PathSegmentBounds.Of(segment, WaveguideWidthPadding);
     }
 
     /// <summary>
