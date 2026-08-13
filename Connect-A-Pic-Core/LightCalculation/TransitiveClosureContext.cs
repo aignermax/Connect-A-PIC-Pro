@@ -15,6 +15,17 @@ public sealed record TransitiveClosureContext
     public IReadOnlyDictionary<Guid, string>? PinOwnerNames { get; init; }
 
     /// <summary>
+    /// Maps each pin flow id to the Owning component INSTANCE's identity
+    /// (<c>Component.Id</c>). The passivity block check groups by this — never by
+    /// display name: two instances of the same component share a name, and merging
+    /// their blocks pulls inter-instance connection weights into the block SVD,
+    /// which inflates σ_max past the noise band and falsely aborts a passive
+    /// circuit (field report: two connected '2x2 MMI Coupler' instances). Null
+    /// falls back to name grouping (legacy contexts in tests).
+    /// </summary>
+    public IReadOnlyDictionary<Guid, Guid>? PinOwnerInstanceIds { get; init; }
+
+    /// <summary>
     /// Pins that are externally observable (circuit ports, e.g. coupler pins or a
     /// group's external pins). The energy guard (|H| ≤ 1) applies only to transfers
     /// between two observable pins: field enhancement at pins INSIDE a resonator
