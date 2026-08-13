@@ -830,11 +830,13 @@ public class GdsHierarchyImporterTests
     [Fact]
     public async Task Explode_ResidualPolygonsOverOutlineCap_DroppedWithTrueCountWarning()
     {
-        // 2500 tiny (68,0) squares = 12500 outline points against the 8000-point
-        // cap. A square never simplifies below its 5 ring points (and must not
-        // silently vanish when the escalated tolerance overshoots it), so the cap
-        // is enforced by counted drops only: 1600 × 5 = 8000 points exactly fill
-        // the cap, 900 are dropped, and the warning reports that true count.
+        // 2500 tiny (68,0) squares = 12500 outline points against an 8000-point
+        // cap (set explicitly so the test does not depend on the default's
+        // value). A square never simplifies below its 5 ring points (and must
+        // not silently vanish when the escalated tolerance overshoots it), so
+        // the cap is enforced by counted drops only: 1600 × 5 = 8000 points
+        // exactly fill the cap, 900 are dropped, and the warning reports that
+        // true count.
         var writer = GdsTestWriter.Create().StandardPrologue().BeginCell("TOP");
         for (int i = 0; i < 2500; i++)
         {
@@ -844,7 +846,8 @@ public class GdsHierarchyImporterTests
         }
         var library = await ReadLibraryAsync(writer.EndCell().EndLibrary().ToArray());
 
-        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP",
+            new GdsHierarchyImportOptions { MaxOutlinePointsPerCell = 8000 });
 
         result.TopCellResidualPolygons.Count.ShouldBe(1600,
             "1600 squares × 5 points exactly fill the 8000-point cap");
