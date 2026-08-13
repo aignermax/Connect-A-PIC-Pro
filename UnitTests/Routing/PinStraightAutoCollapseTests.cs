@@ -152,6 +152,8 @@ public class PinStraightAutoCollapseTests
             MinBendRadiusMicrometers = nestedRadius,
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
+            // The collapse pass only applies to grid routes, so force the A* pipeline.
+            PreferDirectStyledRoutes = false,
         };
         var start = TestComponentFactory.CreatePinlessComponent(0, 0);
         var end = TestComponentFactory.CreatePinlessComponent(0, 275);
@@ -208,6 +210,8 @@ public class PinStraightAutoCollapseTests
             MinBendRadiusMicrometers = radius,
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
+            // The collapse pass only applies to grid routes, so force the A* pipeline.
+            PreferDirectStyledRoutes = false,
         };
         var start = TestComponentFactory.CreatePinlessComponent(0, 0);
         var end = TestComponentFactory.CreatePinlessComponent(0, pinSeparationY - 25);

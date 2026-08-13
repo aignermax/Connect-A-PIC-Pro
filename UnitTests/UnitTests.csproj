@@ -75,6 +75,7 @@
   <ItemGroup>
     <None Include="ComponentRegistry\RegistryClient\Fixtures\*.json" CopyToOutputDirectory="PreserveNewest" />
     <None Include="ComponentRegistry\RegistryClient\Fixtures\*.svg" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="TestData\*.lun" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
 </Project>

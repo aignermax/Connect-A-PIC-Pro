@@ -38,10 +38,13 @@ internal static class CanvasAndPanelExtensions
             // on every app restart.
             var preferences = sp.GetRequiredService<UserPreferencesService>();
             canvas.UseDiagonalRouting = preferences.GetUseDiagonalRouting();
+            canvas.PreferDirectStyledRoutes = preferences.GetPreferDirectStyledRoutes();
             canvas.PropertyChanged += (_, e) =>
             {
                 if (e.PropertyName == nameof(DesignCanvasViewModel.UseDiagonalRouting))
                     preferences.SetUseDiagonalRouting(canvas.UseDiagonalRouting);
+                if (e.PropertyName == nameof(DesignCanvasViewModel.PreferDirectStyledRoutes))
+                    preferences.SetPreferDirectStyledRoutes(canvas.PreferDirectStyledRoutes);
             };
 
             return canvas;

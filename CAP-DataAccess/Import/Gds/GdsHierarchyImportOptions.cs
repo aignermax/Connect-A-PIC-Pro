@@ -141,11 +141,11 @@ public sealed record GdsHierarchyImportOptions
     /// Maximum total outline points kept per cell draft. When simplification at
     /// the configured tolerance exceeds this, the tolerance is raised
     /// adaptively; as a last resort the smallest-area polygons are dropped
-    /// (with a warning). Default: 8000 — outline geometry is built once per
+    /// (with a warning). Default: 9500 — outline geometry is built once per
     /// template and drawn from a cached Skia geometry, so detail is cheap; the
     /// cap only guards degenerate multi-million-point cells.
     /// </summary>
-    public int MaxOutlinePointsPerCell { get; init; } = 8000;
+    public int MaxOutlinePointsPerCell { get; init; } = 9500;
 
     /// <summary>
     /// Resolves a GDS cell name to an existing PDK component. Called with the

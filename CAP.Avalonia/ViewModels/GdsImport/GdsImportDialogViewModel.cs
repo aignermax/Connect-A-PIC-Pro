@@ -321,6 +321,16 @@ public partial class GdsImportDialogViewModel : ObservableObject
         // throw ObjectDisposedException instead of unwinding as a cancellation.
         var token = ResetCancellationSource().Token;
 
+        // The dialog closes as soon as the import STARTS — the placement and
+        // re-routing of a large import take minutes and the user should not
+        // have to keep the window open for them (field report: "Connecting
+        // Pins 116/116" and the dialog just waiting). Progress lands in the
+        // status text, and every warning/info is mirrored to the error console
+        // when the run completes. The window close must NOT cancel this run —
+        // OnWindowClosed checks the flag.
+        _continueRunAfterWindowClose = true;
+        OnClose?.Invoke();
+
         try
         {
             var progress = new Progress<string>(msg => StatusText = msg);
@@ -393,6 +403,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            // A run that outlived its window disposes the cancellation source
+            // itself — OnWindowClosed deliberately left it alone.
+            if (_continueRunAfterWindowClose)
+            {
+                _continueRunAfterWindowClose = false;
+                _cts?.Dispose();
+                _cts = null;
+            }
         }
     }
 
@@ -401,103 +419,5 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private async Task RetryAnalysis()
     {
         await StartAnalysisAsync();
-    }
-
-    /// <summary>Cancels the running operation; closes the dialog when idle or completed.</summary>
-    [RelayCommand]
-    private void Cancel()
-    {
-        if (IsBusy)
-        {
-            CancelCurrentRun();
-            return;
-        }
-        OnClose?.Invoke();
-    }
-
-    /// <summary>
-    /// Called by the view when the dialog window closes: cancels the running
-    /// operation (if any) and releases the per-run cancellation source. A close
-    /// mid-import must not leave the background run mutating a canvas the user
-    /// no longer sees.
-    /// </summary>
-    public void OnWindowClosed()
-    {
-        CancelCurrentRun();
-        _cts?.Dispose();
-        _cts = null;
-    }
-
-    /// <summary>
-    /// Replaces the per-run cancellation source, disposing the previous run's, and
-    /// returns the new source. Both entry points no-op while <see cref="IsBusy"/>,
-    /// so the replaced source always belongs to a finished run — but a late
-    /// progress callback, a queued await continuation or a FileStream read of the
-    /// service's off-thread parse may still REFERENCE its token. Cancel BEFORE
-    /// dispose: every .NET registration path (stream reads, task cancellation
-    /// wiring, semaphore waits) short-circuits on an already-cancelled source,
-    /// while registering on a disposed-not-cancelled source throws
-    /// <see cref="ObjectDisposedException"/> ("The CancellationTokenSource has
-    /// been disposed") — the import failure this ordering prevents.
-    /// </summary>
-    private CancellationTokenSource ResetCancellationSource()
-    {
-        CancelCurrentRun();
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        return _cts;
-    }
-
-    /// <summary>
-    /// Cancels the current run's source, tolerating one that a racing reset or
-    /// window close already disposed: <see cref="CancellationTokenSource.Cancel"/>
-    /// throws <see cref="ObjectDisposedException"/> on a disposed source, which
-    /// must never escape as an import failure (the run is over either way).
-    /// </summary>
-    private void CancelCurrentRun()
-    {
-        try
-        {
-            _cts?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // The source was already released by a racing reset/close — nothing to cancel.
-        }
-    }
-
-    /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
-    internal CancellationTokenSource? CurrentCts => _cts;
-
-    /// <summary>
-    /// Test seam (InternalsVisibleTo UnitTests): invoked between the import
-    /// service completing and canvas placement starting, so tests can land a
-    /// window close deterministically inside that otherwise load-dependent gap.
-    /// </summary>
-    internal Action? ImportServiceCompletedTestHook { get; set; }
-
-    private static string BuildSummary(GdsPlacementReport report)
-    {
-        var summary = string.Format(
-            LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
-            report.PlacedCount, report.ConnectedCount);
-        if (report.RouteDerivedCount > 0 || report.FrozenRoutePathCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultRouteReconstructionSuffix"),
-                report.RouteDerivedCount, report.FrozenRoutePathCount);
-        }
-        if (report.ReroutedCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"),
-                report.ReroutedCount);
-        }
-        if (report.GroupCreated)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultGroupSuffix"), report.GroupName);
-        }
-        return summary;
     }
 }

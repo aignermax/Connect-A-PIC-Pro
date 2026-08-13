@@ -332,6 +332,8 @@ public class PinLeadCollapseHardeningTests
             MinBendRadiusMicrometers = bendRadius,
             MinWaveguideSpacingMicrometers = 2.0,
             UseDiagonalRouting = false,
+            // The collapse pass only applies to grid routes, so force the A* pipeline.
+            PreferDirectStyledRoutes = false,
         };
         var start = TestComponentFactory.CreatePinlessComponent(0, 0);
         var end = TestComponentFactory.CreatePinlessComponent(0, 275);
