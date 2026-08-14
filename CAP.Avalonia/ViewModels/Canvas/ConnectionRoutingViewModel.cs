@@ -117,13 +117,14 @@ public partial class ConnectionRoutingViewModel : ObservableObject
 
     /// <summary>
     /// Names the effective geometry of direct-styled Auto routes. For a multi-selection the
-    /// text is shown only when every target resolved to the same direct style — a mixed batch
-    /// has no single truthful label, so the field stays empty and the batch hint takes over.
+    /// text is shown only when every target is Auto-typed and resolved to the same direct
+    /// style — a mixed batch has no single truthful label, so the field stays empty and the
+    /// batch hint takes over.
     /// </summary>
     private static string ComputeEffectiveStyleText(List<WaveguideConnectionViewModel> targets)
     {
         var styles = targets
-            .Select(t => t.Connection.RoutedPath is { IsDirectStyledRoute: true, DirectStyle: { } style }
+            .Select(t => t.Connection is { Type: WaveguideType.Auto, RoutedPath: { IsDirectStyledRoute: true, DirectStyle: { } style } }
                 ? style
                 : (WaveguideType?)null)
             .Distinct()
@@ -154,5 +155,10 @@ public partial class ConnectionRoutingViewModel : ObservableObject
             _commandManager.ExecuteCommand(command);
         else
             command.Execute();
+
+        // An explicit style pick invalidates the "Auto (effective: …)" label immediately;
+        // switching back to Auto leaves it empty until the reroute lands and the next
+        // selection refresh recomputes it — never show a stale claim.
+        EffectiveStyleText = ComputeEffectiveStyleText(targets);
     }
 }

@@ -104,6 +104,59 @@ public class CanvasClickMultiSelectionTests
     }
 
     [Fact]
+    public async Task CanvasClicked_onBatchSelectedConnection_keepsTheClickedConnectionSelected()
+    {
+        // #862 review finding 2: SelectAt marked the clicked connection selected, then the
+        // sync's ClearSelection() also emptied the connection batch — deselecting the very
+        // connection that was just clicked.
+        var canvas = new DesignCanvasViewModel();
+        var interaction = new CanvasInteractionViewModel(canvas, new CommandManager());
+        interaction.CurrentMode = InteractionMode.Select;
+
+        var connections = new List<WaveguideConnectionViewModel>();
+        for (int i = 0; i < 2; i++)
+        {
+            var start = TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
+            start.WidthMicrometers = 250;
+            start.HeightMicrometers = 250;
+            start.PhysicalX = 0;
+            start.PhysicalY = i * 600;
+            var end = TestComponentFactory.CreateStraightWaveGuideWithPhysicalPins();
+            end.WidthMicrometers = 250;
+            end.HeightMicrometers = 250;
+            end.PhysicalX = 400;
+            end.PhysicalY = i * 600 + 300;
+            canvas.AddComponent(start);
+            canvas.AddComponent(end);
+            var connVm = await canvas.ConnectPinsAsync(
+                start.PhysicalPins.First(p => p.Name == "out"),
+                end.PhysicalPins.First(p => p.Name == "in"));
+            connections.Add(connVm!);
+        }
+
+        foreach (var conn in connections)
+        {
+            conn.IsSelected = true;
+            canvas.Selection.SelectedConnections.Add(conn);
+        }
+
+        // Click a routed-path point of the first connection that lies outside every component.
+        var target = connections[0];
+        var clickPoint = target.Connection.RoutedPath!.Segments
+            .Select(s => ((s.StartPoint.X + s.EndPoint.X) / 2, (s.StartPoint.Y + s.EndPoint.Y) / 2))
+            .First(p => !canvas.Components.Any(c =>
+                p.Item1 >= c.X && p.Item1 <= c.X + c.Width &&
+                p.Item2 >= c.Y && p.Item2 <= c.Y + c.Height));
+        interaction.CanvasClicked(clickPoint.Item1, clickPoint.Item2);
+
+        interaction.SelectedWaveguideConnection.ShouldBe(target,
+            "the clicked batch member becomes the single selection");
+        target.IsSelected.ShouldBeTrue("clicking a batch member must not deselect it");
+        canvas.Selection.SelectedConnections.ShouldBeEmpty(
+            "a plain click dissolves the batch down to the clicked connection");
+    }
+
+    [Fact]
     public void SelectComponentAt_rightClickOutsideSelection_collapsesViaTheSharedSync()
     {
         // Right-click shares SelectAt's sync (finding [8]: one sync point, no copies).

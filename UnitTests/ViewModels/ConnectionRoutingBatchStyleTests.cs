@@ -99,6 +99,36 @@ public class ConnectionRoutingBatchStyleTests
         connections[2].Connection.Type.ShouldBe(WaveguideType.SBend);
     }
 
+    [Fact]
+    public async Task EffectiveStyleText_ShownForUniformDirectStyles_EmptyForMixedBatch()
+    {
+        var (canvas, connections) = await CreateCanvasWithConnectionsAsync(count: 2);
+        var routingVm = new ConnectionRoutingViewModel(canvas);
+
+        foreach (var conn in connections)
+        {
+            conn.Connection.RoutedPath!.IsDirectStyledRoute = true;
+            conn.Connection.RoutedPath!.DirectStyle = WaveguideType.SBend;
+        }
+
+        // Uniform batch: every route resolved to the same direct style — the label is truthful.
+        canvas.Selection.SelectedConnections.Add(connections[0]);
+        canvas.Selection.SelectedConnections.Add(connections[1]);
+        routingVm.EffectiveStyleText.ShouldContain(nameof(WaveguideType.SBend));
+
+        // Mixed batch: one A* route among the targets — no single truthful label, stay empty.
+        connections[1].Connection.RoutedPath!.IsDirectStyledRoute = false;
+        canvas.Selection.ClearConnectionSelection();
+        canvas.Selection.SelectedConnections.Add(connections[0]);
+        canvas.Selection.SelectedConnections.Add(connections[1]);
+        routingVm.EffectiveStyleText.ShouldBe("");
+
+        // Single selection (the #868 behavior) still shows the effective style.
+        canvas.Selection.ClearConnectionSelection();
+        routingVm.SelectedConnection = connections[0];
+        routingVm.EffectiveStyleText.ShouldContain(nameof(WaveguideType.SBend));
+    }
+
     /// <summary>
     /// Builds a canvas with <paramref name="count"/> vertically stacked connection pairs,
     /// each already routed with the automatic A* route.

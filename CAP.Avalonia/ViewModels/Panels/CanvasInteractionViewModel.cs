@@ -527,6 +527,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
         {
             conn.IsSelected = false;
         }
+        // Empty the batch connection set BEFORE the click result is applied: the sync below
+        // calls ClearSelection(), which would otherwise deselect a just-clicked batch member.
+        _canvas.Selection.ClearConnectionSelection();
 
         // Find component at position
         var component = ComponentAt(x, y);
