@@ -4,6 +4,7 @@ using CAP_Core.Components;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
+using CAP_Core.Routing;
 using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
@@ -75,6 +76,51 @@ public class ChangeRoutingStyleCommandTests
 
         vm.Connection.Type.ShouldBe(WaveguideType.Auto);
         vm.Connection.IsRouteFrozen.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void Undo_RestoresFrozenImportedRouteGeometry()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var vm = CreateConnectionVm(MatterType.Light);
+        var importedPath = new RoutedPath();
+        importedPath.Segments.Add(new StraightSegment(0, 0, 50, 0, 0));
+        importedPath.Segments.Add(new StraightSegment(50, 0, 50, 30, 90));
+        vm.Connection.RestoreCachedPath(importedPath);
+        vm.Connection.IsRouteFrozen = true;
+
+        var cmd = new ChangeRoutingStyleCommand(canvas, new[] { vm }, WaveguideType.SBend);
+        cmd.Execute();
+        cmd.Undo();
+
+        vm.Connection.Type.ShouldBe(WaveguideType.Auto);
+        vm.Connection.IsRouteFrozen.ShouldBeTrue();
+        vm.Connection.RoutedPath.ShouldNotBeNull();
+        vm.Connection.RoutedPath.Segments.ShouldBe(importedPath.Segments);
+    }
+
+    [Fact]
+    public void Undo_RestoresManualBendEditsOfStyledRoute()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var vm = CreateConnectionVm(MatterType.Light);
+        vm.Connection.Type = WaveguideType.Bend;
+        var editedPath = new RoutedPath();
+        editedPath.Segments.Add(new StraightSegment(0, 0, 40, 0, 0));
+        vm.Connection.RestoreCachedPath(editedPath);
+        vm.Connection.IsRouteFrozen = true;
+        vm.Connection.BendRadiusOverrides[0] = 25.0;
+        vm.Connection.StraightShiftOffsets[0] = 3.5;
+
+        var cmd = new ChangeRoutingStyleCommand(canvas, new[] { vm }, WaveguideType.SBend);
+        cmd.Execute();
+        cmd.Undo();
+
+        vm.Connection.Type.ShouldBe(WaveguideType.Bend);
+        vm.Connection.BendRadiusOverrides.ShouldBe(new Dictionary<int, double> { [0] = 25.0 });
+        vm.Connection.StraightShiftOffsets.ShouldBe(new Dictionary<int, double> { [0] = 3.5 });
+        vm.Connection.RoutedPath.ShouldNotBeNull();
+        vm.Connection.RoutedPath.Segments.ShouldBe(editedPath.Segments);
     }
 
     [Fact]

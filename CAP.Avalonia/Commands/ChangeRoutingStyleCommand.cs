@@ -1,5 +1,6 @@
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Connections;
+using CAP_Core.Routing;
 
 namespace CAP.Avalonia.Commands;
 
@@ -11,7 +12,13 @@ namespace CAP.Avalonia.Commands;
 /// </summary>
 public sealed class ChangeRoutingStyleCommand : IUndoableCommand
 {
-    private sealed record ConnectionState(WaveguideConnectionViewModel Connection, WaveguideType BeforeType);
+    private sealed record ConnectionState(
+        WaveguideConnectionViewModel Connection,
+        WaveguideType BeforeType,
+        bool BeforeFrozen,
+        RoutedPath? BeforePath,
+        Dictionary<int, double> BeforeBendOverrides,
+        Dictionary<int, double> BeforeStraightShifts);
 
     private readonly DesignCanvasViewModel _canvas;
     private readonly List<ConnectionState> _states;
@@ -31,7 +38,13 @@ public sealed class ChangeRoutingStyleCommand : IUndoableCommand
         _states = connections
             .Where(c => !c.Connection.IsElectrical)
             .Distinct()
-            .Select(c => new ConnectionState(c, c.Connection.Type))
+            .Select(c => new ConnectionState(
+                c,
+                c.Connection.Type,
+                c.Connection.IsRouteFrozen,
+                c.Connection.RoutedPath,
+                new Dictionary<int, double>(c.Connection.BendRadiusOverrides),
+                new Dictionary<int, double>(c.Connection.StraightShiftOffsets)))
             .ToList();
     }
 
@@ -55,8 +68,33 @@ public sealed class ChangeRoutingStyleCommand : IUndoableCommand
     public void Undo()
     {
         foreach (var state in _states)
-            ApplyStyle(state.Connection.Connection, state.BeforeType);
+            RestoreState(state);
         RecalculateOnce();
+    }
+
+    /// <summary>
+    /// Restores the full pre-command state: frozen (e.g. GDS-imported) route geometry and manual
+    /// bend edits would be discarded for good by <see cref="ApplyStyle"/>'s route invalidation,
+    /// so the captured path is put back and the frozen flag re-set before routes recalculate.
+    /// </summary>
+    private static void RestoreState(ConnectionState state)
+    {
+        var connection = state.Connection.Connection;
+        connection.Type = state.BeforeType;
+        connection.IsRouteFrozen = state.BeforeFrozen;
+        RestoreEntries(connection.BendRadiusOverrides, state.BeforeBendOverrides);
+        RestoreEntries(connection.StraightShiftOffsets, state.BeforeStraightShifts);
+        if (state.BeforePath != null && (state.BeforeFrozen || connection.HasManualPathEdits))
+            connection.RestoreCachedPath(state.BeforePath);
+        else
+            connection.InvalidateRoute();
+    }
+
+    private static void RestoreEntries(Dictionary<int, double> target, Dictionary<int, double> saved)
+    {
+        target.Clear();
+        foreach (var (segmentIndex, value) in saved)
+            target[segmentIndex] = value;
     }
 
     /// <summary>
