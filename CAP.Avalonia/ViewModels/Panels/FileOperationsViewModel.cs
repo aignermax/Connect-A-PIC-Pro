@@ -427,6 +427,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 }
             }
 
+            // Canvas-level pin-less frozen paths (issue #856) survive save/load.
+            if (_canvas.CanvasFrozenPaths.Count > 0)
+            {
+                designData.CanvasFrozenPaths = _canvas.CanvasFrozenPaths
+                    .Select(p => CAP_DataAccess.Persistence.ComponentGroupSerializer.ToCanvasFrozenPathDto(p.Path))
+                    .ToList();
+            }
+
             designData.FormatVersion = CurrentFormatVersion;
             // GDS-imported components travel inside the .lun (issue #830) so the
             // design stays self-contained; null when the design imported nothing.
@@ -972,6 +980,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.Components.Clear();
                 _canvas.Connections.Clear();
                 _canvas.AllPins.Clear();
+                _canvas.CanvasFrozenPaths.Clear();
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
                 _pinCalibrationMigratedComponents.Clear();
@@ -1010,6 +1019,18 @@ public partial class FileOperationsViewModel : ObservableObject
                 foreach (var connData in designData.Connections)
                 {
                     LoadConnectionFromData(connData);
+                }
+
+                // Restore canvas-level pin-less frozen paths (issue #856); files
+                // saved before the field simply have none.
+                if (designData.CanvasFrozenPaths != null)
+                {
+                    foreach (var pathDto in designData.CanvasFrozenPaths)
+                    {
+                        var frozenPath = CAP_DataAccess.Persistence.ComponentGroupSerializer
+                            .FromCanvasFrozenPathDto(pathDto);
+                        _canvas.CanvasFrozenPaths.Add(new CanvasFrozenPathViewModel(frozenPath));
+                    }
                 }
 
                 // Pin-calibration migration: report discarded stale routes and re-route them.
@@ -1257,6 +1278,7 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.Components.Clear();
         _canvas.Connections.Clear();
         _canvas.AllPins.Clear();
+        _canvas.CanvasFrozenPaths.Clear();
         _canvas.ConnectionManager.Clear();
         _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
