@@ -135,6 +135,53 @@ public class ComponentOutlineRendererTests
         world[4].Y.ShouldBe(world[0].Y, Tolerance);
     }
 
+    [Fact]
+    public void TransformOutlinePoint_NonCardinalRotation_MatchesModelPinMath()
+    {
+        // 20×10 unrotated footprint; after a 30° model-level rotation the live
+        // dims are the rotated AABB. The outline transform of a local point must
+        // equal the pin-offset rotation of the same point — the renderer gets
+        // the unrotated frame from the recorded pre-rotation dims (without them
+        // it guesses the AABB as the frame and the body renders offset by half
+        // the AABB-vs-original size difference — the field-report Y drift).
+        const double unrotW = 20, unrotH = 10, degrees = 30;
+        double rad = degrees * Math.PI / 180.0;
+        double cos = Math.Cos(rad), sin = Math.Sin(rad);
+        double newW = (unrotW * Math.Abs(cos)) + (unrotH * Math.Abs(sin));
+        double newH = (unrotW * Math.Abs(sin)) + (unrotH * Math.Abs(cos));
+        const double compX = 100, compY = 50;
+
+        var local = new OutlinePoint(20, 0);
+        // Model-level pin math (RotateComponentCommand.ApplyModelRotation):
+        // rotate around the old center, re-base into the new AABB.
+        double lx = local.X - unrotW / 2, ly = local.Y - unrotH / 2;
+        double expectedX = compX + (newW / 2) + (lx * cos) - (ly * sin);
+        double expectedY = compY + (newH / 2) + (lx * sin) + (ly * cos);
+
+        var world = ComponentOutlineRenderer.TransformOutlinePoint(
+            local, compX, compY, newW, newH, degrees,
+            recordedUnrotatedWidth: unrotW, recordedUnrotatedHeight: unrotH);
+
+        world.X.ShouldBe(expectedX, Tolerance);
+        world.Y.ShouldBe(expectedY, Tolerance);
+    }
+
+    [Fact]
+    public void TransformOutlinePoint_NonCardinalWithoutRecordedDims_FallsBackToLegacyGuess()
+    {
+        // Backward compatibility: a component that never recorded its dims
+        // (0/0) keeps the legacy behavior — the renderer cannot know better.
+        var withDims = ComponentOutlineRenderer.TransformOutlinePoint(
+            new OutlinePoint(20, 0), 100, 50, 22.32050807568877, 18.660254037844386, 30, 20, 10);
+        var legacy = ComponentOutlineRenderer.TransformOutlinePoint(
+            new OutlinePoint(20, 0), 100, 50, 22.32050807568877, 18.660254037844386, 30);
+
+        double driftX = withDims.X - legacy.X;
+        double driftY = withDims.Y - legacy.Y;
+        Math.Sqrt((driftX * driftX) + (driftY * driftY)).ShouldBeGreaterThan(1.0,
+            "without the recorded unrotated dims the legacy guess visibly misplaces the body");
+    }
+
     private static void AssertVertex(Point actual, double expectedX, double expectedY)
     {
         actual.X.ShouldBe(expectedX, Tolerance);

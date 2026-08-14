@@ -116,22 +116,48 @@ public class GdsImportCancellationLifecycleTests : IDisposable
     }
 
     [Fact]
-    public async Task CloseMidImport_RunUnwindsWithoutDisposedException()
+    public async Task CloseMidImport_RunContinuesAndCompletesWithoutDisposedException()
     {
+        // New contract (field report): the dialog auto-closes when the import
+        // STARTS, so a window close mid-import is the normal case and must NOT
+        // cancel — the run completes in the background and disposes the source
+        // itself (no disposed-source fault).
         var console = new ErrorConsoleService();
-        var (vm, _, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
         await vm.StartAnalysisAsync();
 
         var run = vm.ImportCommand.ExecuteAsync(null);
         var cts = vm.CurrentCts.ShouldNotBeNull();
 
-        vm.OnWindowClosed(); // close mid-import: cancel + dispose + detach
+        vm.OnWindowClosed(); // the auto-close landing mid-run
 
-        cts.IsCancellationRequested.ShouldBeTrue();
-        vm.CurrentCts.ShouldBeNull();
-        await run; // must unwind as a handled cancellation, never a disposed-source fault
+        cts.IsCancellationRequested.ShouldBeFalse("a close mid-import no longer cancels (auto-close by design)");
+        await run;
         vm.IsBusy.ShouldBeFalse();
         vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeTrue("the import finishes in the background");
+        canvas.Components.ShouldHaveSingleItem();
+        AssertNoDisposedSourceError(console, vm);
+    }
+
+    [Fact]
+    public async Task CloseWhileImportServiceRuns_RunCompletesWithoutDisposedException()
+    {
+        // Deterministic replay of the close-mid-service race: the window close
+        // lands while the service import runs, BEFORE the continuation that
+        // hands the token to the placement executor. With the auto-close
+        // contract the close is ignored and the run completes cleanly.
+        var console = new ErrorConsoleService();
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
+        await vm.StartAnalysisAsync();
+
+        vm.ImportServiceCompletedTestHook = vm.OnWindowClosed;
+        await vm.ImportCommand.ExecuteAsync(null);
+
+        vm.IsBusy.ShouldBeFalse();
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.ImportCompleted.ShouldBeTrue("the close did not cancel the run");
+        canvas.Components.ShouldHaveSingleItem();
         AssertNoDisposedSourceError(console, vm);
     }
 

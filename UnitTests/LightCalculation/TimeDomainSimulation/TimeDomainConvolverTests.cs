@@ -58,7 +58,7 @@ public class TimeDomainConvolverTests
     public void Convolve_NullSignal_ThrowsArgumentNullException()
     {
         Should.Throw<ArgumentNullException>(() =>
-            TimeDomainConvolver.Convolve(null!, new Complex[] { Complex.One }));
+            TimeDomainConvolver.Convolve((double[])null!, new Complex[] { Complex.One }));
     }
 
     [Fact]

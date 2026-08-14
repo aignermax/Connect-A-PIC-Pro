@@ -250,7 +250,6 @@ public class GdsImportDialogViewModelTests : IDisposable
     }
 
     [Theory]
-    [InlineData("")]
     [InlineData("abc")]
     [InlineData("1")]
     [InlineData("1,2,3")]
@@ -260,6 +259,15 @@ public class GdsImportDialogViewModelTests : IDisposable
     public void ParseLayerPairs_Malformed_ReturnsNull(string text)
     {
         GdsImportDialogViewModel.ParseLayerPairs(text).ShouldBeNull();
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("   ")]
+    public void ParseLayerPairs_Empty_ReturnsEmptyList(string text)
+    {
+        // an empty field is valid: no layers configured (foreign files start this way)
+        GdsImportDialogViewModel.ParseLayerPairs(text).ShouldNotBeNull().ShouldBeEmpty();
     }
 
     [Fact]
@@ -308,6 +316,32 @@ public class GdsImportDialogViewModelTests : IDisposable
     }
 
     // ── End-to-end: analyze → import → place on canvas ───────────────────────
+
+    [Fact]
+    public async Task ImportAsync_RequestsWindowCloseAtStart_AndStillCompletesTheRun()
+    {
+        // Field report: the dialog must not stay open while a large import's
+        // routing computes — the window closes as soon as the import starts,
+        // the run continues in the background and completes normally.
+        var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()));
+        await vm.StartAnalysisAsync();
+        var closeRequested = 0;
+        vm.OnClose = () => closeRequested++;
+
+        var run = vm.ImportCommand.ExecuteAsync(null);
+
+        closeRequested.ShouldBe(1, "the dialog asks the view to close right when the import starts");
+
+        await run;
+        vm.HasError.ShouldBeFalse();
+        vm.ImportCompleted.ShouldBeTrue("the import still runs to completion after the window closed");
+        canvas.Components.ShouldHaveSingleItem();
+
+        // A late window-closed callback must not cancel or dispose anything of
+        // the finished run.
+        vm.OnWindowClosed();
+        vm.ImportCompleted.ShouldBeTrue();
+    }
 
     [Fact]
     public async Task ImportAsync_EndToEnd_PlacesGroupedCircuitOnCanvas()

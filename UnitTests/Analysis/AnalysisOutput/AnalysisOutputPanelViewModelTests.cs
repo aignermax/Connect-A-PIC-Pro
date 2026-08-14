@@ -30,6 +30,34 @@ public class AnalysisOutputPanelViewModelTests
     }
 
     [Fact]
+    public void WithoutDesignation_SingleOffLaserCoupler_ShowsItsNameAutomatically()
+    {
+        // Field feedback: a bare "(automatic)" tells you nothing while the tab
+        // is open — the header must name the output the analyses would use.
+        var (canvas, panel) = CreatePanel();
+        var coupler = AnalysisOutputTestBed.AddCoupler(canvas);
+        coupler.LaserConfig!.IsEnabled = false;
+
+        panel.HasOutput.ShouldBeFalse();
+        panel.OutputDisplayName.ShouldBe(string.Format(
+            LocalizationService.Instance.Translate("Analysis.Output.AutoNamed"), coupler.Name));
+    }
+
+    [Fact]
+    public void LaserToggle_RefreshesTheAutomaticName()
+    {
+        var (canvas, panel) = CreatePanel();
+        var coupler = AnalysisOutputTestBed.AddCoupler(canvas);
+        coupler.LaserConfig!.IsEnabled = false;
+        panel.OutputDisplayName.ShouldContain(coupler.Name);
+
+        coupler.LaserConfig.IsEnabled = true;
+
+        panel.OutputDisplayName.ShouldBe(
+            LocalizationService.Instance.Translate("Analysis.Output.AutoAllLasersOn"));
+    }
+
+    [Fact]
     public void Designation_ShowsCouplerName()
     {
         var (canvas, panel) = CreatePanel();

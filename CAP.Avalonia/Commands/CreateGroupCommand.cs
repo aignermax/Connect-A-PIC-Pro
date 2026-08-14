@@ -169,17 +169,16 @@ public class CreateGroupCommand : IUndoableCommand
             Description = $"Group of {_components.Count} components"
         };
 
-        // 4. Add child components to group
-        foreach (var comp in _components)
-        {
-            _createdGroup.AddChild(comp);
-        }
+        // 4. Add child components to group in one batch — per-item adds rescan
+        // all children and path segments each time (quadratic at import scale).
+        _createdGroup.AddChildren(_components);
 
         // 5. Create frozen paths for internal connections.
         // Always create a FrozenWaveguidePath even when RoutedPath is null — an empty
         // RoutedPath produces TransmissionCoefficient = Complex.One (lossless), which is
         // the correct conservative default and ensures the connection is preserved in the
         // group S-Matrix. Skipping connections with null RoutedPath silently drops them.
+        var frozenPaths = new List<FrozenWaveguidePath>();
         foreach (var conn in _internalConnections)
         {
             var frozenPath = new FrozenWaveguidePath
@@ -192,8 +191,9 @@ public class CreateGroupCommand : IUndoableCommand
             // freeze flag, bend overrides, loss) so group edit mode, ungroup and
             // saved templates restore them instead of "Auto" defaults.
             frozenPath.CaptureSettingsFrom(conn);
-            _createdGroup.AddInternalPath(frozenPath);
+            frozenPaths.Add(frozenPath);
         }
+        _createdGroup.AddInternalPaths(frozenPaths);
 
         // 6. Create GroupPins for ALL unoccupied pins
         var occupiedPins = new HashSet<PhysicalPin>();

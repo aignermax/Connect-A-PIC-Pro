@@ -1,0 +1,18 @@
+[
+  {
+    "file": "01-direct-sbend-default.png",
+    "caption": "Default policy on a clear line: the Auto connection gets the smooth direct S-bend immediately \u2014 no grid staircase, no A* run."
+  },
+  {
+    "file": "02-policy-disabled-astar.png",
+    "caption": "Same layout with the new Settings toggle off: the connection is routed by the classic A* grid search instead of the direct styled geometry."
+  },
+  {
+    "file": "03-obstacle-astar-fallback.png",
+    "caption": "A component dropped across the styled path: the direct candidate is rejected against the obstacle grid and A* automatically routes around it."
+  },
+  {
+    "file": "04-settings-routing-toggle.png",
+    "caption": "Settings \u2192 Routing: the new \u0027Direct routes first\u0027 escape hatch sits above the diagonal option, on by default, with a description of the A*-fallback behavior."
+  }
+]

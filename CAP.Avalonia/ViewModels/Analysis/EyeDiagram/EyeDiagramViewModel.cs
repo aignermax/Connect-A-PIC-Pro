@@ -59,6 +59,9 @@ public partial class EyeDiagramViewModel : ObservableObject
     /// <summary>True once a completed eye analysis is available to plot/export.</summary>
     public bool HasResult => _lastHistogram != null;
 
+    /// <summary>The histogram of the last completed run (null before the first run).</summary>
+    public EyeHistogram? LastHistogram => _lastHistogram;
+
     /// <summary>File dialog service for CSV export. Set by MainViewModel.</summary>
     public Services.IFileDialogService? FileDialogService { get; set; }
 
@@ -245,7 +248,10 @@ public partial class EyeDiagramViewModel : ObservableObject
                 ? "No laser is switched on — turn the laser on at your input coupler."
                 : "No light source found — place an input coupler (e.g. a grating/edge coupler).");
 
-        var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
+        // Laser phase noise (#834): interferometric noise from finite linewidth
+        // flows into the eye/BER metrics automatically.
+        var phaseNoise = TransientCircuitFactory.BuildPhaseNoiseSettings(_canvas!);
+        var result = simulator.Run(signals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints, phaseNoise);
         if (result.PinTraces.Count == 0)
             return new EyeRunOutcome(null, null,
                 "The circuit produced no output traces — connect an output path from the light source to a detector/output.");
@@ -260,12 +266,6 @@ public partial class EyeDiagramViewModel : ObservableObject
             return new EyeRunOutcome(null, null, selection.Error);
         var trace = selection.Trace;
 
-        // No time bin can be finer than one sample, otherwise bins stay empty.
-        int timeBins = Math.Min(EyeDiagramBuilder.DefaultTimeBins, plan.SamplesPerBit);
-        var histogram = EyeDiagramBuilder.Build(
-            trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, timeBins);
-        double threshold = histogram.MinAmplitude
-            + ThresholdRelative * (histogram.MaxAmplitude - histogram.MinAmplitude);
         // Per-source RIN (#819): the source's LaserConfig drives the amplitude
         // noise the BER estimator assumes at the receiver.
         var noise = new NoiseModel
@@ -273,6 +273,18 @@ public partial class EyeDiagramViewModel : ObservableObject
             BandwidthHz = ReceiverBandwidthFactor * bitRateHz,
             RinDbPerHz = TransientCircuitFactory.ResolveRinDbPerHz(_canvas!),
         };
+
+        // The plotted eye shows the same receiver noise (#834 field report:
+        // RIN edits looked dead because only the metrics consumed them). The
+        // metrics keep the clean trace + analytical noise (no double count).
+        var plotTrace = ReceiverNoiseTrace.Apply(trace, noise);
+
+        // No time bin can be finer than one sample, otherwise bins stay empty.
+        int timeBins = Math.Min(EyeDiagramBuilder.DefaultTimeBins, plan.SamplesPerBit);
+        var histogram = EyeDiagramBuilder.Build(
+            plotTrace, timeDef.SampleRateHz, plan.BitPeriodSeconds, timeBins);
+        double threshold = histogram.MinAmplitude
+            + ThresholdRelative * (histogram.MaxAmplitude - histogram.MinAmplitude);
         var metrics = BerEstimator.Estimate(
             trace, timeDef.SampleRateHz, plan.BitPeriodSeconds, threshold, noise, timeBins);
 

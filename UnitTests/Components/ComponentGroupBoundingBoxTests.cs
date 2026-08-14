@@ -23,6 +23,31 @@ public class ComponentGroupBoundingBoxTests
         group.HeightMicrometers.ShouldBe(0, "Empty group height should be zero");
     }
 
+    [Fact]
+    public void UpdateGroupBounds_BendFrozenPath_UsesTightArcBounds()
+    {
+        // Field report: a group containing an S-bend frozen path got a collision
+        // footprint ~5× its real size — the arc contributed its full circle.
+        var group = new ComponentGroup("BendGroup")
+        {
+            PhysicalX = 0,
+            PhysicalY = 0
+        };
+
+        // 90° arc, center (500,400), radius 100: swept extent x∈[500,600], y∈[300,400].
+        var path = new RoutedPath();
+        path.Segments.Add(new BendSegment(centerX: 500, centerY: 400, radius: 100,
+            startAngle: 0, sweepAngle: 90));
+        group.AddInternalPath(new FrozenWaveguidePath { Path = path });
+
+        group.UpdateGroupBounds();
+
+        // Tight bounds + 2µm padding per side: x∈[498,602], y∈[298,402].
+        group.WidthMicrometers.ShouldBe(104, 1e-6,
+            "the arc's swept extent only, not its full circle (202 µm)");
+        group.HeightMicrometers.ShouldBe(104, 1e-6);
+    }
+
     /// <summary>
     /// Verifies that a group with only children calculates bounds based on child positions.
     /// </summary>
@@ -167,12 +192,12 @@ public class ComponentGroupBoundingBoxTests
         };
         group.AddInternalPath(frozenPath);
 
-        // Arc with center (300, 300) and radius 50
-        // Bounding box (conservative): (300-50-2, 300-50-2) to (300+50+2, 300+50+2)
-        // = (248, 248) to (352, 352)
-        // Width = Height = 352 - 248 = 104
-        group.WidthMicrometers.ShouldBe(104, 2, "Group width should span arc diameter + padding");
-        group.HeightMicrometers.ShouldBe(104, 2, "Group height should span arc diameter + padding");
+        // Tight arc bounds: the arc sweeps radially 270°→360°, so it occupies
+        // x∈[300,350], y∈[250,300] — plus 2 µm padding per side: (298,248) to
+        // (352,302) → 54×54. (The full-circle box (104×104) was the pre-fix
+        // behavior and inflated group collision footprints far past the arc.)
+        group.WidthMicrometers.ShouldBe(54, 1, "Group width should span the swept arc extent + padding");
+        group.HeightMicrometers.ShouldBe(54, 1, "Group height should span the swept arc extent + padding");
     }
 
     /// <summary>

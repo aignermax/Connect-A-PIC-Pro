@@ -86,11 +86,12 @@ public partial class WaveguideConnectionManager
     }
 
     /// <summary>True for a route the collapse pass may edit: an auto route with a clean,
-    /// unfrozen, non-fallback path.</summary>
+    /// unfrozen, non-fallback path. Direct styled routes (issue #860) are excluded — their
+    /// stubs are intended geometry, not forced grid-escape leads.</summary>
     private static bool IsPinLeadCollapsible(WaveguideConnection connection) =>
         connection.Type == WaveguideType.Auto
         && !connection.IsRouteFrozen
-        && connection.RoutedPath is { IsBlockedFallback: false } path
+        && connection.RoutedPath is { IsBlockedFallback: false, IsDirectStyledRoute: false } path
         && path.IsValid
         && path.Segments.Count > 0;
 

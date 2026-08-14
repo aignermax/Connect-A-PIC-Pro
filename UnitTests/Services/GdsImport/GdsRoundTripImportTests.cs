@@ -243,14 +243,17 @@ public class GdsRoundTripImportTests : IDisposable
         var connection = outcome.Connections.ShouldHaveSingleItem();
         connection.IsRouteDerived.ShouldBeTrue();
         connection.IsElectrical.ShouldBeFalse();
-        connection.A.PinName.ShouldBe("a0");
+        // Endpoint order follows pin enumeration: A is the GC's waveguide-side
+        // heuristic pin, B the MMI's label pin a0 (the pin-layout disambiguation
+        // flipped the enumeration order — both physical pins are unchanged).
         // The any-layer label fallback discovers the GC's fiber-side pin label
         // (demofab's io pin text is not on a configured port layer): the label
         // pin suppresses the fiber-side heuristic touch, so the surviving
         // waveguide-side heuristic pin renumbered heur_2→heur_1. D1's simplifier
         // fix (collapsed polygons are kept instead of silently dropped) restored
         // one heuristic touch, moving the numbering back — same physical pin.
-        connection.B.PinName.ShouldBe("heur_2");
+        connection.A.PinName.ShouldBe("heur_2");
+        connection.B.PinName.ShouldBe("a0");
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
         outcome.Infos.ShouldContain(i => i.Contains("junction with 3 pins"));
         outcome.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s)"));

@@ -78,7 +78,9 @@ public class TwoPhasePathfindingTests
         var router = new WaveguideRouter
         {
             Phase1MaxNodes = 1,     // exhausted on first node
-            Phase2MaxNodes = 500_000
+            Phase2MaxNodes = 500_000,
+            // Force the grid search — a direct styled route would never reach Phase 2.
+            PreferDirectStyledRoutes = false,
         };
         router.InitializePathfindingGrid(-100, -100, 5100, 5100,
                                           Enumerable.Empty<Component>());
@@ -107,7 +109,9 @@ public class TwoPhasePathfindingTests
         var router = new WaveguideRouter
         {
             Phase1MaxNodes = 1,
-            Phase2MaxNodes = 10_000_000
+            Phase2MaxNodes = 10_000_000,
+            // Force the grid search — a direct styled route would never reach Phase 2.
+            PreferDirectStyledRoutes = false,
         };
         router.InitializePathfindingGrid(-100, -100, 5100, 5100,
                                           Enumerable.Empty<Component>());

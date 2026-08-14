@@ -318,16 +318,17 @@ public class GroupEditService
 
     private void SaveSubCanvasToGroup(ComponentGroup group)
     {
+        // Set lookups + batched group mutations keep this O(N + P·S): per-item
+        // AddChild/RemoveChild/AddInternalPath each rescan all children and all
+        // path segments for the bounds, which is quadratic at GDS-import scale.
         var canvasComponents = _components.Select(c => c.Component).ToHashSet();
-        var childrenToRemove = group.ChildComponents.Where(c => !canvasComponents.Contains(c)).ToList();
-        foreach (var child in childrenToRemove)
-            group.RemoveChild(child);
+        group.RemoveChildren(group.ChildComponents.Where(c => !canvasComponents.Contains(c)).ToList());
 
-        foreach (var compVm in _components)
-        {
-            if (!group.ChildComponents.Contains(compVm.Component))
-                group.AddChild(compVm.Component);
-        }
+        var existingChildren = group.ChildComponents.ToHashSet();
+        group.AddChildren(_components
+            .Select(c => c.Component)
+            .Where(c => !existingChildren.Contains(c))
+            .ToList());
 
         // Pin-less frozen paths (GDS-imported route outlines) never entered the
         // sub-canvas as live connections, so the clear-and-rebuild below would
@@ -337,27 +338,28 @@ public class GroupEditService
             .ToList();
 
         group.InternalPaths.Clear();
+        var frozenPaths = new List<FrozenWaveguidePath>();
         foreach (var connVm in _connections.ToList())
         {
             var conn = connVm.Connection;
-            if (conn.RoutedPath != null)
+            if (conn.RoutedPath == null)
+                continue;
+
+            var frozenPath = new FrozenWaveguidePath
             {
-                var frozenPath = new FrozenWaveguidePath
-                {
-                    StartPin = conn.StartPin,
-                    EndPin = conn.EndPin,
-                    Path = conn.RoutedPath
-                };
-                // Keep the per-connection routing settings across the exit, otherwise
-                // they reset to "Auto" defaults on the next expand.
-                frozenPath.CaptureSettingsFrom(conn);
-                group.AddInternalPath(frozenPath);
-            }
+                StartPin = conn.StartPin,
+                EndPin = conn.EndPin,
+                Path = conn.RoutedPath
+            };
+            // Keep the per-connection routing settings across the exit, otherwise
+            // they reset to "Auto" defaults on the next expand.
+            frozenPath.CaptureSettingsFrom(conn);
+            frozenPaths.Add(frozenPath);
         }
+        frozenPaths.AddRange(pinLessPaths);
+        group.AddInternalPaths(frozenPaths);
 
-        foreach (var pinLessPath in pinLessPaths)
-            group.AddInternalPath(pinLessPath);
-
+        // Still needed when the clear above removed paths but nothing was re-added.
         group.UpdateGroupBounds();
     }
 

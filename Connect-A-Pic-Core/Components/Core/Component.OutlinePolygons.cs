@@ -13,4 +13,19 @@ public partial class Component
     /// reference too.
     /// </summary>
     public IReadOnlyList<OutlinePolygon>? OutlinePolygons { get; set; }
+
+    /// <summary>
+    /// The footprint dimensions before any rotation (µm) — the frame
+    /// <see cref="OutlinePolygons"/> points live in. Zero means "never rotated":
+    /// the current <see cref="WidthMicrometers"/>/<see cref="HeightMicrometers"/>
+    /// are the unrotated dims. The model-level rotation commands record the
+    /// pre-rotation dims here ONCE (they never change afterwards). Rendering
+    /// needs them for non-cardinal rotations: the rotated axis-aligned bounding
+    /// box no longer reveals the original aspect, so the unrotated geometry
+    /// frame cannot be recovered from the live dims alone.
+    /// </summary>
+    public double UnrotatedWidthMicrometers { get; set; }
+
+    /// <summary>See <see cref="UnrotatedWidthMicrometers"/>.</summary>
+    public double UnrotatedHeightMicrometers { get; set; }
 }
