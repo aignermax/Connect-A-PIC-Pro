@@ -1,3 +1,4 @@
+using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components.Core;
 
 namespace CAP.Avalonia.Services.GdsImport.LayerVisibility;
@@ -13,10 +14,11 @@ namespace CAP.Avalonia.Services.GdsImport.LayerVisibility;
 public sealed record DesignLayerUsage(int Layer, int DataType, int ShapeCount);
 
 /// <summary>
-/// Walks the placed components (recursing into groups) and collects every GDS
-/// (layer, datatype) pair carried by imported outline polygons or by frozen
-/// paths tagged with their import source layer — exactly the geometry the
-/// per-layer view filter of <see cref="GdsLayerVisibilityState"/> applies to.
+/// Walks the placed components (recursing into groups), plus any canvas-level
+/// frozen paths, and collects every GDS (layer, datatype) pair carried by
+/// imported outline polygons or by frozen paths tagged with their import source
+/// layer — exactly the geometry the per-layer view filter of
+/// <see cref="GdsLayerVisibilityState"/> applies to.
 /// </summary>
 public static class DesignLayerUsageCollector
 {
@@ -25,10 +27,25 @@ public static class DesignLayerUsageCollector
     /// with their shape counts, ordered by layer then datatype.
     /// </summary>
     public static IReadOnlyList<DesignLayerUsage> Collect(IEnumerable<Component> components)
+        => Collect(components, Enumerable.Empty<CanvasFrozenPathViewModel>());
+
+    /// <summary>
+    /// Collects the distinct (layer, datatype) pairs used by <paramref name="components"/>
+    /// and by <paramref name="canvasFrozenPaths"/> with their shape counts, ordered by
+    /// layer then datatype.
+    /// </summary>
+    public static IReadOnlyList<DesignLayerUsage> Collect(
+        IEnumerable<Component> components,
+        IEnumerable<CanvasFrozenPathViewModel> canvasFrozenPaths)
     {
         var counts = new Dictionary<(int Layer, int DataType), int>();
         foreach (var component in components)
             CollectFrom(component, counts);
+        foreach (var pathVm in canvasFrozenPaths)
+        {
+            if (pathVm.Path.Layer is int layer && pathVm.Path.DataType is int dataType)
+                Increment(counts, layer, dataType);
+        }
         return counts
             .OrderBy(kv => kv.Key.Layer).ThenBy(kv => kv.Key.DataType)
             .Select(kv => new DesignLayerUsage(kv.Key.Layer, kv.Key.DataType, kv.Value))

@@ -1,3 +1,5 @@
+using Avalonia.Headless.XUnit;
+using Avalonia.Threading;
 using CAP.Avalonia.Services.GdsImport.LayerVisibility;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.GdsImport.LayerVisibility;
@@ -119,6 +121,22 @@ public class GdsLayerVisibilityViewModelTests
 
         vm.State.CaptureForSave().ShouldBeNull();
         vm.Rows.ShouldAllBe(r => r.IsVisible);
+    }
+
+    [AvaloniaFact]
+    public void CanvasFrozenPathsChange_RefreshesRows()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var vm = new GdsLayerVisibilityViewModel(canvas);
+        vm.Refresh();
+        vm.HasLayers.ShouldBeFalse();
+
+        canvas.CanvasFrozenPaths.Add(new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+            LayerVisibilityTestComponents.CreateFrozenPath(31, 5)));
+        Dispatcher.UIThread.RunJobs(DispatcherPriority.Background);
+
+        vm.HasLayers.ShouldBeTrue();
+        vm.Rows.Select(r => (r.Layer, r.DataType)).ShouldBe(new[] { (31, 5) });
     }
 
     /// <summary>A VM over a canvas holding one component with outlines on (1,0) and (11,0),

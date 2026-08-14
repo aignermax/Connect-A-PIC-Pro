@@ -10,6 +10,7 @@ using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Components;
 using CAP_Core.Components.Core;
 using CAP_Core.LightCalculation;
+using CAP_Core.Routing;
 using CAP_Core.Tiles;
 using Shouldly;
 using Xunit;
@@ -17,10 +18,12 @@ using Xunit;
 namespace UnitTests.GdsImport.LayerVisibility;
 
 /// <summary>
-/// Pixel-level proof of the per-layer view filter (issue #858): with a hidden
+/// Pixel-level proof of the per-layer view filter (issue #858 and #895): with a hidden
 /// (11, 0), the metal stripe paints nothing while the waveguide stripe still
 /// paints; with a faded (11, 0), it paints dimmer than at full opacity. Mirrors
 /// the RenderTargetBitmap probe of <see cref="Rendering.PerLayerOutlineRenderingTests"/>.
+/// Also verifies that canvas-level frozen paths released by ungroup (#856/#895)
+/// honor the same layer filter.
 /// </summary>
 public class GdsLayerVisibilityRenderingTests
 {
@@ -70,6 +73,38 @@ public class GdsLayerVisibilityRenderingTests
             .ShouldBeGreaterThan(100, "the faded stripe is dimmed, not hidden");
     }
 
+    [AvaloniaFact]
+    public void HiddenCanvasFrozenPath_PaintsNothing()
+    {
+        var state = new GdsLayerVisibilityState();
+        state.Set(11, 0, isVisible: false, opacity: 1.0);
+
+        using var fullBitmap = RenderCanvasFrozenPath(layerVisibility: null);
+        using var hiddenBitmap = RenderCanvasFrozenPath(state);
+
+        CountPixels(fullBitmap, MetalRegion, (r, g, b) => r > b)
+            .ShouldBeGreaterThan(20, "without the filter the canvas metal path paints");
+        CountPixels(hiddenBitmap, MetalRegion, (r, g, b) => r > b)
+            .ShouldBe(0, "the hidden canvas frozen path must not paint");
+    }
+
+    [AvaloniaFact]
+    public void FadedCanvasFrozenPath_PaintsDimmer_ThanFullOpacity()
+    {
+        var faded = new GdsLayerVisibilityState();
+        faded.Set(11, 0, isVisible: true, opacity: 0.3);
+
+        using var fullBitmap = RenderCanvasFrozenPath(layerVisibility: null);
+        using var fadedBitmap = RenderCanvasFrozenPath(faded);
+
+        CountPixels(fullBitmap, MetalRegion, (r, g, b) => r > 80)
+            .ShouldBeGreaterThan(10, "full opacity paints bright amber");
+        CountPixels(fadedBitmap, MetalRegion, (r, g, b) => r > 80)
+            .ShouldBe(0, "at 30 % opacity no pixel reaches full-opacity brightness");
+        CountPixels(fadedBitmap, MetalRegion, (r, g, b) => r > 20 && r > b)
+            .ShouldBeGreaterThan(5, "the faded path is dimmed, not hidden");
+    }
+
     private static RenderTargetBitmap RenderTwoLayerComponent(GdsLayerVisibilityState? layerVisibility)
     {
         var canvas = new DesignCanvasViewModel();
@@ -90,6 +125,36 @@ public class GdsLayerVisibilityRenderingTests
         {
             ctx.FillRectangle(Brushes.Black, new Rect(0, 0, 100, 80));
             new ComponentRenderer().Render(ctx, rc);
+        }
+        return bitmap;
+    }
+
+    private static RenderTargetBitmap RenderCanvasFrozenPath(GdsLayerVisibilityState? layerVisibility)
+    {
+        var canvas = new DesignCanvasViewModel();
+        var pathModel = new RoutedPath();
+        pathModel.Segments.Add(new StraightSegment(50, 40, 80, 40, 0));
+        var path = new FrozenWaveguidePath
+        {
+            Path = pathModel,
+            Layer = 11,
+            DataType = 0,
+        };
+        canvas.CanvasFrozenPaths.Add(new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(path));
+        var rc = new CanvasRenderContext
+        {
+            ViewModel = canvas,
+            InteractionState = new CanvasInteractionState(),
+            Zoom = 1.0,
+            Bounds = new Rect(0, 0, 100, 80),
+            LayerVisibility = layerVisibility,
+        };
+
+        var bitmap = new RenderTargetBitmap(new PixelSize(100, 80));
+        using (var ctx = bitmap.CreateDrawingContext())
+        {
+            ctx.FillRectangle(Brushes.Black, new Rect(0, 0, 100, 80));
+            new CanvasFrozenPathRenderer().Render(ctx, rc);
         }
         return bitmap;
     }
