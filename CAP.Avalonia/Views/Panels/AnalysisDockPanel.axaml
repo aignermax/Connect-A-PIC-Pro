@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:panels="using:CAP.Avalonia.Views.Panels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.AnalysisDockPanel"
              x:DataType="vm:MainViewModel">
@@ -12,6 +13,74 @@
         <StackPanel>
             <!-- Header bar: always visible, click to toggle -->
             <DockPanel Height="26" Background="#252526">
+                <!-- Plain-language help: what an S-matrix is and why light splits/recombines
+                     as it propagates through the simulated circuit. -->
+                <controls:HelpFlyoutButton DockPanel.Dock="Right"
+                                           Title="{loc:Localize SMatrixHelp.Title}"
+                                           Margin="0,0,6,0" VerticalAlignment="Center">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <StackPanel.Styles>
+                                <!-- Simple animated coupler: input pulse, split, then recombine. -->
+                                <Style Selector="Ellipse.pulse">
+                                    <Style.Animations>
+                                        <Animation Duration="0:0:2.5" IterationCount="INFINITE">
+                                            <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                                            <KeyFrame Cue="15%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                                            <KeyFrame Cue="85%"><Setter Property="Opacity" Value="1"/></KeyFrame>
+                                            <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/></KeyFrame>
+                                        </Animation>
+                                    </Style.Animations>
+                                </Style>
+                            </StackPanel.Styles>
+
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize SMatrixHelp.Intro}"/>
+
+                            <!-- Diagram: two waveguides approach, cross, and separate. -->
+                            <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                    CornerRadius="4" Padding="4">
+                                <Canvas Width="360" Height="80">
+                                    <!-- Waveguide core. -->
+                                    <Path Data="M 20,40 L 120,40 C 150,40 150,20 180,20 L 340,20"
+                                          Stroke="#4FC3F7" StrokeThickness="4"/>
+                                    <Path Data="M 20,40 L 120,40 C 150,40 150,60 180,60 L 340,60"
+                                          Stroke="#4FC3F7" StrokeThickness="4"/>
+                                    <!-- Input pulse. -->
+                                    <Ellipse Classes="pulse" Canvas.Left="36" Canvas.Top="32"
+                                             Width="16" Height="16" Fill="#FFD54F"/>
+                                    <!-- Split pulses. -->
+                                    <Ellipse Classes="pulse" Canvas.Left="148" Canvas.Top="12"
+                                             Width="16" Height="16" Fill="#81C784"/>
+                                    <Ellipse Classes="pulse" Canvas.Left="148" Canvas.Top="52"
+                                             Width="16" Height="16" Fill="#81C784"/>
+                                    <!-- Output pulses. -->
+                                    <Ellipse Classes="pulse" Canvas.Left="300" Canvas.Top="12"
+                                             Width="16" Height="16" Fill="#FF8A65"/>
+                                    <Ellipse Classes="pulse" Canvas.Left="300" Canvas.Top="52"
+                                             Width="16" Height="16" Fill="#FF8A65"/>
+                                    <TextBlock Canvas.Left="8" Canvas.Top="62"
+                                               Text="{loc:Localize SMatrixHelp.DiagramInput}" FontSize="9" Foreground="Gray"/>
+                                    <TextBlock Canvas.Left="292" Canvas.Top="62"
+                                               Text="{loc:Localize SMatrixHelp.DiagramOutput}" FontSize="9" Foreground="Gray"/>
+                                </Canvas>
+                            </Border>
+
+                            <TextBlock Text="{loc:Localize SMatrixHelp.WhatIsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize SMatrixHelp.WhatIsBody}"/>
+
+                            <TextBlock Text="{loc:Localize SMatrixHelp.SplitRecombineTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize SMatrixHelp.SplitRecombineBody}"/>
+
+                            <TextBlock Text="{loc:Localize SMatrixHelp.RunTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize SMatrixHelp.RunBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+
                 <Button Command="{Binding BottomPanel.Analysis.ToggleCommand}"
                         Background="Transparent"
                         HorizontalAlignment="Stretch"
