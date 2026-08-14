@@ -63,7 +63,13 @@ public enum DesignIssueType
     /// widths or layers. This is an error because the exported geometry cannot satisfy
     /// both endpoints simultaneously.
     /// </summary>
-    PinMismatch
+    PinMismatch,
+
+    /// <summary>
+    /// Two waveguide routes are closer than the active process' minimum edge-to-edge
+    /// spacing. The reported distance and required minimum are included in the issue.
+    /// </summary>
+    WaveguideSpacingViolation
 }
 
 /// <summary>
