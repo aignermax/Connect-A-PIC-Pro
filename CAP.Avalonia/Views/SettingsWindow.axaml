@@ -92,6 +92,13 @@
                     <DataTemplate DataType="{x:Type settings:RoutingSettingsViewModel}">
                         <StackPanel Spacing="8">
                             <TextBlock Text="{loc:Localize Settings.Routing.Title}" FontSize="18" FontWeight="SemiBold" Foreground="White" Margin="0,0,0,8"/>
+                            <CheckBox Content="{loc:Localize Settings.Routing.DirectFirst}"
+                                      IsChecked="{Binding Canvas.PreferDirectStyledRoutes}"
+                                      Foreground="White"/>
+                            <TextBlock Text="{loc:Localize Settings.Routing.DirectFirstDescription}"
+                                       Foreground="Gray" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,0"/>
+
+                            <Separator Margin="0,16,0,8" Background="#3d3d3d"/>
                             <CheckBox Content="{loc:Localize Settings.Routing.EnableDiagonal}"
                                       IsChecked="{Binding Canvas.UseDiagonalRouting}"
                                       Foreground="White"/>

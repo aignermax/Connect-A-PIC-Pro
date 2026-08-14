@@ -53,8 +53,9 @@ internal sealed record KnownCellPinAnchor
 /// into top-cell app space. The projection always uses the TRUE GDS transform
 /// (reflection, exact angle and magnification included, via the same linear
 /// part as <see cref="GdsTransform.FromReference"/>), so the results are honest
-/// routing data even when the placed visual is approximated (reflection dropped,
-/// angle snapped).
+/// routing data even when the placed visual is approximated (reflection dropped);
+/// the placed rotation keeps the exact angle, so placed pins land on the
+/// projected positions.
 ///
 /// The math per pin, with <c>cb</c> = cell bbox (GDS, Y-up), <c>tb</c> = top
 /// bbox (GDS, Y-up), T = instance transform:

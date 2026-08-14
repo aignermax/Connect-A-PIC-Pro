@@ -43,10 +43,15 @@ internal static class GdsImportReporter
             if (Math.Abs(GdsInstancePinProjector.Normalize180(
                     GdsInstancePinProjector.Normalize360(signature.AngleDegrees) - snapped)) > 1e-9)
             {
+                // Kept, not snapped: arbitrary angles are placed exactly, so the
+                // reconstructed connections stay on the true joints. Still worth
+                // a warning — gdsfactory/foundry layouts are usually Manhattan,
+                // so a non-cardinal angle often marks an unintended source transform.
                 session.Warnings.Add(
                     $"{subject} {has} a non-cardinal rotation of " +
-                    $"{GdsHierarchyImporter.Fmt(signature.AngleDegrees)}° — snapped to {GdsHierarchyImporter.Fmt(snapped)}° " +
-                    "(gdsfactory layouts are Manhattan, so this is usually safe).");
+                    $"{GdsHierarchyImporter.Fmt(signature.AngleDegrees)}° — kept exactly (no snapping), " +
+                    "so reconstructed connections stay on the true joints; gdsfactory layouts are " +
+                    "usually Manhattan, so double-check the source intent.");
             }
             if (signature.Reflected)
             {

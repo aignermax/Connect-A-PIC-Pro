@@ -263,9 +263,9 @@ public class GdsPlacementExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_NonCardinalRotation_SnapsAndWarns()
+    public async Task ExecuteAsync_NonCardinalRotation_KeptExactlyWithoutSnapWarning()
     {
-        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
         var plan = new GdsPlacementPlan
         {
             GroupName = "TOP",
@@ -274,8 +274,9 @@ public class GdsPlacementExecutorTests
 
         var report = await executor.ExecuteAsync(plan);
 
-        report.Warnings.ShouldHaveSingleItem().ShouldContain("wgA#0");
-        report.Warnings[0].ShouldContain("snapped");
+        report.Warnings.ShouldBeEmpty(
+            "non-cardinal angles are placed exactly — the importer already warned per cell");
+        canvas.Components.ShouldHaveSingleItem().Component.RotationDegrees.ShouldBe(44, 1e-9);
     }
 
     // ── Skips ────────────────────────────────────────────────────────────────
@@ -437,9 +438,9 @@ public class GdsPlacementExecutorTests
     }
 
     [Fact]
-    public async Task ExecuteAsync_IdenticalRotationSnaps_GroupIntoOneWarning()
+    public async Task ExecuteAsync_IdenticalNonCardinalRotations_KeptExactlyWithoutWarnings()
     {
-        var (_, _, executor) = CreateExecutor(WaveguideTemplate());
+        var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
         var plan = new GdsPlacementPlan
         {
             GroupName = "TOP",
@@ -452,8 +453,9 @@ public class GdsPlacementExecutorTests
 
         var report = await executor.ExecuteAsync(plan);
 
-        report.Warnings.ShouldHaveSingleItem().ShouldBe(
-            "'wgA#0': non-cardinal rotation 44° snapped to 0°. — × 2 instances");
+        report.Warnings.ShouldBeEmpty("exact placement of a non-cardinal angle is not a caveat");
+        SingleGroupOn(canvas).ChildComponents.Select(c => c.RotationDegrees)
+            .ShouldAllBe(r => Math.Abs(r - 44) < 1e-9);
     }
 
     // ── Cancellation ─────────────────────────────────────────────────────────
@@ -716,10 +718,10 @@ public class GdsPlacementExecutorTests
         groupVm.DisplayName.ShouldBe("TOP");
     }
 
-    // ── Rotation snap rounding ───────────────────────────────────────────────
+    // ── Non-cardinal rotation ────────────────────────────────────────────────
 
     [Fact]
-    public async Task ExecuteAsync_HalfwayRotation_SnapsAwayFromZero()
+    public async Task ExecuteAsync_HalfwayRotation_KeptExactly()
     {
         var (canvas, _, executor) = CreateExecutor(WaveguideTemplate());
         var plan = new GdsPlacementPlan
@@ -730,10 +732,10 @@ public class GdsPlacementExecutorTests
 
         var report = await executor.ExecuteAsync(plan);
 
-        // 45° is the exact midpoint between 0° and 90°: AwayFromZero snaps UP to
-        // 90° — banker's rounding would silently snap DOWN to 0°.
-        report.Warnings.ShouldHaveSingleItem().ShouldContain("snapped");
-        canvas.Components.ShouldHaveSingleItem().Component.RotationDegrees.ShouldBe(90);
+        // 45° is no longer snapped to a cardinal — the exact angle keeps the
+        // instance's pins on the true joints the import projected.
+        report.Warnings.ShouldBeEmpty();
+        canvas.Components.ShouldHaveSingleItem().Component.RotationDegrees.ShouldBe(45, 1e-9);
     }
 
     // ── Top-cell route geometry (frozen paths) ───────────────────────────────

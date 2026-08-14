@@ -7,6 +7,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # On-demand baseline runs (e.g. on dev-ki) so a red PR check can be told
+  # apart from an already-red integration branch.
+  workflow_dispatch:
 
 jobs:
   nunit_tests:

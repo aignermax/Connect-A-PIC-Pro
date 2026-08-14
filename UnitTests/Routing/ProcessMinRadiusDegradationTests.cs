@@ -109,7 +109,12 @@ public class ProcessMinRadiusDegradationTests
         bottom.PhysicalX = 60;
         bottom.PhysicalY = 420;
 
-        var router = new WaveguideRouter { ProcessMinBendRadiusMicrometers = processFloor };
+        // Direct-first is disabled: these tests verify the A* pipeline's floor degradation.
+        var router = new WaveguideRouter
+        {
+            ProcessMinBendRadiusMicrometers = processFloor,
+            PreferDirectStyledRoutes = false,
+        };
         router.InitializePathfindingGrid(-100, -100, 1100, 900, new[] { top, bottom });
 
         var manager = new WaveguideConnectionManager(router);

@@ -109,6 +109,24 @@ public class RotateComponentCommandTests
     // Helpers
     // -------------------------------------------------------------------------
 
+    [Fact]
+    public void ApplyModelRotation_RecordsUnrotatedDimensionsOnce()
+    {
+        var comp = CreateComponent(widthMicrometers: 20, heightMicrometers: 10);
+
+        RotateComponentCommand.ApplyModelRotation(comp, 30);
+
+        comp.UnrotatedWidthMicrometers.ShouldBe(20, 1e-9);
+        comp.UnrotatedHeightMicrometers.ShouldBe(10, 1e-9);
+
+        // Further rotations (and undo/redo cycles) must never overwrite the frame.
+        RotateComponentCommand.ApplyModelRotation(comp, 15);
+        RotateComponentCommand.ApplyModelRotation90(comp);
+
+        comp.UnrotatedWidthMicrometers.ShouldBe(20, 1e-9);
+        comp.UnrotatedHeightMicrometers.ShouldBe(10, 1e-9);
+    }
+
     private static Component CreateComponent(
         double widthMicrometers,
         double heightMicrometers,

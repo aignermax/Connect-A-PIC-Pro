@@ -264,7 +264,10 @@ public static class GdsHierarchyImporter
                 CellDraftName = known is null ? cell : null,
                 PositionXUm = topLeft.X,
                 PositionYUm = topLeft.Y,
-                RotationDegrees = GdsInstancePinProjector.Normalize360(-snapped),
+                // The EXACT instance angle (app convention: GDS +φ ≡ app −φ) —
+                // snapping a non-cardinal angle to a cardinal would move the
+                // placed pins microns off the true joints the projector computed.
+                RotationDegrees = GdsInstancePinProjector.Normalize360(-angle),
                 Reflected = gdsInstance.Reflected,
             });
 
