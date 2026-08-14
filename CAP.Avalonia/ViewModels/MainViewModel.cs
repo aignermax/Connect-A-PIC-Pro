@@ -559,6 +559,9 @@ public partial class MainViewModel : ObservableObject
                 // Feed the selected connection into the routing options panel (issue #574).
                 BottomPanel.ConnectionRouting.SelectedConnection =
                     CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the imported-route re-route panel.
+                BottomPanel.RerouteImported.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
             }
         };
 
