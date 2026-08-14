@@ -1,4 +1,5 @@
 [
-  {"file": "01-frozen-imported-routes.png", "caption": "Imported Routes section (auto-appears in the routing panel when a GDS import left frozen routes): 2 re-routable frozen routes counted, Re-route All / Re-route Selected buttons, and 1 hand-edited frozen route explicitly listed as kept unchanged."},
-  {"file": "02-reroute-delta.png", "caption": "After Re-route All (one undoable command): the green report shows the before/after total length and equivalent-90-degree-bend delta of the 2 re-routed routes; the hand-edited route was never touched and stays noted as kept."}
+  {"file": "01-grouped-import-hint.png", "caption": "Right after a standard GDS import (which groups everything it placed): the panel auto-appears and counts the 2 re-routable frozen routes living inside the group, hinting to open or dissolve the group to re-route."},
+  {"file": "02-frozen-imported-routes.png", "caption": "After dissolving the group: 2 re-routable frozen routes counted on the canvas, Re-route All / Re-route Selected buttons, and 1 hand-edited frozen route explicitly listed as kept unchanged."},
+  {"file": "03-reroute-delta.png", "caption": "After Re-route All (one undoable command): the green report shows the before/after total length and equivalent-90-degree-bend delta of the 2 re-routed routes; the hand-edited route was never touched and stays noted as kept."}
 ]
