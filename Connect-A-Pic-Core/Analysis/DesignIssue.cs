@@ -49,7 +49,13 @@ public enum DesignIssueType
     /// obstacles by design and are never auto-rerouted, so the collision must be resolved
     /// manually — move the component or pick a different routing style.
     /// </summary>
-    StyledRouteThroughComponent
+    StyledRouteThroughComponent,
+
+    /// <summary>
+    /// Two waveguide routes are closer than the active process' minimum edge-to-edge
+    /// spacing. The reported distance and required minimum are included in the issue.
+    /// </summary>
+    WaveguideSpacingViolation
 }
 
 /// <summary>

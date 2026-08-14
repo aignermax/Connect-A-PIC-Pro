@@ -14,6 +14,7 @@ namespace CAP_Core.Analysis;
 public class DesignValidator
 {
     private readonly WaveguideOverlapDetector _overlapDetector = new();
+    private readonly WaveguideSpacingDetector _spacingDetector = new();
 
     /// <summary>
     /// Validates all provided waveguide connections and returns any issues found.
@@ -52,6 +53,29 @@ public class DesignValidator
         var connectionList = connections.ToList();
         var issues = Validate(connectionList);
         issues.AddRange(_overlapDetector.DetectOverlaps(connectionList, groups));
+        return issues;
+    }
+
+    /// <summary>
+    /// Validates waveguide connections, detects overlaps with frozen paths, and checks
+    /// edge-to-edge waveguide spacing against a process-defined minimum.
+    /// </summary>
+    /// <param name="connections">Regular waveguide connections to validate.</param>
+    /// <param name="groups">ComponentGroups whose frozen internal paths are checked.</param>
+    /// <param name="minWaveguideSpacingMicrometers">Minimum required edge-to-edge spacing.</param>
+    /// <returns>A list of all design issues found, empty if the design is valid.</returns>
+    public List<DesignIssue> Validate(
+        IEnumerable<WaveguideConnection> connections,
+        IEnumerable<ComponentGroup> groups,
+        double minWaveguideSpacingMicrometers)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(groups);
+
+        var connectionList = connections.ToList();
+        var issues = Validate(connectionList);
+        issues.AddRange(_overlapDetector.DetectOverlaps(connectionList, groups));
+        issues.AddRange(_spacingDetector.DetectViolations(connectionList, groups, minWaveguideSpacingMicrometers));
         return issues;
     }
 
