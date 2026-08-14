@@ -941,6 +941,7 @@
   "Routing.Connection.BendRadius": "Radio de curvatura (µm):",
   "Routing.Connection.BendsInPath": "Curvas en la ruta: ",
   "Routing.Connection.FreezeRoute": "Congelar ruta",
+  "Routing.Connection.BatchApply": "Se aplica a {0} conexiones seleccionadas",
   "Routing.Connection.Radius": "Radio",
   "Routing.Connection.Style": "Estilo:",
   "Routing.Connection.EffectiveStyleFormat": "Auto (efectivo: {0})",

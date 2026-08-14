@@ -941,6 +941,7 @@
   "Routing.Connection.BendRadius": "曲げ半径 (µm)：",
   "Routing.Connection.BendsInPath": "パス内の曲げ： ",
   "Routing.Connection.FreezeRoute": "ルートを固定",
+  "Routing.Connection.BatchApply": "選択した {0} 本の接続に適用されます",
   "Routing.Connection.Radius": "半径",
   "Routing.Connection.Style": "スタイル：",
   "Routing.Connection.EffectiveStyleFormat": "自動（実効: {0}）",
