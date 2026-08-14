@@ -268,6 +268,19 @@ public class GdsPinDetectorTests
     }
 
     [Fact]
+    public void MetalPolygon_TouchingEdge_ProducesNoHeuristicPins()
+    {
+        // The edge heuristic only scans waveguide layers; metal-only edges are
+        // intentionally out of scope (electrical ports need labels or a
+        // higher-confidence detector).
+        var cell = Cell(Poly(11, 0, (0, 1), (3, 1), (3, 2), (0, 2), (0, 1)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldBeEmpty();
+    }
+
+    [Fact]
     public void ClosingPointDuplication_CreatesNoPhantomPins()
     {
         var cell = Cell(

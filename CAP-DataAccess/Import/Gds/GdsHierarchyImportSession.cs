@@ -91,8 +91,27 @@ internal sealed partial class GdsHierarchyImportSession
             DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
             Warnings);
+        pins = FilterExcludedGuessedPins(cellName, pins);
         _pins[cellName] = pins;
         return pins;
+    }
+
+    /// <summary>
+    /// Removes heuristic pins the user deleted in the import dialog from the
+    /// final pin list. Filtering happens after naming so the surviving pins
+    /// keep the same names the dialog showed.
+    /// </summary>
+    private IReadOnlyList<DetectedPin> FilterExcludedGuessedPins(
+        string cellName, IReadOnlyList<DetectedPin> pins)
+    {
+        if (_options.ExcludedGuessedPins.Count == 0)
+            return pins;
+
+        var excluded = new HashSet<(string Cell, string Pin)>(
+            _options.ExcludedGuessedPins.Select(g => (g.CellName, g.PinName)));
+        return pins.Where(p =>
+            p.Source != DetectedPinSource.EdgeHeuristic
+            || !excluded.Contains((cellName, p.Name))).ToList();
     }
 
     /// <summary>
