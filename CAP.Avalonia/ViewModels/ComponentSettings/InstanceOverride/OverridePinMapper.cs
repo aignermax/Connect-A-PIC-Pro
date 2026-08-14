@@ -60,6 +60,8 @@ public static class OverridePinMapper
             OffsetXMicrometers = p.OffsetXMicrometers,
             OffsetYMicrometers = p.OffsetYMicrometers,
             AngleDegrees = p.AngleDegrees,
+            WaveguideWidthMicrometers = p.WaveguideWidthMicrometers,
+            Layer = p.Layer,
         }).ToList();
 
     /// <summary>
@@ -88,6 +90,8 @@ public static class OverridePinMapper
                 AngleDegrees = pd.AngleDegrees,
                 ParentComponent = comp,
                 LogicalPin = logicalByName.GetValueOrDefault(pd.Name),
+                WaveguideWidthMicrometers = pd.WaveguideWidthMicrometers,
+                Layer = pd.Layer,
             });
         }
     }

@@ -39,6 +39,12 @@ public static partial class GdsPinDetector
         var waveguidePolygons = flattened.Polygons
             .Where(p => ContainsLayer(options.WaveguideLayers, p.Layer, p.DataType))
             .ToList();
+        // Attribute a layer to edge-heuristic pins only when every contributing
+        // waveguide polygon agrees on one — mixed-layer geometry stays null.
+        int? waveguideLayer = waveguidePolygons.Count > 0
+            && waveguidePolygons.All(p => p.Layer == waveguidePolygons[0].Layer)
+                ? waveguidePolygons[0].Layer
+                : null;
         var edgeFrame = cellBBox;
         if (labelFree && waveguidePolygons.Count > 0)
         {
@@ -91,6 +97,7 @@ public static partial class GdsPinDetector
                     YUm = ToAppY(midpoint.Y, cellBBox),
                     AngleDegrees = OutwardAngleDegrees(edge),
                     WidthUm = width,
+                    Layer = waveguideLayer,
                     Source = DetectedPinSource.EdgeHeuristic,
                 }));
             }
@@ -104,7 +111,7 @@ public static partial class GdsPinDetector
         if (labelFree && touches.Count > 0
             && !candidates.Any(c => c.Pin.Source == DetectedPinSource.EdgeHeuristic))
         {
-            AddDegenerateChannelFallbackPins(candidates, touches, edgeFrame, cellBBox, options);
+            AddDegenerateChannelFallbackPins(candidates, touches, edgeFrame, cellBBox, options, waveguideLayer);
         }
     }
 
@@ -148,7 +155,8 @@ public static partial class GdsPinDetector
         SortedList<CellEdge, List<(double Start, double End)>> touches,
         GdsBoundingBox edgeFrame,
         GdsBoundingBox cellBBox,
-        GdsPinDetectionOptions options)
+        GdsPinDetectionOptions options,
+        int? waveguideLayer = null)
     {
         double tolerance = options.EdgeTouchToleranceUm;
         foreach (var (edge, intervals) in touches)
@@ -175,6 +183,7 @@ public static partial class GdsPinDetector
                     YUm = ToAppY(midpoint.Y, cellBBox),
                     AngleDegrees = OutwardAngleDegrees(edge),
                     WidthUm = width,
+                    Layer = waveguideLayer,
                     Source = DetectedPinSource.EdgeHeuristic,
                 }));
             }

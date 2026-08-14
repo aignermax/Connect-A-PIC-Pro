@@ -40,6 +40,7 @@ public sealed partial class GdsImportService
 
     private readonly DesignScopedGdsComponentService _designScope;
     private readonly Func<IReadOnlyList<ComponentTemplate>>? _templateProvider;
+    private readonly Func<double?>? _processDefaultWidthProvider;
 
     /// <summary>Initializes a new <see cref="GdsImportService"/>.</summary>
     /// <param name="designScope">
@@ -51,12 +52,21 @@ public sealed partial class GdsImportService
     /// resolution (e.g. <c>() => leftPanel.AllTemplates</c>); null/empty treats
     /// every cell as unknown (all become drafts).
     /// </param>
+    /// <param name="processDefaultWidthProvider">
+    /// Supplies the waveguide width (µm) of the active process' default optical
+    /// cross-section, so imported cells stamp it on their optical pins (DRC-lite
+    /// pin-mismatch rule). Null provider or null value leaves the widths null.
+    /// Like <paramref name="templateProvider"/> it is invoked on the caller's
+    /// context before the background handoff.
+    /// </param>
     public GdsImportService(
         DesignScopedGdsComponentService? designScope = null,
-        Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null)
+        Func<IReadOnlyList<ComponentTemplate>>? templateProvider = null,
+        Func<double?>? processDefaultWidthProvider = null)
     {
         _designScope = designScope ?? new DesignScopedGdsComponentService();
         _templateProvider = templateProvider;
+        _processDefaultWidthProvider = processDefaultWidthProvider;
     }
 
     /// <summary>
@@ -218,9 +228,11 @@ public sealed partial class GdsImportService
 
         // Heavy stages on a thread-pool thread (see the class remarks); the await
         // resumes on the caller's context, so the design-scope registration below
-        // mutates the UI-bound library exactly where it did before.
+        // mutates the UI-bound library exactly where it did before. The process
+        // default width is likewise read here, on the caller's context.
+        var processDefaultWidthUm = _processDefaultWidthProvider?.Invoke();
         var prepared = await Task.Run(
-            () => ParseAndPrepareAsync(gdsPath, topCellName, options, warnings, infos, progress, ct, preParsedLibrary), ct);
+            () => ParseAndPrepareAsync(gdsPath, topCellName, options, warnings, infos, progress, ct, preParsedLibrary, processDefaultWidthUm), ct);
 
         if (prepared.PdkDrafts.Count > 0)
         {
@@ -268,7 +280,8 @@ public sealed partial class GdsImportService
         List<string> infos,
         IProgress<string>? progress,
         CancellationToken ct,
-        GdsLibrary? preParsedLibrary = null)
+        GdsLibrary? preParsedLibrary = null,
+        double? processDefaultWidthUm = null)
     {
         progress?.Report($"Reading '{Path.GetFileName(gdsPath)}'…");
         var library = preParsedLibrary ?? await ReadLibraryAsync(gdsPath, ct);
@@ -308,7 +321,7 @@ public sealed partial class GdsImportService
                 // identity and the stored drafts keep the portable token form —
                 // the runtime path is substituted only into the registration
                 // copies (see DesignScopedGdsComponentService.AddAndRegister).
-                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, GdsHierarchyImporter.GdsFileNameToken, warnings);
+                var pdkDraft = GdsCellDraftMapper.Map(cellDraft, GdsHierarchyImporter.GdsFileNameToken, warnings, processDefaultWidthUm);
                 pdkDraft.Name = DeduplicateName(pdkDraft.Name, cellDraft.CellName, usedNames, warnings);
                 pdkDrafts.Add(pdkDraft);
                 registered.Add(new GdsRegisteredComponent(cellDraft.CellName, pdkDraft.Name));

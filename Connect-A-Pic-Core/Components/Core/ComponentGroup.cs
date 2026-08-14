@@ -723,7 +723,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 OffsetXMicrometers = p.OffsetXMicrometers,
                 OffsetYMicrometers = p.OffsetYMicrometers,
                 AngleDegrees = p.AngleDegrees,
-                LogicalPin = p.LogicalPin
+                LogicalPin = p.LogicalPin,
+                WaveguideWidthMicrometers = p.WaveguideWidthMicrometers,
+                Layer = p.Layer
             }).ToList()
         )
         {
@@ -863,7 +865,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 OffsetXMicrometers = externalPin.RelativeX,
                 OffsetYMicrometers = externalPin.RelativeY,
                 AngleDegrees = externalPin.AngleDegrees,
-                LogicalPin = externalPin.InternalPin.LogicalPin
+                LogicalPin = externalPin.InternalPin.LogicalPin,
+                WaveguideWidthMicrometers = externalPin.InternalPin.WaveguideWidthMicrometers,
+                Layer = externalPin.InternalPin.Layer
             };
 
             PhysicalPins.Add(physicalPin);

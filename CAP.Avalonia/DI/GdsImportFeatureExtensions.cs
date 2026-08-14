@@ -33,7 +33,15 @@ internal static class GdsImportFeatureExtensions
             var leftPanel = sp.GetRequiredService<LeftPanelViewModel>();
             return new GdsImportService(
                 sp.GetRequiredService<DesignScopedGdsComponentService>(),
-                () => leftPanel.AllTemplates.ToList());
+                () => leftPanel.AllTemplates.ToList(),
+                // Resolved lazily inside the delegate (like the bend-radius wiring in
+                // MainViewModel): the active process changes per design, and resolving
+                // FileOperationsViewModel here in the factory would risk a DI cycle.
+                () => CAP_DataAccess.Components.ComponentDraftMapper.ProcessOpticalDefaultsResolver
+                    .Resolve(
+                        sp.GetRequiredService<FileOperationsViewModel>().ActiveProcess,
+                        leftPanel.GetLoadedPdkDrafts())
+                    .WidthUm);
         });
         services.AddSingleton(sp =>
         {

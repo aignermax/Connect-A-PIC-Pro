@@ -74,6 +74,7 @@ public static partial class GdsPinDetector
                     ? SegmentOutwardAngleDegrees(directionPolygon, geometry.P1, geometry.P2)
                     : OutwardAngleDegrees(edge),
                 WidthUm = portShapeWidth,
+                Layer = text.Layer,
                 Source = DetectedPinSource.Label,
                 IsElectrical = InferLabelPinKind(text.Text, geometry),
             }));
@@ -117,6 +118,7 @@ public static partial class GdsPinDetector
                     ? SegmentOutwardAngleDegrees(markerPolygon, geometry.P1, geometry.P2)
                     : OutwardAngleDegrees(edge),
                 WidthUm = 0,
+                Layer = geometry.Polygon?.Layer,
                 Source = DetectedPinSource.ArrowMarker,
                 IsElectrical = InferLabelPinKind(string.Empty, geometry),
             }));
