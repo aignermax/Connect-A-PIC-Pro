@@ -46,6 +46,9 @@ public class ComponentGroupSMatrixBuilder
 
     /// <summary>
     /// Builds S-Matrices for all wavelengths supported by child components.
+    /// Per-wavelength builds are independent (read-only over the group) and run
+    /// in parallel — a dense group's transitive closure is O(n³) per stop, and
+    /// the field report had multi-second simulation starts on a 118-child group.
     /// </summary>
     public Dictionary<int, SMatrix>? BuildGroupSMatrixAllWavelengths(ComponentGroup group)
     {
@@ -60,18 +63,27 @@ public class ComponentGroupSMatrixBuilder
         if (supportedWavelengths.Count == 0)
             return null;
 
-        var result = new Dictionary<int, SMatrix>();
-
-        foreach (var wavelength in supportedWavelengths)
+        var result = new System.Collections.Concurrent.ConcurrentDictionary<int, SMatrix>();
+        try
         {
-            var matrix = BuildSMatrixForWavelength(group, wavelength);
-            if (matrix != null)
+            Parallel.ForEach(supportedWavelengths, wavelength =>
             {
-                result[wavelength] = matrix;
-            }
+                var matrix = BuildSMatrixForWavelength(group, wavelength);
+                if (matrix != null)
+                {
+                    result[wavelength] = matrix;
+                }
+            });
+        }
+        catch (AggregateException ex)
+        {
+            // Keep the rejection structured: callers (and users) expect the plain
+            // domain exception (e.g. NonConvergentCircuitException from the
+            // passivity check), not a Parallel wrapper around it.
+            throw ex.InnerExceptions[0];
         }
 
-        return result;
+        return new Dictionary<int, SMatrix>(result);
     }
 
     /// <summary>
