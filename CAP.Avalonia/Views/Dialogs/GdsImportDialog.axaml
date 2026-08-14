@@ -218,6 +218,12 @@
                           Content="{loc:Localize GdsImport.RerouteConnections}"
                           ToolTip.Tip="{loc:Localize GdsImport.RerouteConnectionsTip}"
                           Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+
+                <!-- Auto-connect all remaining facing pins after placement (opt-in, issue #880) -->
+                <CheckBox IsChecked="{Binding AutoConnectAllPinsRequested}"
+                          Content="{loc:Localize GdsImport.AutoConnectAllPins}"
+                          ToolTip.Tip="{loc:Localize GdsImport.AutoConnectAllPinsTip}"
+                          Foreground="White" FontSize="11" VerticalAlignment="Center"/>
             </StackPanel>
 
             <!-- ═══ Result (after successful import) ═══ -->
