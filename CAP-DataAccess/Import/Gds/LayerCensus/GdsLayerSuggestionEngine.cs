@@ -8,10 +8,11 @@ namespace CAP_DataAccess.Import.Gds.LayerCensus;
 /// (high), metal/waveguide claims from the union of known tool/foundry tables
 /// (medium — layer numbers collide across foundries: one foundry's M1 is
 /// another's core etch, so optical vs electrical from a bare number stays a
-/// human-confirmed guess), and top-cell layers with route-like strokes as
-/// "routing, kind unknown" (low). Facts stay in the census; only
-/// high-confidence suggestions are auto-applied by the dialog — everything
-/// else waits for a click.
+/// human-confirmed guess), port-layer polygon shapes that touch a cell boundary
+/// (low — geometry-only hint for marker layers that carry no text), and
+/// top-cell layers with route-like strokes as "routing, kind unknown" (low).
+/// Facts stay in the census; only high-confidence suggestions are auto-applied
+/// by the dialog — everything else waits for a click.
 /// </summary>
 public static class GdsLayerSuggestionEngine
 {
@@ -23,6 +24,9 @@ public static class GdsLayerSuggestionEngine
 
     /// <summary>Cap on the cell names listed in a text-evidence reason.</summary>
     private const int MaxCellNamesInReason = 4;
+
+    /// <summary>Cell bounding-box edges used to reject full-frame outlines.</summary>
+    private enum BoundaryEdge { Left, Top, Right, Bottom }
 
     /// <summary>
     /// Builds the suggestions for one top-cell choice. Deterministic: at most
@@ -44,6 +48,7 @@ public static class GdsLayerSuggestionEngine
         var opticalProven = AddPortAttachmentSuggestions(library, suggestions, covered);
         AddKnownConventionMatches(census, suggestions, covered, opticalProven);
         AddTextBearingLayers(census, suggestions, covered);
+        AddPortShapeLayers(library, suggestions, covered);
         AddTopCellRouteCandidates(library, topCellName, suggestions, covered);
         return suggestions;
     }
@@ -147,6 +152,152 @@ public static class GdsLayerSuggestionEngine
                 GdsSuggestionConfidence.High,
                 $"{entry.PortLikeTextCount} text label(s) in {FormatCellList(entry.TextCellNames)}"));
         }
+    }
+
+    /// <summary>
+    /// Layers that carry polygons touching a cell boundary are plausible port-
+    /// marker layers even when they have no text (e.g. gdsfactory-style pin
+    /// markers drawn as small polygons). The suggestion is deliberately low
+    /// confidence: a boundary-touching rectangle can also be an outline or a
+    /// pad, so it is offered but never auto-applied.
+    /// </summary>
+    private static void AddPortShapeLayers(
+        GdsLibrary library,
+        List<GdsLayerSuggestion> suggestions,
+        HashSet<(int Layer, int Datatype, GdsLayerRole Role)> covered)
+    {
+        const double toleranceUm = 0.01;
+        var counts = new Dictionary<(int Layer, int Datatype), int>();
+        var cellNames = new Dictionary<(int Layer, int Datatype), HashSet<string>>();
+
+        foreach (var cell in library.Cells.Values)
+        {
+            var bbox = ComputeCellBoundingBox(cell);
+            if (bbox.Width <= 0 || bbox.Height <= 0)
+                continue;
+
+            foreach (var element in cell.Elements)
+            {
+                if (element is not GdsPolygon polygon)
+                    continue;
+
+                // Full-cell outlines (DevRec/bbox frames) touch three or four
+                // edges and are not port markers — skip them before counting.
+                var touchedEdges = new HashSet<BoundaryEdge>();
+                for (int i = 0; i < polygon.Points.Count - 1; i++)
+                {
+                    var p1 = polygon.Points[i];
+                    var p2 = polygon.Points[i + 1];
+                    if (BoundaryEdgeTouched(p1, p2, bbox, toleranceUm) is { } edge)
+                        touchedEdges.Add(edge);
+                }
+                if (touchedEdges.Count >= 3)
+                    continue;
+
+                for (int i = 0; i < polygon.Points.Count - 1; i++)
+                {
+                    var p1 = polygon.Points[i];
+                    var p2 = polygon.Points[i + 1];
+                    if (BoundaryEdgeTouched(p1, p2, bbox, toleranceUm) is null)
+                        continue;
+
+                    var key = (polygon.Layer, polygon.DataType);
+                    counts[key] = counts.TryGetValue(key, out var value) ? value + 1 : 1;
+                    if (!cellNames.TryGetValue(key, out var set))
+                    {
+                        set = new HashSet<string>(StringComparer.Ordinal);
+                        cellNames[key] = set;
+                    }
+                    set.Add(cell.Name);
+                }
+            }
+        }
+
+        foreach (var (pair, count) in counts
+            .OrderBy(kv => kv.Key.Layer)
+            .ThenBy(kv => kv.Key.Datatype))
+        {
+            // A pair already claimed as waveguide/metal is route geometry —
+            // a through-going core strip touches the bbox left+right and must
+            // not additionally get a "may mark ports" chip.
+            if (covered.Contains((pair.Layer, pair.Datatype, GdsLayerRole.Waveguide))
+                || covered.Contains((pair.Layer, pair.Datatype, GdsLayerRole.Metal))
+                || !covered.Add((pair.Layer, pair.Datatype, GdsLayerRole.PortLabels)))
+            {
+                continue;
+            }
+
+            var reason = $"{count} boundary-touching polygon(s) in {FormatCellList(cellNames[pair].ToList())} may mark ports";
+            suggestions.Add(new GdsLayerSuggestion(
+                pair.Layer, pair.Datatype, GdsLayerRole.PortLabels,
+                GdsSuggestionConfidence.Low, reason));
+        }
+    }
+
+    /// <summary>
+    /// The cell's own bounding box, built from its direct polygon/path/text
+    /// geometry. References are ignored: port markers are part of the cell's
+    /// own geometry, and resolving transformed references would require a full
+    /// flatten pass the census deliberately avoids.
+    /// </summary>
+    private static GdsBoundingBox ComputeCellBoundingBox(GdsCell cell)
+    {
+        double minX = double.MaxValue, minY = double.MaxValue;
+        double maxX = double.MinValue, maxY = double.MinValue;
+        bool hasPoint = false;
+
+        void Consider(GdsPoint point)
+        {
+            hasPoint = true;
+            minX = Math.Min(minX, point.X);
+            minY = Math.Min(minY, point.Y);
+            maxX = Math.Max(maxX, point.X);
+            maxY = Math.Max(maxY, point.Y);
+        }
+
+        foreach (var element in cell.Elements)
+        {
+            switch (element)
+            {
+                case GdsPolygon polygon:
+                    foreach (var point in polygon.Points)
+                        Consider(point);
+                    break;
+                case GdsPath path:
+                    foreach (var point in path.Points)
+                        Consider(point);
+                    break;
+                case GdsText text:
+                    Consider(text.Position);
+                    break;
+                case GdsReference reference:
+                    Consider(reference.Offset);
+                    break;
+            }
+        }
+
+        return hasPoint
+            ? new GdsBoundingBox(minX, minY, maxX, maxY)
+            : GdsBoundingBox.Empty;
+    }
+
+    /// <summary>
+    /// The bounding-box edge a segment lies on (both endpoints within
+    /// <paramref name="toleranceUm"/> of the edge line), or null. Edges are
+    /// checked in a fixed order so a corner segment matches at most one edge.
+    /// </summary>
+    private static BoundaryEdge? BoundaryEdgeTouched(
+        GdsPoint p1, GdsPoint p2, GdsBoundingBox bbox, double toleranceUm)
+    {
+        if (Math.Abs(p1.X - bbox.MinX) <= toleranceUm && Math.Abs(p2.X - bbox.MinX) <= toleranceUm)
+            return BoundaryEdge.Left;
+        if (Math.Abs(p1.Y - bbox.MaxY) <= toleranceUm && Math.Abs(p2.Y - bbox.MaxY) <= toleranceUm)
+            return BoundaryEdge.Top;
+        if (Math.Abs(p1.X - bbox.MaxX) <= toleranceUm && Math.Abs(p2.X - bbox.MaxX) <= toleranceUm)
+            return BoundaryEdge.Right;
+        if (Math.Abs(p1.Y - bbox.MinY) <= toleranceUm && Math.Abs(p2.Y - bbox.MinY) <= toleranceUm)
+            return BoundaryEdge.Bottom;
+        return null;
     }
 
     /// <summary>

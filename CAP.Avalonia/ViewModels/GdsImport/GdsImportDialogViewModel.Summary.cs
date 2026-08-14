@@ -27,6 +27,13 @@ public partial class GdsImportDialogViewModel
                 LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"),
                 report.ReroutedCount);
         }
+        if (report.AutoConnectedCount > 0 || report.AutoConnectFailedCount > 0)
+        {
+            summary += string.Format(
+                LocalizationService.Instance.Translate("GdsImport.ResultAutoConnectedSuffix"),
+                report.AutoConnectedCount - report.AutoConnectFailedCount,
+                report.AutoConnectFailedCount);
+        }
         if (report.GroupCreated)
         {
             summary += string.Format(

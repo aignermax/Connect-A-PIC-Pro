@@ -50,7 +50,7 @@ internal static class GdsMziElectricalFixture
             // box centre, pin offsets included) — a bare RotationDegrees assignment
             // would leave the pin offsets unrotated.
             for (var quarterTurns = (int)Math.Round(rotation / 90.0); quarterTurns > 0; quarterTurns--)
-                CAP.Avalonia.Commands.RotateComponentCommand.ApplyModelRotation90(component);
+                CAP_Core.Components.Core.ComponentPoseTransform.Rotate90CounterClockwise(component);
             canvas.AddComponent(component, templateName, pdk);
             return component;
         }

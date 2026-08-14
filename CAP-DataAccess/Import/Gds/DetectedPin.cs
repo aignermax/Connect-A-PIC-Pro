@@ -13,6 +13,9 @@ public enum DetectedPinSource
 
     /// <summary>Derived from a nazca-style arrow pin marker (paired chevron tips or an edge-side single).</summary>
     ArrowMarker,
+
+    /// <summary>Derived from an explicit port-layer polygon shape touching the cell boundary.</summary>
+    PortShape,
 }
 
 /// <summary>
