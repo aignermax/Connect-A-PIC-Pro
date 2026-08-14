@@ -110,18 +110,18 @@ public class RotateComponentCommandTests
     // -------------------------------------------------------------------------
 
     [Fact]
-    public void ApplyModelRotation_RecordsUnrotatedDimensionsOnce()
+    public void RotateByDegrees_RecordsUnrotatedDimensionsOnce()
     {
         var comp = CreateComponent(widthMicrometers: 20, heightMicrometers: 10);
 
-        RotateComponentCommand.ApplyModelRotation(comp, 30);
+        ComponentPoseTransform.RotateByDegrees(comp, 30);
 
         comp.UnrotatedWidthMicrometers.ShouldBe(20, 1e-9);
         comp.UnrotatedHeightMicrometers.ShouldBe(10, 1e-9);
 
         // Further rotations (and undo/redo cycles) must never overwrite the frame.
-        RotateComponentCommand.ApplyModelRotation(comp, 15);
-        RotateComponentCommand.ApplyModelRotation90(comp);
+        ComponentPoseTransform.RotateByDegrees(comp, 15);
+        ComponentPoseTransform.Rotate90CounterClockwise(comp);
 
         comp.UnrotatedWidthMicrometers.ShouldBe(20, 1e-9);
         comp.UnrotatedHeightMicrometers.ShouldBe(10, 1e-9);

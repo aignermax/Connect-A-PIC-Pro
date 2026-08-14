@@ -52,6 +52,14 @@ public partial class Component : ICloneable
     public double PhysicalOffsetX { get; set; }
     public double PhysicalOffsetY { get; set; }
     public double RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the physical pins were mirrored across the component's local
+    /// horizontal centerline (GDS STRANS-reflected instance — see
+    /// <see cref="ComponentPoseTransform.MirrorPinsHorizontally"/>). Persisted
+    /// with the design so the mirrored pin layout survives a save/load.
+    /// </summary>
+    public bool IsMirroredHorizontally { get; set; }
     public double NazcaOriginOffsetX { get; set; }
     public double NazcaOriginOffsetY { get; set; }
 
@@ -365,6 +373,7 @@ public partial class Component : ICloneable
         clonedComponent.PhysicalOffsetX = PhysicalOffsetX;
         clonedComponent.PhysicalOffsetY = PhysicalOffsetY;
         clonedComponent.RotationDegrees = RotationDegrees;
+        clonedComponent.IsMirroredHorizontally = IsMirroredHorizontally;
         clonedComponent.NazcaOriginOffsetX = NazcaOriginOffsetX;
         clonedComponent.NazcaOriginOffsetY = NazcaOriginOffsetY;
         // The module is part of the component's geometry identity (it picks the Nazca cell):
