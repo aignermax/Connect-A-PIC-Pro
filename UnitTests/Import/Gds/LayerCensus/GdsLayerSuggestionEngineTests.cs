@@ -355,6 +355,33 @@ public class GdsLayerSuggestionEngineTests
     }
 
     [Fact]
+    public void BoundaryTouchingPolygon_OnKnownWaveguideLayer_GetsNoPortLabelChip()
+    {
+        // A through-going waveguide core strip touches the bbox left+right —
+        // that is route geometry, not a port marker: the pair already claimed
+        // as waveguide must not additionally get a "may mark ports" chip.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(111, 0, 10, 4),
+            new GdsPolygon
+            {
+                Layer = 1,
+                DataType = 0,
+                Points = new[]
+                {
+                    new GdsPoint(0, 1), new GdsPoint(10, 1),
+                    new GdsPoint(10, 1.5), new GdsPoint(0, 1.5), new GdsPoint(0, 1),
+                },
+            }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 1 && s.Datatype == 0 && s.Role == GdsLayerRole.Waveguide);
+        suggestions.ShouldNotContain(s =>
+            s.Layer == 1 && s.Datatype == 0 && s.Role == GdsLayerRole.PortLabels);
+    }
+
+    [Fact]
     public void MissingTopCell_YieldsNoRouteCandidates_WithoutThrowing()
     {
         var library = Library(Cell("other", Text(56, 0, "p")));

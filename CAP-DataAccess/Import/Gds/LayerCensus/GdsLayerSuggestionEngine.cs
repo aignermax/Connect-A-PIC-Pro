@@ -217,8 +217,15 @@ public static class GdsLayerSuggestionEngine
             .OrderBy(kv => kv.Key.Layer)
             .ThenBy(kv => kv.Key.Datatype))
         {
-            if (!covered.Add((pair.Layer, pair.Datatype, GdsLayerRole.PortLabels)))
+            // A pair already claimed as waveguide/metal is route geometry —
+            // a through-going core strip touches the bbox left+right and must
+            // not additionally get a "may mark ports" chip.
+            if (covered.Contains((pair.Layer, pair.Datatype, GdsLayerRole.Waveguide))
+                || covered.Contains((pair.Layer, pair.Datatype, GdsLayerRole.Metal))
+                || !covered.Add((pair.Layer, pair.Datatype, GdsLayerRole.PortLabels)))
+            {
                 continue;
+            }
 
             var reason = $"{count} boundary-touching polygon(s) in {FormatCellList(cellNames[pair].ToList())} may mark ports";
             suggestions.Add(new GdsLayerSuggestion(

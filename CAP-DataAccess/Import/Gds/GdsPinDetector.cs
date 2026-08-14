@@ -50,6 +50,14 @@ namespace CAP_DataAccess.Import.Gds;
 /// and then by position along the edge; unnamed pins (edge heuristic, arrow
 /// markers, and uncovered port-layer shapes) are named <c>heur_1..N</c> in that
 /// final order.
+///
+/// The strategies live in sibling partial files: labels/arrow markers in
+/// <c>GdsPinDetector.LabelPins.cs</c>, port-layer shapes in
+/// <c>GdsPinDetector.PortShapes.cs</c>, the edge heuristic in
+/// <c>GdsPinDetector.EdgeScan.cs</c>, terminus faces in
+/// <c>GdsPinDetector.TerminusFaces.cs</c>, anchor probing in
+/// <c>GdsPinDetector.AnchorProbe.cs</c>, and shared geometry helpers in
+/// <c>GdsPinDetector.Geometry.cs</c> / <c>GdsPinDetector.EdgeHelpers.cs</c>.
 /// </summary>
 public static partial class GdsPinDetector
 {
@@ -85,244 +93,31 @@ public static partial class GdsPinDetector
         options ??= new GdsPinDetectionOptions();
         options.Validate();
 
-        var result = new List<DetectedPin>();
         if (cellBBox.Width <= 0 || cellBBox.Height <= 0)
-            return result;
+            return new List<DetectedPin>();
 
-        double tolerance = options.EdgeTouchToleranceUm;
-
-        // ── 0. Port-layer shape candidates ───────────────────────────────────
         // Explicit port shapes are detected first: they give a label at the
         // same location its width and exact boundary position, and any shape
         // not named by a label becomes a pin of its own.
         var portShapes = FindPortLayerShapeCandidates(flattened, cellBBox, options);
         var coveredPortShapes = new HashSet<int>();
-
-        // ── 1. Label pins ────────────────────────────────────────────────────
         var labelAnchors = new List<GdsPoint>();
         var candidates = new List<Candidate>();
-        AnchorGeometryIndex? geometryIndex = null;
-        // nazca-style arrow markers carry exact pin positions for this cell.
-        var markers = GdsPinArrowMarkers.Find(flattened, cellBBox);
-        foreach (var text in flattened.Texts)
-        {
-            if (!ContainsLayer(options.PortLayers, text.Layer, text.TextType))
-                continue;
-            // nazca placement anchors / parameter annotations are never ports —
-            // filtered on every path, configured port layers included.
-            if (GdsGhostLabelFilter.IsGhost(text))
-                continue;
 
-            // Built once per run, on the first port label — cells without port
-            // labels never pay for the spatial index.
-            geometryIndex ??= BuildAnchorGeometryIndex(flattened.Polygons, options);
-            // An arrow marker near the label holds the exact pin position:
-            // re-anchor to its tip so direction and material are probed where
-            // the pin really is, not where the label happened to be placed.
-            var anchor = NearestMarkerTip(text.Position, markers, MarkerSnapToleranceUm) ?? text.Position;
-            // A port-layer shape at the boundary gives the exact pin position
-            // and width; arrow markers take precedence for position, but the
-            // shape still contributes width when the label sits on it.
-            var portShape = NearestPortShape(text.Position, portShapes, MarkerSnapToleranceUm);
-            double portShapeWidth = 0;
-            if (portShape is not null)
-            {
-                portShapeWidth = portShape.Value.Candidate.WidthUm;
-                if (!markers.Any(m => DistanceSquaredLessOrEqual(m.Position, text.Position, MarkerSnapToleranceUm)))
-                {
-                    anchor = portShape.Value.Candidate.Midpoint;
-                }
-                coveredPortShapes.Add(portShape.Value.Index);
-            }
-            CellEdge edge = NearestEdge(anchor, cellBBox);
-            var geometry = ProbeAnchorGeometry(anchor, geometryIndex, options);
-            labelAnchors.Add(anchor);
-            candidates.Add(new Candidate(edge, new DetectedPin
-            {
-                Name = text.Text,
-                XUm = ToAppX(anchor.X, cellBBox),
-                YUm = ToAppY(anchor.Y, cellBBox),
-                AngleDegrees = geometry is { Polygon: { } directionPolygon }
-                    ? SegmentOutwardAngleDegrees(directionPolygon, geometry.P1, geometry.P2)
-                    : OutwardAngleDegrees(edge),
-                WidthUm = portShapeWidth,
-                Source = DetectedPinSource.Label,
-                IsElectrical = InferLabelPinKind(text.Text, geometry),
-            }));
-        }
-
-        // ── 1b. Arrow-marker pins ────────────────────────────────────────────
-        // Markers without a nearby label still yield a pin — but only when
-        // route geometry lies at the tip: floating orientation chevrons (they
-        // merely indicate "outside" for an edge) never become pins.
-        if (markers.Count > 0)
-        {
-            geometryIndex ??= BuildAnchorGeometryIndex(flattened.Polygons, options);
-            foreach (var marker in markers)
-            {
-                if (IsCoveredByLabel(marker.Position, labelAnchors, MarkerSnapToleranceUm))
-                    continue;
-                var geometry = ProbeAnchorGeometry(marker.Position, geometryIndex, options);
-                if (geometry is null)
-                    continue;
-                CellEdge edge = NearestEdge(marker.Position, cellBBox);
-                labelAnchors.Add(marker.Position);
-                candidates.Add(new Candidate(edge, new DetectedPin
-                {
-                    Name = string.Empty,
-                    XUm = ToAppX(marker.Position.X, cellBBox),
-                    YUm = ToAppY(marker.Position.Y, cellBBox),
-                    AngleDegrees = geometry is { Polygon: { } markerPolygon }
-                        ? SegmentOutwardAngleDegrees(markerPolygon, geometry.P1, geometry.P2)
-                        : OutwardAngleDegrees(edge),
-                    WidthUm = 0,
-                    Source = DetectedPinSource.ArrowMarker,
-                    IsElectrical = InferLabelPinKind(string.Empty, geometry),
-                }));
-            }
-        }
-
-        // ── 1c. Port-layer shapes not named by labels ────────────────────────
+        AddLabelAndMarkerPins(candidates, labelAnchors, flattened, cellBBox, portShapes, coveredPortShapes, options);
         AddPortLayerShapePins(candidates, labelAnchors, portShapes, coveredPortShapes, cellBBox, options);
+        AddEdgeHeuristicPins(candidates, labelAnchors, flattened, cellBBox, options);
 
-        // ── 2. Edge heuristic ────────────────────────────────────────────────
-        // Label-free cells (route cells: straights, bends, sine bends) scan
-        // against the WAVEGUIDE GEOMETRY's own extent, not the cell bbox:
-        // envelope/marker polygons (e.g. gdsfactory's layer-68 bend envelope)
-        // routinely inflate the cell bbox a few hundred nm past the core's
-        // port faces, which would push those faces beyond the touch tolerance
-        // and silently drop the pins there (field report: bend cells kept only
-        // their west pin, breaking every chain joint at the bend exit). Cells
-        // WITH label/marker pins keep the full-bbox frame — their labeled pins
-        // are authoritative and the heuristic only fills gaps near them.
-        // Pin coordinates are always emitted in the full cell-bbox frame.
-        // Collect touch intervals per edge first so overlapping/adjacent touches
-        // merge into a single pin.
-        bool labelFree = !candidates.Any(
-            c => c.Pin.Source is DetectedPinSource.Label or DetectedPinSource.ArrowMarker or DetectedPinSource.PortShape);
-        var waveguidePolygons = flattened.Polygons
-            .Where(p => ContainsLayer(options.WaveguideLayers, p.Layer, p.DataType))
-            .ToList();
-        var touches = new SortedList<CellEdge, List<(double Start, double End)>>();
-        var edgeFrame = cellBBox;
-        if (labelFree && waveguidePolygons.Count > 0)
-        {
-            edgeFrame = new GdsBoundingBox(
-                waveguidePolygons.Min(p => p.Points.Min(pt => pt.X)),
-                waveguidePolygons.Min(p => p.Points.Min(pt => pt.Y)),
-                waveguidePolygons.Max(p => p.Points.Max(pt => pt.X)),
-                waveguidePolygons.Max(p => p.Points.Max(pt => pt.Y)));
-        }
-        foreach (var polygon in waveguidePolygons)
-        {
-            foreach (var (p1, p2) in Segments(polygon))
-            {
-                CellEdge? edge = TouchingEdge(p1, p2, edgeFrame, tolerance);
-                if (edge is null)
-                    continue;
+        return OrderAndName(candidates);
+    }
 
-                (double start, double end) = edge is CellEdge.Left or CellEdge.Right
-                    ? (Math.Min(p1.Y, p2.Y), Math.Max(p1.Y, p2.Y))
-                    : (Math.Min(p1.X, p2.X), Math.Max(p1.X, p2.X));
-                if (!touches.TryGetValue(edge.Value, out var list))
-                    touches.Add(edge.Value, list = new List<(double, double)>());
-                list.Add((start, end));
-            }
-        }
-
-        foreach (var (edge, intervals) in touches)
-        {
-            // Sidewall rule (waveguide-frame scans only): a touch interval
-            // longer than the frame's PERPENDICULAR extent is the waveguide's
-            // long SIDE lying on the reference edge, not a port face (the
-            // waveguide frame pulls envelope margins inward, which would
-            // otherwise expose those sides as phantom pins). A port face is
-            // never wider than the waveguide is deep.
-            double perpendicularExtent = edge is CellEdge.Left or CellEdge.Right
-                ? edgeFrame.Width
-                : edgeFrame.Height;
-            foreach (var (start, end) in MergeIntervals(intervals, tolerance))
-            {
-                double width = end - start;
-                if (width < options.MinPinWidthUm || width > options.MaxPinWidthUm)
-                    continue;
-                if (labelFree && width > perpendicularExtent + tolerance)
-                    continue;
-
-                GdsPoint midpoint = MidpointOnEdge(edge, (start + end) / 2.0, edgeFrame);
-                if (IsCoveredByLabel(midpoint, labelAnchors, tolerance))
-                    continue;
-                // Arc-apex rule (waveguide-frame scans only): a port FACE has
-                // the waveguide channel continuing inward; a tessellated curve
-                // merely grazes the reference edge with the thin annulus wall
-                // behind it. One decisive probe point separates them (wide
-                // ports skip the probe: nothing apex-like is that wide, and
-                // deeply probed wide tapers would false-fire).
-                if (labelFree && width <= ApexProbeMaxPortWidthUm
-                    && !ChannelContinuesInward(midpoint, edge, width, waveguidePolygons))
-                    continue;
-
-                candidates.Add(new Candidate(edge, new DetectedPin
-                {
-                    Name = string.Empty,
-                    XUm = ToAppX(midpoint.X, cellBBox),
-                    YUm = ToAppY(midpoint.Y, cellBBox),
-                    AngleDegrees = OutwardAngleDegrees(edge),
-                    WidthUm = width,
-                    Source = DetectedPinSource.EdgeHeuristic,
-                }));
-            }
-        }
-
-        // ── 2b. Terminus faces at any exit angle ─────────────────────────────
-        // Device cells keep their labeled pin set; only label-free route cells
-        // get the ring scan.
-        if (labelFree)
-            AddTerminusFacePins(candidates, waveguidePolygons, cellBBox, options);
-
-        // Degenerate-channel fallback: the sidewall/apex rules exist to REMOVE
-        // spurious pins — when every rule path (edge scan AND terminus scan)
-        // comes up empty on a label-free cell that HAS touches (a gdsfactory
-        // stub straight shorter than its own width fails all of them), the
-        // conservative answer is the plain width-window acceptance, exactly the
-        // pre-rule behavior: dangling extra pins are harmless, a silently
-        // broken chain is not. Sidewall-looking intervals stay rejected unless
-        // the frame is sub-µm along their edge (there the aspect comparison is
-        // meaningless — a stub slice's propagation runs along its SHORT axis).
-        if (labelFree && touches.Count > 0
-            && !candidates.Any(c => c.Pin.Source == DetectedPinSource.EdgeHeuristic))
-        {
-            foreach (var (edge, intervals) in touches)
-            {
-                double perpendicularExtent = edge is CellEdge.Left or CellEdge.Right
-                    ? edgeFrame.Width
-                    : edgeFrame.Height;
-                double alongExtent = edge is CellEdge.Left or CellEdge.Right
-                    ? edgeFrame.Height
-                    : edgeFrame.Width;
-                foreach (var (start, end) in MergeIntervals(intervals, tolerance))
-                {
-                    double width = end - start;
-                    if (width < options.MinPinWidthUm || width > options.MaxPinWidthUm)
-                        continue;
-                    if (width > perpendicularExtent + tolerance && alongExtent > 1.0)
-                        continue;
-
-                    GdsPoint midpoint = MidpointOnEdge(edge, (start + end) / 2.0, edgeFrame);
-                    candidates.Add(new Candidate(edge, new DetectedPin
-                    {
-                        Name = string.Empty,
-                        XUm = ToAppX(midpoint.X, cellBBox),
-                        YUm = ToAppY(midpoint.Y, cellBBox),
-                        AngleDegrees = OutwardAngleDegrees(edge),
-                        WidthUm = width,
-                        Source = DetectedPinSource.EdgeHeuristic,
-                    }));
-                }
-            }
-        }
-
-        // ── 3. Deterministic order + heuristic naming ────────────────────────
+    /// <summary>
+    /// Deterministic order (edge left→top→right→bottom, then position along
+    /// the edge) plus <c>heur_1..N</c> naming for unnamed pins in that order.
+    /// </summary>
+    private static List<DetectedPin> OrderAndName(List<Candidate> candidates)
+    {
+        var result = new List<DetectedPin>();
         int heuristicCount = 0;
         foreach (var candidate in candidates
             .OrderBy(c => (int)c.Edge)
@@ -333,70 +128,6 @@ public static partial class GdsPinDetector
                 pin = pin with { Name = $"heur_{++heuristicCount}" };
             result.Add(pin);
         }
-
         return result;
     }
-
-    /// <summary>How far a label anchor may sit from an arrow-marker tip to adopt its exact position.</summary>
-    private const double MarkerSnapToleranceUm = 2.0;
-
-    /// <summary>Ports at most this wide must prove an inward channel (the arc-apex rule);
-    /// wider touches are accepted without the probe.</summary>
-    private const double ApexProbeMaxPortWidthUm = 2.0;
-
-    /// <summary>
-    /// True when the waveguide channel continues inward from a touch midpoint:
-    /// a single probe point along the edge's inward normal must still lie inside
-    /// a waveguide polygon. The probe sits at 90% of
-    /// <c>max(2 × port width, 1 µm)</c> — the bias keeps the point off the far
-    /// boundary when the channel is exactly threshold-long (even-odd is
-    /// implementation-defined ON an edge). Port faces pass (the channel runs
-    /// on), arc-apex grazes fail (only the thin annulus wall lies behind the
-    /// extreme point).
-    /// </summary>
-    private static bool ChannelContinuesInward(
-        GdsPoint midpoint, CellEdge edge, double portWidthUm, IReadOnlyList<GdsPolygon> waveguidePolygons)
-    {
-        double depth = Math.Max(2.0 * portWidthUm, 1.0) * 0.9;
-        var (dx, dy) = edge switch
-        {
-            CellEdge.Left => (1.0, 0.0),
-            CellEdge.Right => (-1.0, 0.0),
-            CellEdge.Top => (0.0, -1.0),   // GDS Y-up: top edge's inward is −Y
-            CellEdge.Bottom => (0.0, 1.0),
-            _ => throw new ArgumentOutOfRangeException(nameof(edge), edge, "Unknown cell edge."),
-        };
-        var probe = new GdsPoint(midpoint.X + dx * depth, midpoint.Y + dy * depth);
-        return waveguidePolygons.Any(p => PointInPolygon(p.Points, probe));
-    }
-
-    /// <summary>Squared distance between two points, compared against <paramref name="toleranceUm"/>².</summary>
-    private static bool DistanceSquaredLessOrEqual(GdsPoint a, GdsPoint b, double toleranceUm)
-    {
-        double dx = a.X - b.X, dy = a.Y - b.Y;
-        return dx * dx + dy * dy <= toleranceUm * toleranceUm;
-    }
-
-    /// <summary>The nearest arrow-marker tip within <paramref name="toleranceUm"/>, else null.</summary>
-    private static GdsPoint? NearestMarkerTip(
-        GdsPoint anchor, IReadOnlyList<GdsPinArrowMarkers.Marker> markers, double toleranceUm)
-    {
-        GdsPoint? best = null;
-        double bestDistanceSquared = toleranceUm * toleranceUm;
-        foreach (var marker in markers)
-        {
-            double dx = marker.Position.X - anchor.X, dy = marker.Position.Y - anchor.Y;
-            double distanceSquared = dx * dx + dy * dy;
-            if (distanceSquared <= bestDistanceSquared)
-            {
-                bestDistanceSquared = distanceSquared;
-                best = marker.Position;
-            }
-        }
-        return best;
-    }
-
-    // Some helpers (edge matching, coordinate conversion, interval merging)
-    // live in GdsPinDetector.EdgeHelpers.cs to keep this file under the
-    // architecture size limit while remaining in the same partial class.
 }

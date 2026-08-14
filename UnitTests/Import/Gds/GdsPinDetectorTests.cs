@@ -284,6 +284,24 @@ public class GdsPinDetectorTests
     }
 
     [Fact]
+    public void PortShape_OffCenter_YFlipConvertsGdsYToAppY()
+    {
+        // Off-center marker: GDS midpoint y = 1 in a 0..4 box must land at
+        // app y = MaxY − gdsY = 3, pinning the Y-flip (a vertically centered
+        // fixture would pass even with the flip missing).
+        var cell = Cell(Poly(1, 10, (0, 0.5), (0.5, 0.5), (0.5, 1.5), (0, 1.5), (0, 0.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.XUm.ShouldBe(0, Tolerance);
+        pin.YUm.ShouldBe(3, Tolerance);
+        pin.AngleDegrees.ShouldBe(180, Tolerance);
+        pin.WidthUm.ShouldBe(1, Tolerance);
+    }
+
+    [Fact]
     public void PortShape_CoversWaveguideEnd_SuppressesDuplicateHeuristicPin()
     {
         // A port marker on the left end plus a waveguide stub ending at the right
