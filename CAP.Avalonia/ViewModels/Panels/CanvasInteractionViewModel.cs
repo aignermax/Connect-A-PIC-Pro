@@ -567,8 +567,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 SelectedComponent = null;
                 _canvas.SelectedComponent = null;
                 SelectedWaveguideConnection = null;
-                UpdateStatus?.Invoke(
-                    $"Selected imported route geometry: {frozenPath.Path.Path.TotalLengthMicrometers:F1}µm");
+                UpdateStatus?.Invoke(string.Format(
+                    Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathSelected"),
+                    frozenPath.Path.Path.TotalLengthMicrometers.ToString("F1")));
             }
             else
             {
@@ -641,7 +642,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
             if (SelectedCanvasFrozenPath == frozenPath)
                 SelectedCanvasFrozenPath = null;
             _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
-            UpdateStatus?.Invoke("Deleted imported route geometry");
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
         }
     }
 
@@ -857,7 +859,8 @@ public partial class CanvasInteractionViewModel : ObservableObject
         {
             SelectedCanvasFrozenPath = null;
             _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
-            UpdateStatus?.Invoke("Deleted imported route geometry");
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
             return;
         }
 

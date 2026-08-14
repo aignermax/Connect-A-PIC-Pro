@@ -19,7 +19,8 @@ public class DeleteCanvasFrozenPathCommand : IUndoableCommand
     }
 
     /// <inheritdoc />
-    public string Description => "Delete imported route geometry";
+    public string Description =>
+        Services.Localization.LocalizationService.Instance.Translate("Command.DeleteFrozenPath");
 
     /// <inheritdoc />
     public void Execute()

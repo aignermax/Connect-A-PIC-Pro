@@ -23,7 +23,8 @@ public class MoveCanvasFrozenPathCommand : IUndoableCommand
     }
 
     /// <inheritdoc />
-    public string Description => "Move imported route geometry";
+    public string Description =>
+        Services.Localization.LocalizationService.Instance.Translate("Command.MoveFrozenPath");
 
     /// <inheritdoc />
     public void Execute()
