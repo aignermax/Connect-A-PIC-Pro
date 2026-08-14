@@ -61,15 +61,21 @@ public static class GdsLayerSuggestionEngine
         HashSet<(int, int, GdsLayerRole)> covered)
     {
         var optical = new HashSet<(int, int)>();
-        foreach (var (pair, labels) in GdsPortAttachmentProbe.Scan(library))
+        foreach (var (pair, evidence) in GdsPortAttachmentProbe.Scan(library))
         {
             if (!covered.Add((pair.Layer, pair.Datatype, GdsLayerRole.Waveguide)))
                 continue;
-            optical.Add(pair);
+            // A single resting label is a hint; a quorum is proof (and only
+            // proof vetoes a metal convention claim on the same pair).
+            var confidence = evidence.Count >= GdsPortAttachmentProbe.MinVotesForProof
+                ? GdsSuggestionConfidence.High
+                : GdsSuggestionConfidence.Medium;
+            if (confidence == GdsSuggestionConfidence.High)
+                optical.Add(pair);
             suggestions.Add(new GdsLayerSuggestion(
                 pair.Layer, pair.Datatype, GdsLayerRole.Waveguide,
-                GdsSuggestionConfidence.High,
-                $"port label(s) {FormatLabelSample(labels)} rest on this layer's shapes"));
+                confidence,
+                $"{evidence.Count} port label(s) rest on this layer ({FormatLabelSample(evidence.SampleLabels)})"));
         }
         return optical;
     }
@@ -120,7 +126,7 @@ public static class GdsLayerSuggestionEngine
     /// <summary>A convention only applies when the pair actually carries matching content.</summary>
     private static bool RoleFitsContent(GdsLayerRole role, GdsLayerCensusEntry entry) => role switch
     {
-        GdsLayerRole.PortLabels => entry.SingleLineTextCount > 0,
+        GdsLayerRole.PortLabels => entry.PortLikeTextCount > 0,
         _ => entry.PolygonCount + entry.PathCount > 0,
     };
 
@@ -129,17 +135,17 @@ public static class GdsLayerSuggestionEngine
         List<GdsLayerSuggestion> suggestions,
         HashSet<(int, int, GdsLayerRole)> covered)
     {
-        foreach (var entry in census.Where(e => e.SingleLineTextCount > 0))
+        foreach (var entry in census.Where(e => e.PortLikeTextCount > 0))
         {
             if (!covered.Add((entry.Layer, entry.Datatype, GdsLayerRole.PortLabels)))
                 continue;
-            // Single-line text labels on a layer ARE the port-label evidence —
-            // strong enough to auto-apply (helper/anchor labels are filtered
-            // downstream at pin detection, so a wrong accept stays harmless).
+            // Single-line, non-ghost text labels on a layer ARE the port-label
+            // evidence — strong enough to auto-apply (helper/anchor labels are
+            // filtered here already and again downstream at pin detection).
             suggestions.Add(new GdsLayerSuggestion(
                 entry.Layer, entry.Datatype, GdsLayerRole.PortLabels,
                 GdsSuggestionConfidence.High,
-                $"{entry.SingleLineTextCount} text label(s) in {FormatCellList(entry.TextCellNames)}"));
+                $"{entry.PortLikeTextCount} text label(s) in {FormatCellList(entry.TextCellNames)}"));
         }
     }
 

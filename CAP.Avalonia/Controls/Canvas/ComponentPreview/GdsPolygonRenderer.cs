@@ -55,8 +55,10 @@ public static class GdsPolygonRenderer
 
         // The rotate command already swapped comp.Width/Height at 90°/270°, but the bitmap
         // holds UNROTATED geometry: draw it into the unrotated-size rect and let the rotation
-        // transform map it onto the footprint — else the 90° swap is applied twice.
-        var destRect = GetUnrotatedDestRect(comp.X, comp.Y, comp.Width, comp.Height, rotationDegrees);
+        // transform map it onto the footprint — else the 90° swap is applied twice. For
+        // non-cardinal rotations the recorded pre-rotation dims supply the frame.
+        var destRect = GetUnrotatedDestRect(comp.X, comp.Y, comp.Width, comp.Height, rotationDegrees,
+            comp.Component.UnrotatedWidthMicrometers, comp.Component.UnrotatedHeightMicrometers);
 
         using (context.PushTransform(BuildRotationMatrix(rotationDegrees, centerX, centerY)))
         {
@@ -123,12 +125,18 @@ public static class GdsPolygonRenderer
     }
 
     /// <summary>
-    /// Footprint size at RotationDegrees = 0: odd quarter-turns swap the live Width/Height
+    /// Footprint size at RotationDegrees = 0. When the component recorded its
+    /// pre-rotation dims (<paramref name="recordedUnrotatedWidth"/>/<paramref name="recordedUnrotatedHeight"/>)
+    /// they win — for non-cardinal rotations the rotated AABB cannot reveal the
+    /// original aspect. Otherwise odd quarter-turns swap the live Width/Height
     /// back. Accepts any 90°-multiple (normalises negatives and ≥360°).
     /// </summary>
     internal static (double Width, double Height) GetUnrotatedSize(
-        double rotationDegrees, double currentWidth, double currentHeight)
+        double rotationDegrees, double currentWidth, double currentHeight,
+        double recordedUnrotatedWidth = 0, double recordedUnrotatedHeight = 0)
     {
+        if (recordedUnrotatedWidth > 0 && recordedUnrotatedHeight > 0)
+            return (recordedUnrotatedWidth, recordedUnrotatedHeight);
         int quarterTurns = (((int)Math.Round(rotationDegrees / 90.0)) % 4 + 4) % 4;
         return quarterTurns % 2 == 0
             ? (currentWidth, currentHeight)
@@ -140,9 +148,11 @@ public static class GdsPolygonRenderer
     /// footprint centre, the image covers the current (rotation-swapped) footprint exactly.
     /// </summary>
     internal static Rect GetUnrotatedDestRect(
-        double compX, double compY, double compWidth, double compHeight, double rotationDegrees)
+        double compX, double compY, double compWidth, double compHeight, double rotationDegrees,
+        double recordedUnrotatedWidth = 0, double recordedUnrotatedHeight = 0)
     {
-        var (unrotatedW, unrotatedH) = GetUnrotatedSize(rotationDegrees, compWidth, compHeight);
+        var (unrotatedW, unrotatedH) = GetUnrotatedSize(
+            rotationDegrees, compWidth, compHeight, recordedUnrotatedWidth, recordedUnrotatedHeight);
         double centerX = compX + compWidth  / 2.0;
         double centerY = compY + compHeight / 2.0;
         return new Rect(centerX - unrotatedW / 2.0, centerY - unrotatedH / 2.0, unrotatedW, unrotatedH);

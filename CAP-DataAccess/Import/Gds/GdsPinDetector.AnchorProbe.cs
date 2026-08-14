@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+
 namespace CAP_DataAccess.Import.Gds;
 
 /// <summary>
@@ -48,6 +50,22 @@ public static partial class GdsPinDetector
     /// </summary>
     internal static readonly string[] ElectricalLabelMarkers =
         ["anode", "cathode", "elec", "pad", "gnd", "vcc", "vdd"];
+
+    /// <summary>
+    /// Contact-style pin names (e1, n1, p1, …): gdsfactory's electrical ports
+    /// and foundry n/p-contact names. Anchored to the whole name so optical
+    /// names like "in", "out", "port0" never match.
+    /// </summary>
+    private static readonly Regex ElectricalContactNamePattern = new(
+        @"^[enp][0-9]+$", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+
+    /// <summary>True for label names that always denote an electrical pin/pad.</summary>
+    internal static bool IsElectricalLabelName(string label)
+    {
+        var trimmed = label.Trim();
+        return ElectricalContactNamePattern.IsMatch(trimmed)
+            || ElectricalLabelMarkers.Any(m => trimmed.Contains(m, StringComparison.OrdinalIgnoreCase));
+    }
 
     /// <summary>One indexed outline segment: endpoints plus the owning polygon's ordinal.</summary>
     private readonly record struct IndexedSegment(GdsPoint P1, GdsPoint P2, int PolygonOrdinal);
@@ -252,11 +270,8 @@ public static partial class GdsPinDetector
                 return null; // waveguide evidence beats the name heuristic
         }
 
-        foreach (string marker in ElectricalLabelMarkers)
-        {
-            if (label.Contains(marker, StringComparison.OrdinalIgnoreCase))
-                return true;
-        }
+        if (IsElectricalLabelName(label))
+            return true;
         return null;
     }
 }

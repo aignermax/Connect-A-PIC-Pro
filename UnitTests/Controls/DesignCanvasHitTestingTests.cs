@@ -134,6 +134,39 @@ public class DesignCanvasHitTestingTests
     }
 
     [Fact]
+    public void HitTestConnection_PointOnLargeBendArc_HitsEvenFarFromTheChord()
+    {
+        // A 90° bend with 100 µm radius: the arc's midpoint sits ~41 µm off the
+        // chord — way past the 10 px tolerance, so the chord approximation used
+        // to miss hovers directly on the curve (hover lit up next to it instead).
+        var vm = new DesignCanvasViewModel();
+        var connection = new CAP_Core.Components.Connections.WaveguideConnection();
+        var path = new CAP_Core.Routing.RoutedPath();
+        path.Segments.Add(new CAP_Core.Routing.BendSegment(0, 0, 100, 0, 90));
+        connection.RestoreCachedPath(path);
+        var connVm = new WaveguideConnectionViewModel(connection);
+        vm.Connections.Add(connVm);
+
+        // Point on the arc at 45° (center (0,0), radius 100): (70.71, 70.71)
+        // or (70.71, -70.71) depending on the sweep's sign convention — one of
+        // them is exactly on the curve.
+        var onArcA = new Point(70.71, 70.71);
+        var onArcB = new Point(70.71, -70.71);
+        var hit = DesignCanvasHitTesting.HitTestConnection(onArcA, vm)
+            ?? DesignCanvasHitTesting.HitTestConnection(onArcB, vm);
+
+        hit.ShouldBeSameAs(connVm, "a hover directly on a large bend's arc must hit the connection");
+
+        // The chord's midpoint is ~41 µm away from the arc — hovering there must NOT hit.
+        var chordMid = new Point(50, 50);
+        var arcA = DesignCanvasHitTesting.HitTestConnection(onArcA, vm);
+        var chordPoint = arcA != null ? onArcB : onArcA; // the OFF-curve diagonal
+        var chordHit = DesignCanvasHitTesting.HitTestConnection(
+            new Point((chordPoint.X + 0) / 2.0, (chordPoint.Y + 100) / 2.0), vm);
+        chordHit.ShouldBeNull("the chord region is off the drawn curve and must stay unhit");
+    }
+
+    [Fact]
     public void HitTestGroupLabel_ReturnsNull_WhenViewModelIsNull()
     {
         var result = DesignCanvasHitTesting.HitTestGroupLabel(new Point(0, 0), null);

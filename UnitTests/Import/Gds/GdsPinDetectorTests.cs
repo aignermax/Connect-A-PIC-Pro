@@ -184,6 +184,24 @@ public class GdsPinDetectorTests
         pins.Count(p => p.Source == DetectedPinSource.EdgeHeuristic).ShouldBe(2);
     }
 
+    [Fact]
+    public void ArrowPair_AcrossDifferentMarkerLayers_AlsoMarksAPin()
+    {
+        // Some conventions stamp one chevron per pin per marker layer: tips
+        // meeting across two DIFFERENT layers still mark the pin.
+        var cell = Cell(
+            Poly(1, 0, (0, 1.75), (10, 1.75), (10, 2.25), (0, 2.25), (0, 1.75)),
+            Chevron(232, 0, 2, bodyDirX: +1),
+            Chevron(234, 0, 2, bodyDirX: -1));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var arrowPin = pins.Single(p => p.Source == DetectedPinSource.ArrowMarker);
+        arrowPin.XUm.ShouldBe(0, Tolerance);
+        arrowPin.YUm.ShouldBe(2, Tolerance);
+        arrowPin.AngleDegrees.ShouldBe(180, Tolerance);
+    }
+
     // ── Edge heuristic ───────────────────────────────────────────────────────
 
     [Fact]
@@ -194,9 +212,18 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        var pin = pins.ShouldHaveSingleItem();
+        // A label-free channel stub exposes BOTH ends: the left face (west)
+        // sorts before the right face (east) the name refers to.
+        pins.Count.ShouldBe(2);
+        pins[0].Source.ShouldBe(DetectedPinSource.EdgeHeuristic);
+        pins[0].Name.ShouldBe("heur_1");
+        pins[0].AngleDegrees.ShouldBe(180, Tolerance); // left face → west
+        pins[0].XUm.ShouldBe(8, Tolerance);
+        pins[0].YUm.ShouldBe(2.5, Tolerance);
+        pins[0].WidthUm.ShouldBe(1, Tolerance);
+        var pin = pins[1];
         pin.Source.ShouldBe(DetectedPinSource.EdgeHeuristic);
-        pin.Name.ShouldBe("heur_1");
+        pin.Name.ShouldBe("heur_2");
         pin.AngleDegrees.ShouldBe(0, Tolerance); // right edge → east
         pin.XUm.ShouldBe(10, Tolerance);
         pin.YUm.ShouldBe(2.5, Tolerance); // 4 − 1.5 (segment midpoint, Y flipped)
@@ -212,17 +239,20 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        pins.Count.ShouldBe(2);
-        pins[0].Name.ShouldBe("heur_1"); // top edge sorts before bottom edge
-        pins[0].AngleDegrees.ShouldBe(270, Tolerance);
-        pins[0].XUm.ShouldBe(5, Tolerance);
-        pins[0].YUm.ShouldBe(0, Tolerance);
-        pins[0].WidthUm.ShouldBe(2, Tolerance);
-        pins[1].Name.ShouldBe("heur_2");
-        pins[1].AngleDegrees.ShouldBe(90, Tolerance);
-        pins[1].XUm.ShouldBe(5, Tolerance);
-        pins[1].YUm.ShouldBe(4, Tolerance);
-        pins[1].WidthUm.ShouldBe(2, Tolerance);
+        // Label-free channel cells expose EVERY channel end: the two stubs' far
+        // ends (left/right faces) join the two box-edge faces the name refers to.
+        // Order: left edge, top edge, right edge, bottom edge.
+        pins.Count.ShouldBe(6);
+        pins[2].Name.ShouldBe("heur_3"); // top edge sorts after the left-edge pins
+        pins[2].AngleDegrees.ShouldBe(270, Tolerance);
+        pins[2].XUm.ShouldBe(5, Tolerance);
+        pins[2].YUm.ShouldBe(0, Tolerance);
+        pins[2].WidthUm.ShouldBe(2, Tolerance);
+        pins[5].Name.ShouldBe("heur_6"); // bottom edge sorts last
+        pins[5].AngleDegrees.ShouldBe(90, Tolerance);
+        pins[5].XUm.ShouldBe(5, Tolerance);
+        pins[5].YUm.ShouldBe(4, Tolerance);
+        pins[5].WidthUm.ShouldBe(2, Tolerance);
     }
 
     [Fact]
@@ -248,17 +278,23 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        pins.Count.ShouldBe(2);
-        pins[0].Name.ShouldBe("heur_1"); // smaller appY sorts first
+        // No phantom pins from the duplicated vertex — and each label-free
+        // channel stub exposes both of its ends (left AND right faces).
+        pins.Count.ShouldBe(4);
+        pins[0].Name.ShouldBe("heur_1"); // left edge, smaller appY sorts first
         pins[0].YUm.ShouldBe(0.75, Tolerance); // 4 − 3.25
         pins[0].WidthUm.ShouldBe(0.5, Tolerance);
         pins[1].Name.ShouldBe("heur_2");
         pins[1].YUm.ShouldBe(2.5, Tolerance); // 4 − 1.5
         pins[1].WidthUm.ShouldBe(1, Tolerance);
+        pins[2].AngleDegrees.ShouldBe(0, Tolerance); // right edge faces east
+        pins[2].WidthUm.ShouldBe(0.5, Tolerance);
+        pins[3].AngleDegrees.ShouldBe(0, Tolerance);
+        pins[3].WidthUm.ShouldBe(1, Tolerance);
     }
 
     [Fact]
-    public void Touches_AdjacentWithinTolerance_MergeIntoOnePin()
+    public void Touches_AdjacentWithinTolerance_StaySeparateChannelEnds()
     {
         // Two waveguide faces on the left edge, 0.0005 µm apart (< tolerance).
         var cell = Cell(
@@ -267,11 +303,20 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        var pin = pins.ShouldHaveSingleItem();
-        pin.WidthUm.ShouldBe(2, Tolerance); // merged interval [1, 3]
-        pin.YUm.ShouldBe(2, Tolerance); // 4 − 2
-        pin.XUm.ShouldBe(0, Tolerance);
-        pin.AngleDegrees.ShouldBe(180, Tolerance);
+        // Two parallel channels this close together are found as TWO separate
+        // ports per side by the terminus scan (coupler-style cells need their
+        // ports distinct); each channel exposes both its ends.
+        pins.Count.ShouldBe(4);
+        pins[0].XUm.ShouldBe(0, Tolerance);
+        pins[0].YUm.ShouldBe(1.49975, Tolerance); // 4 − 2.50025
+        pins[0].WidthUm.ShouldBe(0.9995, Tolerance);
+        pins[0].AngleDegrees.ShouldBe(180, Tolerance);
+        pins[1].YUm.ShouldBe(2.5, Tolerance);
+        pins[1].WidthUm.ShouldBe(1, Tolerance);
+        pins[2].XUm.ShouldBe(3, Tolerance);
+        pins[2].AngleDegrees.ShouldBe(0, Tolerance);
+        pins[3].XUm.ShouldBe(3, Tolerance);
+        pins[3].AngleDegrees.ShouldBe(0, Tolerance);
     }
 
     [Fact]
@@ -284,20 +329,30 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        pins.Count.ShouldBe(2);
+        // Both channels stay separate — and each exposes both ends.
+        pins.Count.ShouldBe(4);
         pins[0].WidthUm.ShouldBe(0.998, Tolerance);
         pins[1].WidthUm.ShouldBe(1, Tolerance);
+        pins[2].WidthUm.ShouldBe(0.998, Tolerance);
+        pins[3].WidthUm.ShouldBe(1, Tolerance);
     }
 
     [Fact]
     public void Touch_WiderThanMaxPinWidth_IsFiltered()
     {
         var box = new GdsBoundingBox(0, 0, 200, 200);
-        var cell = Cell(Poly(1, 0, (0, 10), (10, 10), (10, 160), (0, 160), (0, 10))); // 150 µm face
+        var cell = Cell(Poly(1, 0, (0, 10), (10, 10), (10, 160), (0, 160), (0, 10))); // 150 µm long sides
 
         var pins = GdsPinDetector.Detect(cell, box);
 
-        pins.ShouldBeEmpty();
+        // The 150 µm long sides are sidewalls, not ports — rejected by the
+        // sidewall rule (longer than the frame is deep). The block's two 10 µm
+        // end faces are real channel ends and stay.
+        pins.Count.ShouldBe(2);
+        pins[0].AngleDegrees.ShouldBe(270, Tolerance); // top end
+        pins[0].WidthUm.ShouldBe(10, Tolerance);
+        pins[1].AngleDegrees.ShouldBe(90, Tolerance); // bottom end
+        pins[1].WidthUm.ShouldBe(10, Tolerance);
     }
 
     [Fact]
@@ -521,7 +576,9 @@ public class GdsPinDetectorTests
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
-        pins.ShouldHaveSingleItem().IsElectrical.ShouldBeNull();
+        // Both channel ends of the label-free stub — both keep the unknown kind.
+        pins.Count.ShouldBe(2);
+        pins.ShouldAllBe(p => p.IsElectrical == null);
     }
 
     // ── Options ──────────────────────────────────────────────────────────────
@@ -556,13 +613,52 @@ public class GdsPinDetectorTests
         var wideCell = Cell(Poly(1, 0, (0, 10), (10, 10), (10, 160), (0, 160), (0, 10)));
         var narrowCell = Cell(Poly(1, 0, (0, 10), (10, 10), (10, 10.05), (0, 10.05), (0, 10)));
 
+        // The block's 150 µm long sides are sidewalls (rejected by the sidewall
+        // rule no matter how high the custom max width goes); its two 10 µm end
+        // faces are channel ends and respect the custom window.
         var widePins = GdsPinDetector.Detect(wideCell, box,
             new GdsPinDetectionOptions { MaxPinWidthUm = 200 });
+        widePins.Count.ShouldBe(2);
+        widePins.ShouldAllBe(p => Math.Abs(p.WidthUm - 10) < Tolerance);
+        GdsPinDetector.Detect(wideCell, box, new GdsPinDetectionOptions { MaxPinWidthUm = 5 })
+            .ShouldBeEmpty("the 10 µm end faces exceed the custom max width");
+
+        // The 0.05 µm end faces pass only with the lowered minimum.
         var narrowPins = GdsPinDetector.Detect(narrowCell, box,
             new GdsPinDetectionOptions { MinPinWidthUm = 0.01 });
+        narrowPins.Count.ShouldBe(2);
+        narrowPins.ShouldAllBe(p => Math.Abs(p.WidthUm - 0.05) < Tolerance);
+        GdsPinDetector.Detect(narrowCell, box)
+            .ShouldBeEmpty("the 0.05 µm end faces fall below the default min width");
+    }
 
-        widePins.ShouldHaveSingleItem().WidthUm.ShouldBe(150, Tolerance);
-        narrowPins.ShouldHaveSingleItem().WidthUm.ShouldBe(0.05, Tolerance);
+    [Fact]
+    public void TerminusFace_TiltedExitBehindEnvelope_FoundWithExactAngle()
+    {
+        // gdsfactory partial-angle bend (94.02° sweep): the exit face is tilted
+        // 4° past every axis-aligned bbox edge, and the layer-68 envelope
+        // inflates the cell bbox 0.5 µm past the core — the edge-touch scan
+        // alone loses the exit pin and breaks the chain (field report: rotated
+        // fan-out bends never connected to their continuation straights).
+        var core = AnnulusSector(1, 0, centerX: 0, centerY: 0,
+            radiusOuter: 20.25, radiusInner: 19.75, fromDegrees: 180, toDegrees: 274.02);
+        var envelope = Poly(68, 0,
+            (-20.75, -20.6982), (1.9189, -20.6982), (1.9189, 0.5), (-20.75, 0.5), (-20.75, -20.6982));
+        var cell = Cell(core, envelope);
+        var box = new GdsBoundingBox(-20.75, -20.6982, 1.9189, 0.5);
+
+        var pins = GdsPinDetector.Detect(cell, box);
+
+        pins.Count.ShouldBe(2);
+        // Entry face (axis-aligned): found by the edge scan on the waveguide frame.
+        pins[0].XUm.ShouldBe(0.75, 1e-3);
+        pins[0].YUm.ShouldBe(0.5, 1e-3);
+        pins[0].AngleDegrees.ShouldBe(270, 0.3);
+        // Exit face (tilted 4°): only the terminus ring scan sees it — exact
+        // position and the true travel direction (app 355.98°).
+        pins[1].XUm.ShouldBe(22.1514, 1e-3);
+        pins[1].YUm.ShouldBe(20.4498, 1e-3);
+        pins[1].AngleDegrees.ShouldBe(355.98, 0.3);
     }
 
     // ── Empty / degenerate input ─────────────────────────────────────────────
@@ -817,6 +913,34 @@ public class GdsPinDetectorTests
             DataType = dataType,
             Points = points.Select(p => new GdsPoint(p.X, p.Y)).ToList(),
         };
+
+    /// <summary>
+    /// A tessellated annulus sector (gdsfactory bend_circular shape): outer arc from
+    /// <paramref name="fromDegrees"/> to <paramref name="toDegrees"/>, exit face, inner
+    /// arc back, entry face, closed. Sweep direction follows the angle sign.
+    /// </summary>
+    private static GdsPolygon AnnulusSector(int layer, int dataType, double centerX, double centerY,
+        double radiusOuter, double radiusInner, double fromDegrees, double toDegrees, int segments = 48)
+    {
+        var points = new List<GdsPoint>();
+        for (int i = 0; i <= segments; i++)
+        {
+            double phi = (fromDegrees + ((toDegrees - fromDegrees) * i / segments)) * Math.PI / 180.0;
+            points.Add(new GdsPoint(centerX + (radiusOuter * Math.Cos(phi)), centerY + (radiusOuter * Math.Sin(phi))));
+        }
+        for (int i = segments; i >= 0; i--)
+        {
+            double phi = (fromDegrees + ((toDegrees - fromDegrees) * i / segments)) * Math.PI / 180.0;
+            points.Add(new GdsPoint(centerX + (radiusInner * Math.Cos(phi)), centerY + (radiusInner * Math.Sin(phi))));
+        }
+        points.Add(points[0]);
+        return new GdsPolygon
+        {
+            Layer = layer,
+            DataType = dataType,
+            Points = points,
+        };
+    }
 
     private static GdsText Label(int layer, int textType, string text, double x, double y) =>
         new()

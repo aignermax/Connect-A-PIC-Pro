@@ -7,6 +7,7 @@ using CAP_Core.ExternalPorts.LaserSpectrum;
 using CAP_Core.Grid;
 using CAP_Core.LightCalculation;
 using CAP_Core.LightCalculation.TimeDomainSimulation;
+using CAP_Core.LightCalculation.TimeDomainSimulation.PhaseNoise;
 using CAP.Avalonia.ViewModels.Canvas;
 
 using CAP.Avalonia.Services;
@@ -143,12 +144,47 @@ internal static class TransientCircuitFactory
         double? worst = null;
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
             double rin = compVm.LaserConfig?.RinDbPerHz ?? LaserSpectrumModel.DefaultRinDbPerHz;
             worst = worst == null ? rin : Math.Max(worst.Value, rin);
         }
         return worst ?? LaserSpectrumModel.DefaultRinDbPerHz;
+    }
+
+    /// <summary>
+    /// Builds the laser phase-noise settings for the transient engine (issue #834):
+    /// every enabled coupler with a non-ideal line shape contributes a Wiener phase
+    /// walk with Δν = c·Δλ/λ² derived from its configured FWHM linewidth. All light
+    /// pins of one coupler share the same laser, hence the same lock group (their
+    /// common-mode phase cancels in balanced paths); distinct couplers random-walk
+    /// independently. Ideal sources yield zero linewidth — behaviour is unchanged.
+    /// </summary>
+    /// <param name="canvas">Canvas providing components.</param>
+    public static PhaseNoiseSettings BuildPhaseNoiseSettings(DesignCanvasViewModel canvas)
+    {
+        var settings = new PhaseNoiseSettings();
+        int laserIndex = 0;
+        foreach (var compVm in canvas.Components)
+        {
+            if (!compVm.IsLightSource) continue;
+            if (compVm.IsLaserOff) continue;
+
+            var config = compVm.LaserConfig;
+            double linewidthHz = config is { IsSpectralShape: true }
+                ? PhaseNoiseSettings.LinewidthFwhmNmToHz(config.LinewidthFwhmNm, config.WavelengthNm)
+                : 0;
+            // Component names are not instance-unique; the running index is, and it is
+            // deterministic for a given canvas, keeping runs reproducible.
+            string lockGroup = $"{compVm.Component.Identifier}_{laserIndex++}";
+
+            foreach (var pin in compVm.Component.PhysicalPins)
+            {
+                if (pin.LogicalPin?.MatterType != MatterType.Light) continue;
+                settings.AddSource(pin.LogicalPin.IDInFlow, new PhaseNoiseSource(linewidthHz, lockGroup));
+            }
+        }
+        return settings;
     }
 
     /// <summary>
@@ -160,7 +196,7 @@ internal static class TransientCircuitFactory
     {
         foreach (var compVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
             if (compVm.IsLaserOff) continue;
 
             var laserConfig = compVm.LaserConfig;

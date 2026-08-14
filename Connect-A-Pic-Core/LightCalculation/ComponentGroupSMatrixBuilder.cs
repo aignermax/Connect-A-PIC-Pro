@@ -46,6 +46,9 @@ public class ComponentGroupSMatrixBuilder
 
     /// <summary>
     /// Builds S-Matrices for all wavelengths supported by child components.
+    /// Per-wavelength builds are independent (read-only over the group) and run
+    /// in parallel — a dense group's transitive closure is O(n³) per stop, and
+    /// the field report had multi-second simulation starts on a 118-child group.
     /// </summary>
     public Dictionary<int, SMatrix>? BuildGroupSMatrixAllWavelengths(ComponentGroup group)
     {
@@ -60,18 +63,27 @@ public class ComponentGroupSMatrixBuilder
         if (supportedWavelengths.Count == 0)
             return null;
 
-        var result = new Dictionary<int, SMatrix>();
-
-        foreach (var wavelength in supportedWavelengths)
+        var result = new System.Collections.Concurrent.ConcurrentDictionary<int, SMatrix>();
+        try
         {
-            var matrix = BuildSMatrixForWavelength(group, wavelength);
-            if (matrix != null)
+            Parallel.ForEach(supportedWavelengths, wavelength =>
             {
-                result[wavelength] = matrix;
-            }
+                var matrix = BuildSMatrixForWavelength(group, wavelength);
+                if (matrix != null)
+                {
+                    result[wavelength] = matrix;
+                }
+            });
+        }
+        catch (AggregateException ex)
+        {
+            // Keep the rejection structured: callers (and users) expect the plain
+            // domain exception (e.g. NonConvergentCircuitException from the
+            // passivity check), not a Parallel wrapper around it.
+            throw ex.InnerExceptions[0];
         }
 
-        return result;
+        return new Dictionary<int, SMatrix>(result);
     }
 
     /// <summary>
@@ -225,12 +237,14 @@ public class ComponentGroupSMatrixBuilder
         ComponentGroup group, int wavelengthNm, bool restrictSolveToExternalPins)
     {
         var owners = new Dictionary<Guid, string>();
-        CollectPinOwnerNames(group, owners);
+        var ownerInstances = new Dictionary<Guid, Guid>();
+        CollectPinOwnerNames(group, owners, ownerInstances);
 
         var externalPinIds = CollectExternalPinFlowIds(group);
         return new TransitiveClosureContext
         {
             PinOwnerNames = owners,
+            PinOwnerInstanceIds = ownerInstances,
             ExternallyObservablePinIds = externalPinIds,
             SourcePinIds = restrictSolveToExternalPins ? externalPinIds : null,
             WavelengthNm = wavelengthNm,
@@ -254,8 +268,14 @@ public class ComponentGroupSMatrixBuilder
     /// Maps every child pin flow id to its owning child's display name. Mirrors
     /// <see cref="CollectAllChildPinIds"/>: nested groups contribute their external
     /// pins (their matrix is already closed), regular components their physical pins.
+    /// <paramref name="ownerInstances"/> records the owning component INSTANCE identity
+    /// alongside: the passivity block check must group per instance, never per name —
+    /// two instances of one component share a display name, and merging their blocks
+    /// pulls inter-instance connection weights into the block SVD (false non-passive
+    /// abort on a passive circuit, field report).
     /// </summary>
-    private static void CollectPinOwnerNames(ComponentGroup group, Dictionary<Guid, string> owners)
+    private static void CollectPinOwnerNames(
+        ComponentGroup group, Dictionary<Guid, string> owners, Dictionary<Guid, Guid> ownerInstances)
     {
         foreach (var child in group.ChildComponents)
         {
@@ -267,6 +287,8 @@ public class ComponentGroupSMatrixBuilder
                     if (groupPin.InternalPin?.LogicalPin == null) continue;
                     owners[groupPin.InternalPin.LogicalPin.IDInFlow] = name;
                     owners[groupPin.InternalPin.LogicalPin.IDOutFlow] = name;
+                    ownerInstances[groupPin.InternalPin.LogicalPin.IDInFlow] = child.Id;
+                    ownerInstances[groupPin.InternalPin.LogicalPin.IDOutFlow] = child.Id;
                 }
                 continue;
             }
@@ -275,6 +297,8 @@ public class ComponentGroupSMatrixBuilder
                 if (pin.LogicalPin == null) continue;
                 owners[pin.LogicalPin.IDInFlow] = name;
                 owners[pin.LogicalPin.IDOutFlow] = name;
+                ownerInstances[pin.LogicalPin.IDInFlow] = child.Id;
+                ownerInstances[pin.LogicalPin.IDOutFlow] = child.Id;
             }
         }
     }

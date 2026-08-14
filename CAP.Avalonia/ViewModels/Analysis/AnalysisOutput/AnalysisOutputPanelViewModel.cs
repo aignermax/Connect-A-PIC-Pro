@@ -2,6 +2,7 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP.Avalonia.ViewModels.Simulation;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -52,6 +53,7 @@ public partial class AnalysisOutputPanelViewModel : ObservableObject
         _canvas = canvas;
         canvas.AnalysisOutput.PropertyChanged += OnDesignationChanged;
         canvas.Components.CollectionChanged += OnComponentsChanged;
+        ResubscribeLasers();
         Refresh();
     }
 
@@ -65,12 +67,18 @@ public partial class AnalysisOutputPanelViewModel : ObservableObject
 
     private void OnDesignationChanged(object? sender, PropertyChangedEventArgs e) => Refresh();
 
-    private void OnComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e) => Refresh();
+    private void OnComponentsChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        ResubscribeLasers();
+        Refresh();
+    }
 
     /// <summary>
     /// Re-reads the designation. A designation whose component was deleted is pruned
     /// here (the collection-changed hook fires on delete), so the display and the
-    /// stored state can never disagree.
+    /// stored state can never disagree. Without a designation the header shows what
+    /// the analyses would ACTUALLY use (field feedback: a bare "(automatic)" tells
+    /// you nothing while the tab is open).
     /// </summary>
     private void Refresh()
     {
@@ -86,7 +94,53 @@ public partial class AnalysisOutputPanelViewModel : ObservableObject
         }
 
         HasOutput = coupler != null;
-        OutputDisplayName = coupler?.Name
-            ?? LocalizationService.Instance.Translate("Analysis.Output.None");
+        if (coupler != null)
+        {
+            OutputDisplayName = coupler.Name;
+            return;
+        }
+
+        if (_canvas == null)
+        {
+            OutputDisplayName = LocalizationService.Instance.Translate("Analysis.Output.None");
+            return;
+        }
+
+        var resolution = AnalysisOutputResolver.Resolve(_canvas);
+        OutputDisplayName = resolution.State switch
+        {
+            AnalysisOutputState.AutoSingle => string.Format(
+                LocalizationService.Instance.Translate("Analysis.Output.AutoNamed"),
+                resolution.Output!.Name),
+            AnalysisOutputState.MultipleCandidates =>
+                LocalizationService.Instance.Translate("Analysis.Output.AutoAmbiguous"),
+            AnalysisOutputState.AllLasersOn =>
+                LocalizationService.Instance.Translate("Analysis.Output.AutoAllLasersOn"),
+            _ => LocalizationService.Instance.Translate("Analysis.Output.None"),
+        };
+    }
+
+    private readonly HashSet<ComponentViewModel> _laserSubscriptions = new();
+
+    /// <summary>The auto-resolved output depends on laser on/off states — track them.</summary>
+    private void ResubscribeLasers()
+    {
+        foreach (var vm in _laserSubscriptions)
+            vm.LaserConfig!.PropertyChanged -= OnLaserChanged;
+        _laserSubscriptions.Clear();
+        if (_canvas == null)
+            return;
+        foreach (var vm in _canvas.Components)
+        {
+            if (vm.LaserConfig is null) continue;
+            vm.LaserConfig.PropertyChanged += OnLaserChanged;
+            _laserSubscriptions.Add(vm);
+        }
+    }
+
+    private void OnLaserChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName is nameof(LaserConfig.IsEnabled))
+            Refresh();
     }
 }

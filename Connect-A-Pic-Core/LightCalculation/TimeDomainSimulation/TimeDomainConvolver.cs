@@ -19,6 +19,21 @@ public static class TimeDomainConvolver
     public static Complex[] Convolve(double[] signal, Complex[] impulseResponse)
     {
         if (signal == null) throw new ArgumentNullException(nameof(signal));
+        return Convolve(signal.Select(v => new Complex(v, 0)).ToArray(), impulseResponse);
+    }
+
+    /// <summary>
+    /// Convolves a complex input field s(t) — e.g. an envelope carrying a laser
+    /// phase-noise factor e^{iφ(t)} (issue #834) — with a complex impulse response
+    /// h(t) and returns y(t) = s * h. Because delay acts on the full complex input,
+    /// each path's group delay is applied to the phase process automatically.
+    /// Length of result = signal.Length + impulseResponse.Length - 1.
+    /// </summary>
+    /// <param name="signal">Complex input field samples.</param>
+    /// <param name="impulseResponse">Complex impulse-response samples h[n].</param>
+    public static Complex[] Convolve(Complex[] signal, Complex[] impulseResponse)
+    {
+        if (signal == null) throw new ArgumentNullException(nameof(signal));
         if (impulseResponse == null) throw new ArgumentNullException(nameof(impulseResponse));
 
         int outputLength = signal.Length + impulseResponse.Length - 1;
@@ -26,7 +41,7 @@ public static class TimeDomainConvolver
 
         var sComplex = new Complex[fftSize];
         for (int i = 0; i < signal.Length; i++)
-            sComplex[i] = new Complex(signal[i], 0);
+            sComplex[i] = signal[i];
 
         var hPadded = new Complex[fftSize];
         for (int i = 0; i < impulseResponse.Length; i++)

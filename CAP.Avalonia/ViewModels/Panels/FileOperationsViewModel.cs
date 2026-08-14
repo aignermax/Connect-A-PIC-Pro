@@ -499,6 +499,7 @@ public partial class FileOperationsViewModel : ObservableObject
             Y = c.Y,
             Identifier = c.Component.Identifier,
             Rotation = (int)c.Component.Rotation90CounterClock,
+            RotationDegrees = c.Component.RotationDegrees,
             SliderValue = c.HasSliders ? c.SliderValue : null,
             SliderValues = SnapshotSliderValues(c.Component),
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
@@ -707,6 +708,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 X = child.PhysicalX,
                 Y = child.PhysicalY,
                 Rotation = (int)child.Rotation90CounterClock,
+                RotationDegrees = child.RotationDegrees,
                 SliderValue = child.GetAllSliders().Count > 0
                     ? child.GetSlider(0)?.Value : null,
                 SliderValues = SnapshotSliderValues(child),
@@ -1342,10 +1344,30 @@ public partial class FileOperationsViewModel : ObservableObject
         if (compData.HumanReadableName != null)
             component.HumanReadableName = compData.HumanReadableName;
 
-        // Apply rotation
-        for (int i = 0; i < compData.Rotation; i++)
+        // Apply rotation: exact continuous angle when the file carries one
+        // (GDS imports keep non-cardinal rotations); cardinal angles keep the
+        // legacy quarter-turn loop (discrete-rotation sync, numerically exact).
+        if (compData.RotationDegrees is double exactDegrees)
         {
-            ApplyRotationToComponent(component);
+            int quarterTurns = (int)Math.Round(exactDegrees / 90.0);
+            if (Math.Abs(exactDegrees - (quarterTurns * 90.0)) < 1e-6)
+            {
+                for (int i = 0; i < ((quarterTurns % 4) + 4) % 4; i++)
+                {
+                    ApplyRotationToComponent(component);
+                }
+            }
+            else
+            {
+                RotateComponentCommand.ApplyModelRotation(component, exactDegrees);
+            }
+        }
+        else
+        {
+            for (int i = 0; i < compData.Rotation; i++)
+            {
+                ApplyRotationToComponent(component);
+            }
         }
 
         var vm = _canvas.AddComponent(component, template.Name, template.PdkSource);
@@ -1425,10 +1447,33 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (childData.HumanReadableName != null)
                     child.HumanReadableName = childData.HumanReadableName;
 
-                // Apply rotation
-                for (int i = 0; i < childData.Rotation; i++)
+                // Apply rotation: the exact continuous angle when the file
+                // carries one (GDS imports keep non-cardinal rotations; the
+                // exact path also records the unrotated dims for outline
+                // rendering). Cardinal angles keep the legacy quarter-turn
+                // loop — it keeps the discrete rotation enum in sync and is
+                // numerically exact (no trig noise).
+                if (childData.RotationDegrees is double exactDegrees)
                 {
-                    ApplyRotationToComponent(child);
+                    int quarterTurns = (int)Math.Round(exactDegrees / 90.0);
+                    if (Math.Abs(exactDegrees - (quarterTurns * 90.0)) < 1e-6)
+                    {
+                        for (int i = 0; i < ((quarterTurns % 4) + 4) % 4; i++)
+                        {
+                            ApplyRotationToComponent(child);
+                        }
+                    }
+                    else
+                    {
+                        RotateComponentCommand.ApplyModelRotation(child, exactDegrees);
+                    }
+                }
+                else
+                {
+                    for (int i = 0; i < childData.Rotation; i++)
+                    {
+                        ApplyRotationToComponent(child);
+                    }
                 }
 
                 // Restore slider values (all sliders; legacy single value as fallback)

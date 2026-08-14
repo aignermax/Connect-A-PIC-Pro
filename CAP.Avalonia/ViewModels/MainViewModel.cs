@@ -1323,6 +1323,13 @@ public class ChildComponentData
     public double X { get; set; }
     public double Y { get; set; }
     public int Rotation { get; set; }
+
+    /// <summary>
+    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
+    /// angles). Null in old files — falls back to <see cref="Rotation"/>
+    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// </summary>
+    public double? RotationDegrees { get; set; }
     public double? SliderValue { get; set; }
 
     /// <summary>
@@ -1352,6 +1359,13 @@ public class ComponentData
     public double Y { get; set; }
     public string Identifier { get; set; } = "";
     public int Rotation { get; set; }
+
+    /// <summary>
+    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
+    /// angles). Null in old files — falls back to <see cref="Rotation"/>
+    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// </summary>
+    public double? RotationDegrees { get; set; }
     public double? SliderValue { get; set; }
 
     /// <summary>

@@ -1,3 +1,4 @@
+using CAP.Avalonia.Services.Localization;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CAP.Avalonia.ViewModels.GdsImport.LayerVisibility;
@@ -46,7 +47,8 @@ public partial class GdsLayerVisibilityRowViewModel : ObservableObject
     public int ShapeCount { get; }
 
     /// <summary>Row label, e.g. "Layer 11/0".</summary>
-    public string DisplayName => $"Layer {Layer}/{DataType}";
+    public string DisplayName =>
+        string.Format(LocalizationService.Instance.Translate("LayerVis.LayerRow"), Layer, DataType);
 
     /// <summary>Shape-count badge, e.g. "(42)".</summary>
     public string ShapeCountText => $"({ShapeCount})";

@@ -241,6 +241,76 @@ public class GdsImportDesignRoundTripTests : IDisposable
         return path;
     }
 
+    [Fact]
+    public async Task ImportPlaceSaveLoad_NonCardinalRotation_SurvivesRoundTrip()
+    {
+        // Two 10 µm waveguides end-to-end, BOTH rotated 30° (the joint at GDS
+        // (7660, 6732) nm): the exact rotation must survive save → load —
+        // before, only the discrete quarter-turn was persisted and the pair
+        // reloaded unrotated, visibly shifting the bodies (field report).
+        Directory.CreateDirectory(_root);
+        var gdsPath = Path.Combine(_root, "rotated.gds");
+        File.WriteAllBytes(gdsPath, GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wg", 0, 0, angleDegrees: 30)
+                .SRef("wg", 8660, 5000, angleDegrees: 30)
+            .EndCell()
+            .WaveguideCell("wg")
+            .EndLibrary()
+            .ToArray());
+
+        using var saveHost = new GdsDesignScopeTestHost();
+        var service = saveHost.CreateService(() => Array.Empty<ComponentTemplate>());
+        var outcome = await service.ImportAsync(gdsPath, "TOP", null, null);
+
+        var saveCanvas = new DesignCanvasViewModel();
+        var report = await new GdsPlacementExecutor(saveCanvas, null, () => saveHost.Templates.ToList())
+            .ExecuteAsync(GdsPlacementPlan.FromOutcome(outcome));
+        report.GroupCreated.ShouldBeTrue();
+        var savedGroup = (ComponentGroup)saveCanvas.Components.Single().Component;
+        var savedPositions = savedGroup.ChildComponents
+            .SelectMany(c => c.PhysicalPins.Select(p => p.GetAbsolutePosition()))
+            .OrderBy(p => p.x).ThenBy(p => p.y)
+            .ToList();
+
+        var savePath = Path.Combine(_root, "rotated.lun");
+        await SaveToFile(CreateFileOperations(saveCanvas, saveHost, out _), savePath);
+
+        using var loadHost = new GdsDesignScopeTestHost();
+        var loadCanvas = new DesignCanvasViewModel();
+        await LoadFromFile(CreateFileOperations(loadCanvas, loadHost, out _), savePath);
+
+        var group = loadCanvas.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
+        group.ChildComponents.Count.ShouldBe(2);
+
+        // The exact 30° rotation (app 330°) survived — not snapped back to 0°.
+        foreach (var child in group.ChildComponents)
+        {
+            child.RotationDegrees.ShouldBe(330.0, 0.5,
+                "a non-cardinal import rotation must round-trip through .lun");
+            child.UnrotatedWidthMicrometers.ShouldBe(10, 1e-9,
+                "the unrotated geometry frame rides along for the outline renderer");
+            child.UnrotatedHeightMicrometers.ShouldBe(4, 1e-9);
+        }
+
+        // Every pin sits exactly where it was before the save.
+        var loadedPositions = group.ChildComponents
+            .SelectMany(c => c.PhysicalPins.Select(p => p.GetAbsolutePosition()))
+            .OrderBy(p => p.x).ThenBy(p => p.y)
+            .ToList();
+        loadedPositions.Count.ShouldBe(savedPositions.Count);
+        foreach (var (loaded, saved) in loadedPositions.Zip(savedPositions))
+        {
+            loaded.x.ShouldBe(saved.x, 0.01, "pin X must not drift across save/load");
+            loaded.y.ShouldBe(saved.y, 0.01, "pin Y must not drift across save/load");
+        }
+
+        // The reconstructed joint connection survived with its pins resolved.
+        group.InternalPaths.Count(p => p.StartPin is not null && p.EndPin is not null)
+            .ShouldBe(1);
+    }
+
     // ── Harness (mirrors GdsImportServiceTests / SkippedRouteConnectionPersistenceTests) ──
 
     /// <summary>TOP with two abutting 10×4 µm waveguide cells (wgA → wgB), gdsfactory-style.</summary>

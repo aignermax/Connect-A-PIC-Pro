@@ -137,7 +137,9 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // draws beneath the children so components stay legible on top.
             _outlineRenderer.Draw(context, group.PhysicalX, group.PhysicalY,
                 group.WidthMicrometers, group.HeightMicrometers,
-                group.RotationDegrees, backgroundPolygons, isDimmed, rc.Zoom, rc.LayerVisibility);
+                group.RotationDegrees, backgroundPolygons, isDimmed, rc.Zoom,
+                group.UnrotatedWidthMicrometers, group.UnrotatedHeightMicrometers,
+                rc.LayerVisibility);
         }
 
         foreach (var child in group.ChildComponents)
@@ -199,7 +201,9 @@ public sealed class ComponentRenderer : ICanvasRenderer
             // just like the selection border does for outlined top-level components.
             _outlineRenderer.Draw(context, child.PhysicalX, child.PhysicalY,
                 child.WidthMicrometers, child.HeightMicrometers,
-                child.RotationDegrees, childOutlines, isDimmed, rc.Zoom, rc.LayerVisibility);
+                child.RotationDegrees, childOutlines, isDimmed, rc.Zoom,
+                child.UnrotatedWidthMicrometers, child.UnrotatedHeightMicrometers,
+                rc.LayerVisibility);
         }
         else
         {

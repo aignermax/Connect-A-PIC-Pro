@@ -223,11 +223,13 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 
     private static void AssertExplodeStubScenario(ExplodeResult r)
     {
-        // All ten components placed, none skipped; the three demofab cells become
-        // new drafts, the pin-wrapped demofab parts and the pads resolve back to
-        // the bundled templates.
+        // All ten components placed, none skipped; the straight's parameter is
+        // baked into its cell name so it cannot bind to a default-parameter
+        // template — it registers as the only new draft. Every other cell (MMIs,
+        // phase shifter, photodetector, bond pads) resolves to its bundled PDK
+        // template by nazca function name / pin-layout fit.
         r.Outcome.RegisteredComponents.Select(c => c.CellDraftName).ShouldBe(
-            new[] { "mmi1x2_sh", "demo.shallow.strt_100", "mmi2x2_dp" }, ignoreOrder: true);
+            new[] { "demo.shallow.strt_100" }, ignoreOrder: true);
         r.Outcome.Instances.Count.ShouldBe(10);
         r.Report.PlacedCount.ShouldBe(10);
         r.Report.SkippedPlacements.ShouldBeEmpty();
@@ -282,8 +284,8 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         // the splitter-output waveguide crossing (2 optical connections) and the
         // detector_cross metal-trace crossing (2 electrical connections).
         r.Outcome.Infos.ShouldContain(i =>
-            i.Contains("junction with 4 pins") && i.Contains("'a0'") && i.Contains("'b1'")
-            && i.Contains("'in'") && i.Contains("'b0'"));
+            i.Contains("junction with 4 pins") && i.Contains("'a0'") && i.Contains("'out2'")
+            && i.Contains("'in'") && i.Contains("'out1'"));
         r.Outcome.Infos.ShouldContain(i =>
             i.Contains("junction with 4 pins") && i.Contains("'anode'") && i.Contains("'cathode'")
             && i.Contains("'elec'"));
@@ -297,11 +299,12 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 
         // The placement-time validator honestly flags that the restored
         // connections overlap near the combiner (the source geometry genuinely
-        // entangles there — the junction-frozen networks prove it): the traced
-        // outline of a drawn route runs along BOTH stripe edges, so the tight
-        // corridors cross-detect one pair more than the old A* detours did —
-        // pinned as the known traced-geometry artifact, not an import defect.
-        r.Report.ValidationWarnings.Count.ShouldBe(4);
+        // entangles there — the junction-frozen networks prove it). With the
+        // S-bend-first routing policy (#868) the restored routes no longer
+        // cross-detect along the tight corridors the old A* detours produced:
+        // one genuine overlap remains, pinned as the known traced-geometry
+        // artifact, not an import defect.
+        r.Report.ValidationWarnings.Count.ShouldBe(1);
     }
 
     private static void AssertExplodeUpgradedScenario(ExplodeResult r)

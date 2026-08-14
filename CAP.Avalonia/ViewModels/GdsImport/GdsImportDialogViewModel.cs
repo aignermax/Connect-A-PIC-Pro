@@ -74,6 +74,15 @@ public partial class GdsImportDialogViewModel : ObservableObject
     [ObservableProperty]
     private bool _isExplodeMode = true;
 
+    /// <summary>Factory default for the port-layers field (Lunima/gdsfactory/demofab conventions).</summary>
+    private const string DefaultPortLayersText = "1,10;501,1";
+
+    /// <summary>Factory default for the waveguide-layers field.</summary>
+    private const string DefaultWaveguideLayersText = "1,0; 1111,0";
+
+    /// <summary>Factory default for the metal-layers field (Lunima's own export layers + SiEPIC).</summary>
+    private const string DefaultMetalLayersText = "11,0; 12,0; 13,0";
+
     /// <summary>
     /// Port-label layers as "layer,datatype" pairs, ';'-separated. The default mirrors
     /// <see cref="GdsPinDetectionOptions.PortLayers"/>: 1,10 (gdsfactory port labels)
@@ -81,7 +90,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// import service would union demofab's layer in invisibly otherwise.
     /// </summary>
     [ObservableProperty]
-    private string _portLayersText = "1,10;501,1";
+    private string _portLayersText = DefaultPortLayersText;
 
     /// <summary>
     /// Waveguide-core layers as "layer,datatype" pairs, ';'-separated. One field,
@@ -92,7 +101,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// interconnect layer (1111,0), mirroring the importer defaults.
     /// </summary>
     [ObservableProperty]
-    private string _waveguideLayersText = "1,0; 1111,0";
+    private string _waveguideLayersText = DefaultWaveguideLayersText;
 
     /// <summary>
     /// METAL layers as "layer,datatype" pairs, ';'-separated. Polygons on these
@@ -103,7 +112,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
     /// routing as electrical until corrected here.
     /// </summary>
     [ObservableProperty]
-    private string _metalLayersText = "11,0; 12,0; 13,0";
+    private string _metalLayersText = DefaultMetalLayersText;
 
     /// <summary>
     /// Recreate the detected connections with Lunima's own routing (default: on).
@@ -210,6 +219,25 @@ public partial class GdsImportDialogViewModel : ObservableObject
     }
 
     /// <summary>
+    /// Foreign (nazca-stamped) files must not inherit Lunima's own layer
+    /// defaults: our port/waveguide/metal numbers are our export conventions,
+    /// and on a foundry file they collide with its layer map (one foundry's
+    /// metal number is another's core etch). Only untouched factory defaults
+    /// are cleared — a field the user edited stays as-is.
+    /// </summary>
+    private void ClearFactoryDefaultsOnForeignFile(CAP_DataAccess.Import.Gds.GdsLibrary library)
+    {
+        if (!CAP_DataAccess.Import.Gds.GdsFileProvenance.HasForeignStamps(library))
+            return;
+        if (PortLayersText == DefaultPortLayersText)
+            PortLayersText = "";
+        if (WaveguideLayersText == DefaultWaveguideLayersText)
+            WaveguideLayersText = "";
+        if (MetalLayersText == DefaultMetalLayersText)
+            MetalLayersText = "";
+    }
+
+    /// <summary>
     /// Runs the library analysis (top-cell candidates). Called by the view when the
     /// dialog opens, and again by the Retry button after a failure. Re-entrant-safe:
     /// a second call while busy is a no-op.
@@ -237,6 +265,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         {
             var analysis = await GdsImportService.AnalyzeAsync(GdsFilePath, token);
             _analyzedLibrary = analysis.Library;
+            ClearFactoryDefaultsOnForeignFile(analysis.Library);
             PopulateCensus(analysis.LayerCensus);
             TopCells.Clear();
             foreach (var topCell in analysis.TopCells)
@@ -292,12 +321,23 @@ public partial class GdsImportDialogViewModel : ObservableObject
         // throw ObjectDisposedException instead of unwinding as a cancellation.
         var token = ResetCancellationSource().Token;
 
+        // The dialog closes as soon as the import STARTS — the placement and
+        // re-routing of a large import take minutes and the user should not
+        // have to keep the window open for them (field report: "Connecting
+        // Pins 116/116" and the dialog just waiting). Progress lands in the
+        // status text, and every warning/info is mirrored to the error console
+        // when the run completes. The window close must NOT cancel this run —
+        // OnWindowClosed checks the flag.
+        _continueRunAfterWindowClose = true;
+        OnClose?.Invoke();
+
         try
         {
             var progress = new Progress<string>(msg => StatusText = msg);
             var outcome = await _importService.ImportAsync(
                 GdsFilePath, SelectedTopCell.CellName, options, progress, token,
                 preParsedLibrary: _analyzedLibrary);
+            ImportServiceCompletedTestHook?.Invoke();
 
             token.ThrowIfCancellationRequested();
             var plan = GdsPlacementPlan.FromOutcome(outcome);
@@ -363,6 +403,14 @@ public partial class GdsImportDialogViewModel : ObservableObject
         finally
         {
             IsBusy = false;
+            // A run that outlived its window disposes the cancellation source
+            // itself — OnWindowClosed deliberately left it alone.
+            if (_continueRunAfterWindowClose)
+            {
+                _continueRunAfterWindowClose = false;
+                _cts?.Dispose();
+                _cts = null;
+            }
         }
     }
 
@@ -371,96 +419,5 @@ public partial class GdsImportDialogViewModel : ObservableObject
     private async Task RetryAnalysis()
     {
         await StartAnalysisAsync();
-    }
-
-    /// <summary>Cancels the running operation; closes the dialog when idle or completed.</summary>
-    [RelayCommand]
-    private void Cancel()
-    {
-        if (IsBusy)
-        {
-            CancelCurrentRun();
-            return;
-        }
-        OnClose?.Invoke();
-    }
-
-    /// <summary>
-    /// Called by the view when the dialog window closes: cancels the running
-    /// operation (if any) and releases the per-run cancellation source. A close
-    /// mid-import must not leave the background run mutating a canvas the user
-    /// no longer sees.
-    /// </summary>
-    public void OnWindowClosed()
-    {
-        CancelCurrentRun();
-        _cts?.Dispose();
-        _cts = null;
-    }
-
-    /// <summary>
-    /// Replaces the per-run cancellation source, disposing the previous run's, and
-    /// returns the new source. Both entry points no-op while <see cref="IsBusy"/>,
-    /// so the replaced source always belongs to a finished run — but a late
-    /// progress callback, a queued await continuation or a FileStream read of the
-    /// service's off-thread parse may still REFERENCE its token. Cancel BEFORE
-    /// dispose: every .NET registration path (stream reads, task cancellation
-    /// wiring, semaphore waits) short-circuits on an already-cancelled source,
-    /// while registering on a disposed-not-cancelled source throws
-    /// <see cref="ObjectDisposedException"/> ("The CancellationTokenSource has
-    /// been disposed") — the import failure this ordering prevents.
-    /// </summary>
-    private CancellationTokenSource ResetCancellationSource()
-    {
-        CancelCurrentRun();
-        _cts?.Dispose();
-        _cts = new CancellationTokenSource();
-        return _cts;
-    }
-
-    /// <summary>
-    /// Cancels the current run's source, tolerating one that a racing reset or
-    /// window close already disposed: <see cref="CancellationTokenSource.Cancel"/>
-    /// throws <see cref="ObjectDisposedException"/> on a disposed source, which
-    /// must never escape as an import failure (the run is over either way).
-    /// </summary>
-    private void CancelCurrentRun()
-    {
-        try
-        {
-            _cts?.Cancel();
-        }
-        catch (ObjectDisposedException)
-        {
-            // The source was already released by a racing reset/close — nothing to cancel.
-        }
-    }
-
-    /// <summary>Test seam (InternalsVisibleTo UnitTests): the current per-run cancellation source.</summary>
-    internal CancellationTokenSource? CurrentCts => _cts;
-
-    private static string BuildSummary(GdsPlacementReport report)
-    {
-        var summary = string.Format(
-            LocalizationService.Instance.Translate("GdsImport.ResultSummary"),
-            report.PlacedCount, report.ConnectedCount);
-        if (report.RouteDerivedCount > 0 || report.FrozenRoutePathCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultRouteReconstructionSuffix"),
-                report.RouteDerivedCount, report.FrozenRoutePathCount);
-        }
-        if (report.ReroutedCount > 0)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultReroutedSuffix"),
-                report.ReroutedCount);
-        }
-        if (report.GroupCreated)
-        {
-            summary += string.Format(
-                LocalizationService.Instance.Translate("GdsImport.ResultGroupSuffix"), report.GroupName);
-        }
-        return summary;
     }
 }

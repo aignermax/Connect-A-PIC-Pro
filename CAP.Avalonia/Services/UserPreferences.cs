@@ -122,4 +122,11 @@ public class UserPreferences
     /// classic Manhattan-only routing is the baseline.
     /// </summary>
     public bool UseDiagonalRouting { get; set; }
+
+    /// <summary>
+    /// Whether new/re-routed connections try the direct styled geometry (straight /
+    /// S-bend / sine / cobra) first, using A* only as the obstacle-avoidance fallback.
+    /// On by default — the smooth direct route is what a photonics designer expects.
+    /// </summary>
+    public bool PreferDirectStyledRoutes { get; set; } = true;
 }
