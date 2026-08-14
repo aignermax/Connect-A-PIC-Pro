@@ -108,18 +108,21 @@ public partial class GdsImportDialogViewModel
 
     partial void OnPortLayersTextChanged(string value)
     {
+        ClearExcludedGuessedPins();
         RefreshAcceptedStates();
         RebuildPinSuggestions();
     }
 
     partial void OnWaveguideLayersTextChanged(string value)
     {
+        ClearExcludedGuessedPins();
         RefreshAcceptedStates();
         RebuildPinSuggestions();
     }
 
     partial void OnMetalLayersTextChanged(string value)
     {
+        ClearExcludedGuessedPins();
         RefreshAcceptedStates();
         RebuildPinSuggestions();
     }

@@ -4,11 +4,20 @@ namespace CAP.Avalonia.Services.GdsImport;
 
 /// <summary>
 /// Preview engine for the GDS import dialog: scans the direct child cells of
-/// the selected top cell, runs the same pin detection the import will use, and
-/// returns every edge-heuristic pin as a user-reviewable guess. Metal-only
-/// edges are excluded automatically because the detector only scans the
-/// configured waveguide layers.
+/// the selected top cell, runs pin detection over the configured port and
+/// waveguide layers, and returns every edge-heuristic pin as a user-reviewable
+/// guess. Metal-only edges are excluded automatically because the detector
+/// only scans the configured waveguide layers.
 /// </summary>
+/// <remarks>
+/// This is a preview over the layers the user currently sees in the dialog. The
+/// actual import additionally runs the any-layer label fallback and collapses
+/// coincident label stacks in the full import session, so a cell
+/// whose labels live on non-port layers may show heuristic guesses here that the
+/// import later suppresses. Keeping the preview lightweight avoids recomputing
+/// the full session on every keystroke; the fallback only changes which guesses
+/// disappear, never which real (label) pins exist.
+/// </remarks>
 public static class GdsPinSuggestionEngine
 {
     /// <summary>

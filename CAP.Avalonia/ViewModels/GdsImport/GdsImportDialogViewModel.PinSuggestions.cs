@@ -1,7 +1,6 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Services.GdsImport;
 using CAP_DataAccess.Import.Gds;
-using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.GdsImport;
 
@@ -29,6 +28,13 @@ public partial class GdsImportDialogViewModel
         _excludedGuessedPins.Clear();
         OnPropertyChanged(nameof(HasPinSuggestions));
     }
+
+    /// <summary>
+    /// Clears exclusions the user made in a previous layer-configuration context.
+    /// Called when any layer field changes, because a renumbered <c>heur_1</c> may
+    /// now refer to a different physical pin.
+    /// </summary>
+    private void ClearExcludedGuessedPins() => _excludedGuessedPins.Clear();
 
     /// <summary>
     /// Rebuilds the guessed-pin list for the current top cell and layer
@@ -71,7 +77,6 @@ public partial class GdsImportDialogViewModel
     }
 
     /// <summary>Removes a guessed pin from the list and excludes it from import.</summary>
-    [RelayCommand]
     private void RemovePinSuggestion(GdsImportPinSuggestion? suggestion)
     {
         if (suggestion is null)
