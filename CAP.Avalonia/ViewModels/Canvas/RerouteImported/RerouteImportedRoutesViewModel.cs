@@ -1,7 +1,9 @@
 using System.Globalization;
+using System.Linq;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services.Localization;
 using CAP_Core.Components.Core;
+using CAP_Core.Routing;
 using CAP_Core.Routing.RerouteImported;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -15,7 +17,7 @@ namespace CAP.Avalonia.ViewModels.Canvas.RerouteImported;
 /// delta so the user sees what the router changed. Hand-edited frozen routes are
 /// never re-routed; their count is surfaced instead. Frozen routes living inside
 /// component groups (the standard GDS import groups everything it placed) are
-/// counted too, with a hint to open or dissolve the group before re-routing.
+/// counted and re-routed in place without dissolving the group.
 /// </summary>
 public partial class RerouteImportedRoutesViewModel : ObservableObject
 {
@@ -52,7 +54,7 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
     public string HandEditedKeptText => string.Format(CultureInfo.CurrentCulture,
         LocalizationService.Instance.Translate("Routing.Reroute.HandEditedKept"), HandEditedFrozenCount);
 
-    /// <summary>Localized "N frozen route(s) inside groups — open/dissolve to re-route" hint.</summary>
+    /// <summary>Localized "N frozen route(s) inside groups" line for the panel.</summary>
     public string GroupedFrozenText => string.Format(CultureInfo.CurrentCulture,
         LocalizationService.Instance.Translate("Routing.Reroute.InGroups"), GroupedFrozenCount);
 
@@ -144,13 +146,19 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
     [RelayCommand(CanExecute = nameof(CanRerouteAll))]
     private async Task RerouteAll()
     {
-        var targets = _canvas.Connections
+        var canvasTargets = _canvas.Connections
             .Where(c => ImportedRouteRerouteEligibility.IsEligible(c.Connection))
             .ToList();
-        await RerouteAsync(targets);
+        var groupTargets = CollectGroupTargets(_canvas).ToList();
+
+        if (canvasTargets.Count == 0 && groupTargets.Count == 0)
+            return;
+
+        await RerouteAllAsync(canvasTargets, groupTargets);
     }
 
-    private bool CanRerouteAll() => !IsRerouting && FrozenImportedCount > 0;
+    private bool CanRerouteAll() =>
+        !IsRerouting && (FrozenImportedCount > 0 || GroupedFrozenCount > 0);
 
     /// <summary>Re-routes only the selected connection.</summary>
     [RelayCommand(CanExecute = nameof(CanRerouteSelected))]
@@ -164,6 +172,99 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
         !IsRerouting
         && SelectedConnection is { } selected
         && ImportedRouteRerouteEligibility.IsEligible(selected.Connection);
+
+    private async Task RerouteAllAsync(
+        IReadOnlyList<WaveguideConnectionViewModel> canvasTargets,
+        IReadOnlyList<(ComponentGroup Group, List<FrozenWaveguidePath> Paths)> groupTargets)
+    {
+        IsRerouting = true;
+        try
+        {
+            var allConnectionTargets = canvasTargets.Select(t => t.Connection).ToList();
+            var allGroupPaths = groupTargets.SelectMany(g => g.Paths).ToList();
+            var before = RouteMetricsSnapshot.Capture(allConnectionTargets, allGroupPaths);
+
+            var connectionStates = canvasTargets.Select(t =>
+                new RerouteImportedRoutesStateCommand.ConnectionState
+                {
+                    Connection = t.Connection,
+                    OldPath = t.Connection.RoutedPath!.DeepCopy(),
+                    OldIsFrozen = t.Connection.IsRouteFrozen
+                }).ToList();
+
+            var groupStates = groupTargets.Select(g =>
+                new RerouteImportedRoutesStateCommand.GroupState
+                {
+                    Group = g.Group,
+                    OldPaths = g.Group.InternalPaths
+                        .Select(RerouteImportedRoutesStateCommand.CloneWithPins)
+                        .ToList()
+                }).ToList();
+
+            // Canvas-level targets are mutated directly; the state command handles undo.
+            if (canvasTargets.Count > 0)
+            {
+                new RerouteImportedRoutesCommand(_canvas, canvasTargets).Execute();
+                await _canvas.RecalculateRoutesAsync();
+            }
+
+            // Group-internal targets are routed inside a temporary group-edit sub-canvas.
+            foreach (var (group, paths) in groupTargets)
+                await RerouteGroupInternalAsync(group, paths);
+
+            foreach (var state in connectionStates)
+            {
+                state.NewPath = state.Connection.RoutedPath!.DeepCopy();
+                state.NewIsFrozen = state.Connection.IsRouteFrozen;
+            }
+
+            foreach (var state in groupStates)
+            {
+                state.NewPaths = state.Group.InternalPaths
+                    .Select(RerouteImportedRoutesStateCommand.CloneWithPins)
+                    .ToList();
+            }
+
+            var stateCommand = new RerouteImportedRoutesStateCommand(
+                _canvas, connectionStates, groupStates);
+            _commandManager.ExecuteCommand(stateCommand);
+            await _canvas.RecalculateRoutesAsync();
+
+            var afterConnections = connectionStates.Select(s => s.Connection);
+            var afterGroupPaths = groupStates.SelectMany(s => s.NewPaths);
+            var after = RouteMetricsSnapshot.Capture(afterConnections, afterGroupPaths);
+            ResultText = FormatDelta(
+                canvasTargets.Count + groupTargets.Sum(g => g.Paths.Count), before, after);
+        }
+        finally
+        {
+            IsRerouting = false;
+            Refresh();
+        }
+    }
+
+    private async Task RerouteGroupInternalAsync(
+        ComponentGroup group, IReadOnlyList<FrozenWaveguidePath> paths)
+    {
+        _canvas.EnterGroupEditMode(group);
+        try
+        {
+            var targets = _canvas.Connections
+                .Where(vm => paths.Any(p =>
+                    ReferenceEquals(vm.Connection.StartPin, p.StartPin) &&
+                    ReferenceEquals(vm.Connection.EndPin, p.EndPin)))
+                .ToList();
+
+            if (targets.Count > 0)
+                new RerouteImportedRoutesCommand(_canvas, targets).Execute();
+
+            await _canvas.RecalculateRoutesAsync();
+        }
+        finally
+        {
+            _canvas.ExitGroupEditMode();
+        }
+    }
 
     private async Task RerouteAsync(IReadOnlyList<WaveguideConnectionViewModel> targets)
     {
@@ -197,4 +298,29 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
             count,
             before.LengthMicrometers, after.LengthMicrometers,
             before.EquivalentBends, after.EquivalentBends);
+
+    private static IEnumerable<(ComponentGroup Group, List<FrozenWaveguidePath> Paths)> CollectGroupTargets(
+        DesignCanvasViewModel canvas)
+    {
+        return canvas.Components
+            .Select(c => c.Component)
+            .OfType<ComponentGroup>()
+            .SelectMany(CollectGroupTargetsRecursive);
+    }
+
+    private static IEnumerable<(ComponentGroup Group, List<FrozenWaveguidePath> Paths)> CollectGroupTargetsRecursive(
+        ComponentGroup group)
+    {
+        var direct = group.InternalPaths
+            .Where(ImportedRouteRerouteEligibility.IsEligibleGroupInternal)
+            .ToList();
+        if (direct.Count > 0)
+            yield return (group, direct);
+
+        foreach (var childGroup in group.ChildComponents.OfType<ComponentGroup>())
+        {
+            foreach (var nested in CollectGroupTargetsRecursive(childGroup))
+                yield return nested;
+        }
+    }
 }

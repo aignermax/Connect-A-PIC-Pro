@@ -256,4 +256,92 @@ public class RerouteImportedRoutesViewModelTests
         vm.SelectedConnection = connVm;
         vm.RerouteSelectedCommand.CanExecute(null).ShouldBeFalse();
     }
+
+    [Fact]
+    public async Task RerouteAll_AfterGroupedImport_ReplacesGroupInternalFrozenRoute_InPlace()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (startPin, endPin) = AddComponentPair(canvas, 0);
+        var connVm = ConnectFrozenImported(canvas, startPin, endPin);
+        double importedLength = connVm.Connection.PathLengthMicrometers;
+
+        var commandManager = new CommandManager();
+        var vm = new RerouteImportedRoutesViewModel(canvas, commandManager);
+        var groupCandidates = canvas.Components.ToList();
+        commandManager.ExecuteCommand(new CreateGroupCommand(canvas, groupCandidates, "ImportedTopCell"));
+
+        vm.Refresh();
+        vm.FrozenImportedCount.ShouldBe(0);
+        vm.GroupedFrozenCount.ShouldBe(1);
+
+        await vm.RerouteAllCommand.ExecuteAsync(null);
+
+        var group = canvas.Components.Single().Component.ShouldBeOfType<ComponentGroup>();
+        group.InternalPaths.Count.ShouldBe(1);
+        group.InternalPaths[0].Path.Segments.Count.ShouldNotBe(DetourSegmentCount,
+            "the router must replace the imported U-detour with a direct route");
+        group.InternalPaths[0].Path.TotalLengthMicrometers.ShouldBeLessThan(importedLength / 2);
+        vm.GroupedFrozenCount.ShouldBe(0);
+        vm.ResultText.ShouldNotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task Undo_RestoresGroupInternalImportedGeometry_AndGroupMembership()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (startPin, endPin) = AddComponentPair(canvas, 0);
+        var connVm = ConnectFrozenImported(canvas, startPin, endPin);
+        double importedLength = connVm.Connection.PathLengthMicrometers;
+
+        var commandManager = new CommandManager();
+        var vm = new RerouteImportedRoutesViewModel(canvas, commandManager);
+        var groupCandidates = canvas.Components.ToList();
+        commandManager.ExecuteCommand(new CreateGroupCommand(canvas, groupCandidates, "ImportedTopCell"));
+
+        var group = canvas.Components.Single().Component.ShouldBeOfType<ComponentGroup>();
+        var originalPathId = group.InternalPaths[0].PathId;
+
+        await vm.RerouteAllCommand.ExecuteAsync(null);
+
+        commandManager.Undo().ShouldBeTrue();
+        await canvas.RecalculateRoutesAsync();
+
+        group.InternalPaths.Count.ShouldBe(1);
+        group.InternalPaths[0].Path.Segments.Count.ShouldBe(DetourSegmentCount);
+        group.InternalPaths[0].Path.TotalLengthMicrometers.ShouldBe(importedLength, LengthTolerance);
+        group.InternalPaths[0].PathId.ShouldBe(originalPathId);
+        vm.GroupedFrozenCount.ShouldBe(1);
+    }
+
+    [Fact]
+    public async Task RerouteAll_NeverTouchesHandEditedGroupInternalRoutes()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (startA, endA) = AddComponentPair(canvas, 0);
+        var (startB, endB) = AddComponentPair(canvas, 2000);
+        var eligible = ConnectFrozenImported(canvas, startA, endA);
+        var edited = ConnectFrozenImported(canvas, startB, endB);
+        edited.Connection.BendRadiusOverrides[0] = 25;
+        double editedLength = edited.Connection.PathLengthMicrometers;
+
+        var commandManager = new CommandManager();
+        var vm = new RerouteImportedRoutesViewModel(canvas, commandManager);
+        var groupCandidates = canvas.Components.ToList();
+        commandManager.ExecuteCommand(new CreateGroupCommand(canvas, groupCandidates, "ImportedTopCell"));
+
+        await vm.RerouteAllCommand.ExecuteAsync(null);
+
+        var group = canvas.Components.Single().Component.ShouldBeOfType<ComponentGroup>();
+        var eligiblePath = group.InternalPaths
+            .First(p => ReferenceEquals(p.StartPin, startA) && ReferenceEquals(p.EndPin, endA));
+        var editedPath = group.InternalPaths
+            .First(p => ReferenceEquals(p.StartPin, startB) && ReferenceEquals(p.EndPin, endB));
+
+        eligiblePath.Path.Segments.Count.ShouldNotBe(DetourSegmentCount,
+            "the eligible group-internal route must be re-routed");
+        editedPath.Path.Segments.Count.ShouldBe(DetourSegmentCount,
+            "the hand-edited group-internal route must be kept unchanged");
+        editedPath.BendRadiusOverrides.Count.ShouldBe(1);
+        editedPath.Path.TotalLengthMicrometers.ShouldBe(editedLength, LengthTolerance);
+    }
 }

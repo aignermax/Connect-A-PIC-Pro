@@ -949,7 +949,7 @@
   "Routing.Reroute.All": "Reenrutar todo",
   "Routing.Reroute.FrozenCount": "{0} ruta(s) importada(s) congelada(s)",
   "Routing.Reroute.HandEditedKept": "{0} ruta(s) editada(s) a mano se mantienen sin cambios",
-  "Routing.Reroute.InGroups": "{0} ruta(s) importada(s) congelada(s) dentro de un grupo — abra o disuelva el grupo para reenrutar",
+  "Routing.Reroute.InGroups": "{0} ruta(s) importada(s) congelada(s) dentro de grupos",
   "Routing.Reroute.Result": "{0} ruta(s) reenrutada(s): longitud {1:F1} → {2:F1} µm, curvas {3:F1} → {4:F1}",
   "Routing.Reroute.Selected": "Reenrutar selección",
   "Routing.Reroute.Title": "Rutas importadas:",
