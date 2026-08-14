@@ -120,8 +120,6 @@ public class WaveguideSpacingDetector
         }
 
         double cellSize = minSpacing + maxHalfWidth * 2.0;
-        if (cellSize <= 0)
-            cellSize = minSpacing;
 
         var buckets = new Dictionary<(int X, int Y), List<int>>();
 
@@ -192,10 +190,12 @@ public class WaveguideSpacingDetector
 
         var (centerDistance, closestPoint) = WaveguideSpacingGeometry.ComputeCenterlineDistance(
             a.Segment, b.Segment, minSpacing);
-        double edgeDistance = centerDistance - a.HalfWidthMicrometers - b.HalfWidthMicrometers;
 
-        if (edgeDistance <= WaveguideSpacingGeometry.DistanceToleranceMicrometers)
+        if (centerDistance <= WaveguideSpacingGeometry.DistanceToleranceMicrometers)
             return null;
+
+        double edgeDistance = centerDistance - a.HalfWidthMicrometers - b.HalfWidthMicrometers;
+        edgeDistance = Math.Max(edgeDistance, 0.0);
 
         if (edgeDistance >= minSpacing - WaveguideSpacingGeometry.DistanceToleranceMicrometers)
             return null;

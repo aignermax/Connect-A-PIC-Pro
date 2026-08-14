@@ -113,6 +113,23 @@ public class WaveguideSpacingDetectorCoreTests
     }
 
     [Fact]
+    public void DetectViolations_ParallelRoutesWithOverlappingEdges_ReturnsIssueClampedToZero()
+    {
+        var conn1 = WaveguideSpacingDetectorTestHelpers.CreateConnectionWithSegment(0, 0, 100, 0);
+        var conn2 = WaveguideSpacingDetectorTestHelpers.CreateConnectionWithSegment(0, 0.4, 100, 0.4);
+
+        var result = _detector.DetectViolations(
+            new[] { conn1, conn2 },
+            Array.Empty<ComponentGroup>(),
+            MinSpacing);
+
+        result.Count.ShouldBe(1);
+        result[0].Type.ShouldBe(DesignIssueType.WaveguideSpacingViolation);
+        result[0].Description.ShouldContain("0.00");
+        result[0].Description.ShouldContain("2.00");
+    }
+
+    [Fact]
     public void DetectViolations_SameConnectionFold_ReturnsEmpty()
     {
         var connection = WaveguideSpacingDetectorTestHelpers.CreateConnectionWithSegments(
