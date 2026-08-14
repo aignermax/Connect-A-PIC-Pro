@@ -904,6 +904,9 @@
                     <!-- Imported Layers (per-layer show/hide + opacity for imported GDS, issue #858) -->
                     <panels:GdsLayerVisibilityPanel/>
 
+                    <!-- Re-route imported (frozen) routes -->
+                    <panels:RerouteImportedPanel/>
+
                     <!-- AI Design Assistant Panel -->
                     <panels:AiAssistantPanel/>
 

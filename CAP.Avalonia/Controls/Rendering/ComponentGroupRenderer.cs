@@ -71,13 +71,16 @@ public static class ComponentGroupRenderer
     /// tagged with its import source (layer, datatype) is skipped when that layer is
     /// hidden and drawn faded when it carries a reduced opacity. Untagged paths and a
     /// <c>null</c> filter always draw fully visible.</param>
+    /// <param name="penOverride">Optional pen that wins over both the power-flow pen and
+    /// the layer/default pen — used for the selection highlight of canvas-level paths.</param>
     public static void RenderFrozenWaveguidePath(
         DrawingContext context,
         FrozenWaveguidePath frozenPath,
         PowerFlowResult? powerFlowResult = null,
         double fadeThresholdDb = -40.0,
         Rect? cullRect = null,
-        Services.GdsImport.LayerVisibility.GdsLayerVisibilityState? layerVisibility = null)
+        Services.GdsImport.LayerVisibility.GdsLayerVisibilityState? layerVisibility = null,
+        Pen? penOverride = null)
     {
         if (frozenPath?.Path?.Segments == null || frozenPath.Path.Segments.Count == 0)
             return;
@@ -90,10 +93,10 @@ public static class ComponentGroupRenderer
         if (layerOpacity < 1.0)
         {
             using (context.PushOpacity(layerOpacity))
-                RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect);
+                RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect, penOverride);
             return;
         }
-        RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect);
+        RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect, penOverride);
     }
 
     /// <summary>Draws a frozen path's segments and optional power-flow label (the part
@@ -103,12 +106,17 @@ public static class ComponentGroupRenderer
         FrozenWaveguidePath frozenPath,
         PowerFlowResult? powerFlowResult,
         double fadeThresholdDb,
-        Rect? cullRect)
+        Rect? cullRect,
+        Pen? penOverride)
     {
         Pen frozenPen;
 
         // Use power flow colors if available
-        if (powerFlowResult != null &&
+        if (penOverride != null)
+        {
+            frozenPen = penOverride;
+        }
+        else if (powerFlowResult != null &&
             powerFlowResult.ConnectionFlows.TryGetValue(frozenPath.PathId, out var flow))
         {
             frozenPen = PowerFlowRenderer.CreatePowerPen(flow, fadeThresholdDb);

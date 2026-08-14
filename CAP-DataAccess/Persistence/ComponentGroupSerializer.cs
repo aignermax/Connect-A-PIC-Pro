@@ -188,6 +188,21 @@ public static class ComponentGroupSerializer
     }
 
     /// <summary>
+    /// Serializes a pin-less canvas-level frozen path (issue #856) — same DTO shape
+    /// as group-internal frozen paths, so .lun files stay uniform.
+    /// </summary>
+    public static FrozenPathDto ToCanvasFrozenPathDto(FrozenWaveguidePath frozenPath)
+        => ToFrozenPathDto(frozenPath);
+
+    /// <summary>
+    /// Deserializes a pin-less canvas-level frozen path (issue #856). No component
+    /// lookups are needed because canvas-level paths never carry pin references;
+    /// a DTO that unexpectedly does fails loudly like a group-internal path would.
+    /// </summary>
+    public static FrozenWaveguidePath FromCanvasFrozenPathDto(FrozenPathDto dto)
+        => FromFrozenPathDto(dto, null, null);
+
+    /// <summary>
     /// Converts a FrozenWaveguidePath to a DTO. Pin-less paths (GDS-imported route
     /// outlines) serialize with empty component/pin references.
     /// </summary>

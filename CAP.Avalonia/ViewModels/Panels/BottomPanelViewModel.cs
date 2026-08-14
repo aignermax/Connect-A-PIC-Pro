@@ -22,6 +22,11 @@ public partial class BottomPanelViewModel : ObservableObject
     public ConnectionRoutingViewModel ConnectionRouting { get; }
 
     /// <summary>
+    /// ViewModel for re-routing imported (frozen) waveguide routes on demand.
+    /// </summary>
+    public Canvas.RerouteImported.RerouteImportedRoutesViewModel RerouteImported { get; }
+
+    /// <summary>
     /// ViewModel for locking/unlocking components and connections.
     /// </summary>
     public ElementLockViewModel ElementLock { get; }
@@ -46,11 +51,13 @@ public partial class BottomPanelViewModel : ObservableObject
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
         ConnectionRoutingViewModel connectionRouting,
+        Canvas.RerouteImported.RerouteImportedRoutesViewModel rerouteImported,
         ElementLockViewModel elementLock,
         ErrorConsoleViewModel errorConsole,
         AnalysisDockViewModel analysis)
     {
         ConnectionRouting = connectionRouting;
+        RerouteImported = rerouteImported;
         ElementLock = elementLock;
         ErrorConsole = errorConsole;
         Analysis = analysis;
