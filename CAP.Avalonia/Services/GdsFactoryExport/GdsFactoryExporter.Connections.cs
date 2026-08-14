@@ -72,6 +72,11 @@ public partial class GdsFactoryExporter
                 AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
         }
 
+        // Canvas-level pin-less frozen paths (issue #856): imported route geometry released
+        // by ungrouping exports exactly like it did while it still lived inside the group.
+        foreach (var pathVm in canvas.CanvasFrozenPaths)
+            AppendFrozenPath(sb, pathVm.Path, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
+
         AppendBridgeMarkers(sb, electrical, opticalPaths, metalSpec);
         CollectUnresolvedCrossings(unresolvedCrossingCandidates, electrical, metalSpec, unresolvedCrossings);
         sb.AppendLine();
@@ -150,36 +155,47 @@ public partial class GdsFactoryExporter
         List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
-        {
-            if (frozenPath == null) continue;
-
-            var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
-            var segments = frozenPath.Path?.Segments;
-            if (segments == null || segments.Count == 0)
-            {
-                // Pin-less geometry (GDS-imported route outline) without segments has
-                // nothing to emit — and no pins a fallback straight could anchor on.
-                if (frozenPath.StartPin is null || frozenPath.EndPin is null)
-                    continue;
-                GdsFactorySegmentWriter.AppendPinToPinFallback(
-                    sb, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
-                continue;
-            }
-
-            if (ExportableConnections.TryRecordSkip(
-                    frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
-                continue;
-            GdsFactorySegmentWriter.AppendSegments(
-                sb, segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
-            if (metal == null)
-                opticalPaths.Add(segments);
-        }
+            AppendFrozenPath(sb, frozenPath, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
                 AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
         }
+    }
+
+    /// <summary>
+    /// Exports a single frozen waveguide path — shared between group-internal paths and
+    /// canvas-level paths released by ungrouping (issue #856), so route geometry exports
+    /// identically wherever it lives.
+    /// </summary>
+    private static void AppendFrozenPath(
+        StringBuilder sb, FrozenWaveguidePath? frozenPath, string waveguideKwarg,
+        MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths,
+        List<string>? skippedConnections)
+    {
+        if (frozenPath == null) return;
+
+        var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+        var segments = frozenPath.Path?.Segments;
+        if (segments == null || segments.Count == 0)
+        {
+            // Pin-less geometry (GDS-imported route outline) without segments has
+            // nothing to emit — and no pins a fallback straight could anchor on.
+            if (frozenPath.StartPin is null || frozenPath.EndPin is null)
+                return;
+            GdsFactorySegmentWriter.AppendPinToPinFallback(
+                sb, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            return;
+        }
+
+        if (ExportableConnections.TryRecordSkip(
+                frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
+            return;
+        GdsFactorySegmentWriter.AppendSegments(
+            sb, segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+        if (metal == null)
+            opticalPaths.Add(segments);
     }
 
 }

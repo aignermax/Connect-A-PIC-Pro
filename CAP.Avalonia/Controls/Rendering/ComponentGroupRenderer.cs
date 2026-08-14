@@ -67,12 +67,15 @@ public static class ComponentGroupRenderer
     /// <param name="cullRect">Optional world-space cull rectangle: segments fully outside
     /// it are skipped. Long frozen buses can span far beyond the viewport, so per-segment
     /// culling avoids drawing hundreds of off-screen lines; <c>null</c> draws every segment.</param>
+    /// <param name="penOverride">Optional pen that wins over both the power-flow pen and
+    /// the layer/default pen — used for the selection highlight of canvas-level paths.</param>
     public static void RenderFrozenWaveguidePath(
         DrawingContext context,
         FrozenWaveguidePath frozenPath,
         PowerFlowResult? powerFlowResult = null,
         double fadeThresholdDb = -40.0,
-        Rect? cullRect = null)
+        Rect? cullRect = null,
+        Pen? penOverride = null)
     {
         if (frozenPath?.Path?.Segments == null || frozenPath.Path.Segments.Count == 0)
             return;
@@ -80,7 +83,11 @@ public static class ComponentGroupRenderer
         Pen frozenPen;
 
         // Use power flow colors if available
-        if (powerFlowResult != null &&
+        if (penOverride != null)
+        {
+            frozenPen = penOverride;
+        }
+        else if (powerFlowResult != null &&
             powerFlowResult.ConnectionFlows.TryGetValue(frozenPath.PathId, out var flow))
         {
             frozenPen = PowerFlowRenderer.CreatePowerPen(flow, fadeThresholdDb);

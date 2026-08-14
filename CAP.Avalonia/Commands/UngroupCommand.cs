@@ -16,6 +16,7 @@ public class UngroupCommand : IUndoableCommand
     private ComponentViewModel? _groupViewModel;
     private readonly List<ComponentViewModel> _restoredComponentViewModels = new();
     private readonly List<WaveguideConnectionViewModel> _restoredConnectionViewModels = new();
+    private readonly List<CanvasFrozenPathViewModel> _releasedFrozenPathViewModels = new();
     private readonly double _groupX;
     private readonly double _groupY;
     private bool _hasExecutedOnce;
@@ -66,11 +67,25 @@ public class UngroupCommand : IUndoableCommand
 
             // 2. Convert frozen paths back to WaveguideConnections
             _restoredConnectionViewModels.Clear();
+            _releasedFrozenPathViewModels.Clear();
             foreach (var frozenPath in _group.InternalPaths)
             {
                 // Pin-less frozen geometry (GDS-imported route outlines) has no pins
-                // to anchor a connection to — ungrouping cannot restore it (v1;
-                // route reconstruction is #814), so it is skipped here.
+                // to anchor a connection to, so it is transferred to the canvas-level
+                // frozen-path store instead (issue #856). Clone: the group keeps its
+                // original InternalPaths for Undo, and a shared RoutedPath would let
+                // later canvas edits (move, delete) corrupt the undone group's geometry.
+                if (frozenPath.StartPin is null && frozenPath.EndPin is null)
+                {
+                    var releasedVm = new CanvasFrozenPathViewModel((FrozenWaveguidePath)frozenPath.Clone());
+                    _canvas.CanvasFrozenPaths.Add(releasedVm);
+                    _releasedFrozenPathViewModels.Add(releasedVm);
+                    continue;
+                }
+
+                // Half-pinned paths cannot anchor a connection either, but carry a pin
+                // reference into a child component — leave them with the group (v1;
+                // route reconstruction is #814).
                 if (frozenPath.StartPin is null || frozenPath.EndPin is null)
                     continue;
 
@@ -139,6 +154,13 @@ public class UngroupCommand : IUndoableCommand
             {
                 _canvas.Connections.Remove(connVm);
                 _canvas.ConnectionManager.RemoveConnectionDeferred(connVm.Connection);
+            }
+
+            // Remove the pin-less paths released to the canvas store; the group
+            // still holds the originals in its InternalPaths.
+            foreach (var pathVm in _releasedFrozenPathViewModels)
+            {
+                _canvas.CanvasFrozenPaths.Remove(pathVm);
             }
 
             // Remove individual components
@@ -210,6 +232,12 @@ public class UngroupCommand : IUndoableCommand
             {
                 _canvas.ConnectionManager.AddExistingConnection(connVm.Connection);
                 _canvas.Connections.Add(connVm);
+            }
+
+            // Re-add the SAME released pin-less path ViewModels
+            foreach (var pathVm in _releasedFrozenPathViewModels)
+            {
+                _canvas.CanvasFrozenPaths.Add(pathVm);
             }
 
             // Remove the group from canvas

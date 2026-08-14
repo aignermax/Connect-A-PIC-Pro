@@ -99,6 +99,7 @@ internal static class CanvasAndPanelExtensions
 
         // Bottom panel sub-ViewModels
         services.AddTransient<ConnectionRoutingViewModel>();
+        services.AddTransient<ViewModels.Canvas.RerouteImported.RerouteImportedRoutesViewModel>();
         services.AddTransient<ElementLockViewModel>();
         services.AddTransient<ErrorConsoleViewModel>();
 

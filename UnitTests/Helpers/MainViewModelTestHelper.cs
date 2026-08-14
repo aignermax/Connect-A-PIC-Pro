@@ -212,6 +212,7 @@ public static class MainViewModelTestHelper
             canvas,
             commandManager,
             new ConnectionRoutingViewModel(canvas),
+            new CAP.Avalonia.ViewModels.Canvas.RerouteImported.RerouteImportedRoutesViewModel(canvas, commandManager),
             new ElementLockViewModel(),
             new ErrorConsoleViewModel(errorConsoleService),
             new AnalysisDockViewModel(

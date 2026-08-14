@@ -71,6 +71,21 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private WaveguideConnectionViewModel? _selectedWaveguideConnection;
 
     /// <summary>
+    /// Canvas-level pin-less frozen path currently selected (issue #856). Mutually
+    /// exclusive with component and connection selection, like
+    /// <see cref="SelectedWaveguideConnection"/>.
+    /// </summary>
+    [ObservableProperty]
+    private CanvasFrozenPathViewModel? _selectedCanvasFrozenPath;
+
+    partial void OnSelectedCanvasFrozenPathChanged(
+        CanvasFrozenPathViewModel? oldValue, CanvasFrozenPathViewModel? newValue)
+    {
+        if (oldValue != null) oldValue.IsSelected = false;
+        if (newValue != null) newValue.IsSelected = true;
+    }
+
+    /// <summary>
     /// True when a connection is selected. Metal traces route with curved bends like
     /// waveguides (#854), so routing styles and bend handles apply to electrical
     /// connections too — the routing panel binds its visibility to this.
@@ -538,6 +553,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             SelectedComponent = component;
             _canvas.SelectedComponent = component;
             SelectedWaveguideConnection = null;
+            SelectedCanvasFrozenPath = null;
             UpdateStatus?.Invoke($"Selected: {component.Name}");
         }
         else
@@ -549,13 +565,25 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 SelectedWaveguideConnection = connection;
                 SelectedComponent = null;
                 _canvas.SelectedComponent = null;
+                SelectedCanvasFrozenPath = null;
                 UpdateStatus?.Invoke($"Selected connection: {connection.PathLength:F1}µm, Loss: {connection.LossDb:F2}dB");
+            }
+            else if (FindCanvasFrozenPathAt(x, y) is { } frozenPath)
+            {
+                SelectedCanvasFrozenPath = frozenPath;
+                SelectedComponent = null;
+                _canvas.SelectedComponent = null;
+                SelectedWaveguideConnection = null;
+                UpdateStatus?.Invoke(string.Format(
+                    Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathSelected"),
+                    frozenPath.Path.Path.TotalLengthMicrometers.ToString("F1")));
             }
             else
             {
                 SelectedComponent = null;
                 _canvas.SelectedComponent = null;
                 SelectedWaveguideConnection = null;
+                SelectedCanvasFrozenPath = null;
             }
         }
 
@@ -613,6 +641,16 @@ public partial class CanvasInteractionViewModel : ObservableObject
             var cmd = new DeleteConnectionCommand(_canvas, connection);
             _commandManager.ExecuteCommand(cmd);
             UpdateStatus?.Invoke("Deleted connection");
+            return;
+        }
+
+        if (FindCanvasFrozenPathAt(x, y) is { } frozenPath)
+        {
+            if (SelectedCanvasFrozenPath == frozenPath)
+                SelectedCanvasFrozenPath = null;
+            _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
         }
     }
 
@@ -656,6 +694,13 @@ public partial class CanvasInteractionViewModel : ObservableObject
         // "hover lights it up, but the click misses".
         return DesignCanvasHitTesting.HitTestConnection(new Point(x, y), _canvas);
     }
+
+    /// <summary>
+    /// Finds the canvas-level frozen path nearest the point (issue #856). Delegates to
+    /// the shared canvas hit test so hover, click and delete all agree on what is hit.
+    /// </summary>
+    public CanvasFrozenPathViewModel? FindCanvasFrozenPathAt(double x, double y)
+        => DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(x, y), _canvas);
 
     /// <summary>
     /// Starts dragging a component.
@@ -814,6 +859,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
         var targets = selection.SelectedComponents.ToList();
         if (targets.Count == 0 && SelectedComponent != null)
             targets.Add(SelectedComponent);
+
+        // With no components selected, DEL acts on a selected canvas-level frozen
+        // path (issue #856), mirroring how imported route geometry is deleted.
+        if (targets.Count == 0 && SelectedCanvasFrozenPath is { } frozenPath)
+        {
+            SelectedCanvasFrozenPath = null;
+            _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
+            return;
+        }
 
         var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
         if (deletable.Count == 0)

@@ -565,6 +565,9 @@ public partial class MainViewModel : ObservableObject
                 // Feed the selected connection into the routing options panel (issue #574).
                 BottomPanel.ConnectionRouting.SelectedConnection =
                     CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the imported-route re-route panel.
+                BottomPanel.RerouteImported.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
             }
         };
 
@@ -1255,6 +1258,13 @@ public class DesignFileData
     /// Null for legacy files saved before single-process support; migrated on load.
     /// </summary>
     public ActiveProcessData? ActiveProcess { get; set; }
+
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856):
+    /// GDS-imported route geometry released by ungrouping its import group. Null for
+    /// files saved before canvas-level frozen paths existed.
+    /// </summary>
+    public List<CAP_DataAccess.Persistence.DTOs.FrozenPathDto>? CanvasFrozenPaths { get; set; }
 }
 
 /// <summary>
