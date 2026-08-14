@@ -71,6 +71,8 @@ public class GridPersistenceWithGroupsManager
                             Identifier = component.Identifier,
                             HumanReadableName = component.HumanReadableName,
                             Rotation = (int)component.Rotation90CounterClock,
+                            RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(component),
+                            Mirrored = component.IsMirroredHorizontally ? true : null,
                             Sliders = component.GetAllSliders(),
                             X = x,
                             Y = y
@@ -153,7 +155,7 @@ public class GridPersistenceWithGroupsManager
                 // CRITICAL: Restore HumanReadableName if saved (for backward compatibility, fall back to Identifier)
                 component.HumanReadableName = data.HumanReadableName ?? data.Identifier;
 
-                component.Rotation90CounterClock = (DiscreteRotation)data.Rotation;
+                RestorePose(data, component);
                 LoadSliders(data, component);
                 _gridManager.ComponentMover.PlaceComponent(data.X, data.Y, component);
                 componentLookup[component.Identifier] = component;
@@ -175,7 +177,7 @@ public class GridPersistenceWithGroupsManager
                 // CRITICAL: Restore HumanReadableName if saved (for backward compatibility, fall back to Identifier)
                 component.HumanReadableName = data.HumanReadableName ?? data.Identifier;
 
-                component.Rotation90CounterClock = (DiscreteRotation)data.Rotation;
+                RestorePose(data, component);
                 LoadSliders(data, component);
                 // Don't place in grid - they'll be children of groups
                 componentLookup[component.Identifier] = component;
@@ -300,6 +302,8 @@ public class GridPersistenceWithGroupsManager
                     Identifier = child.Identifier,
                     HumanReadableName = child.HumanReadableName,
                     Rotation = (int)child.Rotation90CounterClock,
+                    RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(child),
+                    Mirrored = child.IsMirroredHorizontally ? true : null,
                     Sliders = child.GetAllSliders(),
                     X = child.GridXMainTile,
                     Y = child.GridYMainTile
@@ -333,6 +337,23 @@ public class GridPersistenceWithGroupsManager
 
         // No copy suffix found - return as-is
         return identifier;
+    }
+
+    /// <summary>
+    /// Restores a component's saved pose: mirror first (local, unrotated frame),
+    /// then the discrete quarter turns, then the exact continuous angle when the
+    /// file carries one (GDS-imported non-cardinal instance; null in older files
+    /// and for cardinal rotations).
+    /// </summary>
+    private static void RestorePose(ComponentData data, Component component)
+    {
+        if (data.Mirrored == true)
+            ComponentPoseTransform.MirrorPinsHorizontally(component);
+
+        component.Rotation90CounterClock = (DiscreteRotation)data.Rotation;
+
+        if (data.RotationDegrees is double exact)
+            ComponentPoseTransform.ApplyExactRotation(component, exact);
     }
 
     /// <summary>
@@ -381,6 +402,20 @@ public class GridPersistenceWithGroupsManager
         public int X { get; set; }
         public int Y { get; set; }
         public int Rotation { get; set; }
+
+        /// <summary>
+        /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+        /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+        /// alone restores those.
+        /// </summary>
+        public double? RotationDegrees { get; set; }
+
+        /// <summary>
+        /// True when the pins were mirrored across the local horizontal centerline
+        /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+        /// </summary>
+        public bool? Mirrored { get; set; }
+
         public string Identifier { get; set; } = "";
         public string? HumanReadableName { get; set; }
         public List<Slider>? Sliders { get; set; }

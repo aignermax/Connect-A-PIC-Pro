@@ -299,6 +299,89 @@ public class GdsLayerSuggestionEngineTests
     }
 
     [Fact]
+    public void BoundaryTouchingPolygon_WithoutText_SuggestsPortLabelsLow()
+    {
+        // A small rectangle that shares one edge with its cell's bbox is a
+        // plausible port marker even when it carries no text — surfaced as a
+        // low-confidence, manually-accepted suggestion, never auto-applied. The
+        // larger extent rectangle makes the marker touch only the left edge.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(111, 0, 10, 4),
+            new GdsPolygon
+            {
+                Layer = 77,
+                DataType = 0,
+                Points = new[]
+                {
+                    new GdsPoint(0, 1), new GdsPoint(0.5, 1),
+                    new GdsPoint(0.5, 2), new GdsPoint(0, 2), new GdsPoint(0, 1),
+                },
+            }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 77 && s.Datatype == 0 && s.Role == GdsLayerRole.PortLabels
+            && s.Confidence == GdsSuggestionConfidence.Low);
+    }
+
+    [Fact]
+    public void BoundaryTouchingPolygon_WithPortLikeText_TextSuggestionWins_NoDuplicate()
+    {
+        // Text evidence is stronger and already maps the layer to port labels;
+        // the geometry-only hint must not produce a second suggestion.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(111, 0, 10, 4),
+            new GdsPolygon
+            {
+                Layer = 77,
+                DataType = 0,
+                Points = new[]
+                {
+                    new GdsPoint(0, 1), new GdsPoint(0.5, 1),
+                    new GdsPoint(0.5, 2), new GdsPoint(0, 2), new GdsPoint(0, 1),
+                },
+            },
+            Text(77, 0, "o1")));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 77 && s.Datatype == 0 && s.Role == GdsLayerRole.PortLabels
+            && s.Confidence == GdsSuggestionConfidence.High);
+        suggestions.ShouldNotContain(s =>
+            s.Layer == 77 && s.Role == GdsLayerRole.PortLabels
+            && s.Confidence == GdsSuggestionConfidence.Low);
+    }
+
+    [Fact]
+    public void BoundaryTouchingPolygon_OnKnownWaveguideLayer_GetsNoPortLabelChip()
+    {
+        // A through-going waveguide core strip touches the bbox left+right —
+        // that is route geometry, not a port marker: the pair already claimed
+        // as waveguide must not additionally get a "may mark ports" chip.
+        var library = Library(Cell(TopCell), Cell("dev",
+            Rectangle(111, 0, 10, 4),
+            new GdsPolygon
+            {
+                Layer = 1,
+                DataType = 0,
+                Points = new[]
+                {
+                    new GdsPoint(0, 1), new GdsPoint(10, 1),
+                    new GdsPoint(10, 1.5), new GdsPoint(0, 1.5), new GdsPoint(0, 1),
+                },
+            }));
+
+        var suggestions = Suggest(library);
+
+        suggestions.ShouldContain(s =>
+            s.Layer == 1 && s.Datatype == 0 && s.Role == GdsLayerRole.Waveguide);
+        suggestions.ShouldNotContain(s =>
+            s.Layer == 1 && s.Datatype == 0 && s.Role == GdsLayerRole.PortLabels);
+    }
+
+    [Fact]
     public void MissingTopCell_YieldsNoRouteCandidates_WithoutThrowing()
     {
         var library = Library(Cell("other", Text(56, 0, "p")));

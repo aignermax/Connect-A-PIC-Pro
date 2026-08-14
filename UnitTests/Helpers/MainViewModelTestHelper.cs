@@ -211,7 +211,7 @@ public static class MainViewModelTestHelper
         return new BottomPanelViewModel(
             canvas,
             commandManager,
-            new ConnectionRoutingViewModel(canvas),
+            new ConnectionRoutingViewModel(canvas, commandManager),
             new CAP.Avalonia.ViewModels.Canvas.RerouteImported.RerouteImportedRoutesViewModel(canvas, commandManager),
             new ElementLockViewModel(),
             new ErrorConsoleViewModel(errorConsoleService),

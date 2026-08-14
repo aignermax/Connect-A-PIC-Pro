@@ -86,11 +86,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// True when a connection is selected. Metal traces route with curved bends like
-    /// waveguides (#854), so routing styles and bend handles apply to electrical
-    /// connections too — the routing panel binds its visibility to this.
+    /// True when a connection is selected — directly or via the rubber-band selection
+    /// (issue #862). Metal traces route with curved bends like waveguides (#854), so
+    /// routing styles and bend handles apply to electrical connections too — the
+    /// routing panel binds its visibility to this.
     /// </summary>
-    public bool IsConnectionSelected => SelectedWaveguideConnection is not null;
+    public bool IsConnectionSelected =>
+        SelectedWaveguideConnection is not null ||
+        _canvas.Selection.SelectedConnections.Any();
 
     partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
         OnPropertyChanged(nameof(IsConnectionSelected));
@@ -179,6 +182,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
         // Hierarchy → right panel: when canvas.SelectedComponent changes externally
         // (e.g. from the hierarchy panel), mirror it so the right-panel property editor updates.
         _canvas.PropertyChanged += OnCanvasPropertyChanged;
+
+        // Rubber-band connection selection (issue #862) feeds the routing panel's visibility.
+        _canvas.Selection.SelectedConnections.CollectionChanged +=
+            (_, _) => OnPropertyChanged(nameof(IsConnectionSelected));
     }
 
     /// <summary>
@@ -543,6 +550,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
         {
             conn.IsSelected = false;
         }
+        // Empty the batch connection set BEFORE the click result is applied: the sync below
+        // calls ClearSelection(), which would otherwise deselect a just-clicked batch member.
+        _canvas.Selection.ClearConnectionSelection();
 
         // Find component at position
         var component = ComponentAt(x, y);

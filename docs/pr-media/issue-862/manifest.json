@@ -1,0 +1,22 @@
+[
+  {
+    "file": "01-three-auto-connections.png",
+    "caption": "Three independent Auto connections; the routing panel stays hidden while nothing is selected."
+  },
+  {
+    "file": "02-box-selected-batch.png",
+    "caption": "A rubber-band drag across the canvas puts all three connections into the batch and the routing panel announces how many it applies to."
+  },
+  {
+    "file": "03-batch-restyled-sbend.png",
+    "caption": "Picking S-bend once restyles every selected connection as a single undoable command."
+  },
+  {
+    "file": "04-single-undo-restores-all.png",
+    "caption": "One Ctrl\u002BZ restores all three connections to their previous Auto routes."
+  },
+  {
+    "file": "05-click-member-keeps-it-selected.png",
+    "caption": "Clicking one batch member dissolves the batch but keeps exactly that connection selected (review fix)."
+  }
+]

@@ -213,6 +213,50 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- Guessed pins: edge-heuristic pins the user can delete before placing -->
+                <StackPanel Spacing="6" IsVisible="{Binding HasPinSuggestions}">
+                    <TextBlock Text="{loc:Localize GdsImport.GuessedPinsHeader}"
+                               Foreground="LightGray" FontSize="11" FontWeight="SemiBold"/>
+                    <TextBlock Text="{loc:Localize GdsImport.GuessedPinsHint}"
+                               Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
+                    <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding PinSuggestions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GdsImportPinSuggestion">
+                                    <Border Background="#252526" CornerRadius="4" Padding="6,4" Margin="0,0,0,4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock FontSize="10" Foreground="White">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0}.{1}">
+                                                            <Binding Path="CellName"/>
+                                                            <Binding Path="PinName"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock FontSize="9" Foreground="Gray">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:F1},{1:F1} µm / {2:F0}° / w{3:F1} µm">
+                                                            <Binding Path="XUm"/>
+                                                            <Binding Path="YUm"/>
+                                                            <Binding Path="AngleDegrees"/>
+                                                            <Binding Path="WidthUm"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="{loc:Localize GdsImport.RemoveGuessedPin}"
+                                                    Command="{Binding RemoveCommand}"
+                                                    Background="#3d1515" Foreground="#FF9090"
+                                                    FontSize="9" Padding="8,2" CornerRadius="4"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
                 <!-- Recreate detected connections with Lunima routing -->
                 <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"
                           Content="{loc:Localize GdsImport.RerouteConnections}"

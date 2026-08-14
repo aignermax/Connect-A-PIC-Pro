@@ -53,6 +53,7 @@ public partial class GdsImportDialogViewModel
                 WaveguideLayers = waveguideLayers,
                 ElectricalLayers = metalLayers,
             },
+            ExcludedGuessedPins = _excludedGuessedPins,
         };
         return true;
     }

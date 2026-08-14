@@ -11,6 +11,11 @@
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
         <TextBlock Text="{loc:Localize Routing.Connection.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
 
+        <!-- Multi-selection (issue #862): the dropdown restyles all selected connections at once. -->
+        <TextBlock Text="{Binding BottomPanel.ConnectionRouting.BatchHint}"
+                   IsVisible="{Binding BottomPanel.ConnectionRouting.IsBatchSelection}"
+                   Foreground="Gray" Margin="0,0,0,3" TextWrapping="Wrap"/>
+
         <TextBlock Text="{loc:Localize Routing.Connection.Style}" Foreground="Gray" Margin="0,0,0,3"/>
         <ComboBox ItemsSource="{Binding BottomPanel.ConnectionRouting.RoutingStyles}"
                   SelectedItem="{Binding BottomPanel.ConnectionRouting.SelectedStyle}"
