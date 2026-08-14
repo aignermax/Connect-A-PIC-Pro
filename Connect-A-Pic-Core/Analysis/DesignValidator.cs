@@ -80,6 +80,104 @@ public class DesignValidator
     }
 
     /// <summary>
+    /// Validates waveguide connections and checks every optical pin on the provided
+    /// components for a waveguide connection. Pins listed in <paramref name="externalPortPins"/>
+    /// are treated as external ports and are not reported as unconnected.
+    /// </summary>
+    /// <param name="connections">Regular waveguide connections to validate.</param>
+    /// <param name="components">All placed components whose optical pins are checked.</param>
+    /// <param name="externalPortPins">Pins that are external ports and should be skipped. Optional.</param>
+    /// <returns>A list of all design issues found, empty if the design is valid.</returns>
+    public List<DesignIssue> Validate(
+        IEnumerable<WaveguideConnection> connections,
+        IEnumerable<Component> components,
+        IEnumerable<PhysicalPin>? externalPortPins = null)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(components);
+
+        var connectionList = connections.ToList();
+        var issues = Validate(connectionList);
+        issues.AddRange(ValidateUnconnectedPins(components, connectionList, externalPortPins));
+        return issues;
+    }
+
+    /// <summary>
+    /// Validates waveguide connections, detects overlaps with frozen paths, and checks
+    /// every optical pin on the provided components for a waveguide connection.
+    /// Pins listed in <paramref name="externalPortPins"/> are treated as external ports
+    /// and are not reported as unconnected.
+    /// </summary>
+    /// <param name="connections">Regular waveguide connections to validate.</param>
+    /// <param name="groups">ComponentGroups whose frozen internal paths are checked for overlap.</param>
+    /// <param name="components">All placed components whose optical pins are checked.</param>
+    /// <param name="externalPortPins">Pins that are external ports and should be skipped. Optional.</param>
+    /// <returns>A list of all design issues found, empty if the design is valid.</returns>
+    public List<DesignIssue> Validate(
+        IEnumerable<WaveguideConnection> connections,
+        IEnumerable<ComponentGroup> groups,
+        IEnumerable<Component> components,
+        IEnumerable<PhysicalPin>? externalPortPins = null)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(groups);
+        ArgumentNullException.ThrowIfNull(components);
+
+        var connectionList = connections.ToList();
+        var issues = Validate(connectionList, groups);
+        issues.AddRange(ValidateUnconnectedPins(components, connectionList, externalPortPins));
+        return issues;
+    }
+
+    /// <summary>
+    /// Checks every optical pin on the provided components and reports any that have no
+    /// waveguide connection and are not listed as external ports.
+    /// </summary>
+    /// <param name="components">All placed components whose optical pins are checked.</param>
+    /// <param name="connections">Regular waveguide connections; endpoint pins are considered connected.</param>
+    /// <param name="externalPortPins">Pins that are external ports and should be skipped. Optional.</param>
+    /// <returns>A list of unconnected-pin issues, empty when every optical pin is connected or external.</returns>
+    public List<DesignIssue> ValidateUnconnectedPins(
+        IEnumerable<Component> components,
+        IEnumerable<WaveguideConnection> connections,
+        IEnumerable<PhysicalPin>? externalPortPins = null)
+    {
+        ArgumentNullException.ThrowIfNull(components);
+        ArgumentNullException.ThrowIfNull(connections);
+
+        var connectedPins = new HashSet<PhysicalPin>(
+            connections.SelectMany(c => new[] { c.StartPin, c.EndPin }).OfType<PhysicalPin>());
+        var externalPortPinSet = new HashSet<PhysicalPin>(externalPortPins ?? Array.Empty<PhysicalPin>());
+
+        var issues = new List<DesignIssue>();
+
+        foreach (var component in components)
+        {
+            foreach (var pin in component.PhysicalPins)
+            {
+                if (pin.MatterType != MatterType.Light)
+                    continue;
+                if (connectedPins.Contains(pin))
+                    continue;
+                if (externalPortPinSet.Contains(pin))
+                    continue;
+
+                var (x, y) = pin.GetAbsolutePosition();
+                issues.Add(new DesignIssue(
+                    DesignIssueType.UnconnectedPin,
+                    connection: null,
+                    x,
+                    y,
+                    string.Create(
+                        CultureInfo.InvariantCulture,
+                        $"Unconnected pin: {FormatPinName(pin)} at ({x}, {y})")));
+            }
+        }
+
+        return issues;
+    }
+
+    /// <summary>
     /// Checks a single connection for issues and adds them to the list.
     /// </summary>
     private static void CheckConnection(
@@ -134,6 +232,52 @@ public class DesignValidator
                 midX,
                 midY,
                 $"Styled route passes through a component: {startName} to {endName}"));
+        }
+
+        CheckPinMismatch(connection, issues);
+    }
+
+    /// <summary>
+    /// Checks whether the two endpoint pins of a connection have matching PDK-driven
+    /// waveguide widths and layers. A mismatch produces a <see cref="DesignIssueType.PinMismatch"/>.
+    /// </summary>
+    private static void CheckPinMismatch(
+        WaveguideConnection connection,
+        List<DesignIssue> issues)
+    {
+        if (connection.StartPin == null || connection.EndPin == null)
+            return;
+
+        var (midX, midY) = CalculateMidpoint(connection);
+
+        var startWidth = connection.StartPin.WaveguideWidthMicrometers;
+        var endWidth = connection.EndPin.WaveguideWidthMicrometers;
+        if (startWidth.HasValue && endWidth.HasValue && startWidth.Value != endWidth.Value)
+        {
+            var startName = FormatPinName(connection.StartPin);
+            var endName = FormatPinName(connection.EndPin);
+            issues.Add(new DesignIssue(
+                DesignIssueType.PinMismatch,
+                connection,
+                midX,
+                midY,
+                string.Create(
+                    CultureInfo.InvariantCulture,
+                    $"Pin width mismatch: {startName} ({startWidth.Value} µm) vs {endName} ({endWidth.Value} µm)")));
+        }
+
+        var startLayer = connection.StartPin.Layer;
+        var endLayer = connection.EndPin.Layer;
+        if (startLayer.HasValue && endLayer.HasValue && startLayer.Value != endLayer.Value)
+        {
+            var startName = FormatPinName(connection.StartPin);
+            var endName = FormatPinName(connection.EndPin);
+            issues.Add(new DesignIssue(
+                DesignIssueType.PinMismatch,
+                connection,
+                midX,
+                midY,
+                $"Pin layer mismatch: {startName} (layer {startLayer.Value}) vs {endName} (layer {endLayer.Value})"));
         }
     }
 

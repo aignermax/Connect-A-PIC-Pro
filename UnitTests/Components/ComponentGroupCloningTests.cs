@@ -63,6 +63,30 @@ public class ComponentGroupCloningTests
     }
 
     /// <summary>
+    /// Verifies that cloning preserves pose metadata (non-cardinal rotation, mirroring,
+    /// unrotated dimensions) on child components, so a later save/load does not rotate
+    /// the already-transformed pins a second time.
+    /// </summary>
+    [Fact]
+    public void Clone_GroupWithChildren_PreservesChildPoseMetadata()
+    {
+        var original = TestComponentFactory.CreateComponentGroup("ParentGroup", addChildren: true);
+        var originalChild = original.ChildComponents[0];
+        originalChild.RotationDegrees = 30.0;
+        originalChild.IsMirroredHorizontally = true;
+        originalChild.UnrotatedWidthMicrometers = 120.0;
+        originalChild.UnrotatedHeightMicrometers = 40.0;
+
+        var cloned = (ComponentGroup)original.Clone();
+
+        var clonedChild = cloned.ChildComponents[0];
+        clonedChild.RotationDegrees.ShouldBe(30.0);
+        clonedChild.IsMirroredHorizontally.ShouldBeTrue();
+        clonedChild.UnrotatedWidthMicrometers.ShouldBe(120.0);
+        clonedChild.UnrotatedHeightMicrometers.ShouldBe(40.0);
+    }
+
+    /// <summary>
     /// Verifies that cloned children have their ParentGroup reference set correctly.
     /// </summary>
     [Fact]

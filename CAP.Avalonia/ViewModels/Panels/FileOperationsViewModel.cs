@@ -123,6 +123,13 @@ public partial class FileOperationsViewModel : ObservableObject
     public Services.GdsImport.DesignScope.DesignScopedGdsComponentService? DesignScopedGdsComponents { get; set; }
 
     /// <summary>
+    /// Per-layer visibility of imported GDS geometry (issue #858). Wired by
+    /// MainViewModel; null in headless contexts. Captured into the .lun on
+    /// save, restored on load, and reset on New Project.
+    /// </summary>
+    public GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? LayerVisibility { get; set; }
+
+    /// <summary>
     /// ViewModel for GDS export functionality.
     /// </summary>
     public GdsExportViewModel GdsExport { get; }
@@ -427,6 +434,14 @@ public partial class FileOperationsViewModel : ObservableObject
                 }
             }
 
+            // Canvas-level pin-less frozen paths (issue #856) survive save/load.
+            if (_canvas.CanvasFrozenPaths.Count > 0)
+            {
+                designData.CanvasFrozenPaths = _canvas.CanvasFrozenPaths
+                    .Select(p => CAP_DataAccess.Persistence.ComponentGroupSerializer.ToCanvasFrozenPathDto(p.Path))
+                    .ToList();
+            }
+
             designData.FormatVersion = CurrentFormatVersion;
             // GDS-imported components travel inside the .lun (issue #830) so the
             // design stays self-contained; null when the design imported nothing.
@@ -436,6 +451,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
                         ?? Enumerable.Empty<string?>());
             designData.ImportedGdsComponents = DesignScopedGdsComponents?.CaptureForSave(referencedPdkSources);
+            designData.LayerVisibility = LayerVisibility?.CaptureForSave();
             designData.Metadata = BuildMetadataForSave();
             if (StoredSMatrices.Count > 0)
             {
@@ -491,7 +507,8 @@ public partial class FileOperationsViewModel : ObservableObject
             Y = c.Y,
             Identifier = c.Component.Identifier,
             Rotation = (int)c.Component.Rotation90CounterClock,
-            RotationDegrees = c.Component.RotationDegrees,
+            RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(c.Component),
+            Mirrored = c.Component.IsMirroredHorizontally ? true : null,
             SliderValue = c.HasSliders ? c.SliderValue : null,
             SliderValues = SnapshotSliderValues(c.Component),
             LaserWavelengthNm = c.LaserConfig?.WavelengthNm,
@@ -700,7 +717,8 @@ public partial class FileOperationsViewModel : ObservableObject
                 X = child.PhysicalX,
                 Y = child.PhysicalY,
                 Rotation = (int)child.Rotation90CounterClock,
-                RotationDegrees = child.RotationDegrees,
+                RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(child),
+                Mirrored = child.IsMirroredHorizontally ? true : null,
                 SliderValue = child.GetAllSliders().Count > 0
                     ? child.GetSlider(0)?.Value : null,
                 SliderValues = SnapshotSliderValues(child),
@@ -972,6 +990,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.Components.Clear();
                 _canvas.Connections.Clear();
                 _canvas.AllPins.Clear();
+                _canvas.CanvasFrozenPaths.Clear();
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
                 _pinCalibrationMigratedComponents.Clear();
@@ -993,6 +1012,9 @@ public partial class FileOperationsViewModel : ObservableObject
                         referencedPdkSources, w => _errorConsole?.LogWarning(w));
                 }
 
+                // Per-layer visibility overrides for imported geometry (#858).
+                LayerVisibility?.Restore(designData.LayerVisibility);
+
                 // Load standalone components
                 foreach (var compData in designData.Components)
                 {
@@ -1010,6 +1032,18 @@ public partial class FileOperationsViewModel : ObservableObject
                 foreach (var connData in designData.Connections)
                 {
                     LoadConnectionFromData(connData);
+                }
+
+                // Restore canvas-level pin-less frozen paths (issue #856); files
+                // saved before the field simply have none.
+                if (designData.CanvasFrozenPaths != null)
+                {
+                    foreach (var pathDto in designData.CanvasFrozenPaths)
+                    {
+                        var frozenPath = CAP_DataAccess.Persistence.ComponentGroupSerializer
+                            .FromCanvasFrozenPathDto(pathDto);
+                        _canvas.CanvasFrozenPaths.Add(new CanvasFrozenPathViewModel(frozenPath));
+                    }
                 }
 
                 // Pin-calibration migration: report discarded stale routes and re-route them.
@@ -1257,6 +1291,7 @@ public partial class FileOperationsViewModel : ObservableObject
         _canvas.Components.Clear();
         _canvas.Connections.Clear();
         _canvas.AllPins.Clear();
+        _canvas.CanvasFrozenPaths.Clear();
         _canvas.ConnectionManager.Clear();
         _canvas.AnalysisOutput.Clear();
         _commandManager.ClearHistory();
@@ -1264,6 +1299,8 @@ public partial class FileOperationsViewModel : ObservableObject
         // Imported GDS components are design-scoped (#830): a fresh project must
         // not inherit the previous design's imported library entries.
         DesignScopedGdsComponents?.ClearDesignScope();
+        // Layer-visibility overrides are per design (#858): reset to all-visible.
+        LayerVisibility?.ClearForNewDesign();
     }
 
     /// <summary>
@@ -1331,31 +1368,7 @@ public partial class FileOperationsViewModel : ObservableObject
         if (compData.HumanReadableName != null)
             component.HumanReadableName = compData.HumanReadableName;
 
-        // Apply rotation: exact continuous angle when the file carries one
-        // (GDS imports keep non-cardinal rotations); cardinal angles keep the
-        // legacy quarter-turn loop (discrete-rotation sync, numerically exact).
-        if (compData.RotationDegrees is double exactDegrees)
-        {
-            int quarterTurns = (int)Math.Round(exactDegrees / 90.0);
-            if (Math.Abs(exactDegrees - (quarterTurns * 90.0)) < 1e-6)
-            {
-                for (int i = 0; i < ((quarterTurns % 4) + 4) % 4; i++)
-                {
-                    ApplyRotationToComponent(component);
-                }
-            }
-            else
-            {
-                RotateComponentCommand.ApplyModelRotation(component, exactDegrees);
-            }
-        }
-        else
-        {
-            for (int i = 0; i < compData.Rotation; i++)
-            {
-                ApplyRotationToComponent(component);
-            }
-        }
+        RestorePose(component, compData.Mirrored, compData.Rotation, compData.RotationDegrees);
 
         var vm = _canvas.AddComponent(component, template.Name, template.PdkSource);
 
@@ -1434,34 +1447,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 if (childData.HumanReadableName != null)
                     child.HumanReadableName = childData.HumanReadableName;
 
-                // Apply rotation: the exact continuous angle when the file
-                // carries one (GDS imports keep non-cardinal rotations; the
-                // exact path also records the unrotated dims for outline
-                // rendering). Cardinal angles keep the legacy quarter-turn
-                // loop — it keeps the discrete rotation enum in sync and is
-                // numerically exact (no trig noise).
-                if (childData.RotationDegrees is double exactDegrees)
-                {
-                    int quarterTurns = (int)Math.Round(exactDegrees / 90.0);
-                    if (Math.Abs(exactDegrees - (quarterTurns * 90.0)) < 1e-6)
-                    {
-                        for (int i = 0; i < ((quarterTurns % 4) + 4) % 4; i++)
-                        {
-                            ApplyRotationToComponent(child);
-                        }
-                    }
-                    else
-                    {
-                        RotateComponentCommand.ApplyModelRotation(child, exactDegrees);
-                    }
-                }
-                else
-                {
-                    for (int i = 0; i < childData.Rotation; i++)
-                    {
-                        ApplyRotationToComponent(child);
-                    }
-                }
+                RestorePose(child, childData.Mirrored, childData.Rotation, childData.RotationDegrees);
 
                 // Restore slider values (all sliders; legacy single value as fallback)
                 RestoreSliderValues(child, childData.SliderValues, childData.SliderValue);
@@ -1974,28 +1960,24 @@ public partial class FileOperationsViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Applies a 90° counter-clockwise rotation to a component.
+    /// Restores a freshly template-created component's saved pose in placement
+    /// order: mirror first (local, unrotated frame — matching
+    /// <see cref="Commands.PlaceComponentCommand.CreateExact"/>), then the
+    /// discrete quarter turns, then the exact continuous angle when the file
+    /// carries one (GDS-imported non-cardinal instance; null in older files
+    /// and for cardinal rotations).
     /// </summary>
-    private static void ApplyRotationToComponent(Component comp)
+    private static void RestorePose(
+        Component component, bool? mirrored, int quarterTurns, double? exactRotationDegrees)
     {
-        var width = comp.WidthMicrometers;
-        var height = comp.HeightMicrometers;
+        if (mirrored == true)
+            ComponentPoseTransform.MirrorPinsHorizontally(component);
 
-        foreach (var pin in comp.PhysicalPins)
-        {
-            var cx = width / 2;
-            var cy = height / 2;
-            var x = pin.OffsetXMicrometers - cx;
-            var y = pin.OffsetYMicrometers - cy;
-            var newX = -y;
-            var newY = x;
-            pin.OffsetXMicrometers = newX + cy;
-            pin.OffsetYMicrometers = newY + cx;
-        }
+        for (int i = 0; i < quarterTurns; i++)
+            ComponentPoseTransform.Rotate90CounterClockwise(component);
 
-        comp.WidthMicrometers = height;
-        comp.HeightMicrometers = width;
-        comp.RotateBy90CounterClockwise();
+        if (exactRotationDegrees is double exact)
+            ComponentPoseTransform.ApplyExactRotation(component, exact);
     }
 
     /// <summary>

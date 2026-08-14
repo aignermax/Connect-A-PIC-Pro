@@ -95,6 +95,11 @@ public class SelectionBoxGestureRecognizer : IGestureRecognizer
         bool ctrl = e.KeyModifiers.HasFlag(KeyModifiers.Control);
         bool alt = e.KeyModifiers.HasFlag(KeyModifiers.Alt);
         canvas.Selection.SelectInRectangle(canvas.Components, minX, minY, maxX, maxY, addToSelection: ctrl, removeFromSelection: alt);
+        // Also collect optical connections crossing the box (issue #862) so the routing-style
+        // control can restyle them all at once. The component pass above already cleared the
+        // selection for a plain drag, so this pass only adds/removes.
+        Selection.ConnectionBoxSelector.SelectInRectangle(
+            canvas.Selection, canvas.Connections, minX, minY, maxX, maxY, removeFromSelection: alt);
         _invalidate();
     }
 

@@ -1,0 +1,39 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:layervis="using:CAP.Avalonia.ViewModels.GdsImport.LayerVisibility"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.GdsLayerVisibilityPanel"
+             x:DataType="vm:MainViewModel">
+
+    <!-- Imported Layers (issue #858): per-layer show/hide + opacity for imported GDS
+         geometry. A pure view filter — connectivity and simulation are untouched. -->
+    <StackPanel IsVisible="{Binding LayerVisibility.HasLayers}">
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize LayerVis.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
+            <Button Grid.Column="1" Content="{loc:Localize LayerVis.ShowAll}"
+                    Command="{Binding LayerVisibility.ShowAllLayersCommand}"
+                    FontSize="10" Padding="6,2" Background="#3d3d5d"/>
+        </Grid>
+        <ItemsControl ItemsSource="{Binding LayerVisibility.Rows}">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="layervis:GdsLayerVisibilityRowViewModel">
+                    <Grid ColumnDefinitions="Auto,*,Auto,90" Margin="0,2,0,2">
+                        <CheckBox IsChecked="{Binding IsVisible}" Padding="4,0,0,0"
+                                  VerticalAlignment="Center"/>
+                        <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Foreground="LightGray"
+                                   FontSize="11" VerticalAlignment="Center" Margin="4,0,0,0"/>
+                        <TextBlock Grid.Column="2" Text="{Binding ShapeCountText}" Foreground="Gray"
+                                   FontSize="10" VerticalAlignment="Center" Margin="4,0,6,0"/>
+                        <Slider Grid.Column="3" Minimum="0" Maximum="100"
+                                Value="{Binding OpacityPercent}"
+                                IsEnabled="{Binding IsVisible}"
+                                ToolTip.Tip="{loc:Localize LayerVis.Opacity}"
+                                VerticalAlignment="Center"/>
+                    </Grid>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+    </StackPanel>
+</UserControl>

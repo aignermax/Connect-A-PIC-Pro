@@ -126,13 +126,19 @@ public class GdsImportCancellationLifecycleTests : IDisposable
         var (vm, canvas, _) = CreateDialog(WriteGds(TwoWaveguideLibrary()), console);
         await vm.StartAnalysisAsync();
 
-        var run = vm.ImportCommand.ExecuteAsync(null);
-        var cts = vm.CurrentCts.ShouldNotBeNull();
+        // Capture the source and close from the mid-run test hook: the tiny
+        // fixture import can otherwise finish (releasing CurrentCts) before an
+        // unawaited test thread observes it under full-suite load.
+        CancellationTokenSource? cts = null;
+        vm.ImportServiceCompletedTestHook = () =>
+        {
+            cts = vm.CurrentCts;
+            vm.OnWindowClosed(); // the auto-close landing mid-run
+        };
+        await vm.ImportCommand.ExecuteAsync(null);
 
-        vm.OnWindowClosed(); // the auto-close landing mid-run
-
-        cts.IsCancellationRequested.ShouldBeFalse("a close mid-import no longer cancels (auto-close by design)");
-        await run;
+        cts.ShouldNotBeNull().IsCancellationRequested.ShouldBeFalse(
+            "a close mid-import no longer cancels (auto-close by design)");
         vm.IsBusy.ShouldBeFalse();
         vm.HasError.ShouldBeFalse(vm.ErrorText);
         vm.ImportCompleted.ShouldBeTrue("the import finishes in the background");

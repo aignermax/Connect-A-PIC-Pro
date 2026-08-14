@@ -167,6 +167,64 @@ public class DesignCanvasHitTestingTests
     }
 
     [Fact]
+    public void HitTestCanvasFrozenPath_ReturnsNull_WhenViewModelIsNull()
+    {
+        var result = DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(0, 0), null);
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void HitTestCanvasFrozenPath_ReturnsNull_WhenNoPaths()
+    {
+        var vm = new DesignCanvasViewModel();
+        var result = DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(50, 50), vm);
+        result.ShouldBeNull();
+    }
+
+    [Fact]
+    public void HitTestCanvasFrozenPath_HitsStraightSegmentWithinTolerance_MissesBeyond()
+    {
+        var (vm, pathVm) = CreateCanvasWithStraightFrozenPath();
+
+        DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(50, 105), vm)
+            .ShouldBeSameAs(pathVm, "5 µm off the segment is inside the 10 µm tolerance");
+        DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(50, 125), vm)
+            .ShouldBeNull("25 µm off the segment is outside the tolerance");
+    }
+
+    [Fact]
+    public void HitTestCanvasFrozenPath_PointOnLargeBendArc_HitsEvenFarFromTheChord()
+    {
+        // Same arc-accuracy guarantee as HitTestConnection: hover, click and delete
+        // share ONE hit test, so a frozen path's large bend must be hit on the curve.
+        var vm = new DesignCanvasViewModel();
+        var path = new CAP_Core.Routing.RoutedPath();
+        path.Segments.Add(new CAP_Core.Routing.BendSegment(0, 0, 100, 0, 90));
+        var pathVm = new CanvasFrozenPathViewModel(
+            new CAP_Core.Components.Core.FrozenWaveguidePath { Path = path });
+        vm.CanvasFrozenPaths.Add(pathVm);
+
+        var onArcA = new Point(70.71, 70.71);
+        var onArcB = new Point(70.71, -70.71);
+        var hit = DesignCanvasHitTesting.HitTestCanvasFrozenPath(onArcA, vm)
+            ?? DesignCanvasHitTesting.HitTestCanvasFrozenPath(onArcB, vm);
+
+        hit.ShouldBeSameAs(pathVm, "a point directly on a large bend's arc must hit the frozen path");
+    }
+
+    private static (DesignCanvasViewModel Vm, CanvasFrozenPathViewModel PathVm)
+        CreateCanvasWithStraightFrozenPath()
+    {
+        var vm = new DesignCanvasViewModel();
+        var path = new CAP_Core.Routing.RoutedPath();
+        path.Segments.Add(new CAP_Core.Routing.StraightSegment(0, 100, 100, 100, 0));
+        var pathVm = new CanvasFrozenPathViewModel(
+            new CAP_Core.Components.Core.FrozenWaveguidePath { Path = path });
+        vm.CanvasFrozenPaths.Add(pathVm);
+        return (vm, pathVm);
+    }
+
+    [Fact]
     public void HitTestGroupLabel_ReturnsNull_WhenViewModelIsNull()
     {
         var result = DesignCanvasHitTesting.HitTestGroupLabel(new Point(0, 0), null);
