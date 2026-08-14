@@ -86,17 +86,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
     }
 
     /// <summary>
-    /// True when the selected connection is an optical waveguide, or the rubber-band selection
-    /// contains at least one optical connection (issue #862). Electrical connections are
-    /// metal traces (#682): they get no routing style and no bend handles, so the routing
-    /// panel binds its visibility to this instead of the raw selection.
+    /// True when a connection is selected — directly or via the rubber-band selection
+    /// (issue #862). Metal traces route with curved bends like waveguides (#854), so
+    /// routing styles and bend handles apply to electrical connections too — the
+    /// routing panel binds its visibility to this.
     /// </summary>
-    public bool IsOpticalConnectionSelected =>
-        (SelectedWaveguideConnection is { } conn && !conn.Connection.IsElectrical) ||
-        _canvas.Selection.SelectedConnections.Any(c => !c.Connection.IsElectrical);
+    public bool IsConnectionSelected =>
+        SelectedWaveguideConnection is not null ||
+        _canvas.Selection.SelectedConnections.Any();
 
     partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
-        OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+        OnPropertyChanged(nameof(IsConnectionSelected));
 
     private PhysicalPin? _connectionStartPin;
     private double _moveStartX;
@@ -156,6 +156,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// </summary>
     public Func<double>? GetMinBendRadiusMicrometers { get; set; }
 
+    /// <summary>
+    /// Callback returning the minimum allowed METAL bend radius (µm) of the design's active
+    /// fabrication process (issue #854), consulted by the bend-handle drag on electrical
+    /// connections. Wired by <c>MainViewModel</c> to the metal routing spec provider; when
+    /// unwired the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
+    /// </summary>
+    public Func<double>? GetMetalMinBendRadiusMicrometers { get; set; }
+
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
@@ -177,7 +185,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         // Rubber-band connection selection (issue #862) feeds the routing panel's visibility.
         _canvas.Selection.SelectedConnections.CollectionChanged +=
-            (_, _) => OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+            (_, _) => OnPropertyChanged(nameof(IsConnectionSelected));
     }
 
     /// <summary>

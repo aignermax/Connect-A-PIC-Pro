@@ -5,7 +5,6 @@ using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
-using CAP_Core.Components.PinKinds;
 using CAP_Core.Routing.InterconnectRouting.SegmentShift;
 
 namespace CAP.Avalonia.Gestures;
@@ -52,7 +51,7 @@ public sealed class SegmentShiftGestureRecognizer : IGestureRecognizer
         if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return false;
 
         var selected = mainVm.CanvasInteraction.SelectedWaveguideConnection;
-        if (selected == null || !IsOptical(selected)) return false;
+        if (selected == null) return false;
 
         double grab = GrabRadiusPx / Zoom();
         foreach (var handle in SegmentShiftGeometry.GetHandles(selected.Connection.GetPathSegments()))
@@ -153,10 +152,6 @@ public sealed class SegmentShiftGestureRecognizer : IGestureRecognizer
         _handle = null;
         _invalidate();
     }
-
-    private static bool IsOptical(WaveguideConnectionViewModel conn) =>
-        !(PinKindHelper.IsElectrical(conn.Connection.StartPin)
-          && PinKindHelper.IsElectrical(conn.Connection.EndPin));
 
     private double Zoom()
     {

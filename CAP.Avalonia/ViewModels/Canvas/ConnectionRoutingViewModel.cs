@@ -80,18 +80,16 @@ public partial class ConnectionRoutingViewModel : ObservableObject
     }
 
     /// <summary>
-    /// The optical connections a style change applies to: the multi-selection when it holds
-    /// any connections, otherwise the single clicked connection. Electrical connections are
-    /// metal traces (#682) and never take a routing style (revisit with #854).
+    /// The connections a style change applies to: the multi-selection when it holds any
+    /// connections, otherwise the single clicked connection. Metal traces route with curved
+    /// bends like waveguides (#854), so electrical connections take routing styles too.
     /// </summary>
     private List<WaveguideConnectionViewModel> TargetConnections()
     {
-        var selected = _canvas.Selection.SelectedConnections
-            .Where(c => !c.Connection.IsElectrical)
-            .ToList();
+        var selected = _canvas.Selection.SelectedConnections.ToList();
         if (selected.Count > 0)
             return selected;
-        if (SelectedConnection is { } single && !single.Connection.IsElectrical)
+        if (SelectedConnection is { } single)
             return new List<WaveguideConnectionViewModel> { single };
         return new List<WaveguideConnectionViewModel>();
     }

@@ -388,6 +388,12 @@ public partial class MainViewModel : ObservableObject
         // the orchestrator refreshes the router before every routing pass, so AUTO cannot
         // bend tighter than the active process allows.
         _canvas.Routing.GetProcessMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
+        // Metal traces are curved like waveguides (#854): the metal spec's bend radius floors
+        // the router for electrical connections and its trace width pads their grid obstacles.
+        // The bend-handle drag clamp for metal traces uses the same source.
+        _canvas.Routing.GetMetalRoutingSpec = metalSpecProvider;
+        CanvasInteraction.GetMetalMinBendRadiusMicrometers =
+            () => metalSpecProvider().MinBendRadiusMicrometers;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]

@@ -5,10 +5,10 @@ using CAP_Core.Routing;
 namespace CAP.Avalonia.Commands;
 
 /// <summary>
-/// Undoable routing-style change for one or many waveguide connections (issue #862). Applying a
-/// style to a multi-selection is ONE command, so a single Ctrl+Z restores every connection's
-/// previous style. Electrical connections are filtered out at construction: metal traces carry no
-/// routing style (issue #682; to be revisited with curved metal, issue #854).
+/// Undoable routing-style change for one or many connections (issue #862). Applying a style to
+/// a multi-selection is ONE command, so a single Ctrl+Z restores every connection's previous
+/// style. Metal traces route with curved bends like waveguides (#854), so electrical
+/// connections are restyled the same way as optical ones.
 /// </summary>
 public sealed class ChangeRoutingStyleCommand : IUndoableCommand
 {
@@ -26,7 +26,7 @@ public sealed class ChangeRoutingStyleCommand : IUndoableCommand
 
     /// <summary>Initializes a new instance of <see cref="ChangeRoutingStyleCommand"/>.</summary>
     /// <param name="canvas">The design canvas whose routes are recalculated after each apply.</param>
-    /// <param name="connections">The connections to restyle; electrical ones are skipped.</param>
+    /// <param name="connections">The connections to restyle.</param>
     /// <param name="style">The routing style to apply to all of them.</param>
     public ChangeRoutingStyleCommand(
         DesignCanvasViewModel canvas,
@@ -36,7 +36,6 @@ public sealed class ChangeRoutingStyleCommand : IUndoableCommand
         _canvas = canvas;
         _style = style;
         _states = connections
-            .Where(c => !c.Connection.IsElectrical)
             .Distinct()
             .Select(c => new ConnectionState(
                 c,

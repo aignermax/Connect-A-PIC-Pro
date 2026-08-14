@@ -13,7 +13,8 @@ namespace UnitTests.Commands;
 
 /// <summary>
 /// Tests <see cref="ChangeRoutingStyleCommand"/> (issue #862): one command restyles many
-/// connections, skips electrical metal traces, and a single undo restores every previous style.
+/// connections — electrical metal traces included since #854 — and a single undo restores
+/// every previous style.
 /// </summary>
 public class ChangeRoutingStyleCommandTests
 {
@@ -33,7 +34,7 @@ public class ChangeRoutingStyleCommandTests
     }
 
     [Fact]
-    public void Execute_SkipsElectricalConnections()
+    public void Execute_RestylesElectricalConnectionsToo()
     {
         var canvas = new DesignCanvasViewModel();
         var optical = CreateConnectionVm(MatterType.Light);
@@ -43,8 +44,8 @@ public class ChangeRoutingStyleCommandTests
         cmd.Execute();
 
         optical.Connection.Type.ShouldBe(WaveguideType.SBend);
-        electrical.Connection.Type.ShouldBe(WaveguideType.Auto);
-        cmd.AffectedCount.ShouldBe(1);
+        electrical.Connection.Type.ShouldBe(WaveguideType.SBend);
+        cmd.AffectedCount.ShouldBe(2);
     }
 
     [Fact]
