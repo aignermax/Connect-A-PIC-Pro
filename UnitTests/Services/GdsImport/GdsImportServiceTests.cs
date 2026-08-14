@@ -39,6 +39,18 @@ public class GdsImportServiceTests : IDisposable
         .EndLibrary()
         .ToArray();
 
+    /// <summary>TOP with two abutting 10×4 µm port-shape-only cells.</summary>
+    private static byte[] TwoPortShapeLibrary() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            .SRef("portA", 0, 0)
+            .SRef("portB", 10000, 0)
+        .EndCell()
+        .PortShapeCell("portA")
+        .PortShapeCell("portB")
+        .EndLibrary()
+        .ToArray();
+
     private string WriteGds(byte[] content, string fileName = "circuit.gds")
     {
         Directory.CreateDirectory(_root);
@@ -199,6 +211,26 @@ public class GdsImportServiceTests : IDisposable
         var cacheFile = Directory.GetFiles(_host.GdsCacheDirectory, "*.gds").ShouldHaveSingleItem();
         _host.Templates.ShouldAllBe(t => t.RawCode != null && !t.RawCode.Contains(GdsFileNameToken()));
         _host.Templates.First().RawCode.ShouldContain(Path.GetFileName(cacheFile));
+    }
+
+    [Fact]
+    public async Task ImportAsync_TwoPortShapeCells_AreConnected()
+    {
+        // Two cells whose only port evidence is boundary-touching polygons on the
+        // default port layer (1,10). The pins detected from those shapes must
+        // align and connect the two instances just like label-based pins.
+        var path = WriteGds(TwoPortShapeLibrary());
+        var service = _host.CreateService(() => Array.Empty<ComponentTemplate>());
+
+        var outcome = await service.ImportAsync(path, "TOP", null, null);
+
+        outcome.RegisteredComponents.ShouldBe(new[]
+        {
+            new GdsRegisteredComponent("portA", "portA"),
+            new GdsRegisteredComponent("portB", "portB"),
+        });
+        outcome.Instances.Count.ShouldBe(2);
+        outcome.Connections.Count.ShouldBe(1);
     }
 
     [Fact]
@@ -471,5 +503,18 @@ file static class GdsImportServiceTestCells
                 .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
                 .Text(1, 10, "in", 0, 2000)
                 .Text(1, 10, "out", 10000, 2000)
+            .EndCell();
+
+    /// <summary>
+    /// 10×4 µm port-shape-only cell: a 0.5 µm core stripe on (1,0), an extent
+    /// rectangle on (111,0), and left/right port markers on (1,10) — no labels.
+    /// </summary>
+    public static GdsTestWriter PortShapeCell(this GdsTestWriter writer, string name) =>
+        writer
+            .BeginCell(name)
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(1, 10, (0, 1500), (500, 1500), (500, 2500), (0, 2500), (0, 1500))
+                .Boundary(1, 10, (9500, 1500), (10000, 1500), (10000, 2500), (9500, 2500), (9500, 1500))
             .EndCell();
 }
