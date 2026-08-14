@@ -979,7 +979,7 @@
   "Routing.Reroute.All": "すべて再ルーティング",
   "Routing.Reroute.FrozenCount": "凍結されたインポート経路：{0} 本",
   "Routing.Reroute.HandEditedKept": "手動編集された経路 {0} 本は変更されません",
-  "Routing.Reroute.InGroups": "グループ内の凍結されたインポート経路：{0} 本 — 再ルーティングするにはグループを開くか解除してください",
+  "Routing.Reroute.InGroups": "グループ内の凍結されたインポート経路：{0} 本",
   "Routing.Reroute.Result": "{0} 本を再ルーティング：長さ {1:F1} → {2:F1} µm、曲げ {3:F1} → {4:F1}",
   "Routing.Reroute.Selected": "選択を再ルーティング",
   "Routing.Reroute.Title": "インポート経路：",

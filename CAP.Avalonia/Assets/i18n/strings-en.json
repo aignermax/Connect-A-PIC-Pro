@@ -979,7 +979,7 @@
   "Routing.Reroute.All": "Re-route All",
   "Routing.Reroute.FrozenCount": "{0} frozen imported route(s)",
   "Routing.Reroute.HandEditedKept": "{0} hand-edited route(s) kept unchanged",
-  "Routing.Reroute.InGroups": "{0} frozen imported route(s) inside a group — open or dissolve the group to re-route",
+  "Routing.Reroute.InGroups": "{0} frozen imported route(s) inside groups",
   "Routing.Reroute.Result": "Re-routed {0} route(s): length {1:F1} → {2:F1} µm, bends {3:F1} → {4:F1}",
   "Routing.Reroute.Selected": "Re-route Selected",
   "Routing.Reroute.Title": "Imported Routes:",
