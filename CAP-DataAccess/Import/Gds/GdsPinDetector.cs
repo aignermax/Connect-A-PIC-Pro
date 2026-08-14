@@ -16,7 +16,7 @@ namespace CAP_DataAccess.Import.Gds;
 /// top edge is the GDS <c>MaxY</c> line and the visual bottom edge is <c>MinY</c>.</item>
 /// </list>
 ///
-/// Two detection strategies run over the same cell:
+/// Three detection strategies run over the same cell:
 /// <list type="number">
 /// <item>Label pins: every TEXT on a configured port layer becomes a named pin at
 /// its anchor. The angle is the outward normal of the nearest waveguide/metal
@@ -31,15 +31,25 @@ namespace CAP_DataAccess.Import.Gds;
 /// proven-optical, so a later metal-route match can still classify the pin
 /// electrical; with no polygon near, the label text decides
 /// (<see cref="ElectricalLabelMarkers"/>) — anything else stays kind-unknown
-/// (the optical default downstream).</item>
+/// (the optical default downstream). When a label sits on an explicit port-layer
+/// polygon shape that touches the cell boundary, the label adopts the shape's
+/// exact boundary midpoint and width.</item>
+/// <item>Port-layer shapes: polygons drawn on configured port layers that touch
+/// the cell boundary are themselves port markers. Each boundary touch becomes a
+/// pin at the touch midpoint, with the touch length as width and the edge's
+/// outward normal as direction. Shapes already covered by a label are consumed
+/// by that label (supplying width/position); uncovered shapes become
+/// <see cref="DetectedPinSource.PortShape"/> pins named in the heuristic
+/// sequence.</item>
 /// <item>Edge heuristic: waveguide-layer polygon segments lying on a bounding-box
 /// edge line yield a pin at the segment midpoint with the segment length as
 /// width. Touches already covered by a label pin are suppressed, and adjacent
 /// touches on the same edge are merged.</item>
 /// </list>
 /// The result is ordered deterministically by edge (left, top, right, bottom)
-/// and then by position along the edge; heuristic pins are named
-/// <c>heur_1..N</c> in that final order.
+/// and then by position along the edge; unnamed pins (edge heuristic, arrow
+/// markers, and uncovered port-layer shapes) are named <c>heur_1..N</c> in that
+/// final order.
 /// </summary>
 public static partial class GdsPinDetector
 {
@@ -81,6 +91,13 @@ public static partial class GdsPinDetector
 
         double tolerance = options.EdgeTouchToleranceUm;
 
+        // ── 0. Port-layer shape candidates ───────────────────────────────────
+        // Explicit port shapes are detected first: they give a label at the
+        // same location its width and exact boundary position, and any shape
+        // not named by a label becomes a pin of its own.
+        var portShapes = FindPortLayerShapeCandidates(flattened, cellBBox, options);
+        var coveredPortShapes = new HashSet<int>();
+
         // ── 1. Label pins ────────────────────────────────────────────────────
         var labelAnchors = new List<GdsPoint>();
         var candidates = new List<Candidate>();
@@ -103,6 +120,20 @@ public static partial class GdsPinDetector
             // re-anchor to its tip so direction and material are probed where
             // the pin really is, not where the label happened to be placed.
             var anchor = NearestMarkerTip(text.Position, markers, MarkerSnapToleranceUm) ?? text.Position;
+            // A port-layer shape at the boundary gives the exact pin position
+            // and width; arrow markers take precedence for position, but the
+            // shape still contributes width when the label sits on it.
+            var portShape = NearestPortShape(text.Position, portShapes, MarkerSnapToleranceUm);
+            double portShapeWidth = 0;
+            if (portShape is not null)
+            {
+                portShapeWidth = portShape.Value.Candidate.WidthUm;
+                if (!markers.Any(m => DistanceSquaredLessOrEqual(m.Position, text.Position, MarkerSnapToleranceUm)))
+                {
+                    anchor = portShape.Value.Candidate.Midpoint;
+                }
+                coveredPortShapes.Add(portShape.Value.Index);
+            }
             CellEdge edge = NearestEdge(anchor, cellBBox);
             var geometry = ProbeAnchorGeometry(anchor, geometryIndex, options);
             labelAnchors.Add(anchor);
@@ -114,7 +145,7 @@ public static partial class GdsPinDetector
                 AngleDegrees = geometry is { Polygon: { } directionPolygon }
                     ? SegmentOutwardAngleDegrees(directionPolygon, geometry.P1, geometry.P2)
                     : OutwardAngleDegrees(edge),
-                WidthUm = 0,
+                WidthUm = portShapeWidth,
                 Source = DetectedPinSource.Label,
                 IsElectrical = InferLabelPinKind(text.Text, geometry),
             }));
@@ -151,6 +182,9 @@ public static partial class GdsPinDetector
             }
         }
 
+        // ── 1c. Port-layer shapes not named by labels ────────────────────────
+        AddPortLayerShapePins(candidates, labelAnchors, portShapes, coveredPortShapes, cellBBox, options);
+
         // ── 2. Edge heuristic ────────────────────────────────────────────────
         // Label-free cells (route cells: straights, bends, sine bends) scan
         // against the WAVEGUIDE GEOMETRY's own extent, not the cell bbox:
@@ -165,7 +199,7 @@ public static partial class GdsPinDetector
         // Collect touch intervals per edge first so overlapping/adjacent touches
         // merge into a single pin.
         bool labelFree = !candidates.Any(
-            c => c.Pin.Source is DetectedPinSource.Label or DetectedPinSource.ArrowMarker);
+            c => c.Pin.Source is DetectedPinSource.Label or DetectedPinSource.ArrowMarker or DetectedPinSource.PortShape);
         var waveguidePolygons = flattened.Polygons
             .Where(p => ContainsLayer(options.WaveguideLayers, p.Layer, p.DataType))
             .ToList();
@@ -295,7 +329,7 @@ public static partial class GdsPinDetector
             .ThenBy(c => c.Edge is CellEdge.Left or CellEdge.Right ? c.Pin.YUm : c.Pin.XUm))
         {
             var pin = candidate.Pin;
-            if (pin.Source is DetectedPinSource.EdgeHeuristic or DetectedPinSource.ArrowMarker)
+            if (pin.Source is DetectedPinSource.EdgeHeuristic or DetectedPinSource.ArrowMarker or DetectedPinSource.PortShape)
                 pin = pin with { Name = $"heur_{++heuristicCount}" };
             result.Add(pin);
         }
@@ -334,6 +368,13 @@ public static partial class GdsPinDetector
         };
         var probe = new GdsPoint(midpoint.X + dx * depth, midpoint.Y + dy * depth);
         return waveguidePolygons.Any(p => PointInPolygon(p.Points, probe));
+    }
+
+    /// <summary>Squared distance between two points, compared against <paramref name="toleranceUm"/>².</summary>
+    private static bool DistanceSquaredLessOrEqual(GdsPoint a, GdsPoint b, double toleranceUm)
+    {
+        double dx = a.X - b.X, dy = a.Y - b.Y;
+        return dx * dx + dy * dy <= toleranceUm * toleranceUm;
     }
 
     /// <summary>The nearest arrow-marker tip within <paramref name="toleranceUm"/>, else null.</summary>
