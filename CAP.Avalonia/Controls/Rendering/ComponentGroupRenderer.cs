@@ -67,6 +67,10 @@ public static class ComponentGroupRenderer
     /// <param name="cullRect">Optional world-space cull rectangle: segments fully outside
     /// it are skipped. Long frozen buses can span far beyond the viewport, so per-segment
     /// culling avoids drawing hundreds of off-screen lines; <c>null</c> draws every segment.</param>
+    /// <param name="layerVisibility">Per-design layer view filter (issue #858): a path
+    /// tagged with its import source (layer, datatype) is skipped when that layer is
+    /// hidden and drawn faded when it carries a reduced opacity. Untagged paths and a
+    /// <c>null</c> filter always draw fully visible.</param>
     /// <param name="penOverride">Optional pen that wins over both the power-flow pen and
     /// the layer/default pen — used for the selection highlight of canvas-level paths.</param>
     public static void RenderFrozenWaveguidePath(
@@ -75,11 +79,36 @@ public static class ComponentGroupRenderer
         PowerFlowResult? powerFlowResult = null,
         double fadeThresholdDb = -40.0,
         Rect? cullRect = null,
+        Services.GdsImport.LayerVisibility.GdsLayerVisibilityState? layerVisibility = null,
         Pen? penOverride = null)
     {
         if (frozenPath?.Path?.Segments == null || frozenPath.Path.Segments.Count == 0)
             return;
 
+        double layerOpacity = frozenPath.Layer is int pathLayer && frozenPath.DataType is int pathDataType
+            ? layerVisibility?.EffectiveOpacity(pathLayer, pathDataType) ?? 1.0
+            : 1.0;
+        if (layerOpacity <= 0)
+            return;
+        if (layerOpacity < 1.0)
+        {
+            using (context.PushOpacity(layerOpacity))
+                RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect, penOverride);
+            return;
+        }
+        RenderFrozenPathBody(context, frozenPath, powerFlowResult, fadeThresholdDb, cullRect, penOverride);
+    }
+
+    /// <summary>Draws a frozen path's segments and optional power-flow label (the part
+    /// of <see cref="RenderFrozenWaveguidePath"/> under the layer-opacity push).</summary>
+    private static void RenderFrozenPathBody(
+        DrawingContext context,
+        FrozenWaveguidePath frozenPath,
+        PowerFlowResult? powerFlowResult,
+        double fadeThresholdDb,
+        Rect? cullRect,
+        Pen? penOverride)
+    {
         Pen frozenPen;
 
         // Use power flow colors if available

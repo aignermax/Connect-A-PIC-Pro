@@ -123,6 +123,13 @@ public partial class FileOperationsViewModel : ObservableObject
     public Services.GdsImport.DesignScope.DesignScopedGdsComponentService? DesignScopedGdsComponents { get; set; }
 
     /// <summary>
+    /// Per-layer visibility of imported GDS geometry (issue #858). Wired by
+    /// MainViewModel; null in headless contexts. Captured into the .lun on
+    /// save, restored on load, and reset on New Project.
+    /// </summary>
+    public GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? LayerVisibility { get; set; }
+
+    /// <summary>
     /// ViewModel for GDS export functionality.
     /// </summary>
     public GdsExportViewModel GdsExport { get; }
@@ -444,6 +451,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
                         ?? Enumerable.Empty<string?>());
             designData.ImportedGdsComponents = DesignScopedGdsComponents?.CaptureForSave(referencedPdkSources);
+            designData.LayerVisibility = LayerVisibility?.CaptureForSave();
             designData.Metadata = BuildMetadataForSave();
             if (StoredSMatrices.Count > 0)
             {
@@ -1002,6 +1010,9 @@ public partial class FileOperationsViewModel : ObservableObject
                         referencedPdkSources, w => _errorConsole?.LogWarning(w));
                 }
 
+                // Per-layer visibility overrides for imported geometry (#858).
+                LayerVisibility?.Restore(designData.LayerVisibility);
+
                 // Load standalone components
                 foreach (var compData in designData.Components)
                 {
@@ -1286,6 +1297,8 @@ public partial class FileOperationsViewModel : ObservableObject
         // Imported GDS components are design-scoped (#830): a fresh project must
         // not inherit the previous design's imported library entries.
         DesignScopedGdsComponents?.ClearDesignScope();
+        // Layer-visibility overrides are per design (#858): reset to all-visible.
+        LayerVisibility?.ClearForNewDesign();
     }
 
     /// <summary>

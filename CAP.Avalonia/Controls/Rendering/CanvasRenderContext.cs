@@ -34,6 +34,13 @@ public sealed class CanvasRenderContext
     public GdsPreviewRenderService? GdsPreviewRenderService { get; init; }
 
     /// <summary>
+    /// Per-design view filter for imported GDS layers (issue #858): hides or fades
+    /// outline polygons and tagged frozen paths per (layer, datatype).
+    /// <c>null</c> renders everything fully visible (design-time, tests).
+    /// </summary>
+    public Services.GdsImport.LayerVisibility.GdsLayerVisibilityState? LayerVisibility { get; init; }
+
+    /// <summary>
     /// Deferred topmost text layer for this frame: renderers enqueue their free-floating
     /// labels (component/pin names, connection readouts) here instead of drawing them inline,
     /// and <see cref="DesignCanvas"/> flushes them after the last geometry pass — see
