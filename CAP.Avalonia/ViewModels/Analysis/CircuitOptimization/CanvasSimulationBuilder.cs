@@ -47,7 +47,7 @@ public static class CanvasSimulationBuilder
         bool anySource = false;
         foreach (var componentVm in canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(componentVm.TemplateName)) continue;
+            if (!componentVm.IsLightSource) continue;
             if (componentVm.IsLaserOff) continue;
 
             anySource |= AddSourcePins(componentVm, portManager);

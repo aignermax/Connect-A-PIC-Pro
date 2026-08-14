@@ -269,7 +269,9 @@ public partial class TimeDomainViewModel : ObservableObject
         var timeDef = Source.CreateGrid(CenterWavelengthNm, SpanNm, FreqPoints);
 
         var inputSignals = BuildInputSignals(portManager, timeDef);
-        return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints);
+        // Laser phase noise (#834): finite-linewidth sources random-walk their phase.
+        var phaseNoise = TransientCircuitFactory.BuildPhaseNoiseSettings(_canvas!);
+        return simulator.Run(inputSignals, timeDef, CenterWavelengthNm, SpanNm, FreqPoints, phaseNoise);
     }
 
     private Dictionary<Guid, double[]> BuildInputSignals(

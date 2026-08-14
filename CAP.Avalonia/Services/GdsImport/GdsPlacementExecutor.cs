@@ -219,11 +219,33 @@ public sealed partial class GdsPlacementExecutor
                 continue;
             }
 
-            var quarterTurns = SnapToQuarterTurns(instruction.RotationDegrees, instruction.InstanceName, warningGrouper);
-            var command = PlaceComponentCommand.CreateExact(
-                _canvas, template, instruction.XUm + originOffset.X, instruction.YUm + originOffset.Y, quarterTurns,
-                mirrorPinsHorizontally: instruction.Reflected);
+            var quarterTurns = (int)Math.Round(instruction.RotationDegrees / 90.0, MidpointRounding.AwayFromZero);
+            var isCardinal = Math.Abs(instruction.RotationDegrees - quarterTurns * 90.0) <= 0.001;
+            // Non-cardinal angles are placed EXACTLY: snapping them to a quarter
+            // turn would move the instance's pins off the true joints the import
+            // projected (and break the reconstructed connections). The importer
+            // already emitted the per-cell "kept exactly" warning.
+            var command = isCardinal
+                ? PlaceComponentCommand.CreateExact(
+                    _canvas, template, instruction.XUm + originOffset.X, instruction.YUm + originOffset.Y,
+                    ((quarterTurns % 4) + 4) % 4,
+                    mirrorPinsHorizontally: instruction.Reflected)
+                : PlaceComponentCommand.CreateExact(
+                    _canvas, template, instruction.XUm + originOffset.X, instruction.YUm + originOffset.Y,
+                    exactRotationDegrees: instruction.RotationDegrees,
+                    mirrorPinsHorizontally: instruction.Reflected);
             Execute(command);
+
+            // Geometry-only import (die frame, logo, ground plate): pure
+            // background — as a routing obstacle it would wall off the grid.
+            // The flag keeps it out of group-obstacle recursion later; the
+            // explicit removal undoes the registration that placement did.
+            var createdComponent = command.CreatedViewModel.Component;
+            if (createdComponent.PhysicalPins.Count == 0)
+            {
+                createdComponent.IsRoutingObstacle = false;
+                _canvas.Router.RemoveComponentObstacle(createdComponent);
+            }
 
             placedViewModels.Add(command.CreatedViewModel);
             report.PlacedCount++;
@@ -434,27 +456,6 @@ public sealed partial class GdsPlacementExecutor
             _commandManager.ExecuteCommand(command);
         else
             command.Execute();
-    }
-
-    /// <summary>
-    /// The plan contract guarantees cardinal rotations; a non-cardinal value is
-    /// snapped to the nearest quarter turn and surfaced as a warning instead of
-    /// silently misplacing the instance. Exact midpoints (x.5 turns, e.g. 45°)
-    /// round AWAY FROM ZERO — <see cref="Math.Round(double)"/>'s banker's
-    /// rounding would snap 45° down to 0° but 135° up to 180°. Warnings collect
-    /// into <paramref name="warningGrouper"/>: identical snaps collapse into one
-    /// grouped line per distinct rotation instead of flooding one per instance.
-    /// </summary>
-    private static int SnapToQuarterTurns(double rotationDegrees, string instanceName, GdsReportLineGrouper warningGrouper)
-    {
-        var snappedTurns = (int)Math.Round(rotationDegrees / 90.0, MidpointRounding.AwayFromZero);
-        var snappedDegrees = snappedTurns * 90.0;
-        if (Math.Abs(rotationDegrees - snappedDegrees) > 0.001)
-        {
-            var note = $"non-cardinal rotation {rotationDegrees:0.###}° snapped to {snappedDegrees % 360:0}°.";
-            warningGrouper.Add(note, $"'{instanceName}': {note}");
-        }
-        return ((snappedTurns % 4) + 4) % 4;
     }
 
     private static string Describe(GdsConnectionInstruction connection) =>

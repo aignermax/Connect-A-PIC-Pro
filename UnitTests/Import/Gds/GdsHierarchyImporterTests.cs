@@ -300,7 +300,7 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
-    public async Task Explode_NonCardinalAngle_SnappedToNearestCardinalWithWarning()
+    public async Task Explode_NonCardinalAngle_KeptExactlyWithWarning()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
             .StandardPrologue()
@@ -313,10 +313,12 @@ public class GdsHierarchyImporterTests
 
         var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
 
-        result.Instances.ShouldHaveSingleItem().RotationDegrees.ShouldBe(270, Tolerance); // 45° → 90° → app −90°
+        // GDS +45° ≡ app −45° ≡ 315° — kept exactly, not snapped to a cardinal:
+        // snapping would move the placed pins off the true projected joints.
+        result.Instances.ShouldHaveSingleItem().RotationDegrees.ShouldBe(315, Tolerance);
         result.Warnings.ShouldContain(w =>
-            w.Contains("45") && w.Contains("90") && w.Contains("Manhattan"));
-        result.Infos.ShouldBeEmpty("the rotation snap is a caveat, not an informational note");
+            w.Contains("45") && w.Contains("kept exactly") && w.Contains("Manhattan"));
+        result.Infos.ShouldBeEmpty("the non-cardinal rotation note is a caveat, not an informational note");
     }
 
     // ── Abutment edge cases ──────────────────────────────────────────────────
@@ -828,11 +830,13 @@ public class GdsHierarchyImporterTests
     [Fact]
     public async Task Explode_ResidualPolygonsOverOutlineCap_DroppedWithTrueCountWarning()
     {
-        // 2500 tiny (68,0) squares = 12500 outline points against the 8000-point
-        // cap. A square never simplifies below its 5 ring points (and must not
-        // silently vanish when the escalated tolerance overshoots it), so the cap
-        // is enforced by counted drops only: 1600 × 5 = 8000 points exactly fill
-        // the cap, 900 are dropped, and the warning reports that true count.
+        // 2500 tiny (68,0) squares = 12500 outline points against an 8000-point
+        // cap (set explicitly so the test does not depend on the default's
+        // value). A square never simplifies below its 5 ring points (and must
+        // not silently vanish when the escalated tolerance overshoots it), so
+        // the cap is enforced by counted drops only: 1600 × 5 = 8000 points
+        // exactly fill the cap, 900 are dropped, and the warning reports that
+        // true count.
         var writer = GdsTestWriter.Create().StandardPrologue().BeginCell("TOP");
         for (int i = 0; i < 2500; i++)
         {
@@ -842,7 +846,8 @@ public class GdsHierarchyImporterTests
         }
         var library = await ReadLibraryAsync(writer.EndCell().EndLibrary().ToArray());
 
-        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP",
+            new GdsHierarchyImportOptions { MaxOutlinePointsPerCell = 8000 });
 
         result.TopCellResidualPolygons.Count.ShouldBe(1600,
             "1600 squares × 5 points exactly fill the 8000-point cap");

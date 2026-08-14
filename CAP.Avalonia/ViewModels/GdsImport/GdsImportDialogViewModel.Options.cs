@@ -59,7 +59,9 @@ public partial class GdsImportDialogViewModel
 
     /// <summary>
     /// Parses "layer,datatype" pairs separated by ';' (e.g. <c>1,10</c> or
-    /// <c>1,10; 2,0</c>). Returns null when any segment is malformed — GDS
+    /// <c>1,10; 2,0</c>). An empty/whitespace field is VALID and yields an
+    /// empty list (no layers configured — e.g. a foreign file's cleared
+    /// defaults). Returns null when any segment is malformed — GDS
     /// layer/datatype numbers are unsigned, so negative values are rejected too.
     /// </summary>
     internal static List<(int Layer, int Datatype)>? ParseLayerPairs(string text)
@@ -78,6 +80,6 @@ public partial class GdsImportDialogViewModel
             }
             pairs.Add((layer, datatype));
         }
-        return pairs.Count > 0 ? pairs : null;
+        return pairs;
     }
 }

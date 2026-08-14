@@ -138,10 +138,10 @@ public class GdsReexportIdempotencyTests : IDisposable
         // ── Absolute pins per generation (the equality assertions above are only
         // meaningful against a known-good generation 1 — the same numbers
         // GdsHighestLevelRoundTripTests pins for the single round trip) ──
-        pinless1.Count.ShouldBe(45,
-            "the junction network's polygons ride the group as frozen paths (both engine scenarios)");
-        report1.FrozenRoutePathCount.ShouldBe(45);
-        outcome1.TopCellWaveguidePolygons.Count.ShouldBe(45);
+        pinless1.Count.ShouldBe(38,
+            "the junction networks' polygons ride the group as frozen paths (both engine scenarios)");
+        report1.FrozenRoutePathCount.ShouldBe(38);
+        outcome1.TopCellWaveguidePolygons.Count.ShouldBe(38);
         var expectedConnections = export1.SiepicUpgraded ? 4 : 2;
         report1.ConnectedCount.ShouldBe(expectedConnections,
             "the clean two-pin route chains restore route-derived (4 SiEPIC-upgraded: 2 MMI braids, " +

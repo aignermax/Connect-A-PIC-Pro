@@ -15,5 +15,10 @@
         <ComboBox ItemsSource="{Binding BottomPanel.ConnectionRouting.RoutingStyles}"
                   SelectedItem="{Binding BottomPanel.ConnectionRouting.SelectedStyle}"
                   Width="180" Margin="0,0,0,8"/>
+        <!-- Names the effective geometry of a direct-styled Auto route (single
+             source of truth was the path, not the dropdown — field report). -->
+        <TextBlock Text="{Binding BottomPanel.ConnectionRouting.EffectiveStyleText}"
+                   Foreground="#7FB2E5" FontSize="10" Margin="0,0,0,4"
+                   IsVisible="{Binding BottomPanel.ConnectionRouting.EffectiveStyleText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
     </StackPanel>
 </UserControl>

@@ -158,6 +158,38 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Adds multiple child components in one batch, recomputing the group bounds
+    /// and invalidating the S-Matrix only once. Per-item <see cref="AddChild"/>
+    /// rescans every child and path segment on each call, which is quadratic at
+    /// GDS-import scale (hundreds of children and segment-rich frozen paths).
+    /// </summary>
+    /// <param name="components">Components to add; none may already be a child.</param>
+    public void AddChildren(IReadOnlyCollection<Component> components)
+    {
+        if (components == null)
+            throw new ArgumentNullException(nameof(components));
+        if (components.Count == 0)
+            return;
+
+        var existing = new HashSet<Component>(ChildComponents);
+        foreach (var component in components)
+        {
+            if (component == null)
+                throw new ArgumentNullException(nameof(components), "Collection contains a null component.");
+            if (!existing.Add(component))
+                throw new InvalidOperationException("Component is already a child of this group.");
+
+            component.ParentGroup = this;
+            if (component is ComponentGroup childGroup)
+                childGroup.ParentGroup = this;
+            ChildComponents.Add(component);
+        }
+
+        UpdateGroupBounds();
+        InvalidateSMatrix();
+    }
+
+    /// <summary>
     /// Removes a child component from this group.
     /// </summary>
     /// <param name="component">Component to remove.</param>
@@ -176,6 +208,33 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
+    /// Removes multiple child components in one batch, recomputing the group
+    /// bounds only once (see <see cref="AddChildren"/> for why per-item calls
+    /// are quadratic at GDS-import scale).
+    /// </summary>
+    /// <param name="components">Components to remove; non-children are ignored.</param>
+    public void RemoveChildren(IReadOnlyCollection<Component> components)
+    {
+        if (components == null || components.Count == 0)
+            return;
+
+        var toRemove = new HashSet<Component>(components);
+        bool removedAny = false;
+        for (int i = ChildComponents.Count - 1; i >= 0; i--)
+        {
+            if (!toRemove.Contains(ChildComponents[i]))
+                continue;
+
+            ChildComponents[i].ParentGroup = null;
+            ChildComponents.RemoveAt(i);
+            removedAny = true;
+        }
+
+        if (removedAny)
+            UpdateGroupBounds();
+    }
+
+    /// <summary>
     /// Adds a frozen waveguide path between two child components, or pin-less
     /// frozen geometry (a GDS-imported route outline).
     /// </summary>
@@ -186,6 +245,30 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             throw new ArgumentNullException(nameof(path));
 
         InternalPaths.Add(path);
+        UpdateGroupBounds();
+        InvalidateSMatrix();
+    }
+
+    /// <summary>
+    /// Adds multiple frozen waveguide paths in one batch, recomputing the group
+    /// bounds and invalidating the S-Matrix only once (see <see cref="AddChildren"/>
+    /// for why per-item calls are quadratic at GDS-import scale).
+    /// </summary>
+    /// <param name="paths">The frozen paths to add.</param>
+    public void AddInternalPaths(IReadOnlyCollection<FrozenWaveguidePath> paths)
+    {
+        if (paths == null)
+            throw new ArgumentNullException(nameof(paths));
+        if (paths.Count == 0)
+            return;
+
+        foreach (var path in paths)
+        {
+            if (path == null)
+                throw new ArgumentNullException(nameof(paths), "Collection contains a null path.");
+            InternalPaths.Add(path);
+        }
+
         UpdateGroupBounds();
         InvalidateSMatrix();
     }
@@ -444,35 +527,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     private (double MinX, double MinY, double MaxX, double MaxY) GetSegmentBounds(PathSegment segment)
     {
         const double WaveguideWidthPadding = 2.0; // Typical waveguide width in micrometers
-
-        if (segment is StraightSegment straight)
-        {
-            double minX = Math.Min(straight.StartPoint.X, straight.EndPoint.X) - WaveguideWidthPadding;
-            double minY = Math.Min(straight.StartPoint.Y, straight.EndPoint.Y) - WaveguideWidthPadding;
-            double maxX = Math.Max(straight.StartPoint.X, straight.EndPoint.X) + WaveguideWidthPadding;
-            double maxY = Math.Max(straight.StartPoint.Y, straight.EndPoint.Y) + WaveguideWidthPadding;
-            return (minX, minY, maxX, maxY);
-        }
-        else if (segment is BendSegment bend)
-        {
-            // For arcs, the bounding box depends on which quadrants the arc passes through
-            // Conservative approach: use center +/- radius + padding
-            double minX = bend.Center.X - bend.RadiusMicrometers - WaveguideWidthPadding;
-            double minY = bend.Center.Y - bend.RadiusMicrometers - WaveguideWidthPadding;
-            double maxX = bend.Center.X + bend.RadiusMicrometers + WaveguideWidthPadding;
-            double maxY = bend.Center.Y + bend.RadiusMicrometers + WaveguideWidthPadding;
-
-            // Refine bounds by checking start and end points
-            minX = Math.Min(minX, Math.Min(bend.StartPoint.X, bend.EndPoint.X) - WaveguideWidthPadding);
-            minY = Math.Min(minY, Math.Min(bend.StartPoint.Y, bend.EndPoint.Y) - WaveguideWidthPadding);
-            maxX = Math.Max(maxX, Math.Max(bend.StartPoint.X, bend.EndPoint.X) + WaveguideWidthPadding);
-            maxY = Math.Max(maxY, Math.Max(bend.StartPoint.Y, bend.EndPoint.Y) + WaveguideWidthPadding);
-
-            return (minX, minY, maxX, maxY);
-        }
-
-        // Unknown segment type - return zero bounds
-        return (0, 0, 0, 0);
+        // Tight bounds: arcs contribute their swept extent only — the full-circle
+        // superset inflated group collision footprints far past the geometry.
+        return PathSegmentBounds.Of(segment, WaveguideWidthPadding);
     }
 
     /// <summary>

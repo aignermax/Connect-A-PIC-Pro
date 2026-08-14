@@ -37,7 +37,9 @@ public class MetalBendRadiusRoutingTests
 
         var bends = path.Segments.OfType<BendSegment>().ToList();
         bends.ShouldNotBeEmpty();
-        bends.ShouldAllBe(b => Math.Abs(b.RadiusMicrometers - 40) < RadiusTolerance);
+        // The direct/S-bend-first policy may pick a geometry-derived radius above
+        // the floor; the contract is only that no bend dips below the metal floor.
+        bends.ShouldAllBe(b => b.RadiusMicrometers >= 40 - RadiusTolerance);
     }
 
     [Fact]
@@ -47,7 +49,7 @@ public class MetalBendRadiusRoutingTests
         {
             MinBendRadiusMicrometers = 10,
             ProcessMinBendRadiusMicrometers = 0,
-            MetalProcessMinBendRadiusMicrometers = 40,
+            MetalProcessMinBendRadiusMicrometers = 400,
         };
 
         var path = router.Route(
@@ -56,7 +58,10 @@ public class MetalBendRadiusRoutingTests
 
         var bends = path.Segments.OfType<BendSegment>().ToList();
         bends.ShouldNotBeEmpty();
-        bends.ShouldAllBe(b => Math.Abs(b.RadiusMicrometers - 10) < RadiusTolerance);
+        // An applied metal floor of 400 µm would force every bend to at least 400;
+        // optical pins must keep the optical floor instead (geometry picks ~40 here).
+        bends.ShouldAllBe(b =>
+            b.RadiusMicrometers >= 10 - RadiusTolerance && b.RadiusMicrometers < 400);
     }
 
     [Fact]
@@ -74,7 +79,8 @@ public class MetalBendRadiusRoutingTests
 
         var bends = path.Segments.OfType<BendSegment>().ToList();
         bends.ShouldNotBeEmpty();
-        bends.ShouldAllBe(b => Math.Abs(b.RadiusMicrometers - 60) < RadiusTolerance);
+        // Connection radius (60) beats the lower metal floor (40): no bend below 60.
+        bends.ShouldAllBe(b => b.RadiusMicrometers >= 60 - RadiusTolerance);
     }
 
     [Fact]

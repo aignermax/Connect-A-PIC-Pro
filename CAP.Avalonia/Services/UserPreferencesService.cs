@@ -403,4 +403,19 @@ public partial class UserPreferencesService
         _preferences.UseDiagonalRouting = enabled;
         Save();
     }
+
+    /// <summary>
+    /// Gets whether direct styled routing (S-bend first, A* as obstacle fallback) is
+    /// enabled. On by default.
+    /// </summary>
+    public bool GetPreferDirectStyledRoutes() => _preferences.PreferDirectStyledRoutes;
+
+    /// <summary>
+    /// Sets whether direct styled routing is enabled and saves preferences.
+    /// </summary>
+    public void SetPreferDirectStyledRoutes(bool enabled)
+    {
+        _preferences.PreferDirectStyledRoutes = enabled;
+        Save();
+    }
 }

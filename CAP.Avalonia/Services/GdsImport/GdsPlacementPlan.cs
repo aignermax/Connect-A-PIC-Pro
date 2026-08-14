@@ -35,8 +35,9 @@ public sealed record GdsPlacementInstruction
     public double YUm { get; init; }
 
     /// <summary>
-    /// Placement rotation in cardinal degrees, in the <c>Component.RotationDegrees</c>
-    /// convention (pin world angle = local angle + RotationDegrees) — assign verbatim.
+    /// Placement rotation in degrees — any angle, kept exactly (non-cardinal
+    /// angles included) — in the <c>Component.RotationDegrees</c> convention
+    /// (pin world angle = local angle + RotationDegrees) — assign verbatim.
     /// </summary>
     public double RotationDegrees { get; init; }
 

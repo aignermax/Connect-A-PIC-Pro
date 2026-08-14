@@ -26,10 +26,19 @@ internal static class GdsGhostLabelFilter
     private static readonly Regex ParameterLabelPattern = new(
         @"^[A-Za-z_][A-Za-z0-9_]*\s*[:=]\s*[-+]?[0-9][0-9.eE+-]*$", RegexOptions.Compiled);
 
+    /// <summary>
+    /// Section headers like <c>Parameters:</c> — a bare name ending in a colon
+    /// is a metadata caption nazca stamps into the cell, never a port label.
+    /// </summary>
+    private static readonly Regex SectionHeaderPattern = new(
+        @"^[A-Za-z_][A-Za-z0-9_ .]*\s*:$", RegexOptions.Compiled);
+
     /// <summary>True for labels the auto-discovery must never turn into pins.</summary>
     public static bool IsGhost(GdsText text)
     {
         var name = text.Text.Trim();
-        return NazcaAnchorNames.Contains(name) || ParameterLabelPattern.IsMatch(name);
+        return NazcaAnchorNames.Contains(name)
+            || ParameterLabelPattern.IsMatch(name)
+            || SectionHeaderPattern.IsMatch(name);
     }
 }

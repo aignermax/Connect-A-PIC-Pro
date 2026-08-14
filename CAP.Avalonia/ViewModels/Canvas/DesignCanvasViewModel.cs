@@ -66,6 +66,13 @@ public partial class DesignCanvasViewModel : ObservableObject
     public bool IsSimulationModeActive => ShowPowerFlow || IsTransientModeActive;
     [ObservableProperty] private bool _useAStarRouting = true;
     [ObservableProperty] private bool _useDiagonalRouting;
+
+    /// <summary>
+    /// Routing policy (issue #860): try the direct styled geometry (straight / S-bend /
+    /// sine / cobra) first; A* runs only when obstacles block the styled path. On by
+    /// default; Settings → Routing offers the classic grid-first behavior as fallback.
+    /// </summary>
+    [ObservableProperty] private bool _preferDirectStyledRoutes = true;
     [ObservableProperty] private bool _showGridOverlay;
     [ObservableProperty] private double _minBendRadiusMicrometers = 10.0;
     [ObservableProperty] private ComponentViewModel? _selectedComponent;
@@ -177,6 +184,7 @@ public partial class DesignCanvasViewModel : ObservableObject
         // Product default: diagonal routing is opt-in (Settings → Routing);
         // the library-level router default is true, so sync it explicitly.
         Router.UseDiagonalRouting = UseDiagonalRouting;
+        Router.PreferDirectStyledRoutes = PreferDirectStyledRoutes;
 
         Routing.InitializeAStarRouting();
     }
@@ -198,6 +206,12 @@ public partial class DesignCanvasViewModel : ObservableObject
     partial void OnUseDiagonalRoutingChanged(bool value)
     {
         Router.UseDiagonalRouting = value;
+        _ = RecalculateRoutesAsync();
+    }
+
+    partial void OnPreferDirectStyledRoutesChanged(bool value)
+    {
+        Router.PreferDirectStyledRoutes = value;
         _ = RecalculateRoutesAsync();
     }
 

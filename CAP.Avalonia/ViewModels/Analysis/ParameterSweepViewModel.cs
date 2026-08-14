@@ -222,7 +222,7 @@ public partial class ParameterSweepViewModel : ObservableObject
 
         foreach (var compVm in _canvas.Components)
         {
-            if (!LightSourceClassifier.IsLightInjectingCoupler(compVm.TemplateName)) continue;
+            if (!compVm.IsLightSource) continue;
 
             // Laser off = output coupler (listen-only, #690) — inject no light.
             if (compVm.IsLaserOff) continue;

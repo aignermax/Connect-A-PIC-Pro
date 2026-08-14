@@ -271,14 +271,16 @@ public sealed partial class GdsPlacementExecutor
             .OfType<ComponentGroup>()
             .ToList();
         var issues = new DesignValidator().Validate(routable, existingGroups);
-        // Grouped per distinct issue (type + involved pins): a big import repeats
-        // the same issue once per affected connection — one grouped line, with the
-        // first issue's coordinates as the example, replaces the per-issue flood.
+        // Grouped per issue KIND (type only): a big import reports the same kind
+        // once per affected connection — with per-pair keys that flooded the
+        // console with thousands of near-identical lines (field report: ~6000
+        // OverlappingPaths lines). One line per kind, the first occurrence as
+        // the named example, the total as the count.
         var grouper = new GdsReportLineGrouper();
         foreach (var issue in issues)
         {
             grouper.Add(
-                $"{issue.Type} — {issue.Description}",
+                issue.Type.ToString(),
                 string.Create(CultureInfo.InvariantCulture,
                     $"{issue.Type} at ({issue.X:0.#}, {issue.Y:0.#}) µm — {issue.Description}"));
         }

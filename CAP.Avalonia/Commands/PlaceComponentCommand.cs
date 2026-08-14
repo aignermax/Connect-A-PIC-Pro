@@ -26,7 +26,8 @@ public class PlaceComponentCommand : IUndoableCommand
         double y,
         bool isValid,
         int quarterTurnsCounterClockwise = 0,
-        bool mirrorPinsHorizontally = false)
+        bool mirrorPinsHorizontally = false,
+        double? exactRotationDegrees = null)
     {
         _canvas = canvas;
         _template = template;
@@ -47,8 +48,11 @@ public class PlaceComponentCommand : IUndoableCommand
             // of the already-rotated bounding box. Doing it pre-placement also avoids
             // the canvas collision guard, which enforces a minimum inter-component
             // gap that GDS-abutting neighbours legitimately violate.
-            for (var i = 0; i < quarterTurnsCounterClockwise; i++)
-                RotateComponentCommand.ApplyModelRotation90(_component);
+            if (exactRotationDegrees.HasValue)
+                RotateComponentCommand.ApplyModelRotation(_component, exactRotationDegrees.Value);
+            else
+                for (var i = 0; i < quarterTurnsCounterClockwise; i++)
+                    RotateComponentCommand.ApplyModelRotation90(_component);
         }
     }
 
@@ -99,14 +103,22 @@ public class PlaceComponentCommand : IUndoableCommand
     /// no pin sits. The mirror is applied to the pin offsets/angles in the local
     /// frame before <paramref name="quarterTurnsCounterClockwise"/> is applied.
     /// </param>
+    /// <param name="exactRotationDegrees">
+    /// When set, the component is rotated by this EXACT angle (any value,
+    /// non-cardinal included) instead of <paramref name="quarterTurnsCounterClockwise"/>.
+    /// For GDS instances whose true angle is not Manhattan: snapping those to a
+    /// cardinal would move their pins off the true joints. The position stays
+    /// the rotated footprint's AABB top-left, matching the GDS projector's frame.
+    /// </param>
     public static PlaceComponentCommand CreateExact(
         DesignCanvasViewModel canvas,
         ComponentTemplate template,
         double x,
         double y,
         int quarterTurnsCounterClockwise = 0,
-        bool mirrorPinsHorizontally = false)
-        => new(canvas, template, x, y, true, quarterTurnsCounterClockwise, mirrorPinsHorizontally);
+        bool mirrorPinsHorizontally = false,
+        double? exactRotationDegrees = null)
+        => new(canvas, template, x, y, true, quarterTurnsCounterClockwise, mirrorPinsHorizontally, exactRotationDegrees);
 
     /// <summary>The component instance created by this command (null when invalid).</summary>
     public Component? PlacedComponent => _component;
