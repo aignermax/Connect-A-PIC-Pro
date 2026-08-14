@@ -3,6 +3,7 @@
         xmlns:system="clr-namespace:System;assembly=System.Runtime"
         xmlns:vm="clr-namespace:CAP.Avalonia.ViewModels.GdsImport"
         xmlns:gds="using:CAP.Avalonia.Services.GdsImport"
+        xmlns:controls="using:CAP.Avalonia.Controls"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.GdsImportDialog"
         x:DataType="vm:GdsImportDialogViewModel"
@@ -101,8 +102,62 @@
                 <Expander x:Name="LayerAssignmentExpander" Background="#252526"
                           CornerRadius="4" IsExpanded="False">
                     <Expander.Header>
-                        <TextBlock Text="{loc:Localize GdsImport.LayerAssignmentHeader}"
-                                   Foreground="LightGray" FontSize="11"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{loc:Localize GdsImport.LayerAssignmentHeader}"
+                                       Foreground="LightGray" FontSize="11" VerticalAlignment="Center"/>
+                            <!-- Plain-language help: what GDS layer/datatype numbers mean
+                                 and that visibility/assignment here is display-only. -->
+                            <controls:HelpFlyoutButton Grid.Column="1"
+                                                       Title="{loc:Localize GdsLayerHelp.Title}"
+                                                       Margin="8,0,4,0" VerticalAlignment="Center">
+                                <controls:HelpFlyoutButton.HelpContent>
+                                    <StackPanel Spacing="8" MaxWidth="400">
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                                   Text="{loc:Localize GdsLayerHelp.Intro}"/>
+
+                                        <!-- Diagram: a layer map table abstraction. -->
+                                        <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                                CornerRadius="4" Padding="8">
+                                            <StackPanel Spacing="4">
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="{loc:Localize GdsLayerHelp.ColLayer}" Foreground="#888" FontSize="10"/>
+                                                    <TextBlock Grid.Column="1" Text="{loc:Localize GdsLayerHelp.ColDatatype}" Foreground="#888" FontSize="10"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ColMeaning}" Foreground="#888" FontSize="10"/>
+                                                </Grid>
+                                                <Rectangle Height="1" Fill="#3d3d3d"/>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="1" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="0" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleWaveguide}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="10" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="0" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleMetal}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="1" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="5" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleAnnotation}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.PairTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.PairBody}"/>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.DatatypeTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.DatatypeBody}"/>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.DisplayOnlyTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.DisplayOnlyBody}"/>
+                                    </StackPanel>
+                                </controls:HelpFlyoutButton.HelpContent>
+                            </controls:HelpFlyoutButton>
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="10" Margin="4">
 
