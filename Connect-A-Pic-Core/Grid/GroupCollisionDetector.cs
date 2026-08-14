@@ -313,40 +313,14 @@ public class GroupCollisionDetector
 
     /// <summary>
     /// Gets the bounding rectangle for a path segment with translation applied.
-    /// Includes padding for waveguide width.
+    /// Includes padding for waveguide width. Arcs contribute their swept extent
+    /// only (tight bounds, <see cref="PathSegmentBounds"/>) — the old full-circle
+    /// box inflated the move-collision footprint far past the real geometry.
     /// </summary>
     private Rect GetTranslatedSegmentBounds(PathSegment segment, double deltaX, double deltaY)
     {
-        if (segment is StraightSegment straight)
-        {
-            double startX = straight.StartPoint.X + deltaX;
-            double startY = straight.StartPoint.Y + deltaY;
-            double endX = straight.EndPoint.X + deltaX;
-            double endY = straight.EndPoint.Y + deltaY;
-
-            double minX = Math.Min(startX, endX) - WaveguideWidthPadding;
-            double minY = Math.Min(startY, endY) - WaveguideWidthPadding;
-            double maxX = Math.Max(startX, endX) + WaveguideWidthPadding;
-            double maxY = Math.Max(startY, endY) + WaveguideWidthPadding;
-
-            return new Rect(minX, minY, maxX - minX, maxY - minY);
-        }
-        else if (segment is BendSegment bend)
-        {
-            // For arcs, use conservative bounding box: center +/- radius + padding
-            double centerX = bend.Center.X + deltaX;
-            double centerY = bend.Center.Y + deltaY;
-            double radius = bend.RadiusMicrometers + WaveguideWidthPadding;
-
-            return new Rect(
-                centerX - radius,
-                centerY - radius,
-                radius * 2,
-                radius * 2);
-        }
-
-        // Unknown segment type - return zero-size rect
-        return new Rect(0, 0, 0, 0);
+        var (minX, minY, maxX, maxY) = PathSegmentBounds.Of(segment, WaveguideWidthPadding);
+        return new Rect(minX + deltaX, minY + deltaY, maxX - minX, maxY - minY);
     }
 
     /// <summary>

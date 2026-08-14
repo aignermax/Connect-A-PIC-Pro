@@ -51,7 +51,7 @@ public static class SingleHopPassivityChecker
         if (context?.PinOwnerNames is not { } owners)
             return;
 
-        foreach (var (name, indices) in GroupPinIndicesByOwner(singleHopMatrix, owners))
+        foreach (var (name, indices) in GroupPinIndicesByOwner(singleHopMatrix, owners, context.PinOwnerInstanceIds))
         {
             double sigmaMax = LargestSingularValue(singleHopMatrix.SMat, indices);
             if (sigmaMax <= 1.0 + TransitiveSMatrixCalculator.PassivityTolerance)
@@ -99,8 +99,8 @@ public static class SingleHopPassivityChecker
 
             bool fromOwned = owners.TryGetValue(reversePinRef[col], out var fromName);
             bool toOwned = owners.TryGetValue(reversePinRef[row], out var toName);
-            if (fromOwned && toOwned && fromName == toName)
-                continue; // same-owner entry: covered (more strictly) by the block SVD.
+            if (fromOwned && toOwned && SameOwnerInstance(reversePinRef[col], reversePinRef[row], owners, context.PinOwnerInstanceIds))
+                continue; // same-instance entry: covered (more strictly) by the block SVD.
 
             double excessPercent = (value.Magnitude - 1.0) * 100.0;
             string connection = $"'{fromName ?? "?"}' → '{toName ?? "?"}'";
@@ -114,26 +114,64 @@ public static class SingleHopPassivityChecker
         }
     }
 
+    /// <summary>
+    /// Whether two pins belong to the same component instance — by instance id when
+    /// the context carries it, else by display name (legacy contexts: identical names
+    /// merge, the pre-instance-map behavior).
+    /// </summary>
+    private static bool SameOwnerInstance(
+        Guid pinA, Guid pinB,
+        IReadOnlyDictionary<Guid, string> owners,
+        IReadOnlyDictionary<Guid, Guid>? ownerInstances)
+    {
+        if (ownerInstances is not null)
+            return ownerInstances.TryGetValue(pinA, out var a)
+                && ownerInstances.TryGetValue(pinB, out var b)
+                && a == b;
+        return owners.TryGetValue(pinA, out var nameA)
+            && owners.TryGetValue(pinB, out var nameB)
+            && nameA == nameB;
+    }
+
     /// <summary>Formats " at N nm" for messages when the wavelength is known.</summary>
     private static string WavelengthClause(TransitiveClosureContext context) =>
         context.WavelengthNm is int nm
             ? $" at {nm.ToString(CultureInfo.InvariantCulture)} nm"
             : "";
 
-    /// <summary>Groups the matrix indices of all pins sharing an owner name.</summary>
-    private static Dictionary<string, List<int>> GroupPinIndicesByOwner(
-        SMatrix singleHopMatrix, IReadOnlyDictionary<Guid, string> owners)
+    /// <summary>Groups the matrix indices of all pins sharing an owner instance.
+    /// Grouping key is the instance id when the context carries it — display names
+    /// are NOT unique (two instances of one component share a name; merging their
+    /// pins would pull inter-instance connection weights into the block SVD and
+    /// inflate σ_max past the noise band, falsely aborting a passive circuit).
+    /// The returned name (for messages) is the display name.</summary>
+    private static List<(string Name, List<int> Indices)> GroupPinIndicesByOwner(
+        SMatrix singleHopMatrix,
+        IReadOnlyDictionary<Guid, string> owners,
+        IReadOnlyDictionary<Guid, Guid>? ownerInstances)
     {
-        var groups = new Dictionary<string, List<int>>();
+        var byInstance = new Dictionary<Guid, (string Name, List<int> Indices)>();
+        var byName = new Dictionary<string, List<int>>();
         foreach (var (pinId, index) in singleHopMatrix.PinReference)
         {
             if (!owners.TryGetValue(pinId, out var name))
                 continue;
-            if (!groups.TryGetValue(name, out var indices))
-                groups[name] = indices = new List<int>();
-            indices.Add(index);
+            if (ownerInstances is not null && ownerInstances.TryGetValue(pinId, out var instanceId))
+            {
+                if (!byInstance.TryGetValue(instanceId, out var entry))
+                    byInstance[instanceId] = entry = (name, new List<int>());
+                entry.Indices.Add(index);
+            }
+            else
+            {
+                if (!byName.TryGetValue(name, out var indices))
+                    byName[name] = indices = new List<int>();
+                indices.Add(index);
+            }
         }
-        return groups;
+        var result = byInstance.Values.Select(e => (e.Name, e.Indices)).ToList();
+        result.AddRange(byName.Select(kv => (kv.Key, kv.Value)));
+        return result;
     }
 
     /// <summary>

@@ -190,6 +190,38 @@ public class GroupCollisionDetectorTests
     }
 
     [Fact]
+    public void CanPlaceGroup_ComponentBesideArcCircleOnly_ShouldAllowPlacement()
+    {
+        // Field report: a group's frozen S-bend produced a collision footprint
+        // ~5× the group — the arc's full circle was the collision box. A
+        // component sitting inside that circle but OFF the swept arc must not
+        // block the placement.
+        var group = CreateGroup("ArcGroup", 0, 0);
+        var child = CreateComponent("child", 500, 300, 10, 10);
+        group.AddChild(child);
+
+        // 90° arc, center (500,400), radius 100: swept extent x∈[500,600],
+        // y∈[300,400] — its full circle would span x∈[398,602], y∈[298,402].
+        var path = new RoutedPath();
+        path.Segments.Add(new BendSegment(centerX: 500, centerY: 400, radius: 100,
+            startAngle: 0, sweepAngle: 90));
+        group.AddInternalPath(new FrozenWaveguidePath
+        {
+            PathId = Guid.NewGuid(),
+            Path = path,
+            StartPin = null,
+            EndPin = null,
+        });
+
+        // Neighbor inside the circle's lower-left quadrant, clear of the arc.
+        var neighbor = CreateComponent("neighbor", 430, 330, 40, 40);
+        var allComponents = new List<Component> { group, child, neighbor };
+
+        _detector.CanPlaceGroup(group, 0, 0, allComponents).ShouldBeTrue(
+            "only the swept arc extent may collide — not the bend's full circle");
+    }
+
+    [Fact]
     public void CanPlaceGroup_ExcludedComponents_ShouldIgnoreInCollisionCheck()
     {
         // Arrange

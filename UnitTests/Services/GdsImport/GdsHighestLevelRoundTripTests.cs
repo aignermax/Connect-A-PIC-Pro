@@ -105,14 +105,15 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // connections are routed waveguides that nazca flattens into top-cell
         // polygon chains. The route-network matcher restores the four chains
         // that span exactly two pins (the two MMI braids, crossing↔crossing,
-        // adiabatic↔halfring); the remaining six entangle into ONE junction
-        // network across the crossing components — never disentangled by
-        // guessing, so those stay frozen paths with an informational note.
+        // adiabatic↔halfring); the remaining six entangle into TWO junction
+        // networks across the crossing components (25 + 13 polygons, 8 + 4 pins)
+        // — never disentangled by guessing, so those stay frozen paths with
+        // informational notes.
         outcome.Connections.Count.ShouldBe(4);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived);
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(45,
-            "the junction network's polygons ride the group as frozen, non-re-routable paths");
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
+            "the junction networks' polygons ride the group as frozen, non-routable paths");
 
         // ── 4. Place with frozen imported geometry: this is a netlist-TOPOLOGY
         // equivalence test, and frozen mode keeps it deterministic and

@@ -224,4 +224,41 @@ public class SingleHopPassivityCheckerTests
             .ShouldBe(1.0045 / (1 - 1.0045 * 0.5) * 0.3, 1e-12);
         warnings.ShouldHaveSingleItem();
     }
+
+    [Fact]
+    public void Compute_TwoSameNamedInstances_GroupedPerInstance_NotFlagged()
+    {
+        // Field report (group simulation abort): two instances of the same
+        // component ('2x2 MMI Coupler') connected in a group. Grouping the
+        // passivity blocks by display NAME merges both instances and pulls the
+        // inter-instance connection into the block SVD — inflating σ_max past
+        // the noise band on a fully passive circuit. Per-INSTANCE grouping
+        // keeps each block exactly unitary and the run goes through.
+        var a1In = Guid.NewGuid(); var a2In = Guid.NewGuid();
+        var a1Out = Guid.NewGuid(); var a2Out = Guid.NewGuid();
+        var b1In = Guid.NewGuid(); var b2In = Guid.NewGuid();
+        var b1Out = Guid.NewGuid(); var b2Out = Guid.NewGuid();
+        var instanceA = Guid.NewGuid(); var instanceB = Guid.NewGuid();
+        var bar = new Complex(Math.Sqrt(0.5), 0);
+        var cross = new Complex(0, Math.Sqrt(0.5));
+        var pins = new[] { a1In, a2In, a1Out, a2Out, b1In, b2In, b1Out, b2Out };
+        var matrix = CreateMatrix(pins,
+            (a1In, a1Out, bar), (a1In, a2Out, cross),
+            (a2In, a1Out, cross), (a2In, a2Out, bar),
+            (b1In, b1Out, bar), (b1In, b2Out, cross),
+            (b2In, b1Out, cross), (b2In, b2Out, bar),
+            (a1Out, b1In, new Complex(0.5, 0))); // the inter-instance connection
+        var context = new TransitiveClosureContext
+        {
+            PinOwnerNames = pins.ToDictionary(p => p, _ => "2x2 MMI Coupler"),
+            PinOwnerInstanceIds = new Dictionary<Guid, Guid>
+            {
+                [a1In] = instanceA, [a2In] = instanceA, [a1Out] = instanceA, [a2Out] = instanceA,
+                [b1In] = instanceB, [b2In] = instanceB, [b1Out] = instanceB, [b2Out] = instanceB,
+            },
+            WavelengthNm = 1546,
+        };
+
+        Should.NotThrow(() => TransitiveSMatrixCalculator.Compute(matrix, context));
+    }
 }
