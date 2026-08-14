@@ -108,12 +108,19 @@ public sealed partial class GdsPlacementExecutor
     /// straight IS the honest route, and the router's degenerate fallback would
     /// only flag them blocked.
     /// </param>
+    /// <param name="autoConnectAllPins">
+    /// True routes every remaining pair of facing, still-unconnected pins with
+    /// Lunima's router after the plan connections landed (opt-in, issue #880) —
+    /// see <see cref="AutoConnectAllPinsAsync"/>. False (the default) leaves
+    /// unconnected pins free for manual routing.
+    /// </param>
     /// <returns>A report of what was placed, connected, and skipped.</returns>
     public async Task<GdsPlacementReport> ExecuteAsync(
         GdsPlacementPlan plan,
         IProgress<string>? progress = null,
         CancellationToken ct = default,
-        bool rerouteImportedConnections = true)
+        bool rerouteImportedConnections = true,
+        bool autoConnectAllPins = false)
     {
         ArgumentNullException.ThrowIfNull(plan);
         var report = new GdsPlacementReport();
@@ -139,6 +146,8 @@ public sealed partial class GdsPlacementExecutor
         // ObservableCollections and must stay on the caller's (UI) context.
         var createdConnections = await ConnectAllAsync(
             plan, placedViewModels, report, progress, ct, originOffset, rerouteImportedConnections);
+        if (autoConnectAllPins)
+            createdConnections.AddRange(await AutoConnectAllPinsAsync(placedViewModels, report, progress, ct));
         ValidateCreatedConnections(createdConnections, report);
         CreateGroup(plan, placedViewModels, report, progress, ct, originOffset);
         return report;
