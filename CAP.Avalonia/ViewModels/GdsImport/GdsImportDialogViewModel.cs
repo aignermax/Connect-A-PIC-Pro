@@ -253,6 +253,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         ImportCompleted = false;
         Warnings.Clear();
         Infos.Clear();
+        ClearPinSuggestions();
         PopulateCensus(Array.Empty<CAP_DataAccess.Import.Gds.LayerCensus.GdsLayerCensusEntry>());
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
         // Capture the token BEFORE the first await: a window close mid-run

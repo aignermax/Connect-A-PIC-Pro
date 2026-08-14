@@ -66,6 +66,13 @@ public sealed record GdsHierarchyImportOptions
     public GdsPinDetectionOptions PinDetection { get; init; } = new();
 
     /// <summary>
+    /// Heuristic (edge-detected) pins the user explicitly removed in the import
+    /// dialog. They are filtered out of every cell's detected pin list before
+    /// drafts are built and before pins are projected onto placed instances.
+    /// </summary>
+    public IReadOnlyList<GdsGuessedPin> ExcludedGuessedPins { get; init; } = Array.Empty<GdsGuessedPin>();
+
+    /// <summary>
     /// Optional candidate-list resolver (all distinct matches for a cell name,
     /// precedence-ordered, INCLUDING same-key collisions). When set, the
     /// session prefers it over <see cref="ResolveKnownComponent"/> and

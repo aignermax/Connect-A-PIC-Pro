@@ -109,10 +109,11 @@ internal sealed partial class GdsHierarchyImportSession
 
         detectionCell.Texts.AddRange(CollapseCoincidentLabels(labels, cellName));
 
-        return GdsPinNameNormalizer.Normalize(
+        var pins = GdsPinNameNormalizer.Normalize(
             DetectWithAnyLayerFallback(detectionCell, bbox, cellName),
             $"Cell '{cellName}'",
             Warnings);
+        return FilterExcludedGuessedPins(cellName, pins);
     }
 
     private IReadOnlyList<GdsOutlinePolygon> BuildOutlines(string cellName, GdsBoundingBox bbox)
