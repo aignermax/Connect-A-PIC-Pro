@@ -194,9 +194,9 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // top-cell polygon chains (asserted above). The route-network matcher
         // merges each chain and restores the four chains that span exactly two
         // pins as real connections; the remaining six chains entangle at the two
-        // crossing components into ONE 45-polygon junction network (12 pins) —
-        // crossing/junction topology is never disentangled by guessing, so those
-        // stay frozen paths with an informational junction note.
+        // crossing components into TWO junction networks (25 + 13 polygons,
+        // 8 + 4 pins) — crossing/junction topology is never disentangled by
+        // guessing, so those stay frozen paths with informational junction notes.
         outcome.Connections.Count.ShouldBe(4);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived && !c.IsElectrical);
         // The two MMI↔MMI braids restore with demofab pin names either way
@@ -213,15 +213,12 @@ public class GdsUserDesignRoundTripTests : IDisposable
         outcome.Connections.ShouldContain(c => c.A.PinName == "port 1" && c.B.PinName == "port 2");
 
         // Zero WARNINGS: the top-cell geometry accounting (restored/frozen) and
-        // the junction note are informational — nothing is silently dropped.
+        // the junction notes are informational — nothing is silently dropped.
         outcome.Warnings.ShouldBeEmpty();
-        if (siepicUpgraded)
-            outcome.Infos.ShouldContain(i => i.Contains("junction with 12 pins"));
-        else
-            outcome.Infos.ShouldContain(i => i.Contains("junction with"));
+        outcome.Infos.ShouldContain(i => i.Contains("junction with"));
         outcome.Infos.ShouldContain(i => i.Contains("restored as 4 real connection(s)"));
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(45,
-            "the junction network rides the group as frozen, non-re-routable paths");
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
+            "the junction networks ride the group as frozen, non-re-routable paths");
 
         // The registered templates carry the pins found in the GDS:
         // the MMI via demofab's (501, 1) labels (a0/a1/b0/b1 — demofab's names for
@@ -280,8 +277,8 @@ public class GdsUserDesignRoundTripTests : IDisposable
         var group = canvas2.Components.ShouldHaveSingleItem().Component.ShouldBeOfType<ComponentGroup>();
         group.GroupName.ShouldBe("ConnectAPIC_Design");
         group.InternalPaths.ShouldContain(p => p.StartPin == null,
-            "the junction network's polygons ride the group as pin-less frozen paths");
-        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(45);
+            "the junction networks' polygons ride the group as pin-less frozen paths");
+        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(38);
         group.InternalPaths.Count(p => p.StartPin != null).ShouldBe(4,
             "the four restored connections are frozen into the group with their pins");
         var children = group.GetAllComponentsRecursive().ToList();
