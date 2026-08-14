@@ -4,7 +4,7 @@ using CAP_Core.Routing;
 namespace CAP.Avalonia.Commands;
 
 /// <summary>
-/// Undoable re-route of imported (frozen) waveguide routes (issue #857):
+/// Undoable re-route of imported (frozen) waveguide routes:
 /// <see cref="Execute"/> unfreezes the targets and hands them to the live router
 /// (one asynchronous routing pass for the whole batch), <see cref="Undo"/> restores
 /// the exact frozen geometry that was imported, so Ctrl+Z brings the imported

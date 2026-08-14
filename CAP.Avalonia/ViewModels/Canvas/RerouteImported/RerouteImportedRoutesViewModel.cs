@@ -1,6 +1,7 @@
 using System.Globalization;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services.Localization;
+using CAP_Core.Components.Core;
 using CAP_Core.Routing.RerouteImported;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
@@ -8,11 +9,13 @@ using CommunityToolkit.Mvvm.Input;
 namespace CAP.Avalonia.ViewModels.Canvas.RerouteImported;
 
 /// <summary>
-/// ViewModel for re-routing imported (frozen) waveguide routes on demand (issue #857).
+/// ViewModel for re-routing imported (frozen) waveguide routes on demand.
 /// Counts the design's frozen imported routes, offers "re-route all" / "re-route
 /// selected" as ONE undoable command, and reports the before/after length and bend
 /// delta so the user sees what the router changed. Hand-edited frozen routes are
-/// never re-routed; their count is surfaced instead.
+/// never re-routed; their count is surfaced instead. Frozen routes living inside
+/// component groups (the standard GDS import groups everything it placed) are
+/// counted too, with a hint to open or dissolve the group before re-routing.
 /// </summary>
 public partial class RerouteImportedRoutesViewModel : ObservableObject
 {
@@ -34,6 +37,13 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
     [NotifyPropertyChangedFor(nameof(IsPanelVisible))]
     private int _handEditedFrozenCount;
 
+    /// <summary>Re-routable frozen routes living inside component groups.</summary>
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(HasGroupedFrozenRoutes))]
+    [NotifyPropertyChangedFor(nameof(GroupedFrozenText))]
+    [NotifyPropertyChangedFor(nameof(IsPanelVisible))]
+    private int _groupedFrozenCount;
+
     /// <summary>Localized "N frozen imported route(s)" line for the panel.</summary>
     public string FrozenCountText => string.Format(CultureInfo.CurrentCulture,
         LocalizationService.Instance.Translate("Routing.Reroute.FrozenCount"), FrozenImportedCount);
@@ -41,6 +51,10 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
     /// <summary>Localized "N hand-edited route(s) kept unchanged" line for the panel.</summary>
     public string HandEditedKeptText => string.Format(CultureInfo.CurrentCulture,
         LocalizationService.Instance.Translate("Routing.Reroute.HandEditedKept"), HandEditedFrozenCount);
+
+    /// <summary>Localized "N frozen route(s) inside groups — open/dissolve to re-route" hint.</summary>
+    public string GroupedFrozenText => string.Format(CultureInfo.CurrentCulture,
+        LocalizationService.Instance.Translate("Routing.Reroute.InGroups"), GroupedFrozenCount);
 
     /// <summary>Before/after summary of the last re-route pass, empty until one ran.</summary>
     [ObservableProperty]
@@ -59,12 +73,17 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
     /// <summary>True when hand-edited frozen routes exist (shown as "kept unchanged").</summary>
     public bool HasHandEditedFrozenRoutes => HandEditedFrozenCount > 0;
 
+    /// <summary>True when re-routable frozen routes live inside component groups.</summary>
+    public bool HasGroupedFrozenRoutes => GroupedFrozenCount > 0;
+
     /// <summary>
-    /// Panel visibility: shown while frozen imported routes exist AND kept visible after a
-    /// full re-route so the before/after delta and the "kept unchanged" note stay readable.
+    /// Panel visibility: shown while frozen imported routes exist (on the canvas or
+    /// inside groups) AND kept visible after a full re-route so the before/after
+    /// delta and the "kept unchanged" note stay readable.
     /// </summary>
     public bool IsPanelVisible =>
-        HasFrozenImportedRoutes || HasHandEditedFrozenRoutes || ResultText.Length > 0;
+        HasFrozenImportedRoutes || HasHandEditedFrozenRoutes || HasGroupedFrozenRoutes
+        || ResultText.Length > 0;
 
     private WaveguideConnectionViewModel? _selectedConnection;
 
@@ -85,10 +104,20 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
         _canvas = canvas;
         _commandManager = commandManager;
         _canvas.Connections.CollectionChanged += (_, _) => Refresh();
+        // Grouping (the standard GDS import ends with one) moves frozen routes off the
+        // canvas into the group — the Components collection is where that shows up.
+        _canvas.Components.CollectionChanged += (_, _) => Refresh();
+        // Routing passes flip IsRouteFrozen outside commands (e.g. an endpoint moved
+        // unfreezes the route); StateChanged fires after every pass.
+        _canvas.Routing.StateChanged += Refresh;
         _commandManager.StateChanged += (_, _) => Refresh();
     }
 
-    /// <summary>Recounts eligible and hand-edited frozen routes from the canvas.</summary>
+    /// <summary>
+    /// Recounts eligible and hand-edited frozen routes from the canvas plus the
+    /// re-routable frozen paths inside component groups. An emptied canvas (new or
+    /// switched design) also discards the last re-route delta.
+    /// </summary>
     public void Refresh()
     {
         var eligible = 0;
@@ -102,6 +131,12 @@ public partial class RerouteImportedRoutesViewModel : ObservableObject
         }
         FrozenImportedCount = eligible;
         HandEditedFrozenCount = handEdited;
+        GroupedFrozenCount = _canvas.Components
+            .Select(c => c.Component)
+            .OfType<ComponentGroup>()
+            .Sum(ImportedRouteRerouteEligibility.CountEligibleGroupInternal);
+        if (_canvas.Components.Count == 0 && _canvas.Connections.Count == 0)
+            ResultText = "";
         RerouteSelectedCommand.NotifyCanExecuteChanged();
     }
 

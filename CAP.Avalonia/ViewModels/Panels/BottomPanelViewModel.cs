@@ -22,7 +22,7 @@ public partial class BottomPanelViewModel : ObservableObject
     public ConnectionRoutingViewModel ConnectionRouting { get; }
 
     /// <summary>
-    /// ViewModel for re-routing imported (frozen) waveguide routes on demand (issue #857).
+    /// ViewModel for re-routing imported (frozen) waveguide routes on demand.
     /// </summary>
     public Canvas.RerouteImported.RerouteImportedRoutesViewModel RerouteImported { get; }
 

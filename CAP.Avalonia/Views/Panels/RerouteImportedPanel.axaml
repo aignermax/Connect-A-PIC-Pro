@@ -5,16 +5,23 @@
              x:Class="CAP.Avalonia.Views.Panels.RerouteImportedPanel"
              x:DataType="vm:MainViewModel">
 
-    <!-- Re-route imported (frozen) routes (issue #857): visible while the design holds
-         frozen imported routes (or a re-route just ran, so the delta stays readable). -->
+    <!-- Re-route imported (frozen) routes: visible while the design holds frozen
+         imported routes — on the canvas or inside component groups (the standard GDS
+         import groups everything) — or a re-route just ran, so the delta stays readable. -->
     <StackPanel IsVisible="{Binding BottomPanel.RerouteImported.IsPanelVisible}">
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
         <TextBlock Text="{loc:Localize Routing.Reroute.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
 
         <TextBlock Foreground="Gray" Margin="0,0,0,6" TextWrapping="Wrap"
+                   IsVisible="{Binding BottomPanel.RerouteImported.HasFrozenImportedRoutes}"
                    Text="{Binding BottomPanel.RerouteImported.FrozenCountText}"/>
 
-        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,6">
+        <TextBlock Foreground="Gray" Margin="0,0,0,6" TextWrapping="Wrap"
+                   IsVisible="{Binding BottomPanel.RerouteImported.HasGroupedFrozenRoutes}"
+                   Text="{Binding BottomPanel.RerouteImported.GroupedFrozenText}"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,6"
+                    IsVisible="{Binding BottomPanel.RerouteImported.HasFrozenImportedRoutes}">
             <Button Content="{loc:Localize Routing.Reroute.All}"
                     Command="{Binding BottomPanel.RerouteImported.RerouteAllCommand}"/>
             <Button Content="{loc:Localize Routing.Reroute.Selected}"

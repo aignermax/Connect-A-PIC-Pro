@@ -901,7 +901,7 @@
                     <!-- Connection Routing (style, width/radius, freeze, per-bend radius — issue #574) -->
                     <panels:ConnectionRoutingPanel/>
 
-                    <!-- Re-route imported (frozen) routes — issue #857 -->
+                    <!-- Re-route imported (frozen) routes -->
                     <panels:RerouteImportedPanel/>
 
                     <!-- AI Design Assistant Panel -->

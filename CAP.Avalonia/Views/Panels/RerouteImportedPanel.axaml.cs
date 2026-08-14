@@ -3,7 +3,7 @@ using Avalonia.Controls;
 namespace CAP.Avalonia.Views.Panels;
 
 /// <summary>
-/// Right-panel section for re-routing imported (frozen) waveguide routes (issue #857):
+/// Right-panel section for re-routing imported (frozen) waveguide routes:
 /// shows how many frozen imported routes the design holds, re-routes them (all or the
 /// selected one) with the live router as one undoable action, and reports the
 /// before/after length and bend delta.

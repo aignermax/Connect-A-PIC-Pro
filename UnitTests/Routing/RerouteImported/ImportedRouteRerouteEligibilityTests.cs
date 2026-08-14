@@ -9,7 +9,7 @@ using Xunit;
 namespace UnitTests.Routing.RerouteImported;
 
 /// <summary>
-/// Verifies which connections the "Re-route imported routes" action (issue #857)
+/// Verifies which connections the "Re-route imported routes" action
 /// may hand back to the live router — only frozen, unedited, optical Auto routes —
 /// and that hand-edited frozen routes are surfaced as "kept unchanged" instead.
 /// </summary>

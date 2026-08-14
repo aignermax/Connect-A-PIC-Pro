@@ -5,7 +5,7 @@ namespace CAP_Core.Routing.RerouteImported;
 /// <summary>
 /// Aggregate length/bend metrics of a set of routes, captured before and after a
 /// re-route pass so the UI can show the user what the re-route changed
-/// (issue #857: show the before/after delta, never replace silently).
+/// (show the before/after delta, never replace silently).
 /// </summary>
 /// <param name="LengthMicrometers">Total routed length in micrometers.</param>
 /// <param name="EquivalentBends">Total equivalent 90° bend count.</param>

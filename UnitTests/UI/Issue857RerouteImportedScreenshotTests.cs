@@ -15,11 +15,14 @@ using Xunit;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Visual documentation for "Re-route imported (frozen) waveguide routes" (#857):
-/// captures (1) the panel with frozen imported routes counted and both re-route buttons,
-/// including the "hand-edited routes kept unchanged" note, and (2) the state after
-/// "Re-route All" with the before/after length and bend delta report. PNGs +
-/// manifest.json land in <c>artifacts/ui-screenshots/issue-857/</c>.
+/// Visual documentation for "Re-route imported (frozen) waveguide routes":
+/// captures (1) the state right after a standard grouped GDS import — the frozen
+/// routes live inside the group, so the panel shows the "inside a group — open or
+/// dissolve to re-route" hint, (2) the panel after dissolving the group, with the
+/// frozen routes counted, both re-route buttons and the "hand-edited routes kept
+/// unchanged" note, and (3) the state after "Re-route All" with the before/after
+/// length and bend delta report. PNGs + manifest.json land in
+/// <c>artifacts/ui-screenshots/issue-857/</c>.
 /// </summary>
 [Trait("Category", "UiScreenshots")]
 [Collection("LocalizationSingleton")]
@@ -30,7 +33,7 @@ public class Issue857RerouteImportedScreenshotTests
     private const int CaptureAttempts = 3;
     private const double DetourOffsetMicrometers = 800;
 
-    /// <summary>Captures the frozen-routes state and the after-re-route delta state.</summary>
+    /// <summary>Captures the grouped-import hint, the frozen-routes state and the delta state.</summary>
     [AvaloniaFact]
     public void CaptureRerouteImportedPanelStates()
     {
@@ -52,7 +55,12 @@ public class Issue857RerouteImportedScreenshotTests
         var edited = SeedFrozenImportedConnection(canvas, 3000);
         edited.Connection.BendRadiusOverrides[0] = 25;
         var reroute = vm.BottomPanel.RerouteImported;
-        reroute.Refresh();
+
+        // The standard GDS import ends by grouping everything it placed: the frozen
+        // connections move off the canvas into the group as FrozenWaveguidePaths.
+        var groupCommand = new CreateGroupCommand(
+            canvas, canvas.Components.ToList(), "ImportedTopCell");
+        commandManager.ExecuteCommand(groupCommand);
 
         var window = new Window
         {
@@ -65,18 +73,29 @@ public class Issue857RerouteImportedScreenshotTests
 
         try
         {
-            // State 1: two re-routable frozen imported routes + one hand-edited kept route.
+            // State 1: right after the grouped import — the panel auto-appears with the
+            // "inside a group — open or dissolve to re-route" hint (hand-edited excluded).
+            reroute.FrozenImportedCount.ShouldBe(0);
+            reroute.GroupedFrozenCount.ShouldBe(2);
+            reroute.IsPanelVisible.ShouldBeTrue();
+            CaptureWithRetry(window, Path.Combine(outputDir, "01-grouped-import-hint.png"));
+
+            // State 2: the group is dissolved (undo here, same effect as ungroup) — the
+            // routes are back on the canvas: two re-routable + one hand-edited kept route.
+            commandManager.Undo();
+            Dispatcher.UIThread.RunJobs();
             reroute.FrozenImportedCount.ShouldBe(2);
             reroute.HandEditedFrozenCount.ShouldBe(1);
-            CaptureWithRetry(window, Path.Combine(outputDir, "01-frozen-imported-routes.png"));
+            reroute.GroupedFrozenCount.ShouldBe(0);
+            CaptureWithRetry(window, Path.Combine(outputDir, "02-frozen-imported-routes.png"));
 
-            // State 2: after "Re-route All" — the delta report replaces the count and the
+            // State 3: after "Re-route All" — the delta report replaces the count and the
             // hand-edited route is still listed as kept unchanged.
             PumpUntilComplete(reroute.RerouteAllCommand.ExecuteAsync(null));
             reroute.FrozenImportedCount.ShouldBe(0);
             reroute.ResultText.ShouldNotBeNullOrEmpty();
             Dispatcher.UIThread.RunJobs();
-            CaptureWithRetry(window, Path.Combine(outputDir, "02-reroute-delta.png"));
+            CaptureWithRetry(window, Path.Combine(outputDir, "03-reroute-delta.png"));
         }
         finally
         {
@@ -85,7 +104,7 @@ public class Issue857RerouteImportedScreenshotTests
         }
 
         WriteManifest(outputDir);
-        Directory.GetFiles(outputDir, "*.png").Length.ShouldBe(2);
+        Directory.GetFiles(outputDir, "*.png").Length.ShouldBe(3);
     }
 
     /// <summary>
@@ -140,8 +159,9 @@ public class Issue857RerouteImportedScreenshotTests
     {
         const string manifest = """
         [
-          {"file": "01-frozen-imported-routes.png", "caption": "Imported Routes section (auto-appears in the routing panel when a GDS import left frozen routes): 2 re-routable frozen routes counted, Re-route All / Re-route Selected buttons, and 1 hand-edited frozen route explicitly listed as kept unchanged."},
-          {"file": "02-reroute-delta.png", "caption": "After Re-route All (one undoable command): the green report shows the before/after total length and equivalent-90-degree-bend delta of the 2 re-routed routes; the hand-edited route was never touched and stays noted as kept."}
+          {"file": "01-grouped-import-hint.png", "caption": "Right after a standard GDS import (which groups everything it placed): the panel auto-appears and counts the 2 re-routable frozen routes living inside the group, hinting to open or dissolve the group to re-route."},
+          {"file": "02-frozen-imported-routes.png", "caption": "After dissolving the group: 2 re-routable frozen routes counted on the canvas, Re-route All / Re-route Selected buttons, and 1 hand-edited frozen route explicitly listed as kept unchanged."},
+          {"file": "03-reroute-delta.png", "caption": "After Re-route All (one undoable command): the green report shows the before/after total length and equivalent-90-degree-bend delta of the 2 re-routed routes; the hand-edited route was never touched and stays noted as kept."}
         ]
         """;
         ScreenshotArtifacts.WriteText(Path.Combine(outputDir, "manifest.json"), manifest);
