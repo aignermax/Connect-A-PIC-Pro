@@ -1175,6 +1175,19 @@ public partial class MainViewModel : ObservableObject
         var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
         var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
 
+        // DRC-lite min waveguide spacing (#899, wired for #915): the first member PDK
+        // process of the active selection provides the declared value (or the conservative
+        // default); without a real process (Playground) the check stays off (0 = disabled).
+        double minWaveguideSpacingMicrometers = 0;
+        if (processLockActive)
+        {
+            var memberProcess = LeftPanel.ResolveLiveMemberPdkNames(FileOperations.ActiveProcess!)
+                .Select(name => LeftPanel.GetLoadedPdkDrafts().FirstOrDefault(
+                    d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
+                .FirstOrDefault(p => p is not null);
+            minWaveguideSpacingMicrometers = memberProcess.GetMinWaveguideSpacingMicrometersOrDefault();
+        }
+
         RightPanel.DesignValidation.RunValidation(
             connections,
             groups,
@@ -1184,7 +1197,8 @@ public partial class MainViewModel : ObservableObject
             pdkSourceByComponent,
             LeftPanel.GetProcessAgnosticPdkNames(),
             compatiblePdkNames,
-            processLockActive);
+            processLockActive,
+            minWaveguideSpacingMicrometers: minWaveguideSpacingMicrometers);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }
