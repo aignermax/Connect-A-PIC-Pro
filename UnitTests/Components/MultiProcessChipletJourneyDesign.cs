@@ -185,16 +185,25 @@ internal sealed class MultiProcessChipletJourneyDesign
     }
 
     /// <summary>
-    /// Connects two pins inside one chiplet with an explicit straight route, frozen so
-    /// the group captures the deterministic geometry (same recipe as #929).
+    /// Builds an explicit straight route between two pins — the deterministic geometry
+    /// recipe the journey uses wherever a connection must not depend on router heuristics.
     /// </summary>
-    private static void Wire(DesignCanvasViewModel canvas, PhysicalPin from, PhysicalPin to)
+    public static RoutedPath StraightPath(PhysicalPin from, PhysicalPin to)
     {
         var (x1, y1) = from.GetAbsolutePosition();
         var (x2, y2) = to.GetAbsolutePosition();
         var path = new RoutedPath();
         path.Segments.Add(new StraightSegment(x1, y1, x2, y2, 0));
-        var connection = canvas.ConnectPinsWithCachedRoute(from, to, path);
+        return path;
+    }
+
+    /// <summary>
+    /// Connects two pins inside one chiplet with an explicit straight route, frozen so
+    /// the group captures the deterministic geometry (same recipe as #929).
+    /// </summary>
+    private static void Wire(DesignCanvasViewModel canvas, PhysicalPin from, PhysicalPin to)
+    {
+        var connection = canvas.ConnectPinsWithCachedRoute(from, to, StraightPath(from, to));
         connection.ShouldNotBeNull($"route {from.Name} -> {to.Name} must be created");
         connection!.Connection.IsRouteFrozen = true;
     }

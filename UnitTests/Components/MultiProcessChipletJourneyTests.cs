@@ -51,8 +51,14 @@ namespace UnitTests.Components;
 ///   Step 7 (RED, #938): no per-chiplet process binding exists to persist.
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
+///
+/// The red steps 3, 5 and 8 additionally carry GREEN "today" pins in the
+/// CurrentBehavior partial: the canvas-global lock really does reject the second
+/// process, the Playground bend floor really is one fallback for everything, and
+/// GDS export really does size every route with one majority cross-section — so a
+/// future per-chiplet fix turns those pins red as a tripwire.
 /// </summary>
-public class MultiProcessChipletJourneyTests : IDisposable
+public partial class MultiProcessChipletJourneyTests : IDisposable
 {
     private const int WavelengthNm = 1550;
     private const double AmplitudeTolerance = 1e-6;
@@ -147,209 +153,7 @@ public class MultiProcessChipletJourneyTests : IDisposable
             "Step 2: only the Y-branch's port-1 reflection leaks back to the unexcited coupler input");
     }
 
-    [Fact(Skip = "Single-process assumption (#933 inventory): the placement policy is canvas-global — a process-locked canvas rejects the second chiplet's process; per-chiplet process scope is https://github.com/aignermax/Lunima/issues/935")]
-    public void Step3_ProcessLockedCanvas_AcceptsSecondProcessChiplet()
-    {
-        var cornerstone = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.CornerstonePdkFile);
-        var siepic = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.SiepicPdkFile);
-        var catalog = ProcessCatalog.BuildGroups(new[]
-        {
-            new PdkProcessEntry(cornerstone.Name, ProcessFingerprintFactory.From(cornerstone)),
-            new PdkProcessEntry(siepic.Name, ProcessFingerprintFactory.From(siepic)),
-        });
-        var active = ActiveProcessSelection.ForGroup(
-            catalog.Single(g => g.MemberPdkNames.Contains(cornerstone.Name)));
-
-        var canvas = new DesignCanvasViewModel();
-        var interaction = new CanvasInteractionViewModel(canvas, new CommandManager());
-        interaction.PlacementContext = new PlacementPolicyContext(
-            () => active, () => Array.Empty<string>(), _ => null);
-
-        interaction.SelectedTemplate = MultiProcessChipletJourneyDesign.TemplateFor(cornerstone, "Coupler");
-        interaction.CanvasClicked(100, 100);
-        canvas.Components.Count.ShouldBe(1, "the Cornerstone chiplet's process owns the canvas");
-
-        // Rung 6: a SiEPIC chiplet must be placeable NEXT TO the Cornerstone chiplet,
-        // carrying its own process — today the canvas-global lock rejects it.
-        interaction.SelectedTemplate = MultiProcessChipletJourneyDesign.TemplateFor(siepic, "Y-Branch 1550");
-        interaction.CanvasClicked(500, 100);
-        canvas.Components.Count.ShouldBe(2,
-            "rung 6: the second chiplet's process must be placeable as a chiplet-scoped process (#935)");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): DRC-lite derives its whole rule set from the single active process (first member PDK) — per-chiplet limits are https://github.com/aignermax/Lunima/issues/936")]
-    public void Step4_DrcLite_ChecksEachChipletAgainstItsOwnProcess()
-    {
-        var design = MultiProcessChipletJourneyDesign.BuildComposed();
-
-        // A deliberately narrow styled route inside chiplet A's process scope:
-        // 0.2 µm < Cornerstone's 0.25 µm foundry minimum (#924).
-        var narrow = design.Canvas.ConnectPinsWithCachedRoute(
-            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o4"),
-            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_mmi_o3"),
-            StraightPath(
-                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o4"),
-                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_mmi_o3")));
-        narrow.ShouldNotBeNull();
-        narrow!.Connection.WidthMicrometers = 0.2;
-
-        // Production behavior for a two-process design: it can only exist in Playground
-        // (#935), so RunDesignChecks runs with processLockActive = false and NO process
-        // rules at all — the Cornerstone violation passes silently.
-        var panel = new DesignValidationViewModel();
-        panel.RunValidation(
-            design.Canvas.ConnectionManager.Connections,
-            allComponents: design.Canvas.Components.Select(vm => vm.Component),
-            processLockActive: false);
-
-        panel.Issues.ShouldContain(
-            i => i.Type == DesignIssueType.WaveguideBelowMinWidth && ReferenceEquals(i.Connection, narrow.Connection),
-            "chiplet A must be checked against Cornerstone's 0.25 µm minimum (#936)");
-        panel.Issues.Count(i => i.Type == DesignIssueType.WaveguideBelowMinWidth
-                && i.Description.Contains("si_")).ShouldBe(0,
-            "chiplet B must stay silent: SiEPIC declares no minWidthUm — no invented values (#926)");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): the router bend-radius floor is one canvas-wide value (Playground fallback 10 µm) — per-chiplet floors are https://github.com/aignermax/Lunima/issues/937")]
-    public void Step5_BendRadiusFloor_FollowsEachChipletsProcess()
-    {
-        // What production applies on a two-process (Playground) canvas: no member PDKs,
-        // so the resolver falls back to the generic 10 µm for EVERY route.
-        var floorForChipletA = WaveguideBendRadiusResolver.Resolve(new ProcessDefinition?[0]);
-
-        floorForChipletA.ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
-            "chiplet A's routes must honor the Cornerstone 30 µm floor, not the fallback (#937)");
-    }
-
-    [Fact]
-    public async Task Step6_LunRoundTrip_BothPdkAssignmentsSurvive()
-    {
-        var design = MultiProcessChipletJourneyDesign.BuildComposed();
-        var fieldsBefore = await SimulateAsync(design.Canvas,
-            InjectLight("source", MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o1")));
-        double outputBefore = Amplitude(fieldsBefore,
-            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2").LogicalPin!.IDOutFlow);
-
-        var saveVm = CreateFileOperations(design.Canvas, design.Templates);
-        var saveDialog = new Mock<IFileDialogService>();
-        saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        saveVm.FileDialogService = saveDialog.Object;
-        await saveVm.SaveDesignAsCommand.ExecuteAsync(null);
-        File.Exists(_designFilePath).ShouldBeTrue("Step 6: design file must be written");
-
-        // Both per-component PDK assignments are persisted in the file itself.
-        var fileText = File.ReadAllText(_designFilePath);
-        fileText.ShouldContain(design.Cornerstone.Name);
-        fileText.ShouldContain(design.Siepic.Name);
-
-        var loadedCanvas = new DesignCanvasViewModel();
-        var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
-        loadVm.ProcessCatalogProvider = () => ProcessCatalog.BuildGroups(new[]
-        {
-            new PdkProcessEntry(design.Cornerstone.Name, ProcessFingerprintFactory.From(design.Cornerstone)),
-            new PdkProcessEntry(design.Siepic.Name, ProcessFingerprintFactory.From(design.Siepic)),
-        });
-        string? migrationWarning = null;
-        loadVm.OnProcessMigrationWarning = w => migrationWarning = w;
-        var loadDialog = new Mock<IFileDialogService>();
-        loadDialog.Setup(f => f.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        loadVm.FileDialogService = loadDialog.Object;
-        await loadVm.LoadDesignCommand.ExecuteAsync(null);
-
-        var loadedGroups = loadedCanvas.Components
-            .Where(c => c.Component is ComponentGroup)
-            .Select(c => (ComponentGroup)c.Component)
-            .ToList();
-        loadedGroups.Count.ShouldBe(2, "Step 6: both chiplets survive the round-trip");
-        var loadedA = loadedGroups.SingleOrDefault(g => g.Identifier == design.ChipletA.Identifier)
-            .ShouldNotBeNull("Step 6: chiplet A identity survives");
-        var loadedB = loadedGroups.SingleOrDefault(g => g.Identifier == design.ChipletB.Identifier)
-            .ShouldNotBeNull("Step 6: chiplet B identity survives");
-        loadedA.ExternalPins.Select(p => p.Name).OrderBy(n => n).ShouldBe(
-            MultiProcessChipletJourneyDesign.ChipletAPinNames.OrderBy(n => n),
-            "Step 6: chiplet A keeps its exposed pins");
-        loadedB.ExternalPins.Select(p => p.Name).OrderBy(n => n).ShouldBe(
-            MultiProcessChipletJourneyDesign.ChipletBPinNames.OrderBy(n => n),
-            "Step 6: chiplet B keeps its exposed pins");
-
-        loadedCanvas.Connections.Count.ShouldBe(1, "Step 6: the inter-chiplet abutment survives");
-        var abutment = loadedCanvas.Connections.Single();
-        var startGroup = abutment.Connection.StartPin.ParentComponent?.ParentGroup;
-        var endGroup = abutment.Connection.EndPin.ParentComponent?.ParentGroup;
-        startGroup.ShouldNotBeNull("Step 6: the abutment start pin must stay inside chiplet A");
-        endGroup.ShouldNotBeNull("Step 6: the abutment end pin must stay inside chiplet B");
-        ReferenceEquals(startGroup, endGroup).ShouldBeFalse(
-            "Step 6: the abutment must keep bridging the two chiplets");
-
-        // Current behavior, pinned honestly: the design-level process record cannot
-        // represent two processes, so the reloaded design collapses to Playground
-        // ("not manufacturable"). The desired per-chiplet binding is step 7 (#938).
-        loadVm.ActiveProcess.ShouldNotBeNull();
-        loadVm.ActiveProcess!.IsPlayground.ShouldBeTrue(
-            "Step 6: today a two-process design reloads as Playground — the single design-level " +
-            "ActiveProcess cannot hold both processes (#938)");
-        migrationWarning.ShouldNotBeNull();
-        migrationWarning!.ShouldContain("multiple processes");
-
-        var loadedFields = await SimulateAsync(loadedCanvas,
-            InjectLight("source", MultiProcessChipletJourneyDesign.ExposedPin(loadedA, "cs_coupler_o1")));
-        Amplitude(loadedFields,
-                MultiProcessChipletJourneyDesign.ExposedPin(loadedB, "si_taper_port 2").LogicalPin!.IDOutFlow)
-            .ShouldBe(outputBefore, AmplitudeTolerance,
-                "Step 6: the reloaded two-process system delivers the same output power");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): .lun persists one design-level ActiveProcess and no per-chiplet process binding — https://github.com/aignermax/Lunima/issues/938")]
-    public async Task Step7_LunRoundTrip_PerChipletProcessBindingSurvives()
-    {
-        var design = MultiProcessChipletJourneyDesign.BuildComposed();
-        var saveVm = CreateFileOperations(design.Canvas, design.Templates);
-        var saveDialog = new Mock<IFileDialogService>();
-        saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        saveVm.FileDialogService = saveDialog.Object;
-        await saveVm.SaveDesignAsCommand.ExecuteAsync(null);
-
-        var loadedCanvas = new DesignCanvasViewModel();
-        var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
-        var loadDialog = new Mock<IFileDialogService>();
-        loadDialog.Setup(f => f.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        loadVm.FileDialogService = loadDialog.Object;
-        await loadVm.LoadDesignCommand.ExecuteAsync(null);
-
-        // Rung 6: chiplet A must reload bound to the Cornerstone process and chiplet B
-        // to the SiEPIC process — the design as a whole is not one process.
-        loadVm.ActiveProcess.ShouldNotBeNull();
-        loadVm.ActiveProcess!.IsPlayground.ShouldBeFalse(
-            "each chiplet's process binding must survive the round-trip (#938)");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): GDS export routes every waveguide through one global interconnect (width/radius/layer from a user preference) — per-chiplet stacks are https://github.com/aignermax/Lunima/issues/939")]
-    public void Step8_GdsExport_EachChipletRoutesOnItsOwnProcessStack()
-    {
-        var design = MultiProcessChipletJourneyDesign.BuildComposed();
-        var script = new SimpleNazcaExporter().Export(design.Canvas);
-
-        // Today the header holds ONE global interconnect — neither chiplet's stack appears.
-        script.ShouldContain("layer=203"); // chiplet A: Cornerstone NITRIDE (xs_nc, 1.2 µm) (#939)
-        script.ShouldContain("layer=1"); // chiplet B: SiEPIC WG (strip, 0.5 µm) (#939)
-    }
-
     // ── Journey helpers ─────────────────────────────────────────────────────────
-
-    private static RoutedPath StraightPath(PhysicalPin from, PhysicalPin to)
-    {
-        var (x1, y1) = from.GetAbsolutePosition();
-        var (x2, y2) = to.GetAbsolutePosition();
-        var path = new RoutedPath();
-        path.Segments.Add(new StraightSegment(x1, y1, x2, y2, 0));
-        return path;
-    }
 
     private static (ExternalInput Input, Guid PinIdInFlow) InjectLight(string name, PhysicalPin pin) =>
         (new ExternalInput(name, new LaserType(LightColor.Red), 0, new Complex(1.0, 0), true),
