@@ -39,6 +39,15 @@ public partial class WaveguideRouter
     private const double RadiusToleranceMicrometers = 1e-6;
 
     /// <summary>
+    /// Pin-to-pin distance (µm) below which the two pins sit at the same point — a
+    /// perfect abutment (gdsfactory-style touching cells, pins snapped together on the
+    /// canvas). Matches the router's endpoint tolerance
+    /// (<see cref="SameEndpointToleranceMicrometers"/> in the direct-route partial) and the
+    /// import pipeline's degenerate-route threshold, so all three agree on what an abutment is.
+    /// </summary>
+    private const double AbutmentPinDistanceMicrometers = 1.0;
+
+    /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
     /// If empty, any radius >= MinBendRadiusMicrometers is allowed.
     /// When set, smoothing snaps each bend to the smallest allowed radius that fits; a
@@ -211,6 +220,9 @@ public partial class WaveguideRouter
     /// if all A* attempts fail; a self-intersecting or blocked fallback at the floor radius
     /// is discarded in favor of the connection radius, and unresolvable results are marked
     /// <see cref="RoutedPath.IsBlockedFallback"/>.
+    /// Pins closer together than <see cref="AbutmentPinDistanceMicrometers"/> short-circuit
+    /// all of the above: they sit at the same point, so the route is a minimal butt joint —
+    /// a valid, unflagged pin-to-pin straight.
     /// </summary>
     /// <param name="startPin">Source pin.</param>
     /// <param name="endPin">Target pin.</param>
@@ -222,6 +234,14 @@ public partial class WaveguideRouter
         var (endX, endY) = endPin.GetAbsolutePosition();
         double startAngle = startPin.GetAbsoluteAngle();
         double endAngle = endPin.GetAbsoluteAngle();
+
+        double abutmentDx = endX - startX;
+        double abutmentDy = endY - startY;
+        if (abutmentDx * abutmentDx + abutmentDy * abutmentDy
+            < AbutmentPinDistanceMicrometers * AbutmentPinDistanceMicrometers)
+        {
+            return BuildAbutmentRoute(startX, startY, endX, endY);
+        }
 
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
@@ -275,6 +295,24 @@ public partial class WaveguideRouter
         startPin.MatterType == MatterType.Electricity || endPin.MatterType == MatterType.Electricity
             ? MetalProcessMinBendRadiusMicrometers
             : ProcessMinBendRadiusMicrometers;
+
+    /// <summary>
+    /// The route for a perfect abutment: both pins sit at the same point, so the honest
+    /// geometry is a single (possibly zero-length) pin-to-pin straight — no bends, no
+    /// fallback, no blocked flag. This is the same shape the GDS import pipeline builds
+    /// for coincident-pin abutments.
+    /// </summary>
+    private static RoutedPath BuildAbutmentRoute(double startX, double startY, double endX, double endY)
+    {
+        double dx = endX - startX;
+        double dy = endY - startY;
+        double headingDegrees = dx != 0 || dy != 0
+            ? AngleUtilities.NormalizeAngle(Math.Atan2(dy, dx) * 180.0 / Math.PI)
+            : 0.0;
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(startX, startY, endX, endY, headingDegrees));
+        return path;
+    }
 
     /// <summary>
     /// Manhattan (CSC) fallback when all A* attempts fail. Tries the process floor radius
