@@ -30,13 +30,13 @@ namespace UnitTests.Services.GdsImport;
 /// original coordinates (uniform origin shift, ≤1 µm slack from the real foundry
 /// cells' bounding boxes); the abutment matcher reconstructs 0 connections (his 10
 /// connections were routed waveguides — flattened top-cell geometry, no abutting
-/// pins); the route-network matcher restores the four polygon chains that span
+/// pins); the route-network matcher restores the five polygon chains that span
 /// exactly two pins (the two MMI braids, halfring↔adiabatic 10.6 µm,
-/// adiabatic↔crossing); the remaining six connections entangle into ONE
-/// junction network across the crossing components — never disentangled by
+/// bdc↔crossing, crossing↔crossing); the remaining five connections entangle into
+/// ONE junction network across the crossing components — never disentangled by
 /// guessing, so their polygons ride the group as frozen, pin-less paths with an
 /// informational note. The imported netlist is therefore a SUBSET of the
-/// original topology: 4 of 10 edges, pin-exact, zero miswired edges. Placement
+/// original topology: 5 of 10 edges, pin-exact, zero miswired edges. Placement
 /// runs with <c>rerouteImportedConnections: false</c>: these are netlist-TOPOLOGY
 /// equivalence tests, and frozen imported geometry keeps them deterministic and
 /// independent of the live router.
@@ -103,19 +103,19 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         // The honest connection outcome: his layout is SPACED — the 10 logical
         // connections are routed waveguides that nazca flattens into top-cell
-        // polygon chains. The route-network matcher restores the four chains
+        // polygon chains. The route-network matcher restores the five chains
         // that span exactly two pins (the two MMI braids, adiabatic↔halfring,
-        // adiabatic↔crossing); the remaining six entangle into ONE junction
-        // network across the crossing components (40 polygons, 12 pins) — never
-        // disentangled by guessing, so those stay frozen paths with an
-        // informational note. (With the exact-geometry sibling check of #874 the
-        // router picks different winners in this congested area: the
-        // crossing↔crossing hop entangles with its neighbors' fallback routes,
-        // while adiabatic↔crossing stays clean.)
-        outcome.Connections.Count.ShouldBe(4);
+        // bdc↔crossing, crossing↔crossing); the remaining five entangle into ONE
+        // junction network across the crossing components (39 polygons, 10 pins)
+        // — never disentangled by guessing, so those stay frozen paths with an
+        // informational note. (With the largest-viable-radius snap of the styled
+        // routes, #888, the wider arcs pick different winners in the congested
+        // crossing area: bdc↔crossing and crossing↔crossing restore cleanly,
+        // adiabatic↔crossing entangles — one net additional clean chain.)
+        outcome.Connections.Count.ShouldBe(5);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived);
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(40,
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(39,
             "the junction network's polygons ride the group as frozen, non-routable paths");
 
         // ── 4. Place with frozen imported geometry: this is a netlist-TOPOLOGY
@@ -128,16 +128,16 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         report.PlacedCount.ShouldBe(7);
         report.SkippedPlacements.ShouldBeEmpty();
-        report.ConnectedCount.ShouldBe(4,
-            "the four clean two-pin route chains restore as real connections (route-derived)");
-        report.RouteDerivedCount.ShouldBe(4);
+        report.ConnectedCount.ShouldBe(5,
+            "the five clean two-pin route chains restore as real connections (route-derived)");
+        report.RouteDerivedCount.ShouldBe(5);
         report.ReroutedCount.ShouldBe(0, "frozen mode hands nothing to the live router");
         report.Warnings.ShouldBeEmpty();
         report.ValidationWarnings.ShouldBeEmpty(
-            "the four route chains keep their drawn polygons as frozen cached routes — no " +
+            "the five route chains keep their drawn polygons as frozen cached routes — no " +
             "re-route, so the old A* braid jitter (blocked/overlapping) no longer trips the validator");
-        report.CachedRouteCount.ShouldBe(4,
-            "all four restored chains load with their drawn geometry as hardcoded paths (issue #811)");
+        report.CachedRouteCount.ShouldBe(5,
+            "all five restored chains load with their drawn geometry as hardcoded paths (issue #811)");
         report.GroupCreated.ShouldBeTrue();
         report.GroupName.ShouldBe("ConnectAPIC_Design");
 
@@ -147,8 +147,8 @@ public class GdsHighestLevelRoundTripTests : IDisposable
 
         if (export.SiepicUpgraded)
         {
-            group.ExternalPins.Count.ShouldBe(20,
-                "28 pins minus the eight consumed by the four restored connections stay free");
+            group.ExternalPins.Count.ShouldBe(18,
+                "28 pins minus the ten consumed by the five restored connections stay free");
             AssertPlacementsMatchOriginals(export.Canvas, children, positionToleranceUm: 1.0);
             AssertPinMappingGeometrically(export.Canvas, children);
             AssertEveryChildIsVisible(children, expectedPinsPerChild: 4);
@@ -395,10 +395,10 @@ public class GdsHighestLevelRoundTripTests : IDisposable
     /// <summary>
     /// SiEPIC-upgraded netlist comparison: the imported circuit's YAML netlist is a
     /// SUBSET of the original's topology — same instance census per component class,
-    /// exactly the 4 route-derived edges (each a pin-exact edge of the original
+    /// exactly the 5 route-derived edges (each a pin-exact edge of the original
     /// graph, zero miswired edges), and every originally-external port still
-    /// external (the 8 user external ports are among the imported 20 ports:
-    /// 28 pins − 4 restored edges × 2).
+    /// external (the 8 user external ports are among the imported 18 ports:
+    /// 28 pins − 5 restored edges × 2).
     /// </summary>
     private static void AssertNetlistTopologyUpgraded(DesignCanvasViewModel original, DesignCanvasViewModel imported)
     {
@@ -414,15 +414,17 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             // The two MMI braids (his connections 1 and 2).
             "mmi2x2_dp#0/a0 = mmi2x2_dp#1/a1",
             "mmi2x2_dp#0/a1 = mmi2x2_dp#1/a0",
-            // Connection 10 (halfring↔adiabatic) and connection 9 (adiabatic↔crossing).
+            // Halfring↔adiabatic, bdc↔crossing and crossing↔crossing: the #888
+            // largest-viable-radius arcs keep these chains clear of the junction.
             "ebeam_adiabatic_te1550#0/port 2 = ebeam_dc_halfring_straight#0/port 3",
-            "ebeam_adiabatic_te1550#0/port 4 = ebeam_crossing4#0/port 1",
+            "ebeam_bdc_te1550#0/port 1 = ebeam_crossing4#1/port 2",
+            "ebeam_crossing4#0/port 2 = ebeam_crossing4#1/port 1",
         }, ignoreOrder: true,
-            customMessage: "exactly the four clean two-pin chains restore, pin-exact, nothing miswired");
+            customMessage: "exactly the five clean two-pin chains restore, pin-exact, nothing miswired");
         importedTopology.Edges.ShouldBeSubsetOf(originalTopology.Edges,
             "every restored edge is a real edge of the original circuit — no spurious topology");
 
-        importedTopology.Ports.Count.ShouldBe(20, "28 pins minus the four restored edges");
+        importedTopology.Ports.Count.ShouldBe(18, "28 pins minus the five restored edges");
         originalTopology.Ports.Count.ShouldBe(8, "his eight external ports");
         originalTopology.Ports.ShouldBeSubsetOf(importedTopology.Ports,
             "every originally-external pin stays external after the round trip");

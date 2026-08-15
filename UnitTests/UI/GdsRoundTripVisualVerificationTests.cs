@@ -193,9 +193,10 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
         // ── 9. Sanity + per-panel pixel assertions ──
         reportOff.PlacedCount.ShouldBe(7);
         reportOff.GroupCreated.ShouldBeTrue();
-        reportOff.ConnectedCount.ShouldBe(siepicUpgraded ? 4 : 2,
+        reportOff.ConnectedCount.ShouldBe(siepicUpgraded ? 5 : 2,
             "route-derived structural restoration: the two MMI braids (both scenarios); plus " +
-            "crossing↔crossing and halfring↔adiabatic when the real SiEPIC cells carry labels");
+            "halfring↔adiabatic, bdc↔crossing and crossing↔crossing when the real SiEPIC cells " +
+            "carry labels (the #888 largest-viable-radius arcs pick these winners)");
         reportOff.ReroutedCount.ShouldBe(0, "frozen mode hands nothing to the live router");
         reportOn.PlacedCount.ShouldBe(7);
         reportOn.ConnectedCount.ShouldBe(reportOff.ConnectedCount,
@@ -588,11 +589,11 @@ public class GdsRoundTripVisualVerificationTests : IDisposable
     {
         AssertFileIsRealPng(path);
 
-        var expectedConnections = siepicUpgraded ? 4 : 2;
+        var expectedConnections = siepicUpgraded ? 5 : 2;
         reportOn.ReroutedCount.ShouldBe(expectedConnections,
             "every route-derived connection is handed to Lunima's router in re-route mode " +
-            "(2 MMI braids; plus crossing↔crossing and halfring↔adiabatic when the real " +
-            "SiEPIC cells carry labels)");
+            "(2 MMI braids; plus halfring↔adiabatic, bdc↔crossing and crossing↔crossing " +
+            "when the real SiEPIC cells carry labels)");
         var rerouted = groupOn.InternalPaths.Where(p => p.StartPin is not null).ToList();
         rerouted.Count.ShouldBe(expectedConnections,
             "the re-routed connections live on the group with their pins");

@@ -37,10 +37,14 @@ namespace UnitTests.Services.GdsImport;
 /// merges two chains into one 4-pin junction network, which v1 deliberately
 /// does not disentangle: those 2+2 connections come back as frozen paths with a
 /// junction info naming the pins. The clean chains restore as real connections.
-/// Metal side (stub scenario): with curved metal routing (#854) all FOUR metal
-/// traces route without crossing and restore as ELECTRICAL connections. The
-/// wider curved traces are larger obstacles, so two more optical routes cross
-/// and freeze as a second optical junction.
+/// Metal side (stub scenario): detector_bar's two metal traces restore as
+/// ELECTRICAL connections. detector_cross's pad37→anode trace has always been an
+/// A*-unroutable CSC fallback diagonal (its pin faces straight into pad36's
+/// body); with the #888 largest-viable-radius optical arcs the sibling metal
+/// detour of pad35 settles on a corridor that diagonal crosses, so those two
+/// traces merge and freeze as ONE metal junction — the metal bend radii
+/// themselves are unchanged (the process floor governs them, not the optical
+/// allowed-radii list).
 /// </para>
 /// </summary>
 [Trait("Category", "Slow")]
@@ -114,8 +118,9 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         // — the four electrical connections are metal traces on (11, 0). Curved
         //   metal routing (#854) bends the traces at the process metal radius,
         //   so the routes carry arc segments in addition to the straight runs.
-        CountLines(script, "layer=(11, 0)").ShouldBe(38,
-            "his four metal routes export one metal segment per routed path segment");
+        CountLines(script, "layer=(11, 0)").ShouldBe(29,
+            "his four metal routes export one metal segment per routed path segment " +
+            "(the metal A* detours settle on fewer segments around the #888 wider optical arcs)");
         CountLines(script, ".put('org',").ShouldBe(12,
             "the ten canvas components plus the two wrapper-internal demofab puts");
 
@@ -136,11 +141,11 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         // interconnect layer (1111, 0); the METAL TRACES land on (11, 0) —
         // the layer the pre-fix import never looked at.
         designCell.Elements.OfType<GdsPolygon>().Count(p => p.Layer == 11 && p.DataType == 0)
-            .ShouldBe(36, "the four curved metal routes, flattened (nazca merges collinear runs)");
+            .ShouldBe(27, "the four curved metal routes, flattened (nazca merges collinear runs)");
         // Curved metal traces are larger routing obstacles, so the optical
-        // A* routes around them settle on different (fewer-polygon) geometry.
+        // A* routes around them settle on different geometry.
         designCell.Elements.OfType<GdsPolygon>().Count(p => p.Layer == 1111 && p.DataType == 0)
-            .ShouldBe(38, "the six optical routes, flattened");
+            .ShouldBe(40, "the six optical routes, flattened");
         designCell.Elements.OfType<GdsPolygon>().Count(p => p.Layer == 1 && p.DataType == 0)
             .ShouldBe(0, "nothing dissolves into the top cell anymore (the straight keeps its cell)");
 
@@ -179,11 +184,12 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         stubTemplate.PinDefinitions.Select(p => p.Name).ShouldContain("ebeam_BondPad#0_elec");
         // A known position: detector_bar's anode rides the first Photodetector
         // instance. Offsets are bbox-relative (template origin = layout
-        // top-left); curved metal (#854) shrinks the layout's Y extent, so the
-        // Y offset re-frames while X stays put.
+        // top-left); the metal A* detours around the #888 wider optical arcs
+        // change the layout's Y extent, so the Y offset re-frames while X
+        // stays put.
         var anode = stubTemplate.PinDefinitions.First(p => p.Name == "Photodetector#0_anode");
         anode.OffsetX.ShouldBe(1036.29, 0.6);
-        anode.OffsetY.ShouldBe(215.94, 0.6);
+        anode.OffsetY.ShouldBe(221.70, 0.6);
         // Pin anchors stay put: anode and cathode keep the Photodetector
         // template's exact 55 µm pin spacing — the pins did not move relative
         // to their component, only the bbox re-frame shifted.
@@ -265,17 +271,19 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         detectorBar.PhysicalPins.Count(p => p.MatterType == CAP_Core.Components.Core.MatterType.Electricity)
             .ShouldBe(2, "anode/cathode stay electrical on the placed detector");
 
-        // Six connections restored: his two CLEAN optical chains (the curved
+        // Four connections restored: his two CLEAN optical chains (the curved
         // metal traces are larger obstacles, so two more optical routes cross
         // and freeze — see the junction assertions below)…
         var optical = r.Outcome.Connections.Where(c => !c.IsElectrical).ToList();
         optical.Count.ShouldBe(2);
         optical.ShouldAllBe(c => c.IsRouteDerived);
-        // …and ALL FOUR metal traces as ELECTRICAL connections: curved metal
-        // routing (#854) bends detector_cross's traces apart, so they no longer
-        // cross each other and no metal junction freezes anymore.
+        // …and detector_bar's TWO metal traces as ELECTRICAL connections.
+        // detector_cross's two traces merge into a metal junction: its
+        // pad37→anode trace is a pre-existing A*-unroutable CSC fallback
+        // diagonal, and pad35's metal detour around the #888 wider optical
+        // arcs now runs through the corridor that diagonal crosses.
         var electrical = r.Outcome.Connections.Where(c => c.IsElectrical).ToList();
-        electrical.Count.ShouldBe(4);
+        electrical.Count.ShouldBe(2);
         electrical.ShouldAllBe(c => c.IsRouteDerived);
 
         // The created connections wire the right pins (demofab cell names for the
@@ -285,48 +293,48 @@ public class GdsMziElectricalRoundTripTests : IDisposable
         r.Outcome.Connections.ShouldContain(c =>
             c.A.PinName == "elec" && c.B.PinName == "cathode" && c.IsElectrical);
 
-        // On the canvas the four electrical connections sit frozen in the import
-        // group (grouping freezes live connections), pins and kinds intact.
+        // On the canvas the restored electrical connections sit frozen in the
+        // import group (grouping freezes live connections), pins and kinds intact.
         var group = (ComponentGroup)r.Canvas.Components.Single().Component;
         var pinned = group.InternalPaths.Where(p => p.StartPin != null).ToList();
-        pinned.Count.ShouldBe(6);
+        pinned.Count.ShouldBe(4);
         pinned.Count(p => p.StartPin!.MatterType == CAP_Core.Components.Core.MatterType.Electricity
                           && p.EndPin!.MatterType == CAP_Core.Components.Core.MatterType.Electricity)
-            .ShouldBe(4, "the four restored metal connections keep both-electrical pins");
-        pinned.ShouldContain(p => p.StartPin!.Name == "elec" && p.EndPin!.Name == "anode");
-        pinned.ShouldContain(p => p.StartPin!.Name == "elec" && p.EndPin!.Name == "cathode");
-        pinned.ShouldContain(p => p.StartPin!.Name == "anode" && p.EndPin!.Name == "elec");
-        pinned.ShouldContain(p => p.StartPin!.Name == "cathode" && p.EndPin!.Name == "elec");
+            .ShouldBe(2, "the two restored metal connections keep both-electrical pins");
+        pinned.ShouldContain(p =>
+            (p.StartPin!.Name == "elec" && p.EndPin!.Name == "anode")
+            || (p.StartPin!.Name == "anode" && p.EndPin!.Name == "elec"));
+        pinned.ShouldContain(p =>
+            (p.StartPin!.Name == "elec" && p.EndPin!.Name == "cathode")
+            || (p.StartPin!.Name == "cathode" && p.EndPin!.Name == "elec"));
 
         // His waveguide crossings stay frozen, reported as junctions with their
-        // pins — both junctions are now OPTICAL: the curved metal traces do not
-        // cross each other anymore, but as larger obstacles they push two more
-        // optical routes into a genuine crossing near the phase shifter.
+        // pins — two OPTICAL junctions (the larger metal obstacles push two more
+        // optical routes into a genuine crossing near the phase shifter) plus
+        // ONE METAL junction: detector_cross's two traces merge where pad35's
+        // detour crosses pad37's pre-existing fallback diagonal.
         r.Outcome.Infos.ShouldContain(i =>
             i.Contains("junction with 4 pins") && i.Contains("'a0'") && i.Contains("'out2'")
             && i.Contains("'in'") && i.Contains("'out1'"));
         r.Outcome.Infos.ShouldContain(i =>
             i.Contains("junction with 4 pins") && i.Contains("'in'") && i.Contains("'out2'")
             && i.Contains("'out1'") && !i.Contains("'a0'"));
-        r.Outcome.Infos.ShouldNotContain(i =>
-            i.Contains("junction") && i.Contains("'anode'"),
-            "no metal junction anymore — all four metal traces restored as connections");
-        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(22,
-            "14 + 8 optical polygons of the two junction networks ride the group as frozen paths");
-        r.Report.FrozenRoutePathCount.ShouldBe(22);
+        r.Outcome.Infos.ShouldContain(i =>
+            i.Contains("junction with 4 pins") && i.Contains("'anode'") && i.Contains("'cathode'")
+            && i.Contains("'elec'"));
+        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
+            "9 + 15 optical + 14 metal polygons of the three junction networks ride the group as frozen paths");
+        r.Report.FrozenRoutePathCount.ShouldBe(38);
 
         // His ask: zero WARNINGS in the clean case (infos acceptable).
         r.Outcome.Warnings.ShouldBeEmpty(
             "the clean round trip produces no warnings — junctions/frozen paths are infos");
 
-        // The placement-time validator honestly flags that the restored
-        // connections overlap near the combiner (the source geometry genuinely
-        // entangles there — the junction-frozen networks prove it). With the
-        // S-bend-first routing policy (#868) the restored routes no longer
-        // cross-detect along the tight corridors the old A* detours produced:
-        // one genuine overlap remains, pinned as the known traced-geometry
-        // artifact, not an import defect.
-        r.Report.ValidationWarnings.Count.ShouldBe(1);
+        // With the #888 largest-viable-radius arcs the restored routes settle
+        // clear of each other — the formerly-flagged overlap near the combiner
+        // now sits inside the frozen junction networks instead, so the
+        // placement-time validator finds nothing to flag.
+        r.Report.ValidationWarnings.ShouldBeEmpty();
     }
 
     private static void AssertExplodeUpgradedScenario(ExplodeResult r)
@@ -341,14 +349,15 @@ public class GdsMziElectricalRoundTripTests : IDisposable
 
         // Pin-anchored placement (#811 follow-up): the resolved pads place on
         // their 'elec' pin labels, so the real cell's m_pin marker paths (bbox
-        // inflated to 115.2 µm) no longer shift anything — all four curved
+        // inflated to 115.2 µm) no longer shift anything — detector_bar's two
         // metal traces restore as ROUTE-DERIVED electrical connections,
-        // exactly like the stub scenario.
+        // exactly like the stub scenario (detector_cross's pair freezes as the
+        // same metal junction).
         var electrical = r.Outcome.Connections.Where(c => c.IsElectrical).ToList();
-        electrical.Count.ShouldBe(4);
+        electrical.Count.ShouldBe(2);
         electrical.ShouldAllBe(c => c.IsRouteDerived);
-        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(22,
-            "same frozen remainder as the stub scenario: 14 + 8 optical junction polygons");
+        r.Outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
+            "same frozen remainder as the stub scenario: 9 + 15 optical + 14 metal junction polygons");
 
         // With the pins anchoring the placement, the marker-path bbox inflation
         // is benign — no size-mismatch warning anymore.
