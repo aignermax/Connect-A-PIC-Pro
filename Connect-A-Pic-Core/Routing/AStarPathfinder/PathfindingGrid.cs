@@ -250,38 +250,25 @@ public partial class PathfindingGrid
         // Collect pin corridor cells that should remain open
         // Only clear a small area OUTSIDE the component where the waveguide approaches
         var pinCorridorCells = new HashSet<(int, int)>();
-        double corridorLength = 10.0; // Length of corridor OUTWARD from pin (not into component)
-        double corridorWidth = 4.0;   // Narrow corridor width (just enough for waveguide)
+        var corridorCellsByPin = new Dictionary<Components.Core.PhysicalPin, HashSet<(int x, int y)>>();
 
         foreach (var pin in component.PhysicalPins)
         {
-            var (pinX, pinY) = pin.GetAbsolutePosition();
-            double pinAngle = pin.GetAbsoluteAngle();
-
-            // Calculate corridor going OUTWARD from the component (same direction as pin points)
-            double angleRad = pinAngle * Math.PI / 180.0;
-            double dx = Math.Cos(angleRad);
-            double dy = Math.Sin(angleRad);
-            double perpX = -dy;
-            double perpY = dx;
-
-            // Mark corridor cells - only going outward from the pin
-            for (double dist = 0; dist <= corridorLength; dist += CellSizeMicrometers)
-            {
-                double centerX = pinX + dx * dist;
-                double centerY = pinY + dy * dist;
-
-                for (double offset = -corridorWidth / 2; offset <= corridorWidth / 2; offset += CellSizeMicrometers)
-                {
-                    double cellX = centerX + perpX * offset;
-                    double cellY = centerY + perpY * offset;
-                    var (gx, gy) = PhysicalToGrid(cellX, cellY);
-                    pinCorridorCells.Add((gx, gy));
-                }
-            }
+            // Raster carve keeps the historical cell-size sampling (routing behavior
+            // unchanged); ownership uses dense sampling so coarse grids cover every
+            // cell the corridor rectangle touches, including its tail cell.
+            pinCorridorCells.UnionWith(CollectPinCorridorCells(pin, CellSizeMicrometers));
+            corridorCellsByPin[pin] = CollectPinCorridorCells(pin, OwnershipCorridorSampleStep);
         }
 
+        // Body cell range WITHOUT padding, to record which blocked cells are real body
+        // (vs. padding band) for the ownership-aware validation predicates.
+        var (bgx1, bgy1) = PhysicalToGrid(component.PhysicalX, component.PhysicalY);
+        var (bgx2, bgy2) = PhysicalToGrid(component.PhysicalX + component.WidthMicrometers,
+                                          component.PhysicalY + component.HeightMicrometers);
+
         var cells = new HashSet<(int, int)>();
+        var bodyCells = new HashSet<(int x, int y)>();
         for (int gx = gx1; gx <= gx2; gx++)
         {
             for (int gy = gy1; gy <= gy2; gy++)
@@ -290,6 +277,8 @@ public partial class PathfindingGrid
                 {
                     _cells[gx, gy] = 1; // Blocked by obstacle
                     cells.Add((gx, gy));
+                    if (gx >= bgx1 && gx <= bgx2 && gy >= bgy1 && gy <= bgy2)
+                        bodyCells.Add((gx, gy));
                 }
             }
         }
@@ -297,6 +286,7 @@ public partial class PathfindingGrid
         {
             _componentCells[component] = cells;
         }
+        RegisterCellOwnership(component, bodyCells, corridorCellsByPin);
 
         // Mark pin reservation zones — soft penalty area around each pin.
         // Routes can pass through but A* prefers to avoid them.
@@ -308,6 +298,48 @@ public partial class PathfindingGrid
             CollectPinReservationZoneCells(pinX, pinY, pinZoneRadius, zoneCells);
         }
         RegisterPinZones(component, zoneCells);
+    }
+
+    /// <summary>Length of the pin corridor OUTWARD from the pin (not into the component), in µm.</summary>
+    private const double PinCorridorLengthMicrometers = 10.0;
+
+    /// <summary>Width of the pin corridor (just enough for the waveguide), in µm.</summary>
+    private const double PinCorridorWidthMicrometers = 4.0;
+
+    /// <summary>Sample step (µm) for OWNERSHIP corridor cells: dense enough that on coarse
+    /// grids (e.g. 4 µm A* cells) the corridor's tail cell is not skipped.</summary>
+    private double OwnershipCorridorSampleStep => Math.Min(CellSizeMicrometers, 1.0);
+
+    /// <summary>
+    /// Collects the persistent corridor cells of one pin: a narrow band going OUTWARD from
+    /// the pin in its direction. These cells stay open in the pin owner's raster and are
+    /// registered as ownership data so validation can tolerate a route hugging its own pin.
+    /// </summary>
+    /// <param name="pin">The pin whose corridor is sampled.</param>
+    /// <param name="sampleStep">Sampling step in µm along and across the corridor.</param>
+    private HashSet<(int x, int y)> CollectPinCorridorCells(
+        Components.Core.PhysicalPin pin, double sampleStep)
+    {
+        var corridor = new HashSet<(int x, int y)>();
+        var (pinX, pinY) = pin.GetAbsolutePosition();
+        double angleRad = pin.GetAbsoluteAngle() * Math.PI / 180.0;
+        double dx = Math.Cos(angleRad);
+        double dy = Math.Sin(angleRad);
+        double perpX = -dy;
+        double perpY = dx;
+
+        for (double dist = 0; dist <= PinCorridorLengthMicrometers; dist += sampleStep)
+        {
+            double centerX = pinX + dx * dist;
+            double centerY = pinY + dy * dist;
+
+            double halfWidth = PinCorridorWidthMicrometers / 2;
+            for (double offset = -halfWidth; offset <= halfWidth; offset += sampleStep)
+            {
+                corridor.Add(PhysicalToGrid(centerX + perpX * offset, centerY + perpY * offset));
+            }
+        }
+        return corridor;
     }
 
     /// <summary>
@@ -342,6 +374,7 @@ public partial class PathfindingGrid
             }
         }
         UnregisterPinZones(component);
+        UnregisterCellOwnership(component);
     }
 
     /// <summary>
@@ -378,6 +411,7 @@ public partial class PathfindingGrid
                     }
                 }
                 UnregisterPinZones(child);
+                UnregisterCellOwnership(child);
             }
         }
 
@@ -563,6 +597,7 @@ public partial class PathfindingGrid
             _componentPinZones.Clear();
             _pinZoneRefCounts.Clear();
         }
+        ClearCellOwnership();
 
         foreach (var component in components)
         {

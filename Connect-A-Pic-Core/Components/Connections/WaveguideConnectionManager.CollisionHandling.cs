@@ -25,7 +25,10 @@ public partial class WaveguideConnectionManager
             return false;
         if (!connection.FrozenPathStillMatchesPins())
             return false; // Endpoint moved: RecalculateTransmission already unfreezes.
-        if (!router.IsPathBlockedByComponents(connection.RoutedPath!.Segments))
+        // Own-pin tolerance: a bend hugging its pin under a NEIGHBOUR's padding band is no
+        // collision — unfreezing there would silently wipe the user's manual edit.
+        if (!router.IsPathBlockedByComponents(
+                connection.RoutedPath!.Segments, connection.StartPin, connection.EndPin))
             return false;
 
         connection.IsRouteFrozen = false;

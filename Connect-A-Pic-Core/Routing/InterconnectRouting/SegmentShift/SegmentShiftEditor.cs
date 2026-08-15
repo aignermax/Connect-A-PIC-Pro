@@ -79,8 +79,10 @@ public static class SegmentShiftEditor
     {
         if (connection.RoutedPath == null)
             return;
-        connection.RoutedPath.PassesThroughComponent =
-            router.IsPathBlockedByComponents(connection.RoutedPath.Segments);
+        // Own-pin tolerance: a collapsed bend hugging its pin under a neighbour's padding
+        // band must not raise a false design issue during a shift drag.
+        connection.RoutedPath.PassesThroughComponent = router.IsPathBlockedByComponents(
+            connection.RoutedPath.Segments, connection.StartPin, connection.EndPin);
     }
 
     /// <summary>Returns the segment index of the n-th straight segment, or -1 when out of range.</summary>
