@@ -31,8 +31,8 @@ namespace UnitTests.Services.GdsImport;
 /// cells' bounding boxes); the abutment matcher reconstructs 0 connections (his 10
 /// connections were routed waveguides — flattened top-cell geometry, no abutting
 /// pins); the route-network matcher restores the four polygon chains that span
-/// exactly two pins (the two MMI braids, crossing↔crossing 12.8 µm,
-/// halfring↔adiabatic 10.6 µm); the remaining six connections entangle into ONE
+/// exactly two pins (the two MMI braids, halfring↔adiabatic 10.6 µm,
+/// adiabatic↔crossing); the remaining six connections entangle into ONE
 /// junction network across the crossing components — never disentangled by
 /// guessing, so their polygons ride the group as frozen, pin-less paths with an
 /// informational note. The imported netlist is therefore a SUBSET of the
@@ -104,16 +104,19 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // The honest connection outcome: his layout is SPACED — the 10 logical
         // connections are routed waveguides that nazca flattens into top-cell
         // polygon chains. The route-network matcher restores the four chains
-        // that span exactly two pins (the two MMI braids, crossing↔crossing,
-        // adiabatic↔halfring); the remaining six entangle into TWO junction
-        // networks across the crossing components (25 + 13 polygons, 8 + 4 pins)
-        // — never disentangled by guessing, so those stay frozen paths with
-        // informational notes.
+        // that span exactly two pins (the two MMI braids, adiabatic↔halfring,
+        // adiabatic↔crossing); the remaining six entangle into ONE junction
+        // network across the crossing components (40 polygons, 12 pins) — never
+        // disentangled by guessing, so those stay frozen paths with an
+        // informational note. (With the exact-geometry sibling check of #874 the
+        // router picks different winners in this congested area: the
+        // crossing↔crossing hop entangles with its neighbors' fallback routes,
+        // while adiabatic↔crossing stays clean.)
         outcome.Connections.Count.ShouldBe(4);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived);
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
-            "the junction networks' polygons ride the group as frozen, non-routable paths");
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(40,
+            "the junction network's polygons ride the group as frozen, non-routable paths");
 
         // ── 4. Place with frozen imported geometry: this is a netlist-TOPOLOGY
         // equivalence test, and frozen mode keeps it deterministic and
@@ -411,9 +414,9 @@ public class GdsHighestLevelRoundTripTests : IDisposable
             // The two MMI braids (his connections 1 and 2).
             "mmi2x2_dp#0/a0 = mmi2x2_dp#1/a1",
             "mmi2x2_dp#0/a1 = mmi2x2_dp#1/a0",
-            // Connection 10 (halfring↔adiabatic) and connection 7 (crossing↔crossing).
+            // Connection 10 (halfring↔adiabatic) and connection 9 (adiabatic↔crossing).
             "ebeam_adiabatic_te1550#0/port 2 = ebeam_dc_halfring_straight#0/port 3",
-            "ebeam_crossing4#0/port 2 = ebeam_crossing4#1/port 1",
+            "ebeam_adiabatic_te1550#0/port 4 = ebeam_crossing4#0/port 1",
         }, ignoreOrder: true,
             customMessage: "exactly the four clean two-pin chains restore, pin-exact, nothing miswired");
         importedTopology.Edges.ShouldBeSubsetOf(originalTopology.Edges,

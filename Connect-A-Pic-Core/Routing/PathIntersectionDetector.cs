@@ -79,6 +79,73 @@ public static class PathIntersectionDetector
     }
 
     /// <summary>
+    /// Returns true when <paramref name="first"/> comes closer to <paramref name="second"/>
+    /// than <paramref name="clearanceMicrometers"/> anywhere OUTSIDE the exemption zones
+    /// around the first path's own endpoints. The exemption mirrors the A* pin corridors:
+    /// near its pins a route in a dense fan-out unavoidably passes close to the sibling
+    /// attached to the neighboring pin, and that fixed pin pitch is not a routing defect.
+    /// Crossings are NOT detected here (an exempted zone would hide them) — pair this
+    /// with <see cref="Crosses"/>.
+    /// </summary>
+    /// <param name="first">Path whose clearance is judged (typically a route candidate).</param>
+    /// <param name="second">Sibling path measured against.</param>
+    /// <param name="clearanceMicrometers">Required center-to-center clearance in µm.</param>
+    /// <param name="endpointExemptionRadiusMicrometers">Radius around the first path's two
+    /// endpoints inside which proximity is tolerated.</param>
+    public static bool ComesCloserThan(
+        RoutedPath first, RoutedPath second,
+        double clearanceMicrometers, double endpointExemptionRadiusMicrometers)
+    {
+        if (clearanceMicrometers <= 0)
+            return false;
+
+        var a = SamplePolyline(first);
+        var b = SamplePolyline(second);
+        if (a.Count < 2 || b.Count < 2)
+            return false;
+        if (!BoundsOverlap(a, b, margin: clearanceMicrometers))
+            return false;
+
+        var firstStart = a[0];
+        var firstEnd = a[^1];
+        // The polyline keeps long straights as single segments; resample so the
+        // per-point exemption has the resolution the clearance verdict needs.
+        double step = Math.Min(SampleStepMicrometers, clearanceMicrometers / 2.0);
+        foreach (var point in ResamplePoints(a, step))
+        {
+            if (Distance(point, firstStart) <= endpointExemptionRadiusMicrometers ||
+                Distance(point, firstEnd) <= endpointExemptionRadiusMicrometers)
+                continue;
+
+            for (int j = 0; j < b.Count - 1; j++)
+            {
+                if (PointToSegment(point, b[j], b[j + 1]) < clearanceMicrometers)
+                    return true;
+            }
+        }
+        return false;
+    }
+
+    /// <summary>Walks the polyline yielding points at most <paramref name="step"/> apart.</summary>
+    private static IEnumerable<(double X, double Y)> ResamplePoints(
+        List<(double X, double Y)> polyline, double step)
+    {
+        yield return polyline[0];
+        for (int i = 0; i < polyline.Count - 1; i++)
+        {
+            double length = Distance(polyline[i], polyline[i + 1]);
+            int steps = Math.Max(1, (int)Math.Ceiling(length / step));
+            for (int k = 1; k <= steps; k++)
+            {
+                double t = (double)k / steps;
+                yield return (
+                    polyline[i].X + (polyline[i + 1].X - polyline[i].X) * t,
+                    polyline[i].Y + (polyline[i + 1].Y - polyline[i].Y) * t);
+            }
+        }
+    }
+
+    /// <summary>
     /// Returns true when the two paths properly cross each other. Cheaper than
     /// <see cref="MinimumDistance"/> for the common non-crossing case: disjoint
     /// bounding boxes are rejected first and no distances are computed. Touching
@@ -102,15 +169,17 @@ public static class PathIntersectionDetector
         return false;
     }
 
-    /// <summary>True when the axis-aligned bounding boxes of the two polylines overlap.</summary>
+    /// <summary>True when the axis-aligned bounding boxes of the two polylines overlap,
+    /// inflated by the given margin.</summary>
     private static bool BoundsOverlap(
-        List<(double X, double Y)> a, List<(double X, double Y)> b)
+        List<(double X, double Y)> a, List<(double X, double Y)> b, double margin = 0)
     {
         double aMinX = a.Min(p => p.X), aMaxX = a.Max(p => p.X);
         double aMinY = a.Min(p => p.Y), aMaxY = a.Max(p => p.Y);
         double bMinX = b.Min(p => p.X), bMaxX = b.Max(p => p.X);
         double bMinY = b.Min(p => p.Y), bMaxY = b.Max(p => p.Y);
-        return aMinX <= bMaxX && bMinX <= aMaxX && aMinY <= bMaxY && bMinY <= aMaxY;
+        return aMinX <= bMaxX + margin && bMinX <= aMaxX + margin
+            && aMinY <= bMaxY + margin && bMinY <= aMaxY + margin;
     }
 
     /// <summary>

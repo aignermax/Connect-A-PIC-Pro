@@ -21,8 +21,9 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// above the floor.</item>
 /// </list>
 ///
-/// A candidate is only a PROPOSAL: the router verifies it against the same obstacle grid
-/// A* uses and falls back to A* when the styled path is actually blocked. Returns null
+/// A candidate is only a PROPOSAL: the router verifies it against the component obstacle
+/// grid A* uses and against the exact geometry of registered sibling routes, and falls
+/// back to A* when the styled path is actually blocked. Returns null
 /// when no styled geometry can leave the start pin along its direction (e.g. the end pin
 /// lies behind the start) or none satisfies the radius floor — A* then routes as before.
 /// </summary>
