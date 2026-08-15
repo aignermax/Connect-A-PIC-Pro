@@ -57,13 +57,20 @@ public static class DirectRouteFirstPolicy
         PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers) =>
         TryBuildWithStyle(startPin, endPin, minBendRadiusMicrometers, out _);
 
-    /// <summary>Like <see cref="TryBuildCandidate"/>, also reporting the chosen style.</summary>
+    /// <summary>
+    /// Like <see cref="TryBuildCandidate"/>, also reporting the chosen style and optionally
+    /// snapping arc radii to foundry allowed values.
+    /// </summary>
+    /// <param name="allowedBendRadii">Optional foundry-style allowed radii (µm). When supplied,
+    /// the largest allowed radius that fits the styled geometry and honors the floor is used
+    /// — larger radii mean lower bend loss.</param>
     public static RoutedPath? TryBuildWithStyle(
         PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers,
-        out CAP_Core.Components.Connections.WaveguideType style)
+        out CAP_Core.Components.Connections.WaveguideType style,
+        IReadOnlyList<double>? allowedBendRadii = null)
     {
         var arcPath = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, WaveguideType.Bend, minBendRadiusMicrometers);
+            startPin, endPin, WaveguideType.Bend, minBendRadiusMicrometers, allowedBendRadii);
         if (MeetsRadiusFloor(arcPath, minBendRadiusMicrometers))
         {
             style = WaveguideType.Bend;
@@ -74,7 +81,7 @@ public static class DirectRouteFirstPolicy
             ? WaveguideType.SBend
             : WaveguideType.Cobra;
         var smoothPath = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, smoothStyle, minBendRadiusMicrometers);
+            startPin, endPin, smoothStyle, minBendRadiusMicrometers, allowedBendRadii);
         if (MeetsRadiusFloor(smoothPath, minBendRadiusMicrometers))
         {
             style = smoothStyle;

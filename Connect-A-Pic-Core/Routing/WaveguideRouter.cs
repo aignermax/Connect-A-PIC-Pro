@@ -44,7 +44,9 @@ public partial class WaveguideRouter
     /// When set, smoothing snaps each bend to the smallest allowed radius that fits; a
     /// post-routing pass (<see cref="AStarPathfinder.BendRadiusUpsizer"/>) then grows optical
     /// bends to the LARGEST allowed radius the free space around them permits (larger radii
-    /// mean lower bend loss), once every sibling route is final.
+    /// mean lower bend loss), once every sibling route is final. Direct/S-bend-first styled
+    /// routes snap their arcs to the largest allowed radius already at build time (issue #888),
+    /// since their geometry is fixed and the post-pass excludes them.
     /// </summary>
     public List<double> AllowedBendRadii { get; set; } = new() { 5, 10, 20, 50 };
 

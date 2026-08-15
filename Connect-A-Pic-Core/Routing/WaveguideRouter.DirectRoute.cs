@@ -44,7 +44,7 @@ public partial class WaveguideRouter
     private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
     {
         var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildWithStyle(
-            startPin, endPin, bendRadius, out var directStyle);
+            startPin, endPin, bendRadius, out var directStyle, AllowedBendRadii);
         if (candidate == null
             || !candidate.IsValid
             || PathIntersectionDetector.HasSelfIntersection(candidate)
