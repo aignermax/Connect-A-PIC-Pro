@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-dialog-auto-connect-checkbox.png",
+    "caption": "GDS import dialog: the new opt-in \u0027Auto-connect all pins after placement\u0027 checkbox (default OFF) below the existing re-route option."
+  },
+  {
+    "file": "02-auto-connected-pairs.png",
+    "caption": "After import with auto-connect ON: both facing pin pairs are routed with the normal direct-first/A*-fallback router \u2014 smooth S-bends across the offsets."
+  },
+  {
+    "file": "03-unroutable-pair-reported.png",
+    "caption": "A pair the router cannot route (target pin buried in a component body) is KEPT on the canvas as a blocked path AND named in the import report \u2014 never silently red."
+  }
+]

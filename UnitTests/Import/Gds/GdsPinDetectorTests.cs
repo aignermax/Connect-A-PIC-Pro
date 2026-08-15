@@ -1,5 +1,6 @@
 using CAP_DataAccess.Import.Gds;
 using Shouldly;
+using System.IO;
 
 namespace UnitTests.Import.Gds;
 
@@ -35,6 +36,42 @@ public class GdsPinDetectorTests
         pin.YUm.ShouldBe(1, Tolerance); // 4 − 3: Y flipped, origin at top
         pin.AngleDegrees.ShouldBe(180, Tolerance); // left edge → west
         pin.WidthUm.ShouldBe(0, Tolerance);
+    }
+
+    // ── Pin layer attribution (DRC-lite) ─────────────────────────────────────
+
+    [Fact]
+    public void Label_Pin_CarriesThePortLabelsLayer()
+    {
+        var cell = Cell(Label(1, 10, "o1", x: 0, y: 3));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().Layer.ShouldBe(1);
+    }
+
+    [Fact]
+    public void PortShape_Pin_CarriesThePortShapesLayer()
+    {
+        var cell = Cell(Poly(1, 10, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.Layer.ShouldBe(1);
+    }
+
+    [Fact]
+    public void EdgeHeuristic_Pins_CarryTheWaveguideLayer_WhenUnambiguous()
+    {
+        // Straight waveguide on layer 1/0 touching the left and right edges.
+        var cell = Cell(Poly(1, 0, (0, 1.75), (10, 1.75), (10, 2.25), (0, 2.25), (0, 1.75)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldNotBeEmpty();
+        pins.ShouldAllBe(p => p.Layer == 1);
     }
 
     [Fact]
@@ -202,6 +239,153 @@ public class GdsPinDetectorTests
         arrowPin.AngleDegrees.ShouldBe(180, Tolerance);
     }
 
+    // ── Port-layer shapes ────────────────────────────────────────────────────
+
+    [Fact]
+    public void PortShape_OnConfiguredLayer_NoLabel_BecomesHeurPinWithWidthAndDirection()
+    {
+        // 1 µm wide port-marker polygon on the default port layer (1,10) touches
+        // the left edge; without a label it becomes a named PortShape pin.
+        var cell = Cell(Poly(1, 10, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.Name.ShouldBe("heur_1");
+        pin.XUm.ShouldBe(0, Tolerance);
+        pin.YUm.ShouldBe(2, Tolerance);
+        pin.AngleDegrees.ShouldBe(180, Tolerance);
+        pin.WidthUm.ShouldBe(1, Tolerance);
+    }
+
+    [Fact]
+    public void PortShape_LabelNearby_AdoptsMidpointAndWidth()
+    {
+        // A label sitting on the marker polygon gets the shape's exact boundary
+        // midpoint and width; the shape itself is not emitted separately.
+        var cell = Cell(
+            Poly(1, 10, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)),
+            Label(1, 10, "o1", x: 0.2, y: 2));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.Label);
+        pin.Name.ShouldBe("o1");
+        pin.XUm.ShouldBe(0, Tolerance);
+        pin.YUm.ShouldBe(2, Tolerance);
+        pin.WidthUm.ShouldBe(1, Tolerance);
+        pin.AngleDegrees.ShouldBe(180, Tolerance);
+    }
+
+    [Fact]
+    public void PortShape_ElectricalLayer_InfersElectrical()
+    {
+        var options = new GdsPinDetectionOptions
+        {
+            PortLayers = [(11, 0)],
+            ElectricalLayers = [(11, 0)],
+        };
+        var cell = Cell(Poly(11, 0, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4, options);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.IsElectrical.ShouldBe(true);
+    }
+
+    [Fact]
+    public void PortShape_NonPortLayer_IsIgnored()
+    {
+        var cell = Cell(Poly(2, 0, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        GdsPinDetector.Detect(cell, Box10x4).ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void PortShape_AdjacentOnSameEdge_AreMerged()
+    {
+        // Two abutting port markers on the left edge represent one physical port.
+        var cell = Cell(
+            Poly(1, 10, (0, 1), (0.5, 1), (0.5, 2), (0, 2), (0, 1)),
+            Poly(1, 10, (0, 2), (0.5, 2), (0.5, 3), (0, 3), (0, 2)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.Count.ShouldBe(1);
+        pins[0].Source.ShouldBe(DetectedPinSource.PortShape);
+        pins[0].WidthUm.ShouldBe(2, Tolerance);
+    }
+
+    [Fact]
+    public void PortShape_OffCenter_YFlipConvertsGdsYToAppY()
+    {
+        // Off-center marker: GDS midpoint y = 1 in a 0..4 box must land at
+        // app y = MaxY − gdsY = 3, pinning the Y-flip (a vertically centered
+        // fixture would pass even with the flip missing).
+        var cell = Cell(Poly(1, 10, (0, 0.5), (0.5, 0.5), (0.5, 1.5), (0, 1.5), (0, 0.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.XUm.ShouldBe(0, Tolerance);
+        pin.YUm.ShouldBe(3, Tolerance);
+        pin.AngleDegrees.ShouldBe(180, Tolerance);
+        pin.WidthUm.ShouldBe(1, Tolerance);
+    }
+
+    [Fact]
+    public void PortShape_CoversWaveguideEnd_SuppressesDuplicateHeuristicPin()
+    {
+        // A port marker on the left end plus a waveguide stub ending at the right
+        // edge: the marker consumes the left end, the heuristic still fills the
+        // uncovered right end.
+        var cell = Cell(
+            Poly(1, 0, (7, 1.75), (10, 1.75), (10, 2.25), (7, 2.25), (7, 1.75)),
+            Poly(1, 10, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.Count.ShouldBe(2);
+        pins[0].Source.ShouldBe(DetectedPinSource.PortShape);
+        pins[0].XUm.ShouldBe(0, Tolerance);
+        pins[1].Source.ShouldBe(DetectedPinSource.EdgeHeuristic);
+        pins[1].XUm.ShouldBe(10, Tolerance);
+    }
+
+    [Fact]
+    public async Task EndToEnd_PortShapeOnly_PinDetectedThroughRealReader()
+    {
+        // gdsfactory-style cell sized by a DevRec outline on (2,0) and a port
+        // marker on the default port layer (1,10); no port labels at all.
+        var gds = GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("CELL")
+                .Boundary(2, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
+                .Boundary(1, 10, (0, 1500), (500, 1500), (500, 2500), (0, 2500), (0, 1500))
+            .EndCell()
+            .EndLibrary()
+            .ToArray();
+
+        using var stream = new MemoryStream(gds);
+        var library = await new GdsReader().ReadAsync(stream);
+        var flattener = new GdsCellFlattener(library);
+        var flattened = flattener.Flatten("CELL");
+        var bbox = flattener.GetBoundingBox("CELL");
+
+        var pins = GdsPinDetector.Detect(flattened, bbox);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.XUm.ShouldBe(0, Tolerance);
+        pin.YUm.ShouldBe(2, Tolerance);
+        pin.WidthUm.ShouldBe(1, Tolerance);
+        pin.AngleDegrees.ShouldBe(180, Tolerance);
+    }
+
     // ── Edge heuristic ───────────────────────────────────────────────────────
 
     [Fact]
@@ -261,6 +445,19 @@ public class GdsPinDetectorTests
         var cell = Cell(
             Poly(2, 0, (0, 1), (3, 1), (3, 2), (0, 2), (0, 1)),
             Poly(1, 5, (0, 3), (3, 3), (3, 3.5), (0, 3.5), (0, 3)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void MetalPolygon_TouchingEdge_ProducesNoHeuristicPins()
+    {
+        // The edge heuristic only scans waveguide layers; metal-only edges are
+        // intentionally out of scope (electrical ports need labels or a
+        // higher-confidence detector).
+        var cell = Cell(Poly(11, 0, (0, 1), (3, 1), (3, 2), (0, 2), (0, 1)));
 
         var pins = GdsPinDetector.Detect(cell, Box10x4);
 
@@ -1033,17 +1230,23 @@ public class GdsPinDetectorTests
                         ? SegmentOutwardAngleDegrees(geometry.Polygon, geometry.P1, geometry.P2)
                         : OutwardAngleDegrees(edge),
                     WidthUm = 0,
+                    Layer = text.Layer,
                     Source = DetectedPinSource.Label,
                     IsElectrical = InferLabelPinKind(text.Text, geometry),
                 }));
             }
 
-            var touches = new SortedList<CellEdge, List<(double Start, double End)>>();
-            foreach (var polygon in flattened.Polygons)
-            {
-                if (!ContainsLayer(options.WaveguideLayers, polygon.Layer, polygon.DataType))
-                    continue;
+            var waveguidePolygons = flattened.Polygons
+                .Where(p => ContainsLayer(options.WaveguideLayers, p.Layer, p.DataType))
+                .ToList();
+            int? waveguideLayer = waveguidePolygons.Count > 0
+                && waveguidePolygons.All(p => p.Layer == waveguidePolygons[0].Layer)
+                    ? waveguidePolygons[0].Layer
+                    : null;
 
+            var touches = new SortedList<CellEdge, List<(double Start, double End)>>();
+            foreach (var polygon in waveguidePolygons)
+            {
                 foreach (var (p1, p2) in Segments(polygon))
                 {
                     CellEdge? edge = TouchingEdge(p1, p2, cellBBox, tolerance);
@@ -1078,6 +1281,7 @@ public class GdsPinDetectorTests
                         YUm = ToAppY(midpoint.Y, cellBBox),
                         AngleDegrees = OutwardAngleDegrees(edge),
                         WidthUm = width,
+                        Layer = waveguideLayer,
                         Source = DetectedPinSource.EdgeHeuristic,
                     }));
                 }

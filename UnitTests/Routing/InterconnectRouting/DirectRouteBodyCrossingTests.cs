@@ -27,8 +27,8 @@ public class DirectRouteBodyCrossingTests
 
         var gc = ComponentTemplates.CreateFromTemplate(gcTemplate, 1219.227, -623.007);
         var mmi = ComponentTemplates.CreateFromTemplate(mmiTemplate, 1057.015, -584.181);
-        RotateComponentCommand.ApplyModelRotation90(mmi);
-        RotateComponentCommand.ApplyModelRotation90(mmi);
+        ComponentPoseTransform.Rotate90CounterClockwise(mmi);
+        ComponentPoseTransform.Rotate90CounterClockwise(mmi);
 
         var start = mmi.PhysicalPins.First(p => p.Name == "in");
         var end = gc.PhysicalPins.First(p => p.Name == "port 2");

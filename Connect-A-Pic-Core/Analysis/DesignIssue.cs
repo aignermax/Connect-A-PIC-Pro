@@ -49,7 +49,27 @@ public enum DesignIssueType
     /// obstacles by design and are never auto-rerouted, so the collision must be resolved
     /// manually — move the component or pick a different routing style.
     /// </summary>
-    StyledRouteThroughComponent
+    StyledRouteThroughComponent,
+
+    /// <summary>
+    /// An optical pin on a placed component has no waveguide connection and is not
+    /// designated as an external port. This is a warning because the design may still
+    /// simulate, but the dangling pin will not export to GDS.
+    /// </summary>
+    UnconnectedPin,
+
+    /// <summary>
+    /// Two pins joined by a waveguide connection have different PDK-driven waveguide
+    /// widths or layers. This is an error because the exported geometry cannot satisfy
+    /// both endpoints simultaneously.
+    /// </summary>
+    PinMismatch,
+
+    /// <summary>
+    /// Two waveguide routes are closer than the active process' minimum edge-to-edge
+    /// spacing. The reported distance and required minimum are included in the issue.
+    /// </summary>
+    WaveguideSpacingViolation
 }
 
 /// <summary>

@@ -5,7 +5,6 @@ using CAP.Avalonia.Controls;
 using CAP.Avalonia.ViewModels;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Panels;
-using CAP_Core.Components.PinKinds;
 using CAP_Core.Routing.InterconnectRouting;
 
 namespace CAP.Avalonia.Gestures;
@@ -55,7 +54,7 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
         if (!e.GetCurrentPoint(null).Properties.IsLeftButtonPressed) return false;
 
         var selected = mainVm.CanvasInteraction.SelectedWaveguideConnection;
-        if (selected == null || !IsOptical(selected)) return false;
+        if (selected == null) return false;
 
         double grab = GrabRadiusPx / Zoom();
         foreach (var corner in BendRadiusEditor.GetBendCorners(selected.Connection.GetPathSegments()))
@@ -63,7 +62,7 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
             var (hx, hy) = BendHandleGeometry.HandlePoint(corner);
             if (Distance(canvasPoint.X, canvasPoint.Y, hx, hy) <= grab)
             {
-                Capture(selected, corner, ResolveMinRadius(mainVm));
+                Capture(selected, corner, ResolveMinRadius(mainVm, selected));
                 return true;
             }
         }
@@ -149,20 +148,19 @@ public sealed class BendHandleGestureRecognizer : IGestureRecognizer
 
     /// <summary>
     /// Resolves the minimum bend radius (µm) for the drag that is about to start: the active
-    /// fabrication process' minimum via <see cref="ViewModels.Panels.CanvasInteractionViewModel"/>,
+    /// fabrication process' minimum via <see cref="ViewModels.Panels.CanvasInteractionViewModel"/>
+    /// — the metal floor for electrical connections (issue #854), the optical one otherwise —
     /// or the absolute fallback when no provider/process is available. Captured once per drag so
     /// live clamping, the committed <see cref="BendRadiusCommand"/> and <see cref="Cancel"/> all
     /// enforce the same bound.
     /// </summary>
-    private static double ResolveMinRadius(MainViewModel mainVm)
+    private static double ResolveMinRadius(MainViewModel mainVm, WaveguideConnectionViewModel conn)
     {
-        double? resolved = mainVm.CanvasInteraction.GetMinBendRadiusMicrometers?.Invoke();
+        double? resolved = conn.Connection.IsElectrical
+            ? mainVm.CanvasInteraction.GetMetalMinBendRadiusMicrometers?.Invoke()
+            : mainVm.CanvasInteraction.GetMinBendRadiusMicrometers?.Invoke();
         return resolved is > 0 ? resolved.Value : BendRadiusEditor.MinRadiusMicrometers;
     }
-
-    private static bool IsOptical(WaveguideConnectionViewModel conn) =>
-        !(PinKindHelper.IsElectrical(conn.Connection.StartPin)
-          && PinKindHelper.IsElectrical(conn.Connection.EndPin));
 
     private double Zoom()
     {

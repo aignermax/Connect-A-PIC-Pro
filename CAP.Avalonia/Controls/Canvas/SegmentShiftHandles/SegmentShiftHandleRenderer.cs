@@ -3,7 +3,6 @@ using Avalonia;
 using Avalonia.Media;
 using CAP.Avalonia.Controls.Rendering;
 using CAP.Avalonia.ViewModels.Canvas;
-using CAP_Core.Components.PinKinds;
 using CAP_Core.Routing.InterconnectRouting.SegmentShift;
 
 namespace CAP.Avalonia.Controls.Canvas.SegmentShiftHandles;
@@ -34,17 +33,12 @@ public sealed class SegmentShiftHandleRenderer : ICanvasRenderer
     public void Render(DrawingContext context, CanvasRenderContext rc)
     {
         var selected = rc.MainViewModel?.CanvasInteraction.SelectedWaveguideConnection;
-        if (selected == null || !IsOptical(selected))
+        if (selected == null)
             return;
 
         double zoom = rc.Zoom <= 0 ? 1.0 : rc.Zoom;
         DrawHandles(context, selected, rc.InteractionState, zoom);
     }
-
-    /// <summary>Optical when it is not a metal trace (both pins electrical), matching #631.</summary>
-    private static bool IsOptical(WaveguideConnectionViewModel conn) =>
-        !(PinKindHelper.IsElectrical(conn.Connection.StartPin)
-          && PinKindHelper.IsElectrical(conn.Connection.EndPin));
 
     private static void DrawHandles(DrawingContext context, WaveguideConnectionViewModel conn,
                                     CanvasInteractionState state, double zoom)

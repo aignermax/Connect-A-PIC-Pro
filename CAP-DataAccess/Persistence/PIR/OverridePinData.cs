@@ -28,6 +28,16 @@ public class OverridePinData
     /// </summary>
     public double AngleDegrees { get; set; }
 
+    /// <summary>
+    /// Waveguide width in µm at this pin (PDK-sourced; DRC-lite pin-mismatch rule).
+    /// Null when the source pin carries none — preserved across capture/apply so an
+    /// override round-trip never silently drops the PDK data.
+    /// </summary>
+    public double? WaveguideWidthMicrometers { get; set; }
+
+    /// <summary>GDS layer number of this pin's waveguide (PDK-sourced); null when the source pin carries none.</summary>
+    public int? Layer { get; set; }
+
     /// <summary>Creates an independent copy of this pin data.</summary>
     public OverridePinData Clone() => new()
     {
@@ -35,5 +45,7 @@ public class OverridePinData
         OffsetXMicrometers = OffsetXMicrometers,
         OffsetYMicrometers = OffsetYMicrometers,
         AngleDegrees = AngleDegrees,
+        WaveguideWidthMicrometers = WaveguideWidthMicrometers,
+        Layer = Layer,
     };
 }

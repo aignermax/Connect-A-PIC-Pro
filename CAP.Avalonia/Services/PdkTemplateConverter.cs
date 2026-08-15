@@ -12,20 +12,35 @@ namespace CAP.Avalonia.Services;
 
 public static class PdkTemplateConverter
 {
+    /// <summary>
+    /// Converts a PDK component draft to a library template. Optical pins carry the
+    /// PDK's waveguide width/layer onto every placed instance (DRC-lite pin-mismatch
+    /// rule): an explicit per-pin draft value wins; otherwise the default optical
+    /// cross-section of <paramref name="process"/> fills in. When neither exists the
+    /// values stay null and the rule stays silent (legacy PDKs, playground).
+    /// </summary>
     public static ComponentTemplate ConvertToTemplate(
         PdkComponentDraft pdkComp,
         string pdkName,
         string? nazcaModuleName,
-        string? gdsFactoryRoutingCrossSection = null)
+        string? gdsFactoryRoutingCrossSection = null,
+        ProcessDefinition? process = null)
     {
-        var pinDefs = pdkComp.Pins.Select(p => new PinDefinition(
-            p.Name,
-            p.OffsetXMicrometers,
-            p.OffsetYMicrometers,
-            p.AngleDegrees,
-            PinKindHelper.Parse(p.PinKind),
-            PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction)
-        )).ToArray();
+        var opticalDefaults = ProcessOpticalDefaultsResolver.Resolve(process);
+        var pinDefs = pdkComp.Pins.Select(p =>
+        {
+            var kind = PinKindHelper.Parse(p.PinKind);
+            bool isOptical = kind == MatterType.Light;
+            return new PinDefinition(
+                p.Name,
+                p.OffsetXMicrometers,
+                p.OffsetYMicrometers,
+                p.AngleDegrees,
+                kind,
+                PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction),
+                p.WaveguideWidthMicrometers ?? (isOptical ? opticalDefaults.WidthUm : null),
+                p.Layer ?? (isOptical ? opticalDefaults.Layer : null));
+        }).ToArray();
 
         double nazcaOriginOffsetX = pdkComp.NazcaOriginOffsetX ?? 0;
         double nazcaOriginOffsetY = pdkComp.NazcaOriginOffsetY ?? 0;

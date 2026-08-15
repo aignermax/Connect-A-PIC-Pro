@@ -32,6 +32,7 @@ public static class ComponentGroupSerializer
             PhysicalX = group.PhysicalX,
             PhysicalY = group.PhysicalY,
             Rotation90CounterClock = (int)group.Rotation90CounterClock,
+            RotationDegrees = ComponentPoseTransform.GetNonCardinalRotationDegrees(group),
             ParentGroupId = group.ParentGroup?.Identifier,
             ParentGroupIdGuid = group.ParentGroup?.Id.ToString()
         };
@@ -122,6 +123,11 @@ public static class ComponentGroupSerializer
             OutlinePolygons = dto.BackgroundPolygons
         };
 
+        // The exact continuous angle (non-cardinal GDS placements) supersedes the
+        // discrete quarter-turn value the property setter above applied.
+        if (dto.RotationDegrees is double exactRotation)
+            ComponentPoseTransform.ApplyExactRotation(group, exactRotation);
+
         // Add child components - prefer Guid lookup, fall back to name lookup
         var useGuids = guidLookup != null && dto.ChildComponentGuids.Count == dto.ChildComponentIds.Count
                        && dto.ChildComponentGuids.Count > 0;
@@ -186,6 +192,21 @@ public static class ComponentGroupSerializer
         throw new InvalidOperationException(
             $"Component '{nameId}' (Guid: {guidStr ?? "none"}) not found in lookup.");
     }
+
+    /// <summary>
+    /// Serializes a pin-less canvas-level frozen path (issue #856) — same DTO shape
+    /// as group-internal frozen paths, so .lun files stay uniform.
+    /// </summary>
+    public static FrozenPathDto ToCanvasFrozenPathDto(FrozenWaveguidePath frozenPath)
+        => ToFrozenPathDto(frozenPath);
+
+    /// <summary>
+    /// Deserializes a pin-less canvas-level frozen path (issue #856). No component
+    /// lookups are needed because canvas-level paths never carry pin references;
+    /// a DTO that unexpectedly does fails loudly like a group-internal path would.
+    /// </summary>
+    public static FrozenWaveguidePath FromCanvasFrozenPathDto(FrozenPathDto dto)
+        => FromFrozenPathDto(dto, null, null);
 
     /// <summary>
     /// Converts a FrozenWaveguidePath to a DTO. Pin-less paths (GDS-imported route

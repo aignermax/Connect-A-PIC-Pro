@@ -152,7 +152,7 @@ public class ComponentOutlineRendererTests
         const double compX = 100, compY = 50;
 
         var local = new OutlinePoint(20, 0);
-        // Model-level pin math (RotateComponentCommand.ApplyModelRotation):
+        // Model-level pin math (ComponentPoseTransform.RotateByDegrees):
         // rotate around the old center, re-base into the new AABB.
         double lx = local.X - unrotW / 2, ly = local.Y - unrotH / 2;
         double expectedX = compX + (newW / 2) + (lx * cos) - (ly * sin);

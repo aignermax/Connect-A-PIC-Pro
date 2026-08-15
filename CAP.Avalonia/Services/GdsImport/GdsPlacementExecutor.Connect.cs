@@ -89,7 +89,7 @@ public sealed partial class GdsPlacementExecutor
             WaveguideConnectionViewModel? connectionVm;
             // Re-routing sends route-derived pairs to the live router; abutment
             // straights keep their frozen geometry in both modes.
-            var cachedRoute = reroute && connection.IsRouteDerived
+            var cachedRoute = ShouldLiveRoute(connection, reroute, rerouteImportedConnections)
                 ? null
                 : TryBuildCachedRoute(connection, startPin, endPin, originOffset);
             if (cachedRoute is not null)
@@ -161,6 +161,22 @@ public sealed partial class GdsPlacementExecutor
     }
 
     /// <summary>
+    /// Whether a connection goes to the live router instead of keeping its traced
+    /// frozen geometry. Metal (electrical) route-derived connections are exempt from
+    /// the <see cref="MaxReroutedConnections"/> cap (issue #854): their traced polygon
+    /// outlines are straight-cornered — electrically unacceptable at RF frequencies —
+    /// so whenever re-routing is requested at all they are re-routed with curved metal
+    /// bends. Optical route-derived connections follow the capped decision.
+    /// </summary>
+    internal static bool ShouldLiveRoute(
+        GdsConnectionInstruction connection, bool rerouteOptical, bool rerouteRequested)
+    {
+        if (!connection.IsRouteDerived)
+            return false;
+        return connection.IsElectrical ? rerouteRequested : rerouteOptical;
+    }
+
+    /// <summary>
     /// Whether this execution hands route-derived connections to the live router:
     /// only when requested AND the plan stays under <see cref="MaxReroutedConnections"/>
     /// — above the cap the frozen imported geometry is kept and the report says so.
@@ -170,11 +186,13 @@ public sealed partial class GdsPlacementExecutor
     {
         if (!rerouteImportedConnections)
             return false;
-        var routeDerived = plan.Connections.Count(c => c.IsRouteDerived);
+        // Metal route-derived connections live-route regardless of the cap (see
+        // ShouldLiveRoute), so only the optical ones count against it.
+        var routeDerived = plan.Connections.Count(c => c.IsRouteDerived && !c.IsElectrical);
         if (routeDerived <= MaxReroutedConnections)
             return true;
         report.Warnings.Add(string.Format(CultureInfo.InvariantCulture,
-            "Re-routing was skipped: {0} route-derived connections exceed the limit of {1} " +
+            "Re-routing was skipped: {0} optical route-derived connections exceed the limit of {1} " +
             "— the imported route geometry was kept as frozen paths instead.",
             routeDerived, MaxReroutedConnections));
         return false;
