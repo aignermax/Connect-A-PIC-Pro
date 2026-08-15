@@ -187,7 +187,10 @@ public partial class WaveguideRouter
         PathfindingGrid?.AddComponentObstacle(component);
 
     /// <summary>
-    /// Routes a waveguide between two pins. With <see cref="PreferDirectStyledRoutes"/> (the
+    /// Routes a waveguide between two pins. Pins closer than
+    /// <see cref="AbutmentThresholdMicrometers"/> are a perfect abutment, not a waveguide:
+    /// they get the minimal pin-to-pin butt joint with no fallback flag.
+    /// Otherwise, with <see cref="PreferDirectStyledRoutes"/> (the
     /// default) the DIRECT styled geometry is tried first and A* only runs when obstacles
     /// actually block the styled path (issue #860). The A* attempt itself is two-phase.
     /// The first attempt honors the process bend-radius floor
@@ -208,6 +211,9 @@ public partial class WaveguideRouter
         var (endX, endY) = endPin.GetAbsolutePosition();
         double startAngle = startPin.GetAbsoluteAngle();
         double endAngle = endPin.GetAbsoluteAngle();
+
+        if (TryRouteAbutment(startX, startY, endX, endY, out var abutmentPath))
+            return abutmentPath;
 
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 

@@ -270,11 +270,10 @@ public sealed partial class GdsPlacementExecutor
     }
 
     /// <summary>
-    /// Pin-to-pin distance (µm) below which a route is degenerate — aligned with
-    /// the router's endpoint tolerance (a route this short is a perfect abutment,
-    /// not a waveguide).
+    /// Pin-to-pin distance (µm) below which a route is degenerate — the router's own
+    /// abutment threshold (a route this short is a perfect abutment, not a waveguide).
     /// </summary>
-    private const double DegenerateRouteThresholdUm = 1.0;
+    private const double DegenerateRouteThresholdUm = WaveguideRouter.AbutmentThresholdMicrometers;
 
     private static double PinDistanceUm(WaveguideConnection connection)
     {
