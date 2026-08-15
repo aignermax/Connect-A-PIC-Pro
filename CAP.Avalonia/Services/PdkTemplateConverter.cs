@@ -1,6 +1,5 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_Core.Components.FormulaReading;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
@@ -119,77 +118,8 @@ public static class PdkTemplateConverter
         PdkSMatrixDraft sMatrixDraft)
     {
         var parametric = ParametricSMatrixMapper.MapToParametricSMatrix(sMatrixDraft);
-
-        var pinIds = pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
-        var sliderTuples = sliders.Select(s => (s.ID, s.Value)).ToList();
-        var sMatrix = new SMatrix(pinIds, sliderTuples);
-
-        var capturedDraft = sMatrixDraft;
-        sMatrix.ParametricRebuild = (newPins, newSliders) =>
-            BuildParametricSMatrix(newPins, newSliders, capturedDraft);
-
-        var pinByName = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pin in pins)
-            pinByName[pin.Name] = pin;
-
-        var paramToSliderGuid = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var paramDraft in sMatrixDraft.Parameters ?? [])
-        {
-            if (paramDraft.SliderNumber is int sn)
-            {
-                if (sn < 0 || sn >= sliders.Count)
-                    throw new InvalidOperationException(
-                        $"Parameter '{paramDraft.Name}' references sliderNumber {sn}, " +
-                        $"but only {sliders.Count} slider(s) exist on this instance.");
-                paramToSliderGuid[paramDraft.Name] = sliders[sn].ID;
-            }
-        }
-
-        var orderedParamSliders = parametric.Parameters
-            .Where(p => paramToSliderGuid.ContainsKey(p.Name))
-            .Select(p => (p.Name, SliderGuid: paramToSliderGuid[p.Name]))
-            .ToList();
-
-        var usedSliderGuids = orderedParamSliders.Select(x => x.SliderGuid).ToList();
-
-        foreach (var conn in parametric.Connections)
-        {
-            if (!pinByName.TryGetValue(conn.FromPin, out var fromPin))
-                throw new InvalidOperationException(
-                    $"Parametric connection references unknown pin '{conn.FromPin}'.");
-            if (!pinByName.TryGetValue(conn.ToPin, out var toPin))
-                throw new InvalidOperationException(
-                    $"Parametric connection references unknown pin '{conn.ToPin}'.");
-
-            var capturedConn = conn;
-            var capturedParametric = parametric;
-            var capturedParamSliders = orderedParamSliders;
-
-            Func<List<object>, Complex> calcFunc = parameters =>
-            {
-                for (int i = 0; i < capturedParamSliders.Count && i < parameters.Count; i++)
-                {
-                    double val = Convert.ToDouble(parameters[i]);
-                    capturedParametric.SetParameterValue(capturedParamSliders[i].Name, val);
-                }
-
-                var results = capturedParametric.EvaluateConnections();
-                var match = results.Where(e =>
-                    e.FromPin == capturedConn.FromPin && e.ToPin == capturedConn.ToPin).ToList();
-                if (match.Count == 0)
-                    throw new InvalidOperationException(
-                        $"No evaluated connection for {capturedConn.FromPin}→{capturedConn.ToPin}.");
-                return match[0].Value;
-            };
-
-            var rawFormula = $"mag={conn.MagnitudeFormula};phase={conn.PhaseDegFormula}";
-            var connFn = new ConnectionFunction(calcFunc, rawFormula, usedSliderGuids, false);
-
-            sMatrix.NonLinearConnections[(fromPin.IDInFlow, toPin.IDOutFlow)] = connFn;
-            sMatrix.NonLinearConnections[(toPin.IDInFlow, fromPin.IDOutFlow)] = connFn;
-        }
-
-        return sMatrix;
+        var snapshot = new ParametricSMatrixSnapshot(parametric.Parameters, parametric.Connections);
+        return ParametricSMatrixFactory.Build(pins, sliders, snapshot);
     }
 
     public static SMatrix CreateSMatrixFromPdk(List<Pin> pins, PdkSMatrixDraft? sMatrixDraft)

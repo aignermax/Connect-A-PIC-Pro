@@ -699,32 +699,67 @@ public class ComponentGroup : Component, INotifyPropertyChanged
 
     /// <summary>
     /// Creates a shallow clone of a Component with a new unique identifier.
+    /// Parametric S-matrices are rebuilt per clone (bound to the clone's own sliders)
+    /// instead of shared: a shared matrix keeps the source's slider IDs in its formula
+    /// connections, so the clone's sliders would be dead and all clones would share
+    /// one parameter state. Numeric matrices are shared as before.
     /// </summary>
     private Component CloneComponent(Component source)
     {
-        // Create new component with same S-matrix and structure
-        var cloned = new Component(
-            new Dictionary<int, SMatrix>(source.WaveLengthToSMatrixMap),
-            source.GetAllSliders().Select(s => new Slider(
+        var clonedSliders = source.GetAllSliders().Select(s => new Slider(
                 Guid.NewGuid(),
                 s.Number,
                 s.Value,
                 s.MaxValue,
-                s.MinValue)).ToList(),
+                s.MinValue))
+            .OrderBy(s => s.Number)
+            .ToList();
+
+        var clonedPhysicalPins = source.PhysicalPins.Select(p => new PhysicalPin
+        {
+            Name = p.Name,
+            OffsetXMicrometers = p.OffsetXMicrometers,
+            OffsetYMicrometers = p.OffsetYMicrometers,
+            AngleDegrees = p.AngleDegrees,
+            LogicalPin = p.LogicalPin
+        }).ToList();
+
+        var logicalPins = clonedPhysicalPins
+            .Where(p => p.LogicalPin != null)
+            .Select(p => p.LogicalPin!)
+            .ToList();
+
+        var sMatrixMap = new Dictionary<int, SMatrix>();
+        foreach (var (wavelength, sourceMatrix) in source.WaveLengthToSMatrixMap)
+        {
+            if (sourceMatrix.ParametricRebuild != null)
+            {
+                // Rebuild binds the formulas to the clone's slider IDs; the current
+                // numeric values are carried over so the clone matches the source's
+                // evaluated state (the pin IDs are shared, so they apply directly).
+                var rebuilt = sourceMatrix.ParametricRebuild(logicalPins, clonedSliders);
+                rebuilt.ParametricRebuild = sourceMatrix.ParametricRebuild;
+                rebuilt.ParametricSnapshot ??= sourceMatrix.ParametricSnapshot;
+                rebuilt.SetValues(sourceMatrix.GetNonNullValues());
+                sMatrixMap[wavelength] = rebuilt;
+            }
+            else
+            {
+                sMatrixMap[wavelength] = sourceMatrix;
+            }
+        }
+
+        // Create new component with same S-matrix and structure
+        var cloned = new Component(
+            sMatrixMap,
+            clonedSliders,
             source.NazcaFunctionName,
             source.NazcaFunctionParameters,
             source.Parts,
             source.TypeNumber,
             $"{source.Identifier}_{Guid.NewGuid():N}",
             source.Rotation90CounterClock,
-            source.PhysicalPins.Select(p => new PhysicalPin
-            {
-                Name = p.Name,
-                OffsetXMicrometers = p.OffsetXMicrometers,
-                OffsetYMicrometers = p.OffsetYMicrometers,
-                AngleDegrees = p.AngleDegrees,
-                LogicalPin = p.LogicalPin
-            }).ToList()
+            clonedPhysicalPins
         )
         {
             PhysicalX = source.PhysicalX,
@@ -738,8 +773,19 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             // exports as a stub and loses its PDK/process attribution (#570/#661 review).
             GdsFactoryFunction = source.GdsFactoryFunction,
             HumanReadableName = source.HumanReadableName, // Preserve human-readable name
+            ParameterDefinitions = source.ParameterDefinitions,
             IsLocked = false // Don't copy lock state
         };
+
+        // The Component constructor resets every slider to its range midpoint;
+        // re-assert the source values so the clone keeps the source's parameter state
+        // (the change notification updates the rebuilt matrices' slider references).
+        foreach (var sourceSlider in source.GetAllSliders())
+        {
+            var clonedSlider = cloned.GetSlider(sourceSlider.Number);
+            if (clonedSlider != null)
+                clonedSlider.Value = sourceSlider.Value;
+        }
 
         return cloned;
     }
