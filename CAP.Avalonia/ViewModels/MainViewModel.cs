@@ -446,7 +446,10 @@ public partial class MainViewModel : ObservableObject
             resolveLiveMemberPdkNames: () =>
                 FileOperations.ActiveProcess is { } activeProcess
                     ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess)
-                    : null);
+                    : null,
+            // Per-chiplet scoping (issue #935): the live catalog lets the policy derive a
+            // group's chiplet process binding from its children.
+            getProcessCatalog: () => ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries()));
 
         CanvasInteraction.PlacementContext = placementContext;
         _canvas.Clipboard.PdkSourceResolver = placementContext.ResolveComponentPdkSource;

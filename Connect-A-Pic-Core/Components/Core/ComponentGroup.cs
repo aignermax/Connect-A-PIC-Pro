@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.Process;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
 
@@ -76,6 +77,16 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     /// Only prefabs appear in the "Saved Groups" panel.
     /// </summary>
     public bool IsPrefab { get; set; }
+
+    /// <summary>
+    /// Optional process binding of this group as a chiplet (issue #935): the fabrication
+    /// process the group's contents belong to. Null = unbound — placement checks then
+    /// derive the scope live from the children (see
+    /// <see cref="GroupProcessPolicy.DeriveProcessBinding"/>). Held in memory only;
+    /// persisting the binding in .lun files is issue #938.
+    /// </summary>
+    [JsonIgnore]
+    public ActiveProcessSelection? ProcessBinding { get; set; }
 
     /// <summary>
     /// Reference to parent group if this group is nested within another group.
@@ -576,6 +587,8 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             WidthMicrometers = WidthMicrometers,
             HeightMicrometers = HeightMicrometers,
             Rotation90CounterClock = Rotation90CounterClock,
+            // Immutable record — sharing the reference is safe.
+            ProcessBinding = ProcessBinding,
             // Immutable records — sharing the list is safe (same rule as Component.DeepCopy).
             OutlinePolygons = OutlinePolygons
         };

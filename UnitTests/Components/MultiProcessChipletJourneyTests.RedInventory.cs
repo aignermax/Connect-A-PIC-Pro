@@ -14,42 +14,13 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 3–5, 7–8) —
+/// Documented-red inventory stations of the multi-process journey (steps 4–5, 7–8) —
 /// each Skip links the issue filed for that exact single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
+/// (Step 3 turned green with the per-chiplet placement scope, issue #935.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
-    [Fact(Skip = "Single-process assumption (#933 inventory): the placement policy is canvas-global — a process-locked canvas rejects the second chiplet's process; per-chiplet process scope is https://github.com/aignermax/Lunima/issues/935")]
-    public void Step3_ProcessLockedCanvas_AcceptsSecondProcessChiplet()
-    {
-        var cornerstone = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.CornerstonePdkFile);
-        var siepic = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.SiepicPdkFile);
-        var catalog = ProcessCatalog.BuildGroups(new[]
-        {
-            new PdkProcessEntry(cornerstone.Name, ProcessFingerprintFactory.From(cornerstone)),
-            new PdkProcessEntry(siepic.Name, ProcessFingerprintFactory.From(siepic)),
-        });
-        var active = ActiveProcessSelection.ForGroup(
-            catalog.Single(g => g.MemberPdkNames.Contains(cornerstone.Name)));
-
-        var canvas = new DesignCanvasViewModel();
-        var interaction = new CanvasInteractionViewModel(canvas, new CommandManager());
-        interaction.PlacementContext = new PlacementPolicyContext(
-            () => active, () => Array.Empty<string>(), _ => null);
-
-        interaction.SelectedTemplate = MultiProcessChipletJourneyDesign.TemplateFor(cornerstone, "Coupler");
-        interaction.CanvasClicked(100, 100);
-        canvas.Components.Count.ShouldBe(1, "the Cornerstone chiplet's process owns the canvas");
-
-        // Rung 6: a SiEPIC chiplet must be placeable NEXT TO the Cornerstone chiplet,
-        // carrying its own process — today the canvas-global lock rejects it.
-        interaction.SelectedTemplate = MultiProcessChipletJourneyDesign.TemplateFor(siepic, "Y-Branch 1550");
-        interaction.CanvasClicked(500, 100);
-        canvas.Components.Count.ShouldBe(2,
-            "rung 6: the second chiplet's process must be placeable as a chiplet-scoped process (#935)");
-    }
-
     [Fact(Skip = "Single-process assumption (#933 inventory): DRC-lite derives its whole rule set from the single active process (first member PDK) — per-chiplet limits are https://github.com/aignermax/Lunima/issues/936")]
     public void Step4_DrcLite_ChecksEachChipletAgainstItsOwnProcess()
     {

@@ -110,6 +110,13 @@ public class PlaceGroupTemplateCommand : IUndoableCommand
 
     public string Description => $"Place group template '{_template.Name}'";
 
+    /// <summary>
+    /// The group instance this command places on <see cref="Execute"/> (created once in
+    /// <c>TryCreate</c>). Lets the caller pin placement-time metadata — e.g. the chiplet
+    /// process binding (issue #935) — onto the instance before it lands on the canvas.
+    /// </summary>
+    public ComponentGroup GroupToPlace => _groupToPlace;
+
     public void Execute()
     {
         // Add the group as a single component to the canvas

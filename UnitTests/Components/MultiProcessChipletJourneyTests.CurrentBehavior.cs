@@ -10,9 +10,12 @@ namespace UnitTests.Components;
 
 /// <summary>
 /// Green "today" pins for the documented-red stations of the multi-process journey:
-/// each test proves the current single-process behavior the red steps 3 (#935), 5
-/// (#937) and 8 (#939) describe, so a future per-chiplet fix turns the pin red as a
-/// tripwire. See <see cref="MultiProcessChipletJourneyTests"/> for the full journey.
+/// each test proves the current single-process behavior the red steps 5 (#937) and 8
+/// (#939) describe, so a future per-chiplet fix turns the pin red as a tripwire.
+/// See <see cref="MultiProcessChipletJourneyTests"/> for the full journey. The step-3
+/// pin now guards the canvas-level half of the shipped per-chiplet scope (#935):
+/// ungrouped foreign content stays rejected even though chiplets may carry a second
+/// process.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -20,10 +23,12 @@ public partial class MultiProcessChipletJourneyTests
     private const double SiepicMinBendRadiusUm = 5.0;
 
     [Fact]
-    public void Placement_ProcessLockedCanvas_RejectsSecondChipletProcess_Today()
+    public void Placement_ProcessLockedCanvas_RejectsUngroupedForeignComponent()
     {
-        // Companion to red step 3 (#935): the canvas-global lock really rejects the
-        // second chiplet's process today — only Playground admits both.
+        // Companion to green step 3 (#935): at the raw canvas scope the lock still
+        // rejects the second chiplet's process — only chiplets (groups bound to their
+        // own process) cross the boundary; loose components and Playground behave as
+        // before.
         var (cornerstone, siepic, catalog) = LoadProcessCatalog();
         var cornerstoneLock = ActiveProcessSelection.ForGroup(
             catalog.Single(g => g.MemberPdkNames.Contains(cornerstone.Name)));
@@ -32,14 +37,14 @@ public partial class MultiProcessChipletJourneyTests
             .IsAllowed.ShouldBeTrue("chiplet A's own process must stay placeable");
 
         var (allowed, blockReason) = SingleProcessPolicy.CheckPlacement(cornerstoneLock, siepic.Name);
-        allowed.ShouldBeFalse("today the design-global lock rejects chiplet B's process (#935)");
+        allowed.ShouldBeFalse("ungrouped foreign content stays rejected at canvas scope (#935)");
         blockReason.ShouldNotBeNull();
         blockReason!.ShouldContain("monolithic");
 
         SingleProcessPolicy.CheckPlacement(ActiveProcessSelection.Playground(), cornerstone.Name)
             .IsAllowed.ShouldBeTrue();
         SingleProcessPolicy.CheckPlacement(ActiveProcessSelection.Playground(), siepic.Name)
-            .IsAllowed.ShouldBeTrue("Playground is the only mode that can hold both chiplets today");
+            .IsAllowed.ShouldBeTrue("Playground still admits both chiplets without any checks");
     }
 
     [Fact]

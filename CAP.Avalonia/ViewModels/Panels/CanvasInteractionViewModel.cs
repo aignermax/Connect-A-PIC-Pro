@@ -428,7 +428,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (SelectedTemplate == null) return;
 
-        var (isAllowed, blockReason) = PlacementContext.CheckPlacement(SelectedTemplate.PdkSource);
+        // Per-chiplet scope (issue #935): dropping onto a process-bound chiplet resolves
+        // against that chiplet's process; everywhere else the canvas-level process applies.
+        var (isAllowed, blockReason) = PlacementContext.CheckPlacementAt(
+            SelectedTemplate.PdkSource, ChipletAt(x, y));
         if (!isAllowed)
         {
             UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
@@ -462,8 +465,12 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         // Single-process enforcement over the group's children (issue #653): a group has no
         // PdkSource of its own, so a foreign-process child must not slip in via grouping.
-        var (isAllowed, blockReason) = PlacementContext.CheckGroupPlacement(
-            ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
+        // Per-chiplet scope (issue #935): onto a bound chiplet the chiplet's process decides;
+        // at canvas level a uniformly foreign-process group is placeable as its own chiplet
+        // and gets that process pinned as its binding.
+        var (isAllowed, blockReason, derivedBinding) = PlacementContext.CheckGroupPlacementAt(
+            SelectedGroupTemplate.TemplateGroup,
+            ChipletAt(x, y),
             SelectedGroupTemplate.Name);
         if (!isAllowed)
         {
@@ -493,18 +500,27 @@ public partial class CanvasInteractionViewModel : ObservableObject
             return;
         }
 
+        // Pin the chiplet process binding resolved by the policy check onto the instance.
+        if (derivedBinding != null)
+        {
+            cmd.GroupToPlace.ProcessBinding = derivedBinding;
+        }
+
         _commandManager.ExecuteCommand(cmd);
         UpdateStatus?.Invoke($"Placed group '{SelectedGroupTemplate.Name}' at ({x:F0}, {y:F0})µm");
     }
 
     /// <summary>
-    /// Resolved PDK source of every recursive non-group child of <paramref name="group"/>,
-    /// used to check the single-process policy over a group's contents (issue #653).
+    /// The topmost group whose bounds contain the point — the chiplet a placement at that
+    /// position targets (issue #935); null when the drop lands on ungrouped canvas.
     /// </summary>
-    private IEnumerable<string?> ChildPdkSources(ComponentGroup group) =>
-        group.GetAllComponentsRecursive()
-            .Where(child => child is not ComponentGroup)
-            .Select(child => PlacementContext.ResolveComponentPdkSource(child));
+    private ComponentGroup? ChipletAt(double x, double y) =>
+        _canvas.Components
+            .Where(c => c.Component is ComponentGroup
+                        && x >= c.X && x <= c.X + c.Width
+                        && y >= c.Y && y <= c.Y + c.Height)
+            .Select(c => (ComponentGroup)c.Component)
+            .LastOrDefault();
 
     /// <summary>
     /// Selects the component or connection at the given canvas position, keeping the
@@ -922,11 +938,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (!_canvas.Clipboard.HasContent) return;
 
-        // PeekPdkSources expands groups to their resolved children (the clipboard's
+        // PeekEntryPdkSources expands groups to their resolved children (the clipboard's
         // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
         // smuggle foreign-process components past the paste guard (issue #653).
-        var blockedCount = _canvas.Clipboard.PeekPdkSources()
-            .Count(pdk => !PlacementContext.CheckPlacement(pdk).IsAllowed);
+        // Per entry (issue #935): a copied group whose children uniformly belong to one
+        // other catalog process pastes as its own chiplet; loose foreign components
+        // stay blocked by the canvas lock.
+        var blockedCount = _canvas.Clipboard.PeekEntryPdkSources()
+            .Count(entry => !PlacementContext.IsPasteEntryAllowed(entry.IsGroup, entry.Sources));
         if (blockedCount > 0)
         {
             // A blocked component implies a non-null, non-Playground active process.
