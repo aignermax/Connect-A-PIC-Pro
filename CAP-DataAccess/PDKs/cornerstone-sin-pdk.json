@@ -60,23 +60,27 @@
         "name": "xs_nc",
         "kind": "Optical",
         "widthUm": 1.2,
+        "minWidthUm": 0.25,
         "minRadiusUm": 30.0,
         "recommendedRadiusUm": 30.0,
         "layers": [
           "NITRIDE"
         ],
-        "description": "SiN C-band strip waveguide"
+        "description": "SiN C-band strip waveguide",
+        "drcSource": "Min. waveguide width 250 nm: CORNERSTONE SiN 300nm MPW-13 Design Guidelines, section 5.4 Table 4 (GDS 203 NITRIDE min. feature size). Min. bend radius 30 um: cspdk.sin300 tech constants radius_nc/radius_no applied as radius_min (gdsfactory/cspdk); the published guidelines define no hard bend-radius minimum."
       },
       {
         "name": "xs_no",
         "kind": "Optical",
         "widthUm": 0.95,
+        "minWidthUm": 0.25,
         "minRadiusUm": 30.0,
         "recommendedRadiusUm": 30.0,
         "layers": [
           "NITRIDE"
         ],
-        "description": "SiN O-band strip waveguide"
+        "description": "SiN O-band strip waveguide",
+        "drcSource": "Min. waveguide width 250 nm: CORNERSTONE SiN 300nm MPW-13 Design Guidelines, section 5.4 Table 4 (GDS 203 NITRIDE min. feature size). Min. bend radius 30 um: cspdk.sin300 tech constants radius_nc/radius_no applied as radius_min (gdsfactory/cspdk); the published guidelines define no hard bend-radius minimum."
       },
       {
         "name": "metal_routing",
@@ -110,7 +114,9 @@
         "name": "SiO2",
         "role": "cladding"
       }
-    ]
+    ],
+    "minWaveguideSpacingUm": 0.25,
+    "drcSource": "Min. waveguide gap 250 nm: CORNERSTONE SiN 300nm MPW-13 Design Guidelines, section 5.4 Table 4 (GDS 203 NITRIDE, light field) - the limit the foundry KLayout pre-DRC script flags as 'Minimum gap violation' (references/CORNERSTONE_Pre_DRC.pdf in gdsfactory/cspdk). The guidelines' >=10 um waveguide separation is a crosstalk recommendation, not a hard DRC rule."
   },
   "components": [
     {
