@@ -738,6 +738,44 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
+    public async Task Explode_TopCellRoutePolygon_WithOwnExportPortLabelOnPin_StillBecomesRouteDerivedConnection()
+    {
+        // The whole-layout export stamps a top-cell port label exactly on every
+        // coupler pin. Re-importing that file makes the route network read as a
+        // 3-pin junction (both real pins + the label) unless the coincident
+        // label is recognized as the SAME joint — the coupler-terminated route
+        // must still become a real connection, and the label must stay an
+        // unconsumed external port.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+                .Text(1, 10, "wgc_out", 10000, 2000) // own-export port label exactly on wgA.out
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldBeEmpty(
+            "the label is the same joint as the pin it sits on, not a third junction party");
+        var connection = result.Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.A.InstanceIndex.ShouldBe(0);
+        connection.A.PinName.ShouldBe("out");
+        connection.B.InstanceIndex.ShouldBe(1);
+        connection.B.PinName.ShouldBe("in");
+        result.Infos.ShouldNotContain(i => i.Contains("junction"),
+            "a port label coincident with a touched pin is not junction topology");
+        result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
+        result.Warnings.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_BecomesBackgroundGeometry()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
