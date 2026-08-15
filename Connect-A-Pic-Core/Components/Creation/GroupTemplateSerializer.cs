@@ -1,6 +1,7 @@
 using System.Text.Json;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
 using CAP_Core.Tiles;
@@ -170,8 +171,12 @@ public static class GroupTemplateSerializer
         // Without this, deserialized children have empty WaveLengthToSMatrixMap → crash.
         var sMatrices = comp.WaveLengthToSMatrixMap.Select(kvp =>
         {
+            // Parametric matrices keep their transfers in formula connections while the
+            // numeric matrix stays zero — snapshot with the formulas evaluated so the
+            // serialized transfers reflect the current parameter values.
+            var numericSnapshot = kvp.Value.CreateEvaluatedSnapshot();
             var allPinIds = kvp.Value.PinReference.Keys.ToList();
-            var transfers = kvp.Value.GetNonNullValues()
+            var transfers = numericSnapshot.GetNonNullValues()
                 .Select(t => new TransferEntryDto
                 {
                     FromPinId = t.Key.PinIdStart,
@@ -185,7 +190,8 @@ public static class GroupTemplateSerializer
             {
                 WavelengthNm = kvp.Key,
                 AllPinIds = allPinIds,
-                Transfers = transfers
+                Transfers = transfers,
+                Parametric = SerializeParametricSnapshot(kvp.Value.ParametricSnapshot)
             };
         }).ToList();
 
@@ -205,7 +211,46 @@ public static class GroupTemplateSerializer
             HeightMicrometers = comp.HeightMicrometers,
             Rotation = (int)comp.Rotation90CounterClock,
             Pins = pins,
-            SMatrices = sMatrices
+            SMatrices = sMatrices,
+            Sliders = comp.GetAllSliders().Select(s => new SliderDto
+            {
+                Id = s.ID,
+                Number = s.Number,
+                Value = s.Value,
+                MinValue = s.MinValue,
+                MaxValue = s.MaxValue
+            }).ToList()
+        };
+    }
+
+    /// <summary>
+    /// Maps a parametric snapshot to its DTO so prefab instances keep live,
+    /// slider-bound formulas after a disk round-trip. Null for non-parametric matrices.
+    /// </summary>
+    private static ParametricSMatrixDto? SerializeParametricSnapshot(ParametricSMatrixSnapshot? snapshot)
+    {
+        if (snapshot == null)
+            return null;
+
+        return new ParametricSMatrixDto
+        {
+            Parameters = snapshot.Parameters.Select(p => new ParametricParameterDto
+            {
+                Name = p.Name,
+                DefaultValue = p.DefaultValue,
+                MinValue = p.MinValue,
+                MaxValue = p.MaxValue,
+                Label = p.Label,
+                SliderNumber = p.SliderNumber,
+                Unit = p.Unit
+            }).ToList(),
+            Connections = snapshot.Connections.Select(c => new ParametricConnectionDto
+            {
+                FromPin = c.FromPin,
+                ToPin = c.ToPin,
+                MagnitudeFormula = c.MagnitudeFormula,
+                PhaseDegFormula = c.PhaseDegFormula
+            }).ToList()
         };
     }
 
@@ -241,11 +286,28 @@ public static class GroupTemplateSerializer
             };
         }).ToList();
 
+        // Restore sliders with their original IDs so the S-matrices' slider references
+        // stay valid. Ordered by number: slider-bound parameters index positionally.
+        var sliders = dto.Sliders
+            .OrderBy(s => s.Number)
+            .Select(s => new Slider(
+                s.Id == Guid.Empty ? Guid.NewGuid() : s.Id,
+                s.Number, s.Value, s.MaxValue, s.MinValue))
+            .ToList();
+
+        var logicalPins = physicalPins
+            .Where(p => p.LogicalPin != null)
+            .Select(p => p.LogicalPin!)
+            .ToList();
+
         // Rebuild S-Matrices from serialized data so children are simulation-ready.
         var sMatrixMap = new Dictionary<int, SMatrix>();
+        IReadOnlyList<ParameterDefinition>? parameterDefinitions = null;
         foreach (var entry in dto.SMatrices)
         {
-            var sMatrix = new SMatrix(entry.AllPinIds, new());
+            var sMatrix = BuildSMatrix(entry, logicalPins, sliders);
+            parameterDefinitions ??= sMatrix.ParametricSnapshot?.Parameters;
+
             var transfers = entry.Transfers.ToDictionary(
                 t => (t.FromPinId, t.ToPinId),
                 t => new System.Numerics.Complex(t.Real, t.Imaginary));
@@ -253,9 +315,9 @@ public static class GroupTemplateSerializer
             sMatrixMap[entry.WavelengthNm] = sMatrix;
         }
 
-        return new Component(
+        var component = new Component(
             sMatrixMap,
-            new List<Slider>(),
+            sliders,
             dto.NazcaFunctionName ?? "",
             dto.NazcaFunctionParameters ?? "",
             new Part[1, 1] { { new Part() } },
@@ -270,8 +332,44 @@ public static class GroupTemplateSerializer
             HeightMicrometers = dto.HeightMicrometers,
             NazcaModuleName = dto.NazcaModuleName,
             GdsFactoryFunction = dto.GdsFactoryFunction,
-            HumanReadableName = dto.HumanReadableName
+            HumanReadableName = dto.HumanReadableName,
+            ParameterDefinitions = parameterDefinitions ?? Array.Empty<ParameterDefinition>()
         };
+
+        // The Component constructor resets every slider to its range midpoint;
+        // re-assert the serialized values so the prefab keeps the parameter state
+        // it was saved with (the change notification updates the matrices' slider
+        // references, so formulas evaluate against the restored values).
+        foreach (var sliderDto in dto.Sliders)
+        {
+            var slider = component.GetSlider(sliderDto.Number);
+            if (slider != null)
+                slider.Value = sliderDto.Value;
+        }
+
+        return component;
+    }
+
+    /// <summary>
+    /// Rebuilds one wavelength's S-matrix: a live, slider-bound parametric matrix
+    /// when the template carries the formula snapshot, otherwise a plain numeric
+    /// matrix (old templates and non-parametric components).
+    /// </summary>
+    private static SMatrix BuildSMatrix(
+        SMatrixEntryDto entry,
+        List<Pin> logicalPins,
+        List<Slider> sliders)
+    {
+        if (entry.Parametric == null)
+            return new SMatrix(entry.AllPinIds, new());
+
+        var snapshot = new ParametricSMatrixSnapshot(
+            entry.Parametric.Parameters.Select(p => new ParameterDefinition(
+                p.Name, p.DefaultValue, p.MinValue, p.MaxValue, p.Label, p.SliderNumber, p.Unit)),
+            entry.Parametric.Connections.Select(c => new FormulaConnection(
+                c.FromPin, c.ToPin, c.MagnitudeFormula, c.PhaseDegFormula)));
+
+        return ParametricSMatrixFactory.Build(logicalPins, sliders, snapshot);
     }
 
     /// <summary>
@@ -544,6 +642,25 @@ public class ChildComponentDto
     /// deserialized components remain simulation-ready without PDK re-loading.
     /// </summary>
     public List<SMatrixEntryDto> SMatrices { get; set; } = new();
+
+    /// <summary>
+    /// Slider state of the child component (empty for slider-less components and
+    /// for templates written before slider persistence existed). Restored with the
+    /// original slider IDs so parametric formulas keep their bindings.
+    /// </summary>
+    public List<SliderDto> Sliders { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for one slider of a child component: identity, current value, and range.
+/// </summary>
+public class SliderDto
+{
+    public Guid Id { get; set; }
+    public int Number { get; set; }
+    public double Value { get; set; }
+    public double MinValue { get; set; }
+    public double MaxValue { get; set; }
 }
 
 /// <summary>
@@ -596,6 +713,49 @@ public class SMatrixEntryDto
 
     /// <summary>Non-zero transfer entries (inflow→outflow with complex coefficient).</summary>
     public List<TransferEntryDto> Transfers { get; set; } = new();
+
+    /// <summary>
+    /// Parametric definition (parameters + formula connections) of this matrix.
+    /// Null for non-parametric matrices and for templates written before parametric
+    /// persistence existed — those restore as plain numeric matrices.
+    /// </summary>
+    public ParametricSMatrixDto? Parametric { get; set; }
+}
+
+/// <summary>
+/// DTO for the parametric definition of one S-matrix: the named parameters and
+/// formula connections needed to rebuild a live, slider-bound matrix.
+/// </summary>
+public class ParametricSMatrixDto
+{
+    public List<ParametricParameterDto> Parameters { get; set; } = new();
+    public List<ParametricConnectionDto> Connections { get; set; } = new();
+}
+
+/// <summary>
+/// DTO for one named parameter of a parametric S-matrix (mirrors
+/// <see cref="Parametric.ParameterDefinition"/> in a serializable shape).
+/// </summary>
+public class ParametricParameterDto
+{
+    public string Name { get; set; } = "";
+    public double DefaultValue { get; set; }
+    public double MinValue { get; set; }
+    public double MaxValue { get; set; }
+    public string Label { get; set; } = "";
+    public int? SliderNumber { get; set; }
+    public string Unit { get; set; } = "";
+}
+
+/// <summary>
+/// DTO for one formula-based connection between named pins.
+/// </summary>
+public class ParametricConnectionDto
+{
+    public string FromPin { get; set; } = "";
+    public string ToPin { get; set; } = "";
+    public string MagnitudeFormula { get; set; } = "";
+    public string PhaseDegFormula { get; set; } = "0";
 }
 
 /// <summary>
