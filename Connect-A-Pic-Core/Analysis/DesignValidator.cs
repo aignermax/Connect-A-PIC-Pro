@@ -130,6 +130,42 @@ public class DesignValidator
     }
 
     /// <summary>
+    /// Full DRC-lite aggregation: validates waveguide connections, detects overlaps with
+    /// frozen paths, checks every optical pin on the provided components for a connection,
+    /// and (when <paramref name="minWaveguideSpacingMicrometers"/> &gt; 0) checks edge-to-edge
+    /// waveguide spacing against the process minimum. Each rule contributes its findings
+    /// exactly once.
+    /// </summary>
+    /// <param name="connections">Regular waveguide connections to validate.</param>
+    /// <param name="groups">ComponentGroups whose frozen internal paths are checked for overlap.</param>
+    /// <param name="components">All placed components whose optical pins are checked.</param>
+    /// <param name="externalPortPins">Pins that are external ports and should be skipped.</param>
+    /// <param name="minWaveguideSpacingMicrometers">
+    /// Minimum required edge-to-edge spacing; ≤0 disables the spacing check.
+    /// </param>
+    /// <returns>A list of all design issues found, empty if the design is valid.</returns>
+    public List<DesignIssue> Validate(
+        IEnumerable<WaveguideConnection> connections,
+        IEnumerable<ComponentGroup> groups,
+        IEnumerable<Component> components,
+        IEnumerable<PhysicalPin>? externalPortPins,
+        double minWaveguideSpacingMicrometers = 0)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(groups);
+        ArgumentNullException.ThrowIfNull(components);
+
+        var connectionList = connections.ToList();
+        var issues = Validate(connectionList, groups, components, externalPortPins);
+        if (minWaveguideSpacingMicrometers > 0)
+        {
+            issues.AddRange(_spacingDetector.DetectViolations(
+                connectionList, groups, minWaveguideSpacingMicrometers));
+        }
+        return issues;
+    }
+
+    /// <summary>
     /// Checks every optical pin on the provided components and reports any that have no
     /// waveguide connection and are not listed as external ports.
     /// </summary>

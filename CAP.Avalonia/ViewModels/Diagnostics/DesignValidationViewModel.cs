@@ -57,17 +57,23 @@ public partial class DesignValidationViewModel : ObservableObject
     /// <summary>
     /// Runs design validation on the provided connections.
     /// Detects invalid geometry, blocked paths, overlaps with frozen group paths,
-    /// (when chip bounds are provided) out-of-bounds component placement, and (when PDK
-    /// data is provided) placed components whose PDK no longer matches the active process.
+    /// per-connection pin width/layer mismatches, (when components are provided) dangling
+    /// optical pins, (when a positive minimum spacing is provided) waveguides closer than
+    /// the process minimum, (when chip bounds are provided) out-of-bounds component
+    /// placement, and (when PDK data is provided) placed components whose PDK no longer
+    /// matches the active process.
     /// </summary>
     /// <param name="connections">Waveguide connections to validate.</param>
     /// <param name="groups">ComponentGroups whose frozen paths are checked for overlap. Optional.</param>
-    /// <param name="allComponents">All placed components checked against chip bounds and PDK compatibility. Optional.</param>
+    /// <param name="allComponents">All placed components checked for dangling pins, chip bounds and PDK compatibility. Optional.</param>
     /// <param name="chipWidthMicrometers">Chip boundary width; ignored when ≤0. Optional.</param>
     /// <param name="chipHeightMicrometers">Chip boundary height; ignored when ≤0. Optional.</param>
     /// <param name="pdkSourceByComponent">Each component's resolved PDK source name. Optional — skips the PDK check when absent.</param>
     /// <param name="processAgnosticPdkNames">PDK names exempt from process enforcement (tool libraries). Optional.</param>
     /// <param name="enabledPdkNames">PDK names currently allowed under the active process lock. Optional — skips the PDK check when absent.</param>
+    /// <param name="processLockActive">Whether a real (non-Playground) fabrication process is active.</param>
+    /// <param name="externalPortPins">Pins treated as external ports; exempt from the dangling-pin check. Optional.</param>
+    /// <param name="minWaveguideSpacingMicrometers">Process minimum edge-to-edge waveguide spacing; ≤0 disables the spacing check. Optional.</param>
     public void RunValidation(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup>? groups = null,
@@ -77,15 +83,22 @@ public partial class DesignValidationViewModel : ObservableObject
         IReadOnlyDictionary<Component, string?>? pdkSourceByComponent = null,
         IReadOnlyCollection<string>? processAgnosticPdkNames = null,
         IReadOnlyCollection<string>? enabledPdkNames = null,
-        bool processLockActive = true)
+        bool processLockActive = true,
+        IEnumerable<PhysicalPin>? externalPortPins = null,
+        double minWaveguideSpacingMicrometers = 0)
     {
         Issues.Clear();
         CurrentIndex = -1;
         HighlightConnection?.Invoke(null);
 
-        var results = groups is not null
-            ? _validator.Validate(connections, groups)
-            : _validator.Validate(connections);
+        // Single full-aggregation call: per-connection checks + frozen-path overlap +
+        // dangling pins + spacing each contribute their findings exactly once (#915).
+        var results = _validator.Validate(
+            connections,
+            groups ?? Array.Empty<ComponentGroup>(),
+            allComponents ?? Array.Empty<Component>(),
+            externalPortPins,
+            minWaveguideSpacingMicrometers);
 
         foreach (var issue in results)
             Issues.Add(issue);
