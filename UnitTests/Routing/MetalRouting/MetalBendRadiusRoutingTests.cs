@@ -65,6 +65,27 @@ public class MetalBendRadiusRoutingTests
     }
 
     [Fact]
+    public void Route_ElectricalPins_DoNotSnapToOpticalAllowedRadii()
+    {
+        var router = new WaveguideRouter
+        {
+            MinBendRadiusMicrometers = 10,
+            MetalProcessMinBendRadiusMicrometers = 40,
+            AllowedBendRadii = new List<double> { 5, 10, 20, 50 },
+        };
+
+        var path = router.Route(
+            CreatePin(MatterType.Electricity, 0, 0, pinX: 0, pinY: 0, angle: 0),
+            CreatePin(MatterType.Electricity, 100, 100, pinX: 0, pinY: 0, angle: 270));
+
+        // The allowed-radii list is an optical concern (bend loss); a metal trace must
+        // keep the generous geometry-derived radius, not snap to the largest allowed 50.
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(
+            100.0 * CAP_Core.Routing.InterconnectRouting.SBendGeometry.GenerousRadiusFactor, 1e-3);
+    }
+
+    [Fact]
     public void Route_ConnectionRadiusAboveMetalFloor_ConnectionRadiusWins()
     {
         var router = new WaveguideRouter

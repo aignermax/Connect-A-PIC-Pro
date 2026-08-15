@@ -43,8 +43,14 @@ public partial class WaveguideRouter
     /// </summary>
     private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
     {
+        // Snapping to the foundry allowed radii is an optical concern (lower bend loss):
+        // electrical (metal) traces are governed solely by the RF process floor and must
+        // keep their geometry, mirroring the BendRadiusUpsizer exclusion.
+        bool isElectrical = startPin.MatterType == MatterType.Electricity
+            || endPin.MatterType == MatterType.Electricity;
         var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildWithStyle(
-            startPin, endPin, bendRadius, out var directStyle);
+            startPin, endPin, bendRadius, out var directStyle,
+            isElectrical ? null : AllowedBendRadii);
         if (candidate == null
             || !candidate.IsValid
             || PathIntersectionDetector.HasSelfIntersection(candidate)
