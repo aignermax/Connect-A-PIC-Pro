@@ -1,13 +1,44 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.DesignChecksPanel"
              x:DataType="vm:MainViewModel">
 
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="{loc:Localize DesignChecks.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize DesignChecks.Title}" Foreground="Salmon" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why the DRC-lite rules exist (coupling, bend
+                 radiation, reflections) and where the limits come from (the PDK). -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize DesignChecksHelp.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize DesignChecksHelp.Intro}"/>
+
+                        <TextBlock Text="{loc:Localize DesignChecksHelp.BendTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize DesignChecksHelp.BendBody}"/>
+
+                        <TextBlock Text="{loc:Localize DesignChecksHelp.SpacingTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize DesignChecksHelp.SpacingBody}"/>
+
+                        <TextBlock Text="{loc:Localize DesignChecksHelp.PinsTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize DesignChecksHelp.PinsBody}"/>
+
+                        <TextBlock Text="{loc:Localize DesignChecksHelp.SourceTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize DesignChecksHelp.SourceBody}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
         <Button Content="{loc:Localize DesignChecks.Run}"
                 Command="{Binding RunDesignChecksCommand}"
                 HorizontalAlignment="Left" Padding="12,4" Margin="0,5,0,5"
