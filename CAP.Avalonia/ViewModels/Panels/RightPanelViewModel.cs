@@ -115,7 +115,7 @@ public partial class RightPanelViewModel : ObservableObject
     public Export.Netlist.NetlistViewModel Netlist { get; }
 
     /// <summary>
-    /// ViewModel for the Truth Table panel (logic-gate behavior of a selected group, issue #947).
+    /// ViewModel for the Truth Table panel (logic-gate behavior of a selected group).
     /// </summary>
     public TruthTableViewModel TruthTable { get; }
 

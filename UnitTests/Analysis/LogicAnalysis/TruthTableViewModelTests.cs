@@ -7,7 +7,7 @@ using Xunit;
 namespace UnitTests.Analysis.LogicAnalysis;
 
 /// <summary>
-/// ViewModel tests for the Truth Table panel (#947): activation only for exactly one
+/// ViewModel tests for the Truth Table panel: activation only for exactly one
 /// selected group, the 4-input limit at the checkboxes, extraction on the
 /// <see cref="LogicGateFixtureFactory"/> fixtures (OR table at threshold 0.25 including
 /// raw powers), extractor validation shown as a message instead of a crash, and cancel.
@@ -202,5 +202,26 @@ public class TruthTableViewModelTests
         vm.StatusText.ShouldBe(Translate("Analysis.TruthTable.Cancelled"));
         vm.IsProcessing.ShouldBeFalse();
         vm.HasResult.ShouldBeFalse();
+    }
+
+    [Fact]
+    public async Task ConfigureForSelection_WhileExtracting_CancelsRunAndShowsNoStaleResult()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a", "b" }, new[] { "y" });
+        // IsProcessing flips synchronously before the extractor starts, so the
+        // re-selection lands while the run is in flight — deterministic, no timing race.
+        vm.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(TruthTableViewModel.IsProcessing) && vm.IsProcessing)
+                vm.ConfigureForSelection(null, new DesignCanvasViewModel());
+        };
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.IsGroupSelected.ShouldBeFalse();
+        vm.HasResult.ShouldBeFalse();
+        vm.IsProcessing.ShouldBeFalse();
+        vm.Rows.ShouldBeEmpty();
     }
 }

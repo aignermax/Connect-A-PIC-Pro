@@ -13,7 +13,7 @@ using Xunit;
 namespace UnitTests.UI;
 
 /// <summary>
-/// Headless render and resource tests for the #947 Truth Table panel: the panel
+/// Headless render and resource tests for the Truth Table panel: the panel
 /// renders in the right properties area with its help "(?)" flyout, shows a hint
 /// unless exactly one group is selected, lists the group's external pins as
 /// checkboxes, and every new string is translated in all five shipped languages.
@@ -65,7 +65,7 @@ public class TruthTablePanelRenderTests
             Dispatcher.UIThread.RunJobs();
 
             var help = panel.GetVisualDescendants().OfType<HelpFlyoutButton>().FirstOrDefault();
-            help.ShouldNotBeNull("the Truth Table panel must carry the #947 help button");
+            help.ShouldNotBeNull("the Truth Table panel must carry the help button");
 
             var expected = LocalizationService.Instance.Translate("TruthTableHelp.Title");
             expected.ShouldNotBe("Why a truth table?",
@@ -149,7 +149,7 @@ public class TruthTablePanelRenderTests
     }
 
     /// <summary>
-    /// Every new #947 key exists with a non-empty value in all five shipped languages,
+    /// Every new truth-table key exists with a non-empty value in all five shipped languages,
     /// and no non-English language silently falls back to the English text.
     /// </summary>
     [Fact]

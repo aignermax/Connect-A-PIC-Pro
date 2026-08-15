@@ -50,6 +50,14 @@ public partial class TruthTableViewModel
             Rows.Clear();
             StatusText = string.Format(Translate("Analysis.TruthTable.Failed"), ex.Message);
         }
+        catch (Exception ex)
+        {
+            // Unexpected simulation failure: never escape the async command and leave
+            // a stale "Extracting…" status behind.
+            HasResult = false;
+            Rows.Clear();
+            StatusText = string.Format(Translate("Analysis.TruthTable.Failed"), ex.Message);
+        }
         finally
         {
             IsProcessing = false;

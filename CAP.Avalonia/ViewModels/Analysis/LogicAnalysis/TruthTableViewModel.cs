@@ -72,6 +72,9 @@ public partial class TruthTableViewModel : ObservableObject
     /// </summary>
     public void ConfigureForSelection(ComponentViewModel? component, DesignCanvasViewModel? canvas)
     {
+        // A late-finishing extraction must not display results for the newly
+        // selected/deselected group.
+        _extractCts?.Cancel();
         _canvas = canvas;
         _group = component?.Component as ComponentGroup;
         var singleSelection = canvas == null || canvas.Selection.SelectedComponents.Count <= 1;
