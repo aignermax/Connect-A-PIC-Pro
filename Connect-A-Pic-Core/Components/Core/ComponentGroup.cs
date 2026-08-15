@@ -698,57 +698,16 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Creates a shallow clone of a Component with a new unique identifier.
+    /// Creates a deep clone of a Component with a new unique identifier.
+    /// Delegates to <see cref="Component.Clone"/> so every clone gets its own logical-pin
+    /// flow IDs and its own S-matrices — sharing them (as a shallow copy would) makes
+    /// copies of one group share simulation state instead of behaving as independent
+    /// instances.
     /// </summary>
     private Component CloneComponent(Component source)
     {
-        // Create new component with same S-matrix and structure
-        var cloned = new Component(
-            new Dictionary<int, SMatrix>(source.WaveLengthToSMatrixMap),
-            source.GetAllSliders().Select(s => new Slider(
-                Guid.NewGuid(),
-                s.Number,
-                s.Value,
-                s.MaxValue,
-                s.MinValue)).ToList(),
-            source.NazcaFunctionName,
-            source.NazcaFunctionParameters,
-            source.Parts,
-            source.TypeNumber,
-            $"{source.Identifier}_{Guid.NewGuid():N}",
-            source.Rotation90CounterClock,
-            source.PhysicalPins.Select(p => new PhysicalPin
-            {
-                Name = p.Name,
-                OffsetXMicrometers = p.OffsetXMicrometers,
-                OffsetYMicrometers = p.OffsetYMicrometers,
-                AngleDegrees = p.AngleDegrees,
-                LogicalPin = p.LogicalPin,
-                WaveguideWidthMicrometers = p.WaveguideWidthMicrometers,
-                Layer = p.Layer
-            }).ToList()
-        )
-        {
-            PhysicalX = source.PhysicalX,
-            PhysicalY = source.PhysicalY,
-            WidthMicrometers = source.WidthMicrometers,
-            HeightMicrometers = source.HeightMicrometers,
-            // Pose metadata must survive group cloning, else the next save/load actively
-            // rotates the already-transformed pins back (non-cardinal rotation, mirroring).
-            RotationDegrees = source.RotationDegrees,
-            IsMirroredHorizontally = source.IsMirroredHorizontally,
-            UnrotatedWidthMicrometers = source.UnrotatedWidthMicrometers,
-            UnrotatedHeightMicrometers = source.UnrotatedHeightMicrometers,
-            NazcaOriginOffsetX = source.NazcaOriginOffsetX,
-            NazcaOriginOffsetY = source.NazcaOriginOffsetY,
-            NazcaModuleName = source.NazcaModuleName,
-            // gdsfactory-backend marker must survive group copy/paste, else the clone
-            // exports as a stub and loses its PDK/process attribution (#570/#661 review).
-            GdsFactoryFunction = source.GdsFactoryFunction,
-            HumanReadableName = source.HumanReadableName, // Preserve human-readable name
-            IsLocked = false // Don't copy lock state
-        };
-
+        var cloned = (Component)source.Clone();
+        cloned.Identifier = $"{source.Identifier}_{Guid.NewGuid():N}";
         return cloned;
     }
 
