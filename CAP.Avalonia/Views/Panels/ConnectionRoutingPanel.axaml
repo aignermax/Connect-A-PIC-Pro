@@ -64,6 +64,10 @@
                         <TextBlock Text="{loc:Localize BendRadiusHelp.AutoTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize BendRadiusHelp.AutoBody}"/>
+
+                        <TextBlock Text="{loc:Localize BendRadiusHelp.SbendTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize BendRadiusHelp.SbendBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
