@@ -99,6 +99,44 @@ public class ProcessMinBendRadiusFloorTests
         SBendGeometry.ApplyRadiusFloor(30.0, floor).ShouldBe(expected, 1e-9);
     }
 
+    [Fact]
+    public void Auto_PerPinPairFloor_OverridesCanvasWideFloor()
+    {
+        // Issue #937: the per-connection provider (the endpoint components' chiplet
+        // process) supersedes the canvas-wide value for optical pairs.
+        var (router, connection) = CreateAutoLayout(offsetY: 100);
+        router.ProcessMinBendRadiusMicrometers = 5.0;
+        router.ProcessMinBendRadiusForPinPair = (_, _) => CornerstoneSinMinRadius;
+
+        connection.RecalculateTransmission(router);
+
+        var bends = connection.GetPathSegments().OfType<BendSegment>().ToList();
+        bends.ShouldNotBeEmpty();
+        bends.ShouldAllBe(b => b.RadiusMicrometers >= CornerstoneSinMinRadius - 1e-6);
+        connection.RoutedPath!.ViolatesProcessMinBendRadius.ShouldBeFalse();
+    }
+
+    [Fact]
+    public void ProcessFloorFor_NoPerPairProvider_KeepsCanvasWideFloor()
+    {
+        var (router, connection) = CreateAutoLayout(offsetY: 100);
+        router.ProcessMinBendRadiusMicrometers = CornerstoneSinMinRadius;
+
+        router.ProcessFloorFor(connection.StartPin, connection.EndPin)
+            .ShouldBe(CornerstoneSinMinRadius);
+    }
+
+    [Fact]
+    public void ProcessFloorFor_ElectricalPair_KeepsMetalFloor()
+    {
+        var (router, connection) = CreateAutoLayout(offsetY: 100);
+        connection.StartPin.LogicalPin = new Pin("output", 0, MatterType.Electricity, RectSide.Right);
+        router.MetalProcessMinBendRadiusMicrometers = 40.0;
+        router.ProcessMinBendRadiusForPinPair = (_, _) => CornerstoneSinMinRadius;
+
+        router.ProcessFloorFor(connection.StartPin, connection.EndPin).ShouldBe(40.0);
+    }
+
     /// <summary>
     /// Two components with laterally offset facing pins and an initialized A* grid, so the
     /// AUTO route must contain bends. The connection keeps its 10 µm default radius.

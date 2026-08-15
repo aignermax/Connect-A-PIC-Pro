@@ -20,9 +20,20 @@ public partial class WaveguideRouter
     /// this floor and <see cref="MinBendRadiusMicrometers"/>; when no clean path exists at the
     /// floor it retries at the connection radius and marks the result with
     /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/> so the design checks surface the
-    /// violation. 0 means no process constraint.
+    /// violation. 0 means no process constraint. For optical pin pairs this canvas-wide value
+    /// is superseded by <see cref="ProcessMinBendRadiusForPinPair"/> when that is wired.
     /// </summary>
     public double ProcessMinBendRadiusMicrometers { get; set; }
+
+    /// <summary>
+    /// Optional per-connection optical bend-radius floor (issue #937): given the routed pin
+    /// pair, returns the floor imposed by the endpoint components' own chiplet process, so a
+    /// multi-process canvas enforces each chiplet's foundry minimum instead of one
+    /// canvas-wide value. When unwired, optical pairs use
+    /// <see cref="ProcessMinBendRadiusMicrometers"/>; electrical pairs always use
+    /// <see cref="MetalProcessMinBendRadiusMicrometers"/>.
+    /// </summary>
+    public Func<PhysicalPin, PhysicalPin, double>? ProcessMinBendRadiusForPinPair { get; set; }
 
     /// <summary>
     /// Bend-radius floor (µm) for ELECTRICAL (metal trace) connections, sourced from the
@@ -290,13 +301,16 @@ public partial class WaveguideRouter
     /// <summary>
     /// The process bend-radius floor governing this pin pair: the metal floor for
     /// electrical pins (RF traces must bend at the metal cross-section radius),
-    /// the optical floor otherwise. Checking one pin is authoritative — cross-kind
-    /// pairs are rejected at connection creation time.
+    /// the optical floor otherwise — per endpoint pair when
+    /// <see cref="ProcessMinBendRadiusForPinPair"/> is wired (issue #937), the
+    /// canvas-wide <see cref="ProcessMinBendRadiusMicrometers"/> otherwise. Checking one
+    /// pin is authoritative — cross-kind pairs are rejected at connection creation time.
     /// </summary>
-    private double ProcessFloorFor(PhysicalPin startPin, PhysicalPin endPin) =>
+    public double ProcessFloorFor(PhysicalPin startPin, PhysicalPin endPin) =>
         startPin.MatterType == MatterType.Electricity || endPin.MatterType == MatterType.Electricity
             ? MetalProcessMinBendRadiusMicrometers
-            : ProcessMinBendRadiusMicrometers;
+            : ProcessMinBendRadiusForPinPair?.Invoke(startPin, endPin)
+              ?? ProcessMinBendRadiusMicrometers;
 
     /// <summary>
     /// The route for a perfect abutment: both pins sit at the same point, so the honest

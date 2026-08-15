@@ -388,6 +388,27 @@ public partial class MainViewModel : ObservableObject
         // the orchestrator refreshes the router before every routing pass, so AUTO cannot
         // bend tighter than the active process allows.
         _canvas.Routing.GetProcessMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
+        // Per-connection floor (issue #937): on a multi-process canvas each optical
+        // connection floors at the stricter of its two endpoint components' chiplet
+        // process instead of the one canvas-wide value. The factory runs on the UI
+        // thread and snapshots library + PDK state, so the returned pin-pair lookup is
+        // safe to call from the routing thread; pins whose PDK is unknown fall back to
+        // the canvas-wide value.
+        _canvas.Routing.CreateProcessMinBendRadiusForPinPair = () =>
+        {
+            var drafts = LeftPanel.GetLoadedPdkDrafts();
+            var templates = LeftPanel.AllTemplates.ToList();
+            double canvasWideFallback = resolveMinBendRadiusMicrometers();
+            return (startPin, endPin) =>
+            {
+                string? startPdk = ViewModels.Library.ComponentPdkSourceResolver.Resolve(
+                    startPin.ParentComponent, templates);
+                string? endPdk = ViewModels.Library.ComponentPdkSourceResolver.Resolve(
+                    endPin.ParentComponent, templates);
+                return CAP_DataAccess.Components.ComponentDraftMapper.WaveguideBendRadiusResolver
+                    .ResolveForEndpointPdks(startPdk, endPdk, drafts, canvasWideFallback);
+            };
+        };
         // Metal traces are curved like waveguides (#854): the metal spec's bend radius floors
         // the router for electrical connections and its trace width pads their grid obstacles.
         // The bend-handle drag clamp for metal traces uses the same source.

@@ -70,20 +70,72 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             double? smallest = null;
             foreach (var process in processes)
             {
-                var xsections = process?.Xsections;
-                if (xsections == null)
-                    continue;
-
-                foreach (var xsection in xsections)
-                {
-                    if (xsection.Kind != XsectionKind.Optical || xsection.MinRadiusUm <= 0)
-                        continue;
-                    if (smallest == null || xsection.MinRadiusUm < smallest.Value)
-                        smallest = xsection.MinRadiusUm;
-                }
+                var declared = DeclaredOpticalMinimum(process);
+                if (declared != null && (smallest == null || declared.Value < smallest.Value))
+                    smallest = declared;
             }
 
             return smallest ?? FallbackMinimumMicrometers;
+        }
+
+        /// <summary>
+        /// Resolves the bend-radius floor for ONE connection from the PDK names of its two
+        /// endpoint components (issue #937): each endpoint contributes the optical minimum of
+        /// its own PDK's process and the STRICTER of the two governs the whole route — a
+        /// cross-process connection must never undercut the tighter chiplet's foundry floor,
+        /// and a same-chiplet pair is no longer diluted by a second member PDK's looser
+        /// minimum. Endpoints whose PDK is unknown (null name, not loaded, built-in) or whose
+        /// process declares no optical minimum contribute nothing; when neither endpoint
+        /// resolves, <paramref name="fallback"/> (typically the design-wide
+        /// <see cref="Resolve(ActiveProcessSelection, IReadOnlyList{PdkDraft}, IReadOnlyCollection{string}?)"/>
+        /// result) applies.
+        /// </summary>
+        /// <param name="startPdkName">PDK source name of the start pin's component, or null.</param>
+        /// <param name="endPdkName">PDK source name of the end pin's component, or null.</param>
+        /// <param name="loadedPdks">All currently loaded PDK drafts.</param>
+        /// <param name="fallback">Floor to use when neither endpoint resolves a minimum.</param>
+        public static double ResolveForEndpointPdks(
+            string? startPdkName, string? endPdkName,
+            IReadOnlyList<PdkDraft>? loadedPdks, double fallback)
+        {
+            double? startMinimum = EndpointMinimum(startPdkName, loadedPdks);
+            double? endMinimum = EndpointMinimum(endPdkName, loadedPdks);
+
+            if (startMinimum == null) return endMinimum ?? fallback;
+            if (endMinimum == null) return startMinimum.Value;
+            return Math.Max(startMinimum.Value, endMinimum.Value);
+        }
+
+        /// <summary>The declared optical minimum of the named PDK's process, or null.</summary>
+        private static double? EndpointMinimum(string? pdkName, IReadOnlyList<PdkDraft>? loadedPdks)
+        {
+            if (string.IsNullOrEmpty(pdkName) || loadedPdks == null)
+                return null;
+
+            var process = loadedPdks.FirstOrDefault(
+                d => string.Equals(d.Name, pdkName, StringComparison.OrdinalIgnoreCase))?.Process;
+            return DeclaredOpticalMinimum(process);
+        }
+
+        /// <summary>
+        /// The smallest positive optical <see cref="ProcessXsection.MinRadiusUm"/> of one
+        /// process definition, or null when it declares none.
+        /// </summary>
+        private static double? DeclaredOpticalMinimum(ProcessDefinition? process)
+        {
+            if (process?.Xsections == null)
+                return null;
+
+            double? smallest = null;
+            foreach (var xsection in process.Xsections)
+            {
+                if (xsection.Kind != XsectionKind.Optical || xsection.MinRadiusUm <= 0)
+                    continue;
+                if (smallest == null || xsection.MinRadiusUm < smallest.Value)
+                    smallest = xsection.MinRadiusUm;
+            }
+
+            return smallest;
         }
     }
 }

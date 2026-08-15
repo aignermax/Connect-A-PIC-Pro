@@ -14,8 +14,9 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 3–5, 7–8) —
-/// each Skip links the issue filed for that exact single-process assumption. See
+/// Documented-red inventory stations of the multi-process journey (steps 3, 4, 7, 8 —
+/// step 5 landed with #937) — each Skip links the issue filed for that exact
+/// single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
@@ -81,17 +82,6 @@ public partial class MultiProcessChipletJourneyTests
         panel.Issues.Count(i => i.Type == DesignIssueType.WaveguideBelowMinWidth
                 && i.Description.Contains("si_")).ShouldBe(0,
             "chiplet B must stay silent: SiEPIC declares no minWidthUm — no invented values (#926)");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): the router bend-radius floor is one canvas-wide value (Playground fallback 10 µm) — per-chiplet floors are https://github.com/aignermax/Lunima/issues/937")]
-    public void Step5_BendRadiusFloor_FollowsEachChipletsProcess()
-    {
-        // What production applies on a two-process (Playground) canvas: no member PDKs,
-        // so the resolver falls back to the generic 10 µm for EVERY route.
-        var floorForChipletA = WaveguideBendRadiusResolver.Resolve(new ProcessDefinition?[0]);
-
-        floorForChipletA.ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
-            "chiplet A's routes must honor the Cornerstone 30 µm floor, not the fallback (#937)");
     }
 
     [Fact(Skip = "Single-process assumption (#933 inventory): .lun persists one design-level ActiveProcess and no per-chiplet process binding — https://github.com/aignermax/Lunima/issues/938")]

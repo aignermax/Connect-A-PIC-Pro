@@ -65,6 +65,18 @@ public class RoutingOrchestrator
     public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? GetMetalRoutingSpec { get; set; }
 
     /// <summary>
+    /// Factory for the per-connection optical bend-radius floor (issue #937), wired by
+    /// <c>MainViewModel</c> to <c>WaveguideBendRadiusResolver.ResolveForEndpointPdks</c>.
+    /// The FACTORY runs on the caller's UI thread at the start of every routing pass (it
+    /// snapshots library and PDK state); the returned pin-pair lookup is pure and safe to
+    /// invoke from the routing thread, and is pushed onto
+    /// <see cref="WaveguideRouter.ProcessMinBendRadiusForPinPair"/>. When unwired, the
+    /// router keeps the canvas-wide <see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>.
+    /// </summary>
+    public Func<Func<CAP_Core.Components.Core.PhysicalPin, CAP_Core.Components.Core.PhysicalPin, double>>?
+        CreateProcessMinBendRadiusForPinPair { get; set; }
+
+    /// <summary>
     /// Raised when IsRouting or RoutingStatusText changes.
     /// </summary>
     public event Action? StateChanged;
@@ -124,6 +136,8 @@ public class RoutingOrchestrator
         // UI thread — the provider reads ViewModel state).
         if (GetProcessMinBendRadiusMicrometers != null)
             _router.ProcessMinBendRadiusMicrometers = GetProcessMinBendRadiusMicrometers();
+        if (CreateProcessMinBendRadiusForPinPair != null)
+            _router.ProcessMinBendRadiusForPinPair = CreateProcessMinBendRadiusForPinPair();
         if (GetMetalRoutingSpec != null)
         {
             var metalSpec = GetMetalRoutingSpec();

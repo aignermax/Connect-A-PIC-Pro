@@ -124,4 +124,90 @@ public class WaveguideBendRadiusResolverTests
             active, new List<PdkDraft> { customPdk }, effectiveMemberPdkNames: new[] { "MyCustomFab" })
             .ShouldBe(25);
     }
+
+    [Fact]
+    public void ResolveForEndpointPdks_SamePdkPair_ResolvesThatPdksMinimum()
+    {
+        var pdks = new List<PdkDraft>
+        {
+            PdkWithOpticalMinimum("Cornerstone", 30),
+            PdkWithOpticalMinimum("SiEPIC", 5),
+        };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("SiEPIC", "SiEPIC", pdks, fallback: 10)
+            .ShouldBe(5, "a same-chiplet pair is not diluted by the other PDK's looser minimum");
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdks_CrossProcessPair_StricterFloorWins()
+    {
+        var pdks = new List<PdkDraft>
+        {
+            PdkWithOpticalMinimum("Cornerstone", 30),
+            PdkWithOpticalMinimum("SiEPIC", 5),
+        };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("Cornerstone", "SiEPIC", pdks, fallback: 10)
+            .ShouldBe(30, "the cross-process route must never undercut the tighter chiplet's floor");
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("SiEPIC", "Cornerstone", pdks, fallback: 10)
+            .ShouldBe(30, "pin order does not matter");
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdks_OneEndpointUnknown_KeepsTheOthersMinimum()
+    {
+        var pdks = new List<PdkDraft> { PdkWithOpticalMinimum("Cornerstone", 30) };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("Cornerstone", null, pdks, fallback: 10)
+            .ShouldBe(30);
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("Cornerstone", "NotLoaded", pdks, fallback: 10)
+            .ShouldBe(30);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdks_PdkWithoutOpticalMinimum_ContributesNothing()
+    {
+        var pdks = new List<PdkDraft>
+        {
+            PdkWithOpticalMinimum("Cornerstone", 30),
+            new PdkDraft { Name = "NoMin", Process = new ProcessDefinition { Name = "NoMin" } },
+        };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("NoMin", "Cornerstone", pdks, fallback: 10)
+            .ShouldBe(30, "the endpoint that declares no minimum must not drag the floor down");
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("NoMin", "NoMin", pdks, fallback: 10)
+            .ShouldBe(10, "with no declared minimum on either side the fallback applies");
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdks_NeitherEndpointResolves_ReturnsFallback()
+    {
+        var pdks = new List<PdkDraft> { PdkWithOpticalMinimum("Cornerstone", 30) };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks(null, null, pdks, fallback: 10).ShouldBe(10);
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("A", "B", null, fallback: 10).ShouldBe(10);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdks_NameMatchIsCaseInsensitive()
+    {
+        var pdks = new List<PdkDraft> { PdkWithOpticalMinimum("Cornerstone", 30) };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks("cornerstone", "CORNERSTONE", pdks, fallback: 10)
+            .ShouldBe(30);
+    }
+
+    private static PdkDraft PdkWithOpticalMinimum(string name, double minRadiusUm) =>
+        new()
+        {
+            Name = name,
+            Process = new ProcessDefinition
+            {
+                Name = name,
+                Xsections = new List<ProcessXsection>
+                {
+                    new() { Name = "Strip", Kind = XsectionKind.Optical, MinRadiusUm = minRadiusUm }
+                }
+            }
+        };
 }

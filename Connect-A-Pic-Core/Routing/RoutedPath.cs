@@ -36,8 +36,10 @@ public class RoutedPath
     public bool IsPlaceholderGeometry { get; set; } = false;
 
     /// <summary>
-    /// True when the path could only be routed with a bend radius below the active
-    /// fabrication process' minimum (<see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>).
+    /// True when the path could only be routed with a bend radius below the governing
+    /// fabrication process' minimum — the endpoint chiplet's per-connection floor
+    /// (<see cref="WaveguideRouter.ProcessMinBendRadiusForPinPair"/>) when wired, else the
+    /// canvas-wide <see cref="WaveguideRouter.ProcessMinBendRadiusMicrometers"/>.
     /// The geometry itself is clean, but the design violates the process rule; the
     /// design checks surface it as a <c>BendRadiusBelowProcessMinimum</c> issue.
     /// </summary>

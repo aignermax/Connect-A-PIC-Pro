@@ -44,7 +44,10 @@ namespace UnitTests.Components;
 ///         canvas cannot take a second-process chiplet; only Playground can mix.
 ///   Step 4 (RED, #936): DRC-lite rules come from the single active process — a
 ///         two-process design checks nothing PDK-dependent at all.
-///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
+///   Step 5 (green, #937): the router resolves the bend-radius floor per connection
+///         from the endpoint components' chiplet process — chiplet A routes at
+///         Cornerstone's 30 µm, chiplet B at SiEPIC's 5 µm, cross-process pairs at
+///         the stricter of the two.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
 ///         groups, the abutment and the physics survive (the design reloads as
 ///         Playground: pinned here as current behavior, #938 is the fix).
@@ -52,11 +55,11 @@ namespace UnitTests.Components;
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
 ///
-/// The red steps 3, 5 and 8 additionally carry GREEN "today" pins in the
+/// The red steps 3 and 8 additionally carry GREEN "today" pins in the
 /// CurrentBehavior partial: the canvas-global lock really does reject the second
-/// process, the Playground bend floor really is one fallback for everything, and
-/// GDS export really does size every route with one majority cross-section — so a
-/// future per-chiplet fix turns those pins red as a tripwire.
+/// process, and GDS export really does size every route with one majority
+/// cross-section — so a future per-chiplet fix turns those pins red as a tripwire.
+/// (Step 5's tripwire fired with #937 and was replaced by the green step itself.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests : IDisposable
 {
@@ -151,6 +154,41 @@ public partial class MultiProcessChipletJourneyTests : IDisposable
             "Step 2: the Y-branch's free arm carries its physical share — the boundary is truly crossed");
         leakage.ShouldBeLessThan(0.02,
             "Step 2: only the Y-branch's port-1 reflection leaks back to the unexcited coupler input");
+    }
+
+    [Fact]
+    public void Step5_BendRadiusFloor_FollowsEachChipletsProcess()
+    {
+        var design = MultiProcessChipletJourneyDesign.BuildComposed();
+        var drafts = new List<PdkDraft> { design.Cornerstone, design.Siepic };
+        double canvasWideFallback = WaveguideBendRadiusResolver.Resolve(
+            ActiveProcessSelection.Playground(), drafts);
+        canvasWideFallback.ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers,
+            "Step 5: Playground knows no member PDKs — the canvas-wide value is the bare fallback");
+
+        // The MainViewModel wiring, headless: each endpoint component's own PDK resolves
+        // its optical minimum and the STRICTER of the pair governs the whole route (#937).
+        design.Canvas.Router.ProcessMinBendRadiusForPinPair = (startPin, endPin) =>
+            WaveguideBendRadiusResolver.ResolveForEndpointPdks(
+                ComponentPdkSourceResolver.Resolve(startPin.ParentComponent, design.Templates),
+                ComponentPdkSourceResolver.Resolve(endPin.ParentComponent, design.Templates),
+                drafts, canvasWideFallback);
+
+        var csCoupler = MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o4");
+        var csMmi = MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_mmi_o3");
+        var siYBranch = MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_ybranch_port 3");
+        var siTaper = MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2");
+
+        design.Canvas.Router.ProcessFloorFor(csCoupler, csMmi).ShouldBe(
+            MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+            "Step 5: a route inside chiplet A honors Cornerstone's 30 µm floor, not the fallback");
+        design.Canvas.Router.ProcessFloorFor(siYBranch, siTaper).ShouldBe(
+            SiepicMinBendRadiusUm,
+            "Step 5: a route inside chiplet B honors SiEPIC's 5 µm floor — no longer over-constrained");
+        design.Canvas.Router.ProcessFloorFor(csMmi, siYBranch).ShouldBe(
+            MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+            "Step 5: a cross-process route honors the STRICTER chiplet's floor — " +
+            "anything looser would undercut Cornerstone's foundry minimum");
     }
 
     // ── Journey helpers ─────────────────────────────────────────────────────────

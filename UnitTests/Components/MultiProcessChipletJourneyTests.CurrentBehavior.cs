@@ -10,9 +10,10 @@ namespace UnitTests.Components;
 
 /// <summary>
 /// Green "today" pins for the documented-red stations of the multi-process journey:
-/// each test proves the current single-process behavior the red steps 3 (#935), 5
-/// (#937) and 8 (#939) describe, so a future per-chiplet fix turns the pin red as a
-/// tripwire. See <see cref="MultiProcessChipletJourneyTests"/> for the full journey.
+/// each test proves the current single-process behavior the red steps 3 (#935) and 8
+/// (#939) describe, so a future per-chiplet fix turns the pin red as a tripwire.
+/// (Step 5's pin fired with #937 and was replaced by the per-chiplet assertion below.)
+/// See <see cref="MultiProcessChipletJourneyTests"/> for the full journey.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -45,8 +46,9 @@ public partial class MultiProcessChipletJourneyTests
     [Fact]
     public void BendRadius_LockedProcess_ResolvesEachProcessMinimum_Today()
     {
-        // Companion to red step 5 (#937): per-process limits exist and are honored —
-        // but only while the whole design is locked to that one process.
+        // Companion to step 5 (#937): the design-wide resolution still exists and
+        // stays honored while the whole design is locked to one process — the
+        // per-connection floor only takes over where endpoint PDKs differ.
         var (cornerstone, siepic, catalog) = LoadProcessCatalog();
         var pdks = new List<PdkDraft> { cornerstone, siepic };
 
@@ -63,19 +65,31 @@ public partial class MultiProcessChipletJourneyTests
     }
 
     [Fact]
-    public void BendRadius_Playground_OneFallbackForBothChiplets_Today()
+    public void BendRadius_Playground_PerChipletFloors_FromEndpointPdks()
     {
-        // Companion to red step 5 (#937): Playground is the only mode that can hold both
-        // chiplets — and there the resolver knows neither chiplet's limit; one global
-        // fallback silently covers every route in the design.
+        // Companion to green step 5 (#937, the fired tripwire): even in Playground —
+        // the only mode that can hold both chiplets — the per-connection resolver
+        // reads each endpoint PDK's own process minimum instead of one global value.
         var (cornerstone, siepic, _) = LoadProcessCatalog();
         var pdks = new List<PdkDraft> { cornerstone, siepic };
+        const double canvasWideFallback = WaveguideBendRadiusResolver.FallbackMinimumMicrometers;
 
-        var resolved = WaveguideBendRadiusResolver.Resolve(ActiveProcessSelection.Playground(), pdks);
-
-        resolved.ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
-        resolved.ShouldNotBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm);
-        resolved.ShouldNotBe(SiepicMinBendRadiusUm);
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks(
+                cornerstone.Name, cornerstone.Name, pdks, canvasWideFallback)
+            .ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+                "a Cornerstone↔Cornerstone pair floors at xs_nc's 30 µm");
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks(
+                siepic.Name, siepic.Name, pdks, canvasWideFallback)
+            .ShouldBe(SiepicMinBendRadiusUm,
+                "a SiEPIC↔SiEPIC pair floors at the strip 5 µm — no longer over-constrained");
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks(
+                cornerstone.Name, siepic.Name, pdks, canvasWideFallback)
+            .ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+                "a cross-process pair takes the STRICTER floor, not the minimum over member PDKs");
+        WaveguideBendRadiusResolver.ResolveForEndpointPdks(
+                null, null, pdks, canvasWideFallback)
+            .ShouldBe(canvasWideFallback,
+                "endpoints without a resolvable PDK keep the canvas-wide fallback");
     }
 
     [Fact]
