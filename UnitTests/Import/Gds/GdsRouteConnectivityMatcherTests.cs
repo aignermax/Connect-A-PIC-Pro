@@ -455,4 +455,123 @@ public class GdsRouteConnectivityMatcherTests
         pair.B.PinName.ShouldBe("in");
         result.ConsumedPolygonIndexes.ShouldBe(new[] { 0 });
     }
+
+    [Fact]
+    public void Match_PortLabelCoincidentWithTouchedPin_IsNotAThirdTouch()
+    {
+        // Own-export shape: a top-cell port label stamped EXACTLY on the coupler
+        // pin the route ends at. Without the coincidence rule the network reads
+        // as a 3-pin junction and the honest 2-pin route stays frozen; the label
+        // is the same joint, so the route must pair and the port must stay
+        // unconsumed (it remains the design's external port).
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("in", 0, 2), Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2), Pin("out", 25, 2) },
+        };
+        var topPortPins = new[] { Pin("GC_out", 10, 2) };
+        var infos = new List<string>();
+
+        var result = Match(new[] { Bridge() }, pinsPerInstance, topPortPins, infos);
+
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.IsRouteDerived.ShouldBeTrue();
+        pair.A.InstanceIndex.ShouldBe(0);
+        pair.A.PinName.ShouldBe("out");
+        pair.B.InstanceIndex.ShouldBe(1);
+        pair.B.PinName.ShouldBe("in");
+        result.ConsumedPolygonIndexes.ShouldBe(new[] { 0 });
+        result.ConsumedInstancePins.ShouldBe(new[] { (0, 1), (1, 0) }, ignoreOrder: true);
+        result.ConsumedPortIndexes.ShouldBeEmpty(
+            "the coincident label is the same joint — the port stays the design's external port");
+        infos.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Match_PortLabelsCoincidentWithBothTouchedPins_CouplerToCouplerRoute_Pairs()
+    {
+        // Coupler-to-coupler route: BOTH ends carry an own-export port label —
+        // 4 touches reduce to the 2 real pins.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2) },
+        };
+        var topPortPins = new[] { Pin("GC1_out", 10, 2), Pin("GC2_in", 15, 2) };
+
+        var result = Match(new[] { Bridge() }, pinsPerInstance, topPortPins);
+
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.A.InstanceIndex.ShouldBe(0);
+        pair.B.InstanceIndex.ShouldBe(1);
+        result.ConsumedPolygonIndexes.ShouldBe(new[] { 0 });
+        result.ConsumedPortIndexes.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void Match_CoincidentPortLabelPlusRealExternalPort_PairsPinWithRealPort()
+    {
+        // Route from a coupler pin to a genuine external port: the label on the
+        // coupler pin drops out, the pin pairs with the real port, and ONLY the
+        // real port is consumed — the coupler's own label stays external.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("out", 10, 2) },
+        };
+        var topPortPins = new[] { Pin("GC_out", 10, 2), Pin("o1", 15, 2) };
+
+        var result = Match(new[] { Bridge() }, pinsPerInstance, topPortPins);
+
+        var pair = result.Pairs.ShouldHaveSingleItem();
+        pair.A.InstanceIndex.ShouldBe(0);
+        pair.A.PinName.ShouldBe("out");
+        pair.B.IsTopLevelPort.ShouldBeTrue();
+        pair.B.PinName.ShouldBe("o1");
+        result.ConsumedPortIndexes.ShouldBe(new[] { 1 });
+        result.ConsumedInstancePins.ShouldBe(new[] { (0, 0) });
+    }
+
+    [Fact]
+    public void Match_PortLabelBeyondCoincidenceTolerance_StaysAJunction()
+    {
+        // The label touches the bridge's top edge (0.9·tol above it) but sits
+        // 1.15 µm from the pin point — NOT the same joint. Three genuine
+        // touches stay junction topology.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2) },
+        };
+        var topPortPins = new[] { Pin("edge_port", 10, 2.25 + 0.9 * Tol) };
+        var infos = new List<string>();
+
+        var result = Match(new[] { Bridge() }, pinsPerInstance, topPortPins, infos);
+
+        result.Pairs.ShouldBeEmpty();
+        result.ConsumedPolygonIndexes.ShouldBeEmpty();
+        infos.ShouldHaveSingleItem().ShouldContain("junction with 3 pins");
+    }
+
+    [Fact]
+    public void Match_ThreePinJunctionWithCoincidentPortLabel_StillStaysFrozen()
+    {
+        // A real 3-pin junction decorated with an own-export label: dropping
+        // the coincident label must not make a guessable 2-pin network out of
+        // genuine junction topology.
+        var pinsPerInstance = new IReadOnlyList<GdsAbsolutePin>[]
+        {
+            new[] { Pin("out", 10, 2) },
+            new[] { Pin("in", 15, 2) },
+            new[] { Pin("tap", 12.5, 2) },
+        };
+        var topPortPins = new[] { Pin("GC_out", 10, 2) };
+        var infos = new List<string>();
+
+        var result = Match(new[] { Bridge() }, pinsPerInstance, topPortPins, infos);
+
+        result.Pairs.ShouldBeEmpty();
+        result.ConsumedPolygonIndexes.ShouldBeEmpty();
+        result.ConsumedPortIndexes.ShouldBeEmpty();
+        infos.ShouldHaveSingleItem().ShouldContain("junction with 3 pins");
+    }
 }
