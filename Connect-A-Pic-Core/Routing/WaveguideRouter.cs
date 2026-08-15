@@ -20,7 +20,8 @@ public partial class WaveguideRouter
     /// this floor and <see cref="MinBendRadiusMicrometers"/>; when no clean path exists at the
     /// floor it retries at the connection radius and marks the result with
     /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/> so the design checks surface the
-    /// violation. 0 means no process constraint.
+    /// violation. 0 means no process constraint. This is the canvas-wide value —
+    /// <see cref="ConnectionProcessFloorProvider"/> can override it per connection.
     /// </summary>
     public double ProcessMinBendRadiusMicrometers { get; set; }
 
@@ -216,7 +217,9 @@ public partial class WaveguideRouter
     /// default) the DIRECT styled geometry is tried first and A* only runs when obstacles
     /// actually block the styled path (issue #860). The A* attempt itself is two-phase.
     /// The first attempt honors the process bend-radius floor
-    /// (<see cref="ProcessMinBendRadiusMicrometers"/>); when no clean path exists at the floor,
+    /// (<see cref="ResolveProcessFloorFor"/> — per-connection when
+    /// <see cref="ConnectionProcessFloorProvider"/> is wired, else the canvas-wide
+    /// <see cref="ProcessMinBendRadiusMicrometers"/>); when no clean path exists at the floor,
     /// it retries at the connection radius and marks the result with
     /// <see cref="RoutedPath.ViolatesProcessMinBendRadius"/>. Falls back to Manhattan routing
     /// if all A* attempts fail; a self-intersecting or blocked fallback at the floor radius
@@ -248,7 +251,8 @@ public partial class WaveguideRouter
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
         double connectionRadius = MinBendRadiusMicrometers;
-        double effectiveRadius = Math.Max(connectionRadius, ProcessFloorFor(startPin, endPin));
+        double processFloor = ResolveProcessFloorFor(startPin, endPin);
+        double effectiveRadius = Math.Max(connectionRadius, processFloor);
         bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
 
         if (PreferDirectStyledRoutes)
@@ -286,17 +290,6 @@ public partial class WaveguideRouter
         return RouteManhattanFallback(startX, startY, startAngle, endX, endY, endInputAngle,
                                       connectionRadius, effectiveRadius, floorRaisesRadius);
     }
-
-    /// <summary>
-    /// The process bend-radius floor governing this pin pair: the metal floor for
-    /// electrical pins (RF traces must bend at the metal cross-section radius),
-    /// the optical floor otherwise. Checking one pin is authoritative — cross-kind
-    /// pairs are rejected at connection creation time.
-    /// </summary>
-    private double ProcessFloorFor(PhysicalPin startPin, PhysicalPin endPin) =>
-        startPin.MatterType == MatterType.Electricity || endPin.MatterType == MatterType.Electricity
-            ? MetalProcessMinBendRadiusMicrometers
-            : ProcessMinBendRadiusMicrometers;
 
     /// <summary>
     /// The route for a perfect abutment: both pins sit at the same point, so the honest

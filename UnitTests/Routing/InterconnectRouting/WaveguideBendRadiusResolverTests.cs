@@ -124,4 +124,115 @@ public class WaveguideBendRadiusResolverTests
             active, new List<PdkDraft> { customPdk }, effectiveMemberPdkNames: new[] { "MyCustomFab" })
             .ShouldBe(25);
     }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_TwoChipletProcesses_StricterEndpointGoverns()
+    {
+        // The #937 scenario: a Cornerstone SiN chiplet (30 µm foundry floor) next to a
+        // SiEPIC SOI chiplet (5 µm). A cross-chiplet connection must keep the stricter
+        // floor — the canvas-wide minimum-over-members (5 µm) under-enforced Cornerstone.
+        var drafts = new List<PdkDraft> { CornerstoneSinPdk(), SiepicSoiPdk() };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("Cornerstone SiN", "SiEPIC SOI", drafts)
+            .ShouldBe(30);
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("SiEPIC SOI", "Cornerstone SiN", drafts)
+            .ShouldBe(30);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_SameChipletEndpoints_UsesThatChipletsFloor()
+    {
+        var drafts = new List<PdkDraft> { CornerstoneSinPdk(), SiepicSoiPdk() };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("Cornerstone SiN", "Cornerstone SiN", drafts)
+            .ShouldBe(30);
+        // SiEPIC-to-SiEPIC resolves BELOW the generic 10 µm fallback: the foundry declares
+        // 5 µm legal, so the canvas-wide fallback no longer over-constrains the route.
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("SiEPIC SOI", "SiEPIC SOI", drafts)
+            .ShouldBe(5);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_OneEndpointUnresolvable_UsesTheOtherEndpointsFloor()
+    {
+        var drafts = new List<PdkDraft> { CornerstoneSinPdk() };
+
+        // Built-in / group / PDK-less components carry no PDK source (null).
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("Cornerstone SiN", null, drafts)
+            .ShouldBe(30);
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames(null, "Cornerstone SiN", drafts)
+            .ShouldBe(30);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_NeitherEndpointResolvable_ReturnsNull()
+    {
+        var drafts = new List<PdkDraft> { CornerstoneSinPdk() };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames(null, null, drafts).ShouldBeNull();
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("Unknown PDK", "Also Unknown", drafts)
+            .ShouldBeNull();
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("Cornerstone SiN", "Cornerstone SiN", null)
+            .ShouldBeNull();
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_PdkWithoutOpticalMinimum_HasNoOpinion()
+    {
+        var noOpticalMin = new PdkDraft
+        {
+            Name = "NoMin PDK",
+            Process = new ProcessDefinition
+            {
+                Name = "NoMin",
+                Xsections = new List<ProcessXsection>
+                {
+                    new() { Name = "E200", Kind = XsectionKind.Optical, MinRadiusUm = 0 },
+                    new() { Name = "MetalDC", Kind = XsectionKind.Metal, MinRadiusUm = 8 }
+                }
+            }
+        };
+        var drafts = new List<PdkDraft> { noOpticalMin, CornerstoneSinPdk() };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("NoMin PDK", "NoMin PDK", drafts)
+            .ShouldBeNull();
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("NoMin PDK", "Cornerstone SiN", drafts)
+            .ShouldBe(30);
+    }
+
+    [Fact]
+    public void ResolveForEndpointPdkNames_PdkNameMatchesCaseInsensitive()
+    {
+        var drafts = new List<PdkDraft> { CornerstoneSinPdk() };
+
+        WaveguideBendRadiusResolver.ResolveForEndpointPdkNames("cornerstone sin", "CORNERSTONE SIN", drafts)
+            .ShouldBe(30);
+    }
+
+    private static PdkDraft CornerstoneSinPdk() => new()
+    {
+        Name = "Cornerstone SiN",
+        Process = new ProcessDefinition
+        {
+            Name = "Cornerstone SiN",
+            Xsections = new List<ProcessXsection>
+            {
+                new() { Name = "sin300", Kind = XsectionKind.Optical, MinRadiusUm = 30 },
+                new() { Name = "MetalDC", Kind = XsectionKind.Metal, MinRadiusUm = 5 }
+            }
+        }
+    };
+
+    private static PdkDraft SiepicSoiPdk() => new()
+    {
+        Name = "SiEPIC SOI",
+        Process = new ProcessDefinition
+        {
+            Name = "SiEPIC SOI",
+            Xsections = new List<ProcessXsection>
+            {
+                new() { Name = "strip", Kind = XsectionKind.Optical, MinRadiusUm = 5 }
+            }
+        }
+    };
 }
