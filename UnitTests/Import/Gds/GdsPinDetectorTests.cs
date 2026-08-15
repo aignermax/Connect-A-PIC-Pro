@@ -38,6 +38,42 @@ public class GdsPinDetectorTests
         pin.WidthUm.ShouldBe(0, Tolerance);
     }
 
+    // ── Pin layer attribution (DRC-lite) ─────────────────────────────────────
+
+    [Fact]
+    public void Label_Pin_CarriesThePortLabelsLayer()
+    {
+        var cell = Cell(Label(1, 10, "o1", x: 0, y: 3));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldHaveSingleItem().Layer.ShouldBe(1);
+    }
+
+    [Fact]
+    public void PortShape_Pin_CarriesThePortShapesLayer()
+    {
+        var cell = Cell(Poly(1, 10, (0, 1.5), (0.5, 1.5), (0.5, 2.5), (0, 2.5), (0, 1.5)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        var pin = pins.ShouldHaveSingleItem();
+        pin.Source.ShouldBe(DetectedPinSource.PortShape);
+        pin.Layer.ShouldBe(1);
+    }
+
+    [Fact]
+    public void EdgeHeuristic_Pins_CarryTheWaveguideLayer_WhenUnambiguous()
+    {
+        // Straight waveguide on layer 1/0 touching the left and right edges.
+        var cell = Cell(Poly(1, 0, (0, 1.75), (10, 1.75), (10, 2.25), (0, 2.25), (0, 1.75)));
+
+        var pins = GdsPinDetector.Detect(cell, Box10x4);
+
+        pins.ShouldNotBeEmpty();
+        pins.ShouldAllBe(p => p.Layer == 1);
+    }
+
     [Fact]
     public void Label_SlightlyInsideLeftEdge_StillUsesThatEdge()
     {
@@ -1194,17 +1230,23 @@ public class GdsPinDetectorTests
                         ? SegmentOutwardAngleDegrees(geometry.Polygon, geometry.P1, geometry.P2)
                         : OutwardAngleDegrees(edge),
                     WidthUm = 0,
+                    Layer = text.Layer,
                     Source = DetectedPinSource.Label,
                     IsElectrical = InferLabelPinKind(text.Text, geometry),
                 }));
             }
 
-            var touches = new SortedList<CellEdge, List<(double Start, double End)>>();
-            foreach (var polygon in flattened.Polygons)
-            {
-                if (!ContainsLayer(options.WaveguideLayers, polygon.Layer, polygon.DataType))
-                    continue;
+            var waveguidePolygons = flattened.Polygons
+                .Where(p => ContainsLayer(options.WaveguideLayers, p.Layer, p.DataType))
+                .ToList();
+            int? waveguideLayer = waveguidePolygons.Count > 0
+                && waveguidePolygons.All(p => p.Layer == waveguidePolygons[0].Layer)
+                    ? waveguidePolygons[0].Layer
+                    : null;
 
+            var touches = new SortedList<CellEdge, List<(double Start, double End)>>();
+            foreach (var polygon in waveguidePolygons)
+            {
                 foreach (var (p1, p2) in Segments(polygon))
                 {
                     CellEdge? edge = TouchingEdge(p1, p2, cellBBox, tolerance);
@@ -1239,6 +1281,7 @@ public class GdsPinDetectorTests
                         YUm = ToAppY(midpoint.Y, cellBBox),
                         AngleDegrees = OutwardAngleDegrees(edge),
                         WidthUm = width,
+                        Layer = waveguideLayer,
                         Source = DetectedPinSource.EdgeHeuristic,
                     }));
                 }

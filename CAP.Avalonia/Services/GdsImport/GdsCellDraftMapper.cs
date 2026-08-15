@@ -42,7 +42,14 @@ public static class GdsCellDraftMapper
     /// Optional warning sink (the import's warning list) receiving one entry per
     /// renamed pin; null discards the warnings (renames still happen).
     /// </param>
-    public static PdkComponentDraft Map(GdsCellDraft draft, string gdsFilePathForRawCode, List<string>? warnings = null)
+    /// <param name="processDefaultWidthUm">
+    /// Waveguide width (µm) of the active process' default optical cross-section,
+    /// stamped on optical pins for the DRC-lite pin-mismatch rule; the pin layer
+    /// always comes from the detected port layer. Null leaves the width null, so
+    /// the rule stays silent instead of guessing.
+    /// </param>
+    public static PdkComponentDraft Map(GdsCellDraft draft, string gdsFilePathForRawCode, List<string>? warnings = null,
+        double? processDefaultWidthUm = null)
     {
         ArgumentNullException.ThrowIfNull(draft);
         ArgumentException.ThrowIfNullOrEmpty(gdsFilePathForRawCode);
@@ -69,6 +76,8 @@ public static class GdsCellDraftMapper
                 PinKind = p.IsElectrical == true
                     ? CAP_Core.Components.PinKinds.PinKindHelper.ElectricalKindName
                     : null,
+                WaveguideWidthMicrometers = p.IsElectrical == true ? null : processDefaultWidthUm,
+                Layer = p.Layer,
             }).ToList(),
             SMatrix = null,
             RawCode = SubstituteGdsFileName(draft.RawCode, gdsFilePathForRawCode),

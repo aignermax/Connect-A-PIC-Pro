@@ -161,6 +161,7 @@ public static partial class GdsPinDetector
                 YUm = ToAppY(shape.Midpoint.Y, cellBBox),
                 AngleDegrees = OutwardAngleDegrees(shape.Edge),
                 WidthUm = shape.WidthUm,
+                Layer = shape.LayerPair.Layer,
                 Source = DetectedPinSource.PortShape,
                 IsElectrical = IsPortShapeElectrical(shape, options) ? true : null,
             }));

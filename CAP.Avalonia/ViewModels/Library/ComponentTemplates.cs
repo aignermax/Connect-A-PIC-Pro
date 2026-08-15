@@ -80,7 +80,9 @@ public static class ComponentTemplates
                 OffsetXMicrometers = def.OffsetX,
                 OffsetYMicrometers = def.OffsetY,
                 AngleDegrees = def.AngleDegrees,
-                LogicalPin = logicalPins[i]
+                LogicalPin = logicalPins[i],
+                WaveguideWidthMicrometers = def.WaveguideWidthMicrometers,
+                Layer = def.Layer
             });
         }
 
@@ -223,8 +225,19 @@ public class PinDefinition
 
     public PolarizationKind Polarization { get; }
 
+    /// <summary>
+    /// Waveguide width in µm at this pin from the PDK (per-pin value or the process'
+    /// default optical cross-section); null when the PDK declares neither — the
+    /// pin-mismatch rule then stays silent for this pin.
+    /// </summary>
+    public double? WaveguideWidthMicrometers { get; }
+
+    /// <summary>GDS layer number of this pin's waveguide from the PDK; null when undeclared.</summary>
+    public int? Layer { get; }
+
     public PinDefinition(string name, double offsetX, double offsetY, double angleDegrees,
-        MatterType kind = MatterType.Light, PolarizationKind polarization = PolarizationKind.TE)
+        MatterType kind = MatterType.Light, PolarizationKind polarization = PolarizationKind.TE,
+        double? waveguideWidthMicrometers = null, int? layer = null)
     {
         Name = name;
         OffsetX = offsetX;
@@ -232,5 +245,7 @@ public class PinDefinition
         AngleDegrees = angleDegrees;
         Kind = kind;
         Polarization = polarization;
+        WaveguideWidthMicrometers = waveguideWidthMicrometers;
+        Layer = layer;
     }
 }

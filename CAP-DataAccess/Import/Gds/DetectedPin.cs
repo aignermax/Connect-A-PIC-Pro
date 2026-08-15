@@ -43,6 +43,14 @@ public sealed record DetectedPin
     /// <summary>Pin width in micrometers; 0 when unknown (e.g. pins derived from labels only).</summary>
     public double WidthUm { get; init; }
 
+    /// <summary>
+    /// GDS layer number the pin was detected on (the port label's layer, the port
+    /// shape's layer, or the waveguide polygon's layer); null when no single layer
+    /// is attributable. Feeds <c>PhysicalPin.Layer</c> for the DRC-lite
+    /// pin-mismatch rule.
+    /// </summary>
+    public int? Layer { get; init; }
+
     /// <summary>How this pin was detected.</summary>
     public DetectedPinSource Source { get; init; }
 

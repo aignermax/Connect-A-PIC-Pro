@@ -824,7 +824,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 OffsetXMicrometers = externalPin.RelativeX,
                 OffsetYMicrometers = externalPin.RelativeY,
                 AngleDegrees = externalPin.AngleDegrees,
-                LogicalPin = externalPin.InternalPin.LogicalPin
+                LogicalPin = externalPin.InternalPin.LogicalPin,
+                WaveguideWidthMicrometers = externalPin.InternalPin.WaveguideWidthMicrometers,
+                Layer = externalPin.InternalPin.Layer
             };
 
             PhysicalPins.Add(physicalPin);
