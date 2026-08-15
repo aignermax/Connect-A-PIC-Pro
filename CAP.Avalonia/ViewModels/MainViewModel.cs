@@ -257,6 +257,13 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public ViewModels.Canvas.ChipSizeViewModel ChipSize { get; }
 
+    /// <summary>
+    /// Per-layer visibility of imported GDS geometry (issue #858). The canvas
+    /// render context consults its <c>State</c>; the Imported Layers panel binds
+    /// to its rows; settings are persisted per design in the .lun file.
+    /// </summary>
+    public ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel LayerVisibility { get; }
+
     public MainViewModel(
         DesignCanvasViewModel canvas,
         SimulationService simulationService,
@@ -288,7 +295,8 @@ public partial class MainViewModel : ObservableObject
         HomeViewModel? homeViewModel = null,
         ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
         ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null,
-        Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null)
+        Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null,
+        ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? layerVisibility = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         // Injected for activation: constructing the binder wires the adaptive
@@ -319,6 +327,11 @@ public partial class MainViewModel : ObservableObject
         // Design-scoped GDS imports (#830): save embeds them in the .lun, load
         // restores/migrates them, New Project clears them.
         FileOperations.DesignScopedGdsComponents = designScopedGdsComponents;
+        // Per-layer visibility of imported GDS geometry (#858): edits mark the
+        // design dirty, and save/load/new-project round-trip through the .lun.
+        LayerVisibility = layerVisibility ?? new ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel(_canvas);
+        LayerVisibility.SettingsEdited = () => FileOperations.HasUnsavedChanges = true;
+        FileOperations.LayerVisibility = LayerVisibility;
         ViewportControl = viewportControl;
 
         // Home screen: shown at startup; delegates project I/O to FileOperations
@@ -375,6 +388,12 @@ public partial class MainViewModel : ObservableObject
         // the orchestrator refreshes the router before every routing pass, so AUTO cannot
         // bend tighter than the active process allows.
         _canvas.Routing.GetProcessMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
+        // Metal traces are curved like waveguides (#854): the metal spec's bend radius floors
+        // the router for electrical connections and its trace width pads their grid obstacles.
+        // The bend-handle drag clamp for metal traces uses the same source.
+        _canvas.Routing.GetMetalRoutingSpec = metalSpecProvider;
+        CanvasInteraction.GetMetalMinBendRadiusMicrometers =
+            () => metalSpecProvider().MinBendRadiusMicrometers;
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
@@ -558,6 +577,9 @@ public partial class MainViewModel : ObservableObject
             {
                 // Feed the selected connection into the routing options panel (issue #574).
                 BottomPanel.ConnectionRouting.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the imported-route re-route panel.
+                BottomPanel.RerouteImported.SelectedConnection =
                     CanvasInteraction.SelectedWaveguideConnection;
             }
         };
@@ -1233,6 +1255,13 @@ public class DesignFileData
     public List<Services.GdsImport.DesignScope.ImportedGdsComponentSetData>? ImportedGdsComponents { get; set; }
 
     /// <summary>
+    /// Per-layer visibility overrides for imported GDS geometry (issue #858).
+    /// Only non-default entries are stored; null when every layer is fully
+    /// visible. Older files without this field load with all layers shown.
+    /// </summary>
+    public List<Services.GdsImport.LayerVisibility.GdsLayerVisibilityData>? LayerVisibility { get; set; }
+
+    /// <summary>
     /// Chip width in micrometers as configured in the Chip Size settings.
     /// Null for files saved before chip-size support was added (defaults to 5000 μm on load).
     /// </summary>
@@ -1249,6 +1278,13 @@ public class DesignFileData
     /// Null for legacy files saved before single-process support; migrated on load.
     /// </summary>
     public ActiveProcessData? ActiveProcess { get; set; }
+
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856):
+    /// GDS-imported route geometry released by ungrouping its import group. Null for
+    /// files saved before canvas-level frozen paths existed.
+    /// </summary>
+    public List<CAP_DataAccess.Persistence.DTOs.FrozenPathDto>? CanvasFrozenPaths { get; set; }
 }
 
 /// <summary>
@@ -1305,11 +1341,18 @@ public class ChildComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>
@@ -1341,11 +1384,18 @@ public class ComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>

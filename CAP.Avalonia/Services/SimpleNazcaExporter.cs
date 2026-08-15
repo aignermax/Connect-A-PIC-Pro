@@ -668,7 +668,8 @@ public class SimpleNazcaExporter
         List<string>? skippedConnections = null,
         List<string>? unresolvedCrossings = null)
     {
-        var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup);
+        var hasFrozenPaths = canvas.Components.Any(vm => vm.Component is ComponentGroup)
+            || canvas.CanvasFrozenPaths.Count > 0;
         if (canvas.Connections.Count == 0 && !hasFrozenPaths)
             return;
 
@@ -749,6 +750,11 @@ public class SimpleNazcaExporter
             if (compVm.Component is ComponentGroup group)
                 AppendGroupFrozenPaths(sb, group, metalStyle, componentNames, skippedConnections);
         }
+
+        // Canvas-level pin-less frozen paths (issue #856): imported route geometry
+        // released by ungrouping exports exactly like it did inside the group.
+        foreach (var pathVm in canvas.CanvasFrozenPaths)
+            AppendFrozenPath(sb, pathVm.Path, metalStyle, componentNames, skippedConnections);
 
         AppendBridgeMarkers(sb, canvas, metalConnections, metalSpec);
         CollectUnresolvedCrossings(unresolvedCrossingCandidates, metalConnections, metalSpec, unresolvedCrossings);
@@ -845,6 +851,12 @@ public class SimpleNazcaExporter
             if (compVm.Component is ComponentGroup group)
                 CollectGroupFrozenPaths(group, paths);
         }
+
+        foreach (var pathVm in canvas.CanvasFrozenPaths)
+        {
+            if (pathVm.Path.Path?.Segments?.Count > 0 && pathVm.Path.Path.IsExportable())
+                paths.Add(pathVm.Path.Path.Segments);
+        }
         return paths;
     }
 
@@ -885,50 +897,60 @@ public class SimpleNazcaExporter
         Dictionary<Component, string> componentNames, List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
-        {
-            if (frozenPath == null) continue;
-
-            // A PIN-LESS frozen path holds imported top-cell route geometry: the source
-            // polygon's OUTLINE traced as a closed ring of straight segments
-            // (GdsImport.GdsFrozenRoutePathFactory.Create) — not a centerline. Emitting the ring
-            // edges as waveguides would draw a waveguide along every outline edge (the
-            // route polygon becomes two parallel lines, and every re-import multiplies
-            // the frozen geometry: 45 rings came back as 2520 polygons in the
-            // re-export round-trip test). The honest round-trip is the polygon itself,
-            // verbatim on its original layer — exactly what the import read.
-            if (frozenPath.StartPin is null
-                && frozenPath.Layer is int outlineLayer && frozenPath.DataType is int outlineDataType
-                && TryChainOutlineRing(frozenPath.Path?.Segments) is { } ring)
-            {
-                AppendOutlineRingExport(sb, ring, outlineLayer, outlineDataType);
-                continue;
-            }
-
-            var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
-            // The import source's (layer, datatype) tag: emitted per segment so imported
-            // geometry lands back on its original layer (a metal polygon's tag also wins
-            // over the process metal layer). Untagged paths keep the historical defaults.
-            var sourceLayer = frozenPath.Layer is int layer && frozenPath.DataType is int dataType
-                ? (layer, dataType)
-                : ((int Layer, int DataType)?)null;
-            var segments = frozenPath.Path?.Segments;
-            if (segments == null || segments.Count == 0)
-            {
-                AppendFallbackExport(sb, frozenPath.StartPin, frozenPath.EndPin, componentNames, metal, sourceLayer);
-                continue;
-            }
-
-            if (ExportableConnections.TryRecordSkip(
-                    frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
-                continue;
-            AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal, sourceLayer);
-        }
+            AppendFrozenPath(sb, frozenPath, metalStyle, componentNames, skippedConnections);
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nestedGroup)
                 AppendGroupFrozenPaths(sb, nestedGroup, metalStyle, componentNames, skippedConnections);
         }
+    }
+
+    /// <summary>
+    /// Exports one frozen waveguide path — shared by group-internal paths and
+    /// canvas-level paths (issue #856), so a path released by ungrouping exports
+    /// byte-identically to the same path inside its group.
+    /// </summary>
+    private static void AppendFrozenPath(
+        StringBuilder sb, FrozenWaveguidePath? frozenPath, MetalTraceStyle metalStyle,
+        Dictionary<Component, string> componentNames, List<string>? skippedConnections)
+    {
+        if (frozenPath == null) return;
+
+        // A PIN-LESS frozen path holds imported top-cell route geometry: the source
+        // polygon's OUTLINE traced as a closed ring of straight segments
+        // (GdsImport.GdsFrozenRoutePathFactory.Create) — not a centerline. Emitting the ring
+        // edges as waveguides would draw a waveguide along every outline edge (the
+        // route polygon becomes two parallel lines, and every re-import multiplies
+        // the frozen geometry: 45 rings came back as 2520 polygons in the
+        // re-export round-trip test). The honest round-trip is the polygon itself,
+        // verbatim on its original layer — exactly what the import read.
+        if (frozenPath.StartPin is null
+            && frozenPath.Layer is int outlineLayer && frozenPath.DataType is int outlineDataType
+            && TryChainOutlineRing(frozenPath.Path?.Segments) is { } ring)
+        {
+            AppendOutlineRingExport(sb, ring, outlineLayer, outlineDataType);
+            return;
+        }
+
+        var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+        // The import source's (layer, datatype) tag: emitted per segment so imported
+        // geometry lands back on its original layer (a metal polygon's tag also wins
+        // over the process metal layer). Untagged paths keep the historical defaults.
+        var sourceLayer = frozenPath.Layer is int layer && frozenPath.DataType is int dataType
+            ? (layer, dataType)
+            : ((int Layer, int DataType)?)null;
+        var segments = frozenPath.Path?.Segments;
+        if (segments == null || segments.Count == 0)
+        {
+            AppendFallbackExport(sb, frozenPath.StartPin, frozenPath.EndPin, componentNames, metal, sourceLayer);
+            return;
+        }
+
+        if (ExportableConnections.TryRecordSkip(
+                frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
+            return;
+        AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal, sourceLayer);
     }
 
     /// <summary>

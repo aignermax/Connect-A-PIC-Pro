@@ -731,6 +731,12 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             PhysicalY = source.PhysicalY,
             WidthMicrometers = source.WidthMicrometers,
             HeightMicrometers = source.HeightMicrometers,
+            // Pose metadata must survive group cloning, else the next save/load actively
+            // rotates the already-transformed pins back (non-cardinal rotation, mirroring).
+            RotationDegrees = source.RotationDegrees,
+            IsMirroredHorizontally = source.IsMirroredHorizontally,
+            UnrotatedWidthMicrometers = source.UnrotatedWidthMicrometers,
+            UnrotatedHeightMicrometers = source.UnrotatedHeightMicrometers,
             NazcaOriginOffsetX = source.NazcaOriginOffsetX,
             NazcaOriginOffsetY = source.NazcaOriginOffsetY,
             NazcaModuleName = source.NazcaModuleName,

@@ -34,6 +34,31 @@ public sealed record MetalRoutingSpec(
     public const int DefaultBridgeGdsLayer = 12;
 
     /// <summary>
+    /// RF rule of thumb for impedance control: metal bends must not be tighter than
+    /// this factor times the trace width. Sharp corners on high-frequency (1–100 GHz)
+    /// traces cause impedance discontinuities and reflections, so the resolved bend
+    /// radius is floored to <c>factor × width</c> even when the process declares a
+    /// smaller manufacturable minimum.
+    /// </summary>
+    public const double RfMinRadiusToWidthFactor = 3.0;
+
+    /// <summary>
+    /// Fallback minimum metal bend radius in µm: the RF width rule applied to the
+    /// default trace width. Used when the process declares no metal radius.
+    /// </summary>
+    public const double DefaultMinBendRadiusMicrometers =
+        RfMinRadiusToWidthFactor * DefaultTraceWidthMicrometers;
+
+    /// <summary>
+    /// Minimum bend radius (µm) for metal traces of this process: the metal
+    /// cross-section's declared radius (recommended, falling back to minimum) floored
+    /// by the RF width rule (<see cref="RfMinRadiusToWidthFactor"/> × trace width).
+    /// The router applies it as the process floor for electrical connections, the
+    /// same way the optical floor governs waveguides.
+    /// </summary>
+    public double MinBendRadiusMicrometers { get; init; } = DefaultMinBendRadiusMicrometers;
+
+    /// <summary>
     /// The trace-drawing subset of this spec (width, GDS layer/datatype) as the
     /// <see cref="MetalTraceStyle"/> the segment exporters consume for inline
     /// metal-trace emission. Crossing policy and bridge layer stay spec-only.

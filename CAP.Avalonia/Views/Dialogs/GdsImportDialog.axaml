@@ -3,6 +3,7 @@
         xmlns:system="clr-namespace:System;assembly=System.Runtime"
         xmlns:vm="clr-namespace:CAP.Avalonia.ViewModels.GdsImport"
         xmlns:gds="using:CAP.Avalonia.Services.GdsImport"
+        xmlns:controls="using:CAP.Avalonia.Controls"
         xmlns:loc="using:CAP.Avalonia.Services.Localization"
         x:Class="CAP.Avalonia.Views.Dialogs.GdsImportDialog"
         x:DataType="vm:GdsImportDialogViewModel"
@@ -101,8 +102,62 @@
                 <Expander x:Name="LayerAssignmentExpander" Background="#252526"
                           CornerRadius="4" IsExpanded="False">
                     <Expander.Header>
-                        <TextBlock Text="{loc:Localize GdsImport.LayerAssignmentHeader}"
-                                   Foreground="LightGray" FontSize="11"/>
+                        <Grid ColumnDefinitions="*,Auto">
+                            <TextBlock Text="{loc:Localize GdsImport.LayerAssignmentHeader}"
+                                       Foreground="LightGray" FontSize="11" VerticalAlignment="Center"/>
+                            <!-- Plain-language help: what GDS layer/datatype numbers mean
+                                 and that visibility/assignment here is display-only. -->
+                            <controls:HelpFlyoutButton Grid.Column="1"
+                                                       Title="{loc:Localize GdsLayerHelp.Title}"
+                                                       Margin="8,0,4,0" VerticalAlignment="Center">
+                                <controls:HelpFlyoutButton.HelpContent>
+                                    <StackPanel Spacing="8" MaxWidth="400">
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                                   Text="{loc:Localize GdsLayerHelp.Intro}"/>
+
+                                        <!-- Diagram: a layer map table abstraction. -->
+                                        <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                                CornerRadius="4" Padding="8">
+                                            <StackPanel Spacing="4">
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="{loc:Localize GdsLayerHelp.ColLayer}" Foreground="#888" FontSize="10"/>
+                                                    <TextBlock Grid.Column="1" Text="{loc:Localize GdsLayerHelp.ColDatatype}" Foreground="#888" FontSize="10"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ColMeaning}" Foreground="#888" FontSize="10"/>
+                                                </Grid>
+                                                <Rectangle Height="1" Fill="#3d3d3d"/>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="1" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="0" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleWaveguide}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="10" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="0" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleMetal}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                                <Grid ColumnDefinitions="60,90,*">
+                                                    <TextBlock Grid.Column="0" Text="1" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="1" Text="5" Foreground="White" FontSize="10" FontFamily="Consolas, Courier New, monospace"/>
+                                                    <TextBlock Grid.Column="2" Text="{loc:Localize GdsLayerHelp.ExampleAnnotation}" Foreground="LightGray" FontSize="10"/>
+                                                </Grid>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.PairTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.PairBody}"/>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.DatatypeTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.DatatypeBody}"/>
+
+                                        <TextBlock Text="{loc:Localize GdsLayerHelp.DisplayOnlyTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize GdsLayerHelp.DisplayOnlyBody}"/>
+                                    </StackPanel>
+                                </controls:HelpFlyoutButton.HelpContent>
+                            </controls:HelpFlyoutButton>
+                        </Grid>
                     </Expander.Header>
                     <StackPanel Spacing="10" Margin="4">
 
@@ -213,10 +268,60 @@
                     </StackPanel>
                 </Expander>
 
+                <!-- Guessed pins: edge-heuristic pins the user can delete before placing -->
+                <StackPanel Spacing="6" IsVisible="{Binding HasPinSuggestions}">
+                    <TextBlock Text="{loc:Localize GdsImport.GuessedPinsHeader}"
+                               Foreground="LightGray" FontSize="11" FontWeight="SemiBold"/>
+                    <TextBlock Text="{loc:Localize GdsImport.GuessedPinsHint}"
+                               Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
+                    <ScrollViewer MaxHeight="140" VerticalScrollBarVisibility="Auto">
+                        <ItemsControl ItemsSource="{Binding PinSuggestions}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="vm:GdsImportPinSuggestion">
+                                    <Border Background="#252526" CornerRadius="4" Padding="6,4" Margin="0,0,0,4">
+                                        <Grid ColumnDefinitions="*,Auto">
+                                            <StackPanel Grid.Column="0" Spacing="2">
+                                                <TextBlock FontSize="10" Foreground="White">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0}.{1}">
+                                                            <Binding Path="CellName"/>
+                                                            <Binding Path="PinName"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                                <TextBlock FontSize="9" Foreground="Gray">
+                                                    <TextBlock.Text>
+                                                        <MultiBinding StringFormat="{}{0:F1},{1:F1} µm / {2:F0}° / w{3:F1} µm">
+                                                            <Binding Path="XUm"/>
+                                                            <Binding Path="YUm"/>
+                                                            <Binding Path="AngleDegrees"/>
+                                                            <Binding Path="WidthUm"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.Text>
+                                                </TextBlock>
+                                            </StackPanel>
+                                            <Button Grid.Column="1" Content="{loc:Localize GdsImport.RemoveGuessedPin}"
+                                                    Command="{Binding RemoveCommand}"
+                                                    Background="#3d1515" Foreground="#FF9090"
+                                                    FontSize="9" Padding="8,2" CornerRadius="4"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </StackPanel>
+
                 <!-- Recreate detected connections with Lunima routing -->
                 <CheckBox IsChecked="{Binding RerouteConnectionsRequested}"
                           Content="{loc:Localize GdsImport.RerouteConnections}"
                           ToolTip.Tip="{loc:Localize GdsImport.RerouteConnectionsTip}"
+                          Foreground="White" FontSize="11" VerticalAlignment="Center"/>
+
+                <!-- Auto-connect all remaining facing pins after placement (opt-in, issue #880) -->
+                <CheckBox IsChecked="{Binding AutoConnectAllPinsRequested}"
+                          Content="{loc:Localize GdsImport.AutoConnectAllPins}"
+                          ToolTip.Tip="{loc:Localize GdsImport.AutoConnectAllPinsTip}"
                           Foreground="White" FontSize="11" VerticalAlignment="Center"/>
             </StackPanel>
 

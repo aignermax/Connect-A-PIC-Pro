@@ -115,6 +115,70 @@ public class MetalRoutingSpecFactoryTests
     }
 
     [Fact]
+    public void FromDefinitions_RecommendedRadius_PreferredOverMinRadius()
+    {
+        var definition = new ProcessDefinition
+        {
+            Name = "Demo",
+            Xsections = new List<ProcessXsection>
+            {
+                new() { Name = "MetalDC", Kind = XsectionKind.Metal, WidthUm = 5, MinRadiusUm = 20, RecommendedRadiusUm = 50 }
+            }
+        };
+
+        var spec = MetalRoutingSpecFactory.FromDefinitions(new[] { definition });
+
+        spec.MinBendRadiusMicrometers.ShouldBe(50);
+    }
+
+    [Fact]
+    public void FromDefinitions_NoRecommendedRadius_FallsBackToMinRadius()
+    {
+        var definition = new ProcessDefinition
+        {
+            Name = "Demo",
+            Xsections = new List<ProcessXsection>
+            {
+                new() { Name = "MetalDC", Kind = XsectionKind.Metal, WidthUm = 5, MinRadiusUm = 20 }
+            }
+        };
+
+        var spec = MetalRoutingSpecFactory.FromDefinitions(new[] { definition });
+
+        spec.MinBendRadiusMicrometers.ShouldBe(20);
+    }
+
+    [Fact]
+    public void FromDefinitions_DeclaredRadiusBelowRfRule_RaisedToThreeTimesTraceWidth()
+    {
+        var definition = new ProcessDefinition
+        {
+            Name = "Demo",
+            Xsections = new List<ProcessXsection>
+            {
+                new() { Name = "MetalRf", Kind = XsectionKind.Metal, WidthUm = 8, MinRadiusUm = 10 }
+            }
+        };
+
+        var spec = MetalRoutingSpecFactory.FromDefinitions(new[] { definition });
+
+        spec.MinBendRadiusMicrometers.ShouldBe(
+            MetalRoutingSpec.RfMinRadiusToWidthFactor * 8);
+    }
+
+    [Fact]
+    public void FromDefinitions_NoMetalXsection_UsesDefaultMinBendRadius()
+    {
+        var definition = new ProcessDefinition { Name = "OpticalOnly" };
+
+        var spec = MetalRoutingSpecFactory.FromDefinitions(new[] { definition });
+
+        spec.MinBendRadiusMicrometers.ShouldBe(MetalRoutingSpec.DefaultMinBendRadiusMicrometers);
+        MetalRoutingSpec.DefaultMinBendRadiusMicrometers.ShouldBe(
+            MetalRoutingSpec.RfMinRadiusToWidthFactor * MetalRoutingSpec.DefaultTraceWidthMicrometers);
+    }
+
+    [Fact]
     public void FromActiveProcess_NullSelection_ReturnsDefault()
     {
         var spec = MetalRoutingSpecFactory.FromActiveProcess(null, new List<PdkDraft>());

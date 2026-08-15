@@ -77,6 +77,23 @@ public partial class WaveguideConnectionManager
     public double WaveguideWidthMicrometers { get; set; } = 4.0;
 
     /// <summary>
+    /// Metal trace width for collision detection (in micrometers), sourced from the
+    /// active process metal cross-section (<c>MetalRoutingSpec.TraceWidthMicrometers</c>,
+    /// issue #854). Electrical connections register grid obstacles at this width instead
+    /// of the optical <see cref="WaveguideWidthMicrometers"/> — thick RF traces would
+    /// otherwise be under-padded and siblings could route into them.
+    /// </summary>
+    public double MetalTraceWidthMicrometers { get; set; } =
+        CAP_Core.Routing.MetalRouting.MetalRoutingSpec.DefaultTraceWidthMicrometers;
+
+    /// <summary>
+    /// Obstacle registration width for a connection: the metal trace width for
+    /// electrical connections, the waveguide width otherwise.
+    /// </summary>
+    public double ObstacleWidthFor(WaveguideConnection connection) =>
+        connection.IsElectrical ? MetalTraceWidthMicrometers : WaveguideWidthMicrometers;
+
+    /// <summary>
     /// Optional adaptive crossing-insertion service. When set, a crossing pass runs
     /// after every routing pass and detours may be replaced by real PDK crossing
     /// components (see <see cref="CrossingInsertionService"/>). Null (default) keeps
@@ -140,7 +157,7 @@ public partial class WaveguideConnectionManager
             router.PathfindingGrid.AddWaveguideObstacle(
                 connection.Id,
                 connection.RoutedPath.Segments,
-                WaveguideWidthMicrometers);
+                ObstacleWidthFor(connection));
         }
 
         return connection;
@@ -498,7 +515,7 @@ public partial class WaveguideConnectionManager
             grid.AddWaveguideObstacle(
                 connection.Id,
                 connection.RoutedPath!.Segments,
-                WaveguideWidthMicrometers);
+                ObstacleWidthFor(connection));
         }
 
         // Route only the invalid/new connections
@@ -520,7 +537,7 @@ public partial class WaveguideConnectionManager
                 grid.AddWaveguideObstacle(
                     connection.Id,
                     connection.RoutedPath.Segments,
-                    WaveguideWidthMicrometers);
+                    ObstacleWidthFor(connection));
 
                 // A route that geometrically crosses a sibling counts as a failure so the
                 // full re-route with ordering strategies gets a chance to untangle it.
@@ -617,7 +634,7 @@ public partial class WaveguideConnectionManager
                 router.PathfindingGrid.AddWaveguideObstacle(
                     connection.Id,
                     connection.RoutedPath.Segments,
-                    WaveguideWidthMicrometers);
+                    ObstacleWidthFor(connection));
 
                 // Count blocked fallbacks and routes that geometrically cross a sibling
                 // as routing failures for ordering optimization. Grid obstacles cannot

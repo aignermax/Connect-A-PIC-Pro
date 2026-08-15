@@ -9,6 +9,12 @@ namespace CAP_Core
         public const double StandardBendRadiusMicrometers = 80.0;
         public const double StandardCouplerSpacingMicrometers = 0.35;
 
+        /// <summary>
+        /// Conservative default for the minimum edge-to-edge spacing between waveguides
+        /// when the active PDK does not declare a process-specific value.
+        /// </summary>
+        public const double DefaultMinWaveguideSpacingMicrometers = 2.0;
+
         // Typische Komponenten-Größen
         public const double TypicalMMIWidthMicrometers = 6.0;
         public const double TypicalMMILengthMicrometers = 50.0;
