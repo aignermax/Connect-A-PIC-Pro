@@ -765,8 +765,59 @@
                                 HorizontalContentAlignment="Center" VerticalContentAlignment="Center"
                                 Background="#3d3d3d" Foreground="#c9c9c9"
                                 ToolTip.Tip="{loc:Localize LeftPanel.EnableAllPdksTip}"/>
-                        <TextBlock Text="{loc:Localize LeftPanel.PdkMgmt}" VerticalAlignment="Center"
-                                   FontWeight="Bold" Foreground="White"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <TextBlock Text="{loc:Localize LeftPanel.PdkMgmt}" VerticalAlignment="Center"
+                                       FontWeight="Bold" Foreground="White"/>
+                            <!-- Plain-language help (#907): what a PDK is, what its process
+                                 defines (layers, bend radius, spacing), and why components from
+                                 different processes can't mix in one design. -->
+                            <controls:HelpFlyoutButton Title="{loc:Localize PdkHelp.Title}"
+                                                       VerticalAlignment="Center">
+                                <controls:HelpFlyoutButton.HelpContent>
+                                    <StackPanel Spacing="8" MaxWidth="400">
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                                   Text="{loc:Localize PdkHelp.Intro}"/>
+
+                                        <!-- Diagram: two layer stacks with different materials —
+                                             components only exist within their own process. -->
+                                        <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                                CornerRadius="4" Padding="4">
+                                            <Canvas Width="360" Height="96">
+                                                <!-- Process A stack (green core). -->
+                                                <Rectangle Canvas.Left="30" Canvas.Top="18" Width="120" Height="10" Fill="#3F51B5"/>
+                                                <Rectangle Canvas.Left="30" Canvas.Top="28" Width="120" Height="8" Fill="#4CAF50"/>
+                                                <Rectangle Canvas.Left="30" Canvas.Top="36" Width="120" Height="12" Fill="#666666"/>
+                                                <TextBlock Canvas.Left="30" Canvas.Top="54"
+                                                           Text="{loc:Localize PdkHelp.DiagramProcessA}" FontSize="9" Foreground="Gray"/>
+                                                <!-- No-mix marker between the stacks. -->
+                                                <TextBlock Canvas.Left="168" Canvas.Top="24" Text="✗" FontSize="16"
+                                                           FontWeight="Bold" Foreground="#FF8A65"/>
+                                                <!-- Process B stack (orange core, different layers). -->
+                                                <Rectangle Canvas.Left="210" Canvas.Top="14" Width="120" Height="12" Fill="#7E57C2"/>
+                                                <Rectangle Canvas.Left="210" Canvas.Top="26" Width="120" Height="8" Fill="#FF9800"/>
+                                                <Rectangle Canvas.Left="210" Canvas.Top="34" Width="120" Height="12" Fill="#555555"/>
+                                                <TextBlock Canvas.Left="210" Canvas.Top="54"
+                                                           Text="{loc:Localize PdkHelp.DiagramProcessB}" FontSize="9" Foreground="Gray"/>
+                                                <TextBlock Canvas.Left="30" Canvas.Top="74" Width="300" TextWrapping="Wrap"
+                                                           Text="{loc:Localize PdkHelp.DiagramNote}" FontSize="9" Foreground="#888888"/>
+                                            </Canvas>
+                                        </Border>
+
+                                        <TextBlock Text="{loc:Localize PdkHelp.WhatIsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize PdkHelp.WhatIsBody}"/>
+
+                                        <TextBlock Text="{loc:Localize PdkHelp.ProcessTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize PdkHelp.ProcessBody}"/>
+
+                                        <TextBlock Text="{loc:Localize PdkHelp.NoMixTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize PdkHelp.NoMixBody}"/>
+                                    </StackPanel>
+                                </controls:HelpFlyoutButton.HelpContent>
+                            </controls:HelpFlyoutButton>
+                        </StackPanel>
                     </DockPanel>
                     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                         <StackPanel Margin="5">

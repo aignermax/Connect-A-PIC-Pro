@@ -4,6 +4,7 @@
              xmlns:vmAnalysis="using:CAP.Avalonia.ViewModels.Analysis"
              xmlns:panels="using:CAP.Avalonia.Views.Panels"
              xmlns:trace="using:CAP.Avalonia.ViewModels.Analysis.TimeTrace"
+             xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:oxy="using:OxyPlot.Avalonia"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.TimeDomainPanel"
@@ -120,19 +121,16 @@
                 <Button Content="{loc:Localize Common.ExportCsv}" Classes="analysis" Background="#3d3d5d"
                         Command="{Binding BottomPanel.Analysis.Transient.ExportCsvCommand}"/>
             </StackPanel>
-            <!-- Plain-language help (#600 feedback): what transient mode does,
-                 the three sources, and how to read the plot. Non-modal flyout. -->
+            <!-- Plain-language help (#600 feedback, standardized in #907): what transient
+                 mode adds over the S-matrix view, the three sources, delays/thresholds, and
+                 how to read the plot. Same reusable "?" control as the other panels. -->
             <StackPanel Margin="0,0,0,4" VerticalAlignment="Bottom">
                 <TextBlock Text=" " FontSize="9" Margin="0,0,0,1"/>
-                <Button Content="?" Classes="analysis" Background="#3d5d3d" Width="26"
-                        HorizontalContentAlignment="Center"
-                        ToolTip.Tip="{loc:Localize TimeDomain.HelpTip}">
-                    <Button.Flyout>
-                        <Flyout Placement="Top">
-                            <panels:TransientHelpFlyout/>
-                        </Flyout>
-                    </Button.Flyout>
-                </Button>
+                <controls:HelpFlyoutButton Title="{loc:Localize TransientHelp.Title}">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <panels:TransientHelpFlyout/>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
             </StackPanel>
         </WrapPanel>
 
