@@ -126,17 +126,18 @@ public class GdsImportE2EJourneyTests : IDisposable
             python!, _root, "gen2", loadedCanvas, loadHost.Templates.ToList());
         var (canvas3, report3, _) = await ImportAndPlaceAsync(gds2, bundled, autoConnectAllPins: true);
         report3.PlacedCount.ShouldBe(5, "step 6: the re-export re-imports completely");
-        // Route-derived reconnection is refused here BY DESIGN of the junction rule:
-        // the export labels every coupler pin as a top-cell port exactly on the route
-        // joint, so each route network touches 3 pins and the connectivity matcher
-        // never guesses. The drawn geometry survives as frozen paths and the
-        // auto-connect stage re-derives the same three wires from the pin layout.
-        report3.ConnectedCount.ShouldBe(0,
-            "step 6: coupler-terminated routes stay frozen (3-pin junction with the exported port label)");
-        report3.FrozenRoutePathCount.ShouldBeGreaterThan(0,
-            "step 6: the exported route geometry is preserved as frozen paths");
-        report3.AutoConnectedCount.ShouldBe(3,
-            "step 6: auto-connect re-derives exactly the three generation-1 wires");
+        // Route-derived reconnection now succeeds at coupler pins (#909): the
+        // export stamps a top-cell port label exactly on each coupler pin, and
+        // the matcher drops a port touch coincident with an instance pin from
+        // the pairing decision — the joint is 2-pin again, so all three drawn
+        // routes reconnect directly and nothing is left frozen or for
+        // auto-connect to re-derive.
+        report3.ConnectedCount.ShouldBe(3,
+            "step 6: the three coupler-terminated routes reconnect route-derived (#909 coincident-port rule)");
+        report3.FrozenRoutePathCount.ShouldBe(0,
+            "step 6: every route polygon became a real connection — none stay frozen");
+        report3.AutoConnectedCount.ShouldBe(0,
+            "step 6: route derivation already restored all three wires — auto-connect has nothing left");
         report3.AutoConnectFailedCount.ShouldBe(0, "step 6: zero unroutable pairs in generation 3");
         report3.AutoConnectUnpairedPinCount.ShouldBe(4,
             "step 6: the Broadband DC's four pins stay unpaired in generation 3 too");
