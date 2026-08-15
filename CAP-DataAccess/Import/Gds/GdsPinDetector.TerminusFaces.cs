@@ -74,6 +74,7 @@ public static partial class GdsPinDetector
                     YUm = appY,
                     AngleDegrees = outward,
                     WidthUm = width,
+                    Layer = polygon.Layer,
                     Source = DetectedPinSource.EdgeHeuristic,
                 }));
             }

@@ -3,6 +3,7 @@ using MathNet.Numerics.LinearAlgebra;
 using System.Linq.Dynamic.Core;
 using CAP_Core.Components.Core;
 using CAP_Core.Components.FormulaReading;
+using CAP_Core.Components.Parametric;
 
 namespace CAP_Core.LightCalculation
 {
@@ -46,6 +47,17 @@ namespace CAP_Core.LightCalculation
         /// lives in a separate assembly (<c>CAP.Avalonia</c>).
         /// </summary>
         public Func<List<Pin>, List<Slider>, SMatrix>? ParametricRebuild { get; set; }
+
+        /// <summary>
+        /// Immutable parameter/formula definitions this matrix was built from
+        /// (<see cref="ParametricSMatrixSnapshot"/>), or <c>null</c> for non-parametric
+        /// matrices. Unlike <see cref="ParametricRebuild"/> (an opaque factory), the
+        /// snapshot exposes the actual formulas and parameter metadata, so serializers
+        /// can persist them and rebuild an equivalent live matrix after a disk
+        /// round-trip. Set once by <c>ParametricSMatrixFactory.Build</c> and carried
+        /// forward by rebuilds; the instance is immutable and freely shareable.
+        /// </summary>
+        public ParametricSMatrixSnapshot? ParametricSnapshot { get; set; }
 
         public SMatrix(List<Guid> allPinsInGrid, List<(Guid sliderID, double value)> AllSliders)
         {
@@ -242,6 +254,30 @@ namespace CAP_Core.LightCalculation
                 var calculatedWeight = connection.Value.CalcConnectionWeightAsync(weightParameters);
                 SMat[PinReference[connection.Key.PinIdEnd], PinReference[connection.Key.PinIdStart]] = calculatedWeight;
             }
+        }
+
+        /// <summary>
+        /// Returns a lightweight copy of this matrix in which every parameter-only
+        /// (slider-driven) formula connection has been resolved to the numeric value
+        /// implied by the current slider positions. Field-dependent (inner-loop)
+        /// connections cannot be resolved without a field and stay unevaluated.
+        /// The original matrix is left untouched — used when a numeric snapshot of
+        /// the current parameter state is needed (e.g. prefab serialization) without
+        /// baking values into the live component.
+        /// </summary>
+        public SMatrix CreateEvaluatedSnapshot()
+        {
+            var snapshot = new SMatrix(
+                PinReference.Keys.ToList(),
+                SliderReference.Select(kv => (kv.Key, kv.Value)).ToList())
+            {
+                NonLinearConnections = NonLinearConnections,
+                ParametricRebuild = ParametricRebuild,
+                ParametricSnapshot = ParametricSnapshot
+            };
+            snapshot.SetValues(GetNonNullValues());
+            snapshot.EvaluateParameterOnlyConnections();
+            return snapshot;
         }
         private async Task RecomputeSMatNonLinearPartsAsync(MathNet.Numerics.LinearAlgebra.Vector<Complex> inputVector, bool SkipOuterLoopFunctions = true)
         {

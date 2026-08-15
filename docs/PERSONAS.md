@@ -2,7 +2,7 @@
 
 This file is the reference for **who Lunima is built for**. Agents redesigning UX, prioritizing features, writing copy, or making workflow trade-offs must read this first and justify design decisions against these personas.
 
-When personas conflict, the priority order for product decisions is: **Peter ≥ Mirko > Priya > Ingrid** — but no change may make the tool *incomprehensible* to Ingrid (the investor demo path must stay obvious).
+When personas conflict, the priority order for product decisions is: **Peter ≥ Mirko > Priya ≥ Jonas > Ingrid** — but no change may make the tool *incomprehensible* to Ingrid (the investor demo path must stay obvious).
 
 ---
 
@@ -86,7 +86,34 @@ When personas conflict, the priority order for product decisions is: **Peter ≥
 
 ---
 
-## Persona 4: Ingrid — The Investor *(working name, secondary persona)*
+## Persona 4: Jonas — The University Student Building a Photonic Computer
+
+**Role:** Master's student in electrical engineering / photonics; uses Lunima both to *learn* photonics and for his thesis project.
+**Background:** Solid digital-logic knowledge (loved the NAND game / NAND2TETRIS), beginner in photonics. No foundry contacts, small budget — his realistic fabrication path is a shared **MPW (multi-project wafer) run** (e.g. Cornerstone SiN/SOI for passives, small InP dies only where gain is needed).
+
+### What he wants
+
+- **Learn while designing:** clickable help `(?)` buttons everywhere physics is non-obvious, with **animated explanations** — see how light propagates through a coupler, why an MZI switches, what a bend radius does to loss.
+- **Multi-wafer / multi-chiplet design:** configure the **fabrication layer stack per chiplet** (different processes on one canvas — SiN passive logic next to an InP active die), place several chiplets, and connect them via **edge couplers** into one larger system.
+- Build logic **NAND-game style**: start from small gates (however they are realized — hybrid modulator+photodiode "transistors" are fine), compose them into adders and registers, and work toward a **small photonic computer** he could actually tape out on MPW shuttles.
+- **Watch it run:** animated light/signal propagation through the finished circuit, so he can *see* his computer compute.
+
+### What frustrates him
+
+- Tools that assume he already knows photonics — jargon without explanation, no way to learn inside the tool.
+- Single-chip assumptions: no way to represent "this part is SiN, that die is InP" or to connect chips at their edges.
+- Tape-out paths priced for companies; anything that hides which parts of his design are MPW-compatible.
+
+### Design implications
+
+- **Education is a core feature, not an add-on**: help flyouts with animations ship with new physics-touching features, not after them.
+- The data model must eventually support **multiple chiplets with distinct process/layer stacks** and **inter-chiplet edge-coupler connections** — new features should not bake in single-chip assumptions.
+- Composability matters: gates → circuits → systems, with hierarchy the student can navigate and reuse.
+- Where real photonic logic is still research (photonic transistors), offer **behavioral/hybrid components** so the computer can be *designed and simulated* today.
+
+---
+
+## Persona 5: Ingrid — The Investor *(working name, secondary persona)*
 
 **Role:** Potential investor evaluating Lunima.
 **Background:** Limited physics/photonics understanding. Will spend **minutes, not hours** in the tool — usually watching a demo.
@@ -108,6 +135,6 @@ When personas conflict, the priority order for product decisions is: **Peter ≥
 ## How agents should use this file
 
 1. **Before UX redesigns:** state which persona(s) the change serves and check it against the "frustrates" lists of the others.
-2. **Feature trade-offs:** precision & scriptability (Peter, Mirko) beat convenience shortcuts; convenience (Priya) beats demo polish (Ingrid); demo polish still matters on the first-run path.
-3. **New integrations:** Tidy3D and open formats serve two personas (Priya, Mirko) — prefer them over single-persona integrations.
-4. **When a persona is missing context** (e.g., a niche workflow none of them covers), say so explicitly in the issue/PR instead of inventing a fifth persona.
+2. **Feature trade-offs:** precision & scriptability (Peter, Mirko) beat convenience shortcuts; convenience & learnability (Priya, Jonas) beat demo polish (Ingrid); demo polish still matters on the first-run path.
+3. **New integrations:** Tidy3D and open formats serve two personas (Priya, Mirko) — prefer them over single-persona integrations. Education features (help flyouts, animations) serve Jonas *and* make Ingrid's demo path legible.
+4. **When a persona is missing context** (e.g., a niche workflow none of them covers), say so explicitly in the issue/PR instead of inventing a sixth persona.

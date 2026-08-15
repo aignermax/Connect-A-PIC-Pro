@@ -15,6 +15,11 @@ public partial class WaveguideConnectionManager
     /// overrides are discarded so the connection is re-routed around the component.
     /// Uses the true arc geometry against component obstacles only, so the verdict does
     /// not depend on which sibling waveguides are currently registered in the grid.
+    /// Frozen group path markings (cell state 3) are deliberately excluded: they are
+    /// ephemeral routing aids, and while a group is being ungrouped a stale in-flight
+    /// pass still holds a grid rebuilt from the removed group — the marking is then a
+    /// ghost of the very connection being judged and unfreezing would silently discard
+    /// the user's manual edits.
     /// Styled routes (Type != Auto) are never unfrozen here — their shape is forced and a
     /// collision is surfaced via <see cref="RoutedPath.PassesThroughComponent"/> instead.
     /// </summary>
@@ -25,7 +30,7 @@ public partial class WaveguideConnectionManager
             return false;
         if (!connection.FrozenPathStillMatchesPins())
             return false; // Endpoint moved: RecalculateTransmission already unfreezes.
-        if (!router.IsPathBlockedByComponents(connection.RoutedPath!.Segments))
+        if (!router.IsPathBlockedByComponentOnly(connection.RoutedPath!.Segments))
             return false;
 
         connection.IsRouteFrozen = false;

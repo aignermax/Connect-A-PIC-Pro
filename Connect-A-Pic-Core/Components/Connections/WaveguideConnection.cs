@@ -166,7 +166,12 @@ namespace CAP_Core.Components.Connections
 
             // The effective bend radius honors both the connection's own setting and the
             // fabrication process' minimum: the larger of the two governs the geometry.
-            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
+            // Electrical connections use the metal floor (RF traces bend at the metal
+            // cross-section radius, issue #854), optical ones the waveguide floor.
+            double processFloor = IsElectrical
+                ? router.MetalProcessMinBendRadiusMicrometers
+                : router.ProcessMinBendRadiusMicrometers;
+            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, processFloor);
 
             if (Type != WaveguideType.Auto)
             {

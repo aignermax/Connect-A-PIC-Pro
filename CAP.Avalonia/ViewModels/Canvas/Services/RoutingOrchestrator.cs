@@ -56,6 +56,15 @@ public class RoutingOrchestrator
     public Func<double>? GetProcessMinBendRadiusMicrometers { get; set; }
 
     /// <summary>
+    /// Callback returning the active process' metal routing spec (wired by <c>MainViewModel</c>
+    /// to <c>MetalRoutingSpecFactory</c>, the same provider the exporters use). Consulted at the
+    /// start of every routing pass: its bend radius becomes the router's metal floor and its
+    /// trace width the obstacle padding for electrical connections (issue #854). When unwired,
+    /// the metal defaults stay unchanged.
+    /// </summary>
+    public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? GetMetalRoutingSpec { get; set; }
+
+    /// <summary>
     /// Raised when IsRouting or RoutingStatusText changes.
     /// </summary>
     public event Action? StateChanged;
@@ -115,6 +124,12 @@ public class RoutingOrchestrator
         // UI thread — the provider reads ViewModel state).
         if (GetProcessMinBendRadiusMicrometers != null)
             _router.ProcessMinBendRadiusMicrometers = GetProcessMinBendRadiusMicrometers();
+        if (GetMetalRoutingSpec != null)
+        {
+            var metalSpec = GetMetalRoutingSpec();
+            _router.MetalProcessMinBendRadiusMicrometers = metalSpec.MinBendRadiusMicrometers;
+            _connectionManager.MetalTraceWidthMicrometers = metalSpec.TraceWidthMicrometers;
+        }
 
         _routingCts?.Cancel();
         _routingCts?.Dispose();

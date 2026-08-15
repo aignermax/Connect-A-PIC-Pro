@@ -66,10 +66,27 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
                     : MetalRoutingSpec.DefaultTraceWidthMicrometers;
                 var (layer, datatype) = ResolveMetalLayer(definition, metal);
                 return new MetalRoutingSpec(
-                    width, layer, datatype, policy, MetalRoutingSpec.DefaultBridgeGdsLayer);
+                    width, layer, datatype, policy, MetalRoutingSpec.DefaultBridgeGdsLayer)
+                {
+                    MinBendRadiusMicrometers = ResolveMinBendRadius(metal, width),
+                };
             }
 
             return MetalRoutingSpec.Default with { CrossingPolicy = policy };
+        }
+
+        /// <summary>
+        /// Resolves the metal bend radius (issue #854): the cross-section's recommended
+        /// radius, falling back to its minimum, floored by the RF impedance-control rule
+        /// (<see cref="MetalRoutingSpec.RfMinRadiusToWidthFactor"/> × trace width) —
+        /// high-frequency traces may need a LARGER radius than the manufacturable minimum.
+        /// </summary>
+        private static double ResolveMinBendRadius(ProcessXsection metal, double traceWidthUm)
+        {
+            var declared = metal.RecommendedRadiusUm > 0
+                ? metal.RecommendedRadiusUm
+                : metal.MinRadiusUm;
+            return Math.Max(declared, MetalRoutingSpec.RfMinRadiusToWidthFactor * traceWidthUm);
         }
 
         /// <summary>

@@ -62,6 +62,39 @@ public class FrozenAndStyledRouteCollisionTests
     }
 
     [Fact]
+    public void FrozenAutoRoute_OverlappingGroupPathMarking_KeepsFreezeAndManualEdits()
+    {
+        // Replays the ungroup race deterministically: a routing pass holding a grid that
+        // was rebuilt from the (already removed) group judges the restored connection
+        // against the group's frozen-path marking (cell state 3) — a ghost of the
+        // connection's own geometry. The destructive unfreeze must consider real
+        // component bounds only, or ungrouping with a pass in flight silently discards
+        // the user's manual bend edits.
+        var (manager, router, connection, components) = RouteAcrossCorner();
+        ApplyBigRadius(connection);
+
+        var group = new ComponentGroup("race-replay");
+        group.AddChildren(components);
+        group.AddInternalPaths(new List<FrozenWaveguidePath>
+        {
+            new()
+            {
+                Path = connection.RoutedPath!.DeepCopy(),
+                StartPin = connection.StartPin,
+                EndPin = connection.EndPin,
+            }
+        });
+        router.PathfindingGrid!.RebuildFromComponents(new[] { group });
+
+        manager.RecalculateAllTransmissions();
+
+        connection.IsRouteFrozen.ShouldBeTrue(
+            "a group path marking is a ghost of the connection's own geometry, not a collision");
+        connection.BendRadiusOverrides.ShouldNotBeEmpty(
+            "the manual bend edit must survive a pass that still sees the removed group");
+    }
+
+    [Fact]
     public void StyledRoute_ComponentOnCurve_KeepsShapeAndRaisesDesignIssue()
     {
         var (manager, router, connection, components) = RouteAcrossCorner(WaveguideType.Cobra);

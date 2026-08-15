@@ -194,9 +194,12 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // top-cell polygon chains (asserted above). The route-network matcher
         // merges each chain and restores the four chains that span exactly two
         // pins as real connections; the remaining six chains entangle at the two
-        // crossing components into TWO junction networks (25 + 13 polygons,
-        // 8 + 4 pins) — crossing/junction topology is never disentangled by
-        // guessing, so those stay frozen paths with informational junction notes.
+        // crossing components into ONE junction network (40 polygons, 12 pins)
+        // — crossing/junction topology is never disentangled by guessing, so
+        // those stay frozen paths with an informational junction note. (With the
+        // exact-geometry sibling check of #874 the router picks different winners
+        // in this congested area: the crossing↔crossing hop entangles with its
+        // neighbors' fallback routes, while adiabatic↔crossing stays clean.)
         outcome.Connections.Count.ShouldBe(4);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived && !c.IsElectrical);
         // The two MMI↔MMI braids restore with demofab pin names either way
@@ -205,20 +208,21 @@ public class GdsUserDesignRoundTripTests : IDisposable
             c.A.InstanceIndex == 1 && c.A.PinName == "a0" && c.B.InstanceIndex == 0 && c.B.PinName == "a1");
         outcome.Connections.ShouldContain(c =>
             c.A.InstanceIndex == 0 && c.A.PinName == "a0" && c.B.InstanceIndex == 1 && c.B.PinName == "a1");
-        // The two clean ebeam chains: both scenarios name the app template pins —
-        // since #811 the upgrade re-emits the stub's (1,10) labels (at exactly the
-        // anchors the real SiEPIC pin texts sat) instead of leaving the foundry's
-        // opt*/pin* names behind.
+        // The two clean ebeam chains (halfring↔adiabatic and adiabatic↔crossing):
+        // both scenarios name the app template pins — since #811 the upgrade
+        // re-emits the stub's (1,10) labels (at exactly the anchors the real
+        // SiEPIC pin texts sat) instead of leaving the foundry's opt*/pin*
+        // names behind.
         outcome.Connections.ShouldContain(c => c.A.PinName == "port 2" && c.B.PinName == "port 3");
-        outcome.Connections.ShouldContain(c => c.A.PinName == "port 1" && c.B.PinName == "port 2");
+        outcome.Connections.ShouldContain(c => c.A.PinName == "port 1" && c.B.PinName == "port 4");
 
         // Zero WARNINGS: the top-cell geometry accounting (restored/frozen) and
         // the junction notes are informational — nothing is silently dropped.
         outcome.Warnings.ShouldBeEmpty();
         outcome.Infos.ShouldContain(i => i.Contains("junction with"));
         outcome.Infos.ShouldContain(i => i.Contains("restored as 4 real connection(s)"));
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(38,
-            "the junction networks ride the group as frozen, non-re-routable paths");
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(40,
+            "the junction network rides the group as frozen, non-re-routable paths");
 
         // The registered templates carry the pins found in the GDS:
         // the MMI via demofab's (501, 1) labels (a0/a1/b0/b1 — demofab's names for
@@ -278,7 +282,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         group.GroupName.ShouldBe("ConnectAPIC_Design");
         group.InternalPaths.ShouldContain(p => p.StartPin == null,
             "the junction networks' polygons ride the group as pin-less frozen paths");
-        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(38);
+        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(40);
         group.InternalPaths.Count(p => p.StartPin != null).ShouldBe(4,
             "the four restored connections are frozen into the group with their pins");
         var children = group.GetAllComponentsRecursive().ToList();

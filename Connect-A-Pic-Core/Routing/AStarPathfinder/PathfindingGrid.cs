@@ -42,6 +42,12 @@ public partial class PathfindingGrid
     private readonly Dictionary<Guid, HashSet<(int x, int y)>> _waveguideCells = new();
     private readonly object _waveguideCellsLock = new();
 
+    // Exact segment geometry per registered waveguide obstacle. The rasterized cells
+    // over-approximate a route by up to a cell plus half the obstacle width, which is
+    // far too coarse to judge clearance between dense parallel routes — consumers that
+    // need a geometric verdict (direct styled candidates) read this instead.
+    private readonly Dictionary<Guid, List<PathSegment>> _waveguideGeometry = new();
+
     // Pin reservation zones: cells near pins that get a soft cost penalty (not blocked).
     // Routes CAN pass through but A* prefers to avoid them, keeping pin areas accessible.
     private readonly HashSet<(int x, int y)> _pinZoneCells = new();
@@ -514,6 +520,19 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
+    /// Checks if a cell is blocked strictly by component geometry (cell state 1), excluding
+    /// frozen group path markings (state 3). Those markings are ephemeral routing aids that
+    /// the next grid rebuild replaces — and while a group is being ungrouped they are a
+    /// ghost of the very connection being judged — so a destructive verdict (unfreezing a
+    /// manually edited route and discarding its bend edits) must never be based on them.
+    /// </summary>
+    public bool IsBlockedByComponentOnly(int gridX, int gridY)
+    {
+        if (!IsInBounds(gridX, gridY)) return true;
+        return _cells[gridX, gridY] == 1;
+    }
+
+    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>
@@ -556,6 +575,7 @@ public partial class PathfindingGrid
         {
             _waveguideCells.Clear();
             _waveguideEndpoints.Clear();
+            _waveguideGeometry.Clear();
         }
         lock (_pinZoneLock)
         {
@@ -639,6 +659,7 @@ public partial class PathfindingGrid
         lock (_waveguideCellsLock)
         {
             _waveguideCells[connectionId] = cells;
+            _waveguideGeometry[connectionId] = segmentList;
             _waveguideEndpoints[connectionId] = (
                 (segmentList[0].StartPoint.X, segmentList[0].StartPoint.Y),
                 (segmentList[^1].EndPoint.X, segmentList[^1].EndPoint.Y));
@@ -658,6 +679,7 @@ public partial class PathfindingGrid
                 return;
             _waveguideCells.Remove(connectionId);
             _waveguideEndpoints.Remove(connectionId);
+            _waveguideGeometry.Remove(connectionId);
         }
 
         foreach (var (gx, gy) in cells)
@@ -685,6 +707,20 @@ public partial class PathfindingGrid
             RemoveWaveguideObstacle(connectionId);
         }
         OnAllWaveguidesCleared?.Invoke();
+    }
+
+    /// <summary>
+    /// Snapshot of the exact segment geometry of every registered waveguide obstacle.
+    /// Use this instead of the rasterized cells when a geometric verdict is needed —
+    /// e.g. whether a direct styled candidate genuinely crosses or crowds a sibling
+    /// route, which the cell approximation cannot answer at dense pin pitches.
+    /// </summary>
+    public List<IReadOnlyList<PathSegment>> GetWaveguideGeometries()
+    {
+        lock (_waveguideCellsLock)
+        {
+            return _waveguideGeometry.Values.ToList<IReadOnlyList<PathSegment>>();
+        }
     }
 
     /// <summary>

@@ -121,7 +121,7 @@ public partial class LeftPanelViewModel
         int addedCount = 0;
         foreach (var pdkComp in pdk.Components)
         {
-            var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
+            var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection, pdk.Process);
             template.IsCustom = true;
             AllTemplates.Add(template);
             if (!Categories.Contains(template.Category))

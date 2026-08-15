@@ -37,6 +37,19 @@ namespace CAP_Core.Components.Core
         /// </summary>
         public PolarizationKind Polarization => LogicalPin?.Polarization ?? PolarizationKind.TE;
 
+        /// <summary>
+        /// Optional waveguide width in micrometers for this pin, populated from the
+        /// component/PDK data when available. Used by DRC to detect width mismatches
+        /// between connected pins.
+        /// </summary>
+        public double? WaveguideWidthMicrometers { get; set; }
+
+        /// <summary>
+        /// Optional GDS layer for this pin, populated from the component/PDK data when
+        /// available. Used by DRC to detect layer mismatches between connected pins.
+        /// </summary>
+        public int? Layer { get; set; }
+
         public (double x, double y) GetAbsolutePosition()
         {
             return (
@@ -79,6 +92,8 @@ namespace CAP_Core.Components.Core
                 OffsetYMicrometers = OffsetYMicrometers,
                 AngleDegrees = AngleDegrees,
                 PinId = Guid.NewGuid(),
+                WaveguideWidthMicrometers = WaveguideWidthMicrometers,
+                Layer = Layer,
                 // ParentComponent and LogicalPin are set after cloning by the Component
             };
         }

@@ -24,13 +24,27 @@ public partial class WaveguideRouter
     /// </summary>
     public double ProcessMinBendRadiusMicrometers { get; set; }
 
+    /// <summary>
+    /// Bend-radius floor (µm) for ELECTRICAL (metal trace) connections, sourced from the
+    /// process metal cross-section via <c>MetalRoutingSpecFactory</c> (issue #854). RF metal
+    /// routing needs curved bends just like waveguides — often LARGER than the optical floor —
+    /// so electrical pin pairs use this floor instead of
+    /// <see cref="ProcessMinBendRadiusMicrometers"/>. Defaults to the RF fallback
+    /// (3 × the default 10 µm trace width); 0 means no metal constraint.
+    /// </summary>
+    public double MetalProcessMinBendRadiusMicrometers { get; set; } =
+        MetalRouting.MetalRoutingSpec.DefaultMinBendRadiusMicrometers;
+
     /// <summary>Tolerance (µm) below which two bend radii count as equal.</summary>
     private const double RadiusToleranceMicrometers = 1e-6;
 
     /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
     /// If empty, any radius >= MinBendRadiusMicrometers is allowed.
-    /// When set, bends will snap to the smallest allowed radius that fits.
+    /// When set, smoothing snaps each bend to the smallest allowed radius that fits; a
+    /// post-routing pass (<see cref="AStarPathfinder.BendRadiusUpsizer"/>) then grows optical
+    /// bends to the LARGEST allowed radius the free space around them permits (larger radii
+    /// mean lower bend loss), once every sibling route is final.
     /// </summary>
     public List<double> AllowedBendRadii { get; set; } = new() { 5, 10, 20, 50 };
 
@@ -212,7 +226,7 @@ public partial class WaveguideRouter
         double endInputAngle = AngleUtilities.NormalizeAngle(endAngle + 180);
 
         double connectionRadius = MinBendRadiusMicrometers;
-        double effectiveRadius = Math.Max(connectionRadius, ProcessMinBendRadiusMicrometers);
+        double effectiveRadius = Math.Max(connectionRadius, ProcessFloorFor(startPin, endPin));
         bool floorRaisesRadius = effectiveRadius > connectionRadius + RadiusToleranceMicrometers;
 
         if (PreferDirectStyledRoutes)
@@ -252,71 +266,15 @@ public partial class WaveguideRouter
     }
 
     /// <summary>
-    /// Direct/S-bend-first policy (issue #860): builds the styled candidate for the pin
-    /// geometry and accepts it only when it is clean AND clear of the SAME obstacle grid A*
-    /// uses (component bodies, frozen paths, registered sibling waveguides) — with the same
-    /// pin corridors cleared that A* would clear. Returns null when no styled geometry fits
-    /// or the candidate is blocked — A* then routes as before.
+    /// The process bend-radius floor governing this pin pair: the metal floor for
+    /// electrical pins (RF traces must bend at the metal cross-section radius),
+    /// the optical floor otherwise. Checking one pin is authoritative — cross-kind
+    /// pairs are rejected at connection creation time.
     /// </summary>
-    private RoutedPath? TryRouteDirect(PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
-    {
-        var candidate = InterconnectRouting.DirectRouteFirstPolicy.TryBuildWithStyle(
-            startPin, endPin, bendRadius, out var directStyle);
-        if (candidate == null
-            || !candidate.IsValid
-            || PathIntersectionDetector.HasSelfIntersection(candidate)
-            || IsDirectCandidateBlocked(candidate.Segments, startPin, endPin, bendRadius))
-        {
-            return null;
-        }
-
-        candidate.IsDirectStyledRoute = true;
-        candidate.DirectStyle = directStyle;
-        return candidate;
-    }
-
-    /// <summary>
-    /// Blocked-cell test for the direct styled candidate, on the SAME grid state A*
-    /// would route on: the pin corridors <see cref="TryRouteAStar"/> clears (start
-    /// outward, end facing and end terminal — 3·radius long, radius wide) are cleared
-    /// for the test and restored afterwards. A styled path may therefore dip into the
-    /// endpoint components' own cells at the pin exit/entry — but a path that keeps
-    /// running THROUGH a component body beyond the corridor (field report: the S-bend
-    /// flowed straight through the target component whose pin faced away) stays
-    /// blocked and defers to A*, which routes around the body. Waveguide and frozen-path
-    /// obstacles are never cleared (corridors only clear component cells), matching the
-    /// previous policy for sibling routes.
-    /// </summary>
-    private bool IsDirectCandidateBlocked(
-        IReadOnlyList<PathSegment> segments, PhysicalPin startPin, PhysicalPin endPin, double bendRadius)
-    {
-        if (PathfindingGrid == null) return false;
-
-        var (startX, startY) = startPin.GetAbsolutePosition();
-        var (endX, endY) = endPin.GetAbsolutePosition();
-        double startAngle = startPin.GetAbsoluteAngle();
-        double endFacingAngle = endPin.GetAbsoluteAngle();
-        double endInputAngle = AngleUtilities.NormalizeAngle(endFacingAngle + 180);
-        double corridorLength = bendRadius * 3;
-        double corridorWidth = bendRadius;
-
-        var clearedStart = PathfindingGrid.ClearPinCorridor(
-            startX, startY, startAngle, corridorLength, corridorWidth);
-        var clearedEndApproach = PathfindingGrid.ClearPinCorridor(
-            endX, endY, endFacingAngle, corridorLength, corridorWidth);
-        var clearedEndTerminal = PathfindingGrid.ClearPinCorridor(
-            endX, endY, endInputAngle, corridorLength, corridorWidth);
-        try
-        {
-            return IsPathBlocked(segments, PathfindingGrid.IsBlocked);
-        }
-        finally
-        {
-            PathfindingGrid.RestoreCells(clearedStart);
-            PathfindingGrid.RestoreCells(clearedEndApproach);
-            PathfindingGrid.RestoreCells(clearedEndTerminal);
-        }
-    }
+    private double ProcessFloorFor(PhysicalPin startPin, PhysicalPin endPin) =>
+        startPin.MatterType == MatterType.Electricity || endPin.MatterType == MatterType.Electricity
+            ? MetalProcessMinBendRadiusMicrometers
+            : ProcessMinBendRadiusMicrometers;
 
     /// <summary>
     /// Manhattan (CSC) fallback when all A* attempts fail. Tries the process floor radius
@@ -400,91 +358,4 @@ public partial class WaveguideRouter
         && !IsPathBlocked(path.Segments)
         && !PathIntersectionDetector.HasSelfIntersection(path);
 
-    /// <summary>
-    /// Checks if any segment in a path passes through blocked cells.
-    /// </summary>
-    public bool IsPathBlocked(IEnumerable<PathSegment> segments)
-    {
-        if (PathfindingGrid == null) return false;
-        return IsPathBlocked(segments, PathfindingGrid.IsBlocked);
-    }
-
-    /// <summary>
-    /// Checks if any segment in a path passes through cells blocked by COMPONENTS
-    /// (including frozen group paths), ignoring registered waveguide obstacles.
-    /// Use this to judge component collisions of an existing route regardless of
-    /// which sibling routes are currently in the grid.
-    /// </summary>
-    public bool IsPathBlockedByComponents(IEnumerable<PathSegment> segments)
-    {
-        if (PathfindingGrid == null) return false;
-        return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponent);
-    }
-
-    /// <summary>Checks all segments against the given cell-blocked predicate.</summary>
-    private bool IsPathBlocked(IEnumerable<PathSegment> segments, Func<int, int, bool> isCellBlocked)
-    {
-        foreach (var segment in segments)
-        {
-            if (segment is StraightSegment)
-            {
-                if (IsLineBlocked(segment.StartPoint.X, segment.StartPoint.Y,
-                                  segment.EndPoint.X, segment.EndPoint.Y, isCellBlocked))
-                    return true;
-            }
-            else if (segment is BendSegment bend)
-            {
-                if (IsArcBlocked(bend, isCellBlocked)) return true;
-            }
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if a straight line passes through any blocked cells.
-    /// </summary>
-    private bool IsLineBlocked(double x1, double y1, double x2, double y2,
-                               Func<int, int, bool> isCellBlocked)
-    {
-        if (PathfindingGrid == null) return false;
-
-        double dx = x2 - x1;
-        double dy = y2 - y1;
-        double length = Math.Sqrt(dx * dx + dy * dy);
-        if (length < 0.001) return false;
-
-        dx /= length;
-        dy /= length;
-
-        double stepSize = PathfindingGrid.CellSizeMicrometers * 0.5;
-        double margin = PathfindingGrid.CellSizeMicrometers;
-
-        for (double t = margin; t < length - margin; t += stepSize)
-        {
-            double px = x1 + dx * t;
-            double py = y1 + dy * t;
-            var (gx, gy) = PathfindingGrid.PhysicalToGrid(px, py);
-            if (isCellBlocked(gx, gy)) return true;
-        }
-        return false;
-    }
-
-    /// <summary>
-    /// Checks if an arc segment passes through blocked cells.
-    /// The arc endpoints themselves are skipped (they legitimately touch pin corridors).
-    /// </summary>
-    private bool IsArcBlocked(BendSegment bend, Func<int, int, bool> isCellBlocked)
-    {
-        if (PathfindingGrid == null) return false;
-
-        double stepLength = PathfindingGrid.CellSizeMicrometers * 0.5;
-        var samples = ArcSampling.SamplePoints(bend, stepLength).ToList();
-
-        for (int i = 1; i < samples.Count - 1; i++)
-        {
-            var (gx, gy) = PathfindingGrid.PhysicalToGrid(samples[i].X, samples[i].Y);
-            if (isCellBlocked(gx, gy)) return true;
-        }
-        return false;
-    }
 }

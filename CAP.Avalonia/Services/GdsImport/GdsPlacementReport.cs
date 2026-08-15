@@ -43,6 +43,21 @@ public sealed class GdsPlacementReport
     public int ReroutedCount { get; internal set; }
 
     /// <summary>
+    /// Number of connections the opt-in auto-connect stage created between
+    /// facing, previously unconnected pins (routed with Lunima's router).
+    /// </summary>
+    public int AutoConnectedCount { get; internal set; }
+
+    /// <summary>
+    /// Number of auto-connected pairs the router could not route — they stay on
+    /// the canvas as visible blocked paths and are named in <see cref="Warnings"/>.
+    /// </summary>
+    public int AutoConnectFailedCount { get; internal set; }
+
+    /// <summary>Number of unconnected pins the auto-connect stage found no facing partner for.</summary>
+    public int AutoConnectUnpairedPinCount { get; internal set; }
+
+    /// <summary>
     /// Issues the post-batch <see cref="CAP_Core.Analysis.DesignValidator"/> run found in the
     /// connections created by this execution (type, location, involved pins). Repeated
     /// per-issue lines are grouped per distinct issue (first example + "× N instances").

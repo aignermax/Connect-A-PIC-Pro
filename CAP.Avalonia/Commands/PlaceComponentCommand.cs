@@ -42,17 +42,17 @@ public class PlaceComponentCommand : IUndoableCommand
             // component's local, unrotated frame — after the quarter turns the
             // pins land exactly where a true GDS STRANS transform puts them.
             if (mirrorPinsHorizontally)
-                MirrorPinsHorizontally(_component);
+                ComponentPoseTransform.MirrorPinsHorizontally(_component);
             // Rotate at the model level BEFORE the component is added to the canvas:
             // rotation keeps the top-left corner invariant, so (x, y) is the top-left
             // of the already-rotated bounding box. Doing it pre-placement also avoids
             // the canvas collision guard, which enforces a minimum inter-component
             // gap that GDS-abutting neighbours legitimately violate.
             if (exactRotationDegrees.HasValue)
-                RotateComponentCommand.ApplyModelRotation(_component, exactRotationDegrees.Value);
+                ComponentPoseTransform.ApplyExactRotation(_component, exactRotationDegrees.Value);
             else
                 for (var i = 0; i < quarterTurnsCounterClockwise; i++)
-                    RotateComponentCommand.ApplyModelRotation90(_component);
+                    ComponentPoseTransform.Rotate90CounterClockwise(_component);
         }
     }
 
@@ -122,26 +122,6 @@ public class PlaceComponentCommand : IUndoableCommand
 
     /// <summary>The component instance created by this command (null when invalid).</summary>
     public Component? PlacedComponent => _component;
-
-    /// <summary>
-    /// Mirrors the physical pins across the component's horizontal centerline in
-    /// its LOCAL (unrotated) frame: offset Y flips within the box, the angle maps
-    /// θ → −θ (a down-pointing pin becomes up-pointing). This is the app-space
-    /// effect of the GDS STRANS flag (reflection across the GDS x-axis) on pins;
-    /// combined with the placement position — the true reflected bbox top-left —
-    /// and the usual pre-placement rotation, the mirrored pins coincide with the
-    /// true reflected pin positions for every cardinal reference transform.
-    /// Geometry (parts, outlines) is NOT mirrored: the core model has no mirror
-    /// support (v1 limitation, surfaced as a placement warning).
-    /// </summary>
-    internal static void MirrorPinsHorizontally(Component component)
-    {
-        foreach (var pin in component.PhysicalPins)
-        {
-            pin.OffsetYMicrometers = component.HeightMicrometers - pin.OffsetYMicrometers;
-            pin.AngleDegrees = (360.0 - pin.AngleDegrees) % 360.0;
-        }
-    }
 
     /// <summary>The canvas ViewModel created for the component on <see cref="Execute"/> (null until then).</summary>
     public ComponentViewModel? CreatedViewModel => _createdViewModel;

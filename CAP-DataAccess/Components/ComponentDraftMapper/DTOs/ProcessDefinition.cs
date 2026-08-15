@@ -71,6 +71,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("electricalBridgeRequired")]
         public bool? ElectricalBridgeRequired { get; set; }
+
+        /// <summary>
+        /// Minimum edge-to-edge spacing between waveguides in µm, as required by the
+        /// foundry design rule. Nullable so PDKs written before this field existed
+        /// round-trip byte-identically and designs fall back to the conservative default.
+        /// </summary>
+        [JsonPropertyName("minWaveguideSpacingUm")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public double? MinWaveguideSpacingUm { get; set; }
     }
 
     /// <summary>A single GDS layer in the process stack.</summary>
