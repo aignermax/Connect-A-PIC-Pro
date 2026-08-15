@@ -520,6 +520,19 @@ public partial class PathfindingGrid
     }
 
     /// <summary>
+    /// Checks if a cell is blocked strictly by component geometry (cell state 1), excluding
+    /// frozen group path markings (state 3). Those markings are ephemeral routing aids that
+    /// the next grid rebuild replaces — and while a group is being ungrouped they are a
+    /// ghost of the very connection being judged — so a destructive verdict (unfreezing a
+    /// manually edited route and discarding its bend edits) must never be based on them.
+    /// </summary>
+    public bool IsBlockedByComponentOnly(int gridX, int gridY)
+    {
+        if (!IsInBounds(gridX, gridY)) return true;
+        return _cells[gridX, gridY] == 1;
+    }
+
+    /// <summary>
     /// Gets the state of a cell.
     /// Returns: 0 = free, 1 = blocked by component, 2 = blocked by waveguide
     /// </summary>

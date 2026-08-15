@@ -143,6 +143,35 @@ public class GroupConnectionSettingsRoundtripTests
     }
 
     [Fact]
+    public async Task Ungroup_FrozenAutoRoute_SurvivesRerouteCancelStorm()
+    {
+        // Regression guard for a CI flake: UngroupCommand (like every canvas command) kicks
+        // off its own fire-and-forget routing pass, so the awaited pass in
+        // Ungroup_FrozenAutoRoute_KeepsGeometryAndOverrides can cancel a pass mid-flight.
+        // A cancelled pass must never destroy the synchronously restored frozen state —
+        // storm the cancel-and-restart path explicitly so a regression here fails loudly
+        // and deterministically instead of surfacing as a once-in-a-blue-moon CI flake.
+        var (canvas, vm1, vm2, connection) = CreateCanvasWithConfiguredConnection();
+        connection.Type = WaveguideType.Auto;
+
+        new CreateGroupCommand(canvas, new List<ComponentViewModel> { vm1, vm2 }).Execute();
+        var group = GetCreatedGroup(canvas);
+        new UngroupCommand(canvas, group).Execute();
+
+        // Each fire-and-forget request cancels its predecessor mid-flight; the final
+        // awaited pass is serialized behind all of them by the routing semaphore.
+        for (var i = 0; i < 5; i++)
+            _ = canvas.RecalculateRoutesAsync();
+        await canvas.RecalculateRoutesAsync();
+
+        var restored = canvas.Connections.ShouldHaveSingleItem().Connection;
+        restored.IsRouteFrozen.ShouldBeTrue();
+        restored.BendRadiusOverrides[0].ShouldBe(12.5);
+        restored.RoutedPath.ShouldNotBeNull();
+        restored.RoutedPath!.Segments.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public void EnterGroupEditMode_TransmissionReflectsStoredLoss_NotTheManagerDefault()
     {
         // Round-5 review [5]: AddConnectionWithCachedRoute computes the transmission with

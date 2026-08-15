@@ -4,10 +4,11 @@
              x:Class="CAP.Avalonia.Views.Panels.TransientHelpFlyout"
              MaxWidth="420">
 
-    <!-- Plain-language explainer for Transient mode (#600 user feedback):
-         a looping animation (light travels through the chip and splits to the
-         outputs) plus non-physicist descriptions of the mode, the three
-         sources, and how to read the plot. Shown from the panel's "?" button. -->
+    <!-- Plain-language explainer for Transient mode (#600 user feedback, extended
+         in #907): a looping animation (light travels through the chip and splits to
+         the outputs) plus non-physicist descriptions of what the mode adds over the
+         S-matrix view, the three sources, and delays/thresholds. Shown as the
+         HelpContent of the panel's HelpFlyoutButton, which renders the title. -->
 
     <UserControl.Styles>
         <!-- Pulse entering from the laser to the chip centre, fading out there. -->
@@ -97,9 +98,6 @@
     <ScrollViewer MaxHeight="440">
         <StackPanel Margin="12" Spacing="8">
 
-            <TextBlock Text="{loc:Localize TransientHelp.Title}"
-                       FontWeight="Bold" FontSize="13" Foreground="White"/>
-
             <!-- Looping animation: laser → chip → split to two outputs. -->
             <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
                     CornerRadius="4" Padding="4">
@@ -137,10 +135,10 @@
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                        Text="{loc:Localize TransientHelp.Intro2}"/>
 
-            <TextBlock Text="{loc:Localize TransientHelp.WhyTitle}" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize TransientHelp.VsSMatrixTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
-                       Text="{loc:Localize TransientHelp.WhyBody}"/>
+                       Text="{loc:Localize TransientHelp.VsSMatrixBody}"/>
 
             <TextBlock Text="{loc:Localize TransientHelp.SourcesTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
@@ -159,8 +157,10 @@
                 </TextBlock>
             </StackPanel>
 
-            <TextBlock Text="{loc:Localize TransientHelp.ReadingTitle}" FontWeight="Bold" FontSize="12"
+            <TextBlock Text="{loc:Localize TransientHelp.DelayThresholdTitle}" FontWeight="Bold" FontSize="12"
                        Foreground="White" Margin="0,4,0,0"/>
+            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                       Text="{loc:Localize TransientHelp.DelayThresholdBody}"/>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                        Text="{loc:Localize TransientHelp.ReadingBody}"/>
             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
