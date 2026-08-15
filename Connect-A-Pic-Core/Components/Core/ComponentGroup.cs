@@ -2,6 +2,7 @@ using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Serialization;
 using CAP_Core.Components.Creation;
+using CAP_Core.Components.Process;
 using CAP_Core.LightCalculation;
 using CAP_Core.Routing;
 
@@ -76,6 +77,15 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     /// Only prefabs appear in the "Saved Groups" panel.
     /// </summary>
     public bool IsPrefab { get; set; }
+
+    /// <summary>
+    /// Optional per-chiplet fabrication process binding (issue #935). When set, this group is
+    /// treated as a chiplet manufactured in <see cref="FabricationProcess"/>; placement and
+    /// paste of components INTO the group are checked against this process instead of the
+    /// canvas-global active process. Null means the group carries no process identity of its
+    /// own — placement into it falls back to the canvas-global check.
+    /// </summary>
+    public ActiveProcessSelection? FabricationProcess { get; set; }
 
     /// <summary>
     /// Reference to parent group if this group is nested within another group.
@@ -576,6 +586,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             WidthMicrometers = WidthMicrometers,
             HeightMicrometers = HeightMicrometers,
             Rotation90CounterClock = Rotation90CounterClock,
+            // A chiplet keeps its fabrication-process binding across copy/paste and template
+            // instantiation, else the copy would silently revert to canvas-global enforcement.
+            FabricationProcess = FabricationProcess,
             // Immutable records — sharing the list is safe (same rule as Component.DeepCopy).
             OutlinePolygons = OutlinePolygons
         };

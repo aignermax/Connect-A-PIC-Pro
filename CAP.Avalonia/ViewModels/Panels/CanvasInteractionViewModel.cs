@@ -399,7 +399,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (SelectedTemplate == null) return;
 
-        var (isAllowed, blockReason) = PlacementContext.CheckPlacement(SelectedTemplate.PdkSource);
+        // Dropping onto a chiplet scopes the check to that chiplet's fabrication process;
+        // ungrouped canvas content falls back to the design-global active process (#935).
+        var (isAllowed, blockReason) = PlacementContext.CheckPlacementInScope(
+            ChipletScopeAt(x, y), SelectedTemplate.PdkSource);
         if (!isAllowed)
         {
             UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
@@ -433,7 +436,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         // Single-process enforcement over the group's children (issue #653): a group has no
         // PdkSource of its own, so a foreign-process child must not slip in via grouping.
-        var (isAllowed, blockReason) = PlacementContext.CheckGroupPlacement(
+        // Dropping onto a chiplet scopes the check to that chiplet's process (#935).
+        var (isAllowed, blockReason) = PlacementContext.CheckGroupPlacementInScope(
+            ChipletScopeAt(x, y),
             ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
             SelectedGroupTemplate.Name);
         if (!isAllowed)
@@ -509,6 +514,25 @@ public partial class CanvasInteractionViewModel : ObservableObject
         _canvas.Components
             .Where(c => x >= c.X && x <= c.X + c.Width && y >= c.Y && y <= c.Y + c.Height)
             .LastOrDefault();
+
+    /// <summary>
+    /// Returns the nearest chiplet (a <see cref="ComponentGroup"/> with a
+    /// <see cref="ComponentGroup.FabricationProcess"/>) whose bounds contain the point —
+    /// walking up the parent chain so a drop onto an unbound inner group nested inside a
+    /// bound chiplet defers to that chiplet — or null when no bound chiplet governs the
+    /// point. Placement/paste checks use this to scope enforcement to the chiplet's
+    /// fabrication process (issue #935).
+    /// </summary>
+    private ComponentGroup? ChipletScopeAt(double x, double y)
+    {
+        var hit = ComponentAt(x, y)?.Component;
+        var group = hit as ComponentGroup ?? hit?.ParentGroup as ComponentGroup;
+        while (group != null && group.FabricationProcess == null)
+        {
+            group = group.ParentGroup;
+        }
+        return group;
+    }
 
     private void SelectAt(double x, double y)
     {
@@ -849,17 +873,25 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (!_canvas.Clipboard.HasContent) return;
 
+        // Paste at an explicit position onto a chiplet scopes the check to that chiplet's
+        // fabrication process (issue #935); a position-less paste (Ctrl+V) keeps the
+        // canvas-global check because the landing spot is not yet known.
+        var scope = (targetX.HasValue && targetY.HasValue)
+            ? ChipletScopeAt(targetX.Value, targetY.Value)
+            : null;
+
         // PeekPdkSources expands groups to their resolved children (the clipboard's
         // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
         // smuggle foreign-process components past the paste guard (issue #653).
         var blockedCount = _canvas.Clipboard.PeekPdkSources()
-            .Count(pdk => !PlacementContext.CheckPlacement(pdk).IsAllowed);
+            .Count(pdk => !PlacementContext.CheckPlacementInScope(scope, pdk).IsAllowed);
         if (blockedCount > 0)
         {
-            // A blocked component implies a non-null, non-Playground active process.
+            // A blocked component implies a non-null, non-Playground effective process.
+            var effective = PlacementContext.EffectiveProcessFor(scope)!;
             UpdateStatus?.Invoke(
                 $"Clipboard has {blockedCount} component(s) from another process; " +
-                $"cannot paste into the '{PlacementContext.ActiveProcess!.DisplayName}' design.");
+                $"cannot paste into the '{effective.DisplayName}' design.");
             return;
         }
 

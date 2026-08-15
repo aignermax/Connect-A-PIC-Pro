@@ -76,4 +76,39 @@ public sealed class PlacementPolicyContext
     public (bool IsAllowed, string? BlockReason) CheckGroupPlacement(
         IEnumerable<string?> childPdkSources, string? groupName = null) =>
         GroupProcessPolicy.CheckGroupPlacement(ActiveProcess, childPdkSources, ProcessAgnosticPdkNames, LiveMemberPdkNames, groupName);
+
+    /// <summary>
+    /// Checks a component's placement against the process that governs <paramref name="scope"/>:
+    /// the chiplet's <see cref="ComponentGroup.FabricationProcess"/> when the target is a
+    /// chiplet with its own binding, else the canvas-global <see cref="ActiveProcess"/>
+    /// (issue #935). Two chiplets of different processes can then coexist on one canvas
+    /// without dropping to Playground.
+    /// </summary>
+    /// <param name="scope">The chiplet the component would land in, or null for ungrouped canvas content.</param>
+    /// <param name="componentPdkName">PDK source of the component being placed.</param>
+    public (bool IsAllowed, string? BlockReason) CheckPlacementInScope(
+        ComponentGroup? scope, string? componentPdkName) =>
+        SingleProcessPolicy.CheckPlacement(
+            EffectiveProcessFor(scope), componentPdkName, ProcessAgnosticPdkNames, LiveMemberPdkNames);
+
+    /// <summary>
+    /// Group-placement counterpart of <see cref="CheckPlacementInScope"/>: children are checked
+    /// against the target chiplet's process when one is bound, else against the canvas-global
+    /// active process (issue #935).
+    /// </summary>
+    /// <param name="scope">The chiplet the group would land in, or null for ungrouped canvas content.</param>
+    /// <param name="childPdkSources">PDK source of every child component.</param>
+    /// <param name="groupName">Display name of the placed group, used in the block message.</param>
+    public (bool IsAllowed, string? BlockReason) CheckGroupPlacementInScope(
+        ComponentGroup? scope, IEnumerable<string?> childPdkSources, string? groupName = null) =>
+        GroupProcessPolicy.CheckGroupPlacement(
+            EffectiveProcessFor(scope), childPdkSources, ProcessAgnosticPdkNames, LiveMemberPdkNames, groupName);
+
+    /// <summary>
+    /// Resolves the process that governs placement into <paramref name="scope"/>: the chiplet's
+    /// own <see cref="ComponentGroup.FabricationProcess"/> when bound, else the canvas-global
+    /// <see cref="ActiveProcess"/> (issue #935).
+    /// </summary>
+    public ActiveProcessSelection? EffectiveProcessFor(ComponentGroup? scope) =>
+        scope?.FabricationProcess ?? ActiveProcess;
 }
