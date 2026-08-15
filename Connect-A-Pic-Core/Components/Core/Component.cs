@@ -355,6 +355,9 @@ public partial class Component : ICloneable
                 // The snapshot travels with every rebuild — without it a clone of a
                 // deserialized prefab could no longer be re-serialized with formulas.
                 rebuilt.ParametricSnapshot ??= oldMatrix.ParametricSnapshot;
+                // Carry the evaluated numeric transfers over (remapped to the clone's
+                // pin IDs) so the clone conducts light before any slider is touched.
+                rebuilt.SetValues(CreateConnectionsWithUpdatedPins(oldToNewPinIds, oldMatrix));
                 clonedLaserSMatrixMap.Add(laserAndMatrix.Key, rebuilt);
                 continue;
             }
@@ -412,6 +415,17 @@ public partial class Component : ICloneable
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
         clonedComponent.ParameterDefinitions = ParameterDefinitions;
+
+        // The constructor sweeps every slider to its range midpoint to prime the
+        // matrix observers; re-assert the source values so the clone keeps the
+        // source's parameter state (the change notification re-evaluates the
+        // rebuilt matrices against the clone's own sliders).
+        foreach (var sourceSlider in GetAllSliders())
+        {
+            var clonedSlider = clonedComponent.GetSlider(sourceSlider.Number);
+            if (clonedSlider != null)
+                clonedSlider.Value = sourceSlider.Value;
+        }
 
         return clonedComponent;
     }
