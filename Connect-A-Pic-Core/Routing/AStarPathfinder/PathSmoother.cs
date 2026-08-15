@@ -13,7 +13,6 @@ public class PathSmoother
     private readonly double _minBendRadius;
     private readonly BendBuilder _bendBuilder;
     private readonly SBendBuilder _sBendBuilder;
-    private readonly CornerRadiusSelector _cornerRadiusSelector;
 
     public PathSmoother(PathfindingGrid grid, double minBendRadius, List<double>? allowedRadii = null)
     {
@@ -21,7 +20,6 @@ public class PathSmoother
         _minBendRadius = minBendRadius;
         _bendBuilder = new BendBuilder(minBendRadius, allowedRadii);
         _sBendBuilder = new SBendBuilder(_bendBuilder, minBendRadius);
-        _cornerRadiusSelector = new CornerRadiusSelector(grid, _bendBuilder, minBendRadius);
     }
 
     public RoutedPath ConvertToSegments(List<AStarNode> gridPath, PhysicalPin startPin, PhysicalPin endPin)
@@ -69,7 +67,6 @@ public class PathSmoother
                 continue;
 
             double straightDistance;
-            double bendRadius = _minBendRadius;
             if (willTurn)
             {
                 // Distance to the exact intersection of the current heading line
@@ -79,17 +76,10 @@ public class PathSmoother
                 double distanceToApex = DistanceToLineIntersection(
                     x, y, currentAngle, cornerX, cornerY, newAngle) ?? dot;
 
-                // Prefer the largest allowed radius the corner's free space permits —
-                // gentler bends mean lower optical loss. Shrinks toward the minimum
-                // only when the straight runs or obstacles force it.
-                bendRadius = _cornerRadiusSelector.SelectForCorner(
-                    corners, i, lastTurnIndex, x, y, currentAngle, newAngle,
-                    distanceToApex, cornerX, cornerY, endX, endY);
-
                 // Setback before the bend: the tangent length of a circular arc
                 // is r·tan(sweep/2) — r for 90° turns, ≈0.414·r for 45° turns.
                 double turnAngle = Math.Abs(AngleUtilities.NormalizeAngle(newAngle - currentAngle));
-                double bendSetback = bendRadius * Math.Tan(turnAngle * Math.PI / 360.0);
+                double bendSetback = _minBendRadius * Math.Tan(turnAngle * Math.PI / 360.0);
                 straightDistance = Math.Max(0, distanceToApex - bendSetback);
             }
             else
@@ -114,8 +104,7 @@ public class PathSmoother
 
             if (willTurn)
             {
-                var bend = _bendBuilder.BuildBend(x, y, currentAngle, newAngle,
-                                                  BendMode.Diagonal45, bendRadius);
+                var bend = _bendBuilder.BuildBend(x, y, currentAngle, newAngle, BendMode.Diagonal45);
                 if (bend != null)
                 {
                     routedPath.Segments.Add(bend);

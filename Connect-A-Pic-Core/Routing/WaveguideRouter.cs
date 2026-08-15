@@ -41,9 +41,10 @@ public partial class WaveguideRouter
     /// <summary>
     /// Allowed bend radii in micrometers (foundry-style discrete values).
     /// If empty, any radius >= MinBendRadiusMicrometers is allowed.
-    /// When set, each corner snaps to the LARGEST allowed radius the free space around it
-    /// permits (larger radii mean lower bend loss), shrinking toward the minimum only when
-    /// straight runs or obstacles force it.
+    /// When set, smoothing snaps each bend to the smallest allowed radius that fits; a
+    /// post-routing pass (<see cref="AStarPathfinder.BendRadiusUpsizer"/>) then grows optical
+    /// bends to the LARGEST allowed radius the free space around them permits (larger radii
+    /// mean lower bend loss), once every sibling route is final.
     /// </summary>
     public List<double> AllowedBendRadii { get; set; } = new() { 5, 10, 20, 50 };
 

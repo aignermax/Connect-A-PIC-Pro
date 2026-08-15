@@ -354,10 +354,12 @@ public partial class WaveguideConnectionManager
         if (UseSequentialRouting && _router.PathfindingGrid != null &&
             !cancellationToken.IsCancellationRequested)
         {
-            // Pull auto routes onto their pins now that every sibling is final, then flag any
+            // Pull auto routes onto their pins now that every sibling is final, grow optical
+            // bends to the gentlest radius the remaining free space permits, then flag any
             // crossing that even the collapse could not keep clear (there should be none). The
             // crossing scan must not run on a half-collapsed state if cancellation interrupted it.
             CollapseAutoRoutePinLeads(cancellationToken);
+            UpsizeAutoRouteBendRadii(cancellationToken);
             if (!cancellationToken.IsCancellationRequested)
                 MarkUnresolvedSiblingCrossings();
         }
