@@ -26,6 +26,12 @@ public partial class WaveguideRouter
     /// this connection's own stale route (same pin pair) so it never blocks its re-route.</summary>
     private const double SameEndpointToleranceMicrometers = 1.0;
 
+    /// <summary>Centerline clearance (µm) below which a candidate and a sibling count as
+    /// touching — the drawn waveguide cores physically merge. Enforced everywhere, even
+    /// inside the pin fan-out exemption zones where sub-min-spacing proximity is allowed.</summary>
+    private const double SiblingContactClearanceMicrometers =
+        PhotonicConstants.StandardWaveguideWidthMicrometers;
+
     /// <summary>
     /// Direct/S-bend-first policy (issue #860): builds the styled candidate for the pin
     /// geometry and accepts it only when it is clean, clear of component bodies on the
@@ -98,10 +104,14 @@ public partial class WaveguideRouter
 
     /// <summary>
     /// Exact geometric verdict against every registered sibling route (issue #874): the
-    /// candidate is rejected when it properly CROSSES a sibling, or when it comes closer
+    /// candidate is rejected when it properly CROSSES a sibling, when it comes closer
     /// than <see cref="MinWaveguideSpacingMicrometers"/> outside the pin fan-out zones
     /// (within 3·radius of the candidate's own pins, proximity to neighbors is dictated
-    /// by the fixed pin pitch and tolerated — matching the A* pin-corridor allowance).
+    /// by the fixed pin pitch and tolerated — matching the A* pin-corridor allowance),
+    /// or when it makes CONTACT with a sibling anywhere — including inside the fan-out
+    /// zones. Contact means the centerlines come within one waveguide width: the drawn
+    /// cores physically merge, the exported GDS polygons touch, and a re-import can no
+    /// longer disentangle the routes (they collapse into one frozen junction network).
     /// A registered obstacle with this connection's own endpoints is its stale previous
     /// route and is skipped.
     /// </summary>
@@ -127,6 +137,10 @@ public partial class WaveguideRouter
                 return true;
             if (PathIntersectionDetector.ComesCloserThan(
                     candidate, sibling, MinWaveguideSpacingMicrometers, exemptionRadius))
+                return true;
+            if (PathIntersectionDetector.ComesCloserThan(
+                    candidate, sibling, SiblingContactClearanceMicrometers,
+                    endpointExemptionRadiusMicrometers: 0))
                 return true;
         }
         return false;

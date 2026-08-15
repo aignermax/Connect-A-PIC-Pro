@@ -121,6 +121,28 @@ public class DirectRouteSiblingClearanceTests
     }
 
     [Fact]
+    public void Route_SiblingTouchingCandidateInsideFanoutZone_DefersToAStar()
+    {
+        // The fan-out exemption tolerates sub-spacing proximity near the pins, but never
+        // CONTACT: a sibling hugging the candidate closer than one waveguide width means
+        // the drawn cores merge — the exported GDS polygons touch and a re-import can no
+        // longer disentangle the two routes into separate connections.
+        var router = CreateRouter();
+        router.InitializePathfindingGrid(-50, -50, 300, 200, Array.Empty<Component>());
+        router.PathfindingGrid!.AddWaveguideObstacle(Guid.NewGuid(), new List<PathSegment>
+        {
+            new StraightSegment(5, 25.5, 25, 25.5, 0)
+        }, SiblingObstacleWidth);
+        var (start, end) = FacingPins(startX: 0, startY: 25, endX: 250, endY: 25);
+
+        var path = router.Route(start, end);
+
+        path.IsDirectStyledRoute.ShouldBeFalse(
+            "a sibling touching the candidate must defer the styled route to A*, " +
+            "even inside the pin fan-out exemption zone");
+    }
+
+    [Fact]
     public void Route_DenseFanoutArray_AllConnectionsRouteDirectWithoutBlockedFallbacks()
     {
         // Field scenario (issue #874): a dense array of parallel channels routed
