@@ -15,6 +15,7 @@ public class DesignValidator
 {
     private readonly WaveguideOverlapDetector _overlapDetector = new();
     private readonly WaveguideSpacingDetector _spacingDetector = new();
+    private readonly WaveguideMinWidthChecker _minWidthChecker = new();
 
     /// <summary>
     /// Validates all provided waveguide connections and returns any issues found.
@@ -132,9 +133,11 @@ public class DesignValidator
     /// <summary>
     /// Full DRC-lite aggregation: validates waveguide connections, detects overlaps with
     /// frozen paths, checks every optical pin on the provided components for a connection,
-    /// and (when <paramref name="minWaveguideSpacingMicrometers"/> &gt; 0) checks edge-to-edge
-    /// waveguide spacing against the process minimum. Each rule contributes its findings
-    /// exactly once.
+    /// (when <paramref name="minWaveguideSpacingMicrometers"/> &gt; 0) checks edge-to-edge
+    /// waveguide spacing against the process minimum, and (when
+    /// <paramref name="minWaveguideWidthRules"/> are provided) flags waveguides narrower
+    /// than the fabrication minimum of their cross-section. Each rule contributes its
+    /// findings exactly once.
     /// </summary>
     /// <param name="connections">Regular waveguide connections to validate.</param>
     /// <param name="groups">ComponentGroups whose frozen internal paths are checked for overlap.</param>
@@ -143,13 +146,18 @@ public class DesignValidator
     /// <param name="minWaveguideSpacingMicrometers">
     /// Minimum required edge-to-edge spacing; ≤0 disables the spacing check.
     /// </param>
+    /// <param name="minWaveguideWidthRules">
+    /// Per-cross-section minimum feature widths of the active process; null/empty disables
+    /// the min-width check (the PDK declares no <c>minWidthUm</c>).
+    /// </param>
     /// <returns>A list of all design issues found, empty if the design is valid.</returns>
     public List<DesignIssue> Validate(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup> groups,
         IEnumerable<Component> components,
         IEnumerable<PhysicalPin>? externalPortPins,
-        double minWaveguideSpacingMicrometers = 0)
+        double minWaveguideSpacingMicrometers = 0,
+        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null)
     {
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(groups);
@@ -161,6 +169,10 @@ public class DesignValidator
         {
             issues.AddRange(_spacingDetector.DetectViolations(
                 connectionList, groups, minWaveguideSpacingMicrometers));
+        }
+        if (minWaveguideWidthRules is { Count: > 0 })
+        {
+            issues.AddRange(_minWidthChecker.CheckConnections(connectionList, minWaveguideWidthRules));
         }
         return issues;
     }

@@ -59,9 +59,10 @@ public partial class DesignValidationViewModel : ObservableObject
     /// Detects invalid geometry, blocked paths, overlaps with frozen group paths,
     /// per-connection pin width/layer mismatches, (when components are provided) dangling
     /// optical pins, (when a positive minimum spacing is provided) waveguides closer than
-    /// the process minimum, (when chip bounds are provided) out-of-bounds component
-    /// placement, and (when PDK data is provided) placed components whose PDK no longer
-    /// matches the active process.
+    /// the process minimum, (when min-width rules are provided) waveguides narrower than
+    /// the fabrication minimum of their cross-section, (when chip bounds are provided)
+    /// out-of-bounds component placement, and (when PDK data is provided) placed
+    /// components whose PDK no longer matches the active process.
     /// </summary>
     /// <param name="connections">Waveguide connections to validate.</param>
     /// <param name="groups">ComponentGroups whose frozen paths are checked for overlap. Optional.</param>
@@ -74,6 +75,7 @@ public partial class DesignValidationViewModel : ObservableObject
     /// <param name="processLockActive">Whether a real (non-Playground) fabrication process is active.</param>
     /// <param name="externalPortPins">Pins treated as external ports; exempt from the dangling-pin check. Optional.</param>
     /// <param name="minWaveguideSpacingMicrometers">Process minimum edge-to-edge waveguide spacing; ≤0 disables the spacing check. Optional.</param>
+    /// <param name="minWaveguideWidthRules">Per-cross-section minimum feature widths of the active process; null/empty disables the min-width check. Optional.</param>
     public void RunValidation(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup>? groups = null,
@@ -85,20 +87,22 @@ public partial class DesignValidationViewModel : ObservableObject
         IReadOnlyCollection<string>? enabledPdkNames = null,
         bool processLockActive = true,
         IEnumerable<PhysicalPin>? externalPortPins = null,
-        double minWaveguideSpacingMicrometers = 0)
+        double minWaveguideSpacingMicrometers = 0,
+        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null)
     {
         Issues.Clear();
         CurrentIndex = -1;
         HighlightConnection?.Invoke(null);
 
         // Single full-aggregation call: per-connection checks + frozen-path overlap +
-        // dangling pins + spacing each contribute their findings exactly once (#915).
+        // dangling pins + spacing + min width each contribute their findings exactly once (#915).
         var results = _validator.Validate(
             connections,
             groups ?? Array.Empty<ComponentGroup>(),
             allComponents ?? Array.Empty<Component>(),
             externalPortPins,
-            minWaveguideSpacingMicrometers);
+            minWaveguideSpacingMicrometers,
+            minWaveguideWidthRules);
 
         foreach (var issue in results)
             Issues.Add(issue);
