@@ -256,11 +256,13 @@ public partial class PathfindingGrid
         // Collect pin corridor cells that should remain open
         // Only clear a small area OUTSIDE the component where the waveguide approaches
         var pinCorridorCells = new HashSet<(int, int)>();
+        var pinCorridors = new Dictionary<PhysicalPin, HashSet<(int x, int y)>>();
         double corridorLength = 10.0; // Length of corridor OUTWARD from pin (not into component)
         double corridorWidth = 4.0;   // Narrow corridor width (just enough for waveguide)
 
         foreach (var pin in component.PhysicalPins)
         {
+            var corridorCells = new HashSet<(int x, int y)>();
             var (pinX, pinY) = pin.GetAbsolutePosition();
             double pinAngle = pin.GetAbsoluteAngle();
 
@@ -282,12 +284,21 @@ public partial class PathfindingGrid
                     double cellX = centerX + perpX * offset;
                     double cellY = centerY + perpY * offset;
                     var (gx, gy) = PhysicalToGrid(cellX, cellY);
+                    corridorCells.Add((gx, gy));
                     pinCorridorCells.Add((gx, gy));
                 }
             }
+            pinCorridors[pin] = corridorCells;
         }
 
+        // Body rectangle in grid coordinates, to classify blocked cells as body vs. padding.
+        var (bx1, by1) = PhysicalToGrid(component.PhysicalX, component.PhysicalY);
+        var (bx2, by2) = PhysicalToGrid(component.PhysicalX + component.WidthMicrometers,
+                                        component.PhysicalY + component.HeightMicrometers);
+
         var cells = new HashSet<(int, int)>();
+        var bodyCells = new HashSet<(int x, int y)>();
+        var paddingCells = new HashSet<(int x, int y)>();
         for (int gx = gx1; gx <= gx2; gx++)
         {
             for (int gy = gy1; gy <= gy2; gy++)
@@ -296,6 +307,10 @@ public partial class PathfindingGrid
                 {
                     _cells[gx, gy] = 1; // Blocked by obstacle
                     cells.Add((gx, gy));
+                    if (gx >= bx1 && gx <= bx2 && gy >= by1 && gy <= by2)
+                        bodyCells.Add((gx, gy));
+                    else
+                        paddingCells.Add((gx, gy));
                 }
             }
         }
@@ -303,6 +318,7 @@ public partial class PathfindingGrid
         {
             _componentCells[component] = cells;
         }
+        RegisterComponentOwnership(component, bodyCells, paddingCells, pinCorridors);
 
         // Mark pin reservation zones — soft penalty area around each pin.
         // Routes can pass through but A* prefers to avoid them.
@@ -347,6 +363,7 @@ public partial class PathfindingGrid
                 }
             }
         }
+        UnregisterComponentOwnership(component, cells);
         UnregisterPinZones(component);
     }
 
@@ -383,6 +400,7 @@ public partial class PathfindingGrid
                         }
                     }
                 }
+                UnregisterComponentOwnership(child, cells);
                 UnregisterPinZones(child);
             }
         }
@@ -583,6 +601,7 @@ public partial class PathfindingGrid
             _componentPinZones.Clear();
             _pinZoneRefCounts.Clear();
         }
+        ClearOwnership();
 
         foreach (var component in components)
         {
