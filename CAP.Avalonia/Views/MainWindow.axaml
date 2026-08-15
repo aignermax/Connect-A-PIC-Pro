@@ -967,6 +967,9 @@
                     <!-- Netlist Panel (gdsfactory YAML view/export, #687) -->
                     <panels:NetlistPanel/>
 
+                    <!-- Truth Table Panel (logic-gate behavior of the selected group, #947) -->
+                    <panels:TruthTablePanel/>
+
                 </StackPanel>
                 </ScrollViewer>
             </DockPanel>
