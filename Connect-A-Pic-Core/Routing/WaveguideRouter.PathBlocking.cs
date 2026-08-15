@@ -1,3 +1,5 @@
+using CAP_Core.Components.Core;
+
 namespace CAP_Core.Routing;
 
 /// <summary>
@@ -18,5 +20,36 @@ public partial class WaveguideRouter
     {
         if (PathfindingGrid == null) return false;
         return IsPathBlocked(segments, PathfindingGrid.IsBlockedByComponentOnly);
+    }
+
+    /// <summary>
+    /// Same verdict as <see cref="IsPathBlockedByComponentOnly(IEnumerable{PathSegment})"/>,
+    /// but with the own-pin tolerance: cells inside the pin corridors of
+    /// <paramref name="ownPins"/> that only a foreign component's padding band reaches
+    /// across do not count as blocked — a route may hug its own pin. A foreign component
+    /// body inside the corridor still blocks.
+    /// </summary>
+    public bool IsPathBlockedByComponentOnly(
+        IEnumerable<PathSegment> segments, IReadOnlyCollection<PhysicalPin> ownPins)
+    {
+        if (PathfindingGrid == null) return false;
+        var corridors = PathfindingGrid.GetPinCorridorCells(ownPins);
+        return IsPathBlocked(segments,
+            (gx, gy) => PathfindingGrid.IsBlockedByComponentOnly(gx, gy, corridors));
+    }
+
+    /// <summary>
+    /// Same verdict as <see cref="IsPathBlockedByComponents(IEnumerable{PathSegment})"/>
+    /// (component geometry plus frozen group path markings), with the own-pin tolerance
+    /// described at
+    /// <see cref="IsPathBlockedByComponentOnly(IEnumerable{PathSegment}, IReadOnlyCollection{PhysicalPin})"/>.
+    /// </summary>
+    public bool IsPathBlockedByComponents(
+        IEnumerable<PathSegment> segments, IReadOnlyCollection<PhysicalPin> ownPins)
+    {
+        if (PathfindingGrid == null) return false;
+        var corridors = PathfindingGrid.GetPinCorridorCells(ownPins);
+        return IsPathBlocked(segments,
+            (gx, gy) => PathfindingGrid.IsBlockedByComponent(gx, gy, corridors));
     }
 }

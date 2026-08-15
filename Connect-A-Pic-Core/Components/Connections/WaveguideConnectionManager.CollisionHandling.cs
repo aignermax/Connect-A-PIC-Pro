@@ -1,3 +1,4 @@
+using CAP_Core.Components.Core;
 using CAP_Core.Routing;
 
 namespace CAP_Core.Components.Connections;
@@ -20,6 +21,10 @@ public partial class WaveguideConnectionManager
     /// pass still holds a grid rebuilt from the removed group — the marking is then a
     /// ghost of the very connection being judged and unfreezing would silently discard
     /// the user's manual edits.
+    /// The route may hug its own pins: cells inside the pin corridors of the connection's
+    /// endpoint pins that only a NEIGHBOUR's padding band covers are tolerated — a foreign
+    /// component placed next to a pin must not unfreeze a collapsed manual edit. A foreign
+    /// component body inside the corridor still unfreezes.
     /// Styled routes (Type != Auto) are never unfrozen here — their shape is forced and a
     /// collision is surfaced via <see cref="RoutedPath.PassesThroughComponent"/> instead.
     /// </summary>
@@ -30,13 +35,22 @@ public partial class WaveguideConnectionManager
             return false;
         if (!connection.FrozenPathStillMatchesPins())
             return false; // Endpoint moved: RecalculateTransmission already unfreezes.
-        if (!router.IsPathBlockedByComponentOnly(connection.RoutedPath!.Segments))
+        if (!router.IsPathBlockedByComponentOnly(connection.RoutedPath!.Segments, OwnEndpointPins(connection)))
             return false;
 
         connection.IsRouteFrozen = false;
         connection.BendRadiusOverrides.Clear();
         connection.StraightShiftOffsets.Clear();
         return true;
+    }
+
+    /// <summary>The connection's endpoint pins, whose pin corridors the route may hug.</summary>
+    private static List<PhysicalPin> OwnEndpointPins(WaveguideConnection connection)
+    {
+        var pins = new List<PhysicalPin>(2);
+        if (connection.StartPin != null) pins.Add(connection.StartPin);
+        if (connection.EndPin != null) pins.Add(connection.EndPin);
+        return pins;
     }
 
     /// <summary>
