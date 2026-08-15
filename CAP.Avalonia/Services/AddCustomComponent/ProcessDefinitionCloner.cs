@@ -18,8 +18,9 @@ public static class ProcessDefinitionCloner
         }).ToList(),
         Xsections = source.Xsections.Select(x => new ProcessXsection
         {
-            Name = x.Name, Kind = x.Kind, WidthUm = x.WidthUm, MinRadiusUm = x.MinRadiusUm,
+            Name = x.Name, Kind = x.Kind, WidthUm = x.WidthUm, MinWidthUm = x.MinWidthUm, MinRadiusUm = x.MinRadiusUm,
             RecommendedRadiusUm = x.RecommendedRadiusUm, Layers = new List<string>(x.Layers), Description = x.Description,
+            DrcSource = x.DrcSource,
         }).ToList(),
         Materials = source.Materials.Select(m => new ProcessMaterial
         {
@@ -28,5 +29,6 @@ public static class ProcessDefinitionCloner
         AllowedAngles = new List<int>(source.AllowedAngles),
         ElectricalBridgeRequired = source.ElectricalBridgeRequired,
         MinWaveguideSpacingUm = source.MinWaveguideSpacingUm,
+        DrcSource = source.DrcSource,
     };
 }

@@ -80,6 +80,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("minWaveguideSpacingUm")]
         [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
         public double? MinWaveguideSpacingUm { get; set; }
+
+        /// <summary>
+        /// Provenance of the process-level DRC values (e.g. <see cref="MinWaveguideSpacingUm"/>):
+        /// the foundry document/table/script the numbers were taken from. Nullable so PDKs
+        /// written before this field existed round-trip byte-identically.
+        /// </summary>
+        [JsonPropertyName("drcSource")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? DrcSource { get; set; }
     }
 
     /// <summary>A single GDS layer in the process stack.</summary>
@@ -134,6 +143,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         [JsonPropertyName("widthUm")]
         public double WidthUm { get; set; }
 
+        /// <summary>
+        /// Fabrication minimum feature width for this cross-section in µm (the foundry DRC
+        /// limit; <see cref="WidthUm"/> is the standard design width and may be larger).
+        /// Nullable so PDKs written before this field existed round-trip byte-identically.
+        /// </summary>
+        [JsonPropertyName("minWidthUm")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public double? MinWidthUm { get; set; }
+
         /// <summary>Minimum allowed bend radius in µm.</summary>
         [JsonPropertyName("minRadiusUm")]
         public double MinRadiusUm { get; set; }
@@ -149,6 +167,15 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// <summary>Human-readable description.</summary>
         [JsonPropertyName("description")]
         public string? Description { get; set; }
+
+        /// <summary>
+        /// Provenance of this cross-section's DRC values (<see cref="MinWidthUm"/>,
+        /// <see cref="MinRadiusUm"/>): the foundry document/table/script the numbers were
+        /// taken from.
+        /// </summary>
+        [JsonPropertyName("drcSource")]
+        [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+        public string? DrcSource { get; set; }
     }
 
     /// <summary>
