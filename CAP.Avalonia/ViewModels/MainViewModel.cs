@@ -1175,10 +1175,12 @@ public partial class MainViewModel : ObservableObject
         var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
         var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
 
-        // DRC-lite min waveguide spacing (#899, wired for #915): the first member PDK
-        // process of the active selection provides the declared value (or the conservative
-        // default); without a real process (Playground) the check stays off (0 = disabled).
+        // DRC-lite min waveguide spacing (#899, wired for #915) and min feature width:
+        // the first member PDK process of the active selection provides the declared
+        // values (spacing falls back to the conservative default); without a real
+        // process (Playground) both checks stay off (0/null = disabled).
         double minWaveguideSpacingMicrometers = 0;
+        IReadOnlyList<CAP_Core.Analysis.WaveguideMinWidthRule>? minWaveguideWidthRules = null;
         if (processLockActive)
         {
             var memberProcess = LeftPanel.ResolveLiveMemberPdkNames(FileOperations.ActiveProcess!)
@@ -1186,6 +1188,7 @@ public partial class MainViewModel : ObservableObject
                     d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
                 .FirstOrDefault(p => p is not null);
             minWaveguideSpacingMicrometers = memberProcess.GetMinWaveguideSpacingMicrometersOrDefault();
+            minWaveguideWidthRules = memberProcess.GetMinWaveguideWidthRules();
         }
 
         RightPanel.DesignValidation.RunValidation(
@@ -1198,7 +1201,8 @@ public partial class MainViewModel : ObservableObject
             LeftPanel.GetProcessAgnosticPdkNames(),
             compatiblePdkNames,
             processLockActive,
-            minWaveguideSpacingMicrometers: minWaveguideSpacingMicrometers);
+            minWaveguideSpacingMicrometers: minWaveguideSpacingMicrometers,
+            minWaveguideWidthRules: minWaveguideWidthRules);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

@@ -69,7 +69,15 @@ public enum DesignIssueType
     /// Two waveguide routes are closer than the active process' minimum edge-to-edge
     /// spacing. The reported distance and required minimum are included in the issue.
     /// </summary>
-    WaveguideSpacingViolation
+    WaveguideSpacingViolation,
+
+    /// <summary>
+    /// An optical waveguide route (or one of its endpoint pins) is narrower than the
+    /// fabrication minimum feature width (<c>minWidthUm</c>) of the associated
+    /// cross-section of the active process. Only fires when the PDK declares the
+    /// limit; the reported width, minimum, and its source are included in the issue.
+    /// </summary>
+    WaveguideBelowMinWidth
 }
 
 /// <summary>
