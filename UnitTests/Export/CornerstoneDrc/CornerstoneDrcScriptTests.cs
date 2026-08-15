@@ -87,7 +87,11 @@ public class CornerstoneDrcScriptTests : IDisposable
             python, CornerstoneDrcPaths.RunnerScript, gds, "--klayout", nonexistentKlayout);
 
         exitCode.ShouldBe(ExitToolError);
-        error.ShouldContain("no KLayout executable found");
+        // An explicit --klayout override that does not resolve takes the script's
+        // "klayout not found at '<path>'" branch; "no KLayout executable found" is
+        // only printed when auto-discovery on PATH comes up empty.
+        error.ShouldContain("klayout not found at");
+        error.ShouldContain(nonexistentKlayout);
     }
 
     /// <summary>Writes a minimal .lyrdb marker database with the given (rule, count) items.</summary>
