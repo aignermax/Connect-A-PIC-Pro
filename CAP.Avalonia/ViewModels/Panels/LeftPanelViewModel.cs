@@ -184,7 +184,7 @@ public partial class LeftPanelViewModel : ObservableObject
                 foreach (var pdkComp in pdk.Components)
                 {
                     var template = ConvertPdkComponentToTemplate(
-                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
+                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection, pdk.Process);
                     template.IsCustom = false;
                     AllTemplates.Add(template);
                     componentCount++;
@@ -363,7 +363,7 @@ public partial class LeftPanelViewModel : ObservableObject
             int addedCount = 0;
             foreach (var pdkComp in pdk.Components)
             {
-                var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
+                var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName, process: pdk.Process);
                 template.IsCustom = true;
                 AllTemplates.Add(template);
                 if (!Categories.Contains(template.Category))
@@ -388,7 +388,8 @@ public partial class LeftPanelViewModel : ObservableObject
 
     private static ComponentTemplate ConvertPdkComponentToTemplate(
         PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName,
-        string? gdsFactoryRoutingCrossSection = null)
+        string? gdsFactoryRoutingCrossSection = null,
+        CAP_DataAccess.Components.ComponentDraftMapper.DTOs.ProcessDefinition? process = null)
         => PdkTemplateConverter.ConvertToTemplate(
-            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
+            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection, process);
 }

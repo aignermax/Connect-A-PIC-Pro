@@ -100,13 +100,32 @@ public partial class GdsImportDialogViewModel
     /// Suggestions depend on the selected top cell (its drawn routes feed the
     /// route-candidate heuristic), so they are rebuilt on every selection change.
     /// </summary>
-    partial void OnSelectedTopCellChanged(GdsTopCellSummary? value) => RebuildSuggestions();
+    partial void OnSelectedTopCellChanged(GdsTopCellSummary? value)
+    {
+        RebuildSuggestions();
+        RebuildPinSuggestions();
+    }
 
-    partial void OnPortLayersTextChanged(string value) => RefreshAcceptedStates();
+    partial void OnPortLayersTextChanged(string value)
+    {
+        ClearExcludedGuessedPins();
+        RefreshAcceptedStates();
+        RebuildPinSuggestions();
+    }
 
-    partial void OnWaveguideLayersTextChanged(string value) => RefreshAcceptedStates();
+    partial void OnWaveguideLayersTextChanged(string value)
+    {
+        ClearExcludedGuessedPins();
+        RefreshAcceptedStates();
+        RebuildPinSuggestions();
+    }
 
-    partial void OnMetalLayersTextChanged(string value) => RefreshAcceptedStates();
+    partial void OnMetalLayersTextChanged(string value)
+    {
+        ClearExcludedGuessedPins();
+        RefreshAcceptedStates();
+        RebuildPinSuggestions();
+    }
 
     private void RebuildSuggestions()
     {

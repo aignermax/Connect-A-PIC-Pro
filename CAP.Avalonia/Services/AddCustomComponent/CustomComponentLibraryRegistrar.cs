@@ -22,7 +22,12 @@ public static class CustomComponentLibraryRegistrar
         Action reapplyActiveProcess,
         Action filterComponents)
     {
-        var template = PdkTemplateConverter.ConvertToTemplate(draft, pdkName, null);
+        // The PDK-level process is looked up from the cached drafts so the template's
+        // optical pins carry the process' default waveguide width/layer (DRC-lite).
+        var process = loadedPdkDrafts
+            .FirstOrDefault(d => string.Equals(d.Name, pdkName, StringComparison.OrdinalIgnoreCase))
+            ?.Process;
+        var template = PdkTemplateConverter.ConvertToTemplate(draft, pdkName, null, process: process);
         template.IsCustom = true;
 
         // An edit-save re-registers an existing component: the on-disk PDK already replaced the

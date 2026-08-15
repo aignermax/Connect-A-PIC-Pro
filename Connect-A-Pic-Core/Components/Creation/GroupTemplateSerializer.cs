@@ -162,7 +162,9 @@ public static class GroupTemplateSerializer
             LogicalPinIdInFlow = p.LogicalPin?.IDInFlow ?? Guid.Empty,
             LogicalPinIdOutFlow = p.LogicalPin?.IDOutFlow ?? Guid.Empty,
             MatterType = p.MatterType,
-            Polarization = p.LogicalPin?.Polarization.ToString()
+            Polarization = p.LogicalPin?.Polarization.ToString(),
+            WaveguideWidthMicrometers = p.WaveguideWidthMicrometers,
+            Layer = p.Layer
         }).ToList();
 
         // Serialize S-Matrices so child components keep their simulation data after reload.
@@ -278,7 +280,9 @@ public static class GroupTemplateSerializer
                 OffsetXMicrometers = p.OffsetX,
                 OffsetYMicrometers = p.OffsetY,
                 AngleDegrees = p.AngleDegrees,
-                LogicalPin = logicalPin
+                LogicalPin = logicalPin,
+                WaveguideWidthMicrometers = p.WaveguideWidthMicrometers,
+                Layer = p.Layer
             };
         }).ToList();
 
@@ -685,6 +689,15 @@ public class PinDto
     /// Null in old prefab files — deserializes to the TE default.
     /// </summary>
     public string? Polarization { get; set; }
+
+    /// <summary>
+    /// PDK-sourced waveguide width in µm at this pin (DRC-lite pin-mismatch rule).
+    /// Null in old prefab files and for pins without PDK data.
+    /// </summary>
+    public double? WaveguideWidthMicrometers { get; set; }
+
+    /// <summary>PDK-sourced GDS layer number of this pin's waveguide; null in old prefab files.</summary>
+    public int? Layer { get; set; }
 }
 
 /// <summary>

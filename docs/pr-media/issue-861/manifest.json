@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-generous-corner-upsized-to-50um.png",
+    "caption": "A lone Auto connection with plenty of room around its corners: after every route is final, the post-pass grows the bends to the largest allowed radius (50 \u00B5m) for the lowest optical loss."
+  },
+  {
+    "file": "02-sibling-route-constrains-upsizing.png",
+    "caption": "A second route crossing the same region: each candidate arc is vetoed against ALL sibling routes at their final positions, so upsizing never trades a gentler bend for a new crossing."
+  },
+  {
+    "file": "03-tight-offset-keeps-small-radius.png",
+    "caption": "A small pin offset with short straight runs: the pass leaves the smaller process radius in place \u2014 it only grows a bend when both neighbouring straights can shed the extra tangent length."
+  }
+]

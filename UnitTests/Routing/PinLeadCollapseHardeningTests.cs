@@ -141,10 +141,13 @@ public class PinLeadCollapseHardeningTests
 
         manager.RecalculateAllTransmissions();
 
+        // The collapse stops at the blocker's padded boundary (~176 µm); the bend upsizing
+        // pass then grows the 10 µm bends to 50 µm, shedding (50-10)·tan(45°) = 40 µm of
+        // lead into tangent length on each side.
         var afterFirst = connection.RoutedPath!;
-        StartPinLead(afterFirst, startPin).ShouldBe(176.0, 0.5,
-            "the lead must collapse exactly to the blocker's padded boundary");
-        EndPinLead(afterFirst, endPin).ShouldBe(176.0, 0.5);
+        StartPinLead(afterFirst, startPin).ShouldBe(136.0, 0.5,
+            "the lead must collapse to the blocker's padded boundary minus the upsized tangent");
+        EndPinLead(afterFirst, endPin).ShouldBe(136.0, 0.5);
 
         manager.RecalculateAllTransmissions();
         connection.RoutedPath.ShouldBeSameAs(afterFirst,

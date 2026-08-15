@@ -27,5 +27,6 @@ public static class ProcessDefinitionCloner
         }).ToList(),
         AllowedAngles = new List<int>(source.AllowedAngles),
         ElectricalBridgeRequired = source.ElectricalBridgeRequired,
+        MinWaveguideSpacingUm = source.MinWaveguideSpacingUm,
     };
 }

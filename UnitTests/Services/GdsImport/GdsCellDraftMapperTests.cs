@@ -253,4 +253,67 @@ public class GdsCellDraftMapperTests
         PinKindHelper.IsElectrical(component.PhysicalPins.Single(p => p.Name == "anode")).ShouldBeTrue();
         PinKindHelper.IsElectrical(component.PhysicalPins.Single(p => p.Name == "o1")).ShouldBeFalse();
     }
+
+    // ── Pin waveguide width / layer (DRC-lite) ───────────────────────────────
+
+    [Fact]
+    public void Map_StampsDetectedPortLayerOnPins()
+    {
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin
+                {
+                    Name = "o1", XUm = 0, YUm = 2, AngleDegrees = 180,
+                    Source = DetectedPinSource.Label, Layer = 1,
+                },
+                new DetectedPin
+                {
+                    Name = "o2", XUm = 10, YUm = 2, AngleDegrees = 0,
+                    Source = DetectedPinSource.Label, Layer = null,
+                },
+            },
+        };
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds");
+
+        result.Pins[0].Layer.ShouldBe(1, "the detected port layer feeds the DRC-lite layer rule");
+        result.Pins[1].Layer.ShouldBeNull("pins without an attributable layer stay null");
+    }
+
+    [Fact]
+    public void Map_ProcessDefaultWidth_StampsOpticalPinsOnly()
+    {
+        var draft = Draft() with
+        {
+            Pins = new[]
+            {
+                new DetectedPin
+                {
+                    Name = "anode", XUm = 0, YUm = 2, AngleDegrees = 180,
+                    Source = DetectedPinSource.Label, IsElectrical = true,
+                },
+                new DetectedPin
+                {
+                    Name = "o1", XUm = 10, YUm = 2, AngleDegrees = 0,
+                    Source = DetectedPinSource.Label, IsElectrical = null,
+                },
+            },
+        };
+
+        var result = GdsCellDraftMapper.Map(draft, "/tmp/lib/circuit.gds", processDefaultWidthUm: 0.5);
+
+        result.Pins[0].WaveguideWidthMicrometers.ShouldBeNull("electrical pins carry no optical width");
+        result.Pins[1].WaveguideWidthMicrometers.ShouldBe(0.5);
+    }
+
+    [Fact]
+    public void Map_NoProcessDefaultWidth_KeepsWidthNull()
+    {
+        var result = GdsCellDraftMapper.Map(Draft(), "/tmp/lib/circuit.gds");
+
+        result.Pins.ShouldAllBe(p => p.WaveguideWidthMicrometers == null,
+            "without process data the width stays null and the mismatch rule stays silent");
+    }
 }

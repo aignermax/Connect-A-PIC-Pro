@@ -698,95 +698,16 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     }
 
     /// <summary>
-    /// Creates a shallow clone of a Component with a new unique identifier.
-    /// Parametric S-matrices are rebuilt per clone (bound to the clone's own sliders)
-    /// instead of shared: a shared matrix keeps the source's slider IDs in its formula
-    /// connections, so the clone's sliders would be dead and all clones would share
-    /// one parameter state. Numeric matrices are shared as before.
+    /// Creates a deep clone of a Component with a new unique identifier.
+    /// Delegates to <see cref="Component.Clone"/> so every clone gets its own logical-pin
+    /// flow IDs and its own S-matrices — sharing them (as a shallow copy would) makes
+    /// copies of one group share simulation state instead of behaving as independent
+    /// instances.
     /// </summary>
     private Component CloneComponent(Component source)
     {
-        var clonedSliders = source.GetAllSliders().Select(s => new Slider(
-                Guid.NewGuid(),
-                s.Number,
-                s.Value,
-                s.MaxValue,
-                s.MinValue))
-            .OrderBy(s => s.Number)
-            .ToList();
-
-        var clonedPhysicalPins = source.PhysicalPins.Select(p => new PhysicalPin
-        {
-            Name = p.Name,
-            OffsetXMicrometers = p.OffsetXMicrometers,
-            OffsetYMicrometers = p.OffsetYMicrometers,
-            AngleDegrees = p.AngleDegrees,
-            LogicalPin = p.LogicalPin
-        }).ToList();
-
-        var logicalPins = clonedPhysicalPins
-            .Where(p => p.LogicalPin != null)
-            .Select(p => p.LogicalPin!)
-            .ToList();
-
-        var sMatrixMap = new Dictionary<int, SMatrix>();
-        foreach (var (wavelength, sourceMatrix) in source.WaveLengthToSMatrixMap)
-        {
-            if (sourceMatrix.ParametricRebuild != null)
-            {
-                // Rebuild binds the formulas to the clone's slider IDs; the current
-                // numeric values are carried over so the clone matches the source's
-                // evaluated state (the pin IDs are shared, so they apply directly).
-                var rebuilt = sourceMatrix.ParametricRebuild(logicalPins, clonedSliders);
-                rebuilt.ParametricRebuild = sourceMatrix.ParametricRebuild;
-                rebuilt.ParametricSnapshot ??= sourceMatrix.ParametricSnapshot;
-                rebuilt.SetValues(sourceMatrix.GetNonNullValues());
-                sMatrixMap[wavelength] = rebuilt;
-            }
-            else
-            {
-                sMatrixMap[wavelength] = sourceMatrix;
-            }
-        }
-
-        // Create new component with same S-matrix and structure
-        var cloned = new Component(
-            sMatrixMap,
-            clonedSliders,
-            source.NazcaFunctionName,
-            source.NazcaFunctionParameters,
-            source.Parts,
-            source.TypeNumber,
-            $"{source.Identifier}_{Guid.NewGuid():N}",
-            source.Rotation90CounterClock,
-            clonedPhysicalPins
-        )
-        {
-            PhysicalX = source.PhysicalX,
-            PhysicalY = source.PhysicalY,
-            WidthMicrometers = source.WidthMicrometers,
-            HeightMicrometers = source.HeightMicrometers,
-            NazcaOriginOffsetX = source.NazcaOriginOffsetX,
-            NazcaOriginOffsetY = source.NazcaOriginOffsetY,
-            NazcaModuleName = source.NazcaModuleName,
-            // gdsfactory-backend marker must survive group copy/paste, else the clone
-            // exports as a stub and loses its PDK/process attribution (#570/#661 review).
-            GdsFactoryFunction = source.GdsFactoryFunction,
-            HumanReadableName = source.HumanReadableName, // Preserve human-readable name
-            ParameterDefinitions = source.ParameterDefinitions,
-            IsLocked = false // Don't copy lock state
-        };
-
-        // The Component constructor resets every slider to its range midpoint;
-        // re-assert the source values so the clone keeps the source's parameter state
-        // (the change notification updates the rebuilt matrices' slider references).
-        foreach (var sourceSlider in source.GetAllSliders())
-        {
-            var clonedSlider = cloned.GetSlider(sourceSlider.Number);
-            if (clonedSlider != null)
-                clonedSlider.Value = sourceSlider.Value;
-        }
-
+        var cloned = (Component)source.Clone();
+        cloned.Identifier = $"{source.Identifier}_{Guid.NewGuid():N}";
         return cloned;
     }
 
@@ -903,7 +824,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
                 OffsetXMicrometers = externalPin.RelativeX,
                 OffsetYMicrometers = externalPin.RelativeY,
                 AngleDegrees = externalPin.AngleDegrees,
-                LogicalPin = externalPin.InternalPin.LogicalPin
+                LogicalPin = externalPin.InternalPin.LogicalPin,
+                WaveguideWidthMicrometers = externalPin.InternalPin.WaveguideWidthMicrometers,
+                Layer = externalPin.InternalPin.Layer
             };
 
             PhysicalPins.Add(physicalPin);
