@@ -102,6 +102,13 @@ jobs:
           fi
         shell: bash
 
+      # Ship the repo's example designs beside the binary so the Home screen's
+      # Examples section (walk-up discovery from the app base directory) also
+      # works in the portable zip/tar layout, not just the dev tree.
+      - name: Bundle example designs
+        run: cp -r examples publish/examples
+        shell: bash
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -158,6 +165,12 @@ jobs:
           --self-contained false
           -p:Version=${{ steps.version.outputs.version }}
           -o publish/win-x64-msi
+
+      # Examples must land in the publish dir BEFORE harvesting so the MSI
+      # installs them next to CAP.Desktop.exe (same discovery as portable).
+      - name: Bundle example designs
+        run: cp -r examples publish/win-x64-msi/examples
+        shell: bash
 
       - name: Generate HarvestedFiles.wxs
         shell: pwsh
