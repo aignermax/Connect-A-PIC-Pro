@@ -2,6 +2,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Avalonia.Controls;
 using CAP.Avalonia.ViewModels.AI;
 using CAP.Avalonia.ViewModels.Analysis;
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Analysis.OnaAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Converters;
@@ -113,6 +114,11 @@ public partial class RightPanelViewModel : ObservableObject
     /// </summary>
     public Export.Netlist.NetlistViewModel Netlist { get; }
 
+    /// <summary>
+    /// ViewModel for the Truth Table panel (logic-gate behavior of a selected group).
+    /// </summary>
+    public TruthTableViewModel TruthTable { get; }
+
     private readonly ComponentEditorFactory _editorFactory;
     private readonly DesignCanvasViewModel _canvas;
 
@@ -149,6 +155,7 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistantViewModel aiAssistant,
         OnaSweepViewModel onaAnalysis,
         Export.Netlist.NetlistViewModel netlist,
+        TruthTableViewModel truthTable,
         ComponentEditorFactory editorFactory)
     {
         _preferencesService = preferencesService;
@@ -168,6 +175,7 @@ public partial class RightPanelViewModel : ObservableObject
         AiAssistant = aiAssistant;
         OnaAnalysis = onaAnalysis;
         Netlist = netlist;
+        TruthTable = truthTable;
 
         // Configure ViewModels that need canvas reference
         RoutingDiagnostics.Configure(canvas);

@@ -67,6 +67,7 @@ internal static class CanvasAndPanelExtensions
         // Right panel sub-ViewModels
         services.AddSingleton<ChipSizeViewModel>();
         services.AddTransient<ParameterSweepViewModel>();
+        services.AddTransient<ViewModels.Analysis.LogicAnalysis.TruthTableViewModel>();
         services.AddTransient<ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel>();
         services.AddTransient<OnaSweepViewModel>();
         services.AddTransient<RoutingDiagnosticsViewModel>();

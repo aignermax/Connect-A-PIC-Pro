@@ -75,6 +75,7 @@ public class PanelWidthPersistenceTests : IDisposable
             new AiAssistantViewModel(Mock.Of<IAiService>(), _preferencesService),
             new OnaSweepViewModel(),
             new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
+            new CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.TruthTableViewModel(),
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
                 new GenericComponentEditorProvider()
