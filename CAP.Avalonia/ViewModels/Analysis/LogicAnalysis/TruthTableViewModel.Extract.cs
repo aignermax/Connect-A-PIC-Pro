@@ -20,6 +20,7 @@ public partial class TruthTableViewModel
 
         var inputs = InputPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
         var outputs = OutputPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
+        var biases = BiasPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
         if (inputs.Length == 0 || outputs.Length == 0)
         {
             StatusText = Translate("Analysis.TruthTable.SelectPins");
@@ -32,7 +33,7 @@ public partial class TruthTableViewModel
         try
         {
             var table = await _extractor.ExtractAsync(
-                _group, inputs, outputs, Threshold, ResolveWavelengthNm(), _extractCts.Token);
+                _group, inputs, outputs, biases, Threshold, ResolveWavelengthNm(), _extractCts.Token);
             ShowTable(table);
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);
         }
@@ -89,6 +90,9 @@ public partial class TruthTableViewModel
             Rows.Add(new TruthTableRowViewModel(string.Join(" ", inputBits), cells));
         }
 
+        BiasText = table.BiasPinNames.Count == 0
+            ? ""
+            : string.Format(Translate("Analysis.TruthTable.BiasLine"), string.Join(", ", table.BiasPinNames));
         HasResult = true;
     }
 

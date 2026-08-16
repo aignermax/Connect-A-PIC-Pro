@@ -10,7 +10,10 @@ namespace UnitTests.Analysis.LogicAnalysis;
 /// ViewModel tests for the Truth Table panel: activation only for exactly one
 /// selected group, the 4-input limit at the checkboxes, extraction on the
 /// <see cref="LogicGateFixtureFactory"/> fixtures (OR table at threshold 0.25 including
-/// raw powers), extractor validation shown as a message instead of a crash, and cancel.
+/// raw powers), extractor validation shown as a message instead of a crash, cancel —
+/// and the bias-pin role (issue #968): mutually exclusive with input/output at the
+/// checkbox, forwarded into the bias-aware extractor overload, and surfaced as a
+/// "Bias: … = 1" line above the result table.
 /// </summary>
 public class TruthTableViewModelTests
 {
@@ -35,6 +38,12 @@ public class TruthTableViewModelTests
             vm.OutputPins.Single(p => p.PinName == name).IsChecked = true;
     }
 
+    private static void CheckBiasPins(TruthTableViewModel vm, params string[] biases)
+    {
+        foreach (var name in biases)
+            vm.BiasPins.Single(p => p.PinName == name).IsChecked = true;
+    }
+
     [Fact]
     public void ConfigureForSelection_NoComponent_IsInactive()
     {
@@ -44,6 +53,7 @@ public class TruthTableViewModelTests
         vm.IsGroupSelected.ShouldBeFalse();
         vm.InputPins.ShouldBeEmpty();
         vm.OutputPins.ShouldBeEmpty();
+        vm.BiasPins.ShouldBeEmpty();
     }
 
     [Fact]
@@ -66,6 +76,8 @@ public class TruthTableViewModelTests
         vm.IsGroupSelected.ShouldBeTrue();
         vm.InputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
         vm.OutputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
+        vm.BiasPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" },
+            "every external pin is also offered for the bias role (inversion gates need it)");
         vm.WavelengthText.ShouldNotBeNullOrWhiteSpace();
     }
 
@@ -158,14 +170,17 @@ public class TruthTableViewModelTests
     }
 
     [Fact]
-    public async Task Extract_PinDeclaredAsInputAndOutput_ShowsMessage()
+    public async Task Extract_PinDeclaredAsInputAndOutput_MutualExclusionLeavesNoInput()
     {
         var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
         CheckPins(vm, new[] { "a" }, new[] { "a" });
 
         await vm.ExtractCommand.ExecuteAsync(null);
 
-        vm.StatusText.ShouldContain("'a'");
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "checking 'a' as output revokes its input role — a pin has exactly one role");
+        vm.StatusText.ShouldBe(Translate("Analysis.TruthTable.SelectPins"),
+            "with the input role revoked, no input remains — the panel asks for one");
         vm.HasResult.ShouldBeFalse();
         vm.IsProcessing.ShouldBeFalse();
     }
@@ -223,5 +238,83 @@ public class TruthTableViewModelTests
         vm.HasResult.ShouldBeFalse();
         vm.IsProcessing.ShouldBeFalse();
         vm.Rows.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void PinRoles_CheckingOneRole_UnchecksTheSamePinInTheOtherTwoLists()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked = true;
+        vm.OutputPins.Single(p => p.PinName == "y").IsChecked = true;
+
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked = true;
+
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked.ShouldBeFalse(
+            "a pin is exactly one of input, output, or bias — the bias check takes over");
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked.ShouldBeTrue();
+        vm.OutputPins.Single(p => p.PinName == "y").IsChecked.ShouldBeTrue(
+            "an unrelated pin keeps its role");
+
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked = true;
+
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked.ShouldBeFalse(
+            "re-checking as input revokes the bias role");
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked.ShouldBeTrue();
+    }
+
+    [Fact]
+    public async Task Extract_WithBiasPin_ForwardsBiasToExtractorAndShowsBiasLine()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        CheckBiasPins(vm, "b");
+        vm.Threshold = 0.75;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.InputHeaders.ToArray().ShouldBe(new[] { "a" },
+            "a bias pin must not appear as an input-bit column");
+        vm.Rows.Count.ShouldBe(2, "only the enumerated input drives the row count");
+        vm.BiasText.ShouldBe(string.Format(Translate("Analysis.TruthTable.BiasLine"), "b"),
+            "the bias assignment surfaces above the result table");
+
+        // Combiner physics with 'b' always on: a=0 leaves the cross-port half (0.5),
+        // a=1 recombines coherently into full power (1.0) — at threshold 0.75 exactly y = a.
+        var rowOff = vm.Rows.Single(r => r.InputBitsText == "0");
+        rowOff.OutputCells[0].IsOne.ShouldBeFalse();
+        rowOff.OutputCells[0].PowerText.ShouldBe("0.50");
+        var rowOn = vm.Rows.Single(r => r.InputBitsText == "1");
+        rowOn.OutputCells[0].IsOne.ShouldBeTrue();
+        rowOn.OutputCells[0].PowerText.ShouldBe("1.00");
+    }
+
+    [Fact]
+    public async Task Extract_WithoutBiasPin_BiasLineStaysEmpty()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a", "b" }, new[] { "y" });
+        vm.Threshold = 0.25;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.BiasText.ShouldBe("", "no bias pins — no bias line above the result");
+    }
+
+    [Fact]
+    public async Task ConfigureForSelection_AfterBiasExtraction_ClearsBiasText()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        CheckBiasPins(vm, "b");
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.BiasText.ShouldNotBeEmpty();
+
+        vm.ConfigureForSelection(null, new DesignCanvasViewModel());
+
+        vm.BiasText.ShouldBe("", "a new selection must not inherit the previous bias line");
+        vm.BiasPins.ShouldBeEmpty();
     }
 }

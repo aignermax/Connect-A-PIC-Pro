@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Library;
@@ -95,6 +96,86 @@ public class LogicGateNotNandExampleTests
         AssertRow(table, 0, expectedBit: false, expectedPower: 0.0);
         AssertRow(table, 1, expectedBit: false, expectedPower: SingleInputPower);
     }
+
+    [Fact]
+    public async Task PanelVM_MarkingAAsInputYAsOutputBiasAsBias_ProducesNotTable()
+    {
+        var vm = await LoadPanelVmForGate();
+        CheckPin(vm.InputPins, "A");
+        CheckPin(vm.OutputPins, "Y");
+        CheckPin(vm.BiasPins, "BIAS");
+        vm.Threshold = NotThreshold;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.Rows.Count.ShouldBe(2, "NOT enumerates only A");
+        AssertPanelRow(vm, "0", expectedBit: true, expectedPower: "0.50");
+        AssertPanelRow(vm, "1", expectedBit: false, expectedPower: "0.25");
+        vm.BiasText.ShouldContain("BIAS",
+            customMessage: "the panel surfaces the bias assignment above the result");
+    }
+
+    [Fact]
+    public async Task PanelVM_MarkingABAsInputsYAsOutputBiasAsBias_ProducesNandTable()
+    {
+        var vm = await LoadPanelVmForGate();
+        CheckPin(vm.InputPins, "A");
+        CheckPin(vm.InputPins, "B");
+        CheckPin(vm.OutputPins, "Y");
+        CheckPin(vm.BiasPins, "BIAS");
+        vm.Threshold = NandThreshold;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.Rows.Count.ShouldBe(4, "NAND enumerates A and B");
+        AssertPanelRow(vm, "0 0", expectedBit: true, expectedPower: "0.50");
+        AssertPanelRow(vm, "1 0", expectedBit: true, expectedPower: "0.25");
+        AssertPanelRow(vm, "0 1", expectedBit: true, expectedPower: "0.25");
+        AssertPanelRow(vm, "1 1", expectedBit: false, expectedPower: "0.00",
+            "the 135°-shifted BIAS cancels A·B exactly when both are on");
+    }
+
+    /// <summary>Asserts one row of the panel VM: input bits, output bit, formatted raw power.</summary>
+    private static void AssertPanelRow(
+        TruthTableViewModel vm, string inputBitsText, bool expectedBit, string expectedPower, string? because = null)
+    {
+        var row = vm.Rows.Single(r => r.InputBitsText == inputBitsText);
+        row.OutputCells[0].IsOne.ShouldBe(expectedBit, because);
+        row.OutputCells[0].PowerText.ShouldBe(expectedPower, because);
+    }
+
+    /// <summary>Loads the shipped example through the real load path and activates the panel VM for the group.</summary>
+    private static async Task<TruthTableViewModel> LoadPanelVmForGate()
+    {
+        var library = new ObservableCollection<ComponentTemplate>(TestPdkLoader.LoadAllTemplates());
+        var canvas = new DesignCanvasViewModel();
+        var fileOps = new FileOperationsViewModel(
+            canvas,
+            new CommandManager(),
+            new SimpleNazcaExporter(),
+            new SaxExporter(),
+            library,
+            new GdsExportViewModel(new GdsExportService()),
+            new PhotonTorchExportViewModel(new PhotonTorchExporter(), canvas),
+            null!);
+
+        var examplePath = Path.Combine(ExampleDesignFilesTests.ExamplesDirectory(), ExampleFileName);
+        (await fileOps.LoadDesignFromPathAsync(examplePath)).ShouldBeTrue(
+            $"the shipped example '{ExampleFileName}' must load through the real load path");
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.IsGroupSelected.ShouldBeTrue("the loaded example group activates the Truth Table panel");
+        return vm;
+    }
+
+    /// <summary>Checks one pin in the given list (mirrors the panel's checkbox interaction).</summary>
+    private static void CheckPin(ObservableCollection<PinSelectionViewModel> pins, string name) =>
+        pins.Single(p => p.PinName == name).IsChecked = true;
 
     /// <summary>Loads the shipped example through the real load path and returns its group.</summary>
     private static async Task<ComponentGroup> LoadGateGroup()
