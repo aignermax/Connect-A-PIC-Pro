@@ -82,8 +82,8 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     /// Optional process binding of this group as a chiplet (issue #935): the fabrication
     /// process the group's contents belong to. Null = unbound — placement checks then
     /// derive the scope live from the children (see
-    /// <see cref="GroupProcessPolicy.DeriveProcessBinding"/>). Held in memory only;
-    /// persisting the binding in .lun files is issue #938.
+    /// <see cref="GroupProcessPolicy.DeriveProcessBinding"/>). Persisted in .lun files
+    /// for top-level groups since issue #938.
     /// </summary>
     [JsonIgnore]
     public ActiveProcessSelection? ProcessBinding { get; set; }
