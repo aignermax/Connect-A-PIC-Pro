@@ -132,19 +132,22 @@ public class TruthTableExtractorBiasTests
     [Fact]
     public async Task ExtractAsync_BiasPinsDoNotCountAgainstTheInputLimit()
     {
-        var group = LogicGateFixtureFactory.CreateNotMziGroup();
+        var group = LogicGateFixtureFactory.CreateBusGroup(TruthTableExtractor.MaxLogicInputs + 1);
+        var biasLane = TruthTableExtractor.MaxLogicInputs;
 
         var table = await new TruthTableExtractor().ExtractAsync(
             group,
             inputPinNames: Enumerable.Range(0, TruthTableExtractor.MaxLogicInputs)
-                .Select(i => i == 0 ? "a" : $"aux").ToArray(),
-            outputPinNames: new[] { "y" },
-            biasPinNames: new[] { "bias" },
+                .Select(i => $"in{i}").ToArray(),
+            outputPinNames: new[] { $"out{biasLane}" },
+            biasPinNames: new[] { $"in{biasLane}" },
             powerThreshold: Threshold025,
             LogicGateFixtureFactory.WavelengthNm);
 
         table.Rows.Count.ShouldBe(1 << TruthTableExtractor.MaxLogicInputs,
             "the bias pin is held on, not enumerated");
+        table.Rows.ShouldAllBe(row => row.Outputs[$"out{biasLane}"].IsOne,
+            "the always-on bias lane crosses the threshold in every row");
     }
 
     [Fact]
