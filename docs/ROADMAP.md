@@ -34,29 +34,20 @@ is the product.
 | # | Rung | Status | Notes |
 |---|------|--------|-------|
 | 0 | PIC canvas, S-matrix sim, light propagation, GDS export (Nazca), S-param import, metal routing, component groups | ✅ exists | |
-| 1 | **GDS import with pin detection + optional auto-connect** | 🔜 next | Load a GDS cell as a black-box component; detect ports from port layers/labels, fall back to edge heuristics. Import option "auto-connect all pins": after placement, route all pin pairs with the existing A* router + crossing insertion (runs a while on large imports). No separate "bake" step needed — manual geometry stays the default (#807), auto-connect is opt-in per import. Depends on routing rework #704/#725. Serves external users (Peter) and the vision (cells as reusable building blocks). |
-| 2 | **DRC-lite** | planned | Entry point exists: Design Validation ("check conflicts", Diagnostics panel) already covers bend radius, blocked paths, waveguide overlaps, component bounds, PDK compatibility (`DesignValidator`). Extend with: min spacing, unconnected pins / pin mismatch, width + layer rules with PDK-driven values. Promote from panel button to a menu item. Only the rules that kill real tapeouts — not a full foundry DRC. |
-| 3 | Hierarchy done right | partially there (`ComponentGroup`) | Group any circuit → reusable component with exposed pins, library, instances. Gates, chips, systems = same operation nested. |
-| 4 | Behavioral / gate layer | seed exists (Verilog-A export) | Gates with transfer-function models, thresholds, delays; logic-level animation instead of field propagation. |
+| 1 | **GDS import with pin detection + optional auto-connect** | 🟡 mostly shipped | Port detection from port layers/labels (#878) and the edge-heuristic fallback (#879) are merged; imported cells arrive as black-box components with real pins. Still open: the opt-in "auto-connect all pins" pass (#880). Manual geometry stays the default (#807). Serves external users (Peter) and the vision (cells as reusable building blocks). |
+| 2 | **DRC-lite** | 🟡 mostly shipped | Design Validation covers bend radius, blocked paths, overlaps, bounds, PDK compatibility — plus min spacing (#899/#915), PDK-driven min width (#926/#931), foundry-cited Cornerstone limits (#920/#924), and per-connection rule sets from each chiplet's own process (#936). Still open: unconnected pins / pin mismatch + menu-item promotion (#897, in review). Only the rules that kill real tapeouts — not a full foundry DRC. |
+| 3 | Hierarchy done right | ✅ core proven | Group → reusable component with exposed pins, prefab library, instances all work; the chiplet-composition journey (#927) proved two group prefabs compose pin-to-pin, simulate and round-trip with correct physics. Gates, chips, systems = same operation nested. |
+| 4 | Behavioral / gate layer | 🟡 started (NAND-game seed) | Truth-table extraction from grouped circuits over the real S-matrix sim (#934), Truth Table panel with threshold + raw powers (#947), and the build→group→extract→save/load E2E journey (#952) are merged. Next: transfer-function models, delays, logic-level animation. |
 | 5 | ISA + assembler + execution visualizer | future | Tiny 4-bit ISA (Hack-computer-style); the assembler is the easy part, the visualizer is the work. |
-| 6 | System / multi-chip layer | future | Boards, fibers between chips, photonic I/O devices, heater/phase control loops (metal routing already exists). |
-| 7 | Manufacturing path | future | MPW tapeout. First target: Cornerstone SiN (open PDK, open KLayout DRC deck — validate our exported GDS against it, then reach out with a concrete artifact). SiEPIC is a consortium, not a fab — fabrication runs via partner fabs (openEBL/AMF et al.). **Optical transistor additionally needs saturable absorbers (SA), i.e. an InP platform** (Fraunhofer HHI / Smart Photonics JePPIX, NDA-based): fab provides data, we build the Lunima PDK JSON and ship it with the software / registry. Connects to #620 (AI-assisted PDK import). |
+| 6 | System / multi-chip layer | 🟡 started (chiplets) | Chiplets carry their own process identity: per-chiplet placement scope + per-connection bend floors (#935/#937), persisted process bindings in .lun (#938), per-chiplet DRC rule sets (#936). Still open: per-chiplet GDS export stacks (#939). Boards, fibers between chips, photonic I/O devices, control loops remain future. |
+| 7 | Manufacturing path | 🟡 validation shipped | MPW tapeout. First target: Cornerstone SiN — the open KLayout pre-DRC deck is vendored with a headless runner and gated proof fixtures (#932), and the bundled SiN PDK carries the foundry-cited gap/width/bend limits (#920/#924). Next: run real exports through it routinely, then reach out to the foundry with a DRC-clean artifact. SiEPIC is a consortium, not a fab — fabrication runs via partner fabs (openEBL/AMF et al.). **Optical transistor additionally needs saturable absorbers (SA), i.e. an InP platform** (Fraunhofer HHI / Smart Photonics JePPIX, NDA-based): fab provides data, we build the Lunima PDK JSON and ship it with the software / registry. Connects to #620 (AI-assisted PDK import). |
 
 ## How open issues map to the rungs
 
-- Rung 1 groundwork: #704 (routing core defects), #725 (routing rework: direct-first, anytime-A*), #801 (grid ownership bug)
+- Rung 1 remainder: #880 (opt-in auto-connect after import); groundwork still open: #704 (routing core defects), #725 (routing rework: direct-first, anytime-A*)
+- Rung 2 remainder: #897 (unconnected-pin check + menu item, in review)
+- Rung 4 (NAND-game): #958 (logic-gate starter example in `examples/`)
 - Rung 4/7 enabler: #753 (waveguide length matching / phase matching)
+- Rung 6 remainder: #939 (per-chiplet GDS export stacks — last red station of the multi-process journey #933); #957 (modernize the journey's stale bend-floor station)
 - PDK strategy (rung 7): #620 (AI-assisted PDK import), #773, #772, #740 (registry/library)
 - Onboarding (principle 1): #769 (first-steps tutorial), #768 (examples in release bundles)
-
-## Next issues to create
-
-1. **GDS import with pin detection (+ optional auto-connect)** — load a GDS cell as
-   a black-box component; ports from port layers/labels with edge-heuristic
-   fallback; import option to route all pins via the existing router.
-2. **DRC-lite: extend Design Validation + menu item** — add min spacing, pin
-   mismatch, width/layer rules (PDK-driven) to `DesignValidator`; promote the
-   check to a menu item.
-3. **Foundry validation: Cornerstone DRC deck** — run our exported GDS through
-   Cornerstone's open KLayout DRC deck; fix what fails; then contact foundry with
-   the DRC-clean demo.
