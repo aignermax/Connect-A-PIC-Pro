@@ -29,6 +29,10 @@
                         <TextBlock Text="{loc:Localize TruthTableHelp.InterferenceTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize TruthTableHelp.InterferenceBody}"/>
+
+                        <TextBlock Text="{loc:Localize TruthTableHelp.BiasTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.BiasBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
@@ -51,6 +55,16 @@
 
             <TextBlock Text="{loc:Localize TruthTable.Outputs}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
             <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.OutputPins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:PinSelectionViewModel">
+                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{loc:Localize TruthTable.Bias}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+            <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.BiasPins}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:PinSelectionViewModel">
                         <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
@@ -84,6 +98,8 @@
 
             <!-- Result table: input bit pattern | per output the bit and the raw power -->
             <StackPanel IsVisible="{Binding RightPanel.TruthTable.HasResult}">
+                <TextBlock Text="{Binding RightPanel.TruthTable.BiasSummaryText}" Foreground="Gray" FontSize="10" Margin="0,5,0,0"
+                           IsVisible="{Binding RightPanel.TruthTable.BiasSummaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                 <StackPanel Orientation="Horizontal" Margin="0,5,0,2">
                     <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.InputHeaders}">
                         <ItemsControl.ItemsPanel>
