@@ -1199,16 +1199,35 @@ public partial class MainViewModel : ObservableObject
         var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
         var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
 
-        // DRC-lite min waveguide spacing (#899, wired for #915) and min feature width:
-        // the first member PDK process of the active selection provides the declared
-        // values (spacing falls back to the conservative default); without a real
-        // process (Playground) both checks stay off (0/null = disabled).
+        // DRC-lite per connection (issue #936): each connection's width and spacing
+        // limits come from its OWN endpoint components' PDK processes — the stricter
+        // chiplet governs a cross-chiplet route, same rule as the router's bend floor
+        // (#937) — so a two-process canvas (only possible in Playground, #935) is
+        // checked per chiplet instead of silently skipping every PDK-dependent rule,
+        // and a locked multi-member process no longer checks the other members against
+        // the first member PDK's limits. PDKs that declare no minimum stay silent
+        // (#926). Library and drafts are snapshotted here on the UI thread (same
+        // pattern as the #937 floor provider); connections whose endpoints don't
+        // resolve to a PDK (built-ins) yield null and fall back to the lock-derived
+        // canvas-wide values below, exactly like the #937 floor. Frozen group paths
+        // carry no pins to resolve an owning process from, so they also keep the
+        // canvas-wide spacing (0 in Playground = off, as before).
+        var drcTemplates = LeftPanel.AllTemplates.ToList();
+        var drcDrafts = LeftPanel.GetLoadedPdkDrafts().ToList();
+        string? DrcPdkSourceOf(PhysicalPin? pin) =>
+            pin?.ParentComponent is { } component
+                ? ComponentPdkSourceResolver.Resolve(component, drcTemplates)
+                : null;
+        Func<CAP_Core.Components.Connections.WaveguideConnection, CAP_Core.Analysis.ConnectionDrcRules?> connectionDrcRuleProvider =
+            connection => ConnectionDrcRuleResolver.ResolveForEndpointPdkNames(
+                DrcPdkSourceOf(connection.StartPin), DrcPdkSourceOf(connection.EndPin), drcDrafts);
+
         double minWaveguideSpacingMicrometers = 0;
         IReadOnlyList<CAP_Core.Analysis.WaveguideMinWidthRule>? minWaveguideWidthRules = null;
         if (processLockActive)
         {
             var memberProcess = LeftPanel.ResolveLiveMemberPdkNames(FileOperations.ActiveProcess!)
-                .Select(name => LeftPanel.GetLoadedPdkDrafts().FirstOrDefault(
+                .Select(name => drcDrafts.FirstOrDefault(
                     d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
                 .FirstOrDefault(p => p is not null);
             minWaveguideSpacingMicrometers = memberProcess.GetMinWaveguideSpacingMicrometersOrDefault();
@@ -1226,7 +1245,8 @@ public partial class MainViewModel : ObservableObject
             compatiblePdkNames,
             processLockActive,
             minWaveguideSpacingMicrometers: minWaveguideSpacingMicrometers,
-            minWaveguideWidthRules: minWaveguideWidthRules);
+            minWaveguideWidthRules: minWaveguideWidthRules,
+            connectionDrcRuleProvider: connectionDrcRuleProvider);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }

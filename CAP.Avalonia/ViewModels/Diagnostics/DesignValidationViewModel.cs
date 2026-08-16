@@ -76,6 +76,12 @@ public partial class DesignValidationViewModel : ObservableObject
     /// <param name="externalPortPins">Pins treated as external ports; exempt from the dangling-pin check. Optional.</param>
     /// <param name="minWaveguideSpacingMicrometers">Process minimum edge-to-edge waveguide spacing; ≤0 disables the spacing check. Optional.</param>
     /// <param name="minWaveguideWidthRules">Per-cross-section minimum feature widths of the active process; null/empty disables the min-width check. Optional.</param>
+    /// <param name="connectionDrcRuleProvider">
+    /// Optional per-connection DRC rule-set resolver (issue #936): when wired, each
+    /// connection's width/spacing limits come from its own endpoint PDKs' processes —
+    /// per-chiplet limits on a multi-process canvas and PDK rules even in Playground —
+    /// instead of the design-wide values above. Optional.
+    /// </param>
     public void RunValidation(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup>? groups = null,
@@ -88,7 +94,8 @@ public partial class DesignValidationViewModel : ObservableObject
         bool processLockActive = true,
         IEnumerable<PhysicalPin>? externalPortPins = null,
         double minWaveguideSpacingMicrometers = 0,
-        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null)
+        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null,
+        Func<WaveguideConnection, ConnectionDrcRules?>? connectionDrcRuleProvider = null)
     {
         Issues.Clear();
         CurrentIndex = -1;
@@ -102,7 +109,8 @@ public partial class DesignValidationViewModel : ObservableObject
             allComponents ?? Array.Empty<Component>(),
             externalPortPins,
             minWaveguideSpacingMicrometers,
-            minWaveguideWidthRules);
+            minWaveguideWidthRules,
+            connectionDrcRuleProvider);
 
         foreach (var issue in results)
             Issues.Add(issue);
