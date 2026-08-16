@@ -19,6 +19,11 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// The group is always simulated in isolation; canvas connections around the group
 /// are irrelevant for its gate behavior.
 ///
+/// An optional set of bias pins can be declared on the bias-aware overload: they
+/// are constantly "on" in every row (coherent, like an active input) but never
+/// appear as input-bit columns — the ingredient inversion needs, since power-only
+/// thresholds cannot make an output bright while the signal input is dark.
+///
 /// Boundaries: at most <see cref="MaxLogicInputs"/> logic inputs (the combination
 /// count grows as 2^n and each combination is a full simulation run), the power
 /// threshold is a mandatory parameter (no guessing), and the whole table is
@@ -37,7 +42,8 @@ public sealed class TruthTableExtractor
 
     /// <summary>
     /// Simulates every binary input combination of <paramref name="group"/> and
-    /// classifies each output against <paramref name="powerThreshold"/>.
+    /// classifies each output against <paramref name="powerThreshold"/>, with no bias
+    /// pins — equivalent to the bias-aware overload with an empty bias list.
     /// </summary>
     /// <param name="group">The grouped circuit under test; its external pins form the gate interface.</param>
     /// <param name="inputPinNames">
@@ -60,18 +66,63 @@ public sealed class TruthTableExtractor
     /// <exception cref="ArgumentOutOfRangeException">
     /// <paramref name="powerThreshold"/> lies outside (0, 1), or <paramref name="wavelengthNm"/> is not positive.
     /// </exception>
-    public async Task<TruthTable> ExtractAsync(
+    public Task<TruthTable> ExtractAsync(
         ComponentGroup group,
         IReadOnlyList<string> inputPinNames,
         IReadOnlyList<string> outputPinNames,
         double powerThreshold,
         int wavelengthNm,
+        CancellationToken cancellationToken = default) =>
+        ExtractAsync(group, inputPinNames, outputPinNames, [], powerThreshold, wavelengthNm, cancellationToken);
+
+    /// <summary>
+    /// Simulates every binary input combination of <paramref name="group"/> and
+    /// classifies each output against <paramref name="powerThreshold"/>, with
+    /// <paramref name="biasPins"/> constantly "on" in every row — coherent, same
+    /// wavelength and field as the enumerated logic inputs, but absent from the
+    /// table's input bits. Bias is what inversion needs physically: a reference
+    /// input whose destructive interference with the signal input can turn the
+    /// output dark.
+    /// </summary>
+    /// <param name="group">The grouped circuit under test; its external pins form the gate interface.</param>
+    /// <param name="inputPinNames">
+    /// Names of the group's external pins to drive as logic inputs
+    /// (1 to <see cref="MaxLogicInputs"/> entries, no duplicates, disjoint from the outputs and the bias pins).
+    /// </param>
+    /// <param name="outputPinNames">Names of the group's external pins to observe as logic outputs.</param>
+    /// <param name="biasPins">
+    /// Names of the group's external pins held constantly "on" (coherent, like an
+    /// active input) in every row. Not a column in the table's input bits.
+    /// </param>
+    /// <param name="powerThreshold">
+    /// Normalized power threshold in the open interval (0, 1): an output is logic 1 when
+    /// its power is ≥ threshold. Each active input injects power 1.
+    /// </param>
+    /// <param name="wavelengthNm">Laser wavelength in nm shared by all inputs (the active laser).</param>
+    /// <param name="cancellationToken">Cancels the extraction between combinations.</param>
+    /// <returns>The truth table, including the raw simulated power behind every output bit.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="group"/> is null.</exception>
+    /// <exception cref="ArgumentException">
+    /// A pin list is empty, contains duplicates, overlaps another list, exceeds
+    /// <see cref="MaxLogicInputs"/> inputs, or names a pin the group does not expose.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// <paramref name="powerThreshold"/> lies outside (0, 1), or <paramref name="wavelengthNm"/> is not positive.
+    /// </exception>
+    public async Task<TruthTable> ExtractAsync(
+        ComponentGroup group,
+        IReadOnlyList<string> inputPinNames,
+        IReadOnlyList<string> outputPinNames,
+        IReadOnlyList<string> biasPins,
+        double powerThreshold,
+        int wavelengthNm,
         CancellationToken cancellationToken = default)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
-        ValidateArguments(inputPinNames, outputPinNames, powerThreshold, wavelengthNm);
+        ValidateArguments(inputPinNames, outputPinNames, biasPins, powerThreshold, wavelengthNm);
         var inputs = ResolvePins(group, inputPinNames, nameof(inputPinNames));
         var outputs = ResolvePins(group, outputPinNames, nameof(outputPinNames));
+        var biases = ResolvePins(group, biasPins, nameof(biasPins));
 
         // Compute the group closure once up front: a group that cannot simulate at
         // all fails before the first row, and the per-combination runs reuse it.
@@ -83,13 +134,14 @@ public sealed class TruthTableExtractor
         {
             cancellationToken.ThrowIfCancellationRequested();
             rows.Add(await SimulateCombinationAsync(
-                group, inputs, outputs, pattern, powerThreshold, wavelengthNm, cancellationToken));
+                group, inputs, biases, outputs, pattern, powerThreshold, wavelengthNm, cancellationToken));
         }
 
         return new TruthTable(
             group.GroupName,
             inputPinNames.ToArray(),
             outputPinNames.ToArray(),
+            biasPins.ToArray(),
             powerThreshold,
             wavelengthNm,
             rows);
@@ -99,6 +151,7 @@ public sealed class TruthTableExtractor
     private static async Task<TruthTableRow> SimulateCombinationAsync(
         ComponentGroup group,
         IReadOnlyList<GroupPin> inputs,
+        IReadOnlyList<GroupPin> biases,
         IReadOnlyList<GroupPin> outputs,
         int pattern,
         double powerThreshold,
@@ -106,6 +159,13 @@ public sealed class TruthTableExtractor
         CancellationToken cancellationToken)
     {
         var portManager = new PhysicalExternalPortManager();
+        // Bias pins are always "on" — the same coherent field as an active input,
+        // just not enumerated as a table column.
+        foreach (var bias in biases)
+        {
+            portManager.AddLightSource(CreateOnInput(bias, wavelengthNm), InFlowIdOf(bias));
+        }
+
         var inputBits = new Dictionary<string, bool>(inputs.Count);
         for (var i = 0; i < inputs.Count; i++)
         {
@@ -171,6 +231,7 @@ public sealed class TruthTableExtractor
     private static void ValidateArguments(
         IReadOnlyList<string> inputPinNames,
         IReadOnlyList<string> outputPinNames,
+        IReadOnlyList<string> biasPins,
         double powerThreshold,
         int wavelengthNm)
     {
@@ -185,10 +246,10 @@ public sealed class TruthTableExtractor
 
         ThrowOnDuplicates(inputPinNames, nameof(inputPinNames));
         ThrowOnDuplicates(outputPinNames, nameof(outputPinNames));
-        var overlap = inputPinNames.Intersect(outputPinNames).FirstOrDefault();
-        if (overlap != null)
-            throw new ArgumentException(
-                $"Pin '{overlap}' is declared as both a logic input and a logic output.", nameof(outputPinNames));
+        ThrowOnDuplicates(biasPins, nameof(biasPins));
+        ThrowOnOverlap(inputPinNames, outputPinNames, nameof(outputPinNames));
+        ThrowOnOverlap(inputPinNames, biasPins, nameof(biasPins));
+        ThrowOnOverlap(biasPins, outputPinNames, nameof(biasPins));
 
         if (double.IsNaN(powerThreshold) || powerThreshold <= 0.0 || powerThreshold >= 1.0)
             throw new ArgumentOutOfRangeException(
@@ -227,5 +288,13 @@ public sealed class TruthTableExtractor
         var duplicate = pinNames.GroupBy(n => n).FirstOrDefault(g => g.Count() > 1)?.Key;
         if (duplicate != null)
             throw new ArgumentException($"Pin '{duplicate}' is listed more than once.", parameterName);
+    }
+
+    /// <summary>Rejects pins claimed for two roles — a pin is exactly one of input, output, or bias.</summary>
+    private static void ThrowOnOverlap(IReadOnlyList<string> first, IReadOnlyList<string> second, string parameterName)
+    {
+        var overlap = first.Intersect(second).FirstOrDefault();
+        if (overlap != null)
+            throw new ArgumentException($"Pin '{overlap}' is assigned two roles in one extraction.", parameterName);
     }
 }
