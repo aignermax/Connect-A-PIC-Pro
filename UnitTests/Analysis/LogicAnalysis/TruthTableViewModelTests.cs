@@ -66,6 +66,7 @@ public class TruthTableViewModelTests
         vm.IsGroupSelected.ShouldBeTrue();
         vm.InputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
         vm.OutputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
+        vm.BiasPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
         vm.WavelengthText.ShouldNotBeNullOrWhiteSpace();
     }
 
@@ -126,6 +127,61 @@ public class TruthTableViewModelTests
         var row11 = vm.Rows.Single(r => r.InputBitsText == "1 1");
         row11.OutputCells[0].IsOne.ShouldBeTrue();
         row11.OutputCells[0].PowerText.ShouldBe("1.00", "coherent recombination doubles the field");
+    }
+
+    [Fact]
+    public async Task Extract_CombinerGroupWithBias_ShowsBiasAssignmentAndInterference()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked = true;
+        vm.Threshold = 0.75;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.InputHeaders.ShouldBe(new[] { "a" }); // the bias pin never becomes an input column
+        vm.BiasSummaryText.ShouldBe(string.Format(Translate("TruthTable.BiasSummary"), "b"));
+        vm.Rows.Count.ShouldBe(2);
+
+        var resting = vm.Rows.Single(r => r.InputBitsText == "0");
+        resting.OutputCells[0].IsOne.ShouldBeFalse("0.5 resting power stays below the 0.75 threshold");
+        resting.OutputCells[0].PowerText.ShouldBe("0.50");
+
+        var active = vm.Rows.Single(r => r.InputBitsText == "1");
+        active.OutputCells[0].IsOne.ShouldBeTrue("bias and input recombine coherently into full power");
+        active.OutputCells[0].PowerText.ShouldBe("1.00");
+    }
+
+    [Fact]
+    public async Task Extract_WithoutBias_ClearsBiasSummary()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        var bias = vm.BiasPins.Single(p => p.PinName == "b");
+        bias.IsChecked = true;
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.BiasSummaryText.ShouldNotBeNullOrWhiteSpace("the bias assignment shows on the result");
+
+        bias.IsChecked = false;
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.BiasSummaryText.ShouldBeEmpty("no bias assigned — no bias summary on the result");
+    }
+
+    [Fact]
+    public async Task Extract_PinDeclaredAsInputAndBias_ShowsMessage()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        vm.BiasPins.Single(p => p.PinName == "a").IsChecked = true;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.StatusText.ShouldContain("'a'");
+        vm.HasResult.ShouldBeFalse();
+        vm.IsProcessing.ShouldBeFalse();
     }
 
     [Fact]

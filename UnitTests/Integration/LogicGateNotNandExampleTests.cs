@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Library;
@@ -96,8 +97,78 @@ public class LogicGateNotNandExampleTests
         AssertRow(table, 1, expectedBit: false, expectedPower: SingleInputPower);
     }
 
+    [Fact]
+    public async Task Panel_InputAOnlyAtThreshold0375_ReproducesNotTable()
+    {
+        var vm = await ExtractThroughPanel(InputA, NotThreshold);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.InputHeaders.ShouldBe(InputA);
+        vm.OutputHeaders.ShouldBe(Outputs);
+        vm.BiasSummaryText.ShouldContain("BIAS"); // the bias assignment shows on the result table
+        vm.Rows.Count.ShouldBe(2);
+        AssertPanelRow(vm, "0", expectedBit: true, expectedPowerText: "0.50");
+        AssertPanelRow(vm, "1", expectedBit: false, expectedPowerText: "0.25");
+    }
+
+    [Fact]
+    public async Task Panel_InputsAbAtThreshold0125_ReproducesNandTable()
+    {
+        var vm = await ExtractThroughPanel(InputsAb, NandThreshold);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.BiasSummaryText.ShouldContain("BIAS");
+        vm.Rows.Count.ShouldBe(4);
+        AssertPanelRow(vm, "0 0", expectedBit: true, expectedPowerText: "0.50");
+        AssertPanelRow(vm, "1 0", expectedBit: true, expectedPowerText: "0.25");
+        AssertPanelRow(vm, "0 1", expectedBit: true, expectedPowerText: "0.25");
+        AssertPanelRow(vm, "1 1", expectedBit: false, expectedPowerText: "0.00");
+    }
+
+    /// <summary>
+    /// Drives the shipped example through the Truth Table panel's ViewModel exactly as
+    /// the interactive flow does: select the group, tick the pins, set the threshold,
+    /// run the Extract command.
+    /// </summary>
+    private static async Task<TruthTableViewModel> ExtractThroughPanel(string[] inputs, double threshold)
+    {
+        var canvas = await LoadGateOnCanvas();
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.IsGroupSelected.ShouldBeTrue("the loaded gate group must activate the panel");
+        foreach (var name in inputs)
+            vm.InputPins.Single(p => p.PinName == name).IsChecked = true;
+        vm.OutputPins.Single(p => p.PinName == "Y").IsChecked = true;
+        vm.BiasPins.Single(p => p.PinName == "BIAS").IsChecked = true;
+        vm.Threshold = threshold;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+        return vm;
+    }
+
+    /// <summary>Asserts one panel row's output bit and its displayed raw power.</summary>
+    private static void AssertPanelRow(
+        TruthTableViewModel vm, string inputBitsText, bool expectedBit, string expectedPowerText)
+    {
+        var row = vm.Rows.Single(r => r.InputBitsText == inputBitsText);
+        row.OutputCells[0].IsOne.ShouldBe(expectedBit,
+            $"threshold {vm.Threshold}: output bit for input pattern {inputBitsText}");
+        row.OutputCells[0].PowerText.ShouldBe(expectedPowerText,
+            $"threshold {vm.Threshold}: raw power for input pattern {inputBitsText}");
+    }
+
     /// <summary>Loads the shipped example through the real load path and returns its group.</summary>
     private static async Task<ComponentGroup> LoadGateGroup()
+    {
+        var canvas = await LoadGateOnCanvas();
+        return canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().Single();
+    }
+
+    /// <summary>Loads the shipped example through the real load path and returns the canvas.</summary>
+    private static async Task<DesignCanvasViewModel> LoadGateOnCanvas()
     {
         var library = new ObservableCollection<ComponentTemplate>(TestPdkLoader.LoadAllTemplates());
         var canvas = new DesignCanvasViewModel();
@@ -115,7 +186,7 @@ public class LogicGateNotNandExampleTests
         (await fileOps.LoadDesignFromPathAsync(examplePath)).ShouldBeTrue(
             $"the shipped example '{ExampleFileName}' must load through the real load path");
 
-        return canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().Single();
+        return canvas;
     }
 
     /// <summary>Extracts the gate's truth table at the given analog→digital threshold.</summary>

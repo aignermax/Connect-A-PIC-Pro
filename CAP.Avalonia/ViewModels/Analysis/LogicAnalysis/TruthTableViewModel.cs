@@ -12,7 +12,8 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// <summary>
 /// ViewModel behind the Truth Table panel: when exactly one <see cref="ComponentGroup"/>
 /// is selected on the canvas, its external pins can be assigned as logic inputs (at most
-/// <see cref="TruthTableExtractor.MaxLogicInputs"/>) and outputs, and the panel extracts
+/// <see cref="TruthTableExtractor.MaxLogicInputs"/>), outputs, or bias pins (constantly
+/// "on" in every row — the ingredient inversion gates need), and the panel extracts
 /// the group's truth table via <see cref="TruthTableExtractor"/> — every output bit shown
 /// together with the raw simulated power behind it.
 /// </summary>
@@ -46,6 +47,10 @@ public partial class TruthTableViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasResult;
 
+    /// <summary>Bias-pin assignment of the extracted table, shown above the result (empty when none).</summary>
+    [ObservableProperty]
+    private string _biasSummaryText = "";
+
     /// <summary>Display text for the wavelength the table will be extracted at.</summary>
     [ObservableProperty]
     private string _wavelengthText = "";
@@ -55,6 +60,9 @@ public partial class TruthTableViewModel : ObservableObject
 
     /// <summary>External pins of the selected group offered as logic outputs (checkboxes).</summary>
     public ObservableCollection<PinSelectionViewModel> OutputPins { get; } = new();
+
+    /// <summary>External pins of the selected group offered as bias pins (checkboxes) — constantly "on" in every row.</summary>
+    public ObservableCollection<PinSelectionViewModel> BiasPins { get; } = new();
 
     /// <summary>Input pin names of the extracted table, in bit order (table header).</summary>
     public ObservableCollection<string> InputHeaders { get; } = new();
@@ -83,6 +91,7 @@ public partial class TruthTableViewModel : ObservableObject
         HasResult = false;
         Rows.Clear();
         StatusText = "";
+        BiasSummaryText = "";
         RebuildPinLists();
         WavelengthText = IsGroupSelected
             ? string.Format(Translate("TruthTable.Wavelength"), ResolveWavelengthNm())
@@ -95,6 +104,7 @@ public partial class TruthTableViewModel : ObservableObject
             pin.PropertyChanged -= OnInputPinPropertyChanged;
         InputPins.Clear();
         OutputPins.Clear();
+        BiasPins.Clear();
         if (!IsGroupSelected || _group == null)
             return;
 
@@ -104,6 +114,7 @@ public partial class TruthTableViewModel : ObservableObject
             input.PropertyChanged += OnInputPinPropertyChanged;
             InputPins.Add(input);
             OutputPins.Add(new PinSelectionViewModel(pin.Name));
+            BiasPins.Add(new PinSelectionViewModel(pin.Name));
         }
     }
 
