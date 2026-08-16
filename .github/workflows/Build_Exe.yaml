@@ -102,6 +102,13 @@ jobs:
           fi
         shell: bash
 
+      # Ship the example designs beside the executable: ExampleDesignsService
+      # discovers them by walking up from the app base directory, and the
+      # release job archives the publish/ root as-is.
+      - name: Bundle examples into publish output
+        run: cp -r examples publish/examples
+        shell: bash
+
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
@@ -158,6 +165,13 @@ jobs:
           --self-contained false
           -p:Version=${{ steps.version.outputs.version }}
           -o publish/win-x64-msi
+
+      # Ship the example designs beside the executable. Must happen before the
+      # harvest step so Generate-HarvestedFiles.ps1 picks up examples/ as a
+      # subdirectory of INSTALLDIR.
+      - name: Bundle examples into publish output
+        shell: pwsh
+        run: Copy-Item -Recurse examples publish/win-x64-msi/examples
 
       - name: Generate HarvestedFiles.wxs
         shell: pwsh

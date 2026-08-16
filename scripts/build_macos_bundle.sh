@@ -133,6 +133,15 @@ else
   exit 1
 fi
 
+# Ship the example designs beside the executable: discovery walks up from the
+# app base directory, so Contents/MacOS/examples is found on the first probe.
+if [[ -d "${REPO_ROOT}/examples" ]]; then
+  cp -R "${REPO_ROOT}/examples" "${MACOS_DIR}/examples"
+  echo "      Bundled examples/ into Contents/MacOS/"
+else
+  echo "      NOTE: No examples/ directory at repo root; the Home screen will show no examples."
+fi
+
 # ---------------------------------------------------------------------------
 # Step 3 — Write Contents/Info.plist
 # ---------------------------------------------------------------------------
