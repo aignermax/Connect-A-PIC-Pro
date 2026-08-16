@@ -47,7 +47,10 @@ namespace UnitTests.Components;
 ///   Step 4 (green, #936): DRC-lite checks each chiplet against its OWN process —
 ///         a deliberately narrow Cornerstone route is flagged even in Playground
 ///         while the SiEPIC chiplet (no declared minWidthUm) stays silent.
-///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
+///   Step 5 (green, #937 shipped in #948): the router floors each connection by its
+///         own endpoint PDKs — a Cornerstone route keeps its 30 µm foundry floor,
+///         the stricter side governs the cross-chiplet abutment, and SiEPIC routes
+///         use their declared 5 µm instead of the 10 µm Playground fallback.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
 ///         groups, the abutment and the physics survive; since #938 the reload
 ///         migrates nothing (the per-chiplet bindings describe the state).
@@ -57,10 +60,12 @@ namespace UnitTests.Components;
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
 ///
-/// The red steps 5 and 8 additionally carry GREEN "today" pins in the
-/// CurrentBehavior partial: the Playground bend floor really is one fallback for
-/// everything, and GDS export really does size every route with one majority
-/// cross-section — so a future per-chiplet fix turns those pins red as a tripwire.
+/// The red step 8 additionally carries a GREEN "today" pin in the CurrentBehavior
+/// partial: GDS export really does size every route with one majority cross-section —
+/// so a future per-chiplet fix turns that pin red as a tripwire. The step-5 pins in
+/// the same partial survived the #948 fix unchanged: the canvas-wide fallback they
+/// pin is still the layer underneath the per-connection floors (a null per-connection
+/// opinion falls back to it), so they now guard that fallback layer.
 /// The step-3 pin now guards the canvas-level half of the shipped #935 behavior:
 /// ungrouped foreign content must stay rejected.
 /// </summary>
