@@ -30,6 +30,9 @@ public static class LogicGateFixtureFactory
     private const double WaveguideLength = 100;
     private const double WaveguideThickness = 5;
 
+    /// <summary>Phase the phase arm imprints on the light passing through it.</summary>
+    private const double PhaseShiftDegrees = 90;
+
     /// <summary>
     /// A single 50/50 coupler exposed as a two-input/one-output circuit: a = in1,
     /// b = in2, y = out1 (out2 stays unexposed). Any single input delivers half its
@@ -83,10 +86,17 @@ public static class LogicGateFixtureFactory
     /// Four independent unity-through waveguides exposed as in0..in3 / out0..out3:
     /// a 4-bit identity bus — the fixture for the maximum-width (16-row) extraction.
     /// </summary>
-    public static ComponentGroup CreateFourBitBusGroup()
+    public static ComponentGroup CreateFourBitBusGroup() => CreateBusGroup(TruthTableExtractor.MaxLogicInputs);
+
+    /// <summary>
+    /// A bus of <paramref name="laneCount"/> independent unity-through waveguides
+    /// (same shape as <see cref="CreateFourBitBusGroup"/>, but usable with an extra
+    /// lane whose pins become a bias pair).
+    /// </summary>
+    public static ComponentGroup CreateBusGroup(int laneCount)
     {
-        var group = new ComponentGroup("4-bit bus");
-        for (var i = 0; i < TruthTableExtractor.MaxLogicInputs; i++)
+        var group = new ComponentGroup($"{laneCount}-bit bus");
+        for (var i = 0; i < laneCount; i++)
         {
             var waveguide = CreateWaveguide($"lane{i}");
             waveguide.PhysicalX = 0;
@@ -95,6 +105,46 @@ public static class LogicGateFixtureFactory
             group.AddExternalPin(Exposed($"in{i}", waveguide, "a0"));
             group.AddExternalPin(Exposed($"out{i}", waveguide, "b0"));
         }
+        return group;
+    }
+
+    /// <summary>
+    /// A Mach-Zehnder inverter (issue #964): splitter and recombiner (50/50 couplers),
+    /// a unity reference arm, and a +90° phase arm. Every 50/50 coupler hands its
+    /// cross port a +90° phase, so with Δφ = 90° between the arms the two coherent
+    /// inputs <c>bias</c> (split.in1, always on) and <c>a</c> (split.in2) evaluate at
+    /// the recombiner's through port (y = combine.out1) as
+    /// 0.5·[bias·(1 − e^{iΔφ}) + i·a·(1 + e^{iΔφ})] = 0.5·(1 − i)·(bias − a):
+    /// bias alone leaves power 0.5 (bright), bias together with a extinguishes to
+    /// exactly 0 (dark) — the inversion a power threshold alone cannot deliver.
+    /// The cross port (aux = combine.out2) carries the complementary sum, keeping
+    /// the fixture lossless and the raw powers exact.
+    /// </summary>
+    public static ComponentGroup CreateNotMziGroup()
+    {
+        var split = CreateCoupler("split");
+        var referenceArm = CreateWaveguide("arm_ref");
+        referenceArm.PhysicalX = CouplerWidth + WaveguideThickness;
+        referenceArm.PhysicalY = 7.5;
+        var phaseArm = CreatePhaseWaveguide("arm_phase", PhaseShiftDegrees);
+        phaseArm.PhysicalX = CouplerWidth + WaveguideThickness;
+        phaseArm.PhysicalY = 67.5;
+        var combine = CreateCoupler("combine");
+        combine.PhysicalX = CouplerWidth + 2 * WaveguideThickness + WaveguideLength;
+
+        var group = new ComponentGroup("NOT (MZI inverter)");
+        group.AddChild(split);
+        group.AddChild(referenceArm);
+        group.AddChild(phaseArm);
+        group.AddChild(combine);
+        ConnectLossless(group, Pin(split, "out1"), Pin(referenceArm, "a0"));
+        ConnectLossless(group, Pin(split, "out2"), Pin(phaseArm, "a0"));
+        ConnectLossless(group, Pin(referenceArm, "b0"), Pin(combine, "in1"));
+        ConnectLossless(group, Pin(phaseArm, "b0"), Pin(combine, "in2"));
+        group.AddExternalPin(Exposed("bias", split, "in1"));
+        group.AddExternalPin(Exposed("a", split, "in2"));
+        group.AddExternalPin(Exposed("y", combine, "out1"));
+        group.AddExternalPin(Exposed("aux", combine, "out2"));
         return group;
     }
 
@@ -202,6 +252,29 @@ public static class LogicGateFixtureFactory
             { ("a0", "b0"), Complex.One },
             { ("b0", "a0"), Complex.One },
         });
+
+    /// <summary>
+    /// Lossless phase element: unity magnitude with a fixed phase — the fixture
+    /// stand-in for the Demo PDK's slider-driven Phase Shifter.
+    /// </summary>
+    private static Component CreatePhaseWaveguide(string identifier, double phaseDegrees)
+    {
+        var phase = Complex.FromPolarCoordinates(1.0, phaseDegrees * Math.PI / 180);
+        return CreateComponent(
+            identifier,
+            WaveguideLength,
+            WaveguideThickness,
+            new[]
+            {
+                ("a0", 0.0, 2.5, 180.0),
+                ("b0", WaveguideLength, 2.5, 0.0),
+            },
+            new Dictionary<(string From, string To), Complex>
+            {
+                { ("a0", "b0"), phase },
+                { ("b0", "a0"), phase },
+            });
+    }
 
     /// <summary>
     /// Builds a component with baking-solved numeric S-matrix transfers: logical pins

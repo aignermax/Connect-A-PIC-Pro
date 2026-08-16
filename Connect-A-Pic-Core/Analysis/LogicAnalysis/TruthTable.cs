@@ -17,7 +17,8 @@ public sealed class TruthTable
         IReadOnlyList<string> outputPinNames,
         double powerThreshold,
         int wavelengthNm,
-        IReadOnlyList<TruthTableRow> rows)
+        IReadOnlyList<TruthTableRow> rows,
+        IReadOnlyList<string>? biasPinNames = null)
     {
         GroupName = groupName;
         InputPinNames = inputPinNames;
@@ -25,6 +26,7 @@ public sealed class TruthTable
         PowerThreshold = powerThreshold;
         WavelengthNm = wavelengthNm;
         Rows = rows;
+        BiasPinNames = biasPinNames ?? Array.Empty<string>();
     }
 
     /// <summary>Name of the group the table was extracted from.</summary>
@@ -35,6 +37,12 @@ public sealed class TruthTable
 
     /// <summary>Logic output pin names.</summary>
     public IReadOnlyList<string> OutputPinNames { get; }
+
+    /// <summary>
+    /// Pins held constantly on during the extraction (the coherent bias/reference
+    /// inputs); empty for a plain extraction. Never a column in the InputBits.
+    /// </summary>
+    public IReadOnlyList<string> BiasPinNames { get; }
 
     /// <summary>Normalized power threshold used for classification (power ≥ threshold is logic 1).</summary>
     public double PowerThreshold { get; }
