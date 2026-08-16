@@ -16,6 +16,7 @@ public class DesignValidator
     private readonly WaveguideOverlapDetector _overlapDetector = new();
     private readonly WaveguideSpacingDetector _spacingDetector = new();
     private readonly WaveguideMinWidthChecker _minWidthChecker = new();
+    private readonly PerConnectionDrcChecker _perConnectionDrcChecker = new();
 
     /// <summary>
     /// Validates all provided waveguide connections and returns any issues found.
@@ -144,11 +145,25 @@ public class DesignValidator
     /// <param name="components">All placed components whose optical pins are checked.</param>
     /// <param name="externalPortPins">Pins that are external ports and should be skipped.</param>
     /// <param name="minWaveguideSpacingMicrometers">
-    /// Minimum required edge-to-edge spacing; ≤0 disables the spacing check.
+    /// Minimum required edge-to-edge spacing; ≤0 disables the spacing check. When a
+    /// per-connection provider is wired this value still governs frozen group paths,
+    /// which carry no pins to resolve an owning process from.
     /// </param>
     /// <param name="minWaveguideWidthRules">
     /// Per-cross-section minimum feature widths of the active process; null/empty disables
-    /// the min-width check (the PDK declares no <c>minWidthUm</c>).
+    /// the min-width check (the PDK declares no <c>minWidthUm</c>). Ignored for
+    /// connections when <paramref name="connectionDrcRuleProvider"/> is wired.
+    /// </param>
+    /// <param name="connectionDrcRuleProvider">
+    /// Optional per-connection rule-set resolver (issue #936): when wired, EACH
+    /// connection's width and spacing limits come from its own endpoint PDKs' processes
+    /// instead of the design-wide values above, so a multi-process (e.g. two-chiplet)
+    /// canvas checks every chiplet against its own foundry limits — including in
+    /// Playground, where no process lock exists at all. A null return means "no PDK
+    /// opinion" (built-ins, PDK-less components): the design-wide values above govern,
+    /// the same fallback rule as the router's per-connection bend floor (#937). A
+    /// non-null but empty rule set means the endpoint PDKs are known and declare no
+    /// minimum — the connection stays silent (no invented values, #926).
     /// </param>
     /// <returns>A list of all design issues found, empty if the design is valid.</returns>
     public List<DesignIssue> Validate(
@@ -157,7 +172,8 @@ public class DesignValidator
         IEnumerable<Component> components,
         IEnumerable<PhysicalPin>? externalPortPins,
         double minWaveguideSpacingMicrometers = 0,
-        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null)
+        IReadOnlyList<WaveguideMinWidthRule>? minWaveguideWidthRules = null,
+        Func<WaveguideConnection, ConnectionDrcRules?>? connectionDrcRuleProvider = null)
     {
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(groups);
@@ -165,6 +181,15 @@ public class DesignValidator
 
         var connectionList = connections.ToList();
         var issues = Validate(connectionList, groups, components, externalPortPins);
+
+        if (connectionDrcRuleProvider is not null)
+        {
+            issues.AddRange(_perConnectionDrcChecker.Check(
+                connectionList, groups, minWaveguideSpacingMicrometers,
+                minWaveguideWidthRules, connectionDrcRuleProvider));
+            return issues;
+        }
+
         if (minWaveguideSpacingMicrometers > 0)
         {
             issues.AddRange(_spacingDetector.DetectViolations(

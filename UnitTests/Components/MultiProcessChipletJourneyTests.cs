@@ -44,8 +44,9 @@ namespace UnitTests.Components;
 ///   Step 3 (green, #935): placement is chiplet-scoped — a process-locked canvas
 ///         accepts a second-process chiplet (bound to its own process) while
 ///         ungrouped foreign content stays rejected.
-///   Step 4 (RED, #936): DRC-lite rules come from the single active process — a
-///         two-process design checks nothing PDK-dependent at all.
+///   Step 4 (green, #936): DRC-lite checks each chiplet against its OWN process —
+///         a deliberately narrow Cornerstone route is flagged even in Playground
+///         while the SiEPIC chiplet (no declared minWidthUm) stays silent.
 ///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
 ///         groups, the abutment and the physics survive; since #938 the reload

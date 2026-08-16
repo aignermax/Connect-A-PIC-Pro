@@ -18,37 +18,60 @@ public class WaveguideSpacingDetector
         WaveguideConnection? Connection,
         PathSegment Segment,
         int SegmentIndex,
-        double HalfWidthMicrometers);
+        double HalfWidthMicrometers,
+        double SpacingMicrometers);
 
     /// <summary>
     /// Detects all distinct waveguide segment pairs whose edge-to-edge clearance
-    /// is smaller than <paramref name="minWaveguideSpacingMicrometers"/>.
+    /// is smaller than the governing minimum spacing. Without a per-connection
+    /// provider that is <paramref name="minWaveguideSpacingMicrometers"/> for every
+    /// segment; with one (issue #936) each connection's segments carry the minimum of
+    /// their own endpoint PDKs' processes (≤0 = no declared limit) while frozen group
+    /// paths keep <paramref name="minWaveguideSpacingMicrometers"/>, and a pair is
+    /// governed by the stricter (larger) of its two segments' values — so a
+    /// Cornerstone route enforces its foundry gap even against a SiEPIC neighbour
+    /// that declares no limit of its own.
     /// </summary>
     /// <param name="connections">Regular waveguide connections to check.</param>
     /// <param name="groups">ComponentGroups whose frozen internal paths are checked.</param>
-    /// <param name="minWaveguideSpacingMicrometers">Minimum required edge-to-edge spacing.</param>
+    /// <param name="minWaveguideSpacingMicrometers">
+    /// Minimum required edge-to-edge spacing for frozen group paths and — when no
+    /// per-connection provider is given — for every connection.
+    /// </param>
+    /// <param name="spacingForConnection">
+    /// Optional per-connection minimum spacing resolver (issue #936); a return ≤0
+    /// means the connection's PDKs declare no limit. Null keeps the uniform
+    /// <paramref name="minWaveguideSpacingMicrometers"/> behavior.
+    /// </param>
     /// <returns>A list of spacing design issues, empty if none found.</returns>
     public List<DesignIssue> DetectViolations(
         IEnumerable<WaveguideConnection> connections,
         IEnumerable<ComponentGroup> groups,
-        double minWaveguideSpacingMicrometers)
+        double minWaveguideSpacingMicrometers,
+        Func<WaveguideConnection, double>? spacingForConnection = null)
     {
         ArgumentNullException.ThrowIfNull(connections);
         ArgumentNullException.ThrowIfNull(groups);
 
-        if (minWaveguideSpacingMicrometers <= 0)
-            return new List<DesignIssue>();
-
-        var segments = CollectSegments(connections, groups);
+        var segments = CollectSegments(connections, groups, minWaveguideSpacingMicrometers, spacingForConnection);
         if (segments.Count < 2)
             return new List<DesignIssue>();
 
-        var pairs = FindCandidatePairs(segments, minWaveguideSpacingMicrometers);
+        double maxSpacing = 0.0;
+        foreach (var segment in segments)
+        {
+            if (segment.SpacingMicrometers > maxSpacing)
+                maxSpacing = segment.SpacingMicrometers;
+        }
+        if (maxSpacing <= 0)
+            return new List<DesignIssue>();
+
+        var pairs = FindCandidatePairs(segments, maxSpacing);
         var issues = new List<DesignIssue>();
 
         foreach (var (indexA, indexB) in pairs)
         {
-            var issue = CheckPair(segments[indexA], segments[indexB], minWaveguideSpacingMicrometers);
+            var issue = CheckPair(segments[indexA], segments[indexB]);
             if (issue is not null)
                 issues.Add(issue);
         }
@@ -58,7 +81,9 @@ public class WaveguideSpacingDetector
 
     private static List<SegmentInfo> CollectSegments(
         IEnumerable<WaveguideConnection> connections,
-        IEnumerable<ComponentGroup> groups)
+        IEnumerable<ComponentGroup> groups,
+        double minWaveguideSpacingMicrometers,
+        Func<WaveguideConnection, double>? spacingForConnection)
     {
         var segments = new List<SegmentInfo>();
 
@@ -69,6 +94,7 @@ public class WaveguideSpacingDetector
 
             var label = FormatConnectionLabel(connection);
             double halfWidth = connection.WidthMicrometers / 2.0;
+            double spacing = spacingForConnection?.Invoke(connection) ?? minWaveguideSpacingMicrometers;
 
             for (int i = 0; i < routedSegments.Count; i++)
             {
@@ -78,7 +104,8 @@ public class WaveguideSpacingDetector
                     connection,
                     routedSegments[i],
                     i,
-                    halfWidth));
+                    halfWidth,
+                    spacing));
             }
         }
 
@@ -100,7 +127,8 @@ public class WaveguideSpacingDetector
                         null,
                         frozenSegments[i],
                         i,
-                        halfWidth));
+                        halfWidth,
+                        minWaveguideSpacingMicrometers));
                 }
             }
         }
@@ -110,7 +138,7 @@ public class WaveguideSpacingDetector
 
     private static HashSet<(int IndexA, int IndexB)> FindCandidatePairs(
         List<SegmentInfo> segments,
-        double minSpacing)
+        double maxSpacing)
     {
         double maxHalfWidth = 0.0;
         foreach (var segment in segments)
@@ -119,14 +147,14 @@ public class WaveguideSpacingDetector
                 maxHalfWidth = segment.HalfWidthMicrometers;
         }
 
-        double cellSize = minSpacing + maxHalfWidth * 2.0;
+        double cellSize = maxSpacing + maxHalfWidth * 2.0;
 
         var buckets = new Dictionary<(int X, int Y), List<int>>();
 
         for (int i = 0; i < segments.Count; i++)
         {
             var (minX, minY, maxX, maxY) = WaveguideSpacingGeometry.GetPaddedBounds(
-                segments[i].Segment, segments[i].HalfWidthMicrometers, minSpacing);
+                segments[i].Segment, segments[i].HalfWidthMicrometers, segments[i].SpacingMicrometers);
 
             int bx0 = (int)Math.Floor(minX / cellSize);
             int bx1 = (int)Math.Floor(maxX / cellSize);
@@ -154,7 +182,7 @@ public class WaveguideSpacingDetector
         for (int i = 0; i < segments.Count; i++)
         {
             var (minX, minY, maxX, maxY) = WaveguideSpacingGeometry.GetPaddedBounds(
-                segments[i].Segment, segments[i].HalfWidthMicrometers, minSpacing);
+                segments[i].Segment, segments[i].HalfWidthMicrometers, segments[i].SpacingMicrometers);
 
             int bx0 = (int)Math.Floor(minX / cellSize) - 1;
             int bx1 = (int)Math.Floor(maxX / cellSize) + 1;
@@ -180,9 +208,15 @@ public class WaveguideSpacingDetector
         return pairs;
     }
 
-    private static DesignIssue? CheckPair(SegmentInfo a, SegmentInfo b, double minSpacing)
+    private static DesignIssue? CheckPair(SegmentInfo a, SegmentInfo b)
     {
         if (a.PathId == b.PathId)
+            return null;
+
+        // The stricter side governs: the pair must respect the larger of the two
+        // segments' process minima; a pair where neither side declares one is silent.
+        double minSpacing = Math.Max(a.SpacingMicrometers, b.SpacingMicrometers);
+        if (minSpacing <= 0)
             return null;
 
         if (WaveguideSpacingGeometry.SegmentsShareEndpoint(a.Segment, b.Segment))

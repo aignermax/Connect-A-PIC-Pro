@@ -49,6 +49,42 @@ public class WaveguideMinWidthChecker
         return issues;
     }
 
+    /// <summary>
+    /// Per-connection counterpart (issue #936): each connection is checked against the
+    /// rule set of its OWN endpoint PDKs — resolved by the caller — instead of one
+    /// design-wide list, so a Cornerstone chiplet on a multi-process canvas is checked
+    /// against the Cornerstone minimum while a SiEPIC chiplet (no declared minimum)
+    /// stays silent, even in Playground where no process lock exists. A connection
+    /// whose rule set resolves to null or empty is skipped (no PDK opinion).
+    /// </summary>
+    /// <param name="connections">The connections to check.</param>
+    /// <param name="rulesForConnection">
+    /// Resolves the min-width rules governing one connection; null/empty return means
+    /// "no declared minimum" and the connection is skipped.
+    /// </param>
+    /// <returns>One issue per violating connection, empty when all are compliant.</returns>
+    public List<DesignIssue> CheckConnections(
+        IEnumerable<WaveguideConnection> connections,
+        Func<WaveguideConnection, IReadOnlyList<WaveguideMinWidthRule>?> rulesForConnection)
+    {
+        ArgumentNullException.ThrowIfNull(connections);
+        ArgumentNullException.ThrowIfNull(rulesForConnection);
+
+        var issues = new List<DesignIssue>();
+        foreach (var connection in connections)
+        {
+            var rules = rulesForConnection(connection);
+            if (rules is not { Count: > 0 })
+                continue;
+
+            var issue = CheckConnection(connection, rules);
+            if (issue is not null)
+                issues.Add(issue);
+        }
+
+        return issues;
+    }
+
     private static DesignIssue? CheckConnection(
         WaveguideConnection connection,
         IReadOnlyList<WaveguideMinWidthRule> rules)

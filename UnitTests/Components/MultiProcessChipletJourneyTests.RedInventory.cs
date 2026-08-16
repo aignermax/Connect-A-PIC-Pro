@@ -1,6 +1,7 @@
 using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
+using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Analysis;
 using CAP_Core.Components.Process;
@@ -12,15 +13,16 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 4–5, 8) —
+/// Documented-red inventory stations of the multi-process journey (steps 5 and 8) —
 /// each Skip links the issue filed for that exact single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
-/// (Step 3 turned green with the per-chiplet placement scope, issue #935; step 7
-/// with the persisted per-chiplet process binding, issue #938.)
+/// (Step 3 turned green with the per-chiplet placement scope, issue #935; step 4
+/// with the per-connection DRC rule sets, issue #936; step 7 with the persisted
+/// per-chiplet process binding, issue #938.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
-    [Fact(Skip = "Single-process assumption (#933 inventory): DRC-lite derives its whole rule set from the single active process (first member PDK) — per-chiplet limits are https://github.com/aignermax/Lunima/issues/936")]
+    [Fact]
     public void Step4_DrcLite_ChecksEachChipletAgainstItsOwnProcess()
     {
         var design = MultiProcessChipletJourneyDesign.BuildComposed();
@@ -36,14 +38,23 @@ public partial class MultiProcessChipletJourneyTests
         narrow.ShouldNotBeNull();
         narrow!.Connection.WidthMicrometers = 0.2;
 
-        // Production behavior for a two-process design: it can only exist in Playground
-        // (#935), so RunDesignChecks runs with processLockActive = false and NO process
-        // rules at all — the Cornerstone violation passes silently.
+        // A two-process design can only exist in Playground (#935), so RunDesignChecks
+        // runs with processLockActive = false — and still checks per chiplet (#936):
+        // the per-connection provider keys each connection's rules to its own endpoint
+        // PDKs, wired here exactly like MainViewModel.RunDesignChecks wires it.
+        var drafts = new List<PdkDraft> { design.Cornerstone, design.Siepic };
+        string? PdkSourceOf(CAP_Core.Components.Core.PhysicalPin? pin) =>
+            pin?.ParentComponent is { } component
+                ? ComponentPdkSourceResolver.Resolve(component, design.Templates)
+                : null;
         var panel = new DesignValidationViewModel();
         panel.RunValidation(
             design.Canvas.ConnectionManager.Connections,
             allComponents: design.Canvas.Components.Select(vm => vm.Component),
-            processLockActive: false);
+            processLockActive: false,
+            connectionDrcRuleProvider: connection =>
+                ConnectionDrcRuleResolver.ResolveForEndpointPdkNames(
+                    PdkSourceOf(connection.StartPin), PdkSourceOf(connection.EndPin), drafts));
 
         panel.Issues.ShouldContain(
             i => i.Type == DesignIssueType.WaveguideBelowMinWidth && ReferenceEquals(i.Connection, narrow.Connection),
