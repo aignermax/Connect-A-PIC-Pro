@@ -394,6 +394,26 @@ public partial class MainViewModel : ObservableObject
         _canvas.Routing.GetMetalRoutingSpec = metalSpecProvider;
         CanvasInteraction.GetMetalMinBendRadiusMicrometers =
             () => metalSpecProvider().MinBendRadiusMicrometers;
+        // Per-connection process floor (issue #937): on a multi-process canvas each
+        // connection is floored by its own endpoint components' PDK process (the stricter
+        // chiplet governs a cross-chiplet route), not by one canvas-wide value. The factory
+        // runs on the UI thread at pass start and snapshots the library and drafts, so the
+        // provider the router calls per connection on the routing thread never touches live
+        // ViewModel collections. Unresolvable endpoints (built-ins, groups, PDK-less drafts)
+        // yield null and the canvas-wide floor above governs.
+        _canvas.Routing.BuildConnectionProcessFloorProvider = () =>
+        {
+            var templates = LeftPanel.AllTemplates.ToList();
+            var drafts = LeftPanel.GetLoadedPdkDrafts().ToList();
+            return (startPin, endPin) =>
+                CAP_DataAccess.Components.ComponentDraftMapper.WaveguideBendRadiusResolver.ResolveForEndpointPdkNames(
+                    PdkSourceOf(startPin), PdkSourceOf(endPin), drafts);
+
+            string? PdkSourceOf(CAP_Core.Components.Core.PhysicalPin pin) =>
+                pin.ParentComponent is { } component
+                    ? ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, templates)
+                    : null;
+        };
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
@@ -446,7 +466,10 @@ public partial class MainViewModel : ObservableObject
             resolveLiveMemberPdkNames: () =>
                 FileOperations.ActiveProcess is { } activeProcess
                     ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess)
-                    : null);
+                    : null,
+            // Per-chiplet scoping (issue #935): the live catalog lets the policy derive a
+            // group's chiplet process binding from its children.
+            getProcessCatalog: () => ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries()));
 
         CanvasInteraction.PlacementContext = placementContext;
         _canvas.Clipboard.PdkSourceResolver = placementContext.ResolveComponentPdkSource;

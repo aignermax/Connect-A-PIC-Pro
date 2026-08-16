@@ -13,6 +13,9 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
     /// pattern of turning an <see cref="ActiveProcessSelection"/> plus the loaded PDK drafts into
     /// a routing parameter. When no process is resolvable (playground / no selection / no optical
     /// minimum declared) it falls back to <see cref="FallbackMinimumMicrometers"/>.
+    /// <see cref="ResolveForEndpointPdkNames"/> is the per-connection counterpart (issue #937):
+    /// it floors one connection by its endpoint components' own PDK processes instead of the
+    /// canvas-wide value.
     /// </summary>
     public static class WaveguideBendRadiusResolver
     {
@@ -70,20 +73,69 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper
             double? smallest = null;
             foreach (var process in processes)
             {
-                var xsections = process?.Xsections;
-                if (xsections == null)
-                    continue;
-
-                foreach (var xsection in xsections)
-                {
-                    if (xsection.Kind != XsectionKind.Optical || xsection.MinRadiusUm <= 0)
-                        continue;
-                    if (smallest == null || xsection.MinRadiusUm < smallest.Value)
-                        smallest = xsection.MinRadiusUm;
-                }
+                var candidate = SmallestOpticalMinimum(process);
+                if (candidate != null && (smallest == null || candidate < smallest.Value))
+                    smallest = candidate;
             }
 
             return smallest ?? FallbackMinimumMicrometers;
+        }
+
+        /// <summary>
+        /// Resolves the per-connection minimum bend radius (µm) from the endpoint components'
+        /// PDK sources (issue #937): each endpoint PDK contributes the smallest positive
+        /// optical <see cref="ProcessXsection.MinRadiusUm"/> of its own process, and the
+        /// STRICTER (larger) of the two governs the connection. On a multi-process canvas
+        /// (e.g. a Cornerstone SiN chiplet next to a SiEPIC SOI chiplet) this keeps a
+        /// Cornerstone route at its 30 µm foundry floor instead of dragging it down to the
+        /// neighbour's 5 µm — and lets a SiEPIC-to-SiEPIC route use its declared 5 µm instead
+        /// of the generic fallback. Returns null when neither endpoint PDK resolves to a
+        /// positive optical minimum, so the caller keeps the canvas-wide floor.
+        /// </summary>
+        /// <param name="startPdkName">PDK source name of the start endpoint's component (null = unknown).</param>
+        /// <param name="endPdkName">PDK source name of the end endpoint's component (null = unknown).</param>
+        /// <param name="loadedPdks">All currently loaded PDK drafts.</param>
+        public static double? ResolveForEndpointPdkNames(
+            string? startPdkName, string? endPdkName, IReadOnlyList<PdkDraft>? loadedPdks)
+        {
+            if (loadedPdks == null)
+                return null;
+
+            double? start = SmallestOpticalMinimum(FindProcess(startPdkName, loadedPdks));
+            double? end = SmallestOpticalMinimum(FindProcess(endPdkName, loadedPdks));
+            if (start == null)
+                return end;
+            if (end == null)
+                return start;
+            return Math.Max(start.Value, end.Value);
+        }
+
+        /// <summary>Finds the process definition of the named loaded PDK (null when unknown).</summary>
+        private static ProcessDefinition? FindProcess(string? pdkName, IReadOnlyList<PdkDraft> loadedPdks) =>
+            string.IsNullOrEmpty(pdkName)
+                ? null
+                : loadedPdks.FirstOrDefault(
+                    d => string.Equals(d.Name, pdkName, StringComparison.OrdinalIgnoreCase))?.Process;
+
+        /// <summary>
+        /// The smallest positive optical <see cref="ProcessXsection.MinRadiusUm"/> of one
+        /// process definition, or null when it declares none.
+        /// </summary>
+        private static double? SmallestOpticalMinimum(ProcessDefinition? process)
+        {
+            if (process?.Xsections == null)
+                return null;
+
+            double? smallest = null;
+            foreach (var xsection in process.Xsections)
+            {
+                if (xsection.Kind != XsectionKind.Optical || xsection.MinRadiusUm <= 0)
+                    continue;
+                if (smallest == null || xsection.MinRadiusUm < smallest.Value)
+                    smallest = xsection.MinRadiusUm;
+            }
+
+            return smallest;
         }
     }
 }

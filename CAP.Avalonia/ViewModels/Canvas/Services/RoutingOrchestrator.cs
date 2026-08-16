@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP_Core.Components;
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.Core;
 using CAP_Core.Routing;
 
 namespace CAP.Avalonia.ViewModels.Canvas.Services;
@@ -63,6 +64,17 @@ public class RoutingOrchestrator
     /// the metal defaults stay unchanged.
     /// </summary>
     public Func<CAP_Core.Routing.MetalRouting.MetalRoutingSpec>? GetMetalRoutingSpec { get; set; }
+
+    /// <summary>
+    /// Factory building the per-connection process bend-floor provider for one routing pass
+    /// (wired by <c>MainViewModel</c>, issue #937). Invoked on the UI thread at pass start —
+    /// together with the canvas-wide floor refresh — so the returned provider closes over
+    /// pass-start snapshots of the component library and PDK drafts and the routing thread
+    /// never enumerates live ViewModel collections. A null factory (or a null provider)
+    /// clears <see cref="WaveguideRouter.ConnectionProcessFloorProvider"/> and the
+    /// canvas-wide floor governs every connection.
+    /// </summary>
+    public Func<Func<PhysicalPin, PhysicalPin, double?>?>? BuildConnectionProcessFloorProvider { get; set; }
 
     /// <summary>
     /// Raised when IsRouting or RoutingStatusText changes.
@@ -130,6 +142,10 @@ public class RoutingOrchestrator
             _router.MetalProcessMinBendRadiusMicrometers = metalSpec.MinBendRadiusMicrometers;
             _connectionManager.MetalTraceWidthMicrometers = metalSpec.TraceWidthMicrometers;
         }
+        // Per-connection floor (issue #937): the factory runs here on the UI thread, so the
+        // provider it builds can close over pass-start snapshots; the router then consults
+        // it per connection on the routing thread.
+        _router.ConnectionProcessFloorProvider = BuildConnectionProcessFloorProvider?.Invoke();
 
         _routingCts?.Cancel();
         _routingCts?.Dispose();

@@ -9,6 +9,7 @@ using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Analysis;
 using CAP_Core.Components.Core;
+using CAP_Core.Components.Creation;
 using CAP_Core.Components.Process;
 using CAP_Core.ExternalPorts;
 using CAP_Core.Grid;
@@ -40,8 +41,9 @@ namespace UnitTests.Components;
 ///         process boundary; pins carry their own PDK's width/layer stamps.
 ///   Step 2 (green): S-matrix simulation delivers physically correct power across
 ///         the chiplet boundary (value assertions from the bundled PDK data).
-///   Step 3 (RED, #935): placement policy is canvas-global — a process-locked
-///         canvas cannot take a second-process chiplet; only Playground can mix.
+///   Step 3 (green, #935): placement is chiplet-scoped — a process-locked canvas
+///         accepts a second-process chiplet (bound to its own process) while
+///         ungrouped foreign content stays rejected.
 ///   Step 4 (RED, #936): DRC-lite rules come from the single active process — a
 ///         two-process design checks nothing PDK-dependent at all.
 ///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
@@ -52,11 +54,12 @@ namespace UnitTests.Components;
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
 ///
-/// The red steps 3, 5 and 8 additionally carry GREEN "today" pins in the
-/// CurrentBehavior partial: the canvas-global lock really does reject the second
-/// process, the Playground bend floor really is one fallback for everything, and
-/// GDS export really does size every route with one majority cross-section — so a
-/// future per-chiplet fix turns those pins red as a tripwire.
+/// The red steps 5 and 8 additionally carry GREEN "today" pins in the
+/// CurrentBehavior partial: the Playground bend floor really is one fallback for
+/// everything, and GDS export really does size every route with one majority
+/// cross-section — so a future per-chiplet fix turns those pins red as a tripwire.
+/// The step-3 pin now guards the canvas-level half of the shipped #935 behavior:
+/// ungrouped foreign content must stay rejected.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests : IDisposable
 {
@@ -151,6 +154,99 @@ public partial class MultiProcessChipletJourneyTests : IDisposable
             "Step 2: the Y-branch's free arm carries its physical share — the boundary is truly crossed");
         leakage.ShouldBeLessThan(0.02,
             "Step 2: only the Y-branch's port-1 reflection leaks back to the unexcited coupler input");
+    }
+
+    [Fact]
+    public void Step3_ProcessLockedCanvas_AcceptsSecondProcessChiplet()
+    {
+        var cornerstone = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.CornerstonePdkFile);
+        var siepic = MultiProcessChipletJourneyDesign.LoadPdk(MultiProcessChipletJourneyDesign.SiepicPdkFile);
+        var catalog = ProcessCatalog.BuildGroups(new[]
+        {
+            new PdkProcessEntry(cornerstone.Name, ProcessFingerprintFactory.From(cornerstone)),
+            new PdkProcessEntry(siepic.Name, ProcessFingerprintFactory.From(siepic)),
+        });
+        ActiveProcessSelection? active = ActiveProcessSelection.ForGroup(
+            catalog.Single(g => g.MemberPdkNames.Contains(cornerstone.Name)));
+        var templates = new List<ComponentTemplate>
+        {
+            MultiProcessChipletJourneyDesign.TemplateFor(cornerstone, "Coupler"),
+            MultiProcessChipletJourneyDesign.TemplateFor(siepic, "Y-Branch 1550"),
+            MultiProcessChipletJourneyDesign.TemplateFor(siepic, "Taper TE 1550"),
+        };
+
+        var libraryPath = Path.Combine(Path.GetTempPath(), $"chiplet_step3_{Guid.NewGuid():N}");
+        Directory.CreateDirectory(libraryPath);
+        try
+        {
+            var canvas = new DesignCanvasViewModel();
+            var interaction = new CanvasInteractionViewModel(
+                canvas, new CommandManager(),
+                new ComponentLibraryViewModel(new GroupLibraryManager(libraryPath)));
+            interaction.PlacementContext = new PlacementPolicyContext(
+                () => active,
+                () => Array.Empty<string>(),
+                component => ComponentPdkSourceResolver.Resolve(component, templates),
+                getProcessCatalog: () => catalog);
+
+            interaction.SelectedTemplate = templates[0];
+            interaction.CanvasClicked(100, 100);
+            canvas.Components.Count.ShouldBe(1, "the Cornerstone chiplet's process owns the canvas");
+
+            // Ungrouped foreign content stays rejected — the lock's protection against
+            // accidental mixing is unchanged; only chiplets carry a second process.
+            string? status = null;
+            interaction.UpdateStatus = s => status = s;
+            interaction.SelectedTemplate = templates[1];
+            interaction.CanvasClicked(500, 100);
+            canvas.Components.Count.ShouldBe(1,
+                "a loose SiEPIC component is ungrouped content — the canvas lock still rejects it");
+            status.ShouldNotBeNull();
+            status!.ShouldContain("monolithic");
+
+            // Rung 6: the same components grouped as a chiplet ARE placeable next to the
+            // Cornerstone chiplet — the group carries the SiEPIC process as its binding.
+            interaction.SelectedTemplate = null;
+            SelectSiepicChipletTemplate(interaction, libraryPath, templates);
+            interaction.CanvasClicked(1500, 100);
+
+            canvas.Components.Count.ShouldBe(2,
+                "the second chiplet places as a chiplet-scoped process on the locked canvas (#935)");
+            var chipletB = (ComponentGroup)canvas.Components.Last().Component;
+            chipletB.ProcessBinding.ShouldNotBeNull(
+                "the placed chiplet is pinned to its own fabrication process");
+            chipletB.ProcessBinding!.IsPlayground.ShouldBeFalse(
+                "a bound chiplet is a first-class manufacturable state, not Playground");
+            chipletB.ProcessBinding.MemberPdkNames.ShouldContain(siepic.Name);
+
+            // The chiplet scopes what may join it: SiEPIC content passes, Cornerstone
+            // content — though it owns the canvas — is foreign to the chiplet.
+            interaction.PlacementContext.CheckPlacementAt(siepic.Name, chipletB).IsAllowed
+                .ShouldBeTrue("the chiplet's own process scopes drops onto it");
+            interaction.PlacementContext.CheckPlacementAt(cornerstone.Name, chipletB).IsAllowed
+                .ShouldBeFalse("the canvas owner is foreign to the chiplet");
+        }
+        finally
+        {
+            if (Directory.Exists(libraryPath)) Directory.Delete(libraryPath, true);
+        }
+    }
+
+    /// <summary>
+    /// Saves chiplet B (Y-branch + taper, built from the real SiEPIC templates) as a group
+    /// template and selects it for placement — the production "Saved Groups" flow.
+    /// </summary>
+    private static void SelectSiepicChipletTemplate(
+        CanvasInteractionViewModel interaction, string libraryPath, List<ComponentTemplate> templates)
+    {
+        var group = new ComponentGroup(MultiProcessChipletJourneyDesign.ChipletBName);
+        group.AddChild(ComponentTemplates.CreateFromTemplate(templates[1], 0, 0));
+        group.AddChild(ComponentTemplates.CreateFromTemplate(templates[2], 200, 0));
+
+        var libraryManager = new GroupLibraryManager(libraryPath);
+        var template = libraryManager.SaveTemplate(group, MultiProcessChipletJourneyDesign.ChipletBName);
+        template.TemplateGroup = group;
+        interaction.SelectedGroupTemplate = template;
     }
 
     // ── Journey helpers ─────────────────────────────────────────────────────────
