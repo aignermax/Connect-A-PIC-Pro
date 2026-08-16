@@ -5,7 +5,6 @@ using CAP.Avalonia.ViewModels.Diagnostics;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Analysis;
-using CAP_Core.Components.Process;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
 using Moq;
@@ -15,11 +14,12 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 5, 7–8) —
+/// Documented-red inventory stations of the multi-process journey (steps 7–8) —
 /// each Skip links the issue filed for that exact single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
 /// (Step 3 turned green with the per-chiplet placement scope, issue #935; step 4
-/// with the per-connection DRC rule sets, issue #936.)
+/// with the per-connection DRC rule sets, issue #936; step 5 with the per-connection
+/// bend-radius floors, issue #937.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -65,15 +65,50 @@ public partial class MultiProcessChipletJourneyTests
             "chiplet B must stay silent: SiEPIC declares no minWidthUm — no invented values (#926)");
     }
 
-    [Fact(Skip = "Single-process assumption (#933 inventory): the router bend-radius floor is one canvas-wide value (Playground fallback 10 µm) — per-chiplet floors are https://github.com/aignermax/Lunima/issues/937")]
+    [Fact]
     public void Step5_BendRadiusFloor_FollowsEachChipletsProcess()
     {
-        // What production applies on a two-process (Playground) canvas: no member PDKs,
-        // so the resolver falls back to the generic 10 µm for EVERY route.
-        var floorForChipletA = WaveguideBendRadiusResolver.Resolve(new ProcessDefinition?[0]);
+        var design = MultiProcessChipletJourneyDesign.BuildComposed();
+        var abutment = design.Canvas.ConnectionManager.Connections.Single();
 
-        floorForChipletA.ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
-            "chiplet A's routes must honor the Cornerstone 30 µm floor, not the fallback (#937)");
+        // One more route inside each chiplet, so all three endpoint combinations
+        // exist on the canvas: A–A, B–B and the cross-process A–B abutment.
+        var intraA = design.Canvas.ConnectPinsWithCachedRoute(
+            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o4"),
+            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_mmi_o3"),
+            MultiProcessChipletJourneyDesign.StraightPath(
+                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_coupler_o4"),
+                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletA, "cs_mmi_o3")));
+        intraA.ShouldNotBeNull();
+        var intraB = design.Canvas.ConnectPinsWithCachedRoute(
+            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_ybranch_port 3"),
+            MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2"),
+            MultiProcessChipletJourneyDesign.StraightPath(
+                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_ybranch_port 3"),
+                MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2")));
+        intraB.ShouldNotBeNull();
+
+        // #937: the floor is per connection now — each endpoint component's PDK process
+        // contributes its minimum and the stricter side governs. The provider is wired
+        // exactly like MainViewModel wires RoutingOrchestrator.BuildConnectionProcessFloorProvider.
+        var drafts = new List<PdkDraft> { design.Cornerstone, design.Siepic };
+        string? PdkSourceOf(CAP_Core.Components.Core.PhysicalPin? pin) =>
+            pin?.ParentComponent is { } component
+                ? ComponentPdkSourceResolver.Resolve(component, design.Templates)
+                : null;
+        double? FloorBetween(CAP_Core.Components.Core.PhysicalPin start, CAP_Core.Components.Core.PhysicalPin end) =>
+            WaveguideBendRadiusResolver.ResolveForEndpointPdkNames(
+                PdkSourceOf(start), PdkSourceOf(end), drafts);
+
+        FloorBetween(intraA!.Connection.StartPin, intraA!.Connection.EndPin)
+            .ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+                "an intra-chiplet-A route honors the Cornerstone 30 µm floor, not the fallback (#937)");
+        FloorBetween(intraB!.Connection.StartPin, intraB!.Connection.EndPin)
+            .ShouldBe(MultiProcessChipletJourneyDesign.SiepicMinBendRadiusUm,
+                "an intra-chiplet-B route uses SiEPIC's declared 5 µm — below the generic 10 µm fallback (#937)");
+        FloorBetween(abutment.StartPin, abutment.EndPin)
+            .ShouldBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm,
+                "the cross-chiplet abutment keeps the stricter side: Cornerstone 30 µm over SiEPIC 5 µm (#937)");
     }
 
     [Fact(Skip = "Single-process assumption (#933 inventory): .lun persists one design-level ActiveProcess and no per-chiplet process binding — https://github.com/aignermax/Lunima/issues/938")]

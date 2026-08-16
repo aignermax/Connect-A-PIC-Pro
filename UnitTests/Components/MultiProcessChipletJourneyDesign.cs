@@ -40,6 +40,8 @@ internal sealed class MultiProcessChipletJourneyDesign
     public const double CornerstoneMinWidthUm = 0.25;
     /// <summary>Cornerstone xs_nc: cspdk.sin300 radius_min tech constant (#924).</summary>
     public const double CornerstoneMinBendRadiusUm = 30.0;
+    /// <summary>SiEPIC strip (WG) minimum bend radius (µm) from the bundled PDK.</summary>
+    public const double SiepicMinBendRadiusUm = 5.0;
     /// <summary>Cornerstone NITRIDE waveguide layer.</summary>
     public const int CornerstoneGdsLayer = 203;
     /// <summary>SiEPIC WG waveguide layer.</summary>

@@ -10,17 +10,17 @@ namespace UnitTests.Components;
 
 /// <summary>
 /// Green "today" pins for the documented-red stations of the multi-process journey:
-/// each test proves the current single-process behavior the red steps 5 (#937) and 8
-/// (#939) describe, so a future per-chiplet fix turns the pin red as a tripwire.
+/// the pin proves the current single-process behavior the red step 8 (#939)
+/// describes, so a future per-chiplet fix turns the pin red as a tripwire.
 /// See <see cref="MultiProcessChipletJourneyTests"/> for the full journey. The step-3
 /// pin now guards the canvas-level half of the shipped per-chiplet scope (#935):
 /// ungrouped foreign content stays rejected even though chiplets may carry a second
-/// process.
+/// process. The bend pins are companions of green step 5 (#937): they pin what the
+/// canvas-wide resolver still contributes beneath the per-connection floors —
+/// locked-process resolution and the Playground fallback.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
-    /// <summary>SiEPIC strip minimum bend radius (µm) from the bundled PDK.</summary>
-    private const double SiepicMinBendRadiusUm = 5.0;
 
     [Fact]
     public void Placement_ProcessLockedCanvas_RejectsUngroupedForeignComponent()
@@ -50,8 +50,9 @@ public partial class MultiProcessChipletJourneyTests
     [Fact]
     public void BendRadius_LockedProcess_ResolvesEachProcessMinimum_Today()
     {
-        // Companion to red step 5 (#937): per-process limits exist and are honored —
-        // but only while the whole design is locked to that one process.
+        // Companion to green step 5 (#937): the canvas-wide resolver keeps resolving a
+        // process-locked design's minimum — single-process designs still floor through
+        // it, while the multi-process canvas layers the per-connection provider on top.
         var (cornerstone, siepic, catalog) = LoadProcessCatalog();
         var pdks = new List<PdkDraft> { cornerstone, siepic };
 
@@ -63,16 +64,17 @@ public partial class MultiProcessChipletJourneyTests
         WaveguideBendRadiusResolver.Resolve(
                 ActiveProcessSelection.ForGroup(
                     catalog.Single(g => g.MemberPdkNames.Contains(siepic.Name))), pdks)
-            .ShouldBe(SiepicMinBendRadiusUm,
+            .ShouldBe(MultiProcessChipletJourneyDesign.SiepicMinBendRadiusUm,
                 "a SiEPIC-locked design resolves the strip 5 µm minimum");
     }
 
     [Fact]
     public void BendRadius_Playground_OneFallbackForBothChiplets_Today()
     {
-        // Companion to red step 5 (#937): Playground is the only mode that can hold both
-        // chiplets — and there the resolver knows neither chiplet's limit; one global
-        // fallback silently covers every route in the design.
+        // Companion to green step 5 (#937): Playground is the only mode that can hold both
+        // chiplets — and there the canvas-wide resolver alone still knows neither chiplet's
+        // limit; one global fallback covers it. Routes with resolvable endpoints escape that
+        // fallback only through the per-connection floors step 5 asserts.
         var (cornerstone, siepic, _) = LoadProcessCatalog();
         var pdks = new List<PdkDraft> { cornerstone, siepic };
 
@@ -80,7 +82,7 @@ public partial class MultiProcessChipletJourneyTests
 
         resolved.ShouldBe(WaveguideBendRadiusResolver.FallbackMinimumMicrometers);
         resolved.ShouldNotBe(MultiProcessChipletJourneyDesign.CornerstoneMinBendRadiusUm);
-        resolved.ShouldNotBe(SiepicMinBendRadiusUm);
+        resolved.ShouldNotBe(MultiProcessChipletJourneyDesign.SiepicMinBendRadiusUm);
     }
 
     [Fact]

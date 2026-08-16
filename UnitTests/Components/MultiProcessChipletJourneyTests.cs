@@ -47,7 +47,9 @@ namespace UnitTests.Components;
 ///   Step 4 (green, #936): DRC-lite checks each chiplet against its OWN process —
 ///         a deliberately narrow Cornerstone route is flagged even in Playground
 ///         while the SiEPIC chiplet (no declared minWidthUm) stays silent.
-///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
+///   Step 5 (green, #937): the router's bend-radius floor is per connection — an
+///         intra-chiplet route honors its own chiplet's process floor and a
+///         cross-chiplet route keeps the stricter endpoint's floor.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
 ///         groups, the abutment and the physics survive (the design reloads as
 ///         Playground: pinned here as current behavior, #938 is the fix).
@@ -55,10 +57,9 @@ namespace UnitTests.Components;
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
 ///
-/// The red steps 5 and 8 additionally carry GREEN "today" pins in the
-/// CurrentBehavior partial: the Playground bend floor really is one fallback for
-/// everything, and GDS export really does size every route with one majority
-/// cross-section — so a future per-chiplet fix turns those pins red as a tripwire.
+/// The red step 8 additionally carries a GREEN "today" pin in the CurrentBehavior
+/// partial: GDS export really does size every route with one majority
+/// cross-section — so a future per-chiplet fix turns that pin red as a tripwire.
 /// The step-3 pin now guards the canvas-level half of the shipped #935 behavior:
 /// ungrouped foreign content must stay rejected.
 /// </summary>
