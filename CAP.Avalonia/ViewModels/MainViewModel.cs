@@ -1375,6 +1375,15 @@ public class DesignGroupData
     /// Canvas Y position of the group ViewModel.
     /// </summary>
     public double CanvasY { get; set; }
+
+    /// <summary>
+    /// Per-chiplet process binding of a top-level group (issue #938): the fabrication
+    /// process the chiplet's contents belong to. Null for unbound groups, nested groups
+    /// (their scope is the top-level chiplet's), and files saved before per-chiplet
+    /// bindings existed — the design-level <see cref="DesignFileData.ActiveProcess"/>
+    /// remains the default for those and for ungrouped components.
+    /// </summary>
+    public ActiveProcessData? ProcessBinding { get; set; }
 }
 
 /// <summary>

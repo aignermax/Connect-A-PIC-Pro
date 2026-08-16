@@ -10,7 +10,7 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Green .lun round-trip station of the multi-process journey (step 6) — see
+/// Green .lun round-trip stations of the multi-process journey (steps 6–7) — see
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
@@ -25,6 +25,7 @@ public partial class MultiProcessChipletJourneyTests
             MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2").LogicalPin!.IDOutFlow);
 
         var saveVm = CreateFileOperations(design.Canvas, design.Templates);
+        saveVm.ProcessCatalogProvider = () => BuildProcessCatalog(design);
         var saveDialog = new Mock<IFileDialogService>();
         saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
                 It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
@@ -40,11 +41,7 @@ public partial class MultiProcessChipletJourneyTests
 
         var loadedCanvas = new DesignCanvasViewModel();
         var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
-        loadVm.ProcessCatalogProvider = () => ProcessCatalog.BuildGroups(new[]
-        {
-            new PdkProcessEntry(design.Cornerstone.Name, ProcessFingerprintFactory.From(design.Cornerstone)),
-            new PdkProcessEntry(design.Siepic.Name, ProcessFingerprintFactory.From(design.Siepic)),
-        });
+        loadVm.ProcessCatalogProvider = () => BuildProcessCatalog(design);
         string? migrationWarning = null;
         loadVm.OnProcessMigrationWarning = w => migrationWarning = w;
         var loadDialog = new Mock<IFileDialogService>();
@@ -78,15 +75,16 @@ public partial class MultiProcessChipletJourneyTests
         ReferenceEquals(startGroup, endGroup).ShouldBeFalse(
             "Step 6: the abutment must keep bridging the two chiplets");
 
-        // Current behavior, pinned honestly: the design-level process record cannot
-        // represent two processes, so the reloaded design collapses to Playground
-        // ("not manufacturable"). The desired per-chiplet binding is step 7 (#938).
+        // Since #938 the round-trip is lossless: the per-chiplet bindings fully describe
+        // the two-process state, so nothing migrates and no "not manufacturable" warning
+        // fires. The canvas-level default stays Playground — the honest state for a
+        // carrier that genuinely mixes two processes (step 7 proves the bindings).
         loadVm.ActiveProcess.ShouldNotBeNull();
         loadVm.ActiveProcess!.IsPlayground.ShouldBeTrue(
-            "Step 6: today a two-process design reloads as Playground — the single design-level " +
-            "ActiveProcess cannot hold both processes (#938)");
-        migrationWarning.ShouldNotBeNull();
-        migrationWarning!.ShouldContain("multiple processes");
+            "Step 6: a two-process carrier's canvas-level default is Playground — " +
+            "manufacturability lives in the per-chiplet bindings (#938)");
+        migrationWarning.ShouldBeNull(
+            "Step 6: with per-chiplet bindings persisted, the reload has nothing to migrate (#938)");
 
         var loadedFields = await SimulateAsync(loadedCanvas,
             InjectLight("source", MultiProcessChipletJourneyDesign.ExposedPin(loadedA, "cs_coupler_o1")));
@@ -95,4 +93,113 @@ public partial class MultiProcessChipletJourneyTests
             .ShouldBe(outputBefore, AmplitudeTolerance,
                 "Step 6: the reloaded two-process system delivers the same output power");
     }
+
+    [Fact]
+    public async Task Step7_LunRoundTrip_PerChipletProcessBindingSurvives()
+    {
+        var design = MultiProcessChipletJourneyDesign.BuildComposed();
+        var saveVm = CreateFileOperations(design.Canvas, design.Templates);
+        saveVm.ProcessCatalogProvider = () => BuildProcessCatalog(design);
+        var saveDialog = new Mock<IFileDialogService>();
+        saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(_designFilePath);
+        saveVm.FileDialogService = saveDialog.Object;
+        await saveVm.SaveDesignAsCommand.ExecuteAsync(null);
+
+        // The binding of each top-level group is persisted inside the file itself.
+        var fileText = File.ReadAllText(_designFilePath);
+        fileText.ShouldContain("\"ProcessBinding\"", Case.Sensitive,
+            "Step 7: each chiplet's process binding must be written into the .lun (#938)");
+
+        var loadedCanvas = new DesignCanvasViewModel();
+        var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
+        loadVm.ProcessCatalogProvider = () => BuildProcessCatalog(design);
+        string? migrationWarning = null;
+        loadVm.OnProcessMigrationWarning = w => migrationWarning = w;
+        var loadDialog = new Mock<IFileDialogService>();
+        loadDialog.Setup(f => f.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(_designFilePath);
+        loadVm.FileDialogService = loadDialog.Object;
+        await loadVm.LoadDesignCommand.ExecuteAsync(null);
+
+        var loadedGroups = loadedCanvas.Components
+            .Where(c => c.Component is ComponentGroup)
+            .Select(c => (ComponentGroup)c.Component)
+            .ToList();
+        var loadedA = loadedGroups.Single(g => g.Identifier == design.ChipletA.Identifier);
+        var loadedB = loadedGroups.Single(g => g.Identifier == design.ChipletB.Identifier);
+
+        // Rung 6: chiplet A reloads bound to the Cornerstone process and chiplet B to
+        // the SiEPIC process — the design as a whole is not one process.
+        loadedA.ProcessBinding.ShouldNotBeNull("Step 7: chiplet A's process binding survives (#938)");
+        loadedA.ProcessBinding!.IsPlayground.ShouldBeFalse(
+            "Step 7: a bound chiplet is a first-class manufacturable state, not Playground");
+        loadedA.ProcessBinding.MemberPdkNames.ShouldContain(design.Cornerstone.Name);
+        loadedB.ProcessBinding.ShouldNotBeNull("Step 7: chiplet B's process binding survives (#938)");
+        loadedB.ProcessBinding!.IsPlayground.ShouldBeFalse(
+            "Step 7: a bound chiplet is a first-class manufacturable state, not Playground");
+        loadedB.ProcessBinding.MemberPdkNames.ShouldContain(design.Siepic.Name);
+
+        migrationWarning.ShouldBeNull(
+            "Step 7: the persisted bindings describe the design completely — no Playground migration");
+        loadVm.ActiveProcess.ShouldNotBeNull(
+            "Step 7: a loaded design never falls back to the unset state (that would re-open the process picker)");
+        loadVm.ActiveProcess!.IsPlayground.ShouldBeTrue(
+            "Step 7: the canvas-level default for a genuine two-process carrier is Playground; " +
+            "the per-chiplet bindings above carry the manufacturability (#938)");
+    }
+
+    /// <summary>
+    /// Backward compatibility (#938 acceptance): a .lun saved before per-chiplet
+    /// bindings existed (no catalog at save time → no bindings in the file) loads
+    /// exactly as today — Playground plus the multi-process migration warning.
+    /// </summary>
+    [Fact]
+    public async Task Step7_LegacyFileWithoutBindings_LoadsExactlyAsBefore()
+    {
+        var design = MultiProcessChipletJourneyDesign.BuildComposed();
+        var saveVm = CreateFileOperations(design.Canvas, design.Templates);
+        var saveDialog = new Mock<IFileDialogService>();
+        saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
+                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(_designFilePath);
+        saveVm.FileDialogService = saveDialog.Object;
+        await saveVm.SaveDesignAsCommand.ExecuteAsync(null);
+
+        var fileText = File.ReadAllText(_designFilePath);
+        fileText.ShouldNotContain("\"ProcessBinding\"", Case.Sensitive,
+            "a pre-#938 save carries no per-chiplet binding — this test pins that legacy shape");
+
+        var loadedCanvas = new DesignCanvasViewModel();
+        var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
+        loadVm.ProcessCatalogProvider = () => BuildProcessCatalog(design);
+        string? migrationWarning = null;
+        loadVm.OnProcessMigrationWarning = w => migrationWarning = w;
+        var loadDialog = new Mock<IFileDialogService>();
+        loadDialog.Setup(f => f.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
+            .ReturnsAsync(_designFilePath);
+        loadVm.FileDialogService = loadDialog.Object;
+        await loadVm.LoadDesignCommand.ExecuteAsync(null);
+
+        var loadedGroups = loadedCanvas.Components
+            .Where(c => c.Component is ComponentGroup)
+            .Select(c => (ComponentGroup)c.Component)
+            .ToList();
+        loadedGroups.ShouldAllBe(g => g.ProcessBinding == null,
+            "legacy files restore no bindings — placement derives the scope live as before (#935)");
+        loadVm.ActiveProcess.ShouldNotBeNull();
+        loadVm.ActiveProcess!.IsPlayground.ShouldBeTrue(
+            "legacy two-process designs still migrate to Playground");
+        migrationWarning.ShouldNotBeNull();
+        migrationWarning!.ShouldContain("multiple processes");
+    }
+
+    /// <summary>The production process catalog over the journey's two bundled PDKs.</summary>
+    private static IReadOnlyList<ProcessGroup> BuildProcessCatalog(MultiProcessChipletJourneyDesign design) =>
+        ProcessCatalog.BuildGroups(new[]
+        {
+            new PdkProcessEntry(design.Cornerstone.Name, ProcessFingerprintFactory.From(design.Cornerstone)),
+            new PdkProcessEntry(design.Siepic.Name, ProcessFingerprintFactory.From(design.Siepic)),
+        });
 }

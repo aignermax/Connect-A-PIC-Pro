@@ -1,4 +1,3 @@
-using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Diagnostics;
@@ -7,19 +6,19 @@ using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Analysis;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using CAP_DataAccess.Components.ComponentDraftMapper.DTOs;
-using Moq;
 using Shouldly;
 using Xunit;
 
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 7–8) —
+/// Documented-red inventory stations of the multi-process journey (step 8) —
 /// each Skip links the issue filed for that exact single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
 /// (Step 3 turned green with the per-chiplet placement scope, issue #935; step 4
 /// with the per-connection DRC rule sets, issue #936; step 5 with the per-connection
-/// bend-radius floors, issue #937 shipped in #948.)
+/// bend-radius floors, issue #937 shipped in #948; step 7 with the persisted
+/// per-chiplet process binding, issue #938.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -113,33 +112,6 @@ public partial class MultiProcessChipletJourneyTests
                 MultiProcessChipletJourneyDesign.ExposedPin(design.ChipletB, "si_taper_port 2"))
             .ShouldBe(SiepicMinBendRadiusUm,
                 "a connection inside chiplet B resolves SiEPIC's own 5 µm minimum (#937/#948)");
-    }
-
-    [Fact(Skip = "Single-process assumption (#933 inventory): .lun persists one design-level ActiveProcess and no per-chiplet process binding — https://github.com/aignermax/Lunima/issues/938")]
-    public async Task Step7_LunRoundTrip_PerChipletProcessBindingSurvives()
-    {
-        var design = MultiProcessChipletJourneyDesign.BuildComposed();
-        var saveVm = CreateFileOperations(design.Canvas, design.Templates);
-        var saveDialog = new Mock<IFileDialogService>();
-        saveDialog.Setup(f => f.ShowSaveFileDialogAsync(
-                It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        saveVm.FileDialogService = saveDialog.Object;
-        await saveVm.SaveDesignAsCommand.ExecuteAsync(null);
-
-        var loadedCanvas = new DesignCanvasViewModel();
-        var loadVm = CreateFileOperations(loadedCanvas, design.Templates);
-        var loadDialog = new Mock<IFileDialogService>();
-        loadDialog.Setup(f => f.ShowOpenFileDialogAsync(It.IsAny<string>(), It.IsAny<string>()))
-            .ReturnsAsync(_designFilePath);
-        loadVm.FileDialogService = loadDialog.Object;
-        await loadVm.LoadDesignCommand.ExecuteAsync(null);
-
-        // Rung 6: chiplet A must reload bound to the Cornerstone process and chiplet B
-        // to the SiEPIC process — the design as a whole is not one process.
-        loadVm.ActiveProcess.ShouldNotBeNull();
-        loadVm.ActiveProcess!.IsPlayground.ShouldBeFalse(
-            "each chiplet's process binding must survive the round-trip (#938)");
     }
 
     [Fact(Skip = "Single-process assumption (#933 inventory): GDS export routes every waveguide through one global interconnect (width/radius/layer from a user preference) — per-chiplet stacks are https://github.com/aignermax/Lunima/issues/939")]

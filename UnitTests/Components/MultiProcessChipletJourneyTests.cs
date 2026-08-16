@@ -52,9 +52,11 @@ namespace UnitTests.Components;
 ///         the stricter side governs the cross-chiplet abutment, and SiEPIC routes
 ///         use their declared 5 µm instead of the 10 µm Playground fallback.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
-///         groups, the abutment and the physics survive (the design reloads as
-///         Playground: pinned here as current behavior, #938 is the fix).
-///   Step 7 (RED, #938): no per-chiplet process binding exists to persist.
+///         groups, the abutment and the physics survive; since #938 the reload
+///         migrates nothing (the per-chiplet bindings describe the state).
+///   Step 7 (green, #938): the per-chiplet process binding is persisted per
+///         top-level group and restored on load — no Playground migration.
+///         Legacy files without bindings load exactly as before.
 ///   Step 8 (RED, #939): GDS export routes every waveguide through one global
 ///         interconnect (width/radius/layer), not each chiplet's own stack.
 ///
