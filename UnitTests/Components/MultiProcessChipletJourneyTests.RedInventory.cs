@@ -15,11 +15,12 @@ using Xunit;
 namespace UnitTests.Components;
 
 /// <summary>
-/// Documented-red inventory stations of the multi-process journey (steps 5, 7–8) —
+/// Documented-red inventory stations of the multi-process journey (steps 5 and 7) —
 /// each Skip links the issue filed for that exact single-process assumption. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey description.
 /// (Step 3 turned green with the per-chiplet placement scope, issue #935; step 4
-/// with the per-connection DRC rule sets, issue #936.)
+/// with the per-connection DRC rule sets, issue #936; step 8 with the per-process
+/// GDS export interconnects, issue #939.)
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -103,14 +104,18 @@ public partial class MultiProcessChipletJourneyTests
             "each chiplet's process binding must survive the round-trip (#938)");
     }
 
-    [Fact(Skip = "Single-process assumption (#933 inventory): GDS export routes every waveguide through one global interconnect (width/radius/layer from a user preference) — per-chiplet stacks are https://github.com/aignermax/Lunima/issues/939")]
+    [Fact]
     public void Step8_GdsExport_EachChipletRoutesOnItsOwnProcessStack()
     {
         var design = MultiProcessChipletJourneyDesign.BuildComposed();
         var script = new SimpleNazcaExporter().Export(design.Canvas);
 
-        // Today the header holds ONE global interconnect — neither chiplet's stack appears.
-        script.ShouldContain("layer=203"); // chiplet A: Cornerstone NITRIDE (xs_nc, 1.2 µm) (#939)
-        script.ShouldContain("layer=1"); // chiplet B: SiEPIC WG (strip, 0.5 µm) (#939)
+        // One interconnect per process cross-section on the canvas: each chiplet's
+        // frozen wires route on their own process' width/radius/layer — resolved from
+        // the endpoint pins' PDK stamps, not from one global user preference (#939).
+        script.ShouldContain("Interconnect(width=1.2, radius=10, layer=203)"); // chiplet A: Cornerstone NITRIDE (xs_nc, 1.2 µm)
+        script.ShouldContain("Interconnect(width=0.5, radius=10, layer=1)");   // chiplet B: SiEPIC WG (strip, 0.5 µm)
+        script.ShouldContain("nd.strt(length=5.00, width=1.2, layer=203)");    // chiplet A's coupler→MMI wire
+        script.ShouldContain("nd.strt(length=5.01, width=0.5, layer=1)");      // chiplet B's Y-branch→taper wire
     }
 }

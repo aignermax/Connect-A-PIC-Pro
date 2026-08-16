@@ -52,15 +52,16 @@ namespace UnitTests.Components;
 ///         groups, the abutment and the physics survive (the design reloads as
 ///         Playground: pinned here as current behavior, #938 is the fix).
 ///   Step 7 (RED, #938): no per-chiplet process binding exists to persist.
-///   Step 8 (RED, #939): GDS export routes every waveguide through one global
-///         interconnect (width/radius/layer), not each chiplet's own stack.
+///   Step 8 (green, #939): GDS export routes each chiplet's waveguides through an
+///         interconnect of its own process cross-section (width/radius/layer from the
+///         endpoint pins' PDK stamps), not one global user preference.
 ///
-/// The red steps 5 and 8 additionally carry GREEN "today" pins in the
-/// CurrentBehavior partial: the Playground bend floor really is one fallback for
-/// everything, and GDS export really does size every route with one majority
-/// cross-section — so a future per-chiplet fix turns those pins red as a tripwire.
-/// The step-3 pin now guards the canvas-level half of the shipped #935 behavior:
-/// ungrouped foreign content must stay rejected.
+/// The red step 5 additionally carries GREEN "today" pins in the CurrentBehavior
+/// partial: the Playground bend floor really is one fallback for everything — so a
+/// future per-chiplet fix turns those pins red as a tripwire. The step-8 pin flipped
+/// with this fix and now guards the per-chiplet cross-sections in the gdsfactory
+/// script. The step-3 pin now guards the canvas-level half of the shipped #935
+/// behavior: ungrouped foreign content must stay rejected.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests : IDisposable
 {

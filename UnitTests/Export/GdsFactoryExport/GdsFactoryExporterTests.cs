@@ -390,45 +390,44 @@ public class GdsFactoryExporterTests
     [Fact]
     public void Export_MixedProcessRouting_IsIndependentOfCanvasInsertionOrder()
     {
-        // Field round 4 review, finding [5]: the routing cross-section owner was "first
-        // component in canvas order" — inserting/reordering a component silently flipped
-        // every routed waveguide to another process' geometry. The choice must be
-        // deterministic and named in the script.
-        string RoutingChoice(params (string Id, string Func, string Xs)[] order)
+        // The routed waveguide's cross-section follows the connection's endpoint pins, so
+        // reordering components on the canvas can no longer flip routed waveguides to
+        // another process' geometry.
+        string RoutingSection(params (string Id, string Func, string Xs)[] order)
         {
             var canvas = new DesignCanvasViewModel();
             var comps = order
-                .Select((o, i) => CreateRoutableComponent(o.Id, o.Func, o.Xs, 50 * i))
+                .Select(o => CreateRoutableComponent(o.Id, o.Func, o.Xs, o.Id == "A" ? 0 : 50))
                 .ToList();
             foreach (var c in comps)
                 canvas.AddComponent(c, c.Identifier);
-            Connect(canvas, comps[0], comps[1]);
+            var sin = comps.Single(c => c.GdsFactoryRoutingCrossSection == "xs_nc");
+            var si = comps.Single(c => c.GdsFactoryRoutingCrossSection == "xs_sc");
+            Connect(canvas, sin, si);
             var script = ExportUbcPdk(canvas);
-            script.ShouldContain("cross_section='xs_sc'");   // the connection is routed with the winner
-            // The routing-choice comment names cross-section AND activation — the
-            // deterministic part (the activation line itself is skipped when that PDK
-            // is already active after the last placement).
-            var start = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
-            start.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
-            return script.Substring(start).Split('\n')[0].Trim();
+            var start = script.IndexOf("# Waveguide connections", StringComparison.Ordinal);
+            start.ShouldBeGreaterThan(0);
+            return script.Substring(start);
         }
 
-        var sinFirst = RoutingChoice(
+        var sinFirst = RoutingSection(
             ("A", "cspdk.sin300.mmi1x2", "xs_nc"), ("B", "cspdk.si220.mmi1x2", "xs_sc"));
-        var siFirst = RoutingChoice(
+        var siFirst = RoutingSection(
             ("B", "cspdk.si220.mmi1x2", "xs_sc"), ("A", "cspdk.sin300.mmi1x2", "xs_nc"));
 
-        // Same design, different insertion order → identical routing process.
-        sinFirst.ShouldBe(siFirst);
-        sinFirst.ShouldContain("'xs_sc'");                 // deterministic tie-break, not canvas order
-        sinFirst.ShouldContain("cspdk.si220");             // the winning process is NAMED in the script
+        // Same connection, different canvas insertion order → same routing cross-section.
+        sinFirst.ShouldContain("cross_section='xs_nc'");   // the start pin's process owns the route
+        sinFirst.ShouldNotContain("cross_section='xs_sc'");
+        siFirst.ShouldContain("cross_section='xs_nc'");
+        siFirst.ShouldNotContain("cross_section='xs_sc'");
     }
 
     [Fact]
-    public void Export_MixedProcessRouting_MajorityProcessOwnsTheWaveguides()
+    public void Export_MixedProcessRouting_EachConnectionRoutesOnItsOwnEndpointProcess()
     {
-        // Two si220 components vs one sin300 (which happens to be FIRST in canvas order):
-        // the routed waveguides belong to the majority process.
+        // Two si220 components vs one sin300: the sin300 connection is NOT absorbed into the
+        // majority process — each connection routes on its own endpoints' cross-section, with
+        // the matching PDK activated immediately before its segments.
         var canvas = new DesignCanvasViewModel();
         var sin = CreateRoutableComponent("A", "cspdk.sin300.mmi1x2", "xs_nc", 0);
         var si1 = CreateRoutableComponent("B", "cspdk.si220.mmi1x2", "xs_sc", 50);
@@ -437,14 +436,20 @@ public class GdsFactoryExporterTests
         canvas.AddComponent(si1, "Si 1");
         canvas.AddComponent(si2, "Si 2");
         Connect(canvas, sin, si1);
+        Connect(canvas, si1, si2);
 
         var script = ExportUbcPdk(canvas);
 
-        var routingStart = script.IndexOf("# Mixed-process design: rout", StringComparison.Ordinal);
-        routingStart.ShouldBeGreaterThan(0, "the routing choice must be named in the script");
-        var routingSection = script.Substring(routingStart);
-        routingSection.ShouldContain("cspdk.si220.PDK.activate()");
-        routingSection.ShouldContain("cross_section='xs_sc'");
+        var connsStart = script.IndexOf("# Waveguide connections", StringComparison.Ordinal);
+        connsStart.ShouldBeGreaterThan(0);
+        var sinActivate = script.IndexOf("cspdk.sin300.PDK.activate()", connsStart, StringComparison.Ordinal);
+        var xsNc = script.IndexOf("cross_section='xs_nc'", connsStart, StringComparison.Ordinal);
+        var siActivate = script.IndexOf("cspdk.si220.PDK.activate()", connsStart, StringComparison.Ordinal);
+        var xsSc = script.IndexOf("cross_section='xs_sc'", connsStart, StringComparison.Ordinal);
+        sinActivate.ShouldBeGreaterThan(0, "the sin300 connection activates its own PDK");
+        xsNc.ShouldBeGreaterThan(sinActivate, "xs_nc routes under the sin300 PDK");
+        siActivate.ShouldBeGreaterThan(xsNc, "the si220-internal connection switches back to its own PDK");
+        xsSc.ShouldBeGreaterThan(siActivate, "xs_sc routes under the si220 PDK");
     }
 
     [Fact]
