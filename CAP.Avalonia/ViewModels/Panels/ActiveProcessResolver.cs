@@ -75,6 +75,30 @@ public static class ActiveProcessResolver
     }
 
     /// <summary>
+    /// Derives the design-level default for a loaded design that carries no own process
+    /// record but whose chiplets restored per-group bindings (issue #938): a single
+    /// distinct chiplet process becomes the design default; several distinct processes
+    /// yield Playground — the canvas genuinely mixes processes there, and the
+    /// manufacturability information lives in the per-chiplet bindings. No warning is
+    /// needed either way: the file fully describes the state, nothing was migrated.
+    /// Returns null when no chiplet carries a real process binding.
+    /// </summary>
+    /// <param name="chipletBindings">Restored bindings of the top-level groups.</param>
+    public static ActiveProcessSelection? FromChipletBindings(IEnumerable<ActiveProcessSelection?> chipletBindings)
+    {
+        var distinct = chipletBindings
+            .Where(b => b is { IsPlayground: false })
+            .GroupBy(b => b!.DisplayName, System.StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        return distinct.Count switch
+        {
+            0 => null,
+            1 => distinct[0].First(),
+            _ => ActiveProcessSelection.Playground(),
+        };
+    }
+
+    /// <summary>
     /// Infers the active process for a legacy design from the PDK sources of its placed
     /// components. One matching group → that process; several → Playground + a warning;
     /// none → null (empty / built-ins only).
