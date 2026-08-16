@@ -1,4 +1,5 @@
 using System.Numerics;
+using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Analysis.LogicAnalysis;
 using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Core;
@@ -96,6 +97,75 @@ public static class LogicGateFixtureFactory
         }
         return group;
     }
+
+    /// <summary>
+    /// Persistence-capable template form of the combiner coupler: the same geometry
+    /// and S-matrix as the raw fixture component, but as a <see cref="ComponentTemplate"/>
+    /// so canvas-placed instances survive the .lun save/load round-trip.
+    /// </summary>
+    public static ComponentTemplate CreateCombinerTemplate() => new()
+    {
+        Name = "Logic Fixture Combiner",
+        Category = "Fixture",
+        NazcaFunctionName = "fixture.logic.combiner",
+        PdkSource = "Logic Fixture PDK",
+        WidthMicrometers = CouplerWidth,
+        HeightMicrometers = CouplerHeight,
+        PinDefinitions = new[]
+        {
+            new PinDefinition("in1", 0, 10, 180),
+            new PinDefinition("in2", 0, 70, 180),
+            new PinDefinition("out1", CouplerWidth, 10, 0),
+            new PinDefinition("out2", CouplerWidth, 70, 0),
+        },
+        CreateWavelengthSMatrixMap = pins =>
+        {
+            var pinIds = pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
+            var matrix = new SMatrix(pinIds, new List<(Guid, double)>());
+            matrix.SetValues(new Dictionary<(Guid, Guid), Complex>
+            {
+                { (pins[0].IDInFlow, pins[2].IDOutFlow), Through },
+                { (pins[0].IDInFlow, pins[3].IDOutFlow), Cross },
+                { (pins[1].IDInFlow, pins[2].IDOutFlow), Cross },
+                { (pins[1].IDInFlow, pins[3].IDOutFlow), Through },
+                { (pins[2].IDInFlow, pins[0].IDOutFlow), Through },
+                { (pins[2].IDInFlow, pins[1].IDOutFlow), Cross },
+                { (pins[3].IDInFlow, pins[0].IDOutFlow), Cross },
+                { (pins[3].IDInFlow, pins[1].IDOutFlow), Through },
+            });
+            return new Dictionary<int, SMatrix> { { WavelengthNm, matrix } };
+        },
+    };
+
+    /// <summary>
+    /// Persistence-capable template form of the unity-through waveguide — see
+    /// <see cref="CreateCombinerTemplate"/> for why the template form exists.
+    /// </summary>
+    public static ComponentTemplate CreateWaveguideTemplate() => new()
+    {
+        Name = "Logic Fixture Waveguide",
+        Category = "Fixture",
+        NazcaFunctionName = "fixture.logic.waveguide",
+        PdkSource = "Logic Fixture PDK",
+        WidthMicrometers = WaveguideLength,
+        HeightMicrometers = WaveguideThickness,
+        PinDefinitions = new[]
+        {
+            new PinDefinition("a0", 0, 2.5, 180),
+            new PinDefinition("b0", WaveguideLength, 2.5, 0),
+        },
+        CreateWavelengthSMatrixMap = pins =>
+        {
+            var pinIds = pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
+            var matrix = new SMatrix(pinIds, new List<(Guid, double)>());
+            matrix.SetValues(new Dictionary<(Guid, Guid), Complex>
+            {
+                { (pins[0].IDInFlow, pins[1].IDOutFlow), Complex.One },
+                { (pins[1].IDInFlow, pins[0].IDOutFlow), Complex.One },
+            });
+            return new Dictionary<int, SMatrix> { { WavelengthNm, matrix } };
+        },
+    };
 
     /// <summary>Lossless 50/50 coupler: pins in1/in2 (left), out1/out2 (right).</summary>
     private static Component CreateCoupler(string identifier) => CreateComponent(
