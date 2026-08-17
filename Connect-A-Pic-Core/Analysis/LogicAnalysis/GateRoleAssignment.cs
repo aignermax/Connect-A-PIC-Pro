@@ -1,0 +1,33 @@
+using CAP_Core.Components.Core;
+
+namespace CAP_Core.Analysis.LogicAnalysis;
+
+/// <summary>
+/// The role each external pin of a gate group plays in a logic network: which pins
+/// are logic inputs, which are logic outputs, which are constantly-on bias pins,
+/// and the power threshold the gate's truth table was extracted at. Until role
+/// persistence (#981) lands, callers and tests construct this record directly;
+/// afterwards its data feeds this parameter.
+/// </summary>
+/// <param name="InputPinNames">External pin names driven as logic inputs.</param>
+/// <param name="OutputPinNames">External pin names observed as logic outputs.</param>
+/// <param name="BiasPinNames">External pin names held constantly "on" — they take no part in wiring.</param>
+/// <param name="PowerThreshold">Normalized power threshold the gate's truth table was extracted at.</param>
+public sealed record GateRoleAssignment(
+    IReadOnlyList<string> InputPinNames,
+    IReadOnlyList<string> OutputPinNames,
+    IReadOnlyList<string> BiasPinNames,
+    double PowerThreshold);
+
+/// <summary>
+/// One top-level gate group on the canvas together with its logic-level model and
+/// its role assignment — the unit of input a <see cref="LogicNetworkBuilder"/>
+/// derives a network from.
+/// </summary>
+/// <param name="Group">The placed gate group; its name becomes the network-local gate id.</param>
+/// <param name="Model">The evaluable logic model extracted from the group.</param>
+/// <param name="Roles">The pin roles matching the extraction the model came from.</param>
+public sealed record LogicGateInstance(
+    ComponentGroup Group,
+    LogicGateModel Model,
+    GateRoleAssignment Roles);
