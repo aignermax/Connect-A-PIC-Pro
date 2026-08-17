@@ -7,9 +7,7 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// Derives a <see cref="LogicNetworkEvaluator"/> from the gate groups placed on the
 /// canvas, making the canvas the source of truth for the wiring: a connection from
 /// one group's external output pin to another group's external input pin becomes a
-/// logic wire (fan-out of one output to several inputs is allowed). Wire endpoints
-/// bound to the internal component pin behind an external pin — the load path's
-/// binding — resolve to that external pin. Unconnected
+/// logic wire (fan-out of one output to several inputs is allowed). Unconnected
 /// gate input pins become network-level inputs named <c>&lt;group&gt;.&lt;pin&gt;</c>,
 /// and every gate output pin becomes a network-level output tap under the same
 /// naming — also when it additionally drives another gate. Bias pins take no part
@@ -102,27 +100,35 @@ public sealed partial class LogicNetworkBuilder
     /// <summary>Renders a gate pin the way network inputs and taps are named: <c>group.pin</c>.</summary>
     private static string Format(LogicPinRef pin) => $"{pin.GateId}.{pin.PinName}";
 
-    /// <summary>Maps one connection endpoint onto its gate pin and role, or null when no gate group is involved.</summary>
+    /// <summary>
+    /// Maps one connection endpoint onto its gate pin and role, or null when no gate
+    /// group is involved. The load path (and live canvas wiring) binds a wire endpoint
+    /// to the internal component pin behind a group's external pin — those resolve
+    /// through the external pin's name, so a loaded design assembles straight from
+    /// its own connections.
+    /// </summary>
     private static Endpoint? ResolveEndpoint(IReadOnlyList<GateContext> contexts, PhysicalPin? pin)
     {
         if (pin?.ParentComponent == null)
             return null;
         var context = contexts.FirstOrDefault(c => ReferenceEquals(c.Group, pin.ParentComponent));
         if (context != null)
-        {
-            var role = context.RoleOf(pin.Name);
-            return role == null ? null : new Endpoint(new LogicPinRef(context.GateId, pin.Name), role.Value);
-        }
+            return ToEndpoint(context, pin.Name);
 
-        // The load path binds wire endpoints to the internal component pin behind a
-        // group's external pin; such an endpoint resolves to the external pin it backs.
-        context = contexts.FirstOrDefault(c =>
-            c.Group.ExternalPins.Any(external => ReferenceEquals(external.InternalPin, pin)));
-        if (context == null)
-            return null;
-        var externalPin = context.Group.ExternalPins.First(external => ReferenceEquals(external.InternalPin, pin));
-        var externalRole = context.RoleOf(externalPin.Name);
-        return externalRole == null ? null : new Endpoint(new LogicPinRef(context.GateId, externalPin.Name), externalRole.Value);
+        foreach (var candidate in contexts)
+        {
+            var external = candidate.Group.ExternalPins.FirstOrDefault(p => ReferenceEquals(p.InternalPin, pin));
+            if (external != null)
+                return ToEndpoint(candidate, external.Name);
+        }
+        return null;
+    }
+
+    /// <summary>Wraps one gate pin name as an endpoint, or null when the pin carries no role.</summary>
+    private static Endpoint? ToEndpoint(GateContext context, string pinName)
+    {
+        var role = context.RoleOf(pinName);
+        return role == null ? null : new Endpoint(new LogicPinRef(context.GateId, pinName), role.Value);
     }
 
     /// <summary>
