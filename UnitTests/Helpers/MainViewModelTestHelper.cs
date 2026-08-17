@@ -186,6 +186,7 @@ public static class MainViewModelTestHelper
             new OnaSweepViewModel(),
             new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
             new CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.TruthTableViewModel(),
+            new CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.LogicPanelViewModel(),
             // Production provider order (CanvasAndPanelExtensions): most specific
             // first, generic fallback last — so panel tests see real editors.
             new ComponentEditorFactory(new IComponentEditorProvider[]

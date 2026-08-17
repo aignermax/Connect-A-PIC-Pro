@@ -76,6 +76,7 @@ public class PanelWidthPersistenceTests : IDisposable
             new OnaSweepViewModel(),
             new CAP.Avalonia.ViewModels.Export.Netlist.NetlistViewModel(),
             new CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.TruthTableViewModel(),
+            new CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.LogicPanelViewModel(),
             new ComponentEditorFactory(new IComponentEditorProvider[]
             {
                 new GenericComponentEditorProvider()
