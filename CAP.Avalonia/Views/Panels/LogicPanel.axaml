@@ -1,0 +1,85 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             xmlns:logic="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis"
+             x:Class="CAP.Avalonia.Views.Panels.LogicPanel"
+             x:DataType="vm:MainViewModel">
+
+    <StackPanel>
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize LogicPanel.Title}" Foreground="MediumPurple" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why the logic layer restores clean 0/1 levels
+                 while the passive optical cascade gives up after about two stages. -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize LogicPanelHelp.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize LogicPanelHelp.Intro}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.RestorationTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.RestorationBody}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.InputsTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.InputsBody}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
+
+        <TextBlock Text="{loc:Localize LogicPanel.Hint}" Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,5">
+            <Button Content="{loc:Localize LogicPanel.Build}"
+                    Command="{Binding RightPanel.Logic.BuildNetworkCommand}"
+                    Width="150" Padding="8,4" Background="#3d5d3d"
+                    IsEnabled="{Binding RightPanel.Logic.IsProcessing, Converter={x:Static BoolConverters.Not}}"/>
+            <Button Content="{loc:Localize Common.Cancel}"
+                    Command="{Binding RightPanel.Logic.CancelCommand}"
+                    Width="70" Padding="8,4" Margin="5,0,0,0" Background="#5d3d3d"
+                    IsVisible="{Binding RightPanel.Logic.IsProcessing}"/>
+        </StackPanel>
+        <ProgressBar IsIndeterminate="True" Height="3" Margin="0,0,0,5"
+                     IsVisible="{Binding RightPanel.Logic.IsProcessing}"/>
+        <TextBlock Text="{Binding RightPanel.Logic.WavelengthText}" Foreground="Gray" FontSize="10" Margin="0,0,0,5"
+                   IsVisible="{Binding RightPanel.Logic.WavelengthText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <TextBlock Text="{Binding RightPanel.Logic.StatusText}" Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
+                   IsVisible="{Binding RightPanel.Logic.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- The assembled network: one toggle per unconnected gate input, one live
+             0/1 indicator per gate output -->
+        <StackPanel IsVisible="{Binding RightPanel.Logic.HasNetwork}">
+            <TextBlock Text="{loc:Localize LogicPanel.Inputs}" Foreground="Gray" FontSize="10" Margin="0,5,0,2"/>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.Inputs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:LogicNetworkInputViewModel">
+                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsOn}"
+                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{loc:Localize LogicPanel.Outputs}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.Outputs}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
+                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                       Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
+                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                       Foreground="Gray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </StackPanel>
+
+</UserControl>

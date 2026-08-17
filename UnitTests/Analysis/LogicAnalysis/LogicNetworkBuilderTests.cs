@@ -186,6 +186,70 @@ public class LogicNetworkBuilderTests
         error.Message.ShouldContain("does not expose");
     }
 
+    [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void Build_ConnectionEndpointsAreInternalPinsBehindTheExternalPins_ResolvesTheGateWire(
+        bool a, bool b, bool expected)
+    {
+        // The load path (and live canvas wiring) binds a wire endpoint to the internal
+        // component pin behind a group's external pin — the builder resolves those to
+        // the gate pin, so a loaded design assembles straight from its own connections.
+        var nand = NandInstanceWithInternalPins("NAND");
+        var inv = NotInstanceWithInternalPins("INV");
+        var connections = new[]
+        {
+            new WaveguideConnection
+            {
+                StartPin = InternalPin(nand.Group, "Y"),
+                EndPin = InternalPin(inv.Group, "A"),
+            },
+        };
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, connections);
+
+        network.InputPinNames.ShouldBe(new[] { "NAND.A", "NAND.B" });
+        network.OutputPinNames.ShouldBe(new[] { "NAND.Y", "INV.Y" });
+        network.Evaluate(Bits(("NAND.A", a), ("NAND.B", b)))["INV.Y"].ShouldBe(expected);
+    }
+
+    /// <summary>A NAND gate instance whose external pins expose pins of an inner component.</summary>
+    private static LogicGateInstance NandInstanceWithInternalPins(string groupName) =>
+        new(
+            CreateGateGroupWithInternalPins(groupName, "A", "B", "BIAS", "Y"),
+            PinnedGateTables.NandGate(),
+            new GateRoleAssignment(new[] { "A", "B" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NandThreshold));
+
+    /// <summary>A NOT gate instance whose external pins expose pins of an inner component.</summary>
+    private static LogicGateInstance NotInstanceWithInternalPins(string groupName) =>
+        new(
+            CreateGateGroupWithInternalPins(groupName, "A", "BIAS", "Y"),
+            PinnedGateTables.NotGate(),
+            new GateRoleAssignment(new[] { "A" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NotThreshold));
+
+    /// <summary>
+    /// A gate group in the shape the load path produces: every external pin maps to a
+    /// pin of an inner component, so wire endpoints never carry the group itself as
+    /// their parent.
+    /// </summary>
+    private static ComponentGroup CreateGateGroupWithInternalPins(string groupName, params string[] externalPinNames)
+    {
+        var group = new ComponentGroup(groupName);
+        var inner = TestComponentFactory.CreateStraightWaveGuide();
+        foreach (var pinName in externalPinNames)
+        {
+            var internalPin = new PhysicalPin { Name = $"inner_{pinName}", ParentComponent = inner };
+            group.AddExternalPin(new GroupPin { Name = pinName, InternalPin = internalPin });
+        }
+        return group;
+    }
+
+    /// <summary>The internal pin behind one of the group's external pins.</summary>
+    private static PhysicalPin InternalPin(ComponentGroup group, string externalPinName) =>
+        group.ExternalPins.Single(p => p.Name == externalPinName).InternalPin;
+
     /// <summary>A NAND gate instance on a synthetic group exposing the example's pin interface.</summary>
     private static LogicGateInstance NandInstance(string groupName) =>
         new(
