@@ -661,7 +661,9 @@ public partial class FileOperationsViewModel : ObservableObject
             CanvasY = groupVm.Y,
             // Only top-level groups act as chiplets (issue #938); a nested group's
             // process scope is its top-level parent's.
-            ProcessBinding = group.ParentGroup == null ? ResolveGroupBindingForSave(group) : null
+            ProcessBinding = group.ParentGroup == null ? ResolveGroupBindingForSave(group) : null,
+            // Same top-level-only rule for the Truth Table pin roles (issue #981).
+            TruthTablePinAssignment = group.ParentGroup == null ? group.TruthTablePinAssignment : null
         });
     }
 
@@ -1519,6 +1521,9 @@ public partial class FileOperationsViewModel : ObservableObject
             if (groupData.GroupDto.ParentGroupId == null)
             {
                 group.ProcessBinding = RestoreGroupBinding(groupData);
+                // Truth Table pin roles (issue #981): restore as persisted — the panel
+                // silently skips pin names that no longer match a real external pin.
+                group.TruthTablePinAssignment = groupData.TruthTablePinAssignment;
                 var groupVm = _canvas.AddComponent(group);
                 groupVm.X = groupData.CanvasX;
                 groupVm.Y = groupData.CanvasY;

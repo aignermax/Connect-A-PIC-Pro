@@ -89,6 +89,15 @@ public class ComponentGroup : Component, INotifyPropertyChanged
     public ActiveProcessSelection? ProcessBinding { get; set; }
 
     /// <summary>
+    /// Pin-role assignment the Truth Table panel last successfully extracted with for
+    /// this group (issue #981). Null while the panel never extracted the group — nothing
+    /// is persisted in that case, keeping the .lun format free of unused blocks.
+    /// Persisted in .lun files for top-level groups since issue #981.
+    /// </summary>
+    [JsonIgnore]
+    public TruthTablePinAssignment? TruthTablePinAssignment { get; set; }
+
+    /// <summary>
     /// Reference to parent group if this group is nested within another group.
     /// Null if this is a top-level group.
     /// </summary>
