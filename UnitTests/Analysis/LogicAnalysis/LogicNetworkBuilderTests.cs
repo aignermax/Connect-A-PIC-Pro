@@ -37,6 +37,38 @@ public class LogicNetworkBuilderTests
     }
 
     [Theory]
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, true)]
+    public void Build_ConnectionBoundToInternalPinsBehindExternalPins_ResolvesTheWire(bool a, bool b, bool expected)
+    {
+        // The load path binds wire endpoints to the internal component pin behind the
+        // external pin, not to the group's own pin (FileOperationsViewModel.ResolvePin).
+        var nand = new LogicGateInstance(
+            CreateLoadBoundGateGroup("NAND", "A", "B", "BIAS", "Y"),
+            PinnedGateTables.NandGate(),
+            new GateRoleAssignment(new[] { "A", "B" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NandThreshold));
+        var inv = new LogicGateInstance(
+            CreateLoadBoundGateGroup("INV", "A", "BIAS", "Y"),
+            PinnedGateTables.NotGate(),
+            new GateRoleAssignment(new[] { "A" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NotThreshold));
+        var connections = new[]
+        {
+            new WaveguideConnection
+            {
+                StartPin = nand.Group.ExternalPins.Single(p => p.Name == "Y").InternalPin,
+                EndPin = inv.Group.ExternalPins.Single(p => p.Name == "A").InternalPin,
+            },
+        };
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, connections);
+
+        network.InputPinNames.ShouldBe(new[] { "NAND.A", "NAND.B" });
+        network.Evaluate(Bits(("NAND.A", a), ("NAND.B", b)))["INV.Y"].ShouldBe(expected);
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, true)]
     public void Build_OutputFannedOutToTwoInputs_DrivesBothLoads(bool a, bool expected)
@@ -209,6 +241,24 @@ public class LogicNetworkBuilderTests
             var physicalPin = new PhysicalPin { Name = pinName, ParentComponent = group };
             group.PhysicalPins.Add(physicalPin);
             group.AddExternalPin(new GroupPin { Name = pinName, InternalPin = physicalPin });
+        }
+        return group;
+    }
+
+    /// <summary>
+    /// A group shaped the way the load path delivers it: the external pins point at
+    /// physical pins of a child component, so wire endpoints bind to those internal pins.
+    /// </summary>
+    private static ComponentGroup CreateLoadBoundGateGroup(string groupName, params string[] externalPinNames)
+    {
+        var group = new ComponentGroup(groupName);
+        var child = TestComponentFactory.CreateStraightWaveGuide();
+        group.AddChild(child);
+        foreach (var pinName in externalPinNames)
+        {
+            var internalPin = new PhysicalPin { Name = pinName, ParentComponent = child };
+            child.PhysicalPins.Add(internalPin);
+            group.AddExternalPin(new GroupPin { Name = pinName, InternalPin = internalPin });
         }
         return group;
     }

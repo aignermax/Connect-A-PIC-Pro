@@ -7,7 +7,9 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// Derives a <see cref="LogicNetworkEvaluator"/> from the gate groups placed on the
 /// canvas, making the canvas the source of truth for the wiring: a connection from
 /// one group's external output pin to another group's external input pin becomes a
-/// logic wire (fan-out of one output to several inputs is allowed). Unconnected
+/// logic wire (fan-out of one output to several inputs is allowed). Wire endpoints
+/// bound to the internal component pin behind an external pin — the load path's
+/// binding — resolve to that external pin. Unconnected
 /// gate input pins become network-level inputs named <c>&lt;group&gt;.&lt;pin&gt;</c>,
 /// and every gate output pin becomes a network-level output tap under the same
 /// naming — also when it additionally drives another gate. Bias pins take no part
@@ -106,8 +108,21 @@ public sealed partial class LogicNetworkBuilder
         if (pin?.ParentComponent == null)
             return null;
         var context = contexts.FirstOrDefault(c => ReferenceEquals(c.Group, pin.ParentComponent));
-        var role = context?.RoleOf(pin.Name);
-        return role == null ? null : new Endpoint(new LogicPinRef(context!.GateId, pin.Name), role.Value);
+        if (context != null)
+        {
+            var role = context.RoleOf(pin.Name);
+            return role == null ? null : new Endpoint(new LogicPinRef(context.GateId, pin.Name), role.Value);
+        }
+
+        // The load path binds wire endpoints to the internal component pin behind a
+        // group's external pin; such an endpoint resolves to the external pin it backs.
+        context = contexts.FirstOrDefault(c =>
+            c.Group.ExternalPins.Any(external => ReferenceEquals(external.InternalPin, pin)));
+        if (context == null)
+            return null;
+        var externalPin = context.Group.ExternalPins.First(external => ReferenceEquals(external.InternalPin, pin));
+        var externalRole = context.RoleOf(externalPin.Name);
+        return externalRole == null ? null : new Endpoint(new LogicPinRef(context.GateId, externalPin.Name), externalRole.Value);
     }
 
     /// <summary>
