@@ -94,9 +94,49 @@ public partial class TruthTableViewModel : ObservableObject
         StatusText = "";
         BiasSummaryText = "";
         RebuildPinLists();
+        PrefillFromPersistedAssignment();
         WavelengthText = IsGroupSelected
             ? string.Format(Translate("TruthTable.Wavelength"), ResolveWavelengthNm())
             : "";
+    }
+
+    /// <summary>
+    /// Re-applies the pin-role assignment the group was last successfully extracted
+    /// with (issue #981 — persisted in the .lun file): ticks the same input/output/
+    /// bias checkboxes and restores the threshold, so a save → load round trip
+    /// brings the panel back exactly as the user left it. Silent for legacy files
+    /// and for groups never extracted; pin names that no longer exist on the group
+    /// are skipped instead of failing.
+    /// </summary>
+    private void PrefillFromPersistedAssignment()
+    {
+        var saved = _group?.TruthTablePinAssignment;
+        if (saved == null)
+            return;
+
+        _revertingPinCheck = true;
+        try
+        {
+            CheckPins(InputPins, saved.InputPinNames);
+            CheckPins(OutputPins, saved.OutputPinNames);
+            CheckPins(BiasPins, saved.BiasPinNames);
+            Threshold = saved.Threshold;
+        }
+        finally
+        {
+            _revertingPinCheck = false;
+        }
+    }
+
+    /// <summary>Ticks the checkbox of every listed pin that still exists on the group.</summary>
+    private static void CheckPins(IEnumerable<PinSelectionViewModel> pins, IEnumerable<string> names)
+    {
+        foreach (var name in names)
+        {
+            var pin = pins.FirstOrDefault(p => p.PinName == name);
+            if (pin != null)
+                pin.IsChecked = true;
+        }
     }
 
     private void RebuildPinLists()

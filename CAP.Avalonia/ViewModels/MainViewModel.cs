@@ -1384,6 +1384,14 @@ public class DesignGroupData
     /// remains the default for those and for ungrouped components.
     /// </summary>
     public ActiveProcessData? ProcessBinding { get; set; }
+
+    /// <summary>
+    /// Truth Table pin-role assignment of a top-level group (issue #981): the input,
+    /// output, and bias pins plus threshold the panel last successfully extracted with.
+    /// Null when the group was never extracted — including every file saved before the
+    /// persistence existed — so legacy .lun files stay clean of unused blocks.
+    /// </summary>
+    public CAP_Core.Components.Core.TruthTablePinAssignment? TruthTablePinAssignment { get; set; }
 }
 
 /// <summary>
