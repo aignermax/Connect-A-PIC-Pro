@@ -1304,5 +1304,6 @@
   "LogicPanelHelp.RestorationTitle": "Clean 0/1 at every stage",
   "LogicPanelHelp.RestorationBody": "A passive optical cascade has no level restoration: light power fades and interferes from stage to stage, so after about two stages the analog levels no longer read as clean bits. The logic layer evaluates each gate's own truth table instead — every gate output is exactly 0 or 1 again, so networks of any depth compose cleanly. That is how real digital electronics works over analog transistors, too.",
   "LogicPanelHelp.InputsTitle": "One toggle per unconnected gate input",
-  "LogicPanelHelp.InputsBody": "Every gate input left unconnected on the canvas becomes a network input named GATE.PIN — in the half-adder example the addends A and B each fan out to four toggles. Switch all pins of one addend together to set its bit."
+  "LogicPanelHelp.InputsBody": "Every gate input left unconnected on the canvas becomes a network input named GATE.PIN — in the half-adder example the addends A and B each fan out to four toggles. Switch all pins of one addend together to set its bit.",
+  "Analysis.LogicPanel.DesignEdited": "The design changed — the logic network was discarded. Build it again to see live states."
 }

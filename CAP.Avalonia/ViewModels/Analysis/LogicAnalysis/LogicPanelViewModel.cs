@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.ComponentModel;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
@@ -14,7 +15,9 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// laser wavelength, shows every unconnected gate input as a toggle and every gate
 /// output as a live 0/1 indicator. Toggling an input re-evaluates immediately —
 /// <see cref="LogicNetworkEvaluator.Evaluate"/> is a pure truth-table lookup, so no
-/// new simulation runs. Assembly failures (no gate in the design, invalid wiring) are
+/// new simulation runs. Every evaluation also pushes the gate output bits onto the
+/// canvas's <see cref="LogicGateStateOverlay"/>, so each gate group carries a live 0/1
+/// badge (issue #994). Assembly failures (no gate in the design, invalid wiring) are
 /// shown as readable status text, never as a crash.
 /// </summary>
 public partial class LogicPanelViewModel : ObservableObject
@@ -46,8 +49,32 @@ public partial class LogicPanelViewModel : ObservableObject
     /// <summary>Network-level output taps (every gate output), shown as 0/1 indicators.</summary>
     public ObservableCollection<LogicNetworkOutputViewModel> Outputs { get; } = new();
 
-    /// <summary>Hands the panel the design canvas; called once from the RightPanel host.</summary>
-    public void Configure(DesignCanvasViewModel canvas) => _canvas = canvas;
+    /// <summary>
+    /// Hands the panel the design canvas; called once from the RightPanel host. The panel
+    /// watches the design for edits: adding/removing a component or a connection
+    /// invalidates a shown network (and with it the canvas badges) — the evaluation the
+    /// user sees must never describe a design that no longer exists.
+    /// </summary>
+    public void Configure(DesignCanvasViewModel canvas)
+    {
+        if (_canvas != null)
+        {
+            _canvas.Components.CollectionChanged -= OnDesignEdited;
+            _canvas.Connections.CollectionChanged -= OnDesignEdited;
+        }
+        _canvas = canvas;
+        _canvas.Components.CollectionChanged += OnDesignEdited;
+        _canvas.Connections.CollectionChanged += OnDesignEdited;
+    }
+
+    /// <summary>A design edit discards the shown network and its canvas badges.</summary>
+    private void OnDesignEdited(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        if (!HasNetwork)
+            return;
+        ClearNetwork();
+        StatusText = Translate("Analysis.LogicPanel.DesignEdited");
+    }
 
     private void ShowNetwork(LogicNetworkEvaluator network)
     {
@@ -73,6 +100,7 @@ public partial class LogicPanelViewModel : ObservableObject
     {
         _network = null;
         HasNetwork = false;
+        _canvas?.LogicGateStates.Clear();
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
@@ -94,6 +122,21 @@ public partial class LogicPanelViewModel : ObservableObject
         var result = _network.Evaluate(bits);
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
+        ShowGateStateBadges(result);
+    }
+
+    /// <summary>
+    /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
+    /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
+    /// data the panel's output list shows, no new simulation.
+    /// </summary>
+    private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result)
+    {
+        if (_canvas == null || _network == null)
+            return;
+        var states = _network.Gates.SelectMany(gate => gate.Value.OutputPinNames.Select(
+            pinName => new LogicGateBadgeState(gate.Key, pinName, result[$"{gate.Key}.{pinName}"])));
+        _canvas.LogicGateStates.ShowStates(states);
     }
 
     /// <summary>The active laser's wavelength, falling back to the standard red wavelength.</summary>

@@ -1304,5 +1304,6 @@
   "LogicPanelHelp.RestorationTitle": "每一级都是干净的 0/1",
   "LogicPanelHelp.RestorationBody": "无源光学级联没有电平恢复:光功率逐级衰减并发生干涉,大约两级之后模拟电平就无法再读作干净的比特。逻辑层改为评估每个门自身的真值表——每个门输出重新变为严格的 0 或 1,因此任意深度的网络都能干净地组合。现实中的数字电子学在模拟晶体管之上也是这样工作的。",
   "LogicPanelHelp.InputsTitle": "每个未连接的门输入对应一个开关",
-  "LogicPanelHelp.InputsBody": "画布上每个未连接的门输入都会成为名为 门.引脚 的网络输入——在半加器示例中,加数 A 和 B 各自扇出到四个开关。同时切换同一加数的所有引脚即可设置其比特。"
+  "LogicPanelHelp.InputsBody": "画布上每个未连接的门输入都会成为名为 门.引脚 的网络输入——在半加器示例中,加数 A 和 B 各自扇出到四个开关。同时切换同一加数的所有引脚即可设置其比特。",
+  "Analysis.LogicPanel.DesignEdited": "设计已更改,逻辑网络已被丢弃。请重新构建以查看实时状态。"
 }
