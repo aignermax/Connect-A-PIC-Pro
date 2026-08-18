@@ -46,6 +46,17 @@ public partial class LogicPanelViewModel : ObservableObject
     /// <summary>Network-level output taps (every gate output), shown as 0/1 indicators.</summary>
     public ObservableCollection<LogicNetworkOutputViewModel> Outputs { get; } = new();
 
+    /// <summary>
+    /// Optical fan-out warnings detected in the assembled network — non-blocking:
+    /// the idealized logic result stays available, the warnings only mark where a
+    /// physical implementation would need splitters and level restoration.
+    /// </summary>
+    public ObservableCollection<LogicFanOutWarningViewModel> FanOutWarnings { get; } = new();
+
+    /// <summary>True when the assembled network has at least one fan-out warning.</summary>
+    [ObservableProperty]
+    private bool _hasFanOutWarnings;
+
     /// <summary>Hands the panel the design canvas; called once from the RightPanel host.</summary>
     public void Configure(DesignCanvasViewModel canvas) => _canvas = canvas;
 
@@ -63,6 +74,11 @@ public partial class LogicPanelViewModel : ObservableObject
         {
             Outputs.Add(new LogicNetworkOutputViewModel(name));
         }
+        foreach (var warning in network.FanOutWarnings)
+        {
+            FanOutWarnings.Add(new LogicFanOutWarningViewModel(warning));
+        }
+        HasFanOutWarnings = FanOutWarnings.Count > 0;
 
         HasNetwork = true;
         ReEvaluate();
@@ -73,10 +89,12 @@ public partial class LogicPanelViewModel : ObservableObject
     {
         _network = null;
         HasNetwork = false;
+        HasFanOutWarnings = false;
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
         Outputs.Clear();
+        FanOutWarnings.Clear();
     }
 
     /// <summary>A toggled input re-evaluates the whole network synchronously.</summary>

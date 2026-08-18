@@ -1304,5 +1304,15 @@
   "LogicPanelHelp.RestorationTitle": "Saubere 0/1 in jeder Stufe",
   "LogicPanelHelp.RestorationBody": "Eine passive optische Kaskade restauriert keine Pegel: Die Lichtleistung schwächt sich ab und interferiert von Stufe zu Stufe, sodass die analogen Pegel nach etwa zwei Stufen nicht mehr als saubere Bits lesbar sind. Die Logikebene wertet stattdessen die eigene Wahrheitstabelle jedes Gatters aus — jeder Gatterausgang ist wieder exakt 0 oder 1, sodass Netzwerke beliebiger Tiefe sauber komponieren. So funktioniert auch reale Digitalelektronik über analogen Transistoren.",
   "LogicPanelHelp.InputsTitle": "Ein Schalter pro unverbundenem Gattereingang",
-  "LogicPanelHelp.InputsBody": "Jeder auf dem Canvas unverbundene Gattereingang wird ein Netzwerk-Eingang namens GATTER.PIN — im Half-Adder-Beispiel fächern die Summanden A und B auf je vier Schalter auf. Schalte alle Pins eines Summanden gemeinsam, um sein Bit zu setzen."
+  "LogicPanelHelp.InputsBody": "Jeder auf dem Canvas unverbundene Gattereingang wird ein Netzwerk-Eingang namens GATTER.PIN — im Half-Adder-Beispiel fächern die Summanden A und B auf je vier Schalter auf. Schalte alle Pins eines Summanden gemeinsam, um sein Bit zu setzen.",
+  "LogicPanel.FanOutWarning.Title": "Warnung: Optische Aufspaltung (Fan-out)",
+  "LogicPanel.FanOutWarning.GateLine": "Gatterausgang '{0}' treibt {1} Gattereingänge.",
+  "LogicPanel.FanOutWarning.InputLine": "Eingangssignal '{0}' treibt {1} Gattereingänge.",
+  "LogicPanel.FanOutWarning.PhysicsNote": "Optisch braucht das einen Splitter pro Zweig und kostet je ~3 dB; reale Designs stellen die Pegel durch Verstärkung wieder her oder duplizieren die Stufe.",
+  "LogicPanelFanOutHelp.Title": "Warum vor Fan-out warnen?",
+  "LogicPanelFanOutHelp.Intro": "Die Logikebene gibt jedem getriebenen Gattereingang den vollen idealen Pegel — aber Licht vermehrt sich nicht. Ein Wellenleiter hinter einem Gatter (oder ein Laser hinter einem Eingangssignal) kann nur aufgespalten werden, und jede Aufspaltung teilt die optische Leistung auf die Zweige. Das Netzwerk oben würde in realer Photonik so nicht funktionieren.",
+  "LogicPanelFanOutHelp.PhysicsTitle": "Aufspalten kostet Leistung",
+  "LogicPanelFanOutHelp.PhysicsBody": "Ein 1×2-Splitter schickt die Hälfte des Lichts in jeden Zweig — ein Verlust von etwa 3 dB pro Zweig. Fan-out auf N Eingänge kaskadiert die Teilung: vier Lasten kosten ~6 dB, acht ~9 dB. Unter der Schaltschwelle eines Gatters liest das empfangende Gatter kein sauberes Bit mehr — die idealisierte 0/1 oben würde zu analogem Rauschen zerfallen.",
+  "LogicPanelFanOutHelp.ExamplesTitle": "Wie reale Designs damit umgehen",
+  "LogicPanelFanOutHelp.ExamplesBody": "Zwei Standardlösungen: das Signal nach dem Splitter verstärken (eine aktive Stufe stellt den Pegel wieder her, wie ein Buffer in der Elektronik) oder die treibende Stufe duplizieren, damit jede Last ihren eigenen Wellenleiter bekommt. Die mitgelieferten Half- und Full-Adder-Beispiele wählen den zweiten Weg: Das Lehrbuch-XOR teilt ein NAND(A, B) zwischen drei Verbrauchern — optisch ein Fan-out — also instanziieren die Beispiele diese Stufe einmal pro Verbraucher. Die Duplikation im Netzwerk ist die physikalische Ehrlichkeit, die die Logikebene abstrahiert."
 }

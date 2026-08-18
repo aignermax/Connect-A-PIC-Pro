@@ -52,6 +52,51 @@
         <TextBlock Text="{Binding RightPanel.Logic.StatusText}" Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
                    IsVisible="{Binding RightPanel.Logic.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
 
+        <!-- Optical fan-out warnings (#996): non-blocking, the idealized logic result
+             stays available — the warning marks where a physical implementation would
+             need splitters and level restoration. -->
+        <Border IsVisible="{Binding RightPanel.Logic.HasFanOutWarnings}"
+                Background="#2a2413" BorderBrush="#8a6d1f" BorderThickness="1"
+                CornerRadius="4" Padding="6" Margin="0,0,0,5">
+            <StackPanel Spacing="3">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{loc:Localize LogicPanel.FanOutWarning.Title}"
+                               Foreground="#e6c860" FontSize="10" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <!-- Education piece: why the half-/full-adder examples duplicate
+                         their XOR ladders instead of splitting one output. -->
+                    <controls:HelpFlyoutButton Grid.Column="1"
+                                               Title="{loc:Localize LogicPanelFanOutHelp.Title}"
+                                               VerticalAlignment="Center" Margin="4,-4,0,0">
+                        <controls:HelpFlyoutButton.HelpContent>
+                            <StackPanel Spacing="8" MaxWidth="400">
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.Intro}"/>
+
+                                <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.PhysicsBody}"/>
+
+                                <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.ExamplesTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.ExamplesBody}"/>
+                            </StackPanel>
+                        </controls:HelpFlyoutButton.HelpContent>
+                    </controls:HelpFlyoutButton>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding RightPanel.Logic.FanOutWarnings}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="logic:LogicFanOutWarningViewModel">
+                            <TextBlock Text="{Binding WarningText}" Foreground="#e6c860"
+                                       FontSize="10" TextWrapping="Wrap"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{loc:Localize LogicPanel.FanOutWarning.PhysicsNote}"
+                           Foreground="#a89040" FontSize="10" TextWrapping="Wrap" FontStyle="Italic"/>
+            </StackPanel>
+        </Border>
+
         <!-- The assembled network: one toggle per unconnected gate input, one live
              0/1 indicator per gate output -->
         <StackPanel IsVisible="{Binding RightPanel.Logic.HasNetwork}">
