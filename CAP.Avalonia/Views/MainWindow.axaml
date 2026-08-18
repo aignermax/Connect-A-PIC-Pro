@@ -198,6 +198,33 @@
                                         </DataTemplate>
                                     </ItemsControl.ItemTemplate>
                                 </ItemsControl>
+                                <!-- Check design (DRC-lite): same command as the Design Checks
+                                     panel button; also scrolls that panel into view. Lives in the
+                                     Export menu because checking precedes tapeout export. -->
+                                <Separator Margin="0,6,0,2" Background="#3d3d3d"/>
+                                <Button HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Margin="0,2" Padding="10,3"
+                                        Background="#3d3d5d"
+                                        Command="{Binding RunDesignChecksCommand}"
+                                        Click="CheckDesignMenuItem_Click"
+                                        ToolTip.Tip="{loc:Localize Toolbar.CheckDesignTip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="10">
+                                        <TextBlock Text="🔍" FontSize="15"
+                                                   VerticalAlignment="Center"/>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <TextBlock Text="{loc:Localize Toolbar.CheckDesign}"
+                                                       Foreground="White"
+                                                       FontWeight="SemiBold"
+                                                       FontSize="12"/>
+                                            <TextBlock Text="{loc:Localize Toolbar.CheckDesignDescription}"
+                                                       Foreground="#aaaaaa"
+                                                       FontSize="9"
+                                                       TextWrapping="Wrap"
+                                                       MaxWidth="180"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
                             </StackPanel>
                         </Flyout>
                     </Button.Flyout>
@@ -962,7 +989,7 @@
                     <panels:AiAssistantPanel/>
 
                     <!-- Design Checks Panel -->
-                    <panels:DesignChecksPanel/>
+                    <panels:DesignChecksPanel x:Name="DesignChecksPanelHost"/>
 
                     <!-- Netlist Panel (gdsfactory YAML view/export, #687) -->
                     <panels:NetlistPanel/>

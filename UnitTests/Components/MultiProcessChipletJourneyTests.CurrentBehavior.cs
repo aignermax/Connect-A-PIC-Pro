@@ -10,14 +10,13 @@ namespace UnitTests.Components;
 
 /// <summary>
 /// Green "today" pins for the documented-red stations of the multi-process journey:
-/// the step-8 (#939) pin proves the current single-process behavior so a future
-/// per-chiplet fix turns it red as a tripwire, while the step-5 (#937) pins guard
-/// the canvas-wide bend-floor fallback layer that remains underneath the
-/// per-connection floors shipped in #948. See
+/// the step-5 (#937) pins guard the canvas-wide bend-floor fallback layer that
+/// remains underneath the per-connection floors shipped in #948. See
 /// <see cref="MultiProcessChipletJourneyTests"/> for the full journey. The step-3
 /// pin now guards the canvas-level half of the shipped per-chiplet scope (#935):
 /// ungrouped foreign content stays rejected even though chiplets may carry a second
-/// process.
+/// process. The step-8 pin flipped with the per-process GDS export (#939) and now
+/// guards that each chiplet's routes carry their own cross-section.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests
 {
@@ -88,12 +87,14 @@ public partial class MultiProcessChipletJourneyTests
     }
 
     [Fact]
-    public void GdsExport_AllRoutedWaveguidesShareOneMajorityCrossSection_Today()
+    public void GdsExport_EachChipletRoutesOnItsOwnProcessCrossSection()
     {
-        // Companion to red step 8 (#939): today's export sizes every routed waveguide
-        // with the single majority-process cross-section; the other chiplet's geometry
-        // never appears on any route. Assertions run on the generated export scripts
-        // (headless, deterministic, no Python/nazca execution).
+        // Flipped step-8 pin (#939): the gdsfactory main script sizes every route with
+        // its own chiplet's cross-section — Cornerstone routes via 'xs_nc', SiEPIC
+        // routes at the strip width stamped on its pins (SiEPIC declares no gdsfactory
+        // routing cross-section) — never one majority-process cross-section for
+        // everything. Assertions run on the generated export scripts (headless,
+        // deterministic, no Python execution).
         var design = MultiProcessChipletJourneyDesign.BuildComposed();
 
         MixedBackendGdsOrchestrator.IsMixedBackendDesign(design.Canvas, design.Templates).ShouldBeTrue(
@@ -108,10 +109,14 @@ public partial class MultiProcessChipletJourneyTests
 
         var routeSizings = RouteSizings(scripts.GdsFactoryScript);
         routeSizings.ShouldNotBeEmpty("the design carries routed waveguides the script must emit");
-        routeSizings.Distinct().Count().ShouldBe(1,
-            "today one majority-process cross-section sizes every route in BOTH chiplets (#939)");
-        routeSizings[0].ShouldBe("cross_section='xs_nc'",
-            "the majority process (Cornerstone) owns the one global route cross-section");
+        routeSizings.ShouldContain("cross_section='xs_nc'",
+            "chiplet A's wire (and the abutment, start-pin-owned) route on the Cornerstone cross-section");
+        routeSizings.ShouldContain("width=0.50",
+            "chiplet B's wire routes at the SiEPIC strip width stamped on its pins");
+        routeSizings.ShouldNotContain("width=WG_WIDTH",
+            "no routed waveguide falls back to the global default anymore");
+        routeSizings.Distinct().Count().ShouldBeGreaterThan(1,
+            "no single global cross-section may size every route in both chiplets (#939)");
 
         // The nazca partial renders SiEPIC placements only — no routed waveguide geometry.
         scripts.NazcaPartialScript.ShouldContain("ebeam_taper_te1550");

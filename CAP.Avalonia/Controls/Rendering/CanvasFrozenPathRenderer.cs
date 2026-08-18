@@ -29,9 +29,10 @@ public sealed class CanvasFrozenPathRenderer : ICanvasRenderer
                 continue;
 
             // Canvas-level paths never carry simulated power (pin-less ⇒ not simulated),
-            // so no power-flow result is passed.
+            // so no power-flow result is passed; the layer-visibility filter still applies.
             ComponentGroupRenderer.RenderFrozenWaveguidePath(
                 context, pathVm.Path, powerFlowResult: null, cullRect: cullRect,
+                layerVisibility: rc.LayerVisibility,
                 penOverride: pathVm.IsSelected ? SelectedPen : null);
         }
     }

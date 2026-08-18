@@ -678,6 +678,15 @@ public partial class MainWindow : Window
     }
 
     /// <summary>
+    /// Scrolls the Design Checks panel into view after the "Check design" menu entry
+    /// ran the validation (the bound command does the checking itself).
+    /// </summary>
+    private void CheckDesignMenuItem_Click(object? sender, RoutedEventArgs e)
+    {
+        DesignChecksPanelHost.BringIntoView();
+    }
+
+    /// <summary>
     /// Gets the actual viewport size (visible area) independent of zoom level.
     /// Uses the DesignCanvas control's own layout bounds, which correctly excludes
     /// the left panel, right panel, and toolbar from the viewport dimensions.

@@ -30,6 +30,7 @@ public partial class GdsLayerVisibilityViewModel : ObservableObject
     {
         _canvas = canvas;
         _canvas.Components.CollectionChanged += (_, _) => QueueRefresh();
+        _canvas.CanvasFrozenPaths.CollectionChanged += (_, _) => QueueRefresh();
         State.Changed += () => _canvas.RepaintRequested?.Invoke();
     }
 
@@ -48,7 +49,9 @@ public partial class GdsLayerVisibilityViewModel : ObservableObject
     /// <summary>Rebuilds the rows from the canvas contents and the current state.</summary>
     public void Refresh()
     {
-        var usages = DesignLayerUsageCollector.Collect(_canvas.Components.Select(vm => vm.Component));
+        var usages = DesignLayerUsageCollector.Collect(
+            _canvas.Components.Select(vm => vm.Component),
+            _canvas.CanvasFrozenPaths);
         Rows.Clear();
         foreach (var usage in usages)
         {

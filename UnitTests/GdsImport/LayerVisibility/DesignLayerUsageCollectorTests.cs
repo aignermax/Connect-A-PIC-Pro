@@ -56,4 +56,45 @@ public class DesignLayerUsageCollectorTests
 
         DesignLayerUsageCollector.Collect(new[] { plain }).ShouldBeEmpty();
     }
+
+    [Fact]
+    public void Collect_CountsCanvasFrozenPaths_PerPair()
+    {
+        var paths = new[]
+        {
+            new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+                LayerVisibilityTestComponents.CreateFrozenPath(31, 5)),
+            new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+                LayerVisibilityTestComponents.CreateFrozenPath(31, 5)),
+            new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+                LayerVisibilityTestComponents.CreateFrozenPath(11, 0)),
+        };
+
+        var usages = DesignLayerUsageCollector.Collect(Array.Empty<Component>(), paths);
+
+        usages.Select(u => (u.Layer, u.DataType, u.ShapeCount))
+            .ShouldBe(new[] { (11, 0, 1), (31, 5, 2) });
+    }
+
+    [Fact]
+    public void Collect_CombinesComponentsAndCanvasFrozenPaths()
+    {
+        var component = LayerVisibilityTestComponents.CreateWithOutlines((1, 0));
+        var path = new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+            LayerVisibilityTestComponents.CreateFrozenPath(1, 0));
+
+        var usages = DesignLayerUsageCollector.Collect(new[] { component }, new[] { path });
+
+        usages.Select(u => (u.Layer, u.DataType, u.ShapeCount))
+            .ShouldBe(new[] { (1, 0, 2) });
+    }
+
+    [Fact]
+    public void Collect_IgnoresUntaggedCanvasFrozenPaths()
+    {
+        var path = new CAP.Avalonia.ViewModels.Canvas.CanvasFrozenPathViewModel(
+            LayerVisibilityTestComponents.CreateFrozenPath(null, null));
+
+        DesignLayerUsageCollector.Collect(Array.Empty<Component>(), new[] { path }).ShouldBeEmpty();
+    }
 }

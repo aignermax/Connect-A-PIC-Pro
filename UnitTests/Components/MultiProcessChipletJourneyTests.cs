@@ -57,12 +57,12 @@ namespace UnitTests.Components;
 ///   Step 7 (green, #938): the per-chiplet process binding is persisted per
 ///         top-level group and restored on load — no Playground migration.
 ///         Legacy files without bindings load exactly as before.
-///   Step 8 (RED, #939): GDS export routes every waveguide through one global
-///         interconnect (width/radius/layer), not each chiplet's own stack.
+///   Step 8 (green, #939): GDS export routes each chiplet's waveguides through an
+///         interconnect of its own process cross-section (width/radius/layer from the
+///         endpoint pins' PDK stamps), not one global user preference.
 ///
-/// The red step 8 additionally carries a GREEN "today" pin in the CurrentBehavior
-/// partial: GDS export really does size every route with one majority cross-section —
-/// so a future per-chiplet fix turns that pin red as a tripwire. The step-5 pins in
+/// The step-8 pin in the CurrentBehavior partial flipped with the #939 fix and now
+/// guards the per-chiplet cross-sections in the gdsfactory script. The step-5 pins in
 /// the same partial survived the #948 fix unchanged: the canvas-wide fallback they
 /// pin is still the layer underneath the per-connection floors (a null per-connection
 /// opinion falls back to it), so they now guard that fallback layer.
