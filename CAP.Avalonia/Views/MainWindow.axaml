@@ -979,6 +979,9 @@
                     <!-- Connection Routing (style, width/radius, freeze, per-bend radius — issue #574) -->
                     <panels:ConnectionRoutingPanel/>
 
+                    <!-- Length Matching (exact target length for one selected connection) -->
+                    <panels:LengthMatchingPanel/>
+
                     <!-- Imported Layers (per-layer show/hide + opacity for imported GDS, issue #858) -->
                     <panels:GdsLayerVisibilityPanel/>
 

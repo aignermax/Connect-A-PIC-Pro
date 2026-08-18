@@ -605,6 +605,9 @@ public partial class MainViewModel : ObservableObject
                 // ... and into the imported-route re-route panel.
                 BottomPanel.RerouteImported.SelectedConnection =
                     CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the length-matching panel.
+                BottomPanel.LengthMatching.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
             }
         };
 
