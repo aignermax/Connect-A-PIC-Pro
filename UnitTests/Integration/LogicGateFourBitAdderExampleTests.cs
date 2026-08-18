@@ -90,7 +90,7 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
     [InlineData(3, 12, true)]
     public void LogicLayer_PinnedInputCombinations_YieldTheArithmeticSum(int a, int b, bool cin)
     {
-        var result = _fixture.Network.Evaluate(_fixture.InputBits(a, b, cin));
+        var result = _fixture.Network.Evaluate(FourBitAdderFixture.InputBits(a, b, cin));
         var sum = a + b + (cin ? 1 : 0);
         var carry = cin;
 
@@ -138,8 +138,8 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             foreach (var b in new[] { 0, 1, 7, 8, 15 })
             foreach (var cin in new[] { false, true })
             {
-                var expected = _fixture.Network.Evaluate(_fixture.InputBits(a, b, cin));
-                reloaded.Evaluate(_fixture.InputBits(a, b, cin)).ShouldBe(expected,
+                var expected = _fixture.Network.Evaluate(FourBitAdderFixture.InputBits(a, b, cin));
+                reloaded.Evaluate(FourBitAdderFixture.InputBits(a, b, cin)).ShouldBe(expected,
                     $"the re-assembled network must evaluate identically for A={a}, B={b}, Cin={cin}");
             }
         }
@@ -218,8 +218,10 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
         /// <summary>No shared state to release.</summary>
         public Task DisposeAsync() => Task.CompletedTask;
 
-        /// <summary>The network input bits for one operand triple (A, B and Cin fan out at the logic layer).</summary>
-        public Dictionary<string, bool> InputBits(int a, int b, bool cin)
+        /// <summary>The network input bits for one operand triple (A, B and Cin fan out at the
+        /// logic layer). Static so sibling journeys (e.g. the manufacturing proof) reuse the
+        /// pin-name mapping without constructing the fixture.</summary>
+        public static Dictionary<string, bool> InputBits(int a, int b, bool cin)
         {
             var bits = new Dictionary<string, bool>();
             for (var stage = 0; stage < 4; stage++)
