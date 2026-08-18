@@ -658,8 +658,33 @@ public partial class FileOperationsViewModel : ObservableObject
             GroupDto = groupDto,
             ChildComponents = childDataList,
             CanvasX = groupVm.X,
-            CanvasY = groupVm.Y
+            CanvasY = groupVm.Y,
+            // Only top-level groups act as chiplets (issue #938); a nested group's
+            // process scope is its top-level parent's.
+            ProcessBinding = group.ParentGroup == null ? ResolveGroupBindingForSave(group) : null,
+            // Same top-level-only rule for the Truth Table pin roles (issue #981).
+            TruthTablePinAssignment = group.ParentGroup == null ? group.TruthTablePinAssignment : null
         });
+    }
+
+    /// <summary>
+    /// Serialized form of a top-level group's chiplet process binding (issue #938): the
+    /// explicitly set binding, or — for groups built without one (e.g. in Playground) —
+    /// the binding derived from the children's PDK sources when they unanimously belong
+    /// to one catalog process. Null when the group has no process content, its children
+    /// span processes, or no catalog is available.
+    /// </summary>
+    private ActiveProcessData? ResolveGroupBindingForSave(ComponentGroup group)
+    {
+        var binding = group.ProcessBinding;
+        if (binding == null && ProcessCatalogProvider?.Invoke() is { Count: > 0 } catalog)
+        {
+            binding = GroupProcessPolicy.DeriveProcessBinding(
+                group.GetAllComponentsRecursive().Select(FindTemplatePdkSource),
+                catalog,
+                ProcessAgnosticPdkNamesProvider?.Invoke() ?? Array.Empty<string>());
+        }
+        return ActiveProcessResolver.ToData(binding);
     }
 
     /// <summary>
@@ -1101,12 +1126,25 @@ public partial class FileOperationsViewModel : ObservableObject
                 else
                 {
                     var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+                    // Chiplets with a restored binding carry their own process (issue
+                    // #938): their children stay out of the design-level inference,
+                    // which is only the default for ungrouped and unbound content.
                     var pdkSources = designData.Components.Select(c => c.PdkSource)
-                        .Concat(designData.Groups?.SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
+                        .Concat(designData.Groups?
+                                .Where(g => g.ProcessBinding == null)
+                                .SelectMany(g => g.ChildComponents.Select(ch => ch.PdkSource))
                                 ?? Enumerable.Empty<string?>());
                     ActiveProcess = ActiveProcessResolver.Migrate(pdkSources, catalog, out var warning,
                         ProcessAgnosticPdkNamesProvider?.Invoke() ?? System.Array.Empty<string>());
                     if (warning != null) OnProcessMigrationWarning?.Invoke(warning);
+
+                    // No unbound process content: the design default follows the
+                    // chiplets themselves — one shared process, or Playground for a
+                    // genuine multi-process carrier (no migration, hence no warning).
+                    ActiveProcess ??= ActiveProcessResolver.FromChipletBindings(
+                        _canvas.Components.Select(vm => vm.Component)
+                            .OfType<ComponentGroup>()
+                            .Select(g => g.ProcessBinding));
                 }
 
                 // Restore imported S-matrices from PIR section
@@ -1482,6 +1520,10 @@ public partial class FileOperationsViewModel : ObservableObject
             // Only add top-level groups (groups without a parent) to the canvas
             if (groupData.GroupDto.ParentGroupId == null)
             {
+                group.ProcessBinding = RestoreGroupBinding(groupData);
+                // Truth Table pin roles (issue #981): restore as persisted — the panel
+                // silently skips pin names that no longer match a real external pin.
+                group.TruthTablePinAssignment = groupData.TruthTablePinAssignment;
                 var groupVm = _canvas.AddComponent(group);
                 groupVm.X = groupData.CanvasX;
                 groupVm.Y = groupData.CanvasY;
@@ -1491,6 +1533,29 @@ public partial class FileOperationsViewModel : ObservableObject
         }
 
         return orderedGroups.Count;
+    }
+
+    /// <summary>
+    /// Restores a top-level group's persisted chiplet process binding (issue #938),
+    /// re-anchored to the installed process catalog exactly like the design-level
+    /// record: newly installed compatible PDKs join the binding, and a chiplet whose
+    /// PDKs are all missing warns instead of silently pinning a nonexistent process.
+    /// Null for unbound groups and legacy files.
+    /// </summary>
+    private ActiveProcessSelection? RestoreGroupBinding(DesignGroupData groupData)
+    {
+        var binding = ActiveProcessResolver.FromData(groupData.ProcessBinding);
+        if (binding is not { IsPlayground: false })
+            return binding;
+
+        var catalog = ProcessCatalogProvider?.Invoke() ?? Array.Empty<ProcessGroup>();
+        var revalidated = ActiveProcessResolver.Revalidate(binding, catalog, out var warning);
+        if (warning != null)
+        {
+            OnProcessMigrationWarning?.Invoke(
+                $"Chiplet '{groupData.GroupDto.GroupName}': {warning}");
+        }
+        return revalidated;
     }
 
     /// <summary>

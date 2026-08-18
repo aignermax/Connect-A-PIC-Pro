@@ -31,6 +31,8 @@ public class TruthTablePanelRenderTests
         "TruthTable.NoGroupSelected",
         "TruthTable.Inputs",
         "TruthTable.Outputs",
+        "TruthTable.Bias",
+        "TruthTable.BiasSummary",
         "TruthTable.Threshold",
         "TruthTable.Wavelength",
         "TruthTable.Extract",
@@ -41,6 +43,8 @@ public class TruthTablePanelRenderTests
         "TruthTableHelp.ThresholdBody",
         "TruthTableHelp.InterferenceTitle",
         "TruthTableHelp.InterferenceBody",
+        "TruthTableHelp.BiasTitle",
+        "TruthTableHelp.BiasBody",
         "Analysis.TruthTable.Running",
         "Analysis.TruthTable.Complete",
         "Analysis.TruthTable.Cancelled",
@@ -137,7 +141,7 @@ public class TruthTablePanelRenderTests
             Dispatcher.UIThread.RunJobs();
 
             var checkBoxes = panel.GetVisualDescendants().OfType<CheckBox>().ToList();
-            checkBoxes.Count.ShouldBe(6, "3 external pins offered as inputs and as outputs");
+            checkBoxes.Count.ShouldBe(9, "3 external pins offered as inputs, as outputs, and as bias");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("a");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("y");
         }

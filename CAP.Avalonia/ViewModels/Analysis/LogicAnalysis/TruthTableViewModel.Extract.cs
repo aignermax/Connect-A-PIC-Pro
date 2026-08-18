@@ -1,5 +1,6 @@
 using System.Globalization;
 using CAP_Core.Analysis.LogicAnalysis;
+using CAP_Core.Components.Core;
 using CommunityToolkit.Mvvm.Input;
 
 namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
@@ -20,6 +21,7 @@ public partial class TruthTableViewModel
 
         var inputs = InputPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
         var outputs = OutputPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
+        var biases = BiasPins.Where(p => p.IsChecked).Select(p => p.PinName).ToArray();
         if (inputs.Length == 0 || outputs.Length == 0)
         {
             StatusText = Translate("Analysis.TruthTable.SelectPins");
@@ -32,8 +34,18 @@ public partial class TruthTableViewModel
         try
         {
             var table = await _extractor.ExtractAsync(
-                _group, inputs, outputs, Threshold, ResolveWavelengthNm(), _extractCts.Token);
+                _group, inputs, outputs, biases, Threshold, ResolveWavelengthNm(), _extractCts.Token);
             ShowTable(table);
+            // Persist the winning assignment on the group (issue #981) so the next
+            // save → load round trip prefills the panel — a cancelled or failed
+            // extraction must not overwrite the last good one.
+            _group.TruthTablePinAssignment = new TruthTablePinAssignment
+            {
+                InputPinNames = inputs.ToList(),
+                OutputPinNames = outputs.ToList(),
+                BiasPinNames = biases.ToList(),
+                Threshold = Threshold
+            };
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);
         }
         catch (OperationCanceledException)
@@ -89,6 +101,9 @@ public partial class TruthTableViewModel
             Rows.Add(new TruthTableRowViewModel(string.Join(" ", inputBits), cells));
         }
 
+        BiasSummaryText = table.BiasPinNames.Count > 0
+            ? string.Format(Translate("TruthTable.BiasSummary"), string.Join(", ", table.BiasPinNames))
+            : "";
         HasResult = true;
     }
 

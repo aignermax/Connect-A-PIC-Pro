@@ -10,7 +10,7 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// </summary>
 public sealed class TruthTable
 {
-    /// <summary>Assembles an immutable extraction result.</summary>
+    /// <summary>Assembles an immutable extraction result without bias pins.</summary>
     public TruthTable(
         string groupName,
         IReadOnlyList<string> inputPinNames,
@@ -18,10 +18,24 @@ public sealed class TruthTable
         double powerThreshold,
         int wavelengthNm,
         IReadOnlyList<TruthTableRow> rows)
+        : this(groupName, inputPinNames, outputPinNames, [], powerThreshold, wavelengthNm, rows)
+    {
+    }
+
+    /// <summary>Assembles an immutable extraction result including the bias-pin assignment.</summary>
+    public TruthTable(
+        string groupName,
+        IReadOnlyList<string> inputPinNames,
+        IReadOnlyList<string> outputPinNames,
+        IReadOnlyList<string> biasPinNames,
+        double powerThreshold,
+        int wavelengthNm,
+        IReadOnlyList<TruthTableRow> rows)
     {
         GroupName = groupName;
         InputPinNames = inputPinNames;
         OutputPinNames = outputPinNames;
+        BiasPinNames = biasPinNames;
         PowerThreshold = powerThreshold;
         WavelengthNm = wavelengthNm;
         Rows = rows;
@@ -35,6 +49,9 @@ public sealed class TruthTable
 
     /// <summary>Logic output pin names.</summary>
     public IReadOnlyList<string> OutputPinNames { get; }
+
+    /// <summary>Bias pin names — constantly "on" in every row, so they never appear as input-bit columns.</summary>
+    public IReadOnlyList<string> BiasPinNames { get; }
 
     /// <summary>Normalized power threshold used for classification (power ≥ threshold is logic 1).</summary>
     public double PowerThreshold { get; }

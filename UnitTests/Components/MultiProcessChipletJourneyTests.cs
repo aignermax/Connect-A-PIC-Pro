@@ -47,21 +47,27 @@ namespace UnitTests.Components;
 ///   Step 4 (green, #936): DRC-lite checks each chiplet against its OWN process —
 ///         a deliberately narrow Cornerstone route is flagged even in Playground
 ///         while the SiEPIC chiplet (no declared minWidthUm) stays silent.
-///   Step 5 (RED, #937): the router's bend-radius floor is one canvas-wide value.
+///   Step 5 (green, #937 shipped in #948): the router floors each connection by its
+///         own endpoint PDKs — a Cornerstone route keeps its 30 µm foundry floor,
+///         the stricter side governs the cross-chiplet abutment, and SiEPIC routes
+///         use their declared 5 µm instead of the 10 µm Playground fallback.
 ///   Step 6 (green): .lun round-trip — both per-component PDK assignments, the
-///         groups, the abutment and the physics survive (the design reloads as
-///         Playground: pinned here as current behavior, #938 is the fix).
-///   Step 7 (RED, #938): no per-chiplet process binding exists to persist.
+///         groups, the abutment and the physics survive; since #938 the reload
+///         migrates nothing (the per-chiplet bindings describe the state).
+///   Step 7 (green, #938): the per-chiplet process binding is persisted per
+///         top-level group and restored on load — no Playground migration.
+///         Legacy files without bindings load exactly as before.
 ///   Step 8 (green, #939): GDS export routes each chiplet's waveguides through an
 ///         interconnect of its own process cross-section (width/radius/layer from the
 ///         endpoint pins' PDK stamps), not one global user preference.
 ///
-/// The red step 5 additionally carries GREEN "today" pins in the CurrentBehavior
-/// partial: the Playground bend floor really is one fallback for everything — so a
-/// future per-chiplet fix turns those pins red as a tripwire. The step-8 pin flipped
-/// with this fix and now guards the per-chiplet cross-sections in the gdsfactory
-/// script. The step-3 pin now guards the canvas-level half of the shipped #935
-/// behavior: ungrouped foreign content must stay rejected.
+/// The step-8 pin in the CurrentBehavior partial flipped with the #939 fix and now
+/// guards the per-chiplet cross-sections in the gdsfactory script. The step-5 pins in
+/// the same partial survived the #948 fix unchanged: the canvas-wide fallback they
+/// pin is still the layer underneath the per-connection floors (a null per-connection
+/// opinion falls back to it), so they now guard that fallback layer.
+/// The step-3 pin now guards the canvas-level half of the shipped #935 behavior:
+/// ungrouped foreign content must stay rejected.
 /// </summary>
 public partial class MultiProcessChipletJourneyTests : IDisposable
 {

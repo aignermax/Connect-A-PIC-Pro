@@ -24,7 +24,7 @@ public class ExampleDesignFilesTests
     /// <summary>Minimum connections a shipped example must contain to be meaningful.</summary>
     private const int MinConnectionsPerExample = 3;
 
-    private static string ExamplesDirectory()
+    internal static string ExamplesDirectory()
     {
         var current = new DirectoryInfo(AppContext.BaseDirectory);
         while (current != null)
@@ -58,9 +58,18 @@ public class ExampleDesignFilesTests
             using var doc = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(examplePath));
             var declaredComponents = doc.RootElement.GetProperty("Components").GetArrayLength();
             var declaredConnections = doc.RootElement.GetProperty("Connections").GetArrayLength();
-            var declaredGroups = doc.RootElement.TryGetProperty("Groups", out var groups)
-                ? groups.GetArrayLength()
-                : 0;
+            var declaredGroups = 0;
+            var declaredGroupChildren = 0;
+            var declaredInternalPaths = 0;
+            if (doc.RootElement.TryGetProperty("Groups", out var groups))
+            {
+                declaredGroups = groups.GetArrayLength();
+                foreach (var group in groups.EnumerateArray())
+                {
+                    declaredGroupChildren += group.GetProperty("ChildComponents").GetArrayLength();
+                    declaredInternalPaths += group.GetProperty("GroupDto").GetProperty("InternalPaths").GetArrayLength();
+                }
+            }
 
             var canvas = new DesignCanvasViewModel();
             var fileOps = new FileOperationsViewModel(
@@ -76,10 +85,12 @@ public class ExampleDesignFilesTests
             var loaded = await fileOps.LoadDesignFromPathAsync(examplePath);
 
             loaded.ShouldBeTrue($"Example '{name}' must load");
-            declaredComponents.ShouldBeGreaterThanOrEqualTo(
-                MinComponentsPerExample, $"Example '{name}' must ship a meaningful circuit");
-            declaredConnections.ShouldBeGreaterThanOrEqualTo(
-                MinConnectionsPerExample, $"Example '{name}' must ship a connected circuit");
+            (declaredComponents + declaredGroupChildren).ShouldBeGreaterThanOrEqualTo(
+                MinComponentsPerExample,
+                $"Example '{name}' must ship a meaningful circuit (group children count)");
+            (declaredConnections + declaredInternalPaths).ShouldBeGreaterThanOrEqualTo(
+                MinConnectionsPerExample,
+                $"Example '{name}' must ship a connected circuit (group-internal paths count)");
             canvas.Components.Count.ShouldBe(
                 declaredComponents + declaredGroups,
                 $"Example '{name}' must resolve every declared component template");

@@ -8,7 +8,8 @@ namespace UnitTests.Analysis.LogicAnalysis;
 
 /// <summary>
 /// ViewModel tests for the Truth Table panel: activation only for exactly one
-/// selected group, the 4-input limit at the checkboxes, extraction on the
+/// selected group, the 4-input limit at the checkboxes, pin-role mutual exclusion
+/// across input/output/bias at the checkbox, extraction on the
 /// <see cref="LogicGateFixtureFactory"/> fixtures (OR table at threshold 0.25 including
 /// raw powers), extractor validation shown as a message instead of a crash, and cancel.
 /// </summary>
@@ -33,6 +34,12 @@ public class TruthTableViewModelTests
             vm.InputPins.Single(p => p.PinName == name).IsChecked = true;
         foreach (var name in outputs)
             vm.OutputPins.Single(p => p.PinName == name).IsChecked = true;
+    }
+
+    private static void CheckBiasPins(TruthTableViewModel vm, params string[] biases)
+    {
+        foreach (var name in biases)
+            vm.BiasPins.Single(p => p.PinName == name).IsChecked = true;
     }
 
     [Fact]
@@ -66,6 +73,7 @@ public class TruthTableViewModelTests
         vm.IsGroupSelected.ShouldBeTrue();
         vm.InputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
         vm.OutputPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
+        vm.BiasPins.Select(p => p.PinName).ShouldBe(new[] { "a", "b", "y" });
         vm.WavelengthText.ShouldNotBeNullOrWhiteSpace();
     }
 
@@ -129,6 +137,64 @@ public class TruthTableViewModelTests
     }
 
     [Fact]
+    public async Task Extract_CombinerGroupWithBias_ShowsBiasAssignmentAndInterference()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked = true;
+        vm.Threshold = 0.75;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.InputHeaders.ShouldBe(new[] { "a" }); // the bias pin never becomes an input column
+        vm.BiasSummaryText.ShouldBe(string.Format(Translate("TruthTable.BiasSummary"), "b"));
+        vm.Rows.Count.ShouldBe(2);
+
+        var resting = vm.Rows.Single(r => r.InputBitsText == "0");
+        resting.OutputCells[0].IsOne.ShouldBeFalse("0.5 resting power stays below the 0.75 threshold");
+        resting.OutputCells[0].PowerText.ShouldBe("0.50");
+
+        var active = vm.Rows.Single(r => r.InputBitsText == "1");
+        active.OutputCells[0].IsOne.ShouldBeTrue("bias and input recombine coherently into full power");
+        active.OutputCells[0].PowerText.ShouldBe("1.00");
+    }
+
+    [Fact]
+    public async Task Extract_WithoutBias_ClearsBiasSummary()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        var bias = vm.BiasPins.Single(p => p.PinName == "b");
+        bias.IsChecked = true;
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.BiasSummaryText.ShouldNotBeNullOrWhiteSpace("the bias assignment shows on the result");
+
+        bias.IsChecked = false;
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.HasResult.ShouldBeTrue();
+        vm.BiasSummaryText.ShouldBeEmpty("no bias assigned — no bias summary on the result");
+    }
+
+    [Fact]
+    public async Task Extract_PinCheckedAsBias_RevokesItsInputTwin()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a" }, new[] { "y" });
+        CheckBiasPins(vm, "a");
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "checking 'a' as bias revokes its input role — a pin has exactly one role");
+        vm.StatusText.ShouldBe(Translate("Analysis.TruthTable.SelectPins"),
+            "with the sole input revoked, no input bit remains — the panel asks for one");
+        vm.HasResult.ShouldBeFalse();
+        vm.IsProcessing.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task Extract_NoPinsSelected_ShowsMessage()
     {
         var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
@@ -158,14 +224,17 @@ public class TruthTableViewModelTests
     }
 
     [Fact]
-    public async Task Extract_PinDeclaredAsInputAndOutput_ShowsMessage()
+    public async Task Extract_PinCheckedAsOutput_RevokesItsInputTwin()
     {
         var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
         CheckPins(vm, new[] { "a" }, new[] { "a" });
 
         await vm.ExtractCommand.ExecuteAsync(null);
 
-        vm.StatusText.ShouldContain("'a'");
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "checking 'a' as output revokes its input role — a pin has exactly one role");
+        vm.StatusText.ShouldBe(Translate("Analysis.TruthTable.SelectPins"),
+            "with the input role revoked, no input remains — the panel asks for one");
         vm.HasResult.ShouldBeFalse();
         vm.IsProcessing.ShouldBeFalse();
     }
@@ -223,5 +292,32 @@ public class TruthTableViewModelTests
         vm.HasResult.ShouldBeFalse();
         vm.IsProcessing.ShouldBeFalse();
         vm.Rows.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void PinRoles_CheckingOneRole_UnchecksTheSamePinInTheOtherTwoLists()
+    {
+        var (vm, _) = ConfigureForGroup(LogicGateFixtureFactory.CreateCombinerGroup());
+        CheckPins(vm, new[] { "a", "b" }, new[] { "y" });
+        CheckBiasPins(vm, "a");
+
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "checking 'a' as bias revokes its input role — a pin has exactly one role");
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked.ShouldBeTrue(
+            "an unrelated pin keeps its role");
+
+        vm.BiasPins.Single(p => p.PinName == "b").IsChecked = true;
+        vm.InputPins.Single(p => p.PinName == "b").IsChecked.ShouldBeFalse(
+            "the bias check takes over from both roles at once");
+
+        vm.OutputPins.Single(p => p.PinName == "a").IsChecked = true;
+        vm.BiasPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "re-checking as output revokes the bias role");
+        vm.OutputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeTrue();
+
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked = true;
+        vm.OutputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeFalse(
+            "re-checking as input revokes the output role");
+        vm.InputPins.Single(p => p.PinName == "a").IsChecked.ShouldBeTrue();
     }
 }

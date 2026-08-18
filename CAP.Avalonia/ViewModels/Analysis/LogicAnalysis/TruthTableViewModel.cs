@@ -12,9 +12,11 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// <summary>
 /// ViewModel behind the Truth Table panel: when exactly one <see cref="ComponentGroup"/>
 /// is selected on the canvas, its external pins can be assigned as logic inputs (at most
-/// <see cref="TruthTableExtractor.MaxLogicInputs"/>) and outputs, and the panel extracts
+/// <see cref="TruthTableExtractor.MaxLogicInputs"/>), outputs, or bias pins (constantly
+/// "on" in every row — the ingredient inversion gates need), and the panel extracts
 /// the group's truth table via <see cref="TruthTableExtractor"/> — every output bit shown
-/// together with the raw simulated power behind it.
+/// together with the raw simulated power behind it. A pin is exactly one of input, output,
+/// or bias: checking it in one list revokes it in the other two.
 /// </summary>
 public partial class TruthTableViewModel : ObservableObject
 {
@@ -24,7 +26,7 @@ public partial class TruthTableViewModel : ObservableObject
     private ComponentGroup? _group;
     private DesignCanvasViewModel? _canvas;
     private CancellationTokenSource? _extractCts;
-    private bool _revertingInputCheck;
+    private bool _revertingPinCheck;
 
     /// <summary>True while exactly one group is selected and the panel is active.</summary>
     [ObservableProperty]
@@ -46,6 +48,10 @@ public partial class TruthTableViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasResult;
 
+    /// <summary>Bias-pin assignment of the extracted table, shown above the result (empty when none).</summary>
+    [ObservableProperty]
+    private string _biasSummaryText = "";
+
     /// <summary>Display text for the wavelength the table will be extracted at.</summary>
     [ObservableProperty]
     private string _wavelengthText = "";
@@ -55,6 +61,9 @@ public partial class TruthTableViewModel : ObservableObject
 
     /// <summary>External pins of the selected group offered as logic outputs (checkboxes).</summary>
     public ObservableCollection<PinSelectionViewModel> OutputPins { get; } = new();
+
+    /// <summary>External pins of the selected group offered as bias pins (checkboxes) — constantly "on" in every row.</summary>
+    public ObservableCollection<PinSelectionViewModel> BiasPins { get; } = new();
 
     /// <summary>Input pin names of the extracted table, in bit order (table header).</summary>
     public ObservableCollection<string> InputHeaders { get; } = new();
@@ -83,43 +92,130 @@ public partial class TruthTableViewModel : ObservableObject
         HasResult = false;
         Rows.Clear();
         StatusText = "";
+        BiasSummaryText = "";
         RebuildPinLists();
+        PrefillFromPersistedAssignment();
         WavelengthText = IsGroupSelected
             ? string.Format(Translate("TruthTable.Wavelength"), ResolveWavelengthNm())
             : "";
     }
 
+    /// <summary>
+    /// Re-applies the pin-role assignment the group was last successfully extracted
+    /// with (issue #981 — persisted in the .lun file): ticks the same input/output/
+    /// bias checkboxes and restores the threshold, so a save → load round trip
+    /// brings the panel back exactly as the user left it. Silent for legacy files
+    /// and for groups never extracted; pin names that no longer exist on the group
+    /// are skipped instead of failing.
+    /// </summary>
+    private void PrefillFromPersistedAssignment()
+    {
+        var saved = _group?.TruthTablePinAssignment;
+        if (saved == null)
+            return;
+
+        _revertingPinCheck = true;
+        try
+        {
+            CheckPins(InputPins, saved.InputPinNames);
+            CheckPins(OutputPins, saved.OutputPinNames);
+            CheckPins(BiasPins, saved.BiasPinNames);
+            Threshold = saved.Threshold;
+        }
+        finally
+        {
+            _revertingPinCheck = false;
+        }
+    }
+
+    /// <summary>Ticks the checkbox of every listed pin that still exists on the group.</summary>
+    private static void CheckPins(IEnumerable<PinSelectionViewModel> pins, IEnumerable<string> names)
+    {
+        foreach (var name in names)
+        {
+            var pin = pins.FirstOrDefault(p => p.PinName == name);
+            if (pin != null)
+                pin.IsChecked = true;
+        }
+    }
+
     private void RebuildPinLists()
     {
-        foreach (var pin in InputPins)
-            pin.PropertyChanged -= OnInputPinPropertyChanged;
+        DetachPinHandlers();
         InputPins.Clear();
         OutputPins.Clear();
+        BiasPins.Clear();
         if (!IsGroupSelected || _group == null)
             return;
 
         foreach (var pin in _group.ExternalPins)
         {
-            var input = new PinSelectionViewModel(pin.Name);
-            input.PropertyChanged += OnInputPinPropertyChanged;
-            InputPins.Add(input);
-            OutputPins.Add(new PinSelectionViewModel(pin.Name));
+            InputPins.Add(CreatePin(pin.Name));
+            OutputPins.Add(CreatePin(pin.Name));
+            BiasPins.Add(CreatePin(pin.Name));
         }
     }
 
-    /// <summary>Enforces the extractor's input limit directly at the checkbox.</summary>
-    private void OnInputPinPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    /// <summary>Builds one checkbox entry and wires the pin-role invariant handler.</summary>
+    private PinSelectionViewModel CreatePin(string pinName)
     {
-        if (_revertingInputCheck || e.PropertyName != nameof(PinSelectionViewModel.IsChecked))
+        var pin = new PinSelectionViewModel(pinName);
+        pin.PropertyChanged += OnPinPropertyChanged;
+        return pin;
+    }
+
+    private void DetachPinHandlers()
+    {
+        foreach (var pin in InputPins.Concat(OutputPins).Concat(BiasPins))
+            pin.PropertyChanged -= OnPinPropertyChanged;
+    }
+
+    /// <summary>
+    /// Enforces the pin-role invariants directly at the checkbox: a pin is at most one
+    /// of input, output, or bias (checking it in one list revokes it in the other two),
+    /// and at most <see cref="TruthTableExtractor.MaxLogicInputs"/> inputs may be checked.
+    /// </summary>
+    private void OnPinPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (_revertingPinCheck || e.PropertyName != nameof(PinSelectionViewModel.IsChecked))
             return;
         if (sender is not PinSelectionViewModel pin || !pin.IsChecked)
+            return;
+
+        _revertingPinCheck = true;
+        try
+        {
+            UncheckSamePinInOtherLists(pin);
+            EnforceInputLimit(pin);
+        }
+        finally
+        {
+            _revertingPinCheck = false;
+        }
+    }
+
+    /// <summary>Unchecks the same pin name in the two lists the just-checked pin does not belong to.</summary>
+    private void UncheckSamePinInOtherLists(PinSelectionViewModel checkedPin)
+    {
+        foreach (var list in new[] { InputPins, OutputPins, BiasPins })
+        {
+            if (list.Contains(checkedPin))
+                continue;
+            var twin = list.FirstOrDefault(p => p.PinName == checkedPin.PinName);
+            if (twin != null)
+                twin.IsChecked = false;
+        }
+    }
+
+    /// <summary>Reverts a fresh input check that would exceed the extractor's input limit.</summary>
+    private void EnforceInputLimit(PinSelectionViewModel checkedPin)
+    {
+        if (!InputPins.Contains(checkedPin))
             return;
         if (InputPins.Count(p => p.IsChecked) <= TruthTableExtractor.MaxLogicInputs)
             return;
 
-        _revertingInputCheck = true;
-        pin.IsChecked = false;
-        _revertingInputCheck = false;
+        checkedPin.IsChecked = false;
         StatusText = string.Format(Translate("Analysis.TruthTable.TooManyInputs"), TruthTableExtractor.MaxLogicInputs);
     }
 

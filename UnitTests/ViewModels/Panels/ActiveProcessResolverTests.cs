@@ -100,6 +100,59 @@ public class ActiveProcessResolverTests
         warning!.ShouldContain("Ghost PDK");
     }
 
+    // ─── FromChipletBindings (design default derived from restored chiplet bindings, #938) ─────
+
+    [Fact]
+    public void FromChipletBindings_NoBindings_ReturnsNull()
+    {
+        ActiveProcessResolver.FromChipletBindings(new ActiveProcessSelection?[] { null, null })
+            .ShouldBeNull();
+        ActiveProcessResolver.FromChipletBindings(Array.Empty<ActiveProcessSelection?>())
+            .ShouldBeNull();
+    }
+
+    [Fact]
+    public void FromChipletBindings_AllChipletsShareOneProcess_AdoptsThatProcess()
+    {
+        var chipletA = ActiveProcessSelection.ForGroup(Soi);
+        var chipletB = ActiveProcessSelection.ForGroup(Soi);
+
+        var result = ActiveProcessResolver.FromChipletBindings(
+            new ActiveProcessSelection?[] { chipletA, chipletB, null });
+
+        result.ShouldNotBeNull();
+        result!.IsPlayground.ShouldBeFalse();
+        result.DisplayName.ShouldBe("SOI 220");
+    }
+
+    [Fact]
+    public void FromChipletBindings_ChipletsSpanProcesses_YieldsPlayground()
+    {
+        var result = ActiveProcessResolver.FromChipletBindings(new ActiveProcessSelection?[]
+        {
+            ActiveProcessSelection.ForGroup(Soi),
+            ActiveProcessSelection.ForGroup(Inp),
+        });
+
+        result.ShouldNotBeNull();
+        result!.IsPlayground.ShouldBeTrue(
+            "a carrier of two chiplet processes has no single design-level process");
+    }
+
+    [Fact]
+    public void FromChipletBindings_PlaygroundBinding_DoesNotCountAsProcess()
+    {
+        var result = ActiveProcessResolver.FromChipletBindings(new ActiveProcessSelection?[]
+        {
+            ActiveProcessSelection.ForGroup(Soi),
+            ActiveProcessSelection.Playground(),
+        });
+
+        result.ShouldNotBeNull();
+        result!.DisplayName.ShouldBe("SOI 220",
+            "a Playground-bound group carries no process — the one real binding decides");
+    }
+
     // ─── Revalidate (stored processes re-anchored to the installed catalog) ─────
 
     [Fact]

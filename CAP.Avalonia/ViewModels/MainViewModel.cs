@@ -1375,6 +1375,23 @@ public class DesignGroupData
     /// Canvas Y position of the group ViewModel.
     /// </summary>
     public double CanvasY { get; set; }
+
+    /// <summary>
+    /// Per-chiplet process binding of a top-level group (issue #938): the fabrication
+    /// process the chiplet's contents belong to. Null for unbound groups, nested groups
+    /// (their scope is the top-level chiplet's), and files saved before per-chiplet
+    /// bindings existed — the design-level <see cref="DesignFileData.ActiveProcess"/>
+    /// remains the default for those and for ungrouped components.
+    /// </summary>
+    public ActiveProcessData? ProcessBinding { get; set; }
+
+    /// <summary>
+    /// Truth Table pin-role assignment of a top-level group (issue #981): the input,
+    /// output, and bias pins plus threshold the panel last successfully extracted with.
+    /// Null when the group was never extracted — including every file saved before the
+    /// persistence existed — so legacy .lun files stay clean of unused blocks.
+    /// </summary>
+    public CAP_Core.Components.Core.TruthTablePinAssignment? TruthTablePinAssignment { get; set; }
 }
 
 /// <summary>
