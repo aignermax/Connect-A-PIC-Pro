@@ -26,6 +26,10 @@ public sealed partial class LogicNetworkEvaluator
     /// every gate must appear exactly once; fan-out of a driver to several loads is allowed.
     /// </param>
     /// <param name="outputTaps">Network-level output names, each tapping one gate output pin.</param>
+    /// <param name="gateDelays">
+    /// Optional propagation delay per gate in picoseconds (see
+    /// <see cref="GateDelayCalculator"/>); gates without an entry report zero delay.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// A gate, pin, or network input is unknown; a gate input is left undriven; or the
     /// wiring is otherwise inconsistent. The message names the offending element.
@@ -35,7 +39,8 @@ public sealed partial class LogicNetworkEvaluator
         IReadOnlyList<string> inputPinNames,
         IReadOnlyDictionary<string, LogicGateModel> gates,
         IReadOnlyDictionary<LogicPinRef, LogicNetDriver> inputWiring,
-        IReadOnlyDictionary<string, LogicPinRef> outputTaps)
+        IReadOnlyDictionary<string, LogicPinRef> outputTaps,
+        IReadOnlyDictionary<string, double>? gateDelays = null)
     {
         InputPinNames = inputPinNames ?? throw new ArgumentNullException(nameof(inputPinNames));
         Gates = gates ?? throw new ArgumentNullException(nameof(gates));
@@ -48,6 +53,7 @@ public sealed partial class LogicNetworkEvaluator
         ValidateOutputTaps();
         _evaluationOrder = TopologicalOrder();
         DetectFanOut();
+        InitializeTiming(gateDelays);
     }
 
     /// <summary>Network-level input pin names.</summary>
@@ -58,6 +64,9 @@ public sealed partial class LogicNetworkEvaluator
 
     /// <summary>Network-level output names, in declaration order.</summary>
     public IReadOnlyList<string> OutputPinNames => _outputTaps.Keys.ToList();
+
+    /// <summary>Network-level output taps: the tapped gate output pin per output name.</summary>
+    public IReadOnlyDictionary<string, LogicPinRef> OutputTaps => _outputTaps;
 
     /// <summary>
     /// Evaluates the network for one input combination: every gate fires exactly

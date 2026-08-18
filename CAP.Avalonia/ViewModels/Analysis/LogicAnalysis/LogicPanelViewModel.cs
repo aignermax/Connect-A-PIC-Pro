@@ -57,6 +57,13 @@ public partial class LogicPanelViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasFanOutWarnings;
 
+    /// <summary>
+    /// Critical-path summary line ("critical path: X ps over N gates") — the slowest
+    /// gate chain limits how fast the network can clock.
+    /// </summary>
+    [ObservableProperty]
+    private string _criticalPathText = "";
+
     /// <summary>Hands the panel the design canvas; called once from the RightPanel host.</summary>
     public void Configure(DesignCanvasViewModel canvas) => _canvas = canvas;
 
@@ -72,13 +79,22 @@ public partial class LogicPanelViewModel : ObservableObject
         }
         foreach (var name in network.OutputPinNames)
         {
-            Outputs.Add(new LogicNetworkOutputViewModel(name));
+            Outputs.Add(new LogicNetworkOutputViewModel(name)
+            {
+                DelayText = string.Format(
+                    Translate("LogicPanel.GateDelay"),
+                    network.GateDelaysPicoseconds[network.OutputTaps[name].GateId]),
+            });
         }
         foreach (var warning in network.FanOutWarnings)
         {
             FanOutWarnings.Add(new LogicFanOutWarningViewModel(warning));
         }
         HasFanOutWarnings = FanOutWarnings.Count > 0;
+        CriticalPathText = string.Format(
+            Translate("LogicPanel.CriticalPath"),
+            network.CriticalPathDelayPicoseconds,
+            network.CriticalPathGateIds.Count);
 
         HasNetwork = true;
         ReEvaluate();
@@ -90,6 +106,7 @@ public partial class LogicPanelViewModel : ObservableObject
         _network = null;
         HasNetwork = false;
         HasFanOutWarnings = false;
+        CriticalPathText = "";
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();

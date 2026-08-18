@@ -1,3 +1,4 @@
+using CAP_Core.Components.ComponentHelpers;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 
@@ -17,6 +18,8 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// </summary>
 public sealed partial class LogicNetworkBuilder
 {
+    private readonly GateDelayCalculator _delayCalculator = new();
+
     /// <summary>
     /// Derives and validates the logic network behind the given gate groups and the
     /// design's connections between their external pins.
@@ -31,6 +34,10 @@ public sealed partial class LogicNetworkBuilder
     /// an external port, an ungrouped component) are ignored — an unconnected gate
     /// input simply becomes a network-level input.
     /// </param>
+    /// <param name="wavelengthNm">
+    /// Wavelength in nm the per-gate propagation delays are derived at; defaults to
+    /// the standard red wavelength when not provided.
+    /// </param>
     /// <returns>The validated, evaluation-ready network.</returns>
     /// <exception cref="ArgumentException">
     /// A gate id is duplicated, a role assignment does not match its model or group,
@@ -39,7 +46,8 @@ public sealed partial class LogicNetworkBuilder
     /// <exception cref="InvalidOperationException">The derived wiring forms a cycle.</exception>
     public LogicNetworkEvaluator Build(
         IReadOnlyList<LogicGateInstance> gates,
-        IReadOnlyList<WaveguideConnection> connections)
+        IReadOnlyList<WaveguideConnection> connections,
+        double? wavelengthNm = null)
     {
         if (gates == null) throw new ArgumentNullException(nameof(gates));
         if (connections == null) throw new ArgumentNullException(nameof(connections));
@@ -55,7 +63,7 @@ public sealed partial class LogicNetworkBuilder
             AddConnectionDrivers(contexts, connection, drivers);
         }
 
-        return AssembleNetwork(contexts, drivers);
+        return AssembleNetwork(contexts, drivers, wavelengthNm ?? StandardWaveLengths.RedNM);
     }
 
     /// <summary>Classifies one design connection and records the logic driver it implies, if any.</summary>
@@ -134,20 +142,24 @@ public sealed partial class LogicNetworkBuilder
     /// <summary>
     /// Assembles the evaluator: unconnected gate inputs become network-level inputs
     /// named <c>&lt;group&gt;.&lt;pin&gt;</c>, and every gate output pin becomes a
-    /// network-level output tap under the same naming.
+    /// network-level output tap under the same naming. Each gate's propagation delay
+    /// is derived from its group's internal optical path length.
     /// </summary>
-    private static LogicNetworkEvaluator AssembleNetwork(
+    private LogicNetworkEvaluator AssembleNetwork(
         IReadOnlyList<GateContext> contexts,
-        IReadOnlyDictionary<LogicPinRef, LogicPinRef> drivers)
+        IReadOnlyDictionary<LogicPinRef, LogicPinRef> drivers,
+        double wavelengthNm)
     {
         var networkInputs = new List<string>();
         var wiring = new Dictionary<LogicPinRef, LogicNetDriver>();
         var outputTaps = new Dictionary<string, LogicPinRef>();
         var models = new Dictionary<string, LogicGateModel>();
+        var delays = new Dictionary<string, double>();
 
         foreach (var context in contexts)
         {
             models[context.GateId] = context.Model;
+            delays[context.GateId] = _delayCalculator.CalculatePicoseconds(context.Group, wavelengthNm);
             foreach (var pinName in context.Model.InputPinNames)
             {
                 var load = new LogicPinRef(context.GateId, pinName);
@@ -161,7 +173,7 @@ public sealed partial class LogicNetworkBuilder
             }
         }
 
-        return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps);
+        return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays);
     }
 
     /// <summary>Registers and returns the network-level input name of an unconnected gate input.</summary>

@@ -82,7 +82,7 @@ public sealed class LogicNetworkAssembler
             gates.Add(await ExtractGateAsync(group, wavelengthNm, cancellationToken));
         }
 
-        return _builder.Build(gates, connections);
+        return _builder.Build(gates, connections, wavelengthNm);
     }
 
     /// <summary>Re-extracts one gate group's model with exactly its persisted roles and threshold.</summary>
