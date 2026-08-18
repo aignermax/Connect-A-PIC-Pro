@@ -5,6 +5,13 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// <param name="PinName">The pin name on that gate.</param>
 public sealed record LogicPinRef(string GateId, string PinName);
 
+/// <summary>
+/// One inter-gate wire of the logic network: a gate output pin driving a gate input pin.
+/// </summary>
+/// <param name="Source">The driving gate output pin.</param>
+/// <param name="Load">The driven gate input pin.</param>
+public sealed record LogicWireEdge(LogicPinRef Source, LogicPinRef Load);
+
 /// <summary>The driver of a gate input pin: a network-level input or another gate's output.</summary>
 public abstract record LogicNetDriver
 {

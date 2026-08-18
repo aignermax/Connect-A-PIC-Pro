@@ -30,6 +30,11 @@ public sealed partial class LogicNetworkEvaluator
     /// Optional propagation delay per gate in picoseconds (see
     /// <see cref="GateDelayCalculator"/>); gates without an entry report zero delay.
     /// </param>
+    /// <param name="wireDelays">
+    /// Optional propagation delay per inter-gate wire in picoseconds (see
+    /// <see cref="WireDelayCalculator"/>), keyed by the (driver output → load input)
+    /// edge; edges without an entry report zero delay.
+    /// </param>
     /// <exception cref="ArgumentException">
     /// A gate, pin, or network input is unknown; a gate input is left undriven; or the
     /// wiring is otherwise inconsistent. The message names the offending element.
@@ -40,7 +45,8 @@ public sealed partial class LogicNetworkEvaluator
         IReadOnlyDictionary<string, LogicGateModel> gates,
         IReadOnlyDictionary<LogicPinRef, LogicNetDriver> inputWiring,
         IReadOnlyDictionary<string, LogicPinRef> outputTaps,
-        IReadOnlyDictionary<string, double>? gateDelays = null)
+        IReadOnlyDictionary<string, double>? gateDelays = null,
+        IReadOnlyDictionary<LogicWireEdge, double>? wireDelays = null)
     {
         InputPinNames = inputPinNames ?? throw new ArgumentNullException(nameof(inputPinNames));
         Gates = gates ?? throw new ArgumentNullException(nameof(gates));
@@ -53,7 +59,7 @@ public sealed partial class LogicNetworkEvaluator
         ValidateOutputTaps();
         _evaluationOrder = TopologicalOrder();
         DetectFanOut();
-        InitializeTiming(gateDelays);
+        InitializeTiming(gateDelays, wireDelays);
     }
 
     /// <summary>Network-level input pin names.</summary>

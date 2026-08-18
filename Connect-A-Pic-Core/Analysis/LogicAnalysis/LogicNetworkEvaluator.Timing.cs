@@ -2,14 +2,16 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 
 /// <summary>
 /// Timing half of <see cref="LogicNetworkEvaluator"/>: per-gate propagation delays in
-/// picoseconds and the critical path — the longest cumulative delay from any network
-/// input to any output over the gate DAG. The delays arrive with the network (derived
-/// from each gate group's internal optical path length, see
-/// <see cref="GateDelayCalculator"/>); the critical path walks the same topological
-/// order <see cref="Evaluate"/> uses, so a gate's cumulative delay is its own delay
-/// plus the slowest driving gate's cumulative delay. Networks built without delay
-/// data report zero delays. Wire delays between gates are not modeled yet — every
-/// logic wire is still ideal.
+/// picoseconds, per-wire delays for the waveguides between gates, and the critical
+/// path — the longest cumulative delay from any network input to any output over the
+/// gate DAG, summing gate delays and inter-gate wire delays along the path. The gate
+/// delays arrive with the network (derived from each gate group's internal optical
+/// path length, see <see cref="GateDelayCalculator"/>), the wire delays from the
+/// connecting waveguide geometry (see <see cref="WireDelayCalculator"/>); the critical
+/// path walks the same topological order <see cref="Evaluate"/> uses, so a gate's
+/// cumulative delay is its own delay plus the slowest arrival (driver cumulative delay
+/// plus that wire's delay) over its driven inputs. Networks built without delay data
+/// report zero delays.
 /// </summary>
 public sealed partial class LogicNetworkEvaluator
 {
@@ -18,8 +20,15 @@ public sealed partial class LogicNetworkEvaluator
         = new Dictionary<string, double>();
 
     /// <summary>
+    /// Propagation delay of every inter-gate wire in picoseconds, keyed by the
+    /// (driver output → load input) edge. Exposed for future wire-delay visualization.
+    /// </summary>
+    public IReadOnlyDictionary<LogicWireEdge, double> WireDelaysPicoseconds { get; private set; }
+        = new Dictionary<LogicWireEdge, double>();
+
+    /// <summary>
     /// Total delay of the critical path in picoseconds: the longest cumulative delay
-    /// from any network input to any network output.
+    /// from any network input to any network output, summing gate and wire delays.
     /// </summary>
     public double CriticalPathDelayPicoseconds { get; private set; }
 
@@ -29,10 +38,13 @@ public sealed partial class LogicNetworkEvaluator
     /// </summary>
     public IReadOnlyList<string> CriticalPathGateIds { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Stores the per-gate delays and derives the critical path over the gate DAG.</summary>
-    private void InitializeTiming(IReadOnlyDictionary<string, double>? gateDelays)
+    /// <summary>Stores the per-gate and per-wire delays and derives the critical path over the gate DAG.</summary>
+    private void InitializeTiming(
+        IReadOnlyDictionary<string, double>? gateDelays,
+        IReadOnlyDictionary<LogicWireEdge, double>? wireDelays)
     {
         GateDelaysPicoseconds = BuildDelayMap(gateDelays);
+        WireDelaysPicoseconds = BuildWireDelayMap(wireDelays);
         (CriticalPathDelayPicoseconds, CriticalPathGateIds) = ComputeCriticalPath();
     }
 
@@ -61,8 +73,42 @@ public sealed partial class LogicNetworkEvaluator
     }
 
     /// <summary>
-    /// Accumulates delays in topological order, then backtracks from the slowest output
-    /// tap through the slowest-driver chain to the network input.
+    /// Fills one delay per inter-gate wire, rejecting edges the wiring does not
+    /// contain and implausible values.
+    /// </summary>
+    private IReadOnlyDictionary<LogicWireEdge, double> BuildWireDelayMap(
+        IReadOnlyDictionary<LogicWireEdge, double>? wireDelays)
+    {
+        var delays = _inputWiring
+            .Where(pair => pair.Value is LogicNetDriver.GateOutput)
+            .ToDictionary(
+                pair => new LogicWireEdge(((LogicNetDriver.GateOutput)pair.Value).Pin, pair.Key),
+                _ => 0.0);
+        if (wireDelays == null)
+            return delays;
+
+        foreach (var (edge, delay) in wireDelays)
+        {
+            if (!delays.ContainsKey(edge))
+                throw new ArgumentException(
+                    $"A wire delay was passed for edge '{FormatPin(edge.Source)}' → '{FormatPin(edge.Load)}', " +
+                    "which the network wiring does not contain.",
+                    nameof(wireDelays));
+            if (double.IsNaN(delay) || double.IsInfinity(delay) || delay < 0)
+                throw new ArgumentException(
+                    $"Wire '{FormatPin(edge.Source)}' → '{FormatPin(edge.Load)}' has an invalid propagation delay " +
+                    $"of {delay} ps — a delay must be a finite, non-negative number.",
+                    nameof(wireDelays));
+            delays[edge] = delay;
+        }
+        return delays;
+    }
+
+    /// <summary>
+    /// Accumulates delays in topological order — a gate's cumulative delay is its own
+    /// delay plus the slowest arrival over its driven inputs (driver cumulative delay
+    /// plus that wire's delay) — then backtracks from the slowest output tap through
+    /// the slowest-driver chain to the network input.
     /// </summary>
     private (double Delay, IReadOnlyList<string> Path) ComputeCriticalPath()
     {
@@ -81,7 +127,7 @@ public sealed partial class LogicNetworkEvaluator
         return (cumulative[criticalGate], Backtrack(criticalGate, predecessor));
     }
 
-    /// <summary>The cumulative delay of the slowest gate driving one of this gate's inputs.</summary>
+    /// <summary>The slowest arrival at one of this gate's inputs: driver cumulative delay plus wire delay.</summary>
     private (double Delay, string? GateId) SlowestDriver(
         string gateId, IReadOnlyDictionary<string, double> cumulative)
     {
@@ -89,11 +135,14 @@ public sealed partial class LogicNetworkEvaluator
         string? driverId = null;
         foreach (var pinName in Gates[gateId].InputPinNames)
         {
-            if (_inputWiring[new LogicPinRef(gateId, pinName)] is not LogicNetDriver.GateOutput source)
+            var load = new LogicPinRef(gateId, pinName);
+            if (_inputWiring[load] is not LogicNetDriver.GateOutput source)
                 continue;
-            if (cumulative[source.Pin.GateId] > delay)
+            var arrival = cumulative[source.Pin.GateId]
+                + WireDelaysPicoseconds[new LogicWireEdge(source.Pin, load)];
+            if (arrival > delay)
             {
-                delay = cumulative[source.Pin.GateId];
+                delay = arrival;
                 driverId = source.Pin.GateId;
             }
         }
