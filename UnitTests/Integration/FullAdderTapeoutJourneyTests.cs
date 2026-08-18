@@ -120,10 +120,17 @@ public class FullAdderTapeoutJourneyTests : IClassFixture<FullAdderTapeoutJourne
             count.ShouldBe(PinnedViolations[rule], $"violation count for rule '{rule}'");
     }
 
-    /// <summary>Parses the runner's <c>--json</c> summary into rule name → count.</summary>
+    /// <summary>
+    /// Parses the runner's <c>--json</c> summary into rule name → count. The JSON
+    /// object is located from the first '{' so any non-JSON preamble the runner
+    /// (or the tools it wraps) prints to stdout cannot break the parse.
+    /// </summary>
     private static Dictionary<string, int> ParseViolationsByRule(string runnerOutput)
     {
-        using var doc = JsonDocument.Parse(runnerOutput);
+        var jsonStart = runnerOutput.IndexOf('{');
+        jsonStart.ShouldBeGreaterThanOrEqualTo(0,
+            $"the runner's --json output must contain a JSON object.\nstdout:\n{runnerOutput}");
+        using var doc = JsonDocument.Parse(runnerOutput[jsonStart..]);
         var result = new Dictionary<string, int>();
         foreach (var entry in doc.RootElement.GetProperty("violationsByRule").EnumerateObject())
             result[entry.Name] = entry.Value.GetInt32();
