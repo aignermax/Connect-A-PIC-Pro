@@ -48,6 +48,15 @@ jobs:
           pip install "https://github.com/aignermax/Lunima/releases/download/vendor-cache-nazca-0.6.1/nazca-0.6.1.tar.gz"
           python3 -c "import nazca, nazca.demofab, gdstk, klayout.db, siepic_ebeam_pdk; print('PDK preview deps ok')"
 
+      # Mirrors the step in xUnitTests.yaml: the klayout pip wheel ships only the
+      # Python module, but the foundry-deck DRC tests probe a `klayout` executable.
+      - name: Install KLayout CLI (for foundry-deck DRC tests)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y klayout
+          klayout -v
+
       - name: Test
         working-directory: UnitTests
         env:
