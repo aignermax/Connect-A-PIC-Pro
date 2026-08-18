@@ -5,6 +5,7 @@ using CAP_Core.Components.Core;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Routing.MetalRouting;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
@@ -12,12 +13,15 @@ namespace CAP.Avalonia.Services.GdsFactoryExport;
 /// <summary>
 /// The connection-geometry half of <see cref="GdsFactoryExporter"/>: waveguide/metal
 /// connection emission, unresolved-crossing collection, bridge markers and frozen group
-/// paths (split out to keep the exporter below the file-size limit).
+/// paths (split out to keep the exporter below the file-size limit). Every optical
+/// connection routes on its own endpoint process' cross-section (resolved per connection
+/// from the pins), not on one design-global choice.
 /// </summary>
 public partial class GdsFactoryExporter
 {
     private static void AppendConnections(
-        StringBuilder sb, DesignCanvasViewModel canvas, string waveguideKwarg, MetalRoutingSpec metalSpec,
+        StringBuilder sb, DesignCanvasViewModel canvas, MetalRoutingSpec metalSpec,
+        GdsFactoryExportOptions options, ref string? activePdk,
         List<string>? skippedConnections = null, List<string>? unresolvedCrossings = null)
     {
         sb.AppendLine("# Waveguide connections");
@@ -53,29 +57,35 @@ public partial class GdsFactoryExporter
                 // second look unless a bridge marker actually resolves the crossing.
                 unresolvedCrossingCandidates.Add(conn);
 
+            var crossSection = ConnectionCrossSectionResolver.Resolve(conn.StartPin, conn.EndPin);
+            var kwarg = WaveguideKwargFor(crossSection);
             var segments = conn.GetPathSegments();
             if (segments.Count > 0)
             {
-                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
+                if (metal == null)
+                    SwitchRoutingPdk(sb, options, crossSection, ref activePdk);
+                GdsFactorySegmentWriter.AppendSegments(sb, segments, conn.StartPin, conn.EndPin, kwarg, metal);
                 if (metal == null)
                     opticalPaths.Add(segments);
             }
             else if (conn.StartPin != null && conn.EndPin != null)
             {
-                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, waveguideKwarg, metal);
+                if (metal == null)
+                    SwitchRoutingPdk(sb, options, crossSection, ref activePdk);
+                GdsFactorySegmentWriter.AppendPinToPinFallback(sb, conn.StartPin, conn.EndPin, kwarg, metal);
             }
         }
 
         foreach (var compVm in canvas.Components)
         {
             if (compVm.Component is ComponentGroup group)
-                AppendGroupFrozenPaths(sb, group, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
+                AppendGroupFrozenPaths(sb, group, options, metalStyle, opticalPaths, ref activePdk, skippedConnections);
         }
 
         // Canvas-level pin-less frozen paths (issue #856): imported route geometry released
         // by ungrouping exports exactly like it did while it still lived inside the group.
         foreach (var pathVm in canvas.CanvasFrozenPaths)
-            AppendFrozenPath(sb, pathVm.Path, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
+            AppendFrozenPath(sb, pathVm.Path, options, metalStyle, opticalPaths, ref activePdk, skippedConnections);
 
         AppendBridgeMarkers(sb, electrical, opticalPaths, metalSpec);
         CollectUnresolvedCrossings(unresolvedCrossingCandidates, electrical, metalSpec, unresolvedCrossings);
@@ -150,33 +160,36 @@ public partial class GdsFactoryExporter
     /// vanishing.
     /// </summary>
     private static void AppendGroupFrozenPaths(
-        StringBuilder sb, ComponentGroup group, string waveguideKwarg,
+        StringBuilder sb, ComponentGroup group, GdsFactoryExportOptions options,
         MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths,
-        List<string>? skippedConnections = null)
+        ref string? activePdk, List<string>? skippedConnections = null)
     {
         foreach (var frozenPath in group.InternalPaths)
-            AppendFrozenPath(sb, frozenPath, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
+            AppendFrozenPath(sb, frozenPath, options, metalStyle, opticalPaths, ref activePdk, skippedConnections);
 
         foreach (var child in group.ChildComponents)
         {
             if (child is ComponentGroup nested)
-                AppendGroupFrozenPaths(sb, nested, waveguideKwarg, metalStyle, opticalPaths, skippedConnections);
+                AppendGroupFrozenPaths(sb, nested, options, metalStyle, opticalPaths, ref activePdk, skippedConnections);
         }
     }
 
     /// <summary>
     /// Exports a single frozen waveguide path — shared between group-internal paths and
     /// canvas-level paths released by ungrouping (issue #856), so route geometry exports
-    /// identically wherever it lives.
+    /// identically wherever it lives. The frozen pins travel with the path, so its
+    /// cross-section resolves to the chiplet's own process just like a live connection's.
     /// </summary>
     private static void AppendFrozenPath(
-        StringBuilder sb, FrozenWaveguidePath? frozenPath, string waveguideKwarg,
+        StringBuilder sb, FrozenWaveguidePath? frozenPath, GdsFactoryExportOptions options,
         MetalTraceStyle metalStyle, List<IReadOnlyList<PathSegment>> opticalPaths,
-        List<string>? skippedConnections)
+        ref string? activePdk, List<string>? skippedConnections)
     {
         if (frozenPath == null) return;
 
         var metal = IsMetalConnection(frozenPath.StartPin, frozenPath.EndPin) ? metalStyle : null;
+        var crossSection = ConnectionCrossSectionResolver.Resolve(frozenPath.StartPin, frozenPath.EndPin);
+        var kwarg = WaveguideKwargFor(crossSection);
         var segments = frozenPath.Path?.Segments;
         if (segments == null || segments.Count == 0)
         {
@@ -184,16 +197,20 @@ public partial class GdsFactoryExporter
             // nothing to emit — and no pins a fallback straight could anchor on.
             if (frozenPath.StartPin is null || frozenPath.EndPin is null)
                 return;
+            if (metal == null)
+                SwitchRoutingPdk(sb, options, crossSection, ref activePdk);
             GdsFactorySegmentWriter.AppendPinToPinFallback(
-                sb, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+                sb, frozenPath.StartPin, frozenPath.EndPin, kwarg, metal);
             return;
         }
 
         if (ExportableConnections.TryRecordSkip(
                 frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
             return;
+        if (metal == null)
+            SwitchRoutingPdk(sb, options, crossSection, ref activePdk);
         GdsFactorySegmentWriter.AppendSegments(
-            sb, segments, frozenPath.StartPin, frozenPath.EndPin, waveguideKwarg, metal);
+            sb, segments, frozenPath.StartPin, frozenPath.EndPin, kwarg, metal);
         if (metal == null)
             opticalPaths.Add(segments);
     }
