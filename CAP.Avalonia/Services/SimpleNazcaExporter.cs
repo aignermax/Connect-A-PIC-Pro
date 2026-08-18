@@ -719,10 +719,14 @@ public class SimpleNazcaExporter
                 ? (sourceL, sourceD)
                 : ((int Layer, int DataType)?)null;
 
-            // The endpoint pins' PDK stamps decide which process cross-section this
-            // connection routes on (width/layer per segment, its own interconnect for
-            // the pin-to-pin fallback) — never the global preference alone.
-            var crossSection = ConnectionCrossSectionResolver.Resolve(conn.StartPin, conn.EndPin);
+            // On a multi-process canvas the endpoint pins' PDK stamps decide which
+            // process cross-section this connection routes on (width/layer per segment,
+            // its own interconnect for the pin-to-pin fallback). A single-process canvas
+            // keeps the default cross-section so its export stays byte-identical to the
+            // legacy global-interconnect output.
+            var crossSection = interconnectPlan?.UsesPerProcessCrossSections == true
+                ? ConnectionCrossSectionResolver.Resolve(conn.StartPin, conn.EndPin)
+                : default;
 
             // Explicit routing style (issue #574) applies to OPTICAL waveguides only:
             // point-to-point styles export a single Nazca primitive (strt/sinebend/cobra)
@@ -963,8 +967,11 @@ public class SimpleNazcaExporter
                 frozenPath.Path, frozenPath.StartPin, frozenPath.EndPin, skippedConnections))
             return;
         // The frozen path keeps its endpoint pins — frozen together with the geometry at
-        // freeze time — so their PDK stamps still carry the chiplet's cross-section.
-        var crossSection = ConnectionCrossSectionResolver.Resolve(frozenPath.StartPin, frozenPath.EndPin);
+        // freeze time — so on a multi-process canvas their PDK stamps still carry the
+        // chiplet's cross-section; a single-process canvas stays byte-identical to legacy.
+        var crossSection = interconnectPlan?.UsesPerProcessCrossSections == true
+            ? ConnectionCrossSectionResolver.Resolve(frozenPath.StartPin, frozenPath.EndPin)
+            : default;
         AppendSegmentExport(sb, segments, frozenPath.StartPin, frozenPath.EndPin, metal, sourceLayer, crossSection);
     }
 
@@ -1037,8 +1044,10 @@ public class SimpleNazcaExporter
     /// <param name="crossSection">
     /// The endpoint pins' process cross-section: stamped waveguide width/GDS layer are
     /// emitted as <c>width=…, layer=…</c> kwargs on every optical segment, so each
-    /// chiplet's routed waveguides land on their own process stack. The import
-    /// source-layer tag wins over it (verbatim round-trip); the metal style ignores it.
+    /// chiplet's routed waveguides land on their own process stack. Callers pass it
+    /// only on a multi-process canvas (≥2 distinct stamped stacks) — the default
+    /// (all-null) value keeps the historical bare calls. The import source-layer tag
+    /// wins over it (verbatim round-trip); the metal style ignores it.
     /// </param>
     internal static void AppendSegmentExport(
         StringBuilder sb, IReadOnlyList<PathSegment> segments,

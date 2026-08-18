@@ -16,6 +16,13 @@ namespace CAP.Avalonia.Services;
 /// an interconnect of its own cross-section (<c>ic_p1</c>, <c>ic_p2</c>, …), so each
 /// chiplet's routed waveguides land on their own process' width, bend radius and GDS
 /// layer. Deterministic: names follow the sorted cross-section keys, never canvas order.
+/// <para>
+/// Per-process routing only activates on a genuinely multi-process canvas — at least
+/// two DISTINCT stamped width/layer stacks (<see cref="UsesPerProcessCrossSections"/>).
+/// A single-process design has nothing to distinguish, so it keeps the legacy global
+/// interconnect and exports byte-identically to before, preserving established GDS
+/// round-trip geometry (the reason the demo/SiEPIC round-trip designs stay stable).
+/// </para>
 /// </summary>
 internal sealed class NazcaProcessInterconnectPlan
 {
@@ -26,6 +33,7 @@ internal sealed class NazcaProcessInterconnectPlan
     private readonly InterconnectSettings _settings;
     private readonly Dictionary<CrossSectionKey, string> _names = new();
     private readonly List<(CrossSectionKey Key, string Name)> _ordered = new();
+    private readonly HashSet<(double? Width, int? Layer)> _stampedStacks = new();
 
     private NazcaProcessInterconnectPlan(InterconnectSettings settings) => _settings = settings;
 
@@ -60,6 +68,14 @@ internal sealed class NazcaProcessInterconnectPlan
         return plan;
     }
 
+    /// <summary>
+    /// True when the canvas carries at least two distinct stamped process stacks
+    /// (width/layer) — only then do per-process interconnects and per-segment
+    /// cross-section kwargs apply; a single-process canvas exports byte-identically
+    /// to the legacy global-interconnect output.
+    /// </summary>
+    public bool UsesPerProcessCrossSections => _stampedStacks.Count > 1;
+
     /// <summary>The interconnect variable a connection's pin-to-pin fallback routes through.</summary>
     public string InterconnectFor(WaveguideConnection connection) =>
         NameFor(connection.StartPin, connection.EndPin, connection.BendRadiusMicrometers);
@@ -71,7 +87,7 @@ internal sealed class NazcaProcessInterconnectPlan
     /// <summary>Appends the per-process interconnect definitions after the legacy one.</summary>
     public void AppendTo(StringBuilder sb)
     {
-        if (_ordered.Count == 0)
+        if (!UsesPerProcessCrossSections || _ordered.Count == 0)
             return;
 
         sb.AppendLine("# Per-process interconnects: connections whose pins carry PDK stamps route");
@@ -115,6 +131,7 @@ internal sealed class NazcaProcessInterconnectPlan
     {
         if (!crossSection.HasOpticalStamps)
             return;
+        _stampedStacks.Add((crossSection.WidthMicrometers, crossSection.GdsLayer));
         var key = KeyOf(crossSection, radiusMicrometers);
         if (!key.Equals(DefaultKey()))
             _names.TryAdd(key, string.Empty); // placeholder; names are assigned in AssignNames
@@ -137,6 +154,8 @@ internal sealed class NazcaProcessInterconnectPlan
 
     private string NameFor(PhysicalPin? startPin, PhysicalPin? endPin, double radiusMicrometers)
     {
+        if (!UsesPerProcessCrossSections)
+            return LegacyName;
         var crossSection = ConnectionCrossSectionResolver.Resolve(startPin, endPin);
         if (!crossSection.HasOpticalStamps)
             return LegacyName;
