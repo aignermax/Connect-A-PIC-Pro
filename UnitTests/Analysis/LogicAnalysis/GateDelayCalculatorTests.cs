@@ -72,6 +72,42 @@ public class GateDelayCalculatorTests
     }
 
     [Fact]
+    public void CalculatePicoseconds_SubgroupInternalPath_MatchesFlatEquivalent()
+    {
+        var nestedGroup = new ComponentGroup("outer");
+        nestedGroup.AddChild(WithInternalPath(StraightPath(0, 0, 1000, 0)));
+
+        var flatGroup = new ComponentGroup("flat");
+        flatGroup.AddInternalPath(StraightPath(0, 0, 1000, 0));
+
+        var nestedLength = GateDelayCalculator.InternalPathLengthMicrometers(nestedGroup);
+        var flatLength = GateDelayCalculator.InternalPathLengthMicrometers(flatGroup);
+        var nestedDelay = new GateDelayCalculator().CalculatePicoseconds(nestedGroup, WavelengthNm);
+        var flatDelay = new GateDelayCalculator().CalculatePicoseconds(flatGroup, WavelengthNm);
+
+        nestedLength.ShouldBe(flatLength, "nesting must not change the optical path length");
+        nestedDelay.ShouldBe(flatDelay, 1e-9, "nesting must not change the physics");
+    }
+
+    [Fact]
+    public void CalculatePicoseconds_MixedDispersionPaths_ConvertsEachWithItsOwnIndex()
+    {
+        var group = new ComponentGroup("mixed");
+        var lowIndexPath = StraightPath(0, 0, 1000, 0);
+        lowIndexPath.DispersionModel = new ConstantDispersion(groupIndex: 2.0);
+        var highIndexPath = StraightPath(0, 0, 500, 0);
+        highIndexPath.DispersionModel = new ConstantDispersion(groupIndex: 5.5);
+        group.AddInternalPath(lowIndexPath);
+        group.AddInternalPath(highIndexPath);
+
+        var delay = new GateDelayCalculator().CalculatePicoseconds(group, WavelengthNm);
+
+        delay.ShouldBe(
+            (1000 * 2.0 + 500 * 5.5) / GateDelayCalculator.SpeedOfLightMicrometersPerPicosecond, 1e-9,
+            "each path converts with its own group index, not the first index times total length");
+    }
+
+    [Fact]
     public void CalculatePicoseconds_NullGroup_Throws() =>
         Should.Throw<ArgumentNullException>(
             () => new GateDelayCalculator().CalculatePicoseconds(null!, WavelengthNm));
@@ -82,5 +118,13 @@ public class GateDelayCalculatorTests
         var path = new RoutedPath();
         path.Segments.Add(new StraightSegment(x1, y1, x2, y2, 0));
         return new FrozenWaveguidePath { Path = path };
+    }
+
+    /// <summary>Wraps one frozen internal path in a nested subgroup of the given group.</summary>
+    private static ComponentGroup WithInternalPath(FrozenWaveguidePath path)
+    {
+        var subGroup = new ComponentGroup("sub");
+        subGroup.AddInternalPath(path);
+        return subGroup;
     }
 }
