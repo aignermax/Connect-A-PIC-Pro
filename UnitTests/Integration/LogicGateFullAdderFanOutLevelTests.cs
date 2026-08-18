@@ -6,21 +6,26 @@ namespace UnitTests.Integration;
 
 /// <summary>
 /// Quantitative fan-out level report over the shipped <c>examples/Logic Gate Full
-/// Adder.lun</c> (#1011, rung 4 honest fan-out treatment): the detection groups
-/// unconnected gate inputs by pin name, so the addend-A pins and the carry-in pins
-/// (all named <c>A</c>) form one 17-load site and the addend-B pins one 13-load
-/// site. Both are network-input signals driven at the full input power 1.0 — split
-/// ideally, each branch would see only 1/17 ≈ 0.059 or 1/13 ≈ 0.077, far below the
-/// NAND threshold 0.125: none of these wires would work physically without splitters
-/// and level restoration. Every site must carry one verdict per receiving input,
-/// with finite, reproducible values.
+/// Adder.lun</c> (#1011, rung 4 honest fan-out treatment, regrouped by #1025): the
+/// detection groups unconnected gate inputs by their explicit signal name, so the
+/// full adder reports three network-input sites — addend A with 13 loads, addend B
+/// with 13 loads, carry-in Cin with 4 loads. The addend-A pins and the carry-in
+/// pins all carry the bare pin name <c>A</c> on their gates, but they are different
+/// sources: the pre-#1025 bare-pin-name grouping merged them into one fictitious
+/// 17-load site whose P/17 verdict answered a question no physical design asks.
+/// Every site is driven at the full input power 1.0 — split ideally, each branch
+/// sees only 1/13 ≈ 0.077 or 1/4 = 0.25: the addends fall below the NAND threshold
+/// 0.125 (no branch reads as 1) while the carry-in's four branches still reach it.
+/// Every site must carry one verdict per receiving input, with finite,
+/// reproducible values.
 /// </summary>
 public class LogicGateFullAdderFanOutLevelTests : IClassFixture<LogicGateFullAdderExampleTests.FullAdderFixture>
 {
     private const double FullInputPower = 1.0;
     private const double NandThreshold = 0.125;
-    private const int LoadsOfSignalA = 17;
+    private const int LoadsOfSignalA = 13;
     private const int LoadsOfSignalB = 13;
+    private const int LoadsOfSignalCin = 4;
 
     private readonly LogicGateFullAdderExampleTests.FullAdderFixture _fixture;
 
@@ -33,7 +38,7 @@ public class LogicGateFullAdderFanOutLevelTests : IClassFixture<LogicGateFullAdd
     {
         var warnings = _fixture.Network.FanOutWarnings;
 
-        warnings.Count.ShouldBe(2, "the unconnected inputs carry pin names A and B — two shared signals");
+        warnings.Count.ShouldBe(3, "the operands A, B and Cin are three separate signals (#1025)");
         foreach (var warning in warnings)
         {
             warning.IsNetworkInputSignal.ShouldBeTrue(
@@ -57,7 +62,7 @@ public class LogicGateFullAdderFanOutLevelTests : IClassFixture<LogicGateFullAdd
     [Theory]
     [InlineData("A", LoadsOfSignalA)]
     [InlineData("B", LoadsOfSignalB)]
-    public void AssembledNetwork_OperandSignalsSplitIdeally_WouldFailPhysically(string signal, int expectedLoads)
+    public void AssembledNetwork_AddendSignalsSplitIdeally_WouldFailPhysically(string signal, int expectedLoads)
     {
         var warning = _fixture.Network.FanOutWarnings.Single(w => w.DriverDisplayName == signal);
 
@@ -68,6 +73,22 @@ public class LogicGateFullAdderFanOutLevelTests : IClassFixture<LogicGateFullAdd
         warning.Levels.Branches.ShouldAllBe(b => !b.ReadsAsOne && b.Threshold == NandThreshold,
             $"1/{expectedLoads} ≈ {FullInputPower / expectedLoads:0.###} < {NandThreshold} — " +
             "the ideally split signal would no longer switch the receiving NAND gates");
+    }
+
+    [Fact]
+    public void AssembledNetwork_CarryInSplitsIdeallyIntoFour_EveryBranchStillReadsAsOne()
+    {
+        var warning = _fixture.Network.FanOutWarnings.Single(w => w.DriverDisplayName == "Cin");
+
+        warning.LoadCount.ShouldBe(LoadsOfSignalCin,
+            "Cin is its own signal with its true member count — not merged into addend A (#1025)");
+        warning.LoadNames.ShouldBe(
+            new[] { "H2N1A.A", "H2N1B.A", "H2N2.A", "H2N5.A" }, ignoreOrder: true);
+        warning.Levels.DriverPowerOne.ShouldBe(FullInputPower);
+        warning.Levels.BranchPower.ShouldBe(FullInputPower / LoadsOfSignalCin, 1e-12);
+        warning.Levels.Branches.ShouldAllBe(b => b.ReadsAsOne && b.Threshold == NandThreshold,
+            $"1/{LoadsOfSignalCin} = {FullInputPower / LoadsOfSignalCin:0.###} ≥ {NandThreshold} — " +
+            "the ideally split carry-in would still switch the receiving NAND gates");
     }
 
     [Fact]

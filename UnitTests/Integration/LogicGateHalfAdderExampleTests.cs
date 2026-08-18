@@ -24,9 +24,11 @@ namespace UnitTests.Integration;
 /// Sum = A⊕B at <c>NAND4.Y</c>, Carry = A∧B at <c>NOT1.Y</c>, evaluated by pure table
 /// lookup. The textbook XOR's shared NAND(A,B) stage is instantiated twice
 /// (NAND1A/NAND1B) because the canvas wires one waveguide per pin — the fan-out of A
-/// and B happens at the logic layer, where each gate input is driven by the same
-/// network bit. Composition at the logic layer restores ideal levels at every stage,
-/// so — unlike the optical two-stage cascade — no S-matrix honesty bound applies here.
+/// and B happens at the logic layer, where the persisted signal names (issue #1025)
+/// merge the four addend-A pins into the single network input <c>A</c> and the four
+/// addend-B pins into <c>B</c>. Composition at the logic layer restores ideal levels
+/// at every stage, so — unlike the optical two-stage cascade — no S-matrix honesty
+/// bound applies here.
 /// </summary>
 public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderExampleTests.HalfAdderFixture>
 {
@@ -36,11 +38,17 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
     private static readonly string[] GateNames =
         { "NAND1A", "NAND1B", "NAND2", "NAND3", "NAND4", "NAND5", "NOT1" };
 
-    /// <summary>Network inputs driven by addend A (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsA = { "NAND1A.A", "NAND1B.A", "NAND2.A", "NAND5.A" };
-
-    /// <summary>Network inputs driven by addend B (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsB = { "NAND1A.B", "NAND1B.B", "NAND3.B", "NAND5.B" };
+    /// <summary>The persisted signal names per gate group (issue #1025); null = no named pins.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>?> ExpectedSignalNames = new()
+    {
+        ["NAND1A"] = new() { ["A"] = "A", ["B"] = "B" },
+        ["NAND1B"] = new() { ["A"] = "A", ["B"] = "B" },
+        ["NAND2"] = new() { ["A"] = "A" },
+        ["NAND3"] = new() { ["B"] = "B" },
+        ["NAND4"] = null,
+        ["NAND5"] = new() { ["A"] = "A", ["B"] = "B" },
+        ["NOT1"] = null,
+    };
 
     private readonly HalfAdderFixture _fixture;
 
@@ -66,6 +74,8 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
             roles.OutputPinNames.ShouldBe(new[] { "Y" });
             roles.BiasPinNames.ShouldBe(new[] { "BIAS" });
             roles.Threshold.ShouldBe(isNot ? NotThreshold : NandThreshold);
+            roles.InputSignalNames.ShouldBe(ExpectedSignalNames[group.GroupName],
+                $"group '{group.GroupName}' ships its network-signal identity (issue #1025)");
             group.Description.ShouldContain("logic layer", Case.Sensitive,
                 "every gate carries the education note about logic-layer composition");
             group.Description.ShouldContain(isNot ? "0.375" : "0.125");
@@ -73,11 +83,10 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
     }
 
     [Fact]
-    public void DerivedNetwork_ExposesAddendInputsAndEveryGateOutputAsTap()
+    public void DerivedNetwork_ExposesAddendSignalsAndEveryGateOutputAsTap()
     {
-        _fixture.Network.InputPinNames.ShouldBe(
-            InputsA.Concat(InputsB).ToArray(), ignoreOrder: true,
-            customMessage: "the addends A and B fan out to four gate inputs each");
+        _fixture.Network.InputPinNames.ShouldBe(new[] { "A", "B" }, ignoreOrder: true,
+            customMessage: "the signal names merge the addend pins into one network input each (issue #1025)");
         _fixture.Network.OutputPinNames.ShouldBe(
             GateNames.Select(name => $"{name}.Y").ToArray(), ignoreOrder: true);
     }
@@ -111,6 +120,12 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
             reloadedGroups.Select(g => g.GroupName).ShouldBe(GateNames, ignoreOrder: true);
             reloadedGroups.ShouldAllBe(g => g.TruthTablePinAssignment != null,
                 "the persisted pin roles must survive the save → load round trip");
+            foreach (var group in reloadedGroups)
+            {
+                group.TruthTablePinAssignment!.InputSignalNames.ShouldBe(
+                    ExpectedSignalNames[group.GroupName],
+                    $"the signal names of '{group.GroupName}' must survive the save → load round trip (#1025)");
+            }
             reloadedCanvas.Connections.Count.ShouldBe(5,
                 "every gate wire must survive the save → load round trip");
 
@@ -163,7 +178,8 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
                 group,
                 LogicGateModel.FromTruthTable(table),
                 new GateRoleAssignment(
-                    roles.InputPinNames, roles.OutputPinNames, roles.BiasPinNames, roles.Threshold)));
+                    roles.InputPinNames, roles.OutputPinNames, roles.BiasPinNames, roles.Threshold,
+                    roles.InputSignalNames)));
         }
 
         var wires = canvas.Connections
@@ -241,14 +257,9 @@ public class LogicGateHalfAdderExampleTests : IClassFixture<LogicGateHalfAdderEx
         /// <summary>No shared state to release.</summary>
         public Task DisposeAsync() => Task.CompletedTask;
 
-        /// <summary>The network input bits for one addend pair (A and B fan out at the logic layer).</summary>
-        public Dictionary<string, bool> InputBits(bool a, bool b)
-        {
-            var bits = new Dictionary<string, bool>();
-            foreach (var name in InputsA) bits[name] = a;
-            foreach (var name in InputsB) bits[name] = b;
-            return bits;
-        }
+        /// <summary>The network input bits for one addend pair — one bit per signal (issue #1025).</summary>
+        public Dictionary<string, bool> InputBits(bool a, bool b) =>
+            new() { ["A"] = a, ["B"] = b };
 
         /// <summary>Saves the loaded design through the real save path and returns the file path.</summary>
         public async Task<string> SaveToTempFile()

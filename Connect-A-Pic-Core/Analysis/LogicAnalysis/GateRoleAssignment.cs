@@ -13,11 +13,17 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// <param name="OutputPinNames">External pin names observed as logic outputs.</param>
 /// <param name="BiasPinNames">External pin names held constantly "on" — they take no part in wiring.</param>
 /// <param name="PowerThreshold">Normalized power threshold the gate's truth table was extracted at.</param>
+/// <param name="InputSignalNames">
+/// Optional network-signal name per input pin (issue #1025): unconnected input pins
+/// carrying the same signal name merge into one network-level input; pins without an
+/// entry keep their own <c>&lt;gate&gt;.&lt;pin&gt;</c> name. Null when unused.
+/// </param>
 public sealed record GateRoleAssignment(
     IReadOnlyList<string> InputPinNames,
     IReadOnlyList<string> OutputPinNames,
     IReadOnlyList<string> BiasPinNames,
-    double PowerThreshold);
+    double PowerThreshold,
+    IReadOnlyDictionary<string, string>? InputSignalNames = null);
 
 /// <summary>
 /// One top-level gate group on the canvas together with its logic-level model and

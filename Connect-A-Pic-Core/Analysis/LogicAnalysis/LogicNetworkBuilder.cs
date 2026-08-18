@@ -9,12 +9,16 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// canvas, making the canvas the source of truth for the wiring: a connection from
 /// one group's external output pin to another group's external input pin becomes a
 /// logic wire (fan-out of one output to several inputs is allowed). Unconnected
-/// gate input pins become network-level inputs named <c>&lt;group&gt;.&lt;pin&gt;</c>,
-/// and every gate output pin becomes a network-level output tap under the same
-/// naming — also when it additionally drives another gate. Bias pins take no part
-/// in wiring (they are constantly on — the extraction contract); a connection into
-/// a bias pin, a connection between two input pins, and a gate input driven by two
-/// different outputs are rejected with messages naming the pins.
+/// gate input pins become network-level inputs: pins carrying a persisted signal
+/// name (issue #1025) merge into one network input per signal — the full adder's
+/// thirteen addend-A pins become the single input <c>A</c> — while a pin without a
+/// signal name keeps its own <c>&lt;group&gt;.&lt;pin&gt;</c> name and never merges
+/// by bare pin name. Every gate output pin becomes a network-level output tap named
+/// <c>&lt;group&gt;.&lt;pin&gt;</c> — also when it additionally drives another gate.
+/// Bias pins take no part in wiring (they are constantly on — the extraction
+/// contract); a connection into a bias pin, a connection between two input pins,
+/// and a gate input driven by two different outputs are rejected with messages
+/// naming the pins.
 /// </summary>
 public sealed partial class LogicNetworkBuilder
 {
@@ -145,10 +149,11 @@ public sealed partial class LogicNetworkBuilder
 
     /// <summary>
     /// Assembles the evaluator: unconnected gate inputs become network-level inputs
-    /// named <c>&lt;group&gt;.&lt;pin&gt;</c>, and every gate output pin becomes a
-    /// network-level output tap under the same naming. Each gate's propagation delay
-    /// is derived from its group's internal optical path length, and each inter-gate
-    /// wire's delay from the connecting waveguide's routed path.
+    /// (one per signal name, see <see cref="NetworkInputName"/>), and every gate
+    /// output pin becomes a network-level output tap named
+    /// <c>&lt;group&gt;.&lt;pin&gt;</c>. Each gate's propagation delay is derived
+    /// from its group's internal optical path length, and each inter-gate wire's
+    /// delay from the connecting waveguide's routed path.
     /// </summary>
     private LogicNetworkEvaluator AssembleNetwork(
         IReadOnlyList<GateContext> contexts,
@@ -178,7 +183,7 @@ public sealed partial class LogicNetworkBuilder
                 var load = new LogicPinRef(context.GateId, pinName);
                 wiring[load] = drivers.TryGetValue(load, out var source)
                     ? new LogicNetDriver.GateOutput(source)
-                    : new LogicNetDriver.NetworkInput(NetworkInputName(networkInputs, load));
+                    : new LogicNetDriver.NetworkInput(NetworkInputName(networkInputs, context, load));
             }
             foreach (var pinName in context.Model.OutputPinNames)
             {
@@ -189,11 +194,18 @@ public sealed partial class LogicNetworkBuilder
         return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays, wireDelays);
     }
 
-    /// <summary>Registers and returns the network-level input name of an unconnected gate input.</summary>
-    private static string NetworkInputName(ICollection<string> networkInputs, LogicPinRef load)
+    /// <summary>
+    /// Registers and returns the network-level input name of an unconnected gate
+    /// input: the pin's persisted signal name when it carries one — every member pin
+    /// of the signal maps to the same network input, registered once — else the
+    /// pin's own <c>&lt;group&gt;.&lt;pin&gt;</c> name (no merging by bare pin name).
+    /// </summary>
+    private static string NetworkInputName(
+        ICollection<string> networkInputs, GateContext context, LogicPinRef load)
     {
-        var name = Format(load);
-        networkInputs.Add(name);
+        var name = context.SignalNameOf(load.PinName) ?? Format(load);
+        if (!networkInputs.Contains(name))
+            networkInputs.Add(name);
         return name;
     }
 }

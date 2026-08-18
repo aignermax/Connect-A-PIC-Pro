@@ -20,7 +20,7 @@ namespace UnitTests.Integration;
 ///   Step 3: all 8 input combinations yield the full-adder Sum/Cout.
 ///   Step 4: every gate delay &gt; 0; the critical path equals an independent
 ///           recomputation from the exposed per-gate delays over the design's DAG.
-///   Step 5: both merged addend fan-out sites carry quantitative level reports whose
+///   Step 5: both addend signal fan-out sites carry quantitative level reports whose
 ///           verdicts match the #1018-documented expectation (both fail physically).
 ///   Step 6: save → load → repeat — the round-tripped design reproduces steps 2–5
 ///           identically (table, delays within 1e-9, same verdicts).
@@ -34,8 +34,8 @@ public class FullAdderLogicJourneyTests
     private const double NandThreshold = 0.125;
     private const int GateCount = 32;
     private const int WireCount = 30;
-    private const int NetworkInputCount = 30;
-    private const int LoadsOfSignalA = 17;
+    private const int NetworkInputCount = 3;
+    private const int LoadsOfSignalA = 13;
     private const int LoadsOfSignalB = 13;
 
     private readonly LogicGateFullAdderExampleTests.FullAdderFixture _journey;
@@ -64,7 +64,7 @@ public class FullAdderLogicJourneyTests
         network.Gates.Count.ShouldBe(GateCount,
             "Step 2: every gate group becomes a network gate");
         network.InputPinNames.Count.ShouldBe(NetworkInputCount,
-            "Step 2: the unconnected gate inputs become the network operands (A×13, B×13, Cin×4)");
+            "Step 2: the persisted signal names merge the operand pins into A, B, Cin (#1025)");
         network.OutputPinNames.Count.ShouldBe(GateCount,
             "Step 2: every gate output is a network-level tap");
         network.Gates.Values.ShouldAllBe(

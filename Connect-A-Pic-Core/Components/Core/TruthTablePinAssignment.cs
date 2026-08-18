@@ -26,4 +26,15 @@ public sealed class TruthTablePinAssignment
     /// extracted at: an output counts as logic 1 at or above it.
     /// </summary>
     public double Threshold { get; set; }
+
+    /// <summary>
+    /// Optional network-signal name per logic input pin (issue #1025): unconnected
+    /// input pins carrying the same signal name merge into one network-level input
+    /// (the full adder's addends A, B and the carry-in Cin become three toggles,
+    /// not thirty) and one fan-out site with its true load count. Pins without an
+    /// entry keep their own <c>&lt;gate&gt;.&lt;pin&gt;</c> name — no merging, so
+    /// unrelated inputs that happen to share a pin name stay separate. Null when no
+    /// pin carries a signal name; legacy files without the block load unchanged.
+    /// </summary>
+    public Dictionary<string, string>? InputSignalNames { get; set; }
 }

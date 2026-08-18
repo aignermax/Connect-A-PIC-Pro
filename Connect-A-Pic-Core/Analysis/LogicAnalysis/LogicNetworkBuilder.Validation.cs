@@ -69,6 +69,7 @@ public sealed partial class LogicNetworkBuilder
             context.ThrowOnOverlappingRoles();
             context.ThrowOnRoleModelMismatch();
             context.ThrowOnUnknownRolePins();
+            context.ThrowOnInvalidSignalNames();
             return context;
         }
 
@@ -80,6 +81,17 @@ public sealed partial class LogicNetworkBuilder
             if (Instance.Roles.BiasPinNames.Contains(pinName)) return PinRole.Bias;
             return null;
         }
+
+        /// <summary>
+        /// The network-signal name assigned to one input pin (issue #1025), or null
+        /// when the pin carries none and keeps its own <c>&lt;gate&gt;.&lt;pin&gt;</c>
+        /// name as its network input.
+        /// </summary>
+        public string? SignalNameOf(string pinName) =>
+            Instance.Roles.InputSignalNames != null
+            && Instance.Roles.InputSignalNames.TryGetValue(pinName, out var signalName)
+                ? signalName
+                : null;
 
         /// <summary>Rejects pins listed twice within one role list.</summary>
         private void ThrowOnDuplicateRolePins()
@@ -143,6 +155,31 @@ public sealed partial class LogicNetworkBuilder
                     $"Gate '{GateId}' assigns a role to pin '{unknown}', which the group does not expose. " +
                     $"Available pins: {string.Join(", ", externalNames)}.",
                     nameof(Instance));
+        }
+
+        /// <summary>
+        /// Rejects empty signal names and signal names on pins that are not logic
+        /// inputs — only an input pin can join a network-level signal, and a signal
+        /// the network cannot name would silently never merge.
+        /// </summary>
+        private void ThrowOnInvalidSignalNames()
+        {
+            if (Instance.Roles.InputSignalNames == null)
+                return;
+            foreach (var (pinName, signalName) in Instance.Roles.InputSignalNames)
+            {
+                if (string.IsNullOrWhiteSpace(signalName))
+                    throw new ArgumentException(
+                        $"Gate '{GateId}' assigns pin '{pinName}' an empty signal name — " +
+                        "a signal name must be a non-empty string.",
+                        nameof(Instance));
+                if (!Instance.Roles.InputPinNames.Contains(pinName))
+                    throw new ArgumentException(
+                        $"Gate '{GateId}' assigns pin '{pinName}' the signal name '{signalName}', " +
+                        $"but '{pinName}' is not one of its input pins ({string.Join(", ", Instance.Roles.InputPinNames)}). " +
+                        "Only an input pin can join a network-level signal.",
+                        nameof(Instance));
+            }
         }
     }
 }

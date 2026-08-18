@@ -14,7 +14,11 @@ public partial class LogicNetworkInputViewModel : ObservableObject
         PinName = pinName;
     }
 
-    /// <summary>Network input name in <c>&lt;gate&gt;.&lt;pin&gt;</c> form.</summary>
+    /// <summary>
+    /// Network input name: the signal name (issue #1025) for pins that carry one —
+    /// one toggle per signal, e.g. the full adder's <c>A</c>, <c>B</c>, <c>Cin</c> —
+    /// or <c>&lt;gate&gt;.&lt;pin&gt;</c> for an unmerged pin.
+    /// </summary>
     public string PinName { get; }
 
     /// <summary>The bit currently driven into the network (initially off).</summary>

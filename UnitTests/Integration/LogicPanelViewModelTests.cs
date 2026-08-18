@@ -9,20 +9,21 @@ namespace UnitTests.Integration;
 /// ViewModel tests for the Logic panel (issue #989, rung 4→5 of the NAND game): the
 /// shipped <c>examples/Logic Gate Half Adder.lun</c> loads through the real load path,
 /// the Build command assembles its logic network through
-/// <see cref="CAP_Core.Analysis.LogicAnalysis.LogicNetworkAssembler"/>, the eight
-/// network inputs (the addends A and B fanned out to four gate pins each) appear as
-/// toggles and every gate output as a live 0/1 indicator — toggling all pins of one
-/// addend shows Sum at <c>NAND4.Y</c> and Carry at <c>NOT1.Y</c> for all four input
-/// combinations. A design without gate groups fails with a readable status instead of
-/// an exception, and IsProcessing brackets the assembly in success and failure alike.
+/// <see cref="CAP_Core.Analysis.LogicAnalysis.LogicNetworkAssembler"/>, and the two
+/// network inputs — the signals A and B (issue #1025), each merging the four gate
+/// pins the addend fans out to — appear as one toggle per signal with every gate
+/// output as a live 0/1 indicator: toggling A and B shows Sum at <c>NAND4.Y</c>
+/// and Carry at <c>NOT1.Y</c> for all four input combinations. A design without
+/// gate groups fails with a readable status instead of an exception, and
+/// IsProcessing brackets the assembly in success and failure alike.
 /// </summary>
 public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.LoadedHalfAdder>
 {
-    /// <summary>Network inputs driven by addend A (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsA = { "NAND1A.A", "NAND1B.A", "NAND2.A", "NAND5.A" };
+    /// <summary>Gate input pins addend A fans out to (the signal A's member pins).</summary>
+    private static readonly string[] LoadsOfSignalA = { "NAND1A.A", "NAND1B.A", "NAND2.A", "NAND5.A" };
 
-    /// <summary>Network inputs driven by addend B (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsB = { "NAND1A.B", "NAND1B.B", "NAND3.B", "NAND5.B" };
+    /// <summary>Gate input pins addend B fans out to (the signal B's member pins).</summary>
+    private static readonly string[] LoadsOfSignalB = { "NAND1A.B", "NAND1B.B", "NAND3.B", "NAND5.B" };
 
     private static readonly string[] OutputTaps =
         { "NAND1A.Y", "NAND1B.Y", "NAND2.Y", "NAND3.Y", "NAND4.Y", "NAND5.Y", "NOT1.Y" };
@@ -33,7 +34,7 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
     public LogicPanelViewModelTests(LoadedHalfAdder fixture) => _fixture = fixture;
 
     [Fact]
-    public async Task BuildNetwork_HalfAdder_TogglingAddendPins_ShowsSumAndCarry()
+    public async Task BuildNetwork_HalfAdder_TogglingAddendSignals_ShowsSumAndCarry()
     {
         var vm = new LogicPanelViewModel();
         vm.Configure(_fixture.Canvas);
@@ -41,9 +42,8 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         await vm.BuildNetworkCommand.ExecuteAsync(null);
 
         vm.HasNetwork.ShouldBeTrue(vm.StatusText);
-        vm.Inputs.Select(i => i.PinName).ShouldBe(
-            InputsA.Concat(InputsB).ToArray(), ignoreOrder: true,
-            customMessage: "the addends A and B fan out to four gate inputs each");
+        vm.Inputs.Select(i => i.PinName).ShouldBe(new[] { "A", "B" }, ignoreOrder: true,
+            customMessage: "one toggle per signal (#1025) — the eight operand pins merge into A and B");
         vm.Outputs.Select(o => o.PinName).ShouldBe(OutputTaps, ignoreOrder: true);
         vm.Inputs.ShouldAllBe(i => !i.IsOn, "network inputs start off");
 
@@ -55,8 +55,8 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
                      (true, true, false, true),
                  })
         {
-            SetAddend(vm, InputsA, a);
-            SetAddend(vm, InputsB, b);
+            vm.Inputs.Single(i => i.PinName == "A").IsOn = a;
+            vm.Inputs.Single(i => i.PinName == "B").IsOn = b;
 
             vm.Outputs.Single(o => o.PinName == "NAND4.Y").IsOne.ShouldBe(expectedSum,
                 $"Sum = A XOR B for A={a}, B={b}");
@@ -87,10 +87,10 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
     [Fact]
     public async Task BuildNetwork_HalfAdder_SurfacesFanOutWarningsForBothAddends()
     {
-        // Issue #996: the half adder fans its addends out at the logic layer —
-        // addend A drives the four pins NAND1A.A, NAND1B.A, NAND2.A, NAND5.A,
-        // addend B drives four more — so the panel must surface one warning per
-        // addend, naming the signal and the load count.
+        // Issue #996 + #1025: the half adder fans its addends out at the logic
+        // layer — signal A drives the four pins NAND1A.A, NAND1B.A, NAND2.A,
+        // NAND5.A, signal B drives four more — so the panel must surface one
+        // warning per signal, naming it and its true member count.
         var vm = new LogicPanelViewModel();
         vm.Configure(_fixture.Canvas);
 
@@ -105,8 +105,8 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         warningB.Warning.IsNetworkInputSignal.ShouldBeTrue();
         warningA.Warning.LoadCount.ShouldBe(4);
         warningB.Warning.LoadCount.ShouldBe(4);
-        warningA.Warning.LoadNames.ShouldBe(InputsA, ignoreOrder: true);
-        warningB.Warning.LoadNames.ShouldBe(InputsB, ignoreOrder: true);
+        warningA.Warning.LoadNames.ShouldBe(LoadsOfSignalA, ignoreOrder: true);
+        warningB.Warning.LoadNames.ShouldBe(LoadsOfSignalB, ignoreOrder: true);
         warningA.WarningText.ShouldContain("A");
         warningA.WarningText.ShouldContain("4");
         // Issue #1011: the quantitative level report rides along — an ideal 1×4
@@ -169,13 +169,6 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         vm.StatusText.ShouldContain("no logic gate");
         vm.Inputs.ShouldBeEmpty();
         vm.Outputs.ShouldBeEmpty();
-    }
-
-    /// <summary>Sets every network input pin of one addend to the same bit.</summary>
-    private static void SetAddend(LogicPanelViewModel vm, IEnumerable<string> pinNames, bool bit)
-    {
-        foreach (var name in pinNames)
-            vm.Inputs.Single(i => i.PinName == name).IsOn = bit;
     }
 
     /// <summary>
