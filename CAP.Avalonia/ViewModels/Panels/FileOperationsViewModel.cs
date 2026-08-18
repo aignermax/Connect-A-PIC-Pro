@@ -419,7 +419,9 @@ public partial class FileOperationsViewModel : ObservableObject
                             ? new Dictionary<int, double>(c.Connection.StraightShiftOffsets)
                             : null,
                         SourceGdsLayer = c.Connection.SourceGdsLayer,
-                        SourceGdsDataType = c.Connection.SourceGdsDataType
+                        SourceGdsDataType = c.Connection.SourceGdsDataType,
+                        TargetLengthMicrometers = c.Connection.TargetLengthMicrometers,
+                        LengthToleranceMicrometers = c.Connection.LengthToleranceMicrometers
                     };
                 }).ToList()
             };
@@ -1715,6 +1717,9 @@ public partial class FileOperationsViewModel : ObservableObject
         {
             connVm.Connection.SourceGdsLayer = connData.SourceGdsLayer;
             connVm.Connection.SourceGdsDataType = connData.SourceGdsDataType;
+            // Meander length intent (issue #1008); null in files that predate the field.
+            connVm.Connection.TargetLengthMicrometers = connData.TargetLengthMicrometers;
+            connVm.Connection.LengthToleranceMicrometers = connData.LengthToleranceMicrometers;
         }
 
         // Restore routing style / interconnect settings / freeze state (issue #574)
