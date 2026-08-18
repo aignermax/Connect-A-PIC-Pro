@@ -1,5 +1,6 @@
 using System.Numerics;
 using CAP_Core.Components.Connections;
+using CAP_Core.LightCalculation.MaterialDispersion;
 using CAP_Core.Routing;
 
 namespace CAP_Core.Components.Core;
@@ -57,6 +58,14 @@ public class FrozenWaveguidePath : ICloneable
     public double PropagationLossDbPerCm { get; set; } = 0.5;
 
     /// <summary>
+    /// Dispersion model of the original connection's waveguide (group index and loss vs.
+    /// wavelength), captured from the live connection when the group was formed. Null when
+    /// the source waveguide carried none — and after a .lun round-trip, since the model is
+    /// not persisted; consumers then fall back to their documented defaults.
+    /// </summary>
+    public IDispersionModel? DispersionModel { get; set; }
+
+    /// <summary>
     /// Routing style of the original connection (Auto/Bend/SBend/Cobra).
     /// Preserved so re-expanding the group (edit mode, ungroup, template
     /// instantiation) restores the user's chosen style instead of "Auto".
@@ -107,6 +116,7 @@ public class FrozenWaveguidePath : ICloneable
         WidthMicrometers = connection.WidthMicrometers;
         IsRouteFrozen = connection.IsRouteFrozen;
         PropagationLossDbPerCm = connection.PropagationLossDbPerCm;
+        DispersionModel = connection.DispersionModel;
         BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in connection.BendRadiusOverrides)
             BendRadiusOverrides[bendIndex] = radius;
@@ -131,6 +141,7 @@ public class FrozenWaveguidePath : ICloneable
         connection.WidthMicrometers = WidthMicrometers;
         connection.IsRouteFrozen = IsRouteFrozen;
         connection.PropagationLossDbPerCm = PropagationLossDbPerCm;
+        connection.DispersionModel = DispersionModel;
         connection.BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in BendRadiusOverrides)
             connection.BendRadiusOverrides[bendIndex] = radius;
@@ -154,6 +165,7 @@ public class FrozenWaveguidePath : ICloneable
         WidthMicrometers = source.WidthMicrometers;
         IsRouteFrozen = source.IsRouteFrozen;
         PropagationLossDbPerCm = source.PropagationLossDbPerCm;
+        DispersionModel = source.DispersionModel;
         BendRadiusOverrides.Clear();
         foreach (var (bendIndex, radius) in source.BendRadiusOverrides)
             BendRadiusOverrides[bendIndex] = radius;

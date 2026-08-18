@@ -120,10 +120,38 @@
                                        Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
                             <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
                                        Foreground="Gray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                            <TextBlock Text="{Binding DelayText}" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
+
+            <!-- Propagation delays (#1002): the slowest gate chain from a network input
+                 to an output limits how fast the circuit can clock. -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0"
+                  IsVisible="{Binding RightPanel.Logic.CriticalPathText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="{Binding RightPanel.Logic.CriticalPathText}" Foreground="#cfe0ff"
+                           FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <controls:HelpFlyoutButton Grid.Column="1"
+                                           Title="{loc:Localize LogicPanelTimingHelp.Title}"
+                                           VerticalAlignment="Center" Margin="4,0,0,0">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize LogicPanelTimingHelp.Intro}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimingHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimingHelp.PhysicsBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimingHelp.ClockTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimingHelp.ClockBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </Grid>
         </StackPanel>
     </StackPanel>
 

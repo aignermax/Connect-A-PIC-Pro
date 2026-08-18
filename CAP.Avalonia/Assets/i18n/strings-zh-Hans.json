@@ -1318,4 +1318,13 @@
   "LogicPanelFanOutHelp.PhysicsTitle": "分束会损耗功率",
   "LogicPanelFanOutHelp.PhysicsBody": "1×2 分束器把一半的光送入每个分支——每个分支约损耗 3 dB。扇出到 N 个输入会级联分束:4 个负载约损耗 6 dB,8 个约 9 dB。低于门的开关阈值时,接收门就无法读出干净的比特,上面理想化的 0/1 会退化为模拟噪声。",
   "LogicPanelFanOutHelp.ExamplesTitle": "实际设计如何处理",
-  "LogicPanelFanOutHelp.ExamplesBody": "两种标准做法:分束后放大信号(有源级恢复电平,类似电子学中的缓冲器),或复制驱动级,让每个负载都有自己的波导。附带的半加器和全加器示例采用第二种:教科书中的 XOR 让一个 NAND(A, B) 同时驱动三个消费者——光学上这是一种扇出——因此示例为每个消费者各实例化一次该级。网络中看到的复制正是逻辑层所抽象掉的物理诚实性。"}
+  "LogicPanelFanOutHelp.ExamplesBody": "两种标准做法:分束后放大信号(有源级恢复电平,类似电子学中的缓冲器),或复制驱动级,让每个负载都有自己的波导。附带的半加器和全加器示例采用第二种:教科书中的 XOR 让一个 NAND(A, B) 同时驱动三个消费者——光学上这是一种扇出——因此示例为每个消费者各实例化一次该级。网络中看到的复制正是逻辑层所抽象掉的物理诚实性。",
+  "LogicPanel.GateDelay": "{0:0.0} ps",
+  "LogicPanel.CriticalPath": "关键路径:{0:0.0} ps,共 {1} 个门",
+  "LogicPanelTimingHelp.Title": "为什么光也需要时间?",
+  "LogicPanelTimingHelp.Intro": "每个门都会显示其传播延迟:光穿过该门的波导和器件所需的时间。关键路径是从网络输入到输出之间最慢的门链。",
+  "LogicPanelTimingHelp.PhysicsTitle": "光以 c/n_g 的速度传播",
+  "LogicPanelTimingHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。显示的延迟等于门内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。该模型使用几何路径长度加上每个器件的宽度,是物理上合理的估算,而非精确的时序仿真。",
+  "LogicPanelTimingHelp.ClockTitle": "最长的链路决定时钟速度",
+  "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟尚未计入。"
+}
