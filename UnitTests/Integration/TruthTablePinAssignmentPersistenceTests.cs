@@ -52,6 +52,8 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
         fileText.ShouldContain("TruthTablePinAssignment", Case.Sensitive,
             "the persisted .lun carries the truth-table block after an extraction");
         fileText.ShouldContain("\"Threshold\": 0.125", Case.Sensitive);
+        fileText.ShouldNotContain("InputSignalNames", Case.Sensitive,
+            "an extraction without signal names writes no signal block — the legacy format stays byte-clean (#1025)");
 
         var reloaded = await LoadFromDisk();
         var group = SingleGateGroup(reloaded);
@@ -61,6 +63,62 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
         saved.OutputPinNames.ShouldBe(NandOutputs);
         saved.BiasPinNames.ShouldBe(NandBiases);
         saved.Threshold.ShouldBe(NandThreshold);
+        saved.InputSignalNames.ShouldBeNull(
+            "no pin carried a signal name — nothing is invented on load (#1025)");
+    }
+
+    [Fact]
+    public async Task RoundTrip_SignalNamesSurviveSaveAndReload()
+    {
+        // Issue #1025: the network-signal identity assigned to input pins is part of
+        // the persisted role block and must ride through save → load like the roles.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        SingleGateGroup(canvas).TruthTablePinAssignment!.InputSignalNames = new()
+        {
+            ["A"] = "OperandA",
+            ["B"] = "OperandB",
+        };
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("InputSignalNames", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        var saved = SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.InputSignalNames.ShouldBe(new Dictionary<string, string>
+        {
+            ["A"] = "OperandA",
+            ["B"] = "OperandB",
+        });
+    }
+
+    [Fact]
+    public async Task ReExtraction_PreservesSignalNamesOfPinsThatStayInputs()
+    {
+        // Issue #1025: re-extracting a gate's truth table rewrites the persisted
+        // assignment — the signal names of pins that stay inputs must ride along,
+        // or every re-extraction would silently strip the design's signal identity.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        SingleGateGroup(canvas).TruthTablePinAssignment!.InputSignalNames = new()
+        {
+            ["A"] = "OperandA",
+            ["B"] = "OperandB",
+        };
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.HasResult.ShouldBeTrue("the re-extraction must succeed");
+
+        var saved = SingleGateGroup(canvas).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.InputSignalNames.ShouldBe(new Dictionary<string, string>
+        {
+            ["A"] = "OperandA",
+            ["B"] = "OperandB",
+        }, "signal names of pins that stay inputs survive the re-extraction");
     }
 
     [Fact]

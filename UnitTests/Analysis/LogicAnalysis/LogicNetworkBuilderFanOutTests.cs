@@ -9,11 +9,13 @@ namespace UnitTests.Analysis.LogicAnalysis;
 /// <summary>
 /// Optical fan-out detection at the builder level (issue #996, rung 4 education
 /// honesty): a gate output wired to more than one gate input, and a network-input
-/// signal shared by several unconnected gate inputs that carry the same pin name,
-/// each surface a structured <see cref="LogicFanOutWarning"/> naming the driver
-/// and the load count — the logic layer restores ideal levels, but optically the
-/// driver would have to be split (~3 dB per branch). A purely point-to-point
-/// design produces no warnings.
+/// signal feeding several gate inputs, each surface a structured
+/// <see cref="LogicFanOutWarning"/> naming the driver and the load count — the
+/// logic layer restores ideal levels, but optically the driver would have to be
+/// split (~3 dB per branch). A purely point-to-point design produces no warnings.
+/// Since issue #1025 network inputs merge only through an explicit signal name,
+/// never through a coinciding bare pin name — so a signal site's load count is its
+/// true member count.
 /// </summary>
 public class LogicNetworkBuilderFanOutTests
 {
@@ -55,13 +57,13 @@ public class LogicNetworkBuilderFanOutTests
     }
 
     [Fact]
-    public void Build_TwoUnconnectedGateInputsSharingPinName_ProducesNetworkInputSignalWarning()
+    public void Build_TwoUnconnectedGateInputsAssignedOneSignal_ProduceNetworkInputSignalWarning()
     {
-        // Two gates whose inputs stay unconnected: each becomes a network input,
-        // but both are named "*.A" — one logical signal the user has to drive
-        // from a single source, which would have to be split optically.
-        var first = NotInstance("INV1");
-        var second = NotInstance("INV2");
+        // Two gates whose inputs stay unconnected and both carry the signal name
+        // "A": one logical signal the user drives from a single source, which
+        // would have to be split optically.
+        var first = NotInstance("INV1", signalOfA: "A");
+        var second = NotInstance("INV2", signalOfA: "A");
 
         var network = new LogicNetworkBuilder().Build(
             new[] { first, second }, Array.Empty<WaveguideConnection>());
@@ -74,12 +76,31 @@ public class LogicNetworkBuilderFanOutTests
     }
 
     [Fact]
+    public void Build_TwoUnconnectedGateInputsSharingPinNameWithoutSignalNames_StayUnmerged()
+    {
+        // Issue #1025 acceptance: two unrelated inputs that happen to share the
+        // bare pin name "A" and carry NO signal names must produce two separate
+        // network inputs — never merge by bare pin name again — and no fan-out
+        // site, because neither network input feeds more than one gate input.
+        var first = NotInstance("INV1");
+        var second = NotInstance("INV2");
+
+        var network = new LogicNetworkBuilder().Build(
+            new[] { first, second }, Array.Empty<WaveguideConnection>());
+
+        network.InputPinNames.ShouldBe(new[] { "INV1.A", "INV2.A" }, ignoreOrder: true);
+        network.FanOutWarnings.ShouldBeEmpty(
+            "a coinciding bare pin name is not a signal — no shared source, no fan-out site");
+    }
+
+    [Fact]
     public void Build_HalfAdderShapedInputFanOut_ReportsBothAddendSignals()
     {
-        // The half-adder pattern (#986): two NANDs whose inputs stay unconnected
-        // carry pin names A and B — addends A and B each fan out at the logic layer.
-        var first = NandInstance("NAND1");
-        var second = NandInstance("NAND2");
+        // The half-adder pattern (#986 + #1025): two NANDs whose unconnected inputs
+        // carry the signal names A and B — addends A and B each fan out at the
+        // logic layer.
+        var first = NandInstance("NAND1", signalOfA: "A", signalOfB: "B");
+        var second = NandInstance("NAND2", signalOfA: "A", signalOfB: "B");
 
         var network = new LogicNetworkBuilder().Build(
             new[] { first, second }, Array.Empty<WaveguideConnection>());
@@ -125,18 +146,29 @@ public class LogicNetworkBuilderFanOutTests
     }
 
     /// <summary>A NAND gate instance on a synthetic group exposing the example's pin interface.</summary>
-    private static LogicGateInstance NandInstance(string groupName) =>
+    private static LogicGateInstance NandInstance(string groupName, string? signalOfA = null, string? signalOfB = null) =>
         new(
             CreateGateGroup(groupName, "A", "B", "BIAS", "Y"),
             PinnedGateTables.NandGate(),
-            new GateRoleAssignment(new[] { "A", "B" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NandThreshold));
+            new GateRoleAssignment(
+                new[] { "A", "B" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NandThreshold,
+                SignalNames(("A", signalOfA), ("B", signalOfB))));
 
     /// <summary>A NOT gate instance on a synthetic group exposing the example's pin interface.</summary>
-    private static LogicGateInstance NotInstance(string groupName) =>
+    private static LogicGateInstance NotInstance(string groupName, string? signalOfA = null) =>
         new(
             CreateGateGroup(groupName, "A", "BIAS", "Y"),
             PinnedGateTables.NotGate(),
-            new GateRoleAssignment(new[] { "A" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NotThreshold));
+            new GateRoleAssignment(
+                new[] { "A" }, new[] { "Y" }, new[] { "BIAS" }, PinnedGateTables.NotThreshold,
+                SignalNames(("A", signalOfA))));
+
+    /// <summary>The signal-name map for a role assignment, or null when no pin carries a name.</summary>
+    private static Dictionary<string, string>? SignalNames(params (string Pin, string? Signal)[] pins)
+    {
+        var named = pins.Where(p => p.Signal != null).ToDictionary(p => p.Pin, p => p.Signal!);
+        return named.Count > 0 ? named : null;
+    }
 
     /// <summary>A bare group whose external pins are connectable like canvas-synced group pins.</summary>
     private static ComponentGroup CreateGateGroup(string groupName, params string[] externalPinNames)

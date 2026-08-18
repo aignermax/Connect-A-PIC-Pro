@@ -131,29 +131,6 @@ public class FullAdderManufacturingJourneyTests
         /// <summary>Laser wavelength the persisted roles were extracted at.</summary>
         public const int WavelengthNm = 1550;
 
-        /// <summary>Network inputs driven by addend A (fan-out at the logic layer).</summary>
-        private static readonly string[] InputsA =
-        {
-            "H1N1A1.A", "H1N1B1.A", "H1N21.A",
-            "H1N1A2.A", "H1N1B2.A", "H1N22.A",
-            "H1N1A3.A", "H1N1B3.A", "H1N23.A",
-            "H1N1A4.A", "H1N1B4.A", "H1N24.A",
-            "H1N5.A",
-        };
-
-        /// <summary>Network inputs driven by addend B (fan-out at the logic layer).</summary>
-        private static readonly string[] InputsB =
-        {
-            "H1N1A1.B", "H1N1B1.B", "H1N31.B",
-            "H1N1A2.B", "H1N1B2.B", "H1N32.B",
-            "H1N1A3.B", "H1N1B3.B", "H1N33.B",
-            "H1N1A4.B", "H1N1B4.B", "H1N34.B",
-            "H1N5.B",
-        };
-
-        /// <summary>Network inputs driven by the carry-in (fan-out at the logic layer).</summary>
-        private static readonly string[] InputsCin = { "H2N1A.A", "H2N1B.A", "H2N2.A", "H2N5.A" };
-
         /// <summary>Temp working directory for the GDS export and the DRC report.</summary>
         public string WorkDirectory { get; } =
             Path.Combine(Path.GetTempPath(), "full-adder-manufacturing-" + Guid.NewGuid().ToString("N"));
@@ -194,14 +171,8 @@ public class FullAdderManufacturingJourneyTests
             return Task.CompletedTask;
         }
 
-        /// <summary>The network input bits for one operand triple (A, B and Cin fan out at the logic layer).</summary>
-        public Dictionary<string, bool> InputBits(bool a, bool b, bool cin)
-        {
-            var bits = new Dictionary<string, bool>();
-            foreach (var name in InputsA) bits[name] = a;
-            foreach (var name in InputsB) bits[name] = b;
-            foreach (var name in InputsCin) bits[name] = cin;
-            return bits;
-        }
+        /// <summary>The network input bits for one operand triple — one bit per signal (issue #1025).</summary>
+        public Dictionary<string, bool> InputBits(bool a, bool b, bool cin) =>
+            new() { ["A"] = a, ["B"] = b, ["Cin"] = cin };
     }
 }

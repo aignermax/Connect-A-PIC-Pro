@@ -12,10 +12,10 @@ public sealed partial class LogicNetworkEvaluator
 {
     /// <summary>
     /// Every driver that feeds more than one gate input: gate outputs wired to
-    /// several loads, and network-input signals — unconnected gate inputs that
-    /// share one pin name (e.g. the half adder's four <c>*.A</c> pins forming
-    /// addend A) and therefore stand for one physical source whose light would
-    /// have to be split. Empty for a purely point-to-point network.
+    /// several loads, and network-input signals feeding several member pins (the
+    /// full adder's signal <c>A</c> driving thirteen gate inputs) — one physical
+    /// source whose light would have to be split. Empty for a purely point-to-point
+    /// network.
     /// </summary>
     public IReadOnlyList<LogicFanOutWarning> FanOutWarnings { get; private set; }
         = Array.Empty<LogicFanOutWarning>();
@@ -50,17 +50,19 @@ public sealed partial class LogicNetworkEvaluator
     }
 
     /// <summary>
-    /// One warning per network-input signal: unconnected gate inputs whose pin
-    /// names coincide (the half adder's <c>NAND1A.A</c>, <c>NAND1B.A</c>,
-    /// <c>NAND2.A</c>, <c>NAND5.A</c> all carry pin name <c>A</c>) are one logical
-    /// signal the user drives from a single source — physically one laser whose
-    /// light would have to be split across every pin in the group.
+    /// One warning per network-input signal with more than one member pin: every
+    /// gate input the signal drives (the half adder's signal <c>A</c> driving
+    /// <c>NAND1A.A</c>, <c>NAND1B.A</c>, <c>NAND2.A</c>, <c>NAND5.A</c>) reads the
+    /// same network bit, but physically the one source behind the signal would have
+    /// to be split across every member pin. Signals are explicit (issue #1025):
+    /// pins merge only through a persisted signal name, never through a coinciding
+    /// bare pin name, so the load count is the signal's true member count.
     /// </summary>
     private IEnumerable<LogicFanOutWarning> DetectNetworkInputSignalFanOut(FanOutLevelCalculator levels)
     {
         return _inputWiring
             .Where(pair => pair.Value is LogicNetDriver.NetworkInput)
-            .GroupBy(pair => pair.Key.PinName)
+            .GroupBy(pair => ((LogicNetDriver.NetworkInput)pair.Value).PinName)
             .Where(group => group.Count() > 1)
             .Select(group =>
             {

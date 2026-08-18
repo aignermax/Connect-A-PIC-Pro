@@ -9,19 +9,13 @@ namespace UnitTests.Integration;
 /// ViewModel tests for the canvas logic-state overlay (issue #994, rung 4 of the NAND
 /// game): while the Logic panel holds a built network, every gate group of the shipped
 /// <c>examples/Logic Gate Half Adder.lun</c> carries its live 0/1 badge on the canvas —
-/// the same table-lookup data the panel's output list shows. Toggling the addends flips
-/// the Sum badge (<c>NAND4</c>) and the Carry badge (<c>NOT1</c>) for all four input
-/// combinations; a design edit discards the network and clears every badge, and a fresh
-/// build re-populates them without duplicating.
+/// the same table-lookup data the panel's output list shows. Toggling the addend signals
+/// A and B (issue #1025) flips the Sum badge (<c>NAND4</c>) and the Carry badge
+/// (<c>NOT1</c>) for all four input combinations; a design edit discards the network and
+/// clears every badge, and a fresh build re-populates them without duplicating.
 /// </summary>
 public class LogicGateStateBadgeTests : IClassFixture<LogicPanelViewModelTests.LoadedHalfAdder>
 {
-    /// <summary>Network inputs driven by addend A (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsA = { "NAND1A.A", "NAND1B.A", "NAND2.A", "NAND5.A" };
-
-    /// <summary>Network inputs driven by addend B (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsB = { "NAND1A.B", "NAND1B.B", "NAND3.B", "NAND5.B" };
-
     /// <summary>The gate groups of the half-adder example, each with its single output pin Y.</summary>
     private static readonly string[] GateNames =
         { "NAND1A", "NAND1B", "NAND2", "NAND3", "NAND4", "NAND5", "NOT1" };
@@ -62,8 +56,8 @@ public class LogicGateStateBadgeTests : IClassFixture<LogicPanelViewModelTests.L
                      (true, true, false, true),
                  })
         {
-            SetAddend(vm, InputsA, a);
-            SetAddend(vm, InputsB, b);
+            vm.Inputs.Single(i => i.PinName == "A").IsOn = a;
+            vm.Inputs.Single(i => i.PinName == "B").IsOn = b;
 
             canvas.LogicGateStates.Badges.Single(badge => badge.GroupName == "NAND4").IsOne
                 .ShouldBe(expectedSum, $"Sum badge = A XOR B for A={a}, B={b}");
@@ -114,12 +108,5 @@ public class LogicGateStateBadgeTests : IClassFixture<LogicPanelViewModelTests.L
         await vm.BuildNetworkCommand.ExecuteAsync(null);
         vm.HasNetwork.ShouldBeTrue(vm.StatusText);
         return (vm, _fixture.Canvas);
-    }
-
-    /// <summary>Sets every network input pin of one addend to the same bit.</summary>
-    private static void SetAddend(LogicPanelViewModel vm, IEnumerable<string> pinNames, bool bit)
-    {
-        foreach (var name in pinNames)
-            vm.Inputs.Single(i => i.PinName == name).IsOn = bit;
     }
 }

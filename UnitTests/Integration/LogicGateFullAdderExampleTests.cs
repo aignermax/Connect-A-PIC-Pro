@@ -19,9 +19,11 @@ namespace UnitTests.Integration;
 /// lookup. Like in the half adder (#987), shared stages are duplicated (the partial sum
 /// S1 = A⊕B fans out onto half adder 2's four operand pins, so half adder 1's XOR ladder
 /// is instantiated four times, H1SUM1–H1SUM4) because the canvas wires one waveguide per
-/// pin — the fan-out of A, B and Cin happens at the logic layer, where each gate input
-/// is driven by the same network bit. The carry-OR reads the two half-adder carries
-/// through two NOTs and one NAND: Cout = NAND(¬C1, ¬C2) = C1∨C2.
+/// pin — the fan-out of A, B and Cin happens at the logic layer, where the persisted
+/// signal names (issue #1025) merge every operand's pins into one network input each:
+/// exactly the three toggles A, B and Cin, although the addend pins and the carry-in
+/// pins all share the bare pin name A on their gates. The carry-OR reads the two
+/// half-adder carries through two NOTs and one NAND: Cout = NAND(¬C1, ¬C2) = C1∨C2.
 /// </summary>
 public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderExampleTests.FullAdderFixture>
 {
@@ -41,28 +43,9 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
 
     private static readonly string[] NotGateNames = { "H1CARRY", "H2CARRY", "ORNOT1", "ORNOT2" };
 
-    /// <summary>Network inputs driven by addend A (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsA =
-    {
-        "H1N1A1.A", "H1N1B1.A", "H1N21.A",
-        "H1N1A2.A", "H1N1B2.A", "H1N22.A",
-        "H1N1A3.A", "H1N1B3.A", "H1N23.A",
-        "H1N1A4.A", "H1N1B4.A", "H1N24.A",
-        "H1N5.A",
-    };
-
-    /// <summary>Network inputs driven by addend B (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsB =
-    {
-        "H1N1A1.B", "H1N1B1.B", "H1N31.B",
-        "H1N1A2.B", "H1N1B2.B", "H1N32.B",
-        "H1N1A3.B", "H1N1B3.B", "H1N33.B",
-        "H1N1A4.B", "H1N1B4.B", "H1N34.B",
-        "H1N5.B",
-    };
-
-    /// <summary>Network inputs driven by the carry-in (fan-out at the logic layer).</summary>
-    private static readonly string[] InputsCin = { "H2N1A.A", "H2N1B.A", "H2N2.A", "H2N5.A" };
+    /// <summary>The persisted signal names per gate group (issue #1025); null = no named pins.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>?> ExpectedSignalNames =
+        BuildExpectedSignalNames();
 
     private readonly FullAdderFixture _fixture;
 
@@ -88,6 +71,8 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
             roles.OutputPinNames.ShouldBe(new[] { "Y" });
             roles.BiasPinNames.ShouldBe(new[] { "BIAS" });
             roles.Threshold.ShouldBe(isNot ? NotThreshold : NandThreshold);
+            roles.InputSignalNames.ShouldBe(ExpectedSignalNames[group.GroupName],
+                $"group '{group.GroupName}' ships its network-signal identity (issue #1025)");
             group.Description.ShouldContain("logic layer", Case.Sensitive,
                 "every gate carries the education note about logic-layer composition");
             group.Description.ShouldContain(isNot ? "0.375" : "0.125");
@@ -95,11 +80,11 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
     }
 
     [Fact]
-    public void AssembledNetwork_ExposesThreeOperandsAndEveryGateOutputAsTap()
+    public void AssembledNetwork_ExposesThreeOperandSignalsAndEveryGateOutputAsTap()
     {
-        _fixture.Network.InputPinNames.ShouldBe(
-            InputsA.Concat(InputsB).Concat(InputsCin).ToArray(), ignoreOrder: true,
-            customMessage: "the operands A, B and Cin fan out to their gate inputs at the logic layer");
+        _fixture.Network.InputPinNames.ShouldBe(new[] { "A", "B", "Cin" }, ignoreOrder: true,
+            customMessage: "the signal names merge the 30 operand pins into exactly three network " +
+                "inputs (issue #1025) — A and Cin stay separate although their pins share the bare pin name A");
         _fixture.Network.OutputPinNames.ShouldBe(
             GateNames.Select(name => $"{name}.Y").ToArray(), ignoreOrder: true);
     }
@@ -142,6 +127,12 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
             reloadedGroups.Select(g => g.GroupName).ShouldBe(GateNames, ignoreOrder: true);
             reloadedGroups.ShouldAllBe(g => g.TruthTablePinAssignment != null,
                 "the persisted pin roles must survive the save → load round trip");
+            foreach (var group in reloadedGroups)
+            {
+                group.TruthTablePinAssignment!.InputSignalNames.ShouldBe(
+                    ExpectedSignalNames[group.GroupName],
+                    $"the signal names of '{group.GroupName}' must survive the save → load round trip (#1025)");
+            }
             reloadedCanvas.Connections.Count.ShouldBe(30,
                 "every gate wire must survive the save → load round trip");
 
@@ -161,6 +152,33 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
         {
             if (File.Exists(savedPath)) File.Delete(savedPath);
         }
+    }
+
+    /// <summary>
+    /// The expected persisted signal names per gate group: half adder 1's operand
+    /// pins carry the addends A and B, half adder 2's unconnected pins carry the
+    /// carry-in Cin; fully wired pins (the sum stages, the carries, the OR) ship
+    /// no names — a driven pin needs no network-signal identity.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>?> BuildExpectedSignalNames()
+    {
+        var addendAB = new Dictionary<string, string> { ["A"] = "A", ["B"] = "B" };
+        var expected = new Dictionary<string, Dictionary<string, string>?>();
+        for (var copy = 1; copy <= 4; copy++)
+        {
+            expected[$"H1N1A{copy}"] = addendAB;
+            expected[$"H1N1B{copy}"] = addendAB;
+            expected[$"H1N2{copy}"] = new() { ["A"] = "A" };
+            expected[$"H1N3{copy}"] = new() { ["B"] = "B" };
+            expected[$"H1SUM{copy}"] = null;
+        }
+        expected["H1N5"] = addendAB;
+        expected["H1CARRY"] = null;
+        foreach (var name in new[] { "H2N1A", "H2N1B", "H2N2", "H2N5" })
+            expected[name] = new() { ["A"] = "Cin" };
+        foreach (var name in new[] { "H2N3", "H2SUM", "H2CARRY", "ORNOT1", "ORNOT2", "OROUT" })
+            expected[name] = null;
+        return expected;
     }
 
     /// <summary>
@@ -209,15 +227,9 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
         /// <summary>No shared state to release.</summary>
         public Task DisposeAsync() => Task.CompletedTask;
 
-        /// <summary>The network input bits for one operand triple (A, B and Cin fan out at the logic layer).</summary>
-        public Dictionary<string, bool> InputBits(bool a, bool b, bool cin)
-        {
-            var bits = new Dictionary<string, bool>();
-            foreach (var name in InputsA) bits[name] = a;
-            foreach (var name in InputsB) bits[name] = b;
-            foreach (var name in InputsCin) bits[name] = cin;
-            return bits;
-        }
+        /// <summary>The network input bits for one operand triple — one bit per signal (issue #1025).</summary>
+        public Dictionary<string, bool> InputBits(bool a, bool b, bool cin) =>
+            new() { ["A"] = a, ["B"] = b, ["Cin"] = cin };
 
         /// <summary>Saves the loaded design through the real save path and returns the file path.</summary>
         public async Task<string> SaveToTempFile()
