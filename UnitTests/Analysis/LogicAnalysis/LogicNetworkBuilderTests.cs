@@ -1,6 +1,8 @@
 using CAP_Core.Analysis.LogicAnalysis;
 using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
+using CAP_Core.LightCalculation.MaterialDispersion;
+using CAP_Core.Routing;
 using Shouldly;
 using Xunit;
 
@@ -327,9 +329,70 @@ public class LogicNetworkBuilderTests
         return group;
     }
 
+    [Fact]
+    public void Build_GatesJoinedByLongWaveguide_AddsTheWireDelayToTheCriticalPath()
+    {
+        var nand = NandInstance("NAND");
+        var inv = NotInstance("INV");
+        var connections = new[] { ConnectWithPath(nand, "Y", inv, "A", 1000) };
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, connections);
+
+        var wireDelay = 1000 * GateDelayCalculator.DefaultGroupIndex
+            / GateDelayCalculator.SpeedOfLightMicrometersPerPicosecond;
+        wireDelay.ShouldBeInRange(14, 15, "~14.01 ps for 1 mm of silicon waveguide");
+        var gateSum = network.CriticalPathGateIds.Sum(id => network.GateDelaysPicoseconds[id]);
+        network.CriticalPathDelayPicoseconds.ShouldBe(gateSum + wireDelay, 1e-9,
+            "critical path = gate delays + wire delay along the chain");
+        network.WireDelaysPicoseconds.ShouldBe(new Dictionary<LogicWireEdge, double>
+        {
+            [new LogicWireEdge(new LogicPinRef("NAND", "Y"), new LogicPinRef("INV", "A"))] = wireDelay,
+        });
+    }
+
+    [Fact]
+    public void Build_ConnectionCarryingDispersionModel_UsesItsGroupIndexForTheWireDelay()
+    {
+        var nand = NandInstance("NAND");
+        var inv = NotInstance("INV");
+        var connection = ConnectWithPath(nand, "Y", inv, "A", 1000);
+        connection.DispersionModel = new ConstantDispersion(groupIndex: 2.0);
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, new[] { connection });
+
+        var wireDelay = 1000 * 2.0 / GateDelayCalculator.SpeedOfLightMicrometersPerPicosecond;
+        network.WireDelaysPicoseconds.Values.Single().ShouldBe(wireDelay, 1e-9);
+    }
+
+    [Fact]
+    public void Build_ConnectionWithoutRoutedPath_ContributesZeroWireDelay()
+    {
+        var nand = NandInstance("NAND");
+        var inv = NotInstance("INV");
+        var connections = new[] { Connect(nand, "Y", inv, "A") };
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, connections);
+
+        network.WireDelaysPicoseconds.Values.Single().ShouldBe(0,
+            "direct-adjacent pins have no waveguide length to cross");
+        network.WireDelaysPicoseconds.Values.ShouldAllBe(delay => delay >= 0,
+            "wire delays never go negative");
+    }
+
     /// <summary>A design connection between two gate groups' external pins.</summary>
     private static WaveguideConnection Connect(LogicGateInstance from, string fromPin, LogicGateInstance to, string toPin) =>
         new() { StartPin = Pin(from.Group, fromPin), EndPin = Pin(to.Group, toPin) };
+
+    /// <summary>A design connection whose routed path is one straight segment of known length.</summary>
+    private static WaveguideConnection ConnectWithPath(
+        LogicGateInstance from, string fromPin, LogicGateInstance to, string toPin, double lengthMicrometers)
+    {
+        var connection = Connect(from, fromPin, to, toPin);
+        var path = new RoutedPath();
+        path.Segments.Add(new StraightSegment(0, 0, lengthMicrometers, 0, 0));
+        connection.ReplaceRoutedPath(path);
+        return connection;
+    }
 
     /// <summary>Looks up a group's connectable external pin.</summary>
     private static PhysicalPin Pin(ComponentGroup group, string name) =>

@@ -19,6 +19,7 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 public sealed partial class LogicNetworkBuilder
 {
     private readonly GateDelayCalculator _delayCalculator = new();
+    private readonly WireDelayCalculator _wireDelayCalculator = new();
 
     /// <summary>
     /// Derives and validates the logic network behind the given gate groups and the
@@ -58,19 +59,21 @@ public sealed partial class LogicNetworkBuilder
         ThrowOnDuplicateGateIds(contexts);
 
         var drivers = new Dictionary<LogicPinRef, LogicPinRef>();
+        var edgeConnections = new Dictionary<LogicPinRef, WaveguideConnection>();
         foreach (var connection in connections)
         {
-            AddConnectionDrivers(contexts, connection, drivers);
+            AddConnectionDrivers(contexts, connection, drivers, edgeConnections);
         }
 
-        return AssembleNetwork(contexts, drivers, wavelengthNm ?? StandardWaveLengths.RedNM);
+        return AssembleNetwork(contexts, drivers, edgeConnections, wavelengthNm ?? StandardWaveLengths.RedNM);
     }
 
-    /// <summary>Classifies one design connection and records the logic driver it implies, if any.</summary>
+    /// <summary>Classifies one design connection and records the logic driver and wire it implies, if any.</summary>
     private static void AddConnectionDrivers(
         IReadOnlyList<GateContext> contexts,
         WaveguideConnection connection,
-        IDictionary<LogicPinRef, LogicPinRef> drivers)
+        IDictionary<LogicPinRef, LogicPinRef> drivers,
+        IDictionary<LogicPinRef, WaveguideConnection> edgeConnections)
     {
         var start = ResolveEndpoint(contexts, connection.StartPin);
         var end = ResolveEndpoint(contexts, connection.EndPin);
@@ -83,6 +86,7 @@ public sealed partial class LogicNetworkBuilder
                 $"Gate input '{Format(load)}' is driven by two different gate outputs: " +
                 $"'{Format(existing)}' and '{Format(source)}'. One logic wire needs exactly one driver.");
         drivers[load] = source;
+        edgeConnections.TryAdd(load, connection);
     }
 
     /// <summary>Determines which endpoint drives which, rejecting logically invalid pairings.</summary>
@@ -143,11 +147,13 @@ public sealed partial class LogicNetworkBuilder
     /// Assembles the evaluator: unconnected gate inputs become network-level inputs
     /// named <c>&lt;group&gt;.&lt;pin&gt;</c>, and every gate output pin becomes a
     /// network-level output tap under the same naming. Each gate's propagation delay
-    /// is derived from its group's internal optical path length.
+    /// is derived from its group's internal optical path length, and each inter-gate
+    /// wire's delay from the connecting waveguide's routed path.
     /// </summary>
     private LogicNetworkEvaluator AssembleNetwork(
         IReadOnlyList<GateContext> contexts,
         IReadOnlyDictionary<LogicPinRef, LogicPinRef> drivers,
+        IReadOnlyDictionary<LogicPinRef, WaveguideConnection> edgeConnections,
         double wavelengthNm)
     {
         var networkInputs = new List<string>();
@@ -155,6 +161,13 @@ public sealed partial class LogicNetworkBuilder
         var outputTaps = new Dictionary<string, LogicPinRef>();
         var models = new Dictionary<string, LogicGateModel>();
         var delays = new Dictionary<string, double>();
+        var wireDelays = new Dictionary<LogicWireEdge, double>();
+
+        foreach (var (load, connection) in edgeConnections)
+        {
+            wireDelays[new LogicWireEdge(drivers[load], load)] =
+                _wireDelayCalculator.CalculatePicoseconds(connection, wavelengthNm);
+        }
 
         foreach (var context in contexts)
         {
@@ -173,7 +186,7 @@ public sealed partial class LogicNetworkBuilder
             }
         }
 
-        return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays);
+        return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays, wireDelays);
     }
 
     /// <summary>Registers and returns the network-level input name of an unconnected gate input.</summary>

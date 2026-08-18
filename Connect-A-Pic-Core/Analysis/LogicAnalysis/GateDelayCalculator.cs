@@ -13,8 +13,8 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// <see cref="DefaultGroupIndex"/>; component widths use the first group index the
 /// recursive paths carry, else the default (a silicon strip waveguide). The result is
 /// a physically plausible estimate — µm of path times n_g/c lands in the fs–ps range —
-/// not an exact timing model: per-edge wire delays between gates and event-driven
-/// simulation are a later rung.
+/// not an exact timing model: event-driven simulation is a later rung. The waveguides
+/// between gates contribute their own per-edge delays, see <see cref="WireDelayCalculator"/>.
 /// </summary>
 public sealed class GateDelayCalculator
 {
