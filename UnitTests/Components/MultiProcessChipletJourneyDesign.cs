@@ -23,7 +23,7 @@ namespace UnitTests.Components;
 /// <see cref="MultiChipletCompositionJourneyTests"/>), now across two
 /// fabrication processes.
 /// </summary>
-internal sealed class MultiProcessChipletJourneyDesign
+public sealed class MultiProcessChipletJourneyDesign
 {
     public const string CornerstonePdkFile = "cornerstone-sin-pdk.json";
     public const string SiepicPdkFile = "siepic-ebeam-pdk.json";
