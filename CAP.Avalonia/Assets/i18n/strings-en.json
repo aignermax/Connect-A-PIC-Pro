@@ -1305,6 +1305,7 @@
   "LogicPanelHelp.RestorationBody": "A passive optical cascade has no level restoration: light power fades and interferes from stage to stage, so after about two stages the analog levels no longer read as clean bits. The logic layer evaluates each gate's own truth table instead — every gate output is exactly 0 or 1 again, so networks of any depth compose cleanly. That is how real digital electronics works over analog transistors, too.",
   "LogicPanelHelp.InputsTitle": "One toggle per unconnected gate input",
   "LogicPanelHelp.InputsBody": "Every gate input left unconnected on the canvas becomes a network input named GATE.PIN — in the half-adder example the addends A and B each fan out to four toggles. Switch all pins of one addend together to set its bit.",
+  "Analysis.LogicPanel.DesignEdited": "The design changed — the logic network was discarded. Build it again to see live states.",
   "LogicPanel.FanOutWarning.Title": "Optical fan-out warning",
   "LogicPanel.FanOutWarning.GateLine": "Gate output '{0}' drives {1} gate inputs.",
   "LogicPanel.FanOutWarning.InputLine": "Input signal '{0}' drives {1} gate inputs.",
@@ -1314,5 +1315,4 @@
   "LogicPanelFanOutHelp.PhysicsTitle": "Splitting costs power",
   "LogicPanelFanOutHelp.PhysicsBody": "A 1×2 splitter sends half the light into each branch — a loss of about 3 dB per branch. Fanning out to N inputs cascades the split: four loads cost ~6 dB, eight ~9 dB. Below a gate's switching threshold the receiving gate no longer reads a clean bit, so the idealized 0/1 above would degrade into analog noise.",
   "LogicPanelFanOutHelp.ExamplesTitle": "How real designs handle it",
-  "LogicPanelFanOutHelp.ExamplesBody": "Two standard fixes: amplify the signal after splitting (an active stage restores the level, like a buffer in electronics), or duplicate the driving stage so every load gets its own waveguide. The shipped half- and full-adder examples take the second route: the textbook XOR shares one NAND(A, B) across three consumers, which would fan out optically — so the examples instantiate that stage once per consumer instead. The duplication you see in the network is the physical honesty the logic layer abstracts away."
-}
+  "LogicPanelFanOutHelp.ExamplesBody": "Two standard fixes: amplify the signal after splitting (an active stage restores the level, like a buffer in electronics), or duplicate the driving stage so every load gets its own waveguide. The shipped half- and full-adder examples take the second route: the textbook XOR shares one NAND(A, B) across three consumers, which would fan out optically — so the examples instantiate that stage once per consumer instead. The duplication you see in the network is the physical honesty the logic layer abstracts away."}

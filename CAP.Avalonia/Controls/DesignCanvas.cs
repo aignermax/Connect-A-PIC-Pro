@@ -185,6 +185,9 @@ public class DesignCanvas : Control
             // Analysis-output overlay (#754) sits on top of components so the candidate
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
+            // Logic-state badges (#994) ride on top of the gate groups like the
+            // analysis overlay: a chip must never sink under a component fill.
+            LogicGateStateBadgeRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
             // Cut tool overlay: guide lines and insertion candidates sit above
             // components and waveguides so the clickable markers are never obscured.
@@ -386,6 +389,7 @@ public class DesignCanvas : Control
             oldCanvas.Connections.CollectionChanged -= OnConnectionsCollectionChanged;
             oldCanvas.CanvasFrozenPaths.CollectionChanged -= OnConnectionsCollectionChanged;
             oldCanvas.AnalysisOutput.PropertyChanged -= OnAnalysisOutputChanged;
+            oldCanvas.LogicGateStates.StatesChanged -= OnLogicGateStatesChanged;
         }
         if (e.NewValue is DesignCanvasViewModel newCanvas)
         {
@@ -395,11 +399,16 @@ public class DesignCanvas : Control
             newCanvas.Connections.CollectionChanged += OnConnectionsCollectionChanged;
             newCanvas.CanvasFrozenPaths.CollectionChanged += OnConnectionsCollectionChanged;
             newCanvas.AnalysisOutput.PropertyChanged += OnAnalysisOutputChanged;
+            newCanvas.LogicGateStates.StatesChanged += OnLogicGateStatesChanged;
         }
     }
 
     /// <summary>Repaints when the designated analysis output changes (#754) so the "OUT" tag follows.</summary>
     private void OnAnalysisOutputChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => InvalidateVisual();
+
+    /// <summary>Repaints when a logic-state badge flips or the overlay clears (#994).</summary>
+    private void OnLogicGateStatesChanged(object? sender, EventArgs e)
         => InvalidateVisual();
 
     private void OnComponentsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
