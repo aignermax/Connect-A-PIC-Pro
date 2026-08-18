@@ -77,8 +77,8 @@ public class GdsImportJourneyTests : IClassFixture<GdsImportJourneyFixture>
     /// <summary>
     /// Step 3 — Simulate: S-matrix light propagation runs over the design;
     /// power arrives at the imported component's input pin through the real
-    /// connection from the Grating Coupler. The imported component's own
-    /// pass-through is blocked by its empty S-matrix (defect #1005).
+    /// connection from the Grating Coupler, and the imported component passes
+    /// it through to its output pin (lossless pass-through default, #1005).
     /// </summary>
     [Fact]
     public async Task Step3_Simulate_PowerArrivesAtImportedInput()
@@ -99,6 +99,14 @@ public class GdsImportJourneyTests : IClassFixture<GdsImportJourneyFixture>
             "the simulation must produce a field value at the imported input pin");
         result.FieldResults[inPin.LogicalPin.IDInFlow].Magnitude
             .ShouldBeGreaterThan(0, "no light arrives at the imported component's input");
+
+        // #1005: the imported waveguide's default lossless pass-through must
+        // carry the light on to its "out" pin instead of absorbing it.
+        var outPin = importedComponent.PhysicalPins.Single(p => p.Name == "out");
+        result.FieldResults.ContainsKey(outPin.LogicalPin!.IDOutFlow).ShouldBeTrue(
+            "the simulation must produce a field value at the imported output pin");
+        result.FieldResults[outPin.LogicalPin.IDOutFlow].Magnitude
+            .ShouldBeGreaterThan(0, "the imported component absorbed the light instead of passing it through");
     }
 
     /// <summary>
