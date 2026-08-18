@@ -5,7 +5,7 @@ namespace CAP_Core.Routing.MeanderGeneration;
 /// to a prescribed geometric length, inside a bounding rectangle.
 /// Directions follow the <see cref="PathSegment"/> tangent convention (degrees,
 /// 0 = +X, counter-clockwise positive); the end direction is the direction of travel
-/// at arrival, not the pin's outward normal. <paramref name="MinBendRadiusMicrometers"/>
+/// at arrival, not the pin's outward normal. The minimum bend radius
 /// carries the process floor semantics of ProcessXsection.MinRadiusUm: no arc in the
 /// result may have a smaller radius.
 /// </summary>
