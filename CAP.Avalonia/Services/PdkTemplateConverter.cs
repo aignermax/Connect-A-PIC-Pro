@@ -143,7 +143,10 @@ public static class PdkTemplateConverter
         var sMatrix = new SMatrix(pinIds, new List<(Guid, double)>());
 
         if (sMatrixDraft?.Connections == null || sMatrixDraft.Connections.Count == 0)
+        {
+            AddDefaultPassThrough(pins, sMatrixDraft, sMatrix);
             return sMatrix;
+        }
 
         var pinByName = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
         foreach (var pin in pins)
@@ -166,5 +169,32 @@ public static class PdkTemplateConverter
 
         sMatrix.SetValues(transfers);
         return sMatrix;
+    }
+
+    /// <summary>
+    /// A draft without a simulation model (<c>null</c> S-matrix — GDS-imported
+    /// cells and black-box custom components) defaults to a lossless
+    /// pass-through: with exactly two optical pins, light crosses in both
+    /// directions at magnitude 1.0 (issue #1005 — previously the empty matrix
+    /// absorbed all light). Any other optical pin count keeps the empty,
+    /// fully absorbing matrix: a multi-port default would have to guess the
+    /// internal routing and would violate passivity. An explicitly declared
+    /// but empty connection list is honored as-is (intentional absorber).
+    /// </summary>
+    private static void AddDefaultPassThrough(List<Pin> pins, PdkSMatrixDraft? sMatrixDraft, SMatrix sMatrix)
+    {
+        if (sMatrixDraft != null)
+            return;
+
+        var opticalPins = pins.Where(p => p.MatterType == MatterType.Light).ToList();
+        if (opticalPins.Count != 2)
+            return;
+
+        var transfers = new Dictionary<(Guid, Guid), Complex>
+        {
+            [(opticalPins[0].IDInFlow, opticalPins[1].IDOutFlow)] = Complex.One,
+            [(opticalPins[1].IDInFlow, opticalPins[0].IDOutFlow)] = Complex.One,
+        };
+        sMatrix.SetValues(transfers);
     }
 }
