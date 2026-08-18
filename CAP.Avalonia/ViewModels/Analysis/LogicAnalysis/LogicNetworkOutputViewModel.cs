@@ -21,6 +21,10 @@ public partial class LogicNetworkOutputViewModel : ObservableObject
     [ObservableProperty]
     private bool _isOne;
 
+    /// <summary>The tapped gate's propagation delay as display text (e.g. "12.3 ps").</summary>
+    [ObservableProperty]
+    private string _delayText = "";
+
     /// <summary>The bit as display text ("1" or "0").</summary>
     public string BitText => IsOne ? "1" : "0";
 

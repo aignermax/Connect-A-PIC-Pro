@@ -112,6 +112,28 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
     }
 
     [Fact]
+    public async Task BuildNetwork_HalfAdder_ShowsGateDelaysAndCriticalPath()
+    {
+        // Issue #1002: every gate output shows its gate's propagation delay, and the
+        // panel carries one critical-path line — the slowest gate chain sets how fast
+        // the circuit can clock.
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        vm.Outputs.ShouldAllBe(
+            o => o.DelayText.EndsWith("ps") && !o.DelayText.StartsWith("0.0") && !o.DelayText.StartsWith("0,0"),
+            "every gate output shows its gate's non-zero propagation delay");
+        vm.CriticalPathText.ShouldContain("ps");
+        vm.CriticalPathText.Contains(" 0.0 ps ").ShouldBeFalse(
+            "the half adder's critical path is non-zero");
+        vm.CriticalPathText.Contains(" 0,0 ps ").ShouldBeFalse(
+            "the half adder's critical path is non-zero");
+    }
+
+    [Fact]
     public async Task BuildNetwork_EmptyDesign_ShowsReadableErrorWithoutCrashing()
     {
         var vm = new LogicPanelViewModel();

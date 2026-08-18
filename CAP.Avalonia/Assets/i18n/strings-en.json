@@ -1318,4 +1318,13 @@
   "LogicPanelFanOutHelp.PhysicsTitle": "Splitting costs power",
   "LogicPanelFanOutHelp.PhysicsBody": "A 1×2 splitter sends half the light into each branch — a loss of about 3 dB per branch. Fanning out to N inputs cascades the split: four loads cost ~6 dB, eight ~9 dB. Below a gate's switching threshold the receiving gate no longer reads a clean bit, so the idealized 0/1 above would degrade into analog noise.",
   "LogicPanelFanOutHelp.ExamplesTitle": "How real designs handle it",
-  "LogicPanelFanOutHelp.ExamplesBody": "Two standard fixes: amplify the signal after splitting (an active stage restores the level, like a buffer in electronics), or duplicate the driving stage so every load gets its own waveguide. The shipped half- and full-adder examples take the second route: the textbook XOR shares one NAND(A, B) across three consumers, which would fan out optically — so the examples instantiate that stage once per consumer instead. The duplication you see in the network is the physical honesty the logic layer abstracts away."}
+  "LogicPanelFanOutHelp.ExamplesBody": "Two standard fixes: amplify the signal after splitting (an active stage restores the level, like a buffer in electronics), or duplicate the driving stage so every load gets its own waveguide. The shipped half- and full-adder examples take the second route: the textbook XOR shares one NAND(A, B) across three consumers, which would fan out optically — so the examples instantiate that stage once per consumer instead. The duplication you see in the network is the physical honesty the logic layer abstracts away.",
+  "LogicPanel.GateDelay": "{0:0.0} ps",
+  "LogicPanel.CriticalPath": "Critical path: {0:0.0} ps over {1} gates",
+  "LogicPanelTimingHelp.Title": "Why does light take time?",
+  "LogicPanelTimingHelp.Intro": "Every gate shows its propagation delay: the time light needs to travel through the gate's waveguides and components. The critical path is the slowest chain of gates from a network input to an output.",
+  "LogicPanelTimingHelp.PhysicsTitle": "Light travels at c/n_g",
+  "LogicPanelTimingHelp.PhysicsBody": "In a waveguide, light moves at the speed of light divided by the group index (c/n_g ≈ c/4.2 for silicon). The delay shown is the gate's internal optical path length times n_g/c — a 100 µm path costs about 1.4 ps. The model uses the geometric path lengths plus each component's width; it is a physically plausible estimate, not an exact timing simulation.",
+  "LogicPanelTimingHelp.ClockTitle": "The longest chain sets the clock speed",
+  "LogicPanelTimingHelp.ClockBody": "Same idea as timing closure in electronics: a new input bit only arrives at the output after the slowest gate chain has settled. The critical path gives the minimum clock period — a 10 ps critical path means the circuit can clock at roughly 100 GHz. Wire delays between gates are not counted yet."
+}
