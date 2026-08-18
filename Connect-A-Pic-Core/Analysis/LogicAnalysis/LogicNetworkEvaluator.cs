@@ -47,6 +47,7 @@ public sealed partial class LogicNetworkEvaluator
         ValidateWiring();
         ValidateOutputTaps();
         _evaluationOrder = TopologicalOrder();
+        DetectFanOut();
     }
 
     /// <summary>Network-level input pin names.</summary>

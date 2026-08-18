@@ -85,6 +85,33 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
     }
 
     [Fact]
+    public async Task BuildNetwork_HalfAdder_SurfacesFanOutWarningsForBothAddends()
+    {
+        // Issue #996: the half adder fans its addends out at the logic layer —
+        // addend A drives the four pins NAND1A.A, NAND1B.A, NAND2.A, NAND5.A,
+        // addend B drives four more — so the panel must surface one warning per
+        // addend, naming the signal and the load count.
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        vm.HasFanOutWarnings.ShouldBeTrue("the half adder's addends fan out to four gate inputs each");
+        vm.FanOutWarnings.Count.ShouldBe(2);
+        var warningA = vm.FanOutWarnings.Single(w => w.Warning.DriverDisplayName == "A");
+        var warningB = vm.FanOutWarnings.Single(w => w.Warning.DriverDisplayName == "B");
+        warningA.Warning.IsNetworkInputSignal.ShouldBeTrue();
+        warningB.Warning.IsNetworkInputSignal.ShouldBeTrue();
+        warningA.Warning.LoadCount.ShouldBe(4);
+        warningB.Warning.LoadCount.ShouldBe(4);
+        warningA.Warning.LoadNames.ShouldBe(InputsA, ignoreOrder: true);
+        warningB.Warning.LoadNames.ShouldBe(InputsB, ignoreOrder: true);
+        warningA.WarningText.ShouldContain("A");
+        warningA.WarningText.ShouldContain("4");
+    }
+
+    [Fact]
     public async Task BuildNetwork_EmptyDesign_ShowsReadableErrorWithoutCrashing()
     {
         var vm = new LogicPanelViewModel();
