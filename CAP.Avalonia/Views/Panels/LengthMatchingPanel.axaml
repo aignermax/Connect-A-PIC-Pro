@@ -1,0 +1,65 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.LengthMatchingPanel"
+             x:DataType="vm:MainViewModel">
+
+    <!-- Length Matching: visible only while exactly one waveguide connection is selected.
+         Stretches the route to an exact target length via a meander (frozen afterwards),
+         or clears the intent and hands the route back to the normal router. -->
+    <StackPanel IsVisible="{Binding BottomPanel.LengthMatching.HasExactlyOneConnection}">
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Routing.LengthMatch.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why the geometric length of a waveguide matters
+                 (phase accumulation and interference) for non-photonics users. -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize Routing.LengthMatch.Help.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize Routing.LengthMatch.Help.Intro}"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize Routing.LengthMatch.Help.Phase}"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize Routing.LengthMatch.Help.Mzi}"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize Routing.LengthMatch.Help.Delta}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
+
+        <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,6">
+            <TextBlock Text="{loc:Localize Routing.LengthMatch.CurrentLength}" Foreground="Gray" VerticalAlignment="Center"/>
+            <TextBlock Text="{Binding BottomPanel.LengthMatching.CurrentLengthText}" Foreground="LightGray" VerticalAlignment="Center"/>
+        </StackPanel>
+
+        <TextBlock Text="{loc:Localize Routing.LengthMatch.TargetLength}" Foreground="Gray" Margin="0,0,0,3"/>
+        <TextBox Text="{Binding BottomPanel.LengthMatching.TargetLengthText}"
+                 Watermark="{loc:Localize Routing.LengthMatch.TargetWatermark}"
+                 Width="180" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+
+        <TextBlock Text="{loc:Localize Routing.LengthMatch.Tolerance}" Foreground="Gray" Margin="0,0,0,3"/>
+        <TextBox Text="{Binding BottomPanel.LengthMatching.ToleranceText}"
+                 Width="180" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+
+        <StackPanel Orientation="Horizontal" Spacing="8">
+            <Button Content="{loc:Localize Routing.LengthMatch.Apply}"
+                    Command="{Binding BottomPanel.LengthMatching.ApplyCommand}"/>
+            <Button Content="{loc:Localize Routing.LengthMatch.Clear}"
+                    Command="{Binding BottomPanel.LengthMatching.ClearCommand}"/>
+        </StackPanel>
+
+        <!-- Error and success are separate blocks: colored without a converter. -->
+        <TextBlock Text="{Binding BottomPanel.LengthMatching.StatusMessage}"
+                   Foreground="#FF8A65" TextWrapping="Wrap" Margin="0,6,0,0"
+                   IsVisible="{Binding BottomPanel.LengthMatching.HasErrorStatus}"/>
+        <TextBlock Text="{Binding BottomPanel.LengthMatching.StatusMessage}"
+                   Foreground="LightGreen" TextWrapping="Wrap" Margin="0,6,0,0"
+                   IsVisible="{Binding BottomPanel.LengthMatching.HasSuccessStatus}"/>
+    </StackPanel>
+</UserControl>
