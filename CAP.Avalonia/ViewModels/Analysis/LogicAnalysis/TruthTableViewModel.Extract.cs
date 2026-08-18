@@ -50,6 +50,7 @@ public partial class TruthTableViewModel
                 Threshold = Threshold,
                 InputSignalNames = PreservedSignalNames(previousSignalNames, inputs),
             };
+            SignalNamesVisible = true;
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);
         }
         catch (OperationCanceledException)
