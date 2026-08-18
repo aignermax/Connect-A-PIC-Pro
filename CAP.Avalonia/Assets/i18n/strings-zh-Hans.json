@@ -1304,5 +1304,13 @@
   "LogicPanelHelp.RestorationTitle": "每一级都是干净的 0/1",
   "LogicPanelHelp.RestorationBody": "无源光学级联没有电平恢复:光功率逐级衰减并发生干涉,大约两级之后模拟电平就无法再读作干净的比特。逻辑层改为评估每个门自身的真值表——每个门输出重新变为严格的 0 或 1,因此任意深度的网络都能干净地组合。现实中的数字电子学在模拟晶体管之上也是这样工作的。",
   "LogicPanelHelp.InputsTitle": "每个未连接的门输入对应一个开关",
-  "LogicPanelHelp.InputsBody": "画布上每个未连接的门输入都会成为名为 门.引脚 的网络输入——在半加器示例中,加数 A 和 B 各自扇出到四个开关。同时切换同一加数的所有引脚即可设置其比特。"
+  "LogicPanelHelp.InputsBody": "画布上每个未连接的门输入都会成为名为 门.引脚 的网络输入——在半加器示例中,加数 A 和 B 各自扇出到四个开关。同时切换同一加数的所有引脚即可设置其比特。",
+  "LogicPanel.FanOut.Title": "扇出警告:",
+  "LogicPanel.FanOut.Warning": "'{0}' 驱动了 {1} 个门输入——光学上这需要每个分支一个分光器,每个分支约损耗 3 dB;真实设计用放大恢复电平,或复制该级。",
+  "LogicPanelFanOutHelp.Title": "为什么扇出是个问题?",
+  "LogicPanelFanOutHelp.Intro": "逻辑导线可以免费驱动多个门输入——求值只是复制比特。但光学上这是不可能的:一条导光波导不能简单地分叉。",
+  "LogicPanelFanOutHelp.SplitterTitle": "分光会瓜分功率",
+  "LogicPanelFanOutHelp.SplitterBody": "1×2 分光器只能把一半光功率送入每个分支(每个分支 −3 dB)。经过几个分支后,信号可能低于接收门的阈值,比特随之丢失。真实的光子设计用光放大恢复电平——或者干脆避免分光。",
+  "LogicPanelFanOutHelp.ExamplesTitle": "为什么示例要复制门",
+  "LogicPanelFanOutHelp.ExamplesBody": "随附的半加器和全加器示例从不分割门输出:教科书 XOR 中被共享的第一级 NAND 存在两份(NAND1A/NAND1B),加数 A 和 B 需要手动施加到多个开关上。复制的级能为每个输入提供完整功率——分光器做不到。请把每条扇出警告理解为:真实版图在这里需要分光器和电平恢复。"
 }

@@ -67,6 +67,34 @@ public class LogicNetworkAssemblerTests
     }
 
     [Fact]
+    public async Task AssembleAsync_OutputFannedOutToTwoInputs_ReportsTheFanOutWarning()
+    {
+        var first = OrGate("OR1");
+        var second = OrGate("OR2");
+        var connections = new[] { Connect(first, "y", second, "a"), Connect(first, "y", second, "b") };
+
+        var network = await Assemble(new Component[] { first, second }, connections);
+
+        var warning = network.FanOutWarnings.ShouldHaveSingleItem();
+        warning.PinName.ShouldBe("OR1.y");
+        warning.LoadCount.ShouldBe(2);
+        network.Evaluate(Bits(("OR1.a", true), ("OR1.b", false)))["OR2.y"].ShouldBeTrue(
+            "the fan-out stays evaluable — the warning does not block the idealized result");
+    }
+
+    [Fact]
+    public async Task AssembleAsync_PointToPointWiring_ReportsNoFanOutWarnings()
+    {
+        var first = OrGate("OR1");
+        var second = OrGate("OR2");
+        var connections = new[] { Connect(first, "y", second, "a") };
+
+        var network = await Assemble(new Component[] { first, second }, connections);
+
+        network.FanOutWarnings.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task AssembleAsync_NoGateGroup_ThrowsAReadableError()
     {
         var plain = new ComponentGroup("PLAIN");

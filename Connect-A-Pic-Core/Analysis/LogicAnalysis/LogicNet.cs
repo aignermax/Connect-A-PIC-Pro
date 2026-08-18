@@ -20,3 +20,13 @@ public abstract record LogicNetDriver
     /// <param name="Pin">The driving gate output pin.</param>
     public sealed record GateOutput(LogicPinRef Pin) : LogicNetDriver;
 }
+
+/// <summary>
+/// One fan-out finding: a driver — a gate output pin or a network input — feeding more
+/// than one gate input. The logic layer hands every load the full level, which optics
+/// cannot do (splitting a waveguide divides the power), so the finding is surfaced as a
+/// non-blocking warning instead of being silently idealized away.
+/// </summary>
+/// <param name="PinName">The fanning-out pin, named the way the network names it (<c>gateId.pinName</c> for a gate output, the pin name for a network input).</param>
+/// <param name="LoadCount">How many gate inputs the pin drives.</param>
+public sealed record LogicFanOutWarning(string PinName, int LoadCount);

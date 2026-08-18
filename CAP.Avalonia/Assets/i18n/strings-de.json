@@ -1304,5 +1304,13 @@
   "LogicPanelHelp.RestorationTitle": "Saubere 0/1 in jeder Stufe",
   "LogicPanelHelp.RestorationBody": "Eine passive optische Kaskade restauriert keine Pegel: Die Lichtleistung schwächt sich ab und interferiert von Stufe zu Stufe, sodass die analogen Pegel nach etwa zwei Stufen nicht mehr als saubere Bits lesbar sind. Die Logikebene wertet stattdessen die eigene Wahrheitstabelle jedes Gatters aus — jeder Gatterausgang ist wieder exakt 0 oder 1, sodass Netzwerke beliebiger Tiefe sauber komponieren. So funktioniert auch reale Digitalelektronik über analogen Transistoren.",
   "LogicPanelHelp.InputsTitle": "Ein Schalter pro unverbundenem Gattereingang",
-  "LogicPanelHelp.InputsBody": "Jeder auf dem Canvas unverbundene Gattereingang wird ein Netzwerk-Eingang namens GATTER.PIN — im Half-Adder-Beispiel fächern die Summanden A und B auf je vier Schalter auf. Schalte alle Pins eines Summanden gemeinsam, um sein Bit zu setzen."
+  "LogicPanelHelp.InputsBody": "Jeder auf dem Canvas unverbundene Gattereingang wird ein Netzwerk-Eingang namens GATTER.PIN — im Half-Adder-Beispiel fächern die Summanden A und B auf je vier Schalter auf. Schalte alle Pins eines Summanden gemeinsam, um sein Bit zu setzen.",
+  "LogicPanel.FanOut.Title": "Fan-out-Warnungen:",
+  "LogicPanel.FanOut.Warning": "'{0}' treibt {1} Gattereingänge — optisch braucht das einen Splitter pro Zweig und kostet ~3 dB je Zweig; echte Designs stellen die Pegel mit Verstärkung wieder her oder duplizieren die Stufe.",
+  "LogicPanelFanOutHelp.Title": "Warum ist Fan-out ein Problem?",
+  "LogicPanelFanOutHelp.Intro": "Ein Logikdraht kann mehrere Gattereingänge gratis speisen — die Auswertung kopiert einfach das Bit. Optisch ist das unmöglich: Ein lichtführender Wellenleiter kann sich nicht einfach gabeln.",
+  "LogicPanelFanOutHelp.SplitterTitle": "Aufteilen verteilt die Leistung",
+  "LogicPanelFanOutHelp.SplitterBody": "Ein 1×2-Splitter schickt nur die halbe Lichtleistung in jeden Zweig (−3 dB pro Zweig). Nach einigen Zweigen kann das Signal unter die Schaltschwelle des empfangenden Gatters fallen, und das Bit geht verloren. Echte photonische Designs stellen den Pegel mit optischer Verstärkung wieder her — oder vermeiden das Aufteilen ganz.",
+  "LogicPanelFanOutHelp.ExamplesTitle": "Warum die Beispiele ihre Gatter duplizieren",
+  "LogicPanelFanOutHelp.ExamplesBody": "Die mitgelieferten Half- und Full-Adder-Beispiele teilen nie einen Gatterausgang auf: Das geteilte NAND der ersten Stufe des Lehrbuch-XOR existiert doppelt (NAND1A/NAND1B), und die Summanden A und B werden von Hand auf mehrere Schalter gelegt. Eine duplizierte Stufe liefert volle Leistung an jedem Eingang — ein Splitter nicht. Lies jede Fan-out-Warnung als Stelle, an der ein echtes Layout Splitter und Pegelrestauration braucht."
 }

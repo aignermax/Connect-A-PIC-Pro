@@ -1,6 +1,9 @@
 using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP_Core.Components.Connections;
+using CAP_Core.Components.Core;
 using Shouldly;
+using UnitTests.Analysis.LogicAnalysis;
 using Xunit;
 
 namespace UnitTests.Integration;
@@ -15,6 +18,9 @@ namespace UnitTests.Integration;
 /// addend shows Sum at <c>NAND4.Y</c> and Carry at <c>NOT1.Y</c> for all four input
 /// combinations. A design without gate groups fails with a readable status instead of
 /// an exception, and IsProcessing brackets the assembly in success and failure alike.
+/// Fan-out honesty: the half adder's internal wires are all point-to-point, so it raises
+/// no warning, while a gate output wired to two gate inputs surfaces a non-blocking
+/// warning naming pin and load count — and the network still evaluates.
 /// </summary>
 public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.LoadedHalfAdder>
 {
@@ -120,6 +126,74 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         foreach (var name in pinNames)
             vm.Inputs.Single(i => i.PinName == name).IsOn = bit;
     }
+
+    [Fact]
+    public async Task BuildNetwork_HalfAdder_ReportsNoFanOutWarnings()
+    {
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        vm.HasFanOutWarnings.ShouldBeFalse(
+            "the shipped example keeps every internal wire point-to-point and duplicates " +
+            "its stages instead of splitting — its input fan-out lives in the tied toggles");
+        vm.FanOutWarnings.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task BuildNetwork_GateOutputFannedOutToTwoInputs_ShowsWarningNamingPinAndLoadCount()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var or1 = OrGate("OR1");
+        var or2 = OrGate("OR2");
+        canvas.Components.Add(new ComponentViewModel(or1));
+        canvas.Components.Add(new ComponentViewModel(or2));
+        canvas.Connections.Add(new WaveguideConnectionViewModel(Connect(or1, "y", or2, "a")));
+        canvas.Connections.Add(new WaveguideConnectionViewModel(Connect(or1, "y", or2, "b")));
+        var vm = new LogicPanelViewModel();
+        vm.Configure(canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        vm.HasFanOutWarnings.ShouldBeTrue();
+        var warning = vm.FanOutWarnings.ShouldHaveSingleItem();
+        warning.ShouldContain("OR1.y");
+        warning.ShouldContain("2");
+
+        vm.Inputs.Single(i => i.PinName == "OR1.a").IsOn = true;
+        vm.Outputs.Single(o => o.PinName == "OR2.y").IsOne.ShouldBeTrue(
+            "the warning does not block evaluation — the idealized result stays available");
+    }
+
+    /// <summary>A combiner group with the OR-reading assignment persisted, as the load path delivers it.</summary>
+    private static ComponentGroup OrGate(string groupName)
+    {
+        var group = LogicGateFixtureFactory.CreateCombinerGroup();
+        group.GroupName = groupName;
+        group.TruthTablePinAssignment = new TruthTablePinAssignment
+        {
+            InputPinNames = new List<string> { "a", "b" },
+            OutputPinNames = new List<string> { "y" },
+            BiasPinNames = new List<string>(),
+            Threshold = OrThreshold,
+        };
+        group.EnsureSMatrixComputed();
+        return group;
+    }
+
+    private const double OrThreshold = 0.25;
+
+    /// <summary>A design connection between two gate groups' external pins.</summary>
+    private static WaveguideConnection Connect(
+        ComponentGroup from, string fromPin, ComponentGroup to, string toPin) =>
+        new() { StartPin = Pin(from, fromPin), EndPin = Pin(to, toPin) };
+
+    /// <summary>Looks up a group's connectable external pin.</summary>
+    private static PhysicalPin Pin(ComponentGroup group, string name) =>
+        group.PhysicalPins.Single(p => p.Name == name);
 
     /// <summary>
     /// Shared fixture: loads the shipped half-adder example through the real load path

@@ -23,7 +23,8 @@ public sealed partial class LogicNetworkEvaluator
     /// <param name="gates">The gate instances of the network, keyed by their network-local id.</param>
     /// <param name="inputWiring">
     /// The driver of every gate input pin, keyed by (gateId, inputPin). Every input pin of
-    /// every gate must appear exactly once; fan-out of a driver to several loads is allowed.
+    /// every gate must appear exactly once; fan-out of a driver to several loads is allowed
+    /// and reported via <see cref="FanOutWarnings"/>.
     /// </param>
     /// <param name="outputTaps">Network-level output names, each tapping one gate output pin.</param>
     /// <exception cref="ArgumentException">
@@ -47,6 +48,7 @@ public sealed partial class LogicNetworkEvaluator
         ValidateWiring();
         ValidateOutputTaps();
         _evaluationOrder = TopologicalOrder();
+        FanOutWarnings = ComputeFanOutWarnings(_inputWiring);
     }
 
     /// <summary>Network-level input pin names.</summary>

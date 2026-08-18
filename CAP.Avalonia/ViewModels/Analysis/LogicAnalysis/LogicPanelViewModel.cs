@@ -15,7 +15,10 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// output as a live 0/1 indicator. Toggling an input re-evaluates immediately —
 /// <see cref="LogicNetworkEvaluator.Evaluate"/> is a pure truth-table lookup, so no
 /// new simulation runs. Assembly failures (no gate in the design, invalid wiring) are
-/// shown as readable status text, never as a crash.
+/// shown as readable status text, never as a crash. A built network that lets one output
+/// (or input) feed several gate inputs stays evaluable, but its fan-out warnings are
+/// surfaced next to the status text — optically that fork needs splitters and level
+/// restoration, which the logic layer idealizes away.
 /// </summary>
 public partial class LogicPanelViewModel : ObservableObject
 {
@@ -46,6 +49,13 @@ public partial class LogicPanelViewModel : ObservableObject
     /// <summary>Network-level output taps (every gate output), shown as 0/1 indicators.</summary>
     public ObservableCollection<LogicNetworkOutputViewModel> Outputs { get; } = new();
 
+    /// <summary>Non-blocking fan-out warnings of the built network, formatted for display.</summary>
+    public ObservableCollection<string> FanOutWarnings { get; } = new();
+
+    /// <summary>True when the built network has a driver feeding more than one gate input.</summary>
+    [ObservableProperty]
+    private bool _hasFanOutWarnings;
+
     /// <summary>Hands the panel the design canvas; called once from the RightPanel host.</summary>
     public void Configure(DesignCanvasViewModel canvas) => _canvas = canvas;
 
@@ -63,6 +73,12 @@ public partial class LogicPanelViewModel : ObservableObject
         {
             Outputs.Add(new LogicNetworkOutputViewModel(name));
         }
+        foreach (var warning in network.FanOutWarnings)
+        {
+            FanOutWarnings.Add(string.Format(
+                Translate("LogicPanel.FanOut.Warning"), warning.PinName, warning.LoadCount));
+        }
+        HasFanOutWarnings = FanOutWarnings.Count > 0;
 
         HasNetwork = true;
         ReEvaluate();
@@ -73,10 +89,12 @@ public partial class LogicPanelViewModel : ObservableObject
     {
         _network = null;
         HasNetwork = false;
+        HasFanOutWarnings = false;
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
         Outputs.Clear();
+        FanOutWarnings.Clear();
     }
 
     /// <summary>A toggled input re-evaluates the whole network synchronously.</summary>

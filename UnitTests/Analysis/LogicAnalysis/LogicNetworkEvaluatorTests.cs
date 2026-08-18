@@ -117,6 +117,57 @@ public class LogicNetworkEvaluatorTests
     }
 
     [Fact]
+    public void FanOutWarnings_NetworkInputDrivingTwoGateInputs_NamesTheInputAndLoadCount()
+    {
+        var network = new LogicNetworkEvaluator(
+            new[] { "a" },
+            new Dictionary<string, LogicGateModel> { ["nand"] = PinnedGateTables.NandGate() },
+            new Dictionary<LogicPinRef, LogicNetDriver>
+            {
+                [new LogicPinRef("nand", "A")] = new LogicNetDriver.NetworkInput("a"),
+                [new LogicPinRef("nand", "B")] = new LogicNetDriver.NetworkInput("a"),
+            },
+            new Dictionary<string, LogicPinRef> { ["y"] = new("nand", "Y") });
+
+        var warning = network.FanOutWarnings.ShouldHaveSingleItem();
+
+        warning.PinName.ShouldBe("a");
+        warning.LoadCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public void FanOutWarnings_GateOutputDrivingTwoGateInputs_NamesThePinAndLoadCount()
+    {
+        var network = new LogicNetworkEvaluator(
+            new[] { "a", "b" },
+            new Dictionary<string, LogicGateModel>
+            {
+                ["src"] = PinnedGateTables.NandGate(),
+                ["sink"] = PinnedGateTables.NandGate(),
+            },
+            new Dictionary<LogicPinRef, LogicNetDriver>
+            {
+                [new LogicPinRef("src", "A")] = new LogicNetDriver.NetworkInput("a"),
+                [new LogicPinRef("src", "B")] = new LogicNetDriver.NetworkInput("b"),
+                [new LogicPinRef("sink", "A")] = new LogicNetDriver.GateOutput(new LogicPinRef("src", "Y")),
+                [new LogicPinRef("sink", "B")] = new LogicNetDriver.GateOutput(new LogicPinRef("src", "Y")),
+            },
+            new Dictionary<string, LogicPinRef> { ["y"] = new("sink", "Y") });
+
+        var warning = network.FanOutWarnings.ShouldHaveSingleItem();
+
+        warning.PinName.ShouldBe("src.Y");
+        warning.LoadCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public void FanOutWarnings_PointToPointNetwork_IsEmpty()
+    {
+        SingleNotNetwork().FanOutWarnings.ShouldBeEmpty(
+            "every driver feeds exactly one load — nothing to warn about");
+    }
+
+    [Fact]
     public void Constructor_CrossWiredGates_ThrowsCycleErrorInsteadOfHanging()
     {
         var error = Should.Throw<InvalidOperationException>(() => new LogicNetworkEvaluator(

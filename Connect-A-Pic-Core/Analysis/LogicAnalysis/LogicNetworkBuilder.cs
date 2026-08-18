@@ -7,7 +7,9 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// Derives a <see cref="LogicNetworkEvaluator"/> from the gate groups placed on the
 /// canvas, making the canvas the source of truth for the wiring: a connection from
 /// one group's external output pin to another group's external input pin becomes a
-/// logic wire (fan-out of one output to several inputs is allowed). Unconnected
+/// logic wire (fan-out of one output to several inputs is allowed and reported back as
+/// <see cref="LogicFanOutWarning"/>s on the built network — optically such a fork needs
+/// splitters and level restoration, which the logic layer idealizes away). Unconnected
 /// gate input pins become network-level inputs named <c>&lt;group&gt;.&lt;pin&gt;</c>,
 /// and every gate output pin becomes a network-level output tap under the same
 /// naming — also when it additionally drives another gate. Bias pins take no part

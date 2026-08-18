@@ -4,6 +4,7 @@
              xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              xmlns:logic="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis"
+             xmlns:system="clr-namespace:System;assembly=System.Runtime"
              x:Class="CAP.Avalonia.Views.Panels.LogicPanel"
              x:DataType="vm:MainViewModel">
 
@@ -51,6 +52,39 @@
                    IsVisible="{Binding RightPanel.Logic.WavelengthText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
         <TextBlock Text="{Binding RightPanel.Logic.StatusText}" Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
                    IsVisible="{Binding RightPanel.Logic.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- Non-blocking fan-out honesty: one line per driver feeding more than one gate
+             input. The evaluation stays available; the warning keeps the physics honest. -->
+        <StackPanel IsVisible="{Binding RightPanel.Logic.HasFanOutWarnings}" Margin="0,0,0,5">
+            <Grid ColumnDefinitions="*,Auto">
+                <TextBlock Text="{loc:Localize LogicPanel.FanOut.Title}" Foreground="Orange" FontSize="10" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                <controls:HelpFlyoutButton Grid.Column="1"
+                                           Title="{loc:Localize LogicPanelFanOutHelp.Title}"
+                                           VerticalAlignment="Center">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize LogicPanelFanOutHelp.Intro}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.SplitterTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelFanOutHelp.SplitterBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.ExamplesTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelFanOutHelp.ExamplesBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.FanOutWarnings}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="system:String">
+                        <TextBlock Text="{Binding}" Foreground="Orange" FontSize="10" TextWrapping="Wrap" Margin="0,1"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
 
         <!-- The assembled network: one toggle per unconnected gate input, one live
              0/1 indicator per gate output -->

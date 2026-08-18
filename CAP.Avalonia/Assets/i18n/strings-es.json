@@ -1304,5 +1304,13 @@
   "LogicPanelHelp.RestorationTitle": "0/1 limpios en cada etapa",
   "LogicPanelHelp.RestorationBody": "Una cascada óptica pasiva no restaura niveles: la potencia de la luz se debilita e interfiere de etapa en etapa, así que tras unas dos etapas los niveles analógicos ya no se leen como bits limpios. La capa lógica evalúa en cambio la tabla de verdad de cada puerta: cada salida vuelve a ser exactamente 0 o 1, de modo que redes de cualquier profundidad se componen limpiamente. Así funciona también la electrónica digital real sobre transistores analógicos.",
   "LogicPanelHelp.InputsTitle": "Un interruptor por entrada de puerta sin conectar",
-  "LogicPanelHelp.InputsBody": "Cada entrada de puerta sin conectar en el lienzo se convierte en una entrada de red llamada PUERTA.PIN: en el ejemplo del semisumador, los sumandos A y B se reparten cada uno en cuatro interruptores. Cambia todos los pines de un sumando a la vez para fijar su bit."
+  "LogicPanelHelp.InputsBody": "Cada entrada de puerta sin conectar en el lienzo se convierte en una entrada de red llamada PUERTA.PIN: en el ejemplo del semisumador, los sumandos A y B se reparten cada uno en cuatro interruptores. Cambia todos los pines de un sumando a la vez para fijar su bit.",
+  "LogicPanel.FanOut.Title": "Advertencias de fan-out:",
+  "LogicPanel.FanOut.Warning": "'{0}' alimenta {1} entradas de puerta — ópticamente esto necesita un divisor por rama y cuesta ~3 dB cada una; los diseños reales restauran los niveles con amplificación o duplican la etapa.",
+  "LogicPanelFanOutHelp.Title": "¿Por qué es un problema el fan-out?",
+  "LogicPanelFanOutHelp.Intro": "Un cable lógico puede alimentar varias entradas de puerta gratis — la evaluación simplemente copia el bit. Ópticamente eso es imposible: una guía de onda que lleva luz no puede simplemente bifurcarse.",
+  "LogicPanelFanOutHelp.SplitterTitle": "Dividir reparte la potencia",
+  "LogicPanelFanOutHelp.SplitterBody": "Un divisor 1×2 envía solo la mitad de la potencia de la luz a cada rama (−3 dB por rama). Tras unas pocas ramas la señal puede caer por debajo del umbral de la puerta receptora y el bit se pierde. Los diseños fotónicos reales restauran el nivel con amplificación óptica — o evitan dividir por completo.",
+  "LogicPanelFanOutHelp.ExamplesTitle": "Por qué los ejemplos duplican sus puertas",
+  "LogicPanelFanOutHelp.ExamplesBody": "Los ejemplos incluidos de semisumador y sumador completo nunca dividen una salida de puerta: el NAND compartido de la primera etapa del XOR de libro existe dos veces (NAND1A/NAND1B), y los sumandos A y B se aplican a mano a varios interruptores. Una etapa duplicada entrega potencia completa en cada entrada — un divisor no. Lee cada advertencia de fan-out como un punto donde un layout real necesita divisores y restauración de niveles."
 }

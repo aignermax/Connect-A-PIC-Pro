@@ -84,6 +84,54 @@ public class LogicNetworkBuilderTests
             "NAND(!a, !a) restores the input bit");
     }
 
+    [Fact]
+    public void Build_OutputFannedOutToTwoInputs_ReportsTheFanOutWarning()
+    {
+        var source = NotInstance("SRC");
+        var nand = NandInstance("NAND");
+        var connections = new[] { Connect(source, "Y", nand, "A"), Connect(source, "Y", nand, "B") };
+
+        var network = new LogicNetworkBuilder().Build(new[] { source, nand }, connections);
+
+        var warning = network.FanOutWarnings.ShouldHaveSingleItem();
+        warning.PinName.ShouldBe("SRC.Y");
+        warning.LoadCount.ShouldBe(2);
+    }
+
+    [Fact]
+    public void Build_OutputFannedOutToThreeInputs_ReportsTheFullLoadCount()
+    {
+        var source = NotInstance("SRC");
+        var first = NotInstance("NOT1");
+        var second = NotInstance("NOT2");
+        var third = NotInstance("NOT3");
+        var connections = new[]
+        {
+            Connect(source, "Y", first, "A"),
+            Connect(source, "Y", second, "A"),
+            Connect(source, "Y", third, "A"),
+        };
+
+        var network = new LogicNetworkBuilder().Build(new[] { source, first, second, third }, connections);
+
+        var warning = network.FanOutWarnings.ShouldHaveSingleItem();
+        warning.PinName.ShouldBe("SRC.Y");
+        warning.LoadCount.ShouldBe(3);
+    }
+
+    [Fact]
+    public void Build_PointToPointChain_ReportsNoFanOutWarnings()
+    {
+        var nand = NandInstance("NAND");
+        var inv = NotInstance("INV");
+        var connections = new[] { Connect(nand, "Y", inv, "A") };
+
+        var network = new LogicNetworkBuilder().Build(new[] { nand, inv }, connections);
+
+        network.FanOutWarnings.ShouldBeEmpty(
+            "every wire joins exactly one output with exactly one input");
+    }
+
     [Theory]
     [InlineData(false, true)]
     [InlineData(true, false)]
