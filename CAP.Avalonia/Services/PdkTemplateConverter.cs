@@ -192,12 +192,25 @@ public static class PdkTemplateConverter
         return sMatrix;
     }
 
+    /// <summary>
+    /// Builds the runtime <see cref="SMatrix"/> from a fixed (non-parametric)
+    /// <see cref="PdkSMatrixDraft"/>. A null draft means the component has no
+    /// simulation model at all (GDS import, black-box custom component) and gets
+    /// the black-box default of <see cref="ApplyBlackBoxDefault"/>; a draft with
+    /// no connections stays fully absorbing.
+    /// </summary>
     public static SMatrix CreateSMatrixFromPdk(List<Pin> pins, PdkSMatrixDraft? sMatrixDraft)
     {
         var pinIds = pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
         var sMatrix = new SMatrix(pinIds, new List<(Guid, double)>());
 
-        if (sMatrixDraft?.Connections == null || sMatrixDraft.Connections.Count == 0)
+        if (sMatrixDraft == null)
+        {
+            ApplyBlackBoxDefault(pins, sMatrix);
+            return sMatrix;
+        }
+
+        if (sMatrixDraft.Connections == null || sMatrixDraft.Connections.Count == 0)
             return sMatrix;
 
         var pinByName = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
@@ -221,5 +234,28 @@ public static class PdkTemplateConverter
 
         sMatrix.SetValues(transfers);
         return sMatrix;
+    }
+
+    /// <summary>
+    /// Simulation default for a component without any S-matrix model. Exactly two
+    /// optical pins have one unambiguous ideal — the lossless pass-through
+    /// (magnitude 1, phase 0, both directions), mirroring
+    /// <c>FdtdSMatrixToDraftConverter.LosslessTwoPort</c> — so an imported waveguide
+    /// passes light instead of swallowing it. Every other pin count has no canonical
+    /// model and stays absorbing: an all-pairs unit-magnitude default would be
+    /// non-passive and could diverge the field iteration, and any invented split
+    /// ratio would be fabricated physics.
+    /// </summary>
+    private static void ApplyBlackBoxDefault(List<Pin> pins, SMatrix sMatrix)
+    {
+        var opticalPins = pins.Where(p => p.MatterType == MatterType.Light).ToList();
+        if (opticalPins.Count != 2)
+            return;
+
+        sMatrix.SetValues(new Dictionary<(Guid, Guid), Complex>
+        {
+            [(opticalPins[0].IDInFlow, opticalPins[1].IDOutFlow)] = Complex.One,
+            [(opticalPins[1].IDInFlow, opticalPins[0].IDOutFlow)] = Complex.One,
+        });
     }
 }

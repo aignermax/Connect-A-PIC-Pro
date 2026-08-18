@@ -225,6 +225,25 @@ public class GdsCellDraftMapperTests
     }
 
     [Fact]
+    public void Map_TwoOpticalPins_PlacedComponentPassesLightThrough()
+    {
+        // A GDS-imported 2-pin cell must not absorb all light — the placed
+        // component's S-matrix carries the lossless in↔out pass-through.
+        var componentDraft = GdsCellDraftMapper.Map(Draft(), "/tmp/lib/circuit.gds");
+        var template = PdkTemplateConverter.ConvertToTemplate(componentDraft, "user-pdk", null);
+        var component = ComponentTemplates.CreateFromTemplate(template, 0, 0);
+
+        var matrix = component.WaveLengthToSMatrixMap[1550];
+        var inPin = component.PhysicalPins.Select(p => p.LogicalPin!).Single(p => p.Name == "in");
+        var outPin = component.PhysicalPins.Select(p => p.LogicalPin!).Single(p => p.Name == "out");
+
+        var transfers = matrix.GetNonNullValues();
+        transfers.Count.ShouldBe(2);
+        transfers[(inPin.IDInFlow, outPin.IDOutFlow)].Magnitude.ShouldBe(1.0, Tolerance);
+        transfers[(outPin.IDInFlow, inPin.IDOutFlow)].Magnitude.ShouldBe(1.0, Tolerance);
+    }
+
+    [Fact]
     public void Map_ProvenElectricalPin_PlacedComponentPinIsElectrical()
     {
         // The whole survival chain: DetectedPin.IsElectrical → pinKind JSON field

@@ -9,9 +9,11 @@ namespace CAP.Avalonia.Services.GdsImport;
 /// Maps a <see cref="GdsCellDraft"/> (pure-data output of the GDS hierarchy
 /// importer) to a persistable <see cref="PdkComponentDraft"/>, mirroring the
 /// shape <c>CustomComponentDraftFactory</c> establishes for black-box custom
-/// components: <see cref="PdkComponentDraft.SMatrix"/> stays null (no simulation
-/// model — the component simulates as a lossless pass-through), and geometry is
-/// carried by <see cref="PdkComponentDraft.RawCode"/> plus the outline polygons.
+/// components: <see cref="PdkComponentDraft.SMatrix"/> stays null (no measured or
+/// computed model — the template converter applies its black-box default: a cell
+/// with exactly two optical pins simulates as a lossless pass-through, any other
+/// pin count absorbs), and geometry is carried by
+/// <see cref="PdkComponentDraft.RawCode"/> plus the outline polygons.
 /// </summary>
 public static class GdsCellDraftMapper
 {
