@@ -160,7 +160,9 @@ public partial class LengthMatchingViewModel : ObservableObject
     /// <summary>
     /// Removes the length intent: drops target/tolerance, unfreezes the route and lets the
     /// normal router rebuild it (the stale meander geometry must be discarded first, or the
-    /// incremental router would keep it).
+    /// incremental router would keep it). A connection without a length target is left
+    /// untouched: routes frozen for other reasons (e.g. GDS-imported geometry) must not be
+    /// unfrozen and re-routed — that would silently discard their path.
     /// </summary>
     [RelayCommand]
     private async Task Clear()
@@ -169,6 +171,9 @@ public partial class LengthMatchingViewModel : ObservableObject
             return;
 
         var connection = target.Connection;
+        if (connection.TargetLengthMicrometers is null)
+            return;
+
         connection.TargetLengthMicrometers = null;
         connection.LengthToleranceMicrometers = null;
         connection.IsRouteFrozen = false;

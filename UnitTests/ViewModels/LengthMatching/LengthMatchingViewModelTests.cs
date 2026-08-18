@@ -193,4 +193,26 @@ public class LengthMatchingViewModelTests
         vm.IsStatusError.ShouldBeFalse();
         vm.HasSuccessStatus.ShouldBeTrue();
     }
+
+    [Fact]
+    public async Task Clear_WithoutTargetOnFrozenRoute_KeepsGeometryUntouched()
+    {
+        var canvas = new DesignCanvasViewModel();
+        var (startPin, endPin) = AddComponentPair(canvas);
+        var connVm = ConnectStraight(canvas, startPin, endPin);
+        var routeBefore = connVm.Connection.RoutedPath;
+        // GDS-imported routes are frozen with no length target (GdsPlacementExecutor).
+        connVm.Connection.IsRouteFrozen = true;
+
+        var vm = new LengthMatchingViewModel(canvas) { SelectedConnection = connVm };
+        await vm.ClearCommand.ExecuteAsync(null);
+
+        connVm.Connection.IsRouteFrozen.ShouldBeTrue(
+            "Clear must not unfreeze a route that never had a length target — " +
+            "unfreezing a GDS-imported route would silently discard its imported geometry");
+        connVm.Connection.RoutedPath.ShouldBeSameAs(routeBefore);
+        connVm.Connection.TargetLengthMicrometers.ShouldBeNull();
+        connVm.Connection.LengthToleranceMicrometers.ShouldBeNull();
+        vm.HasStatus.ShouldBeFalse("nothing was cleared, so no status is shown");
+    }
 }
