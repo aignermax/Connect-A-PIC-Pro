@@ -74,6 +74,12 @@ public sealed partial class LogicNetworkEvaluator
     /// <summary>Network-level output taps: the tapped gate output pin per output name.</summary>
     public IReadOnlyDictionary<string, LogicPinRef> OutputTaps => _outputTaps;
 
+    /// <summary>The driver of every gate input pin — exposed for the event-timeline walker.</summary>
+    internal IReadOnlyDictionary<LogicPinRef, LogicNetDriver> InputWiring => _inputWiring;
+
+    /// <summary>The topological gate order — exposed for the event-timeline walker.</summary>
+    internal IReadOnlyList<string> EvaluationOrder => _evaluationOrder;
+
     /// <summary>
     /// Evaluates the network for one input combination: every gate fires exactly
     /// once in topological order, reading clean bits and producing clean bits.
