@@ -7,11 +7,14 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// path length: the geometric lengths of the group's internal waveguide paths plus the
 /// physical width of every leaf child component (the distance light travels through it
 /// along the propagation axis), converted with the waveguide group index —
-/// delay = L · n_g / c. The group index comes from an internal path's dispersion model
-/// when the process data carries one; otherwise <see cref="DefaultGroupIndex"/> applies
-/// (a silicon strip waveguide). The result is a physically plausible estimate — µm of
-/// path times n_g/c lands in the fs–ps range — not an exact timing model: per-edge wire
-/// delays between gates and event-driven simulation are a later rung.
+/// delay = L · n_g / c. Nested <see cref="ComponentGroup"/> children contribute their
+/// own paths and widths, so hierarchy does not change the physics. Each path is
+/// converted with its own dispersion model's group index, falling back to
+/// <see cref="DefaultGroupIndex"/>; component widths use the first group index the
+/// recursive paths carry, else the default (a silicon strip waveguide). The result is
+/// a physically plausible estimate — µm of path times n_g/c lands in the fs–ps range —
+/// not an exact timing model: per-edge wire delays between gates and event-driven
+/// simulation are a later rung.
 /// </summary>
 public sealed class GateDelayCalculator
 {
@@ -37,25 +40,42 @@ public sealed class GateDelayCalculator
     public double CalculatePicoseconds(ComponentGroup group, double wavelengthNm)
     {
         if (group == null) throw new ArgumentNullException(nameof(group));
-        var lengthMicrometers = InternalPathLengthMicrometers(group);
-        var groupIndex = ResolveGroupIndex(group, wavelengthNm);
-        return lengthMicrometers * groupIndex / SpeedOfLightMicrometersPerPicosecond;
+        var fallbackIndex = ResolveGroupIndex(group, wavelengthNm);
+        var widthDelay = group.GetAllComponentsRecursive()
+            .Where(component => component is not ComponentGroup)
+            .Sum(component => component.WidthMicrometers) * fallbackIndex;
+        var pathDelay = EnumerateInternalPaths(group)
+            .Sum(path => (path.Path?.TotalLengthMicrometers ?? 0)
+                * (path.DispersionModel?.GroupIndexAt(wavelengthNm) ?? DefaultGroupIndex));
+        return (widthDelay + pathDelay) / SpeedOfLightMicrometersPerPicosecond;
     }
 
     /// <summary>
-    /// Total internal optical path length in micrometers: the geometric lengths of the
-    /// group's internal waveguide paths plus the width of every leaf child component.
+    /// Total internal optical path length in micrometers, recursive across nested
+    /// groups: the geometric lengths of all internal waveguide paths plus the width of
+    /// every leaf child component.
     /// </summary>
     public static double InternalPathLengthMicrometers(ComponentGroup group) =>
-        group.InternalPaths.Sum(path => path.Path?.TotalLengthMicrometers ?? 0)
+        EnumerateInternalPaths(group).Sum(path => path.Path?.TotalLengthMicrometers ?? 0)
         + group.GetAllComponentsRecursive()
             .Where(component => component is not ComponentGroup)
             .Sum(component => component.WidthMicrometers);
 
-    /// <summary>The first group index the group's internal waveguides carry, else the default.</summary>
+    /// <summary>The first group index the recursive internal waveguides carry, else the default.</summary>
     private static double ResolveGroupIndex(ComponentGroup group, double wavelengthNm) =>
-        group.InternalPaths
+        EnumerateInternalPaths(group)
             .Select(path => path.DispersionModel?.GroupIndexAt(wavelengthNm))
             .FirstOrDefault(index => index.HasValue)
         ?? DefaultGroupIndex;
+
+    /// <summary>Depth-first enumeration of this group's and every nested group's frozen paths.</summary>
+    private static IEnumerable<FrozenWaveguidePath> EnumerateInternalPaths(ComponentGroup group)
+    {
+        foreach (var path in group.InternalPaths)
+            yield return path;
+        foreach (var child in group.ChildComponents)
+            if (child is ComponentGroup childGroup)
+                foreach (var path in EnumerateInternalPaths(childGroup))
+                    yield return path;
+    }
 }
