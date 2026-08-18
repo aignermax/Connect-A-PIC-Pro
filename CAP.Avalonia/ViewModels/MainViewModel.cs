@@ -1578,6 +1578,15 @@ public class ConnectionData
 
     /// <summary>GDS datatype of the import source route polygons — see <see cref="SourceGdsLayer"/>.</summary>
     public int? SourceGdsDataType { get; set; }
+
+    /// <summary>
+    /// Target route length (µm) the connection was meandered to (issue #1008);
+    /// null = no length intent (also in files that predate the field).
+    /// </summary>
+    public double? TargetLengthMicrometers { get; set; }
+
+    /// <summary>Accepted deviation (µm) from <see cref="TargetLengthMicrometers"/>; null = no length intent.</summary>
+    public double? LengthToleranceMicrometers { get; set; }
 }
 
 /// <summary>
