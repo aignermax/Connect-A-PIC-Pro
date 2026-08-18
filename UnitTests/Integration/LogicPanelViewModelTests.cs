@@ -109,6 +109,14 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         warningB.Warning.LoadNames.ShouldBe(InputsB, ignoreOrder: true);
         warningA.WarningText.ShouldContain("A");
         warningA.WarningText.ShouldContain("4");
+        // Issue #1011: the quantitative level report rides along — an ideal 1×4
+        // split of the full input power hands each branch 0.25, which still
+        // reaches the NAND threshold 0.125, so every branch reads "still a 1".
+        warningA.SplitLine.ShouldContain("4");
+        warningA.VerdictLines.Count.ShouldBe(warningA.Warning.LoadCount);
+        warningA.Warning.Levels.DriverPowerOne.ShouldBe(1.0);
+        warningA.Warning.Levels.BranchPower.ShouldBe(0.25);
+        warningA.Warning.Levels.Branches.ShouldAllBe(b => b.ReadsAsOne && b.Threshold == 0.125);
     }
 
     [Fact]

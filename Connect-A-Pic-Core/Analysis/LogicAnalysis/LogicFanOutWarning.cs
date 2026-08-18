@@ -26,8 +26,15 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// order — listed in the UI so the user sees exactly which pins the warning
 /// groups together.
 /// </param>
+/// <param name="Levels">
+/// The quantitative level report (#1011): assuming an ideal 1×N splitter behind the
+/// driver, the per-branch power and, per receiving input, whether it would still
+/// reach that gate's power threshold and read as a logic 1. Advisory only — the
+/// idealized logic result stays unchanged.
+/// </param>
 public sealed record LogicFanOutWarning(
     string DriverDisplayName,
     bool IsNetworkInputSignal,
     int LoadCount,
-    IReadOnlyList<string> LoadNames);
+    IReadOnlyList<string> LoadNames,
+    FanOutLevelReport Levels);

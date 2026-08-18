@@ -1313,9 +1313,12 @@
   "LogicPanel.FanOutWarning.GateLine": "门输出 '{0}' 驱动 {1} 个门输入。",
   "LogicPanel.FanOutWarning.InputLine": "输入信号 '{0}' 驱动 {1} 个门输入。",
   "LogicPanel.FanOutWarning.PhysicsNote": "在光学上,这需要每个分支一个分束器,每个分束器损耗约 3 dB;实际设计通过放大恢复电平,或复制驱动级。",
+  "LogicPanel.FanOutWarning.SplitLine": "理想 1×{0} 分光:{1:0.###} → 每分支 {2:0.###}(−{3:0.00} dB)",
+  "LogicPanel.FanOutWarning.BranchStillOne": "✓ '{0}' 仍可读出 1(阈值 {1:0.###})",
+  "LogicPanel.FanOutWarning.BranchWouldFail": "✗ '{0}' 将无法读出 1(阈值 {1:0.###})",
   "LogicPanelFanOutHelp.Title": "为什么要警告扇出?",
   "LogicPanelFanOutHelp.Intro": "逻辑层为每个被驱动的门输入提供完整的理想电平——但光不会增多。从门引出的一根波导(或驱动输入信号的一个激光器)只能被分束,而分束会把光功率分配到各分支。上面的网络在真实光子学中无法直接工作。",
   "LogicPanelFanOutHelp.PhysicsTitle": "分束会损耗功率",
-  "LogicPanelFanOutHelp.PhysicsBody": "1×2 分束器把一半的光送入每个分支——每个分支约损耗 3 dB。扇出到 N 个输入会级联分束:4 个负载约损耗 6 dB,8 个约 9 dB。低于门的开关阈值时,接收门就无法读出干净的比特,上面理想化的 0/1 会退化为模拟噪声。",
+  "LogicPanelFanOutHelp.PhysicsBody": "1×2 分束器把一半的光送入每个分支——每个分支约损耗 3 dB。扇出到 N 个输入会级联分束:4 个负载约损耗 6 dB,8 个约 9 dB。低于门的开关阈值时,接收门就无法读出干净的比特,上面理想化的 0/1 会退化为模拟噪声。经验法则:每次分光功率减半(每分支 −3 dB),N 个分支即损耗 −10·log10(N) dB——每条警告中的判定均假设为无附加损耗的理想分光器,实际硬件会略差一些。",
   "LogicPanelFanOutHelp.ExamplesTitle": "实际设计如何处理",
   "LogicPanelFanOutHelp.ExamplesBody": "两种标准做法:分束后放大信号(有源级恢复电平,类似电子学中的缓冲器),或复制驱动级,让每个负载都有自己的波导。附带的半加器和全加器示例采用第二种:教科书中的 XOR 让一个 NAND(A, B) 同时驱动三个消费者——光学上这是一种扇出——因此示例为每个消费者各实例化一次该级。网络中看到的复制正是逻辑层所抽象掉的物理诚实性。"}

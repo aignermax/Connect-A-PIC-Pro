@@ -23,24 +23,30 @@ public sealed partial class LogicNetworkEvaluator
     /// <summary>Runs the fan-out detection over the validated wiring; called once from the constructor.</summary>
     private void DetectFanOut()
     {
+        var levels = new FanOutLevelCalculator(Gates);
         var warnings = new List<LogicFanOutWarning>();
-        warnings.AddRange(DetectGateOutputFanOut());
-        warnings.AddRange(DetectNetworkInputSignalFanOut());
+        warnings.AddRange(DetectGateOutputFanOut(levels));
+        warnings.AddRange(DetectNetworkInputSignalFanOut(levels));
         FanOutWarnings = warnings;
     }
 
     /// <summary>One warning per gate output pin wired to more than one gate input.</summary>
-    private IEnumerable<LogicFanOutWarning> DetectGateOutputFanOut()
+    private IEnumerable<LogicFanOutWarning> DetectGateOutputFanOut(FanOutLevelCalculator levels)
     {
         return _inputWiring
             .Where(pair => pair.Value is LogicNetDriver.GateOutput)
             .GroupBy(pair => ((LogicNetDriver.GateOutput)pair.Value).Pin)
             .Where(group => group.Count() > 1)
-            .Select(group => new LogicFanOutWarning(
-                DriverDisplayName: FormatPin(group.Key),
-                IsNetworkInputSignal: false,
-                LoadCount: group.Count(),
-                LoadNames: group.Select(pair => FormatPin(pair.Key)).ToList()));
+            .Select(group =>
+            {
+                var loads = group.Select(pair => pair.Key).ToList();
+                return new LogicFanOutWarning(
+                    DriverDisplayName: FormatPin(group.Key),
+                    IsNetworkInputSignal: false,
+                    LoadCount: loads.Count,
+                    LoadNames: loads.Select(FormatPin).ToList(),
+                    Levels: levels.ForGateOutput(group.Key, loads));
+            });
     }
 
     /// <summary>
@@ -50,17 +56,22 @@ public sealed partial class LogicNetworkEvaluator
     /// signal the user drives from a single source — physically one laser whose
     /// light would have to be split across every pin in the group.
     /// </summary>
-    private IEnumerable<LogicFanOutWarning> DetectNetworkInputSignalFanOut()
+    private IEnumerable<LogicFanOutWarning> DetectNetworkInputSignalFanOut(FanOutLevelCalculator levels)
     {
         return _inputWiring
             .Where(pair => pair.Value is LogicNetDriver.NetworkInput)
             .GroupBy(pair => pair.Key.PinName)
             .Where(group => group.Count() > 1)
-            .Select(group => new LogicFanOutWarning(
-                DriverDisplayName: group.Key,
-                IsNetworkInputSignal: true,
-                LoadCount: group.Count(),
-                LoadNames: group.Select(pair => FormatPin(pair.Key)).ToList()));
+            .Select(group =>
+            {
+                var loads = group.Select(pair => pair.Key).ToList();
+                return new LogicFanOutWarning(
+                    DriverDisplayName: group.Key,
+                    IsNetworkInputSignal: true,
+                    LoadCount: loads.Count,
+                    LoadNames: loads.Select(FormatPin).ToList(),
+                    Levels: levels.ForNetworkInput(loads));
+            });
     }
 
     /// <summary>Renders a gate pin the way network inputs and taps are named: <c>gate.pin</c>.</summary>
