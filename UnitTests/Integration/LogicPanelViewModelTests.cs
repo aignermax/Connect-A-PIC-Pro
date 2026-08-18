@@ -109,6 +109,36 @@ public class LogicPanelViewModelTests : IClassFixture<LogicPanelViewModelTests.L
         warningB.Warning.LoadNames.ShouldBe(InputsB, ignoreOrder: true);
         warningA.WarningText.ShouldContain("A");
         warningA.WarningText.ShouldContain("4");
+        // Issue #1011: the quantitative level report rides along — an ideal 1×4
+        // split of the full input power hands each branch 0.25, which still
+        // reaches the NAND threshold 0.125, so every branch reads "still a 1".
+        warningA.SplitLine.ShouldContain("4");
+        warningA.VerdictLines.Count.ShouldBe(warningA.Warning.LoadCount);
+        warningA.Warning.Levels.DriverPowerOne.ShouldBe(1.0);
+        warningA.Warning.Levels.BranchPower.ShouldBe(0.25);
+        warningA.Warning.Levels.Branches.ShouldAllBe(b => b.ReadsAsOne && b.Threshold == 0.125);
+    }
+
+    [Fact]
+    public async Task BuildNetwork_HalfAdder_ShowsGateDelaysAndCriticalPath()
+    {
+        // Issue #1002: every gate output shows its gate's propagation delay, and the
+        // panel carries one critical-path line — the slowest gate chain sets how fast
+        // the circuit can clock.
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        vm.Outputs.ShouldAllBe(
+            o => o.DelayText.EndsWith("ps") && !o.DelayText.StartsWith("0.0") && !o.DelayText.StartsWith("0,0"),
+            "every gate output shows its gate's non-zero propagation delay");
+        vm.CriticalPathText.ShouldContain("ps");
+        vm.CriticalPathText.Contains(" 0.0 ps ").ShouldBeFalse(
+            "the half adder's critical path is non-zero");
+        vm.CriticalPathText.Contains(" 0,0 ps ").ShouldBeFalse(
+            "the half adder's critical path is non-zero");
     }
 
     [Fact]

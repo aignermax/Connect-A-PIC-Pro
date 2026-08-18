@@ -87,8 +87,22 @@
                 <ItemsControl ItemsSource="{Binding RightPanel.Logic.FanOutWarnings}">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate x:DataType="logic:LogicFanOutWarningViewModel">
-                            <TextBlock Text="{Binding WarningText}" Foreground="#e6c860"
-                                       FontSize="10" TextWrapping="Wrap"/>
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="{Binding WarningText}" Foreground="#e6c860"
+                                           FontSize="10" TextWrapping="Wrap"/>
+                                <!-- Quantitative level report (#1011): the ideal-split arithmetic
+                                     and one verdict per receiving input. -->
+                                <TextBlock Text="{Binding SplitLine}" Foreground="#d8b44a"
+                                           FontSize="10" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding VerdictLines}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" Foreground="#d8b44a"
+                                                       FontSize="10" TextWrapping="Wrap" Margin="10,0,0,0"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
