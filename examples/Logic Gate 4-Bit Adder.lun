@@ -3717,7 +3717,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -4043,7 +4047,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -4369,7 +4377,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -4695,7 +4706,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -5347,7 +5361,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -5673,7 +5691,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -5999,7 +6021,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -6325,7 +6350,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -6977,7 +7005,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -7303,7 +7335,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -7629,7 +7665,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -7955,7 +7994,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -8607,7 +8649,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -8933,7 +8979,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -9259,7 +9309,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -9585,7 +9638,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -10237,7 +10293,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -10563,7 +10623,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -10889,7 +10953,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -11215,7 +11282,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -11867,7 +11937,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -12193,7 +12267,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -12519,7 +12597,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -12845,7 +12926,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -13497,7 +13581,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -13823,7 +13911,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -14149,7 +14241,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -14475,7 +14570,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -15127,7 +15225,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -15453,7 +15555,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -15779,7 +15885,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -16105,7 +16214,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -16757,7 +16869,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -17083,7 +17199,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -17409,7 +17529,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -17735,7 +17858,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -18387,7 +18513,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -18713,7 +18843,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -19039,7 +19173,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -19365,7 +19502,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -20017,7 +20157,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -20343,7 +20487,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -20669,7 +20817,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -20995,7 +21146,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -21647,7 +21801,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -21973,7 +22131,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -22299,7 +22461,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -22625,7 +22790,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -23277,7 +23445,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -23603,7 +23775,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -23929,7 +24105,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0"
+        }
       }
     },
     {
@@ -24255,7 +24434,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B0"
+        }
       }
     },
     {
@@ -24907,7 +25089,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -25233,7 +25418,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -25559,7 +25747,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -26537,7 +26728,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -27188,7 +27382,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -28815,7 +29013,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -29466,7 +29668,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -31093,7 +31298,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -31744,7 +31953,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -33371,7 +33583,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -34022,7 +34238,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -35649,7 +35868,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -36300,7 +36523,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -37927,7 +38153,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -38578,7 +38808,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -40205,7 +40438,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -40856,7 +41093,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -42483,7 +42723,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -43134,7 +43378,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -44761,7 +45008,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -45412,7 +45663,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -47039,7 +47293,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A0",
+          "B": "B0"
+        }
       }
     },
     {
@@ -47690,7 +47948,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "Cin"
+        }
       }
     },
     {
@@ -49317,7 +49578,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -49643,7 +49908,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -49969,7 +50238,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -50295,7 +50567,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -50947,7 +51222,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -51273,7 +51552,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -51599,7 +51882,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -51925,7 +52211,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -52577,7 +52866,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -52903,7 +53196,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -53229,7 +53526,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -53555,7 +53855,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -54207,7 +54510,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -54533,7 +54840,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -54859,7 +55170,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -55185,7 +55499,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -55837,7 +56154,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -56163,7 +56484,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -56489,7 +56814,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -56815,7 +57143,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -57467,7 +57798,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -57793,7 +58128,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -58119,7 +58458,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -58445,7 +58787,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -59097,7 +59442,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -59423,7 +59772,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -59749,7 +60102,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -60075,7 +60431,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -60727,7 +61086,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -61053,7 +61416,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -61379,7 +61746,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -61705,7 +62075,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -62357,7 +62730,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -62683,7 +63060,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -63009,7 +63390,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -63335,7 +63719,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -63987,7 +64374,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -64313,7 +64704,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -64639,7 +65034,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1"
+        }
       }
     },
     {
@@ -64965,7 +65363,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B1"
+        }
       }
     },
     {
@@ -67898,7 +68299,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -69525,7 +69930,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -71803,7 +72212,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -74081,7 +74494,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -76359,7 +76776,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -78637,7 +79058,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -80915,7 +81340,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A1",
+          "B": "B1"
+        }
       }
     },
     {
@@ -83193,7 +83622,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -83519,7 +83952,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -83845,7 +84282,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -84171,7 +84611,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -84823,7 +85266,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -85149,7 +85596,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -85475,7 +85926,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -85801,7 +86255,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -86453,7 +86910,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -86779,7 +87240,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -87105,7 +87570,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -87431,7 +87899,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -88083,7 +88554,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -88409,7 +88884,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -88735,7 +89214,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -89061,7 +89543,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -89713,7 +90198,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -90039,7 +90528,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -90365,7 +90858,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -90691,7 +91187,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -91343,7 +91842,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -91669,7 +92172,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -91995,7 +92502,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -92321,7 +92831,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -92973,7 +93486,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -93299,7 +93816,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -93625,7 +94146,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2"
+        }
       }
     },
     {
@@ -93951,7 +94475,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B2"
+        }
       }
     },
     {
@@ -96884,7 +97411,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -98511,7 +99042,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -100789,7 +101324,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -103067,7 +103606,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A2",
+          "B": "B2"
+        }
       }
     },
     {
@@ -105345,7 +105888,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -105671,7 +106218,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -105997,7 +106548,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3"
+        }
       }
     },
     {
@@ -106323,7 +106877,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B3"
+        }
       }
     },
     {
@@ -106975,7 +107532,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -107301,7 +107862,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -107627,7 +108192,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3"
+        }
       }
     },
     {
@@ -107953,7 +108521,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B3"
+        }
       }
     },
     {
@@ -108605,7 +109176,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -108931,7 +109506,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -109257,7 +109836,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3"
+        }
       }
     },
     {
@@ -109583,7 +110165,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B3"
+        }
       }
     },
     {
@@ -110235,7 +110820,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -110561,7 +111150,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
@@ -110887,7 +111480,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3"
+        }
       }
     },
     {
@@ -111213,7 +111809,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "B": "B3"
+        }
       }
     },
     {
@@ -114146,7 +114745,11 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A3",
+          "B": "B3"
+        }
       }
     },
     {
