@@ -1353,5 +1353,13 @@
   "LogicPanelTimingHelp.PhysicsTitle": "Licht bewegt sich mit c/n_g",
   "LogicPanelTimingHelp.PhysicsBody": "Im Wellenleiter bewegt sich Licht mit Lichtgeschwindigkeit geteilt durch den Gruppenindex (c/n_g ≈ c/4,2 für Silizium). Die angezeigte Verzögerung ist die interne optische Weglänge des Gatters mal n_g/c — ein 100-µm-Pfad kostet etwa 1,4 ps. Das Modell nutzt die geometrischen Weglängen plus die Breite jedes Bauteils; es ist eine physikalisch plausible Schätzung, keine exakte Timing-Simulation.",
   "LogicPanelTimingHelp.ClockTitle": "Die längste Kette bestimmt die Taktrate",
-  "LogicPanelTimingHelp.ClockBody": "Wie beim Timing Closure in der Elektronik: Ein neues Eingangsbit kommt erst am Ausgang an, wenn die langsamste Gatterkette durchgelaufen ist. Der kritische Pfad gibt die minimale Taktperiode vor — 10 ps kritischer Pfad bedeuten etwa 100 GHz Taktrate. Laufzeiten der Verbindungen zwischen den Gattern sind noch nicht eingerechnet."
+  "LogicPanelTimingHelp.ClockBody": "Wie beim Timing Closure in der Elektronik: Ein neues Eingangsbit kommt erst am Ausgang an, wenn die langsamste Gatterkette durchgelaufen ist. Der kritische Pfad gibt die minimale Taktperiode vor — 10 ps kritischer Pfad bedeuten etwa 100 GHz Taktrate. Laufzeiten der Verbindungen zwischen den Gattern sind noch nicht eingerechnet.",
+  "LogicPanel.Timeline": "Zeitverlauf:",
+  "LogicPanel.TimelineEmpty": "Schalte einen Eingang um, um die Schaltereignisse durch die Gatter laufen zu sehen.",
+  "LogicPanelTimelineHelp.Title": "Warum laufen die Ereignisse durch?",
+  "LogicPanelTimelineHelp.Intro": "Jede Zeile ist ein Gatterausgang, der nach dem letzten Umschalten eines Eingangs auf einen neuen Pegel wechselt — in der Reihenfolge, in der das Licht ankommt. Von oben nach unten lesen: Das Umschalten startet bei t = 0 und die Änderung breitet sich durch das Gatternetz aus, jedes Gatter addiert seine eigene Verzögerung.",
+  "LogicPanelTimelineHelp.PhysicsTitle": "Licht braucht Zeit",
+  "LogicPanelTimelineHelp.PhysicsBody": "Im Wellenleiter bewegt sich Licht mit Lichtgeschwindigkeit geteilt durch den Gruppenindex (c/n_g ≈ c/4,2 für Silizium). Die Verzögerung eines Gatters ist seine interne optische Weglänge mal n_g/c — ein 100-µm-Pfad kostet etwa 1,4 ps. Laufzeiten der Verbindungen kommen obendrauf: Jede gezeigte Pikosekunde ist eine echte Strecke, die das Licht zurücklegen musste.",
+  "LogicPanelTimelineHelp.OrderTitle": "Der langsamste Eingang entscheidet",
+  "LogicPanelTimelineHelp.OrderBody": "Ein Gatter schaltet erst, wenn jeder seiner sich ändernden Eingänge angekommen ist — der längste Pfad zu diesem Gatter bestimmt seine Schaltzeit. Das letzte Ereignis der Liste ist das langsamste Signal dieses Umschaltens; es liegt nie später als die unten gezeigte Zahl des kritischen Pfads, denn der kritische Pfad ist der schlimmste Fall über alle möglichen Umschaltungen."
 }

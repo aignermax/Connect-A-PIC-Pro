@@ -141,6 +141,55 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Event timeline (#1045, rung 5 visualizer slice 2): the switch events
+                 of the last input toggle in arrival-time order — the first "watch
+                 your computer compute" view on the way to the animated light
+                 propagation of the north star. -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,2">
+                <TextBlock Text="{loc:Localize LogicPanel.Timeline}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+                <!-- Plain-language physics: why light takes time, why some gates
+                     switch later, and how the last event relates to the critical
+                     path number shown below. -->
+                <controls:HelpFlyoutButton Grid.Column="1"
+                                           Title="{loc:Localize LogicPanelTimelineHelp.Title}"
+                                           VerticalAlignment="Center" Margin="4,-4,0,0">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.Intro}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.PhysicsBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.OrderTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.OrderBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.TimelineEvents}"
+                          IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:LogicTimelineEventViewModel">
+                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
+                                       FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
+                                       FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                       Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
+                            <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                       Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{loc:Localize LogicPanel.TimelineEmpty}" Foreground="Gray" FontSize="10"
+                       FontStyle="Italic" TextWrapping="Wrap"
+                       IsVisible="{Binding RightPanel.Logic.HasTimelineEvents, Converter={x:Static BoolConverters.Not}}"/>
+
             <!-- Propagation delays (#1002): the slowest gate chain from a network input
                  to an output limits how fast the circuit can clock. -->
             <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0"
