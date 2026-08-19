@@ -22,10 +22,11 @@ public partial class PinSelectionViewModel : ObservableObject
     private bool _isChecked;
 
     /// <summary>
-    /// Network-signal name offered on input rows (issue #1033): input pins sharing a
-    /// signal name become one network input in the Logic panel. Empty means "no
-    /// signal" — the pin keeps its <c>&lt;gate&gt;.&lt;pin&gt;</c> naming. Only the
-    /// input list binds this; output and bias rows never show the field.
+    /// Signal name offered on input and output rows: input pins sharing a signal
+    /// name become one network input in the Logic panel, and a named output pin's
+    /// tap reads the signal name instead of the raw <c>&lt;gate&gt;.&lt;pin&gt;</c>
+    /// id. Empty means "no signal" — the pin keeps its raw naming. Only the input
+    /// and output lists bind this; bias rows never show the field.
     /// </summary>
     [ObservableProperty]
     private string _signalName = "";
@@ -33,8 +34,8 @@ public partial class PinSelectionViewModel : ObservableObject
     /// <summary>
     /// True when the row offers the signal-name field: the panel shows it once the
     /// group carries a persisted pin assignment (after extraction or load). The view
-    /// additionally ANDs this with <see cref="IsChecked"/> — only checked input rows
-    /// are editable.
+    /// additionally ANDs this with <see cref="IsChecked"/> — only checked input and
+    /// output rows are editable.
     /// </summary>
     [ObservableProperty]
     private bool _signalEditingVisible;

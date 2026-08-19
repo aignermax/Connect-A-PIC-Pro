@@ -70,10 +70,12 @@ public class LogicEventTimelineFullAdderTests
 
         var events = LogicEventTimeline.Compute(network, before, after);
         var afterTaps = network.Evaluate(after);
+        var tapNameByPin = network.OutputTaps.ToDictionary(tap => tap.Value, tap => tap.Key);
 
         foreach (var e in events)
         {
-            afterTaps[$"{e.GateId}.{e.OutputPin}"].ShouldBe(e.NewValue,
+            var pin = new LogicPinRef(e.GateId, e.OutputPin);
+            afterTaps[tapNameByPin[pin]].ShouldBe(e.NewValue,
                 $"the event's new value must equal the network's evaluated after-state at {e.GateId}.{e.OutputPin}");
         }
     }

@@ -133,6 +133,108 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RoundTrip_OutputSignalNamesSurviveSaveAndReload()
+    {
+        // Issue #1046: the signal name assigned to an output pin is part of the
+        // persisted role block and must ride through save → load like the roles.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        SingleGateGroup(canvas).TruthTablePinAssignment!.OutputSignalNames = new()
+        {
+            ["Y"] = "Done",
+        };
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("OutputSignalNames", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        var saved = SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.OutputSignalNames.ShouldBe(new Dictionary<string, string> { ["Y"] = "Done" });
+    }
+
+    [Fact]
+    public async Task RoundTrip_OutputSignalNamesAssignedThroughPanel_SurviveSaveAndReload()
+    {
+        // Issue #1046: the user names the output pin's signal in the Truth Table
+        // panel after extraction; the name persists like the roles.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.SignalNamesVisible.ShouldBeTrue("after extraction the output rows offer the signal field");
+        vm.OutputPins.Single(p => p.PinName == "Y").SignalName = "Done";
+        SingleGateGroup(canvas).TruthTablePinAssignment!.OutputSignalNames.ShouldBe(
+            new Dictionary<string, string> { ["Y"] = "Done" },
+            "the panel edit writes straight into the persisted assignment");
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("Done", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        var saved = SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.OutputSignalNames.ShouldBe(new Dictionary<string, string> { ["Y"] = "Done" });
+
+        // …and the reopened panel prefills the output signal field from the file.
+        var reloadedGroupVm = reloaded.Components.Single(c => c.Component is ComponentGroup);
+        reloaded.Selection.SelectSingle(reloadedGroupVm);
+        var reloadedVm = new TruthTableViewModel();
+        reloadedVm.ConfigureForSelection(reloadedGroupVm, reloaded);
+        reloadedVm.SignalNamesVisible.ShouldBeTrue();
+        reloadedVm.OutputPins.Single(p => p.PinName == "Y").SignalName.ShouldBe("Done");
+    }
+
+    [Fact]
+    public async Task RoundTrip_LastOutputSignalNameCleared_PersistsNoOutputSignalBlock()
+    {
+        // Issue #1046: clearing the last output signal field collapses the map to
+        // null, so the saved .lun carries no output-signal block — legacy files
+        // stay byte-clean.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        var pinY = vm.OutputPins.Single(p => p.PinName == "Y");
+        pinY.SignalName = "Done";
+        pinY.SignalName = "";
+        SingleGateGroup(canvas).TruthTablePinAssignment!.OutputSignalNames.ShouldBeNull();
+
+        await Save(canvas);
+        var fileText = File.ReadAllText(_designFilePath);
+        fileText.ShouldContain("TruthTablePinAssignment", Case.Sensitive);
+        fileText.ShouldNotContain("OutputSignalNames", Case.Sensitive,
+            "an emptied output-signal map persists as null — no format noise (#1046)");
+    }
+
+    [Fact]
+    public async Task ReExtraction_PreservesOutputSignalNamesOfPinsThatStayOutputs()
+    {
+        // Issue #1046: re-extracting a gate's truth table rewrites the persisted
+        // assignment — the signal names of pins that stay outputs must ride along.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        SingleGateGroup(canvas).TruthTablePinAssignment!.OutputSignalNames = new()
+        {
+            ["Y"] = "Done",
+        };
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.HasResult.ShouldBeTrue("the re-extraction must succeed");
+
+        var saved = SingleGateGroup(canvas).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.OutputSignalNames.ShouldBe(new Dictionary<string, string> { ["Y"] = "Done" },
+            "output signal names of pins that stay outputs survive the re-extraction");
+    }
+
+    [Fact]
     public async Task RoundTrip_LastSignalNameCleared_PersistsNoSignalBlock()
     {
         // Issue #1033: clearing the last signal field collapses the map to null, so

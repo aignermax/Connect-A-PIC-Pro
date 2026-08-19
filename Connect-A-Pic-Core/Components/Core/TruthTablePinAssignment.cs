@@ -37,4 +37,34 @@ public sealed class TruthTablePinAssignment
     /// pin carries a signal name; legacy files without the block load unchanged.
     /// </summary>
     public Dictionary<string, string>? InputSignalNames { get; set; }
+
+    /// <summary>
+    /// Optional signal name per logic output pin: the named output's network tap
+    /// carries the signal name instead of the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id —
+    /// the 4-bit adder's sum reads <c>S0</c>–<c>S3</c> and <c>Cout</c>, not
+    /// <c>T0H2SUM.Y</c> … <c>T3OROUT.Y</c>. Unlike input names, output names never
+    /// merge pins (every tap is one gate output), so they must be unique across the
+    /// network. Null when no output pin carries a name; legacy files without the
+    /// block load unchanged.
+    /// </summary>
+    public Dictionary<string, string>? OutputSignalNames { get; set; }
+
+    /// <summary>
+    /// Creates an independent copy of the assignment: the lists and the signal-name
+    /// dictionaries are mutable, so copies of one gate must not share them.
+    /// </summary>
+    /// <returns>A new assignment with the same roles, threshold, and signal names.</returns>
+    public TruthTablePinAssignment Copy() => new()
+    {
+        InputPinNames = new List<string>(InputPinNames),
+        OutputPinNames = new List<string>(OutputPinNames),
+        BiasPinNames = new List<string>(BiasPinNames),
+        Threshold = Threshold,
+        InputSignalNames = InputSignalNames == null
+            ? null
+            : new Dictionary<string, string>(InputSignalNames),
+        OutputSignalNames = OutputSignalNames == null
+            ? null
+            : new Dictionary<string, string>(OutputSignalNames)
+    };
 }

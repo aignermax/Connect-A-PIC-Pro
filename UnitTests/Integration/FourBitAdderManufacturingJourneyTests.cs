@@ -56,11 +56,11 @@ public class FourBitAdderManufacturingJourneyTests
         // leaves the 4-bit range as Cout — the one combination that pins every output.
         var result = _journey.Network.Evaluate(_journey.Adder.InputBits(9, 7, true));
 
-        result["T0H2SUM.Y"].ShouldBeTrue("S0 of 9 + 7 + 1 = 17");
-        result["T1H2SUM.Y"].ShouldBeFalse("S1 of 9 + 7 + 1 = 17");
-        result["T2H2SUM.Y"].ShouldBeFalse("S2 of 9 + 7 + 1 = 17");
-        result["T3H2SUM.Y"].ShouldBeFalse("S3 of 9 + 7 + 1 = 17");
-        result["T3OROUT.Y"].ShouldBeTrue("Cout carries the 5th bit of 17");
+        result["S0"].ShouldBeTrue("S0 of 9 + 7 + 1 = 17");
+        result["S1"].ShouldBeFalse("S1 of 9 + 7 + 1 = 17");
+        result["S2"].ShouldBeFalse("S2 of 9 + 7 + 1 = 17");
+        result["S3"].ShouldBeFalse("S3 of 9 + 7 + 1 = 17");
+        result["Cout"].ShouldBeTrue("Cout carries the 5th bit of 17");
     }
 
     [Fact]

@@ -1281,7 +1281,7 @@
   "TruthTableHelp.InterferenceBody": "光波带着相位叠加,两个输入可能相互增强,也可能相互抵消。50/50 合束器在单个输入时输出 0.5 的功率,两个输入都打开时为 1.0——在 0.25 的阈值下,这正是一个或门(OR)。",
   "TruthTableHelp.InterferenceTitle": "为什么干涉会塑造真值表",
   "TruthTableHelp.Intro": "真值表用于检验你编组的电路是否表现得像一个数字逻辑门:对输入比特的每一种组合进行仿真,并显示每个输出是开(1)还是关(0)。",
-  "TruthTableHelp.SignalsBody": "共享信号名称的输入引脚是同一个物理光源:全加器的十三个加数 A 引脚在逻辑面板中合并为一个 'A' 开关,而不是十三个。该光源的光必须分束才能到达信号的每个引脚——扇出级别报告正是对此进行计数。",
+  "TruthTableHelp.SignalsBody": "共享信号名称的输入引脚是同一个物理光源:全加器的十三个加数 A 引脚在逻辑面板中合并为一个 'A' 开关,而不是十三个。该光源的光必须分束才能到达信号的每个引脚——扇出级别报告正是对此进行计数。输出引脚也可以命名:逻辑面板随后会显示信号名称——4 位加法器的和将显示为 S0–S3 和 Cout,而不是像 T0H2SUM.Y 这样的原始引脚 ID。",
   "TruthTableHelp.SignalsTitle": "为什么需要信号名称?",
   "TruthTableHelp.ThresholdBody": "光学是模拟的:输出从来不是精确的 0 或 1,而是一定的光功率。阈值决定多大的功率算“开”——0.5 表示“至少达到一个输入功率的一半”。功率列显示每个比特越过阈值的清晰程度:0.93 是确定的 1,而 0.51 只是勉强越过同一阈值——这是截然不同的两课。",
   "TruthTableHelp.ThresholdTitle": "为什么需要阈值?",
@@ -1353,5 +1353,13 @@
   "LogicPanelTimingHelp.PhysicsTitle": "光以 c/n_g 的速度传播",
   "LogicPanelTimingHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。显示的延迟等于门内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。该模型使用几何路径长度加上每个器件的宽度,是物理上合理的估算,而非精确的时序仿真。",
   "LogicPanelTimingHelp.ClockTitle": "最长的链路决定时钟速度",
-  "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟尚未计入。"
+  "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟尚未计入。",
+  "LogicPanel.Timeline": "时间线:",
+  "LogicPanel.TimelineEmpty": "切换一个输入,观看开关事件在门电路中逐级传播。",
+  "LogicPanelTimelineHelp.Title": "事件为什么会逐级传播?",
+  "LogicPanelTimelineHelp.Intro": "每一行都是一个门输出在上次输入切换后跳到新电平的事件,按光到达的先后顺序排列。从上往下读:切换在 t = 0 进入,变化沿门网络传播,每个门都加上自己的延迟。",
+  "LogicPanelTimelineHelp.PhysicsTitle": "光需要时间",
+  "LogicPanelTimelineHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。门的延迟等于其内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。门之间的连线延迟再累加:显示的每一皮秒都是光真实走过的距离。",
+  "LogicPanelTimelineHelp.OrderTitle": "最慢的输入说了算",
+  "LogicPanelTimelineHelp.OrderBody": "一个门只有等它所有发生变化的输入都到达后才会翻转——通往该门的最长路径决定了它的翻转时刻。列表中最后一个事件就是本次切换中最慢的信号;它不会晚于下方显示的关键路径数值,因为关键路径是所有可能切换中最坏的情况。"
 }

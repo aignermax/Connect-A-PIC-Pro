@@ -3,19 +3,20 @@ using CAP_Core.Components.Core;
 namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 
 /// <summary>
-/// Signal-name half of <see cref="TruthTableViewModel"/> (issue #1033): the editable
-/// signal field on each checked input row writes
-/// <see cref="TruthTablePinAssignment.InputSignalNames"/> on the selected group.
-/// Names are trimmed on write; an empty-after-trim field means "no signal" and
-/// removes the pin's entry — a map that empties collapses to null so legacy .lun
-/// files stay byte-clean. Signal names only ever live on input pins: a pin that
-/// loses its input role (unchecked, or checked as output/bias) drops its entry.
+/// Signal-name half of <see cref="TruthTableViewModel"/>: the editable signal field
+/// on each checked input row writes <see cref="TruthTablePinAssignment.InputSignalNames"/>,
+/// on each checked output row <see cref="TruthTablePinAssignment.OutputSignalNames"/>,
+/// both on the selected group. Names are trimmed on write; an empty-after-trim field
+/// means "no signal" and removes the pin's entry — a map that empties collapses to
+/// null so legacy .lun files stay byte-clean. Signal names only ever live on input
+/// and output pins: a pin that loses its role (unchecked, or checked into another
+/// role) drops its entry.
 /// </summary>
 public partial class TruthTableViewModel
 {
     /// <summary>
     /// Applies one signal-field edit: the trimmed name becomes the pin's persisted
-    /// signal, or — empty — removes the pin from the map. Silent while the group
+    /// signal, or — empty — removes the pin from its map. Silent while the group
     /// carries no persisted assignment (nothing to attach a name to).
     /// </summary>
     private void ApplySignalNameEdit(PinSelectionViewModel pin)
@@ -27,50 +28,68 @@ public partial class TruthTableViewModel
         var name = pin.SignalName.Trim();
         if (name.Length == 0 || !pin.IsChecked)
         {
-            RemoveSignalNameEntry(pin.PinName);
+            RemoveSignalNameEntry(pin);
             return;
         }
-        (assignment.InputSignalNames ??= new Dictionary<string, string>())[pin.PinName] = name;
+        if (InputPins.Contains(pin))
+            (assignment.InputSignalNames ??= new Dictionary<string, string>())[pin.PinName] = name;
+        else
+            (assignment.OutputSignalNames ??= new Dictionary<string, string>())[pin.PinName] = name;
     }
 
     /// <summary>
-    /// Drops the pin's signal identity together with its input role: the map entry
+    /// Drops the pin's signal identity together with its role: the map entry
     /// goes and the field clears, so text and map always mirror each other.
     /// </summary>
     private void RevokeSignalName(PinSelectionViewModel pin)
     {
         pin.SignalName = "";
-        RemoveSignalNameEntry(pin.PinName);
+        RemoveSignalNameEntry(pin);
     }
 
-    /// <summary>Removes one pin's entry; an emptied map collapses to null.</summary>
-    private void RemoveSignalNameEntry(string pinName)
+    /// <summary>Removes one pin's entry from its role's map; an emptied map collapses to null.</summary>
+    private void RemoveSignalNameEntry(PinSelectionViewModel pin)
     {
         var assignment = _group?.TruthTablePinAssignment;
-        var map = assignment?.InputSignalNames;
-        if (map == null || !map.Remove(pinName))
+        if (assignment == null)
             return;
-        if (map.Count == 0)
-            assignment!.InputSignalNames = null;
+        var isInput = InputPins.Contains(pin);
+        var map = isInput ? assignment.InputSignalNames : assignment.OutputSignalNames;
+        if (map == null || !map.Remove(pin.PinName))
+            return;
+        if (map.Count != 0)
+            return;
+        if (isInput)
+            assignment.InputSignalNames = null;
+        else
+            assignment.OutputSignalNames = null;
     }
 
-    /// <summary>Restores the persisted signal names into the freshly ticked input rows.</summary>
+    /// <summary>Restores the persisted signal names into the freshly ticked input and output rows.</summary>
     private void PrefillSignalNames(TruthTablePinAssignment saved)
     {
-        if (saved.InputSignalNames == null)
+        PrefillSignalNames(saved.InputSignalNames, InputPins);
+        PrefillSignalNames(saved.OutputSignalNames, OutputPins);
+    }
+
+    /// <summary>Restores one persisted signal-name map into the matching rows.</summary>
+    private static void PrefillSignalNames(
+        IReadOnlyDictionary<string, string>? names, IEnumerable<PinSelectionViewModel> pins)
+    {
+        if (names == null)
             return;
-        foreach (var (pinName, signal) in saved.InputSignalNames)
+        foreach (var (pinName, signal) in names)
         {
-            var pin = InputPins.FirstOrDefault(p => p.PinName == pinName);
+            var pin = pins.FirstOrDefault(p => p.PinName == pinName);
             if (pin != null)
                 pin.SignalName = signal;
         }
     }
 
-    /// <summary>Pushes the panel-level visibility flag onto the input rows.</summary>
+    /// <summary>Pushes the panel-level visibility flag onto the input and output rows.</summary>
     partial void OnSignalNamesVisibleChanged(bool value)
     {
-        foreach (var pin in InputPins)
+        foreach (var pin in InputPins.Concat(OutputPins))
             pin.SignalEditingVisible = value;
     }
 }

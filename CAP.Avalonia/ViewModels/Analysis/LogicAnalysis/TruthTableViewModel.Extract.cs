@@ -38,17 +38,18 @@ public partial class TruthTableViewModel
             ShowTable(table);
             // Persist the winning assignment on the group (issue #981) so the next
             // save → load round trip prefills the panel — a cancelled or failed
-            // extraction must not overwrite the last good one. Signal names (#1025)
-            // ride along for pins that stay inputs: re-extracting must not silently
-            // drop the network-signal identity a design carries.
-            var previousSignalNames = _group.TruthTablePinAssignment?.InputSignalNames;
+            // extraction must not overwrite the last good one. Signal names (#1025,
+            // #1046) ride along for pins that keep their role: re-extracting must not
+            // silently drop the signal identity a design carries.
+            var previous = _group.TruthTablePinAssignment;
             _group.TruthTablePinAssignment = new TruthTablePinAssignment
             {
                 InputPinNames = inputs.ToList(),
                 OutputPinNames = outputs.ToList(),
                 BiasPinNames = biases.ToList(),
                 Threshold = Threshold,
-                InputSignalNames = PreservedSignalNames(previousSignalNames, inputs),
+                InputSignalNames = PreservedSignalNames(previous?.InputSignalNames, inputs),
+                OutputSignalNames = PreservedSignalNames(previous?.OutputSignalNames, outputs),
             };
             SignalNamesVisible = true;
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);
@@ -116,18 +117,18 @@ public partial class TruthTableViewModel
         new(value.IsOne, value.Power.ToString("F2", CultureInfo.InvariantCulture));
 
     /// <summary>
-    /// The signal names that survive a re-extraction: entries whose pin stays a
-    /// logic input keep their name; entries for pins no longer among the inputs are
-    /// dropped (a signal only exists on input pins). Null when nothing survives —
-    /// the .lun format stays free of empty blocks.
+    /// The signal names that survive a re-extraction: entries whose pin keeps the
+    /// role the map belongs to keep their name; entries for pins that left the role
+    /// are dropped (a signal only exists on pins of that role). Null when nothing
+    /// survives — the .lun format stays free of empty blocks.
     /// </summary>
     private static Dictionary<string, string>? PreservedSignalNames(
-        IReadOnlyDictionary<string, string>? previous, IReadOnlyCollection<string> inputs)
+        IReadOnlyDictionary<string, string>? previous, IReadOnlyCollection<string> rolePins)
     {
         if (previous == null)
             return null;
         var preserved = previous
-            .Where(pair => inputs.Contains(pair.Key))
+            .Where(pair => rolePins.Contains(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value);
         return preserved.Count > 0 ? preserved : null;
     }

@@ -107,11 +107,13 @@ public partial class LogicPanelViewModel : ObservableObject
         }
         foreach (var name in network.OutputPinNames)
         {
+            var tap = network.OutputTaps[name];
             Outputs.Add(new LogicNetworkOutputViewModel(name)
             {
+                RawPinName = $"{tap.GateId}.{tap.PinName}",
                 DelayText = string.Format(
                     Translate("LogicPanel.GateDelay"),
-                    network.GateDelaysPicoseconds[network.OutputTaps[name].GateId]),
+                    network.GateDelaysPicoseconds[tap.GateId]),
             });
         }
         foreach (var warning in network.FanOutWarnings)
@@ -136,6 +138,7 @@ public partial class LogicPanelViewModel : ObservableObject
         _canvas?.LogicGateStates.Clear();
         HasFanOutWarnings = false;
         CriticalPathText = "";
+        ClearTimeline();
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
@@ -159,24 +162,29 @@ public partial class LogicPanelViewModel : ObservableObject
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
         ShowGateStateBadges(result, bits);
+        UpdateTimeline(bits);
     }
 
     /// <summary>
     /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
     /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
-    /// data the panel's output list shows, no new simulation. Gate input pins carrying a
-    /// persisted signal name additionally get a named badge (<c>A0 = 1</c>, issue #1051):
-    /// an unconnected named pin merged into the network input of its signal's name, so
-    /// its live bit is the toggle bit itself — display only, nothing re-evaluated.
+    /// data the panel's output list shows, no new simulation. Result bits are keyed by
+    /// tap name, so the walk goes through the taps: a signal-named output reads under
+    /// its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input pins
+    /// carrying a persisted signal name additionally get a named badge (<c>A0 = 1</c>,
+    /// issue #1051): an unconnected named pin merged into the network input of its
+    /// signal's name, so its live bit is the toggle bit itself — display only, nothing
+    /// re-evaluated.
     /// </summary>
     private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
     {
         if (_canvas == null || _network == null)
             return;
         var signalNamesByGate = PersistedInputSignalNamesByGate();
-        var states = _network.Gates.SelectMany(gate => gate.Value.OutputPinNames
-            .Select(pinName => new LogicGateBadgeState(gate.Key, pinName, result[$"{gate.Key}.{pinName}"]))
-            .Concat(NamedInputBadges(gate.Key, signalNamesByGate, inputBits)));
+        var states = _network.OutputTaps
+            .Select(tap => new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]))
+            .Concat(_network.Gates.Keys.SelectMany(
+                gateId => NamedInputBadges(gateId, signalNamesByGate, inputBits)));
         _canvas.LogicGateStates.ShowStates(states);
     }
 
