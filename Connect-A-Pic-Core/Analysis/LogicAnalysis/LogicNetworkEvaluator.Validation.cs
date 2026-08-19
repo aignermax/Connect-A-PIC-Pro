@@ -110,7 +110,7 @@ public sealed partial class LogicNetworkEvaluator
     }
 
     /// <summary>Rejects missing or unknown network input bits before any gate fires.</summary>
-    private void ValidateInputBits(IReadOnlyDictionary<string, bool> inputBits)
+    internal void ValidateInputBits(IReadOnlyDictionary<string, bool> inputBits)
     {
         var missing = InputPinNames.FirstOrDefault(name => !inputBits.ContainsKey(name));
         if (missing != null)
