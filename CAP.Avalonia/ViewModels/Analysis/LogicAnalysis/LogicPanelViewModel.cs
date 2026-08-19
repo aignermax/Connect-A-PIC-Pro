@@ -169,22 +169,22 @@ public partial class LogicPanelViewModel : ObservableObject
     /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
     /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
     /// data the panel's output list shows, no new simulation. Result bits are keyed by
-    /// tap name, so the output walk goes through the taps: a signal-named output reads
-    /// under its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input
-    /// pins carrying a persisted signal name additionally get a named badge
-    /// (<c>A0 = 1</c>, issue #1051): an unconnected named pin merged into the network
-    /// input of its signal's name, so its live bit is the toggle bit itself —
-    /// display only, nothing re-evaluated.
+    /// tap name, so the walk goes through the taps: a signal-named output reads under
+    /// its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input pins
+    /// carrying a persisted signal name additionally get a named badge (<c>A0 = 1</c>,
+    /// issue #1051): an unconnected named pin merged into the network input of its
+    /// signal's name, so its live bit is the toggle bit itself — display only, nothing
+    /// re-evaluated.
     /// </summary>
     private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
     {
         if (_canvas == null || _network == null)
             return;
         var signalNamesByGate = PersistedInputSignalNamesByGate();
-        var outputBadges = _network.OutputTaps.Select(tap =>
-            new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]));
-        var states = outputBadges.Concat(_network.Gates.SelectMany(gate =>
-            NamedInputBadges(gate.Key, signalNamesByGate, inputBits)));
+        var states = _network.OutputTaps
+            .Select(tap => new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]))
+            .Concat(_network.Gates.Keys.SelectMany(
+                gateId => NamedInputBadges(gateId, signalNamesByGate, inputBits)));
         _canvas.LogicGateStates.ShowStates(states);
     }
 
