@@ -48,4 +48,23 @@ public sealed class TruthTablePinAssignment
     /// block load unchanged.
     /// </summary>
     public Dictionary<string, string>? OutputSignalNames { get; set; }
+
+    /// <summary>
+    /// Creates an independent copy of the assignment: the lists and the signal-name
+    /// dictionaries are mutable, so copies of one gate must not share them.
+    /// </summary>
+    /// <returns>A new assignment with the same roles, threshold, and signal names.</returns>
+    public TruthTablePinAssignment Copy() => new()
+    {
+        InputPinNames = new List<string>(InputPinNames),
+        OutputPinNames = new List<string>(OutputPinNames),
+        BiasPinNames = new List<string>(BiasPinNames),
+        Threshold = Threshold,
+        InputSignalNames = InputSignalNames == null
+            ? null
+            : new Dictionary<string, string>(InputSignalNames),
+        OutputSignalNames = OutputSignalNames == null
+            ? null
+            : new Dictionary<string, string>(OutputSignalNames)
+    };
 }
