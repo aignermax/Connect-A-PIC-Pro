@@ -75,6 +75,13 @@ public partial class RegistryBrowserViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasNoResults;
 
+    /// <summary>
+    /// True once an index load succeeded (network or local cache). The component-library
+    /// search hint matches only against this in-memory copy — never on the network.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasIndexLoaded;
+
     /// <summary>In-flight index load; awaited by tests and the screenshot harness.</summary>
     public Task IndexLoadTask { get; private set; } = Task.CompletedTask;
 
@@ -136,6 +143,9 @@ public partial class RegistryBrowserViewModel : ObservableObject
             return;
         }
 
+        // Set before the Adds: CollectionChanged subscribers recomputing on each
+        // Add (library search hint) must already see the loaded state.
+        HasIndexLoaded = true;
         SelectedComponent = null;
         Components.Clear();
         foreach (var entry in result.Value!.Components.OrderBy(c => c.Name))

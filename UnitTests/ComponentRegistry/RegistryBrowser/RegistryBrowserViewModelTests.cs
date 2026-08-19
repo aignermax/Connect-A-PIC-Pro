@@ -336,6 +336,30 @@ public class RegistryBrowserViewModelTests : IDisposable
     }
 
     [Fact]
+    public async Task Load_Success_MarksIndexLoaded_ForTheLibrarySearchHint()
+    {
+        var vm = CreateViewModel();
+        vm.HasIndexLoaded.ShouldBeFalse();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        vm.HasIndexLoaded.ShouldBeTrue();
+        vm.HasIndexLoaded.ShouldBe(vm.Components.Count > 0);
+    }
+
+    [Fact]
+    public async Task Load_Failure_LeavesIndexNotLoaded_SoTheHintNeverPretendsToKnowHits()
+    {
+        _harness.Handler.SimulateNetworkFailure = true;
+        var vm = CreateViewModel();
+
+        await vm.LoadCommand.ExecuteAsync(null);
+
+        vm.HasIndexLoaded.ShouldBeFalse();
+        vm.ErrorMessage.ShouldNotBeEmpty();
+    }
+
+    [Fact]
     public void StatusColors_MapAllKnownStatuses()
     {
         RegistryStatusPresentation.ToColor("demo").ShouldBe("#8a6d3b");
