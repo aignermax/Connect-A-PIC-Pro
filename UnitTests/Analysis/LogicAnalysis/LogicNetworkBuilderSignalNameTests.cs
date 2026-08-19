@@ -14,7 +14,8 @@ namespace UnitTests.Analysis.LogicAnalysis;
 /// without a signal name keeps its own <c>&lt;gate&gt;.&lt;pin&gt;</c> name and
 /// never merges by bare pin name, so two unrelated inputs that happen to share a
 /// pin name stay two inputs. Signal names on non-input pins and empty names are
-/// rejected at build time.
+/// rejected at build time — and so is a network input name that collides with an
+/// output tap name, because a name spanning both roles reads as the same wire.
 /// </summary>
 public class LogicNetworkBuilderSignalNameTests
 {
@@ -143,6 +144,34 @@ public class LogicNetworkBuilderSignalNameTests
 
         error.Message.ShouldContain("'A'");
         error.Message.ShouldContain("empty signal name");
+    }
+
+    [Fact]
+    public void Build_InputSignalNamedLikeAnOutputTap_ThrowsNamingBothSides()
+    {
+        var first = NotInstance("G1", signalOfA: "G3.Y");
+        var second = NotInstance("G2", signalOfA: "G3.Y");
+        var tap = NotInstance("G3");
+
+        var error = Should.Throw<ArgumentException>(
+            () => new LogicNetworkBuilder().Build(new[] { first, second, tap }, Array.Empty<WaveguideConnection>()));
+
+        error.Message.ShouldContain("'G3.Y'");
+        error.Message.ShouldContain("G1.A");
+        error.Message.ShouldContain("G2.A");
+        error.Message.ShouldContain("output pin G3.Y");
+    }
+
+    [Fact]
+    public void Build_SignalNameSharingOnlyAPrefixWithATap_Builds()
+    {
+        var named = NotInstance("G1", signalOfA: "G3");
+        var tap = NotInstance("G3");
+
+        var network = new LogicNetworkBuilder().Build(new[] { named, tap }, Array.Empty<WaveguideConnection>());
+
+        network.InputPinNames.ShouldBe(new[] { "G3", "G3.A" }, ignoreOrder: true);
+        network.OutputPinNames.ShouldBe(new[] { "G1.Y", "G3.Y" }, ignoreOrder: true);
     }
 
     /// <summary>A NAND gate instance on a synthetic group exposing the example's pin interface.</summary>

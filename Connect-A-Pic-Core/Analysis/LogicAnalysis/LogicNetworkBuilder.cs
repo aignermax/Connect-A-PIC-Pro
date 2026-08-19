@@ -18,7 +18,8 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// Bias pins take no part in wiring (they are constantly on — the extraction
 /// contract); a connection into a bias pin, a connection between two input pins,
 /// and a gate input driven by two different outputs are rejected with messages
-/// naming the pins.
+/// naming the pins. A network input name shared with an output tap name is likewise
+/// rejected — a name spanning both roles reads as the same wire in the Logic panel.
 /// </summary>
 public sealed partial class LogicNetworkBuilder
 {
@@ -162,6 +163,7 @@ public sealed partial class LogicNetworkBuilder
         double wavelengthNm)
     {
         var networkInputs = new List<string>();
+        var inputMembers = new Dictionary<string, List<string>>();
         var wiring = new Dictionary<LogicPinRef, LogicNetDriver>();
         var outputTaps = new Dictionary<string, LogicPinRef>();
         var models = new Dictionary<string, LogicGateModel>();
@@ -183,13 +185,15 @@ public sealed partial class LogicNetworkBuilder
                 var load = new LogicPinRef(context.GateId, pinName);
                 wiring[load] = drivers.TryGetValue(load, out var source)
                     ? new LogicNetDriver.GateOutput(source)
-                    : new LogicNetDriver.NetworkInput(NetworkInputName(networkInputs, context, load));
+                    : new LogicNetDriver.NetworkInput(NetworkInputName(networkInputs, inputMembers, context, load));
             }
             foreach (var pinName in context.Model.OutputPinNames)
             {
                 outputTaps[$"{context.GateId}.{pinName}"] = new LogicPinRef(context.GateId, pinName);
             }
         }
+
+        ThrowOnInputOutputNameCollision(inputMembers, outputTaps);
 
         return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays, wireDelays);
     }
@@ -199,13 +203,21 @@ public sealed partial class LogicNetworkBuilder
     /// input: the pin's persisted signal name when it carries one — every member pin
     /// of the signal maps to the same network input, registered once — else the
     /// pin's own <c>&lt;group&gt;.&lt;pin&gt;</c> name (no merging by bare pin name).
+    /// The pin is recorded as a member of its network input so a later name
+    /// collision can name the pins behind the colliding name.
     /// </summary>
     private static string NetworkInputName(
-        ICollection<string> networkInputs, GateContext context, LogicPinRef load)
+        ICollection<string> networkInputs,
+        IDictionary<string, List<string>> inputMembers,
+        GateContext context,
+        LogicPinRef load)
     {
         var name = context.SignalNameOf(load.PinName) ?? Format(load);
         if (!networkInputs.Contains(name))
             networkInputs.Add(name);
+        if (!inputMembers.TryGetValue(name, out var members))
+            inputMembers[name] = members = new List<string>();
+        members.Add(Format(load));
         return name;
     }
 }
