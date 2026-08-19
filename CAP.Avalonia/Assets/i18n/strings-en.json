@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Select exactly one group to see whether it behaves like a logic gate.",
   "TruthTable.Outputs": "Outputs:",
   "TruthTable.Signal": "Signal:",
+  "TruthTable.SignalWarnCrossRole": "'{0}' names both an input and an output — the network build rejects a name spanning two roles.",
+  "TruthTable.SignalWarnDuplicateOutput": "Another gate's output already uses '{0}' — output names must be unique.",
   "TruthTable.SignalWatermark": "signal name (optional)",
   "TruthTable.Threshold": "Threshold:",
   "TruthTable.Title": "Truth Table:",

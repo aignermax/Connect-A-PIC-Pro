@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "グループを 1 つだけ選択すると、論理ゲートとして振る舞うか確認できます。",
   "TruthTable.Outputs": "出力:",
   "TruthTable.Signal": "信号:",
+  "TruthTable.SignalWarnCrossRole": "「{0}」は入力と出力の両方を指しています — 二つの役割にまたがる名前はネットワークのビルドで拒否されます。",
+  "TruthTable.SignalWarnDuplicateOutput": "別のゲートの出力がすでに「{0}」を使用しています — 出力名は一意にする必要があります。",
   "TruthTable.SignalWatermark": "信号名（任意）",
   "TruthTable.Threshold": "しきい値:",
   "TruthTable.Title": "真理値表:",

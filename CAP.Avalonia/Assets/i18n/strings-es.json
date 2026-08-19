@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Selecciona exactamente un grupo para ver si se comporta como una puerta lógica.",
   "TruthTable.Outputs": "Salidas:",
   "TruthTable.Signal": "Señal:",
+  "TruthTable.SignalWarnCrossRole": "\"{0}\" nombra tanto una entrada como una salida — el ensamblado de la red rechaza un nombre que abarca dos roles.",
+  "TruthTable.SignalWarnDuplicateOutput": "La salida de otra puerta ya usa \"{0}\" — los nombres de salida deben ser únicos.",
   "TruthTable.SignalWatermark": "nombre de señal (opcional)",
   "TruthTable.Threshold": "Umbral:",
   "TruthTable.Title": "Tabla de verdad:",

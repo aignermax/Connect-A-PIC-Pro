@@ -104,6 +104,7 @@ public partial class TruthTableViewModel : ObservableObject
         RebuildPinLists();
         PrefillFromPersistedAssignment();
         SignalNamesVisible = IsGroupSelected && _group?.TruthTablePinAssignment != null;
+        RefreshCollisionHints();
         WavelengthText = IsGroupSelected
             ? string.Format(Translate("TruthTable.Wavelength"), ResolveWavelengthNm())
             : "";
@@ -201,6 +202,7 @@ public partial class TruthTableViewModel : ObservableObject
         {
             if (!_revertingPinCheck && (InputPins.Contains(pin) || OutputPins.Contains(pin)))
                 ApplySignalNameEdit(pin);
+            RefreshCollisionHints();
             return;
         }
         if (_revertingPinCheck || e.PropertyName != nameof(PinSelectionViewModel.IsChecked))
@@ -209,6 +211,7 @@ public partial class TruthTableViewModel : ObservableObject
         {
             if (InputPins.Contains(pin) || OutputPins.Contains(pin))
                 RevokeSignalName(pin);
+            RefreshCollisionHints();
             return;
         }
 
@@ -222,6 +225,7 @@ public partial class TruthTableViewModel : ObservableObject
         {
             _revertingPinCheck = false;
         }
+        RefreshCollisionHints();
     }
 
     /// <summary>Unchecks the same pin name in the two lists the just-checked pin does not belong to.</summary>

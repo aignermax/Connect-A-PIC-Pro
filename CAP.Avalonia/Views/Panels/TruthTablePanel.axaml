@@ -56,23 +56,32 @@
             <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.InputPins}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:PinSelectionViewModel">
-                        <Grid ColumnDefinitions="*,110">
-                            <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
-                                      Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
-                            <!-- The signal field edits the group's persisted pin assignment,
-                                 so it appears only once the group carries one (after
-                                 extraction or load) and the pin is checked as input. -->
-                            <TextBox Grid.Column="1" Text="{Binding SignalName}"
-                                     Watermark="{loc:Localize TruthTable.SignalWatermark}"
-                                     FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
-                                <TextBox.IsVisible>
-                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                        <Binding Path="IsChecked"/>
-                                        <Binding Path="SignalEditingVisible"/>
-                                    </MultiBinding>
-                                </TextBox.IsVisible>
-                            </TextBox>
-                        </Grid>
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,110">
+                                <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                          Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
+                                <!-- The signal field edits the group's persisted pin assignment,
+                                     so it appears only once the group carries one (after
+                                     extraction or load) and the pin is checked as input. -->
+                                <TextBox Grid.Column="1" Text="{Binding SignalName}"
+                                         Watermark="{loc:Localize TruthTable.SignalWatermark}"
+                                         FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBox.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="IsChecked"/>
+                                            <Binding Path="SignalEditingVisible"/>
+                                        </MultiBinding>
+                                    </TextBox.IsVisible>
+                                </TextBox>
+                            </Grid>
+                            <!-- Live collision hint: warns at typing time about the duplicate
+                                 output name or the input/output cross-role name the build would
+                                 reject minutes later (issue #1071). Warning only — the build
+                                 keeps its authoritative rejection. -->
+                            <TextBlock Text="{Binding SignalWarning}" Foreground="#FFB86B" FontSize="9"
+                                       TextWrapping="Wrap" Margin="0,0,0,2"
+                                       IsVisible="{Binding SignalWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
@@ -86,23 +95,29 @@
             <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.OutputPins}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:PinSelectionViewModel">
-                        <Grid ColumnDefinitions="*,110">
-                            <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
-                                      Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
-                            <!-- Same persisted-assignment semantics as the input rows:
-                                 a named output's tap reads the signal name in the Logic
-                                 panel (S0, Cout) instead of the raw gate.pin id. -->
-                            <TextBox Grid.Column="1" Text="{Binding SignalName}"
-                                     Watermark="{loc:Localize TruthTable.SignalWatermark}"
-                                     FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
-                                <TextBox.IsVisible>
-                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                        <Binding Path="IsChecked"/>
-                                        <Binding Path="SignalEditingVisible"/>
-                                    </MultiBinding>
-                                </TextBox.IsVisible>
-                            </TextBox>
-                        </Grid>
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,110">
+                                <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                          Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
+                                <!-- Same persisted-assignment semantics as the input rows:
+                                     a named output's tap reads the signal name in the Logic
+                                     panel (S0, Cout) instead of the raw gate.pin id.
+                                     The inline warning under the field mirrors the input rows. -->
+                                <TextBox Grid.Column="1" Text="{Binding SignalName}"
+                                         Watermark="{loc:Localize TruthTable.SignalWatermark}"
+                                         FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBox.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="IsChecked"/>
+                                            <Binding Path="SignalEditingVisible"/>
+                                        </MultiBinding>
+                                    </TextBox.IsVisible>
+                                </TextBox>
+                            </Grid>
+                            <TextBlock Text="{Binding SignalWarning}" Foreground="#FFB86B" FontSize="9"
+                                       TextWrapping="Wrap" Margin="0,0,0,2"
+                                       IsVisible="{Binding SignalWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
