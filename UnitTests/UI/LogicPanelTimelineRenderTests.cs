@@ -103,10 +103,12 @@ public class LogicPanelTimelineRenderTests
             Dispatcher.UIThread.RunJobs();
 
             var textBlocks = panel.GetVisualDescendants().OfType<TextBlock>().ToList();
-            textBlocks.Any(t => t.Text == "12.3 ps").ShouldBeTrue("the first row shows its time");
+            // The times are formatted in the machine's current culture ("12,3 ps" under
+            // de-DE), so assert against the rows' own display text, not a hardcoded literal.
+            textBlocks.Any(t => t.Text == logic.TimelineEvents[0].TimeText).ShouldBeTrue("the first row shows its time");
             textBlocks.Any(t => t.Text == "H1SUM1.Y").ShouldBeTrue("the first row shows gate.pin");
             textBlocks.Any(t => t.Text == "0→1").ShouldBeTrue("the first row shows a rising transition");
-            textBlocks.Any(t => t.Text == "25.7 ps").ShouldBeTrue("the second row shows its time");
+            textBlocks.Any(t => t.Text == logic.TimelineEvents[1].TimeText).ShouldBeTrue("the second row shows its time");
             textBlocks.Any(t => t.Text == "1→0").ShouldBeTrue("the second row shows a falling transition");
         }
         finally

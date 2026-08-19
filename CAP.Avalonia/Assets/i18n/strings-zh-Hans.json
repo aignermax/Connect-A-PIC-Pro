@@ -1361,5 +1361,11 @@
   "LogicPanelTimelineHelp.PhysicsTitle": "光需要时间",
   "LogicPanelTimelineHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。门的延迟等于其内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。门之间的连线延迟再累加:显示的每一皮秒都是光真实走过的距离。",
   "LogicPanelTimelineHelp.OrderTitle": "最慢的输入说了算",
-  "LogicPanelTimelineHelp.OrderBody": "一个门只有等它所有发生变化的输入都到达后才会翻转——通往该门的最长路径决定了它的翻转时刻。列表中最后一个事件就是本次切换中最慢的信号;它不会晚于下方显示的关键路径数值,因为关键路径是所有可能切换中最坏的情况。"
+  "LogicPanelTimelineHelp.OrderBody": "一个门只有等它所有发生变化的输入都到达后才会翻转——通往该门的最长路径决定了它的翻转时刻。列表中最后一个事件就是本次切换中最慢的信号;它不会晚于下方显示的关键路径数值,因为关键路径是所有可能切换中最坏的情况。",
+  "LogicPanel.ReplayPrev": "◀ 上一步",
+  "LogicPanel.ReplayNext": "下一步 ▶",
+  "LogicPanel.ReplayTime": "正在显示 t = {0:0.0} ps",
+  "LogicPanel.ReplayExit": "返回实时状态",
+  "LogicPanelTimelineHelp.ReplayTitle": "逐步观看波纹传播",
+  "LogicPanelTimelineHelp.ReplayBody": "点击某一行(或使用上一步/下一步按钮),画布上的徽章就会定格在该时刻:已经翻转的门显示新电平,列表中更靠后的门仍显示旧电平——变化在芯片上清晰可见地逐级传播。再次点击该行或点击“返回实时状态”,即可回到稳定的最终状态。时间仅从延迟模型中查取,不会重新进行仿真。"
 }

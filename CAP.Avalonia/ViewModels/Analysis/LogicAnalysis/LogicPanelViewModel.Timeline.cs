@@ -31,7 +31,9 @@ public partial class LogicPanelViewModel
     /// Computes the switch events between the last shown input assignment and
     /// <paramref name="currentBits"/> and replaces the displayed timeline. The
     /// first call after a build only records the baseline — no toggle has happened
-    /// yet, so the timeline stays empty.
+    /// yet, so the timeline stays empty. A new toggle also exits replay: the badges
+    /// already show the new live end state, and the before-bits of the previous
+    /// toggle no longer describe the network.
     /// </summary>
     private void UpdateTimeline(IReadOnlyDictionary<string, bool> currentBits)
     {
@@ -44,18 +46,23 @@ public partial class LogicPanelViewModel
         }
 
         var events = LogicEventTimeline.Compute(_network, _previousInputBits, currentBits);
+        _replayBeforeResult = _network.Evaluate(_previousInputBits);
+        SelectedTimelineEvent = null;
         TimelineEvents.Clear();
         foreach (var e in events)
             TimelineEvents.Add(new LogicTimelineEventViewModel(e));
         HasTimelineEvents = TimelineEvents.Count > 0;
         _previousInputBits = currentBits;
+        PreviousTimelineEventCommand.NotifyCanExecuteChanged();
+        NextTimelineEventCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Discards the displayed timeline and the input baseline.</summary>
+    /// <summary>Discards the displayed timeline, the input baseline, and any active replay.</summary>
     private void ClearTimeline()
     {
         TimelineEvents.Clear();
         HasTimelineEvents = false;
         _previousInputBits = null;
+        ClearReplay();
     }
 }

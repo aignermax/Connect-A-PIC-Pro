@@ -1361,5 +1361,11 @@
   "LogicPanelTimelineHelp.PhysicsTitle": "La luz tarda tiempo",
   "LogicPanelTimelineHelp.PhysicsBody": "En una guía de onda, la luz se mueve a la velocidad de la luz dividida por el índice de grupo (c/n_g ≈ c/4,2 para el silicio). El retardo de una puerta es la longitud de su camino óptico interno multiplicada por n_g/c: un camino de 100 µm cuesta unos 1,4 ps. Los retardos de los cables se suman: cada picosegundo mostrado es una distancia real que la luz tuvo que recorrer.",
   "LogicPanelTimelineHelp.OrderTitle": "La entrada más lenta decide",
-  "LogicPanelTimelineHelp.OrderBody": "Una puerta solo conmuta cuando han llegado todas sus entradas que cambian: el camino más largo hacia esa puerta fija su instante de conmutación. El último evento de la lista es la señal más lenta de este cambio; nunca cae más tarde que el número de ruta crítica mostrado abajo, porque la ruta crítica es el peor caso entre todos los cambios posibles."
+  "LogicPanelTimelineHelp.OrderBody": "Una puerta solo conmuta cuando han llegado todas sus entradas que cambian: el camino más largo hacia esa puerta fija su instante de conmutación. El último evento de la lista es la señal más lenta de este cambio; nunca cae más tarde que el número de ruta crítica mostrado abajo, porque la ruta crítica es el peor caso entre todos los cambios posibles.",
+  "LogicPanel.ReplayPrev": "◀ Anterior",
+  "LogicPanel.ReplayNext": "Siguiente ▶",
+  "LogicPanel.ReplayTime": "mostrando t = {0:0.0} ps",
+  "LogicPanel.ReplayExit": "Volver en vivo",
+  "LogicPanelTimelineHelp.ReplayTitle": "Recorre la onda paso a paso",
+  "LogicPanelTimelineHelp.ReplayBody": "Haz clic en una fila (o en los botones Anterior/Siguiente) y las insignias del lienzo se congelan en ese instante: cada puerta que ya ha conmutado muestra su nuevo nivel y cada puerta más abajo en la lista aún muestra el anterior — el cambio se propaga visiblemente por el chip. Haz clic de nuevo en la fila o en 'Volver en vivo' para regresar al estado final estable. Los tiempos solo se consultan del modelo de retardos; nada se vuelve a simular."
 }

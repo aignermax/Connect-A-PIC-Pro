@@ -156,6 +156,7 @@ public partial class LogicPanelViewModel : ObservableObject
             return;
         var bits = Inputs.ToDictionary(input => input.PinName, input => input.IsOn);
         var result = _network.Evaluate(bits);
+        _liveResult = result;
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
         ShowGateStateBadges(result);
@@ -171,9 +172,7 @@ public partial class LogicPanelViewModel : ObservableObject
     {
         if (_canvas == null || _network == null)
             return;
-        var states = _network.Gates.SelectMany(gate => gate.Value.OutputPinNames.Select(
-            pinName => new LogicGateBadgeState(gate.Key, pinName, result[$"{gate.Key}.{pinName}"])));
-        _canvas.LogicGateStates.ShowStates(states);
+        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(result));
     }
 
     /// <summary>The active laser's wavelength, falling back to the standard red wavelength.</summary>

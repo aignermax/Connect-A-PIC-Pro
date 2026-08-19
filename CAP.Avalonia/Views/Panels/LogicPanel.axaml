@@ -7,6 +7,20 @@
              x:Class="CAP.Avalonia.Views.Panels.LogicPanel"
              x:DataType="vm:MainViewModel">
 
+    <UserControl.Styles>
+        <!-- Replay (#1058): the selected timeline row — the instant the canvas badges
+             currently show — gets a visible highlight. -->
+        <Style Selector="Button.timeline-event">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+        <Style Selector="Button.timeline-event.selected">
+            <Setter Property="Background" Value="#3d3d5d"/>
+        </Style>
+    </UserControl.Styles>
+
     <StackPanel>
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
         <Grid ColumnDefinitions="*,Auto">
@@ -165,24 +179,52 @@
                             <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.OrderTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.OrderBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
                         </StackPanel>
                     </controls:HelpFlyoutButton.HelpContent>
                 </controls:HelpFlyoutButton>
             </Grid>
+            <!-- Replay navigation (#1058, rung 5 visualizer slice 3): step through the
+                 switch events and the canvas badges show the network state at that
+                 instant — pure lookup, nothing is re-simulated. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,2"
+                        IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
+                <Button Content="{loc:Localize LogicPanel.ReplayPrev}"
+                        Command="{Binding RightPanel.Logic.PreviousTimelineEventCommand}"
+                        Padding="6,2" FontSize="10"/>
+                <Button Content="{loc:Localize LogicPanel.ReplayNext}"
+                        Command="{Binding RightPanel.Logic.NextTimelineEventCommand}"
+                        Padding="6,2" FontSize="10"/>
+                <TextBlock Text="{Binding RightPanel.Logic.ReplayTimeText}" Foreground="#e6c860"
+                           FontSize="10" VerticalAlignment="Center" Margin="4,0,0,0"
+                           IsVisible="{Binding RightPanel.Logic.IsReplayActive}"/>
+                <Button Content="{loc:Localize LogicPanel.ReplayExit}"
+                        Command="{Binding RightPanel.Logic.ExitReplayCommand}"
+                        Padding="6,2" FontSize="10"
+                        IsVisible="{Binding RightPanel.Logic.IsReplayActive}"/>
+            </StackPanel>
             <ItemsControl ItemsSource="{Binding RightPanel.Logic.TimelineEvents}"
                           IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:LogicTimelineEventViewModel">
-                        <StackPanel Orientation="Horizontal" Margin="0,1">
-                            <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
-                                       FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
-                                       FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
-                                       Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
-                            <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
-                                       Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
-                        </StackPanel>
+                        <Button Classes="timeline-event"
+                                Classes.selected="{Binding IsSelected}"
+                                Command="{Binding $parent[ItemsControl].DataContext.RightPanel.Logic.SelectTimelineEventCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
+                                           FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
+                                           FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                           Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
+                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                           Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
+                            </StackPanel>
+                        </Button>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
