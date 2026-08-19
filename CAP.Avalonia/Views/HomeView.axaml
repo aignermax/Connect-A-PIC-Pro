@@ -44,6 +44,14 @@
                         <TextBlock Text="{loc:Localize Home.OpenProject}" FontWeight="SemiBold" FontSize="13"/>
                     </StackPanel>
                 </Button>
+                <Button Command="{Binding LearnTutorialCommand}"
+                        Background="#3d5d3d" Foreground="White" Padding="14,7"
+                        ToolTip.Tip="{loc:Localize Home.LearnTutorialTip}">
+                    <StackPanel Orientation="Horizontal" Spacing="7">
+                        <TextBlock Text="🎓" FontSize="13"/>
+                        <TextBlock Text="{loc:Localize Home.LearnTutorial}" FontWeight="SemiBold" FontSize="13"/>
+                    </StackPanel>
+                </Button>
             </StackPanel>
 
             <!-- Shipped example designs -->

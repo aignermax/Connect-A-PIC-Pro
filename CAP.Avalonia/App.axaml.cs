@@ -47,6 +47,7 @@ public partial class App : Application
         services.AddModeSolverFeature();
         services.AddNotificationFeature();
         services.AddHomeFeature();
+        services.AddOnboardingFeature();
         services.AddComponentRegistryFeature();
         services.AddAddCustomComponentFeature();
         services.AddGdsImportFeature();

@@ -1,0 +1,45 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels.Onboarding.FirstStepsTutorial"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             x:Class="CAP.Avalonia.Views.Panels.FirstStepsTutorialPanel"
+             x:DataType="vm:TutorialViewModel">
+
+  <!-- Guided first-steps tour card (issue #1080, slice 1 of #769): shows the
+       current step and progress; deliberately minimal — no spotlight/arrow
+       engine yet. Non-modal: the canvas stays fully interactive. -->
+  <Border Background="#2b2b33" BorderBrush="#5a8a5a" BorderThickness="1"
+          CornerRadius="6" Padding="12" Width="340"
+          BoxShadow="0 4 12 0 #99000000">
+    <StackPanel Spacing="8">
+
+      <!-- Header: progress + close -->
+      <DockPanel>
+        <Button DockPanel.Dock="Right" Content="✕" Padding="4,0"
+                Background="Transparent" Foreground="#aaaaaa"
+                Command="{Binding SkipCommand}"
+                ToolTip.Tip="{loc:Localize Tutorial.Skip}"/>
+        <TextBlock Text="{Binding ProgressText}" Foreground="#9ad1ff" FontSize="11"
+                   VerticalAlignment="Center"/>
+      </DockPanel>
+
+      <!-- Current step -->
+      <TextBlock Text="{Binding CurrentTitle}" FontWeight="SemiBold" FontSize="14"
+                 Foreground="White"/>
+      <TextBlock Text="{Binding CurrentBody}" TextWrapping="Wrap"
+                 Foreground="#c9c9c9" FontSize="12"/>
+
+      <!-- Actions -->
+      <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+        <Button Content="{loc:Localize Tutorial.Skip}"
+                Command="{Binding SkipCommand}"
+                Background="Transparent" Foreground="#aaaaaa" FontSize="11"
+                Padding="8,4"/>
+        <Button Content="{loc:Localize Tutorial.Next}"
+                Command="{Binding NextCommand}"
+                Background="#3d5d3d" Foreground="White" FontSize="11"
+                Padding="10,4"/>
+      </StackPanel>
+    </StackPanel>
+  </Border>
+</UserControl>
