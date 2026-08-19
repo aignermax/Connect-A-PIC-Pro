@@ -5,12 +5,14 @@ using Xunit;
 namespace UnitTests.Canvas;
 
 /// <summary>
-/// View-model tests for the canvas logic-state overlay's named badges (issue #1051,
-/// rung 4→5 of the NAND game): a gate input pin carrying a persisted signal name gets a
-/// badge that shows the name next to the live bit (<c>A0 = 1</c>), so a student watching
-/// the adder compute can tell which badge is which signal. Unnamed pins keep the plain
-/// 0/1 chip exactly, and a name that disappears from the design disappears from the
-/// badge on the next rebuild — the overlay mirrors exactly the states it is handed.
+/// View-model tests for the canvas logic-state overlay's named badges (issues
+/// #1051/#1067, rung 4→5 of the NAND game): a pin carrying a persisted signal name
+/// gets a badge that shows the name next to the live bit — the input chip
+/// (<c>A0 = 1</c>) and, symmetric to it, the named output tap (<c>S0 = 1</c>) — so a
+/// student watching the adder compute can tell which badge is which signal. Unnamed
+/// pins keep the plain 0/1 chip exactly, and a name that disappears from the design
+/// disappears from the badge on the next rebuild — the overlay mirrors exactly the
+/// states it is handed.
 /// </summary>
 public class LogicGateStateOverlayTests
 {
@@ -29,6 +31,21 @@ public class LogicGateStateOverlayTests
         named.HasSignalName.ShouldBeTrue();
         named.SignalName.ShouldBe("A0");
         named.LabelText.ShouldBe("A0 = 1");
+    }
+
+    [Fact]
+    public void ShowStates_NamedOutputTap_BadgeShowsSignalNameAndBit()
+    {
+        // Issue #1067: the named output chip is the input chip's symmetric sibling —
+        // the state hands the output tap's signal name through to the badge label.
+        var overlay = new LogicGateStateOverlay();
+
+        overlay.ShowStates(new[] { new LogicGateBadgeState("T0H2SUM", "Y", true, "S0") });
+
+        var named = overlay.Badges.Single();
+        named.HasSignalName.ShouldBeTrue();
+        named.SignalName.ShouldBe("S0");
+        named.LabelText.ShouldBe("S0 = 1");
     }
 
     [Fact]
