@@ -192,11 +192,22 @@ public class LogicPanelPlaybackTests
         return vm;
     }
 
-    /// <summary>The anonymous output badges currently on the canvas, keyed <c>gate.pin</c>.</summary>
+    /// <summary>
+    /// The output-pin badges currently on the canvas, keyed <c>gate.pin</c> — the
+    /// named output chips (issue #1067) ride along with their tap's signal name, so
+    /// they match by raw pin ref, not by anonymity. Named input chips (issue #1051)
+    /// carry the live input bits, not gate output states — playback derivations
+    /// exclude them.
+    /// </summary>
     private Dictionary<string, bool> BadgeStates() =>
         _fixture.Canvas.LogicGateStates.Badges
-            .Where(b => !b.HasSignalName)
+            .Where(IsOutputChip)
             .ToDictionary(b => $"{b.GroupName}.{b.PinName}", b => b.IsOne);
+
+    /// <summary>True for a chip on a gate's output tap — anonymous or named (issue #1067).</summary>
+    private bool IsOutputChip(LogicGateBadgeViewModel badge) =>
+        _fixture.Network.OutputTaps.Values.Any(
+            p => p.GateId == badge.GroupName && p.PinName == badge.PinName);
 
     /// <summary>Asserts the canvas badges show exactly the expected pin states.</summary>
     private void BadgesShouldShow(IReadOnlyDictionary<string, bool> expected, string because)
