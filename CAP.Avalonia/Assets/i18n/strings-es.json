@@ -1353,5 +1353,13 @@
   "LogicPanelTimingHelp.PhysicsTitle": "La luz viaja a c/n_g",
   "LogicPanelTimingHelp.PhysicsBody": "En una guía de onda, la luz se mueve a la velocidad de la luz dividida por el índice de grupo (c/n_g ≈ c/4,2 para el silicio). El retardo mostrado es la longitud del camino óptico interno de la puerta multiplicada por n_g/c: un camino de 100 µm cuesta unos 1,4 ps. El modelo usa las longitudes geométricas más el ancho de cada componente; es una estimación físicamente plausible, no una simulación de temporización exacta.",
   "LogicPanelTimingHelp.ClockTitle": "La cadena más larga fija la velocidad de reloj",
-  "LogicPanelTimingHelp.ClockBody": "La misma idea que el cierre de temporización en electrónica: un nuevo bit de entrada solo llega a la salida cuando la cadena de puertas más lenta se ha estabilizado. La ruta crítica da el período mínimo de reloj: 10 ps de ruta crítica significan un reloj de unos 100 GHz. Los retardos de los cables entre puertas aún no se contabilizan."
+  "LogicPanelTimingHelp.ClockBody": "La misma idea que el cierre de temporización en electrónica: un nuevo bit de entrada solo llega a la salida cuando la cadena de puertas más lenta se ha estabilizado. La ruta crítica da el período mínimo de reloj: 10 ps de ruta crítica significan un reloj de unos 100 GHz. Los retardos de los cables entre puertas aún no se contabilizan.",
+  "LogicPanel.Timeline": "Cronología:",
+  "LogicPanel.TimelineEmpty": "Cambia una entrada para ver cómo los eventos de conmutación se propagan por las puertas.",
+  "LogicPanelTimelineHelp.Title": "¿Por qué se propagan los eventos?",
+  "LogicPanelTimelineHelp.Intro": "Cada fila es una salida de puerta que cambia a un nuevo nivel tras tu último cambio de entrada, en el orden en que llega la luz. Lee de arriba abajo: el cambio entra en t = 0 y se propaga por la red de puertas, cada una sumando su propio retardo.",
+  "LogicPanelTimelineHelp.PhysicsTitle": "La luz tarda tiempo",
+  "LogicPanelTimelineHelp.PhysicsBody": "En una guía de onda, la luz se mueve a la velocidad de la luz dividida por el índice de grupo (c/n_g ≈ c/4,2 para el silicio). El retardo de una puerta es la longitud de su camino óptico interno multiplicada por n_g/c: un camino de 100 µm cuesta unos 1,4 ps. Los retardos de los cables se suman: cada picosegundo mostrado es una distancia real que la luz tuvo que recorrer.",
+  "LogicPanelTimelineHelp.OrderTitle": "La entrada más lenta decide",
+  "LogicPanelTimelineHelp.OrderBody": "Una puerta solo conmuta cuando han llegado todas sus entradas que cambian: el camino más largo hacia esa puerta fija su instante de conmutación. El último evento de la lista es la señal más lenta de este cambio; nunca cae más tarde que el número de ruta crítica mostrado abajo, porque la ruta crítica es el peor caso entre todos los cambios posibles."
 }
