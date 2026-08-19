@@ -125,6 +125,7 @@ public partial class LogicPanelViewModel : ObservableObject
             Translate("LogicPanel.CriticalPath"),
             network.CriticalPathDelayPicoseconds,
             network.CriticalPathGateIds.Count);
+        RebuildBusRows();
 
         HasNetwork = true;
         ReEvaluate();
@@ -139,6 +140,9 @@ public partial class LogicPanelViewModel : ObservableObject
         HasFanOutWarnings = false;
         CriticalPathText = "";
         ClearTimeline();
+        DetachBusRows();
+        InputRows.Clear();
+        OutputRows.Clear();
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
