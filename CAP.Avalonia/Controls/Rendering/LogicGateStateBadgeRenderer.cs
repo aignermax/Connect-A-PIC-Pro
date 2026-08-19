@@ -11,7 +11,10 @@ namespace CAP.Avalonia.Controls.Rendering;
 /// panel's network is built: a small dark chip at the group's top-right corner carrying
 /// the evaluated bit of one gate output pin — LightGreen for 1, gray for 0, the same
 /// colors the Logic panel's output list uses. A multi-output gate gets one chip per
-/// output pin, stacked downward. The chips only ever sit on top of the group — the
+/// output pin, stacked downward. Gate input pins carrying a persisted signal name get
+/// an additional wider chip below, showing the signal name next to its live bit
+/// (<c>A0 = 1</c>, issue #1051); unnamed pins keep the plain square 0/1 chip exactly.
+/// The chips only ever sit on top of the group — the
 /// group itself is never repainted — and they vanish with the network (rebuild, cancel,
 /// design edit, load), driven entirely by <see cref="LogicGateStateOverlay"/>.
 /// </summary>
@@ -22,6 +25,7 @@ internal static class LogicGateStateBadgeRenderer
     private const double BadgeSpacing = 2;
     private const double BadgeCornerRadius = 3;
     private const double BadgeFontSize = 11;
+    private const double BadgeTextPaddingX = 3;
 
     private static readonly Color BackingColor = Color.FromArgb(220, 30, 30, 30);
     private static readonly Color BorderColor = Color.FromArgb(160, 120, 120, 120);
@@ -61,23 +65,29 @@ internal static class LogicGateStateBadgeRenderer
         }
     }
 
-    /// <summary>Draws one chip: dark backing, thin border, centered 0/1 bit.</summary>
+    /// <summary>Draws one chip: dark backing, thin border, centered bit — named badges
+    /// widen the chip to fit their <c>name = bit</c> label, growing left from the
+    /// group's right edge so the unnamed square chip keeps its exact geometry.</summary>
     private static void DrawBadge(DrawingContext context, Rect groupBounds, int index, LogicGateBadgeViewModel badge)
     {
-        var rect = new Rect(
-            groupBounds.Right - BadgeSize - BadgeMargin,
-            groupBounds.Top + BadgeMargin + index * (BadgeSize + BadgeSpacing),
-            BadgeSize,
-            BadgeSize);
-        context.DrawRectangle(BackingBrush, BorderPen, rect, BadgeCornerRadius, BadgeCornerRadius);
-
         var text = new FormattedText(
-            badge.BitText,
+            badge.LabelText,
             CultureInfo.InvariantCulture,
             FlowDirection.LeftToRight,
             new Typeface("Arial", FontStyle.Normal, FontWeight.Bold),
             BadgeFontSize,
             badge.IsOne ? OneBrush : ZeroBrush);
+
+        var width = badge.HasSignalName
+            ? Math.Max(BadgeSize, text.Width + 2 * BadgeTextPaddingX)
+            : BadgeSize;
+        var rect = new Rect(
+            groupBounds.Right - width - BadgeMargin,
+            groupBounds.Top + BadgeMargin + index * (BadgeSize + BadgeSpacing),
+            width,
+            BadgeSize);
+        context.DrawRectangle(BackingBrush, BorderPen, rect, BadgeCornerRadius, BadgeCornerRadius);
+
         context.DrawText(text, new Point(
             rect.Center.X - text.Width / 2,
             rect.Center.Y - text.Height / 2));
