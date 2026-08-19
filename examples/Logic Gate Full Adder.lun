@@ -9171,7 +9171,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "S"
+        }
       }
     },
     {
@@ -10801,7 +10804,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "Cout"
+        }
       }
     }
   ],

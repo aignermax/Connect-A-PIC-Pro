@@ -4,7 +4,8 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 
 /// <summary>
 /// One network-level output tap of the assembled logic network, shown as a live
-/// 0/1 indicator in the Logic panel.
+/// 0/1 indicator in the Logic panel. A tap named by an output signal shows that
+/// name; the raw tapped pin rides along for the tooltip.
 /// </summary>
 public partial class LogicNetworkOutputViewModel : ObservableObject
 {
@@ -14,8 +15,15 @@ public partial class LogicNetworkOutputViewModel : ObservableObject
         PinName = pinName;
     }
 
-    /// <summary>Output tap name in <c>&lt;gate&gt;.&lt;pin&gt;</c> form.</summary>
+    /// <summary>
+    /// Output tap name: the output signal name when the tapped pin carries one,
+    /// else the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id.
+    /// </summary>
     public string PinName { get; }
+
+    /// <summary>The tapped gate output pin in raw <c>&lt;gate&gt;.&lt;pin&gt;</c> form (tooltip).</summary>
+    [ObservableProperty]
+    private string _rawPinName = "";
 
     /// <summary>The currently evaluated bit at this tap.</summary>
     [ObservableProperty]

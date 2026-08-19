@@ -161,11 +161,13 @@ public partial class TruthTableViewModel : ObservableObject
         foreach (var pin in _group.ExternalPins)
         {
             var input = CreatePin(pin.Name);
+            var output = CreatePin(pin.Name);
             // OnSignalNamesVisibleChanged only fires on change — freshly rebuilt rows
             // take the flag explicitly so an unchanged value still reaches them.
             input.SignalEditingVisible = SignalNamesVisible;
+            output.SignalEditingVisible = SignalNamesVisible;
             InputPins.Add(input);
-            OutputPins.Add(CreatePin(pin.Name));
+            OutputPins.Add(output);
             BiasPins.Add(CreatePin(pin.Name));
         }
     }
@@ -189,7 +191,7 @@ public partial class TruthTableViewModel : ObservableObject
     /// of input, output, or bias (checking it in one list revokes it in the other two),
     /// and at most <see cref="TruthTableExtractor.MaxLogicInputs"/> inputs may be checked.
     /// Signal-name edits write through to the group's persisted assignment, and a pin
-    /// losing its input role drops its signal identity (issue #1033).
+    /// losing its input or output role drops its signal identity (issues #1033/#1046).
     /// </summary>
     private void OnPinPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
@@ -197,7 +199,7 @@ public partial class TruthTableViewModel : ObservableObject
             return;
         if (e.PropertyName == nameof(PinSelectionViewModel.SignalName))
         {
-            if (!_revertingPinCheck && InputPins.Contains(pin))
+            if (!_revertingPinCheck && (InputPins.Contains(pin) || OutputPins.Contains(pin)))
                 ApplySignalNameEdit(pin);
             return;
         }
@@ -205,7 +207,7 @@ public partial class TruthTableViewModel : ObservableObject
             return;
         if (!pin.IsChecked)
         {
-            if (InputPins.Contains(pin))
+            if (InputPins.Contains(pin) || OutputPins.Contains(pin))
                 RevokeSignalName(pin);
             return;
         }
@@ -234,8 +236,8 @@ public partial class TruthTableViewModel : ObservableObject
                 continue;
             twin.IsChecked = false;
             // The guard above suppresses the twin's own uncheck handler, so the
-            // input-role loss revokes its signal identity explicitly here.
-            if (ReferenceEquals(list, InputPins))
+            // role loss revokes its signal identity explicitly here.
+            if (!ReferenceEquals(list, BiasPins))
                 RevokeSignalName(twin);
         }
     }

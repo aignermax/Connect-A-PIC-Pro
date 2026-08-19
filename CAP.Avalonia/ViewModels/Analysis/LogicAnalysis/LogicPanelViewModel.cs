@@ -106,11 +106,13 @@ public partial class LogicPanelViewModel : ObservableObject
         }
         foreach (var name in network.OutputPinNames)
         {
+            var tap = network.OutputTaps[name];
             Outputs.Add(new LogicNetworkOutputViewModel(name)
             {
+                RawPinName = $"{tap.GateId}.{tap.PinName}",
                 DelayText = string.Format(
                     Translate("LogicPanel.GateDelay"),
-                    network.GateDelaysPicoseconds[network.OutputTaps[name].GateId]),
+                    network.GateDelaysPicoseconds[tap.GateId]),
             });
         }
         foreach (var warning in network.FanOutWarnings)
@@ -163,14 +165,16 @@ public partial class LogicPanelViewModel : ObservableObject
     /// <summary>
     /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
     /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
-    /// data the panel's output list shows, no new simulation.
+    /// data the panel's output list shows, no new simulation. Result bits are keyed by
+    /// tap name, so the walk goes through the taps: a signal-named output reads under
+    /// its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id.
     /// </summary>
     private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result)
     {
         if (_canvas == null || _network == null)
             return;
-        var states = _network.Gates.SelectMany(gate => gate.Value.OutputPinNames.Select(
-            pinName => new LogicGateBadgeState(gate.Key, pinName, result[$"{gate.Key}.{pinName}"])));
+        var states = _network.OutputTaps.Select(tap =>
+            new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]));
         _canvas.LogicGateStates.ShowStates(states);
     }
 
