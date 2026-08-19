@@ -1368,6 +1368,9 @@
   "LogicPanel.ReplayNext": "Weiter ▶",
   "LogicPanel.ReplayTime": "Anzeige bei t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Zurück zu Live",
+  "LogicPanel.PlaybackPlay": "▶ Abspielen",
+  "LogicPanel.PlaybackPause": "⏸ Anhalten",
   "LogicPanelTimelineHelp.ReplayTitle": "Die Welle Schritt für Schritt",
-  "LogicPanelTimelineHelp.ReplayBody": "Klicke auf eine Zeile (oder die Zurück/Weiter-Schaltflächen) und die Badges auf der Zeichenfläche frieren zu diesem Zeitpunkt ein: Jedes Gatter, das bereits geschaltet hat, zeigt seinen neuen Pegel, jedes Gatter weiter unten in der Liste noch seinen alten — die Änderung läuft sichtbar über den Chip. Klicke die Zeile erneut oder auf 'Zurück zu Live', um zum stabilen Endzustand zurückzukehren. Die Zeiten werden nur aus dem Verzögerungsmodell nachgeschlagen; nichts wird neu simuliert."
+  "LogicPanelTimelineHelp.ReplayBody": "Klicke auf eine Zeile (oder die Zurück/Weiter-Schaltflächen) und die Badges auf der Zeichenfläche frieren zu diesem Zeitpunkt ein: Jedes Gatter, das bereits geschaltet hat, zeigt seinen neuen Pegel, jedes Gatter weiter unten in der Liste noch seinen alten — die Änderung läuft sichtbar über den Chip. Klicke die Zeile erneut oder auf 'Zurück zu Live', um zum stabilen Endzustand zurückzukehren. Die Zeiten werden nur aus dem Verzögerungsmodell nachgeschlagen; nichts wird neu simuliert.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Mit '▶ Abspielen' läuft die Welle von selbst — ein Ereignis alle 0,6 Sekunden. Das Tempo ist didaktisch, nicht maßstäblich: Die echten Schaltvorgänge liegen nur Pikosekunden auseinander."
 }

@@ -1368,6 +1368,9 @@
   "LogicPanel.ReplayNext": "Next ▶",
   "LogicPanel.ReplayTime": "showing t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Back to live",
+  "LogicPanel.PlaybackPlay": "▶ Play",
+  "LogicPanel.PlaybackPause": "⏸ Pause",
   "LogicPanelTimelineHelp.ReplayTitle": "Step through the ripple",
-  "LogicPanelTimelineHelp.ReplayBody": "Click a row (or the Prev/Next buttons) and the canvas badges freeze at that instant: every gate that has already switched shows its new level, every gate further down the list still shows its old one — the change visibly ripples across the chip. Click the row again or 'Back to live' to return to the settled end state. The times are only looked up from the delay model; nothing is re-simulated."
+  "LogicPanelTimelineHelp.ReplayBody": "Click a row (or the Prev/Next buttons) and the canvas badges freeze at that instant: every gate that has already switched shows its new level, every gate further down the list still shows its old one — the change visibly ripples across the chip. Click the row again or 'Back to live' to return to the settled end state. The times are only looked up from the delay model; nothing is re-simulated.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Press '▶ Play' and the ripple advances on its own — one event every 0.6 seconds. The pacing is didactic, not to scale: the real switch events are only picoseconds apart."
 }
