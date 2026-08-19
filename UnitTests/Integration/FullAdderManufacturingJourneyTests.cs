@@ -26,8 +26,8 @@ namespace UnitTests.Integration;
 public class FullAdderManufacturingJourneyTests
     : IClassFixture<FullAdderManufacturingJourneyTests.ManufacturingJourneyFixture>
 {
-    private const string SumTap = "H2SUM.Y";
-    private const string CarryOutTap = "OROUT.Y";
+    private const string SumTap = "S";
+    private const string CarryOutTap = "Cout";
 
     private readonly ManufacturingJourneyFixture _journey;
 

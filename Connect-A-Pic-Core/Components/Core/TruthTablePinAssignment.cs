@@ -37,4 +37,15 @@ public sealed class TruthTablePinAssignment
     /// pin carries a signal name; legacy files without the block load unchanged.
     /// </summary>
     public Dictionary<string, string>? InputSignalNames { get; set; }
+
+    /// <summary>
+    /// Optional signal name per logic output pin: the named output's network tap
+    /// carries the signal name instead of the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id —
+    /// the 4-bit adder's sum reads <c>S0</c>–<c>S3</c> and <c>Cout</c>, not
+    /// <c>T0H2SUM.Y</c> … <c>T3OROUT.Y</c>. Unlike input names, output names never
+    /// merge pins (every tap is one gate output), so they must be unique across the
+    /// network. Null when no output pin carries a name; legacy files without the
+    /// block load unchanged.
+    /// </summary>
+    public Dictionary<string, string>? OutputSignalNames { get; set; }
 }

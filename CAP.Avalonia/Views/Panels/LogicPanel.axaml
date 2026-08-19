@@ -129,7 +129,10 @@
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
                         <StackPanel Orientation="Horizontal" Margin="0,1">
-                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                            <!-- Tap name: the output signal name when one exists; the
+                                 tooltip always reveals the raw tapped gate.pin id. -->
+                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="110"
+                                       VerticalAlignment="Center" ToolTip.Tip="{Binding RawPinName}"/>
                             <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
                                        Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
                             <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
