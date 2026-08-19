@@ -31,6 +31,25 @@ public sealed partial class LogicNetworkBuilder
                 nameof(contexts));
     }
 
+    /// <summary>
+    /// Rejects a network input name that equals an output tap name: input names merge
+    /// pins, output names rename taps, and a name shared across the two roles reads as
+    /// the same wire in the Logic panel. Checking against every tap name (not only
+    /// signal-named ones) also catches an input signal named like a raw
+    /// <c>&lt;gate&gt;.&lt;pin&gt;</c> tap.
+    /// </summary>
+    private static void ThrowOnInputOutputNameCollision(
+        IReadOnlyDictionary<string, List<string>> inputMembers,
+        IReadOnlyDictionary<string, LogicPinRef> outputTaps)
+    {
+        var collision = inputMembers.Keys.FirstOrDefault(outputTaps.ContainsKey);
+        if (collision == null)
+            return;
+        throw new ArgumentException(
+            $"Signal name '{collision}' is used by input pins ({string.Join(", ", inputMembers[collision])}) " +
+            $"and by output pin {collision} — rename one of them.");
+    }
+
     /// <summary>One gate group with its prevalidated logic interface.</summary>
     private sealed class GateContext
     {
