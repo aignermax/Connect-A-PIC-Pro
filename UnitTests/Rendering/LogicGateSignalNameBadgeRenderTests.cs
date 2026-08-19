@@ -14,15 +14,16 @@ using Xunit;
 namespace UnitTests.Rendering;
 
 /// <summary>
-/// Render smoke tests for the named canvas logic-state badges (issue #1051, rung 4→5 of
-/// the NAND game): over the shipped <c>examples/Logic Gate 4-Bit Adder.lun</c> — whose
-/// operand pins carry the persisted signal names A0–A3, B0–B3 and Cin since #1032/#1034 —
-/// the Logic panel's build puts a named badge (<c>A0 = 1</c>) next to the live bit on
-/// every gate group reading a named signal, and the badge renderer actually paints those
-/// chips headlessly. A synthetic geometry test pins the chip layout: the named chip
-/// widens to fit its label while the anonymous output badge keeps its exact square.
-/// Renders the production renderer into a <see cref="RenderTargetBitmap"/> and samples
-/// real pixels — same pattern as <see cref="ComponentGroupOutlineRenderingTests"/>.
+/// Render smoke tests for the named canvas logic-state badges (issues #1051/#1067, rung
+/// 4→5 of the NAND game): over the shipped <c>examples/Logic Gate 4-Bit Adder.lun</c> —
+/// whose operand pins carry the persisted signal names A0–A3, B0–B3 and Cin since
+/// #1032/#1034 and whose sum/carry taps read S0–S3/Cout since #1046 — the Logic panel's
+/// build puts named chips (<c>A0 = 1</c>, <c>S0 = 0</c>) next to the live bit on every
+/// affected gate group, and the badge renderer actually paints those chips headlessly.
+/// A synthetic geometry test pins the chip layout: a named chip widens to fit its label
+/// while an anonymous output badge keeps its exact square. Renders the production
+/// renderer into a <see cref="RenderTargetBitmap"/> and samples real pixels — same
+/// pattern as <see cref="ComponentGroupOutlineRenderingTests"/>.
 /// </summary>
 public class LogicGateSignalNameBadgeRenderTests
     : IClassFixture<LogicGateFourBitAdderExampleTests.FourBitAdderFixture>
@@ -37,9 +38,10 @@ public class LogicGateSignalNameBadgeRenderTests
     private const int RowTop = 14;   // BadgeMargin + 10 origin offset
     private const int SquareLeftEdge = 50;
 
-    /// <summary>The nine network signals of the 4-bit adder (issues #1025/#1034).</summary>
-    private static readonly string[] NetworkSignals =
-        { "A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "Cin" };
+    /// <summary>The nine network signals of the 4-bit adder (issues #1025/#1034) plus the
+    /// five named output taps (issue #1046) the chips now carry (issue #1067).</summary>
+    private static readonly string[] NamedChipSignals =
+        { "A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "Cin", "S0", "S1", "S2", "S3", "Cout" };
 
     private readonly LogicGateFourBitAdderExampleTests.FourBitAdderFixture _fixture;
 
@@ -57,12 +59,12 @@ public class LogicGateSignalNameBadgeRenderTests
 
         var badges = _fixture.Canvas.LogicGateStates.Badges;
         var named = badges.Where(b => b.HasSignalName).ToList();
-        named.Select(b => b.SignalName).Distinct().ShouldBe(NetworkSignals, ignoreOrder: true,
-            customMessage: "every named operand signal shows on the canvas badges of its input gates");
+        named.Select(b => b.SignalName).Distinct().ShouldBe(NamedChipSignals, ignoreOrder: true,
+            customMessage: "every named operand signal and every named output tap shows on the canvas chips");
         named.ShouldAllBe(b => b.LabelText == $"{b.SignalName} = {(b.IsOne ? "1" : "0")}");
         badges.Where(b => !b.HasSignalName).ShouldAllBe(
             b => b.PinName == "Y" && b.LabelText == b.BitText,
-            "the anonymous per-output badges stay exactly as before");
+            "the unnamed outputs keep the exact anonymous 0/1 chip");
 
         vm.Inputs.Single(i => i.PinName == "A2").IsOn = true;
         badges.Where(b => b.SignalName == "A2").ShouldAllBe(
@@ -82,6 +84,34 @@ public class LogicGateSignalNameBadgeRenderTests
             .ShouldBeGreaterThan(10, "the A0 chip paints its label text (inputs are off — gray)");
         CountInRow(pixels, row: 2, IsGrayTextPixel)
             .ShouldBeGreaterThan(10, "the B0 chip paints its label text (inputs are off — gray)");
+    }
+
+    [AvaloniaFact]
+    public async Task FourBitAdder_NamedOutputChip_PaintsItsLabelHeadlessly()
+    {
+        // Issue #1067: T0H2SUM's output tap reads under the signal name S0, so the gate's
+        // single output chip carries "S0 = 0" (inputs off) instead of the bare bit.
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+
+        var chip = _fixture.Canvas.LogicGateStates.Badges.Single(b => b.GroupName == "T0H2SUM");
+        chip.SignalName.ShouldBe("S0");
+        chip.PinName.ShouldBe("Y");
+        chip.LabelText.ShouldBe("S0 = 0");
+
+        var group = _fixture.Groups.Single(g => g.GroupName == "T0H2SUM");
+        var bounds = ComponentGroupRenderer.CalculateGroupBounds(group);
+        using var bitmap = RenderBadgeCorner(_fixture.Canvas, bounds);
+        var pixels = ReadPixels(bitmap);
+
+        var row0Left = LeftmostPainted(pixels, row: 0);
+        row0Left.ShouldNotBeNull("the named output chip renders");
+        row0Left.Value.ShouldBeLessThan(SquareLeftEdge - 6,
+            "the named output chip widens left past the square to fit its 'S0 = 0' label");
+        CountInRow(pixels, row: 0, IsGrayTextPixel)
+            .ShouldBeGreaterThan(10, "the S0 chip paints its gray label text (inputs are off)");
     }
 
     [AvaloniaFact]

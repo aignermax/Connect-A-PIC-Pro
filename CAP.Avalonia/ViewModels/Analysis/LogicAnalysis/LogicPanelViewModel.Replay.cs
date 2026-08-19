@@ -137,9 +137,12 @@ public partial class LogicPanelViewModel
     }
 
     /// <summary>
-    /// The badge states of one evaluation result: the anonymous chip per gate output
-    /// pin (walked through the tap names the result keys by) plus the named input
-    /// chips of the given input assignment (issue #1051).
+    /// The badge states of one evaluation result: one chip per gate output pin (walked
+    /// through the tap names the result keys by) plus the named input chips of the given
+    /// input assignment (issue #1051). An output pin whose network tap carries a
+    /// persisted signal name gets a named chip too (<c>S0 = 1</c>, issue #1067) — the
+    /// tap key then differs from the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id; an
+    /// anonymous tap keeps the plain 0/1 chip exactly.
     /// </summary>
     private IEnumerable<LogicGateBadgeState> BadgeStatesOf(
         IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
@@ -147,7 +150,11 @@ public partial class LogicPanelViewModel
         if (_network == null)
             yield break;
         foreach (var tap in _network.OutputTaps)
-            yield return new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]);
+        {
+            var rawName = $"{tap.Value.GateId}.{tap.Value.PinName}";
+            yield return new LogicGateBadgeState(
+                tap.Value.GateId, tap.Value.PinName, result[tap.Key], tap.Key == rawName ? null : tap.Key);
+        }
         var signalNamesByGate = PersistedInputSignalNamesByGate();
         foreach (var gateId in _network.Gates.Keys)
         {

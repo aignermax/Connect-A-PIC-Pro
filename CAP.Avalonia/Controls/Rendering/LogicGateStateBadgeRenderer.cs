@@ -11,9 +11,11 @@ namespace CAP.Avalonia.Controls.Rendering;
 /// panel's network is built: a small dark chip at the group's top-right corner carrying
 /// the evaluated bit of one gate output pin — LightGreen for 1, gray for 0, the same
 /// colors the Logic panel's output list uses. A multi-output gate gets one chip per
-/// output pin, stacked downward. Gate input pins carrying a persisted signal name get
-/// an additional wider chip below, showing the signal name next to its live bit
-/// (<c>A0 = 1</c>, issue #1051); unnamed pins keep the plain square 0/1 chip exactly.
+/// output pin, stacked downward. A pin carrying a persisted signal name gets a wider
+/// chip showing the name next to its live bit: an input pin's chip is stacked below
+/// (<c>A0 = 1</c>, issue #1051), an output pin whose network tap is signal-named
+/// carries the name on its own chip (<c>S0 = 1</c>, issue #1067); unnamed pins keep
+/// the plain square 0/1 chip exactly.
 /// The chips only ever sit on top of the group — the
 /// group itself is never repainted — and they vanish with the network (rebuild, cancel,
 /// design edit, load), driven entirely by <see cref="LogicGateStateOverlay"/>.

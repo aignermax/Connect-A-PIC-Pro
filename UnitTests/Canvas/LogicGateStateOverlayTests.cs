@@ -32,6 +32,21 @@ public class LogicGateStateOverlayTests
     }
 
     [Fact]
+    public void ShowStates_NamedOutputPin_BadgeShowsSignalNameAndBit()
+    {
+        // Issue #1067: an output pin whose network tap is signal-named carries the
+        // name on its own chip — "S0 = 1" instead of the bare bit.
+        var overlay = new LogicGateStateOverlay();
+
+        overlay.ShowStates(new[] { new LogicGateBadgeState("T0H2SUM", "Y", true, "S0") });
+
+        var badge = overlay.Badges.Single();
+        badge.HasSignalName.ShouldBeTrue();
+        badge.SignalName.ShouldBe("S0");
+        badge.LabelText.ShouldBe("S0 = 1");
+    }
+
+    [Fact]
     public void ShowStates_UnnamedPin_BadgeKeepsPlainBitText()
     {
         var overlay = new LogicGateStateOverlay();

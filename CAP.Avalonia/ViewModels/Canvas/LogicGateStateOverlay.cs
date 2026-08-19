@@ -9,9 +9,11 @@ namespace CAP.Avalonia.ViewModels.Canvas;
 /// owns the single instance as the canvas-side source of truth; the Logic panel writes
 /// the freshly evaluated gate output bits into it after every evaluation and clears it
 /// when the network is discarded (rebuild, cancel, failure, design edit, load), so the
-/// badges always mirror exactly the data the panel's output list shows. Gate input pins
-/// carrying a persisted signal name additionally get a named badge
-/// (<c>A0 = 1</c>, issue #1051), so a student can tell which badge reads which signal.
+/// badges always mirror exactly the data the panel's output list shows. A gate pin
+/// carrying a persisted signal name shows that name on its badge: input pins get an
+/// additional named chip (<c>A0 = 1</c>, issue #1051), and an output pin whose network
+/// tap is signal-named carries the name on its own chip (<c>S0 = 1</c>, issue #1067),
+/// so a student can tell which badge reads which signal.
 /// </summary>
 public sealed class LogicGateStateOverlay
 {
@@ -48,8 +50,9 @@ public sealed class LogicGateStateOverlay
 /// <param name="PinName">The gate pin the bit belongs to.</param>
 /// <param name="IsOne">The evaluated bit.</param>
 /// <param name="SignalName">
-/// The persisted signal name of a gate input pin (issue #1051), or null for the
-/// anonymous per-output-pin badges.
+/// The persisted signal name of the badge's pin: a named gate input pin (issue #1051)
+/// or an output pin whose network tap is signal-named (issue #1067); null for
+/// anonymous badges.
 /// </param>
 public readonly record struct LogicGateBadgeState(string GroupName, string PinName, bool IsOne, string? SignalName = null);
 
@@ -57,9 +60,10 @@ public readonly record struct LogicGateBadgeState(string GroupName, string PinNa
 /// One logic-state badge on a gate group: the evaluated bit of one of the gate's output
 /// pins. Single-output gates — every gate of the shipped logic examples — get exactly one
 /// badge; a multi-output gate gets one badge per output pin, stacked on the group.
-/// Gate input pins carrying a persisted signal name get an additional named badge
-/// showing the signal's live bit (<c>A0 = 1</c>, issue #1051); unnamed pins keep the
-/// plain 0/1 chip exactly.
+/// A pin carrying a persisted signal name shows the name next to the live bit: input
+/// pins get an additional named chip (<c>A0 = 1</c>, issue #1051), and an output pin
+/// whose network tap is signal-named carries the name on its own chip
+/// (<c>S0 = 1</c>, issue #1067); unnamed pins keep the plain 0/1 chip exactly.
 /// </summary>
 public sealed class LogicGateBadgeViewModel
 {
@@ -81,7 +85,7 @@ public sealed class LogicGateBadgeViewModel
     /// <summary>The currently evaluated bit at this pin.</summary>
     public bool IsOne { get; }
 
-    /// <summary>The persisted signal name of a named input pin, or null for anonymous badges.</summary>
+    /// <summary>The persisted signal name of a named input or output pin, or null for anonymous badges.</summary>
     public string? SignalName { get; }
 
     /// <summary>True when the badge carries a persisted signal name.</summary>

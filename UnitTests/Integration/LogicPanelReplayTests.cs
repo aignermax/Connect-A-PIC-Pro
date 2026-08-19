@@ -48,6 +48,40 @@ public class LogicPanelReplayTests
     }
 
     [Fact]
+    public async Task SelectEvent_FullAdder_NamedOutputChipsFreezeAtTheDerivedState()
+    {
+        // Issue #1067: the full adder's S and Cout taps are signal-named (issue #1046),
+        // so their output chips carry the name — replay (#1058) must keep the named
+        // chips and freeze them at the derived state of the selected instant.
+        var vm = await BuildAndToggleCin();
+
+        vm.SelectTimelineEventCommand.Execute(vm.TimelineEvents[0]);
+
+        var firstTime = vm.TimelineEvents[0].Event.TimePicoseconds;
+        var state = StateAt(firstTime);
+        var namedOutputs = _fixture.Canvas.LogicGateStates.Badges
+            .Where(b => b.HasSignalName && IsOutputChip(b)).ToList();
+        namedOutputs.Select(b => b.SignalName).ShouldBe(new[] { "S", "Cout" }, ignoreOrder: true,
+            "the signal-named output taps keep their names on the replayed canvas");
+        foreach (var chip in namedOutputs)
+        {
+            chip.IsOne.ShouldBe(state[$"{chip.GroupName}.{chip.PinName}"],
+                $"the '{chip.SignalName}' chip freezes at the derived state of t = {firstTime:0.0} ps");
+            chip.LabelText.ShouldBe($"{chip.SignalName} = {(chip.IsOne ? "1" : "0")}");
+        }
+
+        vm.SelectTimelineEventCommand.Execute(vm.TimelineEvents[0]);
+
+        vm.IsReplayActive.ShouldBeFalse();
+        var live = LiveEndState();
+        foreach (var chip in _fixture.Canvas.LogicGateStates.Badges.Where(b => b.HasSignalName && IsOutputChip(b)))
+        {
+            chip.IsOne.ShouldBe(live[$"{chip.GroupName}.{chip.PinName}"],
+                "deselecting returns the named output chips to the live end state");
+        }
+    }
+
+    [Fact]
     public async Task SelectEvent_FullAdder_EveryUnswitchedPinKeepsItsBeforeValue()
     {
         var vm = await BuildAndToggleCin();
@@ -61,7 +95,7 @@ public class LogicPanelReplayTests
             .Where(e => e.Event.TimePicoseconds <= firstTime)
             .Select(e => $"{e.Event.GateId}.{e.Event.OutputPin}")
             .ToHashSet();
-        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges.Where(b => !b.HasSignalName))
+        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges.Where(IsOutputChip))
         {
             var tap = $"{badge.GroupName}.{badge.PinName}";
             if (!switched.Contains(tap))
@@ -187,14 +221,20 @@ public class LogicPanelReplayTests
     }
 
     /// <summary>
-    /// The anonymous output badges currently on the canvas, keyed <c>gate.pin</c>.
+    /// The output-pin badges currently on the canvas, keyed <c>gate.pin</c>.
     /// Named input chips (issue #1051) ride along on the overlay but carry the live
-    /// input bits, not gate output states — replay derivations exclude them.
+    /// input bits, not gate output states — replay derivations exclude them. A named
+    /// output chip (issue #1067) still carries a gate output state, so it stays in.
     /// </summary>
     private Dictionary<string, bool> BadgeStates() =>
         _fixture.Canvas.LogicGateStates.Badges
-            .Where(b => !b.HasSignalName)
+            .Where(IsOutputChip)
             .ToDictionary(b => $"{b.GroupName}.{b.PinName}", b => b.IsOne);
+
+    /// <summary>True for a gate's output-pin chip — named when its tap carries a persisted
+    /// signal name (issue #1067), anonymous elsewhere.</summary>
+    private bool IsOutputChip(LogicGateBadgeViewModel badge) =>
+        _fixture.Network.OutputTaps.Values.Contains(new LogicPinRef(badge.GroupName, badge.PinName));
 
     /// <summary>Asserts the canvas badges show exactly the expected pin states.</summary>
     private void BadgesShouldShow(IReadOnlyDictionary<string, bool> expected, string because)
