@@ -35,4 +35,11 @@ public partial class LogicTimelineEventViewModel : ObservableObject
 
     /// <summary>The transition as display text ("0→1" or "1→0").</summary>
     public string TransitionText => IsRising ? "0→1" : "1→0";
+
+    /// <summary>
+    /// True while this row is the replayed event (issue #1058): the panel highlights the
+    /// row and the canvas badges show the network state at this event's time.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isSelected;
 }

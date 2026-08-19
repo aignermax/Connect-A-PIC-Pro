@@ -159,6 +159,8 @@ public partial class LogicPanelViewModel : ObservableObject
             return;
         var bits = Inputs.ToDictionary(input => input.PinName, input => input.IsOn);
         var result = _network.Evaluate(bits);
+        _liveResult = result;
+        _liveInputBits = bits;
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
         ShowGateStateBadges(result, bits);
@@ -180,12 +182,7 @@ public partial class LogicPanelViewModel : ObservableObject
     {
         if (_canvas == null || _network == null)
             return;
-        var signalNamesByGate = PersistedInputSignalNamesByGate();
-        var states = _network.OutputTaps
-            .Select(tap => new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]))
-            .Concat(_network.Gates.Keys.SelectMany(
-                gateId => NamedInputBadges(gateId, signalNamesByGate, inputBits)));
-        _canvas.LogicGateStates.ShowStates(states);
+        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(result, inputBits));
     }
 
     /// <summary>The persisted input signal names per gate group of the design (issue #1025).</summary>
