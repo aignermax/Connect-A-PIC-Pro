@@ -84,6 +84,49 @@ public class CrossingLifecycleTests
     }
 
     [Fact]
+    public void MovedNetEndpoint_IntersectionStillValid_CrossingReinsertedEquivalently()
+    {
+        var layout = CrossingTestCircuit.Build(ExpensiveBendLossDb);
+        var oldRecord = layout.Service.Records.ShouldHaveSingleItem();
+
+        // Move the vertical net's bottom terminal only as far as (200, 300): the
+        // vertical net still crosses the horizontal one, so after dissolution the
+        // crossing-pass must rebuild the crossing (records are re-evaluated via
+        // reinsert, never skipped as stale-but-alive bookkeeping).
+        layout.BBottom.Component.PhysicalY = 300;
+
+        layout.Manager.RecalculateAllTransmissions();
+
+        layout.RemovedCrossings.ShouldContain(oldRecord.CrossingComponent,
+            "an endpoint move triggers dissolution before re-evaluation");
+        var record = layout.Service.Records.ShouldHaveSingleItem();
+        layout.Manager.Connections.ShouldBe(record.AllSubConnections.ToList(),
+            ignoreOrder: true,
+            customMessage: "the rebuilt crossing must own exactly its four sub-connections");
+        foreach (var connection in layout.Manager.Connections)
+            connection.IsPathValid.ShouldBeTrue();
+        NetSpansFromTo(record, new[] { layout.ALeft.PhysicalPin, layout.ARight.PhysicalPin },
+            new[] { layout.BTop.PhysicalPin, layout.BBottom.PhysicalPin });
+    }
+
+    /// <summary>
+    /// Asserts the record still ties the same two nets together: one original
+    /// spans the first pin pair, the second original spans the other.
+    /// </summary>
+    private static void NetSpansFromTo(CrossingRecord record, PhysicalPin[] firstNet, PhysicalPin[] secondNet)
+    {
+        var aPins = new[] { record.OriginalA.StartPin, record.OriginalA.EndPin };
+        var bPins = new[] { record.OriginalB.StartPin, record.OriginalB.EndPin };
+        bool aSpansFirst = aPins.Intersect(firstNet).Count() == aPins.Length;
+        var firstOriginal = aSpansFirst ? aPins : bPins;
+        var secondOriginal = aSpansFirst ? bPins : aPins;
+        firstOriginal.ShouldBe(firstNet, ignoreOrder: true,
+            customMessage: "one original must span the first net's outer pins");
+        secondOriginal.ShouldBe(secondNet, ignoreOrder: true,
+            customMessage: "the other original must span the second net's outer pins");
+    }
+
+    [Fact]
     public void UnroutableCrossingPort_RollsBackInsertionAndKeepsDetour()
     {
         // A 100x100 wall away from both nets: the sabotaged crossing's north port
