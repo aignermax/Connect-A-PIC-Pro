@@ -116,8 +116,21 @@ public class PathSmoother
         }
 
         // GEOMETRIC TERMINAL APPROACH - STRICT VALIDATION
+        int bodySegmentCount = routedPath.Segments.Count;
         bool terminalSuccess = AppendTerminalApproach(
             routedPath, ref x, ref y, ref currentAngle, endX, endY, endEntryAngle);
+
+        // The A* search stops GoalTolerance cells before the pin, so the terminal
+        // approach is produced purely geometrically and can cross a neighbouring
+        // waveguide or component body without a crossing component — an overlap
+        // that has no optical model and would silently reach GDS export. Validate
+        // the new segments against the same grid state the body path was planned
+        // on; pin-corridor cells are legitimately clear, anything else blocked
+        // means the approach dips into foreign geometry.
+        if (terminalSuccess && TerminalApproachCollidesWithObstacle(routedPath, bodySegmentCount))
+        {
+            terminalSuccess = false;
+        }
 
         if (!terminalSuccess)
         {
@@ -126,6 +139,21 @@ public class PathSmoother
         }
 
         return routedPath;
+    }
+
+    /// <summary>
+    /// True when any segment added by <see cref="AppendTerminalApproach"/> (everything
+    /// past <paramref name="bodySegmentCount"/>) enters a blocked cell. Segment endpoints
+    /// are skipped — they sit in pin corridors cleared for this route.
+    /// </summary>
+    private bool TerminalApproachCollidesWithObstacle(RoutedPath path, int bodySegmentCount)
+    {
+        for (int i = bodySegmentCount; i < path.Segments.Count; i++)
+        {
+            if (SegmentGridCollision.IsSegmentBlocked(_grid, path.Segments[i]))
+                return true;
+        }
+        return false;
     }
 
     /// <summary>
