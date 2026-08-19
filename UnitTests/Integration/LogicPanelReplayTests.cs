@@ -54,13 +54,14 @@ public class LogicPanelReplayTests
 
         vm.SelectTimelineEventCommand.Execute(vm.TimelineEvents[0]);
 
-        var before = _fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: false));
+        var before = ByGatePin(
+            _fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: false)));
         var firstTime = vm.TimelineEvents[0].Event.TimePicoseconds;
         var switched = vm.TimelineEvents
             .Where(e => e.Event.TimePicoseconds <= firstTime)
             .Select(e => $"{e.Event.GateId}.{e.Event.OutputPin}")
             .ToHashSet();
-        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges)
+        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges.Where(b => !b.HasSignalName))
         {
             var tap = $"{badge.GroupName}.{badge.PinName}";
             if (!switched.Contains(tap))
@@ -143,7 +144,7 @@ public class LogicPanelReplayTests
         vm.SelectedTimelineEvent.ShouldBeNull();
         vm.ReplayTimeText.ShouldBeEmpty();
         BadgesShouldShow(
-            _fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: false)),
+            ByGatePin(_fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: false))),
             "the badges follow the new toggle's live end state, not the stale replay");
     }
 
@@ -185,10 +186,15 @@ public class LogicPanelReplayTests
         return vm;
     }
 
-    /// <summary>The badges currently on the canvas, keyed <c>gate.pin</c>.</summary>
+    /// <summary>
+    /// The anonymous output badges currently on the canvas, keyed <c>gate.pin</c>.
+    /// Named input chips (issue #1051) ride along on the overlay but carry the live
+    /// input bits, not gate output states — replay derivations exclude them.
+    /// </summary>
     private Dictionary<string, bool> BadgeStates() =>
-        _fixture.Canvas.LogicGateStates.Badges.ToDictionary(
-            b => $"{b.GroupName}.{b.PinName}", b => b.IsOne);
+        _fixture.Canvas.LogicGateStates.Badges
+            .Where(b => !b.HasSignalName)
+            .ToDictionary(b => $"{b.GroupName}.{b.PinName}", b => b.IsOne);
 
     /// <summary>Asserts the canvas badges show exactly the expected pin states.</summary>
     private void BadgesShouldShow(IReadOnlyDictionary<string, bool> expected, string because)
@@ -201,7 +207,16 @@ public class LogicPanelReplayTests
 
     /// <summary>The settled end state after the Cin toggle the tests perform.</summary>
     private IReadOnlyDictionary<string, bool> LiveEndState() =>
-        _fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: true));
+        ByGatePin(_fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: true)));
+
+    /// <summary>
+    /// Re-keys a tap-keyed evaluation result by raw <c>gate.pin</c>: since issue #1046
+    /// a signal-named output evaluates under its signal name (the adder's sum reads
+    /// <c>S</c>), while the canvas badges always carry gate and pin.
+    /// </summary>
+    private Dictionary<string, bool> ByGatePin(IReadOnlyDictionary<string, bool> tapKeyed) =>
+        _fixture.Network.OutputTaps.ToDictionary(
+            tap => $"{tap.Value.GateId}.{tap.Value.PinName}", tap => tapKeyed[tap.Key]);
 
     /// <summary>
     /// The independently derived state at time t: evaluate every gate output for the
@@ -211,7 +226,7 @@ public class LogicPanelReplayTests
     /// </summary>
     private Dictionary<string, bool> StateAt(double timePicoseconds)
     {
-        var state = new Dictionary<string, bool>(
+        var state = ByGatePin(
             _fixture.Network.Evaluate(_fixture.InputBits(a: false, b: false, cin: false)));
         var events = LogicEventTimeline.Compute(
             _fixture.Network,
