@@ -1353,7 +1353,7 @@
   "LogicPanelTimingHelp.PhysicsTitle": "光以 c/n_g 的速度传播",
   "LogicPanelTimingHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。显示的延迟等于门内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。该模型使用几何路径长度加上每个器件的宽度,是物理上合理的估算,而非精确的时序仿真。",
   "LogicPanelTimingHelp.ClockTitle": "最长的链路决定时钟速度",
-  "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟尚未计入。",
+  "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟也计入路径。",
   "LogicPanel.Timeline": "时间线:",
   "LogicPanel.TimelineEmpty": "切换一个输入,观看开关事件在门电路中逐级传播。",
   "LogicPanelTimelineHelp.Title": "事件为什么会逐级传播?",

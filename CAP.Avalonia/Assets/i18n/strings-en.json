@@ -1353,7 +1353,7 @@
   "LogicPanelTimingHelp.PhysicsTitle": "Light travels at c/n_g",
   "LogicPanelTimingHelp.PhysicsBody": "In a waveguide, light moves at the speed of light divided by the group index (c/n_g ≈ c/4.2 for silicon). The delay shown is the gate's internal optical path length times n_g/c — a 100 µm path costs about 1.4 ps. The model uses the geometric path lengths plus each component's width; it is a physically plausible estimate, not an exact timing simulation.",
   "LogicPanelTimingHelp.ClockTitle": "The longest chain sets the clock speed",
-  "LogicPanelTimingHelp.ClockBody": "Same idea as timing closure in electronics: a new input bit only arrives at the output after the slowest gate chain has settled. The critical path gives the minimum clock period — a 10 ps critical path means the circuit can clock at roughly 100 GHz. Wire delays between gates are not counted yet.",
+  "LogicPanelTimingHelp.ClockBody": "Same idea as timing closure in electronics: a new input bit only arrives at the output after the slowest gate chain has settled. The critical path gives the minimum clock period — a 10 ps critical path means the circuit can clock at roughly 100 GHz. Wire delays between gates are included in the path.",
   "LogicPanel.Timeline": "Timeline:",
   "LogicPanel.TimelineEmpty": "Toggle an input to watch the switch events ripple through the gates.",
   "LogicPanelTimelineHelp.Title": "Why do the events ripple?",

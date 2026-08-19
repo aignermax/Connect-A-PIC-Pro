@@ -1353,7 +1353,7 @@
   "LogicPanelTimingHelp.PhysicsTitle": "La luz viaja a c/n_g",
   "LogicPanelTimingHelp.PhysicsBody": "En una guía de onda, la luz se mueve a la velocidad de la luz dividida por el índice de grupo (c/n_g ≈ c/4,2 para el silicio). El retardo mostrado es la longitud del camino óptico interno de la puerta multiplicada por n_g/c: un camino de 100 µm cuesta unos 1,4 ps. El modelo usa las longitudes geométricas más el ancho de cada componente; es una estimación físicamente plausible, no una simulación de temporización exacta.",
   "LogicPanelTimingHelp.ClockTitle": "La cadena más larga fija la velocidad de reloj",
-  "LogicPanelTimingHelp.ClockBody": "La misma idea que el cierre de temporización en electrónica: un nuevo bit de entrada solo llega a la salida cuando la cadena de puertas más lenta se ha estabilizado. La ruta crítica da el período mínimo de reloj: 10 ps de ruta crítica significan un reloj de unos 100 GHz. Los retardos de los cables entre puertas aún no se contabilizan.",
+  "LogicPanelTimingHelp.ClockBody": "La misma idea que el cierre de temporización en electrónica: un nuevo bit de entrada solo llega a la salida cuando la cadena de puertas más lenta se ha estabilizado. La ruta crítica da el período mínimo de reloj: 10 ps de ruta crítica significan un reloj de unos 100 GHz. Los retardos de los cables entre puertas están incluidos en la ruta.",
   "LogicPanel.Timeline": "Cronología:",
   "LogicPanel.TimelineEmpty": "Cambia una entrada para ver cómo los eventos de conmutación se propagan por las puertas.",
   "LogicPanelTimelineHelp.Title": "¿Por qué se propagan los eventos?",

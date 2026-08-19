@@ -1353,7 +1353,7 @@
   "LogicPanelTimingHelp.PhysicsTitle": "Licht bewegt sich mit c/n_g",
   "LogicPanelTimingHelp.PhysicsBody": "Im Wellenleiter bewegt sich Licht mit Lichtgeschwindigkeit geteilt durch den Gruppenindex (c/n_g ≈ c/4,2 für Silizium). Die angezeigte Verzögerung ist die interne optische Weglänge des Gatters mal n_g/c — ein 100-µm-Pfad kostet etwa 1,4 ps. Das Modell nutzt die geometrischen Weglängen plus die Breite jedes Bauteils; es ist eine physikalisch plausible Schätzung, keine exakte Timing-Simulation.",
   "LogicPanelTimingHelp.ClockTitle": "Die längste Kette bestimmt die Taktrate",
-  "LogicPanelTimingHelp.ClockBody": "Wie beim Timing Closure in der Elektronik: Ein neues Eingangsbit kommt erst am Ausgang an, wenn die langsamste Gatterkette durchgelaufen ist. Der kritische Pfad gibt die minimale Taktperiode vor — 10 ps kritischer Pfad bedeuten etwa 100 GHz Taktrate. Laufzeiten der Verbindungen zwischen den Gattern sind noch nicht eingerechnet.",
+  "LogicPanelTimingHelp.ClockBody": "Wie beim Timing Closure in der Elektronik: Ein neues Eingangsbit kommt erst am Ausgang an, wenn die langsamste Gatterkette durchgelaufen ist. Der kritische Pfad gibt die minimale Taktperiode vor — 10 ps kritischer Pfad bedeuten etwa 100 GHz Taktrate. Laufzeiten der Verbindungen zwischen den Gattern sind im Pfad enthalten.",
   "LogicPanel.Timeline": "Zeitverlauf:",
   "LogicPanel.TimelineEmpty": "Schalte einen Eingang um, um die Schaltereignisse durch die Gatter laufen zu sehen.",
   "LogicPanelTimelineHelp.Title": "Warum laufen die Ereignisse durch?",
