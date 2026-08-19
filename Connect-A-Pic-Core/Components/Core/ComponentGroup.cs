@@ -596,6 +596,9 @@ public class ComponentGroup : Component, INotifyPropertyChanged
             WidthMicrometers = WidthMicrometers,
             HeightMicrometers = HeightMicrometers,
             Rotation90CounterClock = Rotation90CounterClock,
+            // A copy of a gate is a gate: the pin roles travel with the copy (copied,
+            // not shared — the assignment and its lists are mutable).
+            TruthTablePinAssignment = TruthTablePinAssignment?.Copy(),
             // Immutable record — sharing the reference is safe.
             ProcessBinding = ProcessBinding,
             // Immutable records — sharing the list is safe (same rule as Component.DeepCopy).
