@@ -1366,6 +1366,9 @@
   "LogicPanel.ReplayNext": "下一步 ▶",
   "LogicPanel.ReplayTime": "正在显示 t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "返回实时状态",
+  "LogicPanel.PlaybackPlay": "▶ 播放",
+  "LogicPanel.PlaybackPause": "⏸ 暂停",
   "LogicPanelTimelineHelp.ReplayTitle": "逐步观看波纹传播",
-  "LogicPanelTimelineHelp.ReplayBody": "点击某一行(或使用上一步/下一步按钮),画布上的徽章就会定格在该时刻:已经翻转的门显示新电平,列表中更靠后的门仍显示旧电平——变化在芯片上清晰可见地逐级传播。再次点击该行或点击“返回实时状态”,即可回到稳定的最终状态。时间仅从延迟模型中查取,不会重新进行仿真。"
+  "LogicPanelTimelineHelp.ReplayBody": "点击某一行(或使用上一步/下一步按钮),画布上的徽章就会定格在该时刻:已经翻转的门显示新电平,列表中更靠后的门仍显示旧电平——变化在芯片上清晰可见地逐级传播。再次点击该行或点击“返回实时状态”,即可回到稳定的最终状态。时间仅从延迟模型中查取,不会重新进行仿真。",
+  "LogicPanelTimelineHelp.PlaybackBody": "按下“▶ 播放”后,波纹将自动前进——每 0.6 秒一个事件。该节奏仅用于教学演示,并非真实比例:实际的开关事件之间仅相隔皮秒。"
 }

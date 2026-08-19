@@ -47,6 +47,7 @@ public partial class LogicPanelViewModel
 
         var events = LogicEventTimeline.Compute(_network, _previousInputBits, currentBits);
         _replayBeforeResult = _network.Evaluate(_previousInputBits);
+        StopPlayback();
         SelectedTimelineEvent = null;
         TimelineEvents.Clear();
         foreach (var e in events)

@@ -53,28 +53,41 @@ public partial class LogicPanelViewModel
 
     /// <summary>
     /// Selects a timeline row for replay; clicking the already-selected row deselects it
-    /// and returns the canvas to the live end state.
+    /// and returns the canvas to the live end state. A manual (de)selection stops the
+    /// auto-play.
     /// </summary>
     [RelayCommand]
     private void SelectTimelineEvent(LogicTimelineEventViewModel? row)
     {
         if (row == null)
             return;
+        StopPlayback();
         SelectedTimelineEvent = ReferenceEquals(SelectedTimelineEvent, row) ? null : row;
     }
 
-    /// <summary>Steps the replay one event earlier.</summary>
+    /// <summary>Steps the replay one event earlier; manual stepping stops the auto-play.</summary>
     [RelayCommand(CanExecute = nameof(CanStepToPreviousEvent))]
-    private void PreviousTimelineEvent() => StepTo(SelectedIndex - 1);
+    private void PreviousTimelineEvent()
+    {
+        StopPlayback();
+        StepTo(SelectedIndex - 1);
+    }
 
     /// <summary>Steps the replay one event later; from the live state this selects the first event.</summary>
     [RelayCommand(CanExecute = nameof(CanStepToNextEvent))]
-    private void NextTimelineEvent() =>
+    private void NextTimelineEvent()
+    {
+        StopPlayback();
         StepTo(SelectedTimelineEvent == null ? 0 : SelectedIndex + 1);
+    }
 
     /// <summary>Leaves replay mode — the badges return to the live end state.</summary>
     [RelayCommand]
-    private void ExitReplay() => SelectedTimelineEvent = null;
+    private void ExitReplay()
+    {
+        StopPlayback();
+        SelectedTimelineEvent = null;
+    }
 
     private bool CanStepToPreviousEvent() => SelectedIndex > 0;
 
@@ -161,6 +174,7 @@ public partial class LogicPanelViewModel
     {
         // The live/before results go first: clearing the selection re-pushes the live
         // badges, which must no-op once the network behind them is gone.
+        StopPlayback();
         _liveResult = null;
         _liveInputBits = null;
         _replayBeforeResult = null;

@@ -1366,6 +1366,9 @@
   "LogicPanel.ReplayNext": "Siguiente ▶",
   "LogicPanel.ReplayTime": "mostrando t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Volver en vivo",
+  "LogicPanel.PlaybackPlay": "▶ Reproducir",
+  "LogicPanel.PlaybackPause": "⏸ Pausa",
   "LogicPanelTimelineHelp.ReplayTitle": "Recorre la onda paso a paso",
-  "LogicPanelTimelineHelp.ReplayBody": "Haz clic en una fila (o en los botones Anterior/Siguiente) y las insignias del lienzo se congelan en ese instante: cada puerta que ya ha conmutado muestra su nuevo nivel y cada puerta más abajo en la lista aún muestra el anterior — el cambio se propaga visiblemente por el chip. Haz clic de nuevo en la fila o en 'Volver en vivo' para regresar al estado final estable. Los tiempos solo se consultan del modelo de retardos; nada se vuelve a simular."
+  "LogicPanelTimelineHelp.ReplayBody": "Haz clic en una fila (o en los botones Anterior/Siguiente) y las insignias del lienzo se congelan en ese instante: cada puerta que ya ha conmutado muestra su nuevo nivel y cada puerta más abajo en la lista aún muestra el anterior — el cambio se propaga visiblemente por el chip. Haz clic de nuevo en la fila o en 'Volver en vivo' para regresar al estado final estable. Los tiempos solo se consultan del modelo de retardos; nada se vuelve a simular.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Pulsa '▶ Reproducir' y la onda avanza sola: un evento cada 0,6 segundos. El ritmo es didáctico, no a escala: los eventos de conmutación reales están separados solo por picosegundos."
 }
