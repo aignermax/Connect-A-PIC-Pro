@@ -320,4 +320,39 @@ public class ComponentGroupCloningTests
         clone2.PhysicalX.ShouldBe(original.PhysicalX,
             "Modifying one clone should not affect another");
     }
+
+    /// <summary>
+    /// Verifies that DeepCopy carries the persisted Truth Table pin roles as an
+    /// independent copy: a duplicated gate must stay a gate, and the assignment's
+    /// mutable lists must not be shared with the original.
+    /// </summary>
+    [Fact]
+    public void DeepCopy_GroupWithPersistedPinRoles_CarriesAnIndependentCopy()
+    {
+        var original = TestComponentFactory.CreateComponentGroup("GateGroup", addChildren: false);
+        original.TruthTablePinAssignment = new TruthTablePinAssignment
+        {
+            InputPinNames = new List<string> { "A", "B" },
+            OutputPinNames = new List<string> { "Y" },
+            BiasPinNames = new List<string> { "BIAS" },
+            Threshold = 0.125,
+            InputSignalNames = new Dictionary<string, string> { ["A"] = "A" }
+        };
+
+        var copy = original.DeepCopy();
+
+        var copiedRoles = copy.TruthTablePinAssignment.ShouldNotBeNull(
+            "a duplicated gate must keep its pin roles");
+        copiedRoles.ShouldNotBeSameAs(original.TruthTablePinAssignment,
+            "the assignment and its lists are mutable — copies must not share them");
+        copiedRoles.InputPinNames.ShouldBe(original.TruthTablePinAssignment!.InputPinNames);
+        copiedRoles.OutputPinNames.ShouldBe(original.TruthTablePinAssignment.OutputPinNames);
+        copiedRoles.BiasPinNames.ShouldBe(original.TruthTablePinAssignment.BiasPinNames);
+        copiedRoles.Threshold.ShouldBe(original.TruthTablePinAssignment.Threshold);
+        copiedRoles.InputSignalNames.ShouldBe(original.TruthTablePinAssignment.InputSignalNames);
+
+        copiedRoles.InputPinNames.Add("Mutated");
+        original.TruthTablePinAssignment.InputPinNames.Count.ShouldBe(2,
+            "mutating the copy's role list must not leak into the original");
+    }
 }

@@ -1566,54 +1566,54 @@ public partial class FileOperationsViewModel : ObservableObject
     /// </summary>
     private List<DesignGroupData> TopologicalSortGroups(List<DesignGroupData> groupDataList)
     {
-        // Build dependency map: group ID -> list of group IDs that depend on it (parents)
-        var dependents = new Dictionary<string, List<string>>();
-        var inDegree = new Dictionary<string, int>();
+        // Dependency bookkeeping keys are the data objects themselves, not the group
+        // identifier: identifiers are not unique — two groups sharing one must never
+        // merge into two copies of the first on load.
+        var dependents = new Dictionary<DesignGroupData, List<DesignGroupData>>();
+        var inDegree = new Dictionary<DesignGroupData, int>();
 
         foreach (var groupData in groupDataList)
         {
-            var groupId = groupData.GroupDto.Identifier;
-            if (!inDegree.ContainsKey(groupId))
-                inDegree[groupId] = 0;
+            if (!inDegree.ContainsKey(groupData))
+                inDegree[groupData] = 0;
 
             // Count how many child groups this group has (determines loading order)
             foreach (var childId in groupData.GroupDto.ChildComponentIds)
             {
                 // Check if this child is a group (appears as a group in the list)
                 var childGroup = groupDataList.FirstOrDefault(g => g.GroupDto.Identifier == childId);
-                if (childGroup != null)
+                if (childGroup != null && childGroup != groupData)
                 {
                     // This group depends on its child group being loaded first
-                    if (!dependents.ContainsKey(childId))
-                        dependents[childId] = new List<string>();
-                    dependents[childId].Add(groupId);
-                    inDegree[groupId]++;
+                    if (!dependents.ContainsKey(childGroup))
+                        dependents[childGroup] = new List<DesignGroupData>();
+                    dependents[childGroup].Add(groupData);
+                    inDegree[groupData]++;
                 }
             }
         }
 
         // Kahn's algorithm for topological sort
-        var queue = new Queue<string>();
+        var queue = new Queue<DesignGroupData>();
         foreach (var groupData in groupDataList)
         {
-            if (inDegree[groupData.GroupDto.Identifier] == 0)
-                queue.Enqueue(groupData.GroupDto.Identifier);
+            if (inDegree[groupData] == 0)
+                queue.Enqueue(groupData);
         }
 
         var sorted = new List<DesignGroupData>();
         while (queue.Count > 0)
         {
-            var currentId = queue.Dequeue();
-            var groupData = groupDataList.First(g => g.GroupDto.Identifier == currentId);
-            sorted.Add(groupData);
+            var current = queue.Dequeue();
+            sorted.Add(current);
 
-            if (dependents.ContainsKey(currentId))
+            if (dependents.TryGetValue(current, out var dependentList))
             {
-                foreach (var dependentId in dependents[currentId])
+                foreach (var dependent in dependentList)
                 {
-                    inDegree[dependentId]--;
-                    if (inDegree[dependentId] == 0)
-                        queue.Enqueue(dependentId);
+                    inDegree[dependent]--;
+                    if (inDegree[dependent] == 0)
+                        queue.Enqueue(dependent);
                 }
             }
         }
