@@ -171,9 +171,10 @@ public partial class LogicPanelViewModel : ObservableObject
     /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
     /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
     /// data the panel's output list shows, no new simulation. Result bits are keyed by
-    /// tap name, so the walk goes through the taps: a signal-named output reads under
-    /// its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input pins
-    /// carrying a persisted signal name additionally get a named badge (<c>A0 = 1</c>,
+    /// tap name, so the walk goes through the taps: a signal-named output additionally
+    /// shows its signal name in the badge (<c>S0 = 1</c>, issue #1067), reading under
+    /// that name instead of the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input pins
+    /// carrying a persisted signal name get a named badge too (<c>A0 = 1</c>,
     /// issue #1051): an unconnected named pin merged into the network input of its
     /// signal's name, so its live bit is the toggle bit itself — display only, nothing
     /// re-evaluated.

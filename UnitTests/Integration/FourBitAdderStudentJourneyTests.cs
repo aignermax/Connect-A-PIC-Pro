@@ -14,11 +14,12 @@ namespace UnitTests.Integration;
 /// (#1046), event timeline (#1045) and named canvas badges (#1051). The journey loads
 /// the example through the real load path, builds the logic network with the real
 /// <see cref="LogicNetworkAssembler"/>, and pins what the student sees: nine named input
-/// toggles, output taps reading S0–S3/Cout, an anonymous output badge per gate plus a
-/// named chip per operand pin, and — the new cross-feature assertion — a toggle whose
-/// timeline event set matches exactly the anonymous badges whose bit flipped, with the
-/// last event no later than the critical path. Toggling back to zero shows the falling
-/// events. Fixture-per-test isolation keeps each step deterministic.
+/// toggles, output taps reading S0–S3/Cout, an output badge per gate — named for the
+/// five pinned sum/carry taps (issue #1067), anonymous elsewhere — plus a named chip
+/// per operand pin, and — the new cross-feature assertion — a toggle whose timeline
+/// event set matches exactly the output badges whose bit flipped, with the last event
+/// no later than the critical path. Toggling back to zero shows the falling events.
+/// Fixture-per-test isolation keeps each step deterministic.
 /// </summary>
 public class FourBitAdderStudentJourneyTests
     : IClassFixture<LogicGateFourBitAdderExampleTests.FourBitAdderFixture>
@@ -60,7 +61,7 @@ public class FourBitAdderStudentJourneyTests
     }
 
     [Fact]
-    public async Task Step2_CanvasBadges_AnonymousOutputChipPerGate_PlusNamedOperandChips()
+    public async Task Step2_CanvasBadges_OneOutputChipPerGate_PlusNamedOperandChips()
     {
         var vm = await BuildPanel();
 
@@ -72,19 +73,21 @@ public class FourBitAdderStudentJourneyTests
             var expectedNamed = group.TruthTablePinAssignment?.InputSignalNames;
             var expectedCount = 1 + (expectedNamed?.Count ?? 0);
             owner.Count.ShouldBe(expectedCount,
-                $"gate '{group.GroupName}': one anonymous output chip plus a named chip per named pin");
-            owner.Where(b => !b.HasSignalName).Single().PinName.ShouldBe("Y",
-                $"the anonymous chip of '{group.GroupName}' reads its output pin");
+                $"gate '{group.GroupName}': one output chip plus a named chip per named pin");
+            var outputChip = owner.Single(b => b.PinName == "Y");
+            var expectedOutputName = group.TruthTablePinAssignment?.OutputSignalNames?.GetValueOrDefault("Y");
+            outputChip.SignalName.ShouldBe(expectedOutputName,
+                $"the output chip of '{group.GroupName}' names its pinned tap (#1067) or stays anonymous");
             if (expectedNamed != null)
             {
-                owner.Where(b => b.HasSignalName).Select(b => b.SignalName)
+                owner.Where(b => b.PinName != "Y").Select(b => b.SignalName)
                     .ShouldBe(expectedNamed.Values, ignoreOrder: true,
-                        customMessage: $"the named chips of '{group.GroupName}' mirror the persisted roles");
+                        customMessage: $"the named operand chips of '{group.GroupName}' mirror the persisted roles");
             }
         }
         badges.Where(b => b.HasSignalName).ShouldAllBe(b =>
             !b.IsOne && b.LabelText == $"{b.SignalName} = 0",
-                "with all inputs off every named chip reads its zero");
+                "with all inputs off every named chip — operand or named output — reads its zero");
         AssertBadgesMirrorPanelOutputs(vm);
     }
 
@@ -127,17 +130,18 @@ public class FourBitAdderStudentJourneyTests
         try
         {
             vm.Inputs.Single(i => i.PinName == "A0").IsOn = true;
-            var before = AnonymousBadges().ToDictionary(b => (b.GroupName, b.PinName), b => b.IsOne);
+            var before = OutputBadges().ToDictionary(b => (b.GroupName, b.PinName), b => b.IsOne);
             vm.Inputs.Single(i => i.PinName == "B0").IsOn = true;
 
+            // The S0/S1 chips carry signal names since #1067; the timeline still matches
+            // the flipped output chips — named or anonymous — exactly.
             var changed = _fixture.Canvas.LogicGateStates.Badges
-                .Where(b => !b.HasSignalName)
                 .Where(b => before.TryGetValue((b.GroupName, b.PinName), out var was) && was != b.IsOne)
                 .Select(b => (b.GroupName, b.PinName))
                 .ToHashSet();
             var timelinePairs = vm.TimelineEvents.Select(e => (e.Event.GateId, e.Event.OutputPin));
             changed.ShouldBe(timelinePairs.ToHashSet(), ignoreOrder: true,
-                "the timeline's switched gates match exactly the anonymous badges whose bit flipped — " +
+                "the timeline's switched gates match exactly the output badges whose bit flipped — " +
                 "badge chips and event rows must never contradict each other on screen");
 
             var times = vm.TimelineEvents.Select(e => e.Event.TimePicoseconds).ToList();
@@ -181,18 +185,27 @@ public class FourBitAdderStudentJourneyTests
             "the last toggle leaves its 1→0 events on the timeline");
     }
 
-    /// <summary>The anonymous (output-pin) badges currently on the canvas, materialized.</summary>
-    private List<LogicGateBadgeViewModel> AnonymousBadges() =>
-        _fixture.Canvas.LogicGateStates.Badges.Where(b => !b.HasSignalName).ToList();
+    /// <summary>
+    /// The output-pin badges currently on the canvas, materialized: every chip sitting
+    /// on a gate's output tap — anonymous or named (the S0–S3/Cout chips of #1067).
+    /// Named input chips (issue #1051) carry their signal's live bit, not a gate
+    /// output bit, so tap mirroring steps around them.
+    /// </summary>
+    private List<LogicGateBadgeViewModel> OutputBadges() =>
+        _fixture.Canvas.LogicGateStates.Badges
+            .Where(b => _fixture.Network.OutputTaps.Values.Any(
+                p => p.GateId == b.GroupName && p.PinName == b.PinName))
+            .ToList();
 
     /// <summary>
-    /// Every anonymous badge must carry the same bit the panel's output list shows for
-    /// its tapped pin — anonymous chips and output rows must never disagree on screen.
+    /// Every output badge must carry the same bit the panel's output list shows for
+    /// its tapped pin — chips and output rows must never disagree on screen, whether
+    /// the chip reads a signal name or stays anonymous.
     /// </summary>
     private void AssertBadgesMirrorPanelOutputs(LogicPanelViewModel vm)
     {
         var outputsByRawPin = vm.Outputs.ToDictionary(o => o.RawPinName, o => o);
-        foreach (var badge in AnonymousBadges())
+        foreach (var badge in OutputBadges())
         {
             var raw = $"{badge.GroupName}.{badge.PinName}";
             outputsByRawPin.TryGetValue(raw, out var output).ShouldBeTrue(
@@ -202,7 +215,8 @@ public class FourBitAdderStudentJourneyTests
         }
 
         var namedBySignal = vm.Inputs.ToDictionary(i => i.PinName, i => i.IsOn);
-        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges.Where(b => b.HasSignalName))
+        foreach (var badge in _fixture.Canvas.LogicGateStates.Badges
+                     .Where(b => b.HasSignalName && NetworkInputs.Contains(b.SignalName)))
         {
             badge.IsOne.ShouldBe(namedBySignal[badge.SignalName!],
                 $"named chip '{badge.SignalName}' on '{badge.GroupName}' mirrors its toggle bit");
