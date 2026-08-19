@@ -13,13 +13,16 @@ namespace UnitTests.Integration;
 /// Pinned tests for the shipped <c>examples/Logic Gate 4-Bit Adder.lun</c> (issue #1023,
 /// rung 4→5 of the NAND game): 344 top-level instances of the NOT/NAND gate (256 NAND,
 /// 88 NOT) — four full-adder stages reusing the shipped full adder's structure (#990),
-/// carry rippling stage to stage (Cout_i → Cin_i+1). Network inputs: A0–A3, B0–B3, Cin;
-/// outputs: S0–S3 (<c>T{i}H2SUM.Y</c>) and Cout (<c>T3OROUT.Y</c>), checked against the
-/// arithmetic sum. The canvas wires one waveguide per pin, so a stage's carry-out —
-/// consumed by the next stage on 3 + K carry-in pins (the sum XOR ladder's three plus
-/// one per duplicated carry stage) — is duplicated with its carry-OR subtree per
-/// consumer: K = (10, 7, 4, 1) with K_i = 3 + K_i+1; stage 3 taps Cout directly. The
-/// fixture records the assembler wall clock for the PR's scale report.
+/// carry rippling stage to stage (Cout_i → Cin_i+1). The canvas wires one waveguide per
+/// pin, so a stage's carry-out — consumed by the next stage on 3 + K carry-in pins (the
+/// sum XOR ladder's three plus one per duplicated carry stage) — is duplicated with its
+/// carry-OR subtree per consumer: K = (10, 7, 4, 1) with K_i = 3 + K_i+1; stage 3 taps
+/// Cout directly. The fan-out of the operand bits happens at the logic layer, where the
+/// persisted signal names (issues #1025/#1034) merge the 261 unconnected operand pins
+/// into exactly nine network inputs — A0–A3, B0–B3 and Cin, the nine toggles the Logic
+/// panel shows. Outputs: S0–S3 (<c>T{i}H2SUM.Y</c>) and Cout (<c>T3OROUT.Y</c>),
+/// checked against the arithmetic sum. The fixture records the assembler wall clock
+/// for the PR's scale report.
 /// </summary>
 public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitAdderExampleTests.FourBitAdderFixture>
 {
@@ -29,15 +32,16 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
     /// <summary>Carry-out copies per stage: K_i = 3 + K_i+1; the last stage taps Cout directly.</summary>
     private static readonly int[] CarryCopies = { 10, 7, 4, 1 };
 
+    /// <summary>The nine network inputs the operand pins merge into: four A bits, four B bits, Cin.</summary>
+    private static readonly string[] NetworkInputs =
+        { "A0", "A1", "A2", "A3", "B0", "B1", "B2", "B3", "Cin" };
+
     private static readonly string[] GateNames = Enumerable.Range(0, 4).SelectMany(StageGateNames).ToArray();
     private static readonly string[] NotGateNames = GateNames.Where(n => n.Contains("CARRY") || n.Contains("ORNOT")).ToArray();
 
-    private static readonly string[][] InputsA = Enumerable.Range(0, 4).Select(s => OperandPins(s, "A", "H1N2")).ToArray();
-    private static readonly string[][] InputsB = Enumerable.Range(0, 4).Select(s => OperandPins(s, "B", "H1N3")).ToArray();
-
-    /// <summary>Network inputs driven by the carry-in of the whole adder (stage 0's Cin pins).</summary>
-    private static readonly string[] InputsCin = new[] { "T0H2N1A.A", "T0H2N1B.A", "T0H2N2.A", "T0H2N5.A" }
-        .Concat(Enumerable.Range(2, CarryCopies[0] - 1).Select(k => $"T0H2N5C{k}.A")).ToArray();
+    /// <summary>The persisted signal names per gate group (issues #1025/#1034); missing = no named pins.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>> ExpectedSignalNames =
+        BuildExpectedSignalNames();
 
     private readonly FourBitAdderFixture _fixture;
 
@@ -62,6 +66,8 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             roles.OutputPinNames.ShouldBe(new[] { "Y" });
             roles.BiasPinNames.ShouldBe(new[] { "BIAS" });
             roles.Threshold.ShouldBe(isNot ? NotThreshold : NandThreshold);
+            roles.InputSignalNames.ShouldBe(ExpectedSignalNames.GetValueOrDefault(group.GroupName),
+                $"group '{group.GroupName}' ships its network-signal identity (issues #1025/#1034)");
             group.Description.ShouldContain("logic layer", Case.Sensitive,
                 "every gate carries the education note about logic-layer composition");
             group.Description.ShouldContain(isNot ? "0.375" : "0.125");
@@ -69,11 +75,11 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
     }
 
     [Fact]
-    public void AssembledNetwork_ExposesNineOperandBitsAndEveryGateOutputAsTap()
+    public void AssembledNetwork_ExposesNineOperandSignalsAndEveryGateOutputAsTap()
     {
-        var expectedInputs = InputsA.Concat(InputsB).SelectMany(pins => pins).Concat(InputsCin).ToArray();
-        _fixture.Network.InputPinNames.ShouldBe(expectedInputs, ignoreOrder: true,
-            customMessage: "the addend bits A0–A3, B0–B3 and Cin fan out at the logic layer");
+        _fixture.Network.InputPinNames.ShouldBe(NetworkInputs, ignoreOrder: true,
+            customMessage: "the signal names merge the 261 operand pins into exactly nine network " +
+                "inputs (issues #1025/#1034) — A0–A3, B0–B3 and Cin");
         _fixture.Network.OutputPinNames.ShouldBe(
             GateNames.Select(name => $"{name}.Y").ToArray(), ignoreOrder: true);
     }
@@ -121,6 +127,12 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             reloadedGroups.Select(g => g.GroupName).ShouldBe(GateNames, ignoreOrder: true);
             reloadedGroups.ShouldAllBe(g => g.TruthTablePinAssignment != null,
                 "the persisted pin roles must survive the round trip");
+            foreach (var group in reloadedGroups)
+            {
+                group.TruthTablePinAssignment!.InputSignalNames.ShouldBe(
+                    ExpectedSignalNames.GetValueOrDefault(group.GroupName),
+                    $"the signal names of '{group.GroupName}' must survive the round trip (#1025/#1034)");
+            }
             reloadedCanvas.Connections.Count.ShouldBe(339, "every gate wire must survive the round trip");
 
             var watch = Stopwatch.StartNew();
@@ -157,6 +169,39 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             canvas.Connections.Select(c => c.Connection).ToList(),
             FourBitAdderFixture.WavelengthNm);
 
+    /// <summary>
+    /// The expected persisted signal names per gate group (missing key = no named pins):
+    /// every stage's operand pins carry the addend bits A{stage} and B{stage}; stage 0's
+    /// second half-adder reads the adder's carry-in at its A pins (signal Cin), while
+    /// stages 1–3 read the previous stage's carry-out through a wire. Fully wired pins
+    /// (sum stages, carries, OR trees) ship no names — a driven pin needs no identity.
+    /// </summary>
+    private static Dictionary<string, Dictionary<string, string>> BuildExpectedSignalNames()
+    {
+        var expected = new Dictionary<string, Dictionary<string, string>>();
+        for (var stage = 0; stage < 4; stage++)
+        {
+            var p = $"T{stage}";
+            var both = new Dictionary<string, string> { ["A"] = $"A{stage}", ["B"] = $"B{stage}" };
+            expected[$"{p}H1N5"] = both;
+            for (var k = 2; k <= CarryCopies[stage]; k++)
+                expected[$"{p}H1N5C{k}"] = both;
+            for (var j = 1; j <= 3 + CarryCopies[stage]; j++)
+            {
+                expected[$"{p}H1N1A{j}"] = both;
+                expected[$"{p}H1N1B{j}"] = both;
+                expected[$"{p}H1N2{j}"] = new() { ["A"] = $"A{stage}" };
+                expected[$"{p}H1N3{j}"] = new() { ["B"] = $"B{stage}" };
+            }
+        }
+        var cin = new Dictionary<string, string> { ["A"] = "Cin" };
+        foreach (var n in new[] { "H2N1A", "H2N1B", "H2N2", "H2N5" })
+            expected[$"T0{n}"] = cin;
+        for (var k = 2; k <= CarryCopies[0]; k++)
+            expected[$"T0H2N5C{k}"] = cin;
+        return expected;
+    }
+
     private static IEnumerable<string> StageGateNames(int stage)
     {
         var p = $"T{stage}";
@@ -168,18 +213,6 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
         for (var k = 2; k <= CarryCopies[stage]; k++)
             foreach (var n in new[] { $"H1N5C{k}", $"H1CARRYC{k}", $"H2N5C{k}", $"H2CARRYC{k}", $"ORNOT1C{k}", $"ORNOT2C{k}", $"OROUTC{k}" })
                 yield return p + n;
-    }
-
-    /// <summary>The gate input pins one operand bit drives within its stage (logic-layer fan-out).</summary>
-    private static string[] OperandPins(int stage, string pin, string secondXorGate)
-    {
-        var p = $"T{stage}";
-        var pins = new List<string> { $"{p}H1N5.{pin}" };
-        for (var j = 1; j <= 3 + CarryCopies[stage]; j++)
-            pins.AddRange(new[] { $"{p}H1N1A{j}.{pin}", $"{p}H1N1B{j}.{pin}", $"{p}{secondXorGate}{j}.{pin}" });
-        for (var k = 2; k <= CarryCopies[stage]; k++)
-            pins.Add($"{p}H1N5C{k}.{pin}");
-        return pins.ToArray();
     }
 
     /// <summary>Shared fixture: loads the shipped example once and assembles its logic network (each
@@ -218,16 +251,15 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
         /// <summary>No shared state to release.</summary>
         public Task DisposeAsync() => Task.CompletedTask;
 
-        /// <summary>The network input bits for one operand triple (A, B and Cin fan out at the logic layer).</summary>
+        /// <summary>The network input bits for one operand triple — one bit per signal (#1025/#1034).</summary>
         public Dictionary<string, bool> InputBits(int a, int b, bool cin)
         {
-            var bits = new Dictionary<string, bool>();
+            var bits = new Dictionary<string, bool> { ["Cin"] = cin };
             for (var stage = 0; stage < 4; stage++)
             {
-                foreach (var name in InputsA[stage]) bits[name] = ((a >> stage) & 1) == 1;
-                foreach (var name in InputsB[stage]) bits[name] = ((b >> stage) & 1) == 1;
+                bits[$"A{stage}"] = ((a >> stage) & 1) == 1;
+                bits[$"B{stage}"] = ((b >> stage) & 1) == 1;
             }
-            foreach (var name in InputsCin) bits[name] = cin;
             return bits;
         }
 
