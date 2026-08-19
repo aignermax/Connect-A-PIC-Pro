@@ -5,6 +5,7 @@ using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Analysis.LogicAnalysis;
 using CAP_Core.Components.ComponentHelpers;
+using CAP_Core.Components.Core;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
@@ -160,7 +161,7 @@ public partial class LogicPanelViewModel : ObservableObject
         var result = _network.Evaluate(bits);
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
-        ShowGateStateBadges(result);
+        ShowGateStateBadges(result, bits);
         UpdateTimeline(bits);
     }
 
@@ -168,16 +169,52 @@ public partial class LogicPanelViewModel : ObservableObject
     /// Pushes the freshly evaluated bit of every gate output pin onto the canvas overlay,
     /// so each gate group carries its live 0/1 badge (issue #994) — the same table-lookup
     /// data the panel's output list shows, no new simulation. Result bits are keyed by
-    /// tap name, so the walk goes through the taps: a signal-named output reads under
-    /// its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id.
+    /// tap name, so the output walk goes through the taps: a signal-named output reads
+    /// under its signal name, not its raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id. Gate input
+    /// pins carrying a persisted signal name additionally get a named badge
+    /// (<c>A0 = 1</c>, issue #1051): an unconnected named pin merged into the network
+    /// input of its signal's name, so its live bit is the toggle bit itself —
+    /// display only, nothing re-evaluated.
     /// </summary>
-    private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result)
+    private void ShowGateStateBadges(IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
     {
         if (_canvas == null || _network == null)
             return;
-        var states = _network.OutputTaps.Select(tap =>
+        var signalNamesByGate = PersistedInputSignalNamesByGate();
+        var outputBadges = _network.OutputTaps.Select(tap =>
             new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]));
+        var states = outputBadges.Concat(_network.Gates.SelectMany(gate =>
+            NamedInputBadges(gate.Key, signalNamesByGate, inputBits)));
         _canvas.LogicGateStates.ShowStates(states);
+    }
+
+    /// <summary>The persisted input signal names per gate group of the design (issue #1025).</summary>
+    private Dictionary<string, IReadOnlyDictionary<string, string>> PersistedInputSignalNamesByGate() =>
+        _canvas!.Components
+            .Select(c => c.Component)
+            .OfType<ComponentGroup>()
+            .Where(group => group.TruthTablePinAssignment?.InputSignalNames != null)
+            .ToDictionary(
+                group => group.GroupName,
+                group => (IReadOnlyDictionary<string, string>)group.TruthTablePinAssignment!.InputSignalNames!);
+
+    /// <summary>
+    /// One badge per named input pin of the gate: the signal name next to the live bit
+    /// of the network input the pin merged into. A pin whose signal never became a
+    /// network input (a wired named pin reads its wire instead) gets no badge.
+    /// </summary>
+    private static IEnumerable<LogicGateBadgeState> NamedInputBadges(
+        string gateId,
+        IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> signalNamesByGate,
+        IReadOnlyDictionary<string, bool> inputBits)
+    {
+        if (!signalNamesByGate.TryGetValue(gateId, out var signalNames))
+            yield break;
+        foreach (var (pinName, signalName) in signalNames)
+        {
+            if (inputBits.TryGetValue(signalName, out var bit))
+                yield return new LogicGateBadgeState(gateId, pinName, bit, signalName);
+        }
     }
 
     /// <summary>The active laser's wavelength, falling back to the standard red wavelength.</summary>
