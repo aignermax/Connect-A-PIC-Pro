@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Wähle genau eine Gruppe aus, um zu sehen, ob sie sich wie ein Logikgatter verhält.",
   "TruthTable.Outputs": "Ausgänge:",
   "TruthTable.Signal": "Signalname:",
+  "TruthTable.SignalWarnCrossRole": "„{0}“ benennt sowohl einen Eingang als auch einen Ausgang — der Netzwerk-Build lehnt Namen ab, die zwei Rollen überspannen.",
+  "TruthTable.SignalWarnDuplicateOutput": "Der Ausgang eines anderen Gatters verwendet „{0}“ bereits — Ausgangsnamen müssen eindeutig sein.",
   "TruthTable.SignalWatermark": "Signalname (optional)",
   "TruthTable.Threshold": "Schwellwert:",
   "TruthTable.Title": "Wahrheitstabelle:",

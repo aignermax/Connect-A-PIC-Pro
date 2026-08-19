@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "仅选中一个分组,即可查看它是否表现得像一个逻辑门。",
   "TruthTable.Outputs": "输出:",
   "TruthTable.Signal": "信号:",
+  "TruthTable.SignalWarnCrossRole": "“{0}”同时用作输入和输出的名称——网络构建会拒绝跨两种角色的名称。",
+  "TruthTable.SignalWarnDuplicateOutput": "另一个门的输出已使用“{0}”——输出名称必须唯一。",
   "TruthTable.SignalWatermark": "信号名称（可选）",
   "TruthTable.Threshold": "阈值:",
   "TruthTable.Title": "真值表:",
