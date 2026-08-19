@@ -77,12 +77,32 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
-            <TextBlock Text="{loc:Localize TruthTable.Outputs}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+            <Grid ColumnDefinitions="*,110" Margin="0,8,0,2">
+                <TextBlock Text="{loc:Localize TruthTable.Outputs}" Foreground="Gray" FontSize="10"/>
+                <TextBlock Grid.Column="1" Text="{loc:Localize TruthTable.Signal}" Foreground="Gray" FontSize="10"
+                           Margin="4,0,0,0"
+                           IsVisible="{Binding RightPanel.TruthTable.SignalNamesVisible}"/>
+            </Grid>
             <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.OutputPins}">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="logic:PinSelectionViewModel">
-                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
-                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                        <Grid ColumnDefinitions="*,110">
+                            <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                      Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
+                            <!-- Same persisted-assignment semantics as the input rows:
+                                 a named output's tap reads the signal name in the Logic
+                                 panel (S0, Cout) instead of the raw gate.pin id. -->
+                            <TextBox Grid.Column="1" Text="{Binding SignalName}"
+                                     Watermark="{loc:Localize TruthTable.SignalWatermark}"
+                                     FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
+                                <TextBox.IsVisible>
+                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                        <Binding Path="IsChecked"/>
+                                        <Binding Path="SignalEditingVisible"/>
+                                    </MultiBinding>
+                                </TextBox.IsVisible>
+                            </TextBox>
+                        </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>
             </ItemsControl>

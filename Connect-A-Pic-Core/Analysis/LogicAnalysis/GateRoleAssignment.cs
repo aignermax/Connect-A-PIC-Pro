@@ -18,12 +18,19 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// carrying the same signal name merge into one network-level input; pins without an
 /// entry keep their own <c>&lt;gate&gt;.&lt;pin&gt;</c> name. Null when unused.
 /// </param>
+/// <param name="OutputSignalNames">
+/// Optional signal name per output pin: the pin's network-level output tap carries
+/// the signal name instead of the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> id — the
+/// adder's sum reads <c>S</c>, its carry <c>Cout</c>. Names never merge (every tap
+/// is one gate output) and must be unique across the network. Null when unused.
+/// </param>
 public sealed record GateRoleAssignment(
     IReadOnlyList<string> InputPinNames,
     IReadOnlyList<string> OutputPinNames,
     IReadOnlyList<string> BiasPinNames,
     double PowerThreshold,
-    IReadOnlyDictionary<string, string>? InputSignalNames = null);
+    IReadOnlyDictionary<string, string>? InputSignalNames = null,
+    IReadOnlyDictionary<string, string>? OutputSignalNames = null);
 
 /// <summary>
 /// One top-level gate group on the canvas together with its logic-level model and

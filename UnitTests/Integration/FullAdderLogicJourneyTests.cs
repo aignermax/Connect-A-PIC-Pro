@@ -86,9 +86,9 @@ public class FullAdderLogicJourneyTests
     {
         var result = _journey.Network.Evaluate(_journey.InputBits(a, b, cin));
 
-        result["H2SUM.Y"].ShouldBe(expectedSum,
+        result["S"].ShouldBe(expectedSum,
             $"Step 3: Sum = A⊕B⊕Cin for A={a}, B={b}, Cin={cin}");
-        result["OROUT.Y"].ShouldBe(expectedCout,
+        result["Cout"].ShouldBe(expectedCout,
             $"Step 3: Cout = majority(A, B, Cin) for A={a}, B={b}, Cin={cin}");
     }
 

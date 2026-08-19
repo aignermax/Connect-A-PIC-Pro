@@ -1,4 +1,5 @@
 using CAP.Avalonia.ViewModels.Canvas;
+using CAP_Core.Analysis.LogicAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
@@ -21,6 +22,13 @@ public partial class LogicPanelViewModel
 
     /// <summary>The live end state of the current evaluation — the badges' resting state.</summary>
     private IReadOnlyDictionary<string, bool>? _liveResult;
+
+    /// <summary>
+    /// The input bits of the current evaluation. Replay reuses them for the named input
+    /// chips: the toggle enters at t = 0, so at every replayed instant the inputs
+    /// already carry their new values.
+    /// </summary>
+    private IReadOnlyDictionary<string, bool>? _liveInputBits;
 
     /// <summary>
     /// The timeline event the canvas currently replays, or null when the badges show the
@@ -100,38 +108,51 @@ public partial class LogicPanelViewModel
         ApplyReplayState(value.Event.TimePicoseconds);
     }
 
-    /// <summary>The state at time t: before bits plus every switch event with time ≤ t.</summary>
+    /// <summary>
+    /// The state at time t: before bits plus every switch event with time ≤ t.
+    /// Evaluation results key by tap name (a signal-named output reads as <c>S0</c>,
+    /// not <c>gate.pin</c>), so each event's pin is mapped back to its tap first.
+    /// </summary>
     private void ApplyReplayState(double timePicoseconds)
     {
-        if (_canvas == null || _network == null || _replayBeforeResult == null)
+        if (_canvas == null || _network == null || _replayBeforeResult == null || _liveInputBits == null)
             return;
+        var tapNamesByPin = _network.OutputTaps.ToDictionary(tap => tap.Value, tap => tap.Key);
         var state = new Dictionary<string, bool>(_replayBeforeResult);
         foreach (var row in TimelineEvents)
         {
             if (row.Event.TimePicoseconds > timePicoseconds)
                 break;
-            state[$"{row.Event.GateId}.{row.Event.OutputPin}"] = row.Event.NewValue;
+            state[tapNamesByPin[new LogicPinRef(row.Event.GateId, row.Event.OutputPin)]] = row.Event.NewValue;
         }
-        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(state));
+        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(state, _liveInputBits));
     }
 
     /// <summary>Returns the canvas badges to the live end state after replay ends.</summary>
     private void RestoreLiveBadges()
     {
-        if (_canvas == null || _liveResult == null)
+        if (_canvas == null || _liveResult == null || _liveInputBits == null)
             return;
-        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(_liveResult));
+        _canvas.LogicGateStates.ShowStates(BadgeStatesOf(_liveResult, _liveInputBits));
     }
 
-    /// <summary>One badge state per gate output pin of an evaluation result.</summary>
-    private IEnumerable<LogicGateBadgeState> BadgeStatesOf(IReadOnlyDictionary<string, bool> result)
+    /// <summary>
+    /// The badge states of one evaluation result: the anonymous chip per gate output
+    /// pin (walked through the tap names the result keys by) plus the named input
+    /// chips of the given input assignment (issue #1051).
+    /// </summary>
+    private IEnumerable<LogicGateBadgeState> BadgeStatesOf(
+        IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
     {
         if (_network == null)
             yield break;
-        foreach (var gate in _network.Gates)
+        foreach (var tap in _network.OutputTaps)
+            yield return new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]);
+        var signalNamesByGate = PersistedInputSignalNamesByGate();
+        foreach (var gateId in _network.Gates.Keys)
         {
-            foreach (var pinName in gate.Value.OutputPinNames)
-                yield return new LogicGateBadgeState(gate.Key, pinName, result[$"{gate.Key}.{pinName}"]);
+            foreach (var badge in NamedInputBadges(gateId, signalNamesByGate, inputBits))
+                yield return badge;
         }
     }
 
@@ -141,6 +162,7 @@ public partial class LogicPanelViewModel
         // The live/before results go first: clearing the selection re-pushes the live
         // badges, which must no-op once the network behind them is gone.
         _liveResult = null;
+        _liveInputBits = null;
         _replayBeforeResult = null;
         SelectedTimelineEvent = null;
     }

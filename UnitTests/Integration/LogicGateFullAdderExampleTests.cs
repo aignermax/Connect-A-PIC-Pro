@@ -1,4 +1,5 @@
 using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP_Core.Analysis.LogicAnalysis;
 using CAP_Core.Components.Core;
@@ -22,7 +23,9 @@ namespace UnitTests.Integration;
 /// pin — the fan-out of A, B and Cin happens at the logic layer, where the persisted
 /// signal names (issue #1025) merge every operand's pins into one network input each:
 /// exactly the three toggles A, B and Cin, although the addend pins and the carry-in
-/// pins all share the bare pin name A on their gates. The carry-OR reads the two
+/// pins all share the bare pin name A on their gates. The outputs carry signal names,
+/// too (#1046): the sum tap reads <c>S</c> (<c>H2SUM.Y</c>) and the carry-out tap
+/// <c>Cout</c> (<c>OROUT.Y</c>). The carry-OR reads the two
 /// half-adder carries through two NOTs and one NAND: Cout = NAND(¬C1, ¬C2) = C1∨C2.
 /// </summary>
 public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderExampleTests.FullAdderFixture>
@@ -43,9 +46,19 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
 
     private static readonly string[] NotGateNames = { "H1CARRY", "H2CARRY", "ORNOT1", "ORNOT2" };
 
-    /// <summary>The persisted signal names per gate group (issue #1025); null = no named pins.</summary>
+    /// <summary>The persisted input signal names per gate group (issue #1025); null = no named pins.</summary>
     private static readonly Dictionary<string, Dictionary<string, string>?> ExpectedSignalNames =
         BuildExpectedSignalNames();
+
+    /// <summary>The persisted output signal names per gate group (issue #1046); null = no named outputs.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>?> ExpectedOutputSignalNames =
+        GateNames.ToDictionary(
+            name => name,
+            name => name == "H2SUM"
+                ? new Dictionary<string, string> { ["Y"] = "S" }
+                : name == "OROUT"
+                    ? new Dictionary<string, string> { ["Y"] = "Cout" }
+                    : null);
 
     private readonly FullAdderFixture _fixture;
 
@@ -73,6 +86,8 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
             roles.Threshold.ShouldBe(isNot ? NotThreshold : NandThreshold);
             roles.InputSignalNames.ShouldBe(ExpectedSignalNames[group.GroupName],
                 $"group '{group.GroupName}' ships its network-signal identity (issue #1025)");
+            roles.OutputSignalNames.ShouldBe(ExpectedOutputSignalNames[group.GroupName],
+                $"group '{group.GroupName}' ships its output signal names (issue #1046)");
             group.Description.ShouldContain("logic layer", Case.Sensitive,
                 "every gate carries the education note about logic-layer composition");
             group.Description.ShouldContain(isNot ? "0.375" : "0.125");
@@ -86,7 +101,9 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
             customMessage: "the signal names merge the 30 operand pins into exactly three network " +
                 "inputs (issue #1025) — A and Cin stay separate although their pins share the bare pin name A");
         _fixture.Network.OutputPinNames.ShouldBe(
-            GateNames.Select(name => $"{name}.Y").ToArray(), ignoreOrder: true);
+            GateNames.Select(name => name == "H2SUM" ? "S" : name == "OROUT" ? "Cout" : $"{name}.Y").ToArray(),
+            ignoreOrder: true,
+            customMessage: "every gate output is a tap — the named outputs read S and Cout (issue #1046)");
     }
 
     [Theory]
@@ -103,8 +120,8 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
     {
         var result = _fixture.Network.Evaluate(_fixture.InputBits(a, b, cin));
 
-        result["H2SUM.Y"].ShouldBe(expectedSum, "Sum = A XOR B XOR Cin");
-        result["OROUT.Y"].ShouldBe(expectedCout, "Cout = majority(A, B, Cin)");
+        result["S"].ShouldBe(expectedSum, "Sum = A XOR B XOR Cin");
+        result["Cout"].ShouldBe(expectedCout, "Cout = majority(A, B, Cin)");
 
         var sum1 = a ^ b;
         result["H1SUM1.Y"].ShouldBe(sum1, "half adder 1's sum stays readable as a tap");
@@ -113,6 +130,27 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
         result["H1SUM4.Y"].ShouldBe(sum1, "the duplicated sum stage reads identically");
         result["H1CARRY.Y"].ShouldBe(a && b, "half adder 1's carry stays readable as a tap");
         result["H2CARRY.Y"].ShouldBe(sum1 && cin, "half adder 2's carry stays readable as a tap");
+    }
+
+    [Fact]
+    public async Task LogicPanel_Outputs_ShowSignalNames_WithRawPinIdsRidingAlong()
+    {
+        // Issue #1046: the Logic panel reads S and Cout instead of the raw gate pin
+        // ids; the tooltip text keeps the tapped gate.pin reachable.
+        var vm = new LogicPanelViewModel();
+        vm.Configure(_fixture.Canvas);
+
+        await vm.BuildNetworkCommand.ExecuteAsync(null);
+
+        vm.HasNetwork.ShouldBeTrue(vm.StatusText);
+        var sum = vm.Outputs.Single(o => o.PinName == "S");
+        sum.RawPinName.ShouldBe("H2SUM.Y", "the raw pin id rides along for the tooltip");
+        var cout = vm.Outputs.Single(o => o.PinName == "Cout");
+        cout.RawPinName.ShouldBe("OROUT.Y");
+        vm.Outputs.ShouldNotContain(o => o.PinName == "H2SUM.Y" || o.PinName == "OROUT.Y",
+            "named outputs no longer surface as raw gate pin ids");
+        var unnamed = vm.Outputs.Single(o => o.PinName == "H1SUM1.Y");
+        unnamed.RawPinName.ShouldBe("H1SUM1.Y", "an unnamed output keeps its raw id — display and tooltip coincide");
     }
 
     [Fact]
@@ -132,6 +170,9 @@ public class LogicGateFullAdderExampleTests : IClassFixture<LogicGateFullAdderEx
                 group.TruthTablePinAssignment!.InputSignalNames.ShouldBe(
                     ExpectedSignalNames[group.GroupName],
                     $"the signal names of '{group.GroupName}' must survive the save → load round trip (#1025)");
+                group.TruthTablePinAssignment!.OutputSignalNames.ShouldBe(
+                    ExpectedOutputSignalNames[group.GroupName],
+                    $"the output signal names of '{group.GroupName}' must survive the save → load round trip (#1046)");
             }
             reloadedCanvas.Connections.Count.ShouldBe(30,
                 "every gate wire must survive the save → load round trip");

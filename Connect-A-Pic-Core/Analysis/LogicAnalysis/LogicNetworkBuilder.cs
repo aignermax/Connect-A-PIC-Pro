@@ -13,8 +13,10 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// name (issue #1025) merge into one network input per signal — the full adder's
 /// thirteen addend-A pins become the single input <c>A</c> — while a pin without a
 /// signal name keeps its own <c>&lt;group&gt;.&lt;pin&gt;</c> name and never merges
-/// by bare pin name. Every gate output pin becomes a network-level output tap named
-/// <c>&lt;group&gt;.&lt;pin&gt;</c> — also when it additionally drives another gate.
+/// by bare pin name. Every gate output pin becomes a network-level output tap —
+/// named by its persisted output signal name when it carries one (the adder's sum
+/// reads <c>S</c>, its carry <c>Cout</c>), else <c>&lt;group&gt;.&lt;pin&gt;</c> —
+/// also when it additionally drives another gate.
 /// Bias pins take no part in wiring (they are constantly on — the extraction
 /// contract); a connection into a bias pin, a connection between two input pins,
 /// and a gate input driven by two different outputs are rejected with messages
@@ -187,11 +189,30 @@ public sealed partial class LogicNetworkBuilder
             }
             foreach (var pinName in context.Model.OutputPinNames)
             {
-                outputTaps[$"{context.GateId}.{pinName}"] = new LogicPinRef(context.GateId, pinName);
+                AddOutputTap(outputTaps, context, pinName);
             }
         }
 
         return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays, wireDelays);
+    }
+
+    /// <summary>
+    /// Registers one gate output pin as a network-level output tap: the pin's
+    /// persisted signal name when it carries one — the adder's carry-out reads
+    /// <c>Cout</c>, not <c>OROUT.Y</c> — else the raw <c>&lt;group&gt;.&lt;pin&gt;</c>
+    /// name. Output names never merge (every tap is one gate output), so two pins
+    /// landing on one tap name are rejected with a message naming both.
+    /// </summary>
+    private static void AddOutputTap(
+        IDictionary<string, LogicPinRef> outputTaps, GateContext context, string pinName)
+    {
+        var tap = new LogicPinRef(context.GateId, pinName);
+        var tapName = context.OutputSignalNameOf(pinName) ?? Format(tap);
+        if (outputTaps.TryGetValue(tapName, out var existing) && !existing.Equals(tap))
+            throw new ArgumentException(
+                $"Two gate outputs are named '{tapName}': '{Format(existing)}' and '{Format(tap)}'. " +
+                "Output signal names must be unique across the network — rename one of them.");
+        outputTaps[tapName] = tap;
     }
 
     /// <summary>

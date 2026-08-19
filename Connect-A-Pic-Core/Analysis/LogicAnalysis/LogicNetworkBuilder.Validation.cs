@@ -69,7 +69,10 @@ public sealed partial class LogicNetworkBuilder
             context.ThrowOnOverlappingRoles();
             context.ThrowOnRoleModelMismatch();
             context.ThrowOnUnknownRolePins();
-            context.ThrowOnInvalidSignalNames();
+            context.ThrowOnInvalidSignalNames(
+                instance.Roles.InputSignalNames, instance.Roles.InputPinNames, "input");
+            context.ThrowOnInvalidSignalNames(
+                instance.Roles.OutputSignalNames, instance.Roles.OutputPinNames, "output");
             return context;
         }
 
@@ -88,8 +91,18 @@ public sealed partial class LogicNetworkBuilder
         /// name as its network input.
         /// </summary>
         public string? SignalNameOf(string pinName) =>
-            Instance.Roles.InputSignalNames != null
-            && Instance.Roles.InputSignalNames.TryGetValue(pinName, out var signalName)
+            SignalNameOf(Instance.Roles.InputSignalNames, pinName);
+
+        /// <summary>
+        /// The signal name assigned to one output pin, or null when the pin carries
+        /// none and its network tap keeps the raw <c>&lt;gate&gt;.&lt;pin&gt;</c> name.
+        /// </summary>
+        public string? OutputSignalNameOf(string pinName) =>
+            SignalNameOf(Instance.Roles.OutputSignalNames, pinName);
+
+        /// <summary>Looks up one pin's signal name in an optional name map.</summary>
+        private static string? SignalNameOf(IReadOnlyDictionary<string, string>? names, string pinName) =>
+            names != null && names.TryGetValue(pinName, out var signalName)
                 ? signalName
                 : null;
 
@@ -158,26 +171,29 @@ public sealed partial class LogicNetworkBuilder
         }
 
         /// <summary>
-        /// Rejects empty signal names and signal names on pins that are not logic
-        /// inputs — only an input pin can join a network-level signal, and a signal
-        /// the network cannot name would silently never merge.
+        /// Rejects empty signal names and signal names on pins that do not play the
+        /// matching role — a signal name the network cannot honor would silently
+        /// never merge (inputs) or never rename a tap (outputs).
         /// </summary>
-        private void ThrowOnInvalidSignalNames()
+        private void ThrowOnInvalidSignalNames(
+            IReadOnlyDictionary<string, string>? signalNames,
+            IReadOnlyList<string> rolePins,
+            string role)
         {
-            if (Instance.Roles.InputSignalNames == null)
+            if (signalNames == null)
                 return;
-            foreach (var (pinName, signalName) in Instance.Roles.InputSignalNames)
+            foreach (var (pinName, signalName) in signalNames)
             {
                 if (string.IsNullOrWhiteSpace(signalName))
                     throw new ArgumentException(
                         $"Gate '{GateId}' assigns pin '{pinName}' an empty signal name — " +
                         "a signal name must be a non-empty string.",
                         nameof(Instance));
-                if (!Instance.Roles.InputPinNames.Contains(pinName))
+                if (!rolePins.Contains(pinName))
                     throw new ArgumentException(
                         $"Gate '{GateId}' assigns pin '{pinName}' the signal name '{signalName}', " +
-                        $"but '{pinName}' is not one of its input pins ({string.Join(", ", Instance.Roles.InputPinNames)}). " +
-                        "Only an input pin can join a network-level signal.",
+                        $"but '{pinName}' is not one of its {role} pins ({string.Join(", ", rolePins)}). " +
+                        $"Only an {role} pin can carry a signal name.",
                         nameof(Instance));
             }
         }

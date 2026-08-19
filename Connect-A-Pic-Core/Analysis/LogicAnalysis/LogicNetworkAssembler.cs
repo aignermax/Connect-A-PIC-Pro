@@ -95,7 +95,8 @@ public sealed class LogicNetworkAssembler
             persisted.OutputPinNames,
             persisted.BiasPinNames,
             persisted.Threshold,
-            persisted.InputSignalNames);
+            persisted.InputSignalNames,
+            persisted.OutputSignalNames);
         var table = await _extractor.ExtractAsync(
             group,
             roles.InputPinNames,

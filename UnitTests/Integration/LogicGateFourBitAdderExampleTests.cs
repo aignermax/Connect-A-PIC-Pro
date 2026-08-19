@@ -20,7 +20,8 @@ namespace UnitTests.Integration;
 /// Cout directly. The fan-out of the operand bits happens at the logic layer, where the
 /// persisted signal names (issues #1025/#1034) merge the 261 unconnected operand pins
 /// into exactly nine network inputs — A0–A3, B0–B3 and Cin, the nine toggles the Logic
-/// panel shows. Outputs: S0–S3 (<c>T{i}H2SUM.Y</c>) and Cout (<c>T3OROUT.Y</c>),
+/// panel shows. Outputs carry signal names, too (#1046): the sum taps read S0–S3
+/// (<c>T{i}H2SUM.Y</c>) and the carry-out Cout (<c>T3OROUT.Y</c>),
 /// checked against the arithmetic sum. The fixture records the assembler wall clock
 /// for the PR's scale report.
 /// </summary>
@@ -42,6 +43,12 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
     /// <summary>The persisted signal names per gate group (issues #1025/#1034); missing = no named pins.</summary>
     private static readonly Dictionary<string, Dictionary<string, string>> ExpectedSignalNames =
         BuildExpectedSignalNames();
+
+    /// <summary>The persisted output signal names per gate group (issue #1046); missing = no named outputs.</summary>
+    private static readonly Dictionary<string, Dictionary<string, string>> ExpectedOutputSignalNames =
+        Enumerable.Range(0, 4).ToDictionary(stage => $"T{stage}H2SUM", stage => $"S{stage}")
+            .Append(new KeyValuePair<string, string>("T3OROUT", "Cout"))
+            .ToDictionary(pair => pair.Key, pair => new Dictionary<string, string> { ["Y"] = pair.Value });
 
     private readonly FourBitAdderFixture _fixture;
 
@@ -68,6 +75,8 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             roles.Threshold.ShouldBe(isNot ? NotThreshold : NandThreshold);
             roles.InputSignalNames.ShouldBe(ExpectedSignalNames.GetValueOrDefault(group.GroupName),
                 $"group '{group.GroupName}' ships its network-signal identity (issues #1025/#1034)");
+            roles.OutputSignalNames.ShouldBe(ExpectedOutputSignalNames.GetValueOrDefault(group.GroupName),
+                $"group '{group.GroupName}' ships its output signal names (issue #1046)");
             group.Description.ShouldContain("logic layer", Case.Sensitive,
                 "every gate carries the education note about logic-layer composition");
             group.Description.ShouldContain(isNot ? "0.375" : "0.125");
@@ -81,7 +90,19 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
             customMessage: "the signal names merge the 261 operand pins into exactly nine network " +
                 "inputs (issues #1025/#1034) — A0–A3, B0–B3 and Cin");
         _fixture.Network.OutputPinNames.ShouldBe(
-            GateNames.Select(name => $"{name}.Y").ToArray(), ignoreOrder: true);
+            GateNames.Select(ExpectedTapName).ToArray(), ignoreOrder: true,
+            customMessage: "every gate output is a tap — the named outputs read S0–S3 and Cout (issue #1046)");
+    }
+
+    /// <summary>The network tap name of one gate's output: the output signal name where one ships (#1046).</summary>
+    private static string ExpectedTapName(string gateName)
+    {
+        for (var stage = 0; stage < 4; stage++)
+        {
+            if (gateName == $"T{stage}H2SUM")
+                return $"S{stage}";
+        }
+        return gateName == "T3OROUT" ? "Cout" : $"{gateName}.Y";
     }
 
     [Theory]
@@ -103,12 +124,12 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
         for (var stage = 0; stage < 4; stage++)
         {
             var sumBit = ((sum >> stage) & 1) == 1;
-            result[$"T{stage}H2SUM.Y"].ShouldBe(sumBit,
+            result[$"S{stage}"].ShouldBe(sumBit,
                 $"S{stage} of {a} + {b} + {(cin ? 1 : 0)} = {sum}");
             result[$"T{stage}H1SUM1.Y"].ShouldBe((((a >> stage) ^ (b >> stage)) & 1) == 1,
                 $"stage {stage}'s partial sum A{stage} XOR B{stage} stays readable as a tap");
             carry = ((a >> stage) & 1) + ((b >> stage) & 1) + (carry ? 1 : 0) >= 2;
-            result[$"T{stage}OROUT.Y"].ShouldBe(carry,
+            result[stage < 3 ? $"T{stage}OROUT.Y" : "Cout"].ShouldBe(carry,
                 stage < 3 ? $"the ripple carry C{stage + 1} leaves stage {stage}" : "Cout of the 5-bit sum");
             for (var k = 2; stage < 3 && k <= CarryCopies[stage]; k++)
                 result[$"T{stage}OROUTC{k}.Y"].ShouldBe(carry,
@@ -132,6 +153,9 @@ public class LogicGateFourBitAdderExampleTests : IClassFixture<LogicGateFourBitA
                 group.TruthTablePinAssignment!.InputSignalNames.ShouldBe(
                     ExpectedSignalNames.GetValueOrDefault(group.GroupName),
                     $"the signal names of '{group.GroupName}' must survive the round trip (#1025/#1034)");
+                group.TruthTablePinAssignment!.OutputSignalNames.ShouldBe(
+                    ExpectedOutputSignalNames.GetValueOrDefault(group.GroupName),
+                    $"the output signal names of '{group.GroupName}' must survive the round trip (#1046)");
             }
             reloadedCanvas.Connections.Count.ShouldBe(339, "every gate wire must survive the round trip");
 

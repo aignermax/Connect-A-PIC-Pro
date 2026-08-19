@@ -9,7 +9,9 @@ namespace CAP.Avalonia.ViewModels.Canvas;
 /// owns the single instance as the canvas-side source of truth; the Logic panel writes
 /// the freshly evaluated gate output bits into it after every evaluation and clears it
 /// when the network is discarded (rebuild, cancel, failure, design edit, load), so the
-/// badges always mirror exactly the data the panel's output list shows.
+/// badges always mirror exactly the data the panel's output list shows. Gate input pins
+/// carrying a persisted signal name additionally get a named badge
+/// (<c>A0 = 1</c>, issue #1051), so a student can tell which badge reads which signal.
 /// </summary>
 public sealed class LogicGateStateOverlay
 {
@@ -26,7 +28,7 @@ public sealed class LogicGateStateOverlay
         Badges.Clear();
         foreach (var state in states)
         {
-            Badges.Add(new LogicGateBadgeViewModel(state.GroupName, state.PinName, state.IsOne));
+            Badges.Add(new LogicGateBadgeViewModel(state.GroupName, state.PinName, state.IsOne, state.SignalName));
         }
         StatesChanged?.Invoke(this, EventArgs.Empty);
     }
@@ -43,34 +45,54 @@ public sealed class LogicGateStateOverlay
 
 /// <summary>One evaluated gate output bit destined for a canvas badge.</summary>
 /// <param name="GroupName">Name of the gate group on the canvas.</param>
-/// <param name="PinName">The gate's output pin the bit belongs to.</param>
+/// <param name="PinName">The gate pin the bit belongs to.</param>
 /// <param name="IsOne">The evaluated bit.</param>
-public readonly record struct LogicGateBadgeState(string GroupName, string PinName, bool IsOne);
+/// <param name="SignalName">
+/// The persisted signal name of a gate input pin (issue #1051), or null for the
+/// anonymous per-output-pin badges.
+/// </param>
+public readonly record struct LogicGateBadgeState(string GroupName, string PinName, bool IsOne, string? SignalName = null);
 
 /// <summary>
 /// One logic-state badge on a gate group: the evaluated bit of one of the gate's output
 /// pins. Single-output gates — every gate of the shipped logic examples — get exactly one
 /// badge; a multi-output gate gets one badge per output pin, stacked on the group.
+/// Gate input pins carrying a persisted signal name get an additional named badge
+/// showing the signal's live bit (<c>A0 = 1</c>, issue #1051); unnamed pins keep the
+/// plain 0/1 chip exactly.
 /// </summary>
 public sealed class LogicGateBadgeViewModel
 {
     /// <summary>Initializes the badge with its first evaluated bit.</summary>
-    public LogicGateBadgeViewModel(string groupName, string pinName, bool isOne)
+    public LogicGateBadgeViewModel(string groupName, string pinName, bool isOne, string? signalName = null)
     {
         GroupName = groupName;
         PinName = pinName;
         IsOne = isOne;
+        SignalName = signalName;
     }
 
     /// <summary>Name of the gate group the badge sits on — the network's gate id.</summary>
     public string GroupName { get; }
 
-    /// <summary>The gate output pin the bit was read from.</summary>
+    /// <summary>The gate pin the bit was read from.</summary>
     public string PinName { get; }
 
     /// <summary>The currently evaluated bit at this pin.</summary>
     public bool IsOne { get; }
 
+    /// <summary>The persisted signal name of a named input pin, or null for anonymous badges.</summary>
+    public string? SignalName { get; }
+
+    /// <summary>True when the badge carries a persisted signal name.</summary>
+    public bool HasSignalName => SignalName != null;
+
     /// <summary>The bit as display text ("1" or "0").</summary>
     public string BitText => IsOne ? "1" : "0";
+
+    /// <summary>
+    /// The badge's full display text: <c>A0 = 1</c> for a named signal, the plain
+    /// bit ("1" or "0") for an anonymous badge.
+    /// </summary>
+    public string LabelText => HasSignalName ? $"{SignalName} = {BitText}" : BitText;
 }

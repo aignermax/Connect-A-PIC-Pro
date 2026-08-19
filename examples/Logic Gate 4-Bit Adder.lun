@@ -26402,7 +26402,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "S0"
+        }
       }
     },
     {
@@ -67322,7 +67325,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "S1"
+        }
       }
     },
     {
@@ -96434,7 +96440,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "S2"
+        }
       }
     },
     {
@@ -113768,7 +113777,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "S3"
+        }
       }
     },
     {
@@ -116050,7 +116062,10 @@
         "BiasPinNames": [
           "BIAS"
         ],
-        "Threshold": 0.125
+        "Threshold": 0.125,
+        "OutputSignalNames": {
+          "Y": "Cout"
+        }
       }
     }
   ],
