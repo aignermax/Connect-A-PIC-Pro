@@ -46,6 +46,39 @@ public class DuplicateIdentifierGroupLoadTests : IDisposable
                 "duplicate identifiers must not merge two groups into copies of the first on load");
     }
 
+    [Fact]
+    public async Task SaveLoadReload_NestedGroupSharingIdentifierWithEarlierTopLevelGroup_BindsItsActualChild()
+    {
+        var decoy = SingleGroup(await LogicGateHalfAdderExampleTests.LoadCanvas(NotNandPath()));
+        decoy.GroupName = "DECOY";
+        var parent = SingleGroup(await LogicGateHalfAdderExampleTests.LoadCanvas(NotNandPath()));
+        parent.GroupName = "PARENT";
+        parent.Identifier = "PARENT-ID";
+        var inner = SingleGroup(await LogicGateHalfAdderExampleTests.LoadCanvas(NotNandPath()));
+        inner.GroupName = "INNER";
+        var leaf = SingleGroup(await LogicGateHalfAdderExampleTests.LoadCanvas(NotNandPath()));
+        leaf.GroupName = "LEAF";
+        leaf.Identifier = "LEAF-ID";
+
+        inner.Identifier.ShouldBe(decoy.Identifier,
+            "this fixture needs the nested group and the top-level decoy to share one identifier");
+
+        inner.AddChild(leaf);
+        parent.AddChild(inner);
+
+        // Decoy first so it precedes the nested child in the file's group list.
+        var canvas = new DesignCanvasViewModel();
+        canvas.AddComponent(decoy);
+        canvas.AddComponent(parent);
+        var savedPath = await Save(canvas);
+        var reloaded = await LogicGateHalfAdderExampleTests.LoadCanvas(savedPath);
+
+        var reloadedParent = LogicGateHalfAdderExampleTests.GroupsOf(reloaded)
+            .Single(g => g.GroupName == "PARENT");
+        reloadedParent.ChildComponents.OfType<ComponentGroup>().Single().GroupName.ShouldBe("INNER",
+            "the parent must bind its actual nested child, not the earlier top-level group sharing its identifier");
+    }
+
     private static string NotNandPath() =>
         Path.Combine(ExampleDesignFilesTests.ExamplesDirectory(), "Logic Gate NOT-NAND.lun");
 

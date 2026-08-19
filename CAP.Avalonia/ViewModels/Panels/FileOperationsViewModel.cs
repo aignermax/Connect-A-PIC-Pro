@@ -1578,10 +1578,26 @@ public partial class FileOperationsViewModel : ObservableObject
                 inDegree[groupData] = 0;
 
             // Count how many child groups this group has (determines loading order)
-            foreach (var childId in groupData.GroupDto.ChildComponentIds)
+            var childIds = groupData.GroupDto.ChildComponentIds;
+            var childGuids = groupData.GroupDto.ChildComponentGuids;
+            for (var i = 0; i < childIds.Count; i++)
             {
-                // Check if this child is a group (appears as a group in the list)
-                var childGroup = groupDataList.FirstOrDefault(g => g.GroupDto.Identifier == childId);
+                // Check if this child is a group (appears as a group in the list).
+                // Match by saved Guid: identifiers are not unique, so a string match
+                // can pick a same-named group that merely appears earlier in the file
+                // and misorder the reconstruction (the parent then binds the wrong
+                // child through the name fallback). The identifier match remains as
+                // the fallback for files that predate the Guid fields.
+                DesignGroupData? childGroup = null;
+                if (i < childGuids.Count && Guid.TryParse(childGuids[i], out var childGuid))
+                {
+                    childGroup = groupDataList.FirstOrDefault(g =>
+                        g.GroupDto.IdGuid != null
+                        && Guid.TryParse(g.GroupDto.IdGuid, out var groupGuid)
+                        && groupGuid == childGuid);
+                }
+
+                childGroup ??= groupDataList.FirstOrDefault(g => g.GroupDto.Identifier == childIds[i]);
                 if (childGroup != null && childGroup != groupData)
                 {
                     // This group depends on its child group being loaded first
