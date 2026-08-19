@@ -22,9 +22,11 @@ public sealed record LogicSwitchEvent(
 /// switches at <c>max(arrival over its inputs) + gateDelay</c>, where an arrival
 /// is the driver's switch time plus that wire's delay (a driver that never
 /// switches contributes a stable arrival of 0). Gates whose output value does
-/// not change emit no event. This slice models exactly one switch per pin — no
-/// glitch/hazard modeling — and reuses the evaluator's
-/// <see cref="LogicNetworkEvaluator.GateDelaysPicoseconds"/> and
+/// not change emit no event. Register gates emit no events at all: their outputs
+/// hold the committed state through the settling and only advance on an explicit
+/// clock step, which a combinational toggle timeline does not model. This slice
+/// models exactly one switch per pin — no glitch/hazard modeling — and reuses the
+/// evaluator's <see cref="LogicNetworkEvaluator.GateDelaysPicoseconds"/> and
 /// <see cref="LogicNetworkEvaluator.WireDelaysPicoseconds"/> without recomputing
 /// any physics.
 /// </summary>
@@ -53,13 +55,15 @@ public static class LogicEventTimeline
         network.ValidateInputBits(previousInputs);
         network.ValidateInputBits(nextInputs);
 
-        var before = EvaluateAllGateOutputs(network, previousInputs);
-        var after = EvaluateAllGateOutputs(network, nextInputs);
+        var before = network.EvaluateGateOutputs(previousInputs);
+        var after = network.EvaluateGateOutputs(nextInputs);
 
         var switchTimes = new Dictionary<LogicPinRef, double>();
         var events = new List<LogicSwitchEvent>();
         foreach (var gateId in network.EvaluationOrder)
         {
+            if (network.IsRegisterGate(gateId))
+                continue;
             var gate = network.Gates[gateId];
             var arrival = LatestInputArrival(network, gateId, switchTimes);
             var switchTime = arrival + network.GateDelaysPicoseconds[gateId];
@@ -104,35 +108,5 @@ public static class LogicEventTimeline
                 latest = arrival;
         }
         return latest;
-    }
-
-    /// <summary>
-    /// Evaluates every gate output pin (not just the network taps) for one input
-    /// assignment, walking the same topological order <see cref="LogicNetworkEvaluator.Evaluate"/>
-    /// uses.
-    /// </summary>
-    private static IReadOnlyDictionary<LogicPinRef, bool> EvaluateAllGateOutputs(
-        LogicNetworkEvaluator network,
-        IReadOnlyDictionary<string, bool> inputBits)
-    {
-        var outputs = new Dictionary<LogicPinRef, bool>();
-        foreach (var gateId in network.EvaluationOrder)
-        {
-            var gate = network.Gates[gateId];
-            var gateInputs = new Dictionary<string, bool>(gate.InputPinNames.Count);
-            foreach (var pinName in gate.InputPinNames)
-            {
-                var load = new LogicPinRef(gateId, pinName);
-                gateInputs[pinName] = network.InputWiring[load] switch
-                {
-                    LogicNetDriver.NetworkInput input => inputBits[input.PinName],
-                    LogicNetDriver.GateOutput source => outputs[source.Pin],
-                    _ => throw new InvalidOperationException("Unsupported driver type."),
-                };
-            }
-            foreach (var (pinName, bit) in gate.Evaluate(gateInputs))
-                outputs[new LogicPinRef(gateId, pinName)] = bit;
-        }
-        return outputs;
     }
 }

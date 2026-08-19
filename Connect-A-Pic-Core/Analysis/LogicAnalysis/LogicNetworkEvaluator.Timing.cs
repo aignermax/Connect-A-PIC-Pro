@@ -127,10 +127,17 @@ public sealed partial class LogicNetworkEvaluator
         return (cumulative[criticalGate], Backtrack(criticalGate, predecessor));
     }
 
-    /// <summary>The slowest arrival at one of this gate's inputs: driver cumulative delay plus wire delay.</summary>
+    /// <summary>
+    /// The slowest arrival at one of this gate's inputs: driver cumulative delay
+    /// plus wire delay. A register gate reports no arrival — its inputs are sampled
+    /// at the clock step, so the register breaks the combinational critical path
+    /// the way its output starts a new one.
+    /// </summary>
     private (double Delay, string? GateId) SlowestDriver(
         string gateId, IReadOnlyDictionary<string, double> cumulative)
     {
+        if (IsRegisterGate(gateId))
+            return (0.0, null);
         var delay = 0.0;
         string? driverId = null;
         foreach (var pinName in Gates[gateId].InputPinNames)
