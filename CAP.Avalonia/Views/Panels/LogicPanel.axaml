@@ -4,6 +4,7 @@
              xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              xmlns:logic="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis"
+             xmlns:bus="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.BusView"
              x:Class="CAP.Avalonia.Views.Panels.LogicPanel"
              x:DataType="vm:MainViewModel">
 
@@ -42,6 +43,10 @@
                         <TextBlock Text="{loc:Localize LogicPanelHelp.InputsTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize LogicPanelHelp.InputsBody}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.BusTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.BusBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
@@ -129,18 +134,40 @@
              0/1 indicator per gate output -->
         <StackPanel IsVisible="{Binding RightPanel.Logic.HasNetwork}">
             <TextBlock Text="{loc:Localize LogicPanel.Inputs}" Foreground="Gray" FontSize="10" Margin="0,5,0,2"/>
-            <ItemsControl ItemsSource="{Binding RightPanel.Logic.Inputs}">
-                <ItemsControl.ItemTemplate>
+            <!-- Bus view (#1068): indexed families (A0–A3) collapse into a bus header
+                 line showing the decimal value with an editable quick-set field; plain
+                 names keep their single toggle. -->
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.InputRows}">
+                <ItemsControl.DataTemplates>
                     <DataTemplate x:DataType="logic:LogicNetworkInputViewModel">
                         <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsOn}"
                                   Foreground="LightGray" FontSize="11" Margin="0,1"/>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="bus:LogicSignalBusInputViewModel">
+                        <StackPanel Margin="0,1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding HeaderText}" FontFamily="Consolas" FontSize="11"
+                                           Foreground="#cfe0ff" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding ValueText}" Width="56" Margin="8,0,0,0"
+                                         FontFamily="Consolas" FontSize="11" Padding="4,1"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Members}" Margin="14,0,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="logic:LogicNetworkInputViewModel">
+                                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsOn}"
+                                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.DataTemplates>
             </ItemsControl>
 
             <TextBlock Text="{loc:Localize LogicPanel.Outputs}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
-            <ItemsControl ItemsSource="{Binding RightPanel.Logic.Outputs}">
-                <ItemsControl.ItemTemplate>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.OutputRows}">
+                <ItemsControl.DataTemplates>
                     <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
                         <StackPanel Orientation="Horizontal" Margin="0,1">
                             <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="110" VerticalAlignment="Center"/>
@@ -152,7 +179,28 @@
                                        VerticalAlignment="Center" Margin="8,0,0,0"/>
                         </StackPanel>
                     </DataTemplate>
-                </ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="bus:LogicSignalBusOutputViewModel">
+                        <StackPanel Margin="0,1">
+                            <TextBlock Text="{Binding HeaderText}" FontFamily="Consolas" FontSize="11"
+                                       FontWeight="SemiBold" Foreground="#cfe0ff"/>
+                            <ItemsControl ItemsSource="{Binding Members}" Margin="14,0,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="96" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                                       Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
+                                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                                       Foreground="Gray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                                            <TextBlock Text="{Binding DelayText}" Foreground="Gray" FontSize="10"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.DataTemplates>
             </ItemsControl>
 
             <!-- Event timeline (#1045, rung 5 visualizer slice 2): the switch events
@@ -183,15 +231,23 @@
                             <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
+                            <!-- Auto-play: the fixed 0.6 s cadence is didactic,
+                                 not to scale — the real events are picoseconds apart. -->
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.PlaybackBody}"/>
                         </StackPanel>
                     </controls:HelpFlyoutButton.HelpContent>
                 </controls:HelpFlyoutButton>
             </Grid>
-            <!-- Replay navigation (#1058, rung 5 visualizer slice 3): step through the
-                 switch events and the canvas badges show the network state at that
-                 instant — pure lookup, nothing is re-simulated. -->
+            <!-- Replay navigation: step through the switch events and the canvas
+                 badges show the network state at that instant — pure lookup, nothing
+                 is re-simulated. Play advances the replay on its own at a fixed
+                 didactic cadence. -->
             <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,2"
                         IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
+                <Button Content="{Binding RightPanel.Logic.PlayPauseText}"
+                        Command="{Binding RightPanel.Logic.TogglePlaybackCommand}"
+                        Padding="6,2" FontSize="10"/>
                 <Button Content="{loc:Localize LogicPanel.ReplayPrev}"
                         Command="{Binding RightPanel.Logic.PreviousTimelineEventCommand}"
                         Padding="6,2" FontSize="10"/>

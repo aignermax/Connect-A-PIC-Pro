@@ -5,6 +5,7 @@ using Avalonia.VisualTree;
 using CAP.Avalonia.Controls;
 using CAP.Avalonia.Services.Localization;
 using CAP.Avalonia.Views.Panels;
+using CAP_Core.Components.Core;
 using Shouldly;
 using UnitTests.Analysis.LogicAnalysis;
 using UnitTests.Helpers;
@@ -39,6 +40,8 @@ public class TruthTablePanelRenderTests
         "TruthTable.Cancel",
         "TruthTable.Signal",
         "TruthTable.SignalWatermark",
+        "TruthTable.SignalWarnCrossRole",
+        "TruthTable.SignalWarnDuplicateOutput",
         "TruthTableHelp.Title",
         "TruthTableHelp.Intro",
         "TruthTableHelp.ThresholdTitle",
@@ -157,6 +160,48 @@ public class TruthTablePanelRenderTests
     }
 
     /// <summary>
+    /// A signal name colliding across the design (issue #1071) shows the localized
+    /// inline hint under the field: naming an input like another gate's output raises
+    /// the cross-role warning at typing time.
+    /// </summary>
+    [AvaloniaFact]
+    public void TruthTablePanel_CollidingSignalName_ShowsInlineWarning()
+    {
+        Window? window = null;
+        try
+        {
+            var canvas = new CAP.Avalonia.ViewModels.Canvas.DesignCanvasViewModel();
+            var sumVm = canvas.AddComponent(CreateNotGateWithPersistedRoles("SUM"));
+            var invVm = canvas.AddComponent(CreateNotGateWithPersistedRoles("INV"));
+            var vm = MainViewModelTestHelper.CreateMainViewModel(canvas: canvas);
+
+            canvas.Selection.SelectSingle(sumVm);
+            vm.RightPanel.TruthTable.ConfigureForSelection(sumVm, canvas);
+            vm.RightPanel.TruthTable.OutputPins.Single(p => p.PinName == "Y").SignalName = "S";
+
+            canvas.Selection.SelectSingle(invVm);
+            vm.RightPanel.TruthTable.ConfigureForSelection(invVm, canvas);
+            vm.RightPanel.TruthTable.InputPins.Single(p => p.PinName == "A").SignalName = "S";
+
+            var panel = new TruthTablePanel { DataContext = vm };
+            window = new Window { Width = 460, Height = 700, Content = panel };
+            window.Show();
+            Dispatcher.UIThread.RunJobs();
+
+            var expected = string.Format(
+                LocalizationService.Instance.Translate("TruthTable.SignalWarnCrossRole"), "S");
+            panel.GetVisualDescendants().OfType<TextBlock>()
+                .Any(t => t.Text == expected)
+                .ShouldBeTrue("the colliding input row must show the cross-role hint inline");
+        }
+        finally
+        {
+            window?.Close();
+            Dispatcher.UIThread.RunJobs();
+        }
+    }
+
+    /// <summary>
     /// Every new truth-table key exists with a non-empty value in all five shipped languages,
     /// and no non-English language silently falls back to the English text.
     /// </summary>
@@ -179,5 +224,25 @@ public class TruthTablePanelRenderTests
                         $"{language.Code} must not fall back to English for {key}");
             }
         }
+    }
+
+    /// <summary>A bare NOT-shaped group with persisted roles but no signal names yet.</summary>
+    private static ComponentGroup CreateNotGateWithPersistedRoles(string groupName)
+    {
+        var group = new ComponentGroup(groupName);
+        foreach (var pinName in new[] { "A", "BIAS", "Y" })
+        {
+            var physicalPin = new PhysicalPin { Name = pinName, ParentComponent = group };
+            group.PhysicalPins.Add(physicalPin);
+            group.AddExternalPin(new GroupPin { Name = pinName, InternalPin = physicalPin });
+        }
+        group.TruthTablePinAssignment = new TruthTablePinAssignment
+        {
+            InputPinNames = new List<string> { "A" },
+            OutputPinNames = new List<string> { "Y" },
+            BiasPinNames = new List<string> { "BIAS" },
+            Threshold = PinnedGateTables.NotThreshold,
+        };
+        return group;
     }
 }

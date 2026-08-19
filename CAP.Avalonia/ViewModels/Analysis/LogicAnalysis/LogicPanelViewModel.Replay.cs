@@ -53,28 +53,41 @@ public partial class LogicPanelViewModel
 
     /// <summary>
     /// Selects a timeline row for replay; clicking the already-selected row deselects it
-    /// and returns the canvas to the live end state.
+    /// and returns the canvas to the live end state. A manual (de)selection stops the
+    /// auto-play.
     /// </summary>
     [RelayCommand]
     private void SelectTimelineEvent(LogicTimelineEventViewModel? row)
     {
         if (row == null)
             return;
+        StopPlayback();
         SelectedTimelineEvent = ReferenceEquals(SelectedTimelineEvent, row) ? null : row;
     }
 
-    /// <summary>Steps the replay one event earlier.</summary>
+    /// <summary>Steps the replay one event earlier; manual stepping stops the auto-play.</summary>
     [RelayCommand(CanExecute = nameof(CanStepToPreviousEvent))]
-    private void PreviousTimelineEvent() => StepTo(SelectedIndex - 1);
+    private void PreviousTimelineEvent()
+    {
+        StopPlayback();
+        StepTo(SelectedIndex - 1);
+    }
 
     /// <summary>Steps the replay one event later; from the live state this selects the first event.</summary>
     [RelayCommand(CanExecute = nameof(CanStepToNextEvent))]
-    private void NextTimelineEvent() =>
+    private void NextTimelineEvent()
+    {
+        StopPlayback();
         StepTo(SelectedTimelineEvent == null ? 0 : SelectedIndex + 1);
+    }
 
     /// <summary>Leaves replay mode — the badges return to the live end state.</summary>
     [RelayCommand]
-    private void ExitReplay() => SelectedTimelineEvent = null;
+    private void ExitReplay()
+    {
+        StopPlayback();
+        SelectedTimelineEvent = null;
+    }
 
     private bool CanStepToPreviousEvent() => SelectedIndex > 0;
 
@@ -137,9 +150,12 @@ public partial class LogicPanelViewModel
     }
 
     /// <summary>
-    /// The badge states of one evaluation result: the anonymous chip per gate output
-    /// pin (walked through the tap names the result keys by) plus the named input
-    /// chips of the given input assignment (issue #1051).
+    /// The badge states of one evaluation result: one chip per gate output pin (walked
+    /// through the tap names the result keys by), each named when its output tap carries
+    /// a persisted signal name — the tap key then differs from the raw
+    /// <c>&lt;gate&gt;.&lt;pin&gt;</c> id, so the chip reads <c>S0 = 1</c> (issue #1067),
+    /// symmetric to the named input chips of the given input assignment (issue #1051).
+    /// Unnamed outputs keep their exact anonymous chip.
     /// </summary>
     private IEnumerable<LogicGateBadgeState> BadgeStatesOf(
         IReadOnlyDictionary<string, bool> result, IReadOnlyDictionary<string, bool> inputBits)
@@ -147,7 +163,12 @@ public partial class LogicPanelViewModel
         if (_network == null)
             yield break;
         foreach (var tap in _network.OutputTaps)
-            yield return new LogicGateBadgeState(tap.Value.GateId, tap.Value.PinName, result[tap.Key]);
+        {
+            var rawTapName = $"{tap.Value.GateId}.{tap.Value.PinName}";
+            var outputSignalName = tap.Key == rawTapName ? null : tap.Key;
+            yield return new LogicGateBadgeState(
+                tap.Value.GateId, tap.Value.PinName, result[tap.Key], outputSignalName);
+        }
         var signalNamesByGate = PersistedInputSignalNamesByGate();
         foreach (var gateId in _network.Gates.Keys)
         {
@@ -161,6 +182,7 @@ public partial class LogicPanelViewModel
     {
         // The live/before results go first: clearing the selection re-pushes the live
         // badges, which must no-op once the network behind them is gone.
+        StopPlayback();
         _liveResult = null;
         _liveInputBits = null;
         _replayBeforeResult = null;

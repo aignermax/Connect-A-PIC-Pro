@@ -1,3 +1,4 @@
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.BusView;
 using CommunityToolkit.Mvvm.ComponentModel;
 
 namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
@@ -5,9 +6,10 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// <summary>
 /// One network-level output tap of the assembled logic network, shown as a live
 /// 0/1 indicator in the Logic panel. A tap named by an output signal shows that
-/// name; the raw tapped pin rides along for the tooltip.
+/// name; the raw tapped pin rides along for the tooltip. Doubles as a plain
+/// (non-grouped) Outputs row of the bus view (issue #1068).
 /// </summary>
-public partial class LogicNetworkOutputViewModel : ObservableObject
+public partial class LogicNetworkOutputViewModel : LogicOutputRowViewModel
 {
     /// <summary>Initializes the indicator for the output tap named <paramref name="pinName"/>.</summary>
     public LogicNetworkOutputViewModel(string pinName)

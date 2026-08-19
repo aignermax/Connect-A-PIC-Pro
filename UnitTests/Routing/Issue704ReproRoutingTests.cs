@@ -23,7 +23,7 @@ public class Issue704ReproRoutingTests
     /// <summary>Taper pin o1 absolute position from the repro files.</summary>
     private const double TaperPinY = 816.626565747488;
 
-    [Fact(Skip = "terminal-approach collision check requires ownership-aware grid cells; retracted from this PR")]
+    [Fact]
     public void OverlappingWaveguidesRepro_NeighboringPortRoutes_DoNotSilentlyOverlap()
     {
         // Geometry of overlappingwaveguides.lun: the Taper pin sits 5.9 µm below
@@ -60,10 +60,21 @@ public class Issue704ReproRoutingTests
 
         foreach (var connection in manager.Connections)
         {
-            var gridPath = connection.RoutedPath?.DebugGridPath;
-            if (gridPath == null) continue;
-            PathLoopDetector.IsSelfIntersecting(gridPath).ShouldBeFalse(
+            var path = connection.RoutedPath;
+            path.ShouldNotBeNull($"route {connection} produced no path at all");
+
+            // Engine-agnostic invariant: the smoothed waveguide geometry must
+            // never cross itself, no matter which routing engine built it.
+            PathIntersectionDetector.HasSelfIntersection(path).ShouldBeFalse(
                 $"route {connection} must never cross itself");
+
+            // Grid-level invariant for A*-routed connections: no grid cell may
+            // be visited twice by the path body (the 360° loop symptom).
+            if (path.DebugGridPath != null)
+            {
+                PathLoopDetector.IsSelfIntersecting(path.DebugGridPath).ShouldBeFalse(
+                    $"route {connection} visits a grid cell twice");
+            }
         }
     }
 

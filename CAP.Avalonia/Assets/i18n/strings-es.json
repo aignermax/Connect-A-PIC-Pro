@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Selecciona exactamente un grupo para ver si se comporta como una puerta lógica.",
   "TruthTable.Outputs": "Salidas:",
   "TruthTable.Signal": "Señal:",
+  "TruthTable.SignalWarnCrossRole": "\"{0}\" nombra tanto una entrada como una salida — el ensamblado de la red rechaza un nombre que abarca dos roles.",
+  "TruthTable.SignalWarnDuplicateOutput": "La salida de otra puerta ya usa \"{0}\" — los nombres de salida deben ser únicos.",
   "TruthTable.SignalWatermark": "nombre de señal (opcional)",
   "TruthTable.Threshold": "Umbral:",
   "TruthTable.Title": "Tabla de verdad:",
@@ -1332,6 +1334,8 @@
   "LogicPanelHelp.RestorationBody": "Una cascada óptica pasiva no restaura niveles: la potencia de la luz se debilita e interfiere de etapa en etapa, así que tras unas dos etapas los niveles analógicos ya no se leen como bits limpios. La capa lógica evalúa en cambio la tabla de verdad de cada puerta: cada salida vuelve a ser exactamente 0 o 1, de modo que redes de cualquier profundidad se componen limpiamente. Así funciona también la electrónica digital real sobre transistores analógicos.",
   "LogicPanelHelp.InputsTitle": "Un interruptor por entrada de puerta sin conectar",
   "LogicPanelHelp.InputsBody": "Cada entrada de puerta sin conectar en el lienzo se convierte en una entrada de red llamada PUERTA.PIN: en el ejemplo del semisumador, los sumandos A y B se reparten cada uno en cuatro interruptores. Cambia todos los pines de un sumando a la vez para fijar su bit.",
+  "LogicPanelHelp.BusTitle": "Las señales indexadas se leen como buses decimales",
+  "LogicPanelHelp.BusBody": "Las señales que comparten un prefijo y terminan en un índice — A0 a A3 — se agrupan en una línea de bus, por ejemplo A = 3 (0011). El índice 0 es el bit menos significativo. Escribe un número decimal en el campo junto a un bus de entrada para fijar sus bits de una vez; el valor se limita al ancho del bus.",
   "Analysis.LogicPanel.DesignEdited": "El diseño cambió: se descartó la red lógica. Constrúyala de nuevo para ver los estados en vivo.",
   "LogicPanel.FanOutWarning.Title": "Advertencia de fan-out óptico",
   "LogicPanel.FanOutWarning.GateLine": "La salida de puerta '{0}' alimenta {1} entradas de puerta.",
@@ -1366,6 +1370,9 @@
   "LogicPanel.ReplayNext": "Siguiente ▶",
   "LogicPanel.ReplayTime": "mostrando t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Volver en vivo",
+  "LogicPanel.PlaybackPlay": "▶ Reproducir",
+  "LogicPanel.PlaybackPause": "⏸ Pausa",
   "LogicPanelTimelineHelp.ReplayTitle": "Recorre la onda paso a paso",
-  "LogicPanelTimelineHelp.ReplayBody": "Haz clic en una fila (o en los botones Anterior/Siguiente) y las insignias del lienzo se congelan en ese instante: cada puerta que ya ha conmutado muestra su nuevo nivel y cada puerta más abajo en la lista aún muestra el anterior — el cambio se propaga visiblemente por el chip. Haz clic de nuevo en la fila o en 'Volver en vivo' para regresar al estado final estable. Los tiempos solo se consultan del modelo de retardos; nada se vuelve a simular."
+  "LogicPanelTimelineHelp.ReplayBody": "Haz clic en una fila (o en los botones Anterior/Siguiente) y las insignias del lienzo se congelan en ese instante: cada puerta que ya ha conmutado muestra su nuevo nivel y cada puerta más abajo en la lista aún muestra el anterior — el cambio se propaga visiblemente por el chip. Haz clic de nuevo en la fila o en 'Volver en vivo' para regresar al estado final estable. Los tiempos solo se consultan del modelo de retardos; nada se vuelve a simular.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Pulsa '▶ Reproducir' y la onda avanza sola: un evento cada 0,6 segundos. El ritmo es didáctico, no a escala: los eventos de conmutación reales están separados solo por picosegundos."
 }

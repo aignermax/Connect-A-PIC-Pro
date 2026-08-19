@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "仅选中一个分组,即可查看它是否表现得像一个逻辑门。",
   "TruthTable.Outputs": "输出:",
   "TruthTable.Signal": "信号:",
+  "TruthTable.SignalWarnCrossRole": "“{0}”同时用作输入和输出的名称——网络构建会拒绝跨两种角色的名称。",
+  "TruthTable.SignalWarnDuplicateOutput": "另一个门的输出已使用“{0}”——输出名称必须唯一。",
   "TruthTable.SignalWatermark": "信号名称（可选）",
   "TruthTable.Threshold": "阈值:",
   "TruthTable.Title": "真值表:",
@@ -1332,6 +1334,8 @@
   "LogicPanelHelp.RestorationBody": "无源光学级联没有电平恢复:光功率逐级衰减并发生干涉,大约两级之后模拟电平就无法再读作干净的比特。逻辑层改为评估每个门自身的真值表——每个门输出重新变为严格的 0 或 1,因此任意深度的网络都能干净地组合。现实中的数字电子学在模拟晶体管之上也是这样工作的。",
   "LogicPanelHelp.InputsTitle": "每个未连接的门输入对应一个开关",
   "LogicPanelHelp.InputsBody": "画布上每个未连接的门输入都会成为名为 门.引脚 的网络输入——在半加器示例中,加数 A 和 B 各自扇出到四个开关。同时切换同一加数的所有引脚即可设置其比特。",
+  "LogicPanelHelp.BusTitle": "带索引的信号显示为十进制总线",
+  "LogicPanelHelp.BusBody": "前缀相同且以索引结尾的信号(如 A0 到 A3)会合并为一行总线,例如 A = 3 (0011)。索引 0 是最低有效位(LSB)。在输入总线旁的输入框中键入十进制数即可一次设置所有位;数值会被限制在总线宽度允许的范围内。",
   "Analysis.LogicPanel.DesignEdited": "设计已更改,逻辑网络已被丢弃。请重新构建以查看实时状态。",
   "LogicPanel.FanOutWarning.Title": "光学扇出警告",
   "LogicPanel.FanOutWarning.GateLine": "门输出 '{0}' 驱动 {1} 个门输入。",
@@ -1366,6 +1370,9 @@
   "LogicPanel.ReplayNext": "下一步 ▶",
   "LogicPanel.ReplayTime": "正在显示 t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "返回实时状态",
+  "LogicPanel.PlaybackPlay": "▶ 播放",
+  "LogicPanel.PlaybackPause": "⏸ 暂停",
   "LogicPanelTimelineHelp.ReplayTitle": "逐步观看波纹传播",
-  "LogicPanelTimelineHelp.ReplayBody": "点击某一行(或使用上一步/下一步按钮),画布上的徽章就会定格在该时刻:已经翻转的门显示新电平,列表中更靠后的门仍显示旧电平——变化在芯片上清晰可见地逐级传播。再次点击该行或点击“返回实时状态”,即可回到稳定的最终状态。时间仅从延迟模型中查取,不会重新进行仿真。"
+  "LogicPanelTimelineHelp.ReplayBody": "点击某一行(或使用上一步/下一步按钮),画布上的徽章就会定格在该时刻:已经翻转的门显示新电平,列表中更靠后的门仍显示旧电平——变化在芯片上清晰可见地逐级传播。再次点击该行或点击“返回实时状态”,即可回到稳定的最终状态。时间仅从延迟模型中查取,不会重新进行仿真。",
+  "LogicPanelTimelineHelp.PlaybackBody": "按下“▶ 播放”后,波纹将自动前进——每 0.6 秒一个事件。该节奏仅用于教学演示,并非真实比例:实际的开关事件之间仅相隔皮秒。"
 }

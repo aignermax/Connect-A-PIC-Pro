@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Wähle genau eine Gruppe aus, um zu sehen, ob sie sich wie ein Logikgatter verhält.",
   "TruthTable.Outputs": "Ausgänge:",
   "TruthTable.Signal": "Signalname:",
+  "TruthTable.SignalWarnCrossRole": "„{0}“ benennt sowohl einen Eingang als auch einen Ausgang — der Netzwerk-Build lehnt Namen ab, die zwei Rollen überspannen.",
+  "TruthTable.SignalWarnDuplicateOutput": "Der Ausgang eines anderen Gatters verwendet „{0}“ bereits — Ausgangsnamen müssen eindeutig sein.",
   "TruthTable.SignalWatermark": "Signalname (optional)",
   "TruthTable.Threshold": "Schwellwert:",
   "TruthTable.Title": "Wahrheitstabelle:",
@@ -1332,6 +1334,8 @@
   "LogicPanelHelp.RestorationBody": "Eine passive optische Kaskade restauriert keine Pegel: Die Lichtleistung schwächt sich ab und interferiert von Stufe zu Stufe, sodass die analogen Pegel nach etwa zwei Stufen nicht mehr als saubere Bits lesbar sind. Die Logikebene wertet stattdessen die eigene Wahrheitstabelle jedes Gatters aus — jeder Gatterausgang ist wieder exakt 0 oder 1, sodass Netzwerke beliebiger Tiefe sauber komponieren. So funktioniert auch reale Digitalelektronik über analogen Transistoren.",
   "LogicPanelHelp.InputsTitle": "Ein Schalter pro unverbundenem Gattereingang",
   "LogicPanelHelp.InputsBody": "Jeder auf dem Canvas unverbundene Gattereingang wird ein Netzwerk-Eingang namens GATTER.PIN — im Half-Adder-Beispiel fächern die Summanden A und B auf je vier Schalter auf. Schalte alle Pins eines Summanden gemeinsam, um sein Bit zu setzen.",
+  "LogicPanelHelp.BusTitle": "Indizierte Signale lesen sich als Dezimal-Busse",
+  "LogicPanelHelp.BusBody": "Signale mit gemeinsamem Präfix und Index am Ende — A0 bis A3 — fassen sich zu einer Buszeile zusammen, zum Beispiel A = 3 (0011). Index 0 ist das niedrigstwertige Bit (LSB). Tippe eine Dezimalzahl in das Feld neben einem Eingangs-Bus, um alle Bits auf einmal zu setzen; der Wert wird auf die Bus-Breite begrenzt.",
   "Analysis.LogicPanel.DesignEdited": "Das Design wurde geändert — das Logiknetzwerk wurde verworfen. Baue es erneut, um die Live-Zustände zu sehen.",
   "LogicPanel.FanOutWarning.Title": "Warnung: Optische Aufspaltung (Fan-out)",
   "LogicPanel.FanOutWarning.GateLine": "Gatterausgang '{0}' treibt {1} Gattereingänge.",
@@ -1366,6 +1370,9 @@
   "LogicPanel.ReplayNext": "Weiter ▶",
   "LogicPanel.ReplayTime": "Anzeige bei t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Zurück zu Live",
+  "LogicPanel.PlaybackPlay": "▶ Abspielen",
+  "LogicPanel.PlaybackPause": "⏸ Anhalten",
   "LogicPanelTimelineHelp.ReplayTitle": "Die Welle Schritt für Schritt",
-  "LogicPanelTimelineHelp.ReplayBody": "Klicke auf eine Zeile (oder die Zurück/Weiter-Schaltflächen) und die Badges auf der Zeichenfläche frieren zu diesem Zeitpunkt ein: Jedes Gatter, das bereits geschaltet hat, zeigt seinen neuen Pegel, jedes Gatter weiter unten in der Liste noch seinen alten — die Änderung läuft sichtbar über den Chip. Klicke die Zeile erneut oder auf 'Zurück zu Live', um zum stabilen Endzustand zurückzukehren. Die Zeiten werden nur aus dem Verzögerungsmodell nachgeschlagen; nichts wird neu simuliert."
+  "LogicPanelTimelineHelp.ReplayBody": "Klicke auf eine Zeile (oder die Zurück/Weiter-Schaltflächen) und die Badges auf der Zeichenfläche frieren zu diesem Zeitpunkt ein: Jedes Gatter, das bereits geschaltet hat, zeigt seinen neuen Pegel, jedes Gatter weiter unten in der Liste noch seinen alten — die Änderung läuft sichtbar über den Chip. Klicke die Zeile erneut oder auf 'Zurück zu Live', um zum stabilen Endzustand zurückzukehren. Die Zeiten werden nur aus dem Verzögerungsmodell nachgeschlagen; nichts wird neu simuliert.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Mit '▶ Abspielen' läuft die Welle von selbst — ein Ereignis alle 0,6 Sekunden. Das Tempo ist didaktisch, nicht maßstäblich: Die echten Schaltvorgänge liegen nur Pikosekunden auseinander."
 }

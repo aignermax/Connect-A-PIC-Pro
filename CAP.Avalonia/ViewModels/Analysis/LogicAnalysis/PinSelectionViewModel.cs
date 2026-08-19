@@ -39,4 +39,13 @@ public partial class PinSelectionViewModel : ObservableObject
     /// </summary>
     [ObservableProperty]
     private bool _signalEditingVisible;
+
+    /// <summary>
+    /// Live collision hint for the typed signal name (issue #1071): mirrors what the
+    /// <c>LogicNetworkBuilder</c> would reject — a duplicate output tap or a name
+    /// spanning both an input and an output. Empty while the name is clean; the view
+    /// hides the hint then. Warning only — the build keeps its authoritative rejection.
+    /// </summary>
+    [ObservableProperty]
+    private string _signalWarning = "";
 }

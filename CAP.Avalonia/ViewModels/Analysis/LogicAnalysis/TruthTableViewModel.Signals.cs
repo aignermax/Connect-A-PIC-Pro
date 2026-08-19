@@ -1,3 +1,4 @@
+using CAP_Core.Analysis.LogicAnalysis;
 using CAP_Core.Components.Core;
 
 namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
@@ -91,5 +92,51 @@ public partial class TruthTableViewModel
     {
         foreach (var pin in InputPins.Concat(OutputPins))
             pin.SignalEditingVisible = value;
+    }
+
+    /// <summary>
+    /// Recomputes the live collision hint on every input and output row (issue #1071):
+    /// the typed name is checked against the persisted assignments of every gate group
+    /// on the canvas — the same source <c>LogicNetworkBuilder</c> validates at build
+    /// time — so a duplicate output name or a name spanning both roles warns at typing
+    /// time instead of minutes later. Same-named inputs merge by design and stay silent.
+    /// </summary>
+    private void RefreshCollisionHints()
+    {
+        foreach (var pin in InputPins.Concat(OutputPins))
+            pin.SignalWarning = ComputeCollisionHint(pin);
+    }
+
+    /// <summary>The localized hint for one row's current signal name, empty while the name is clean.</summary>
+    private string ComputeCollisionHint(PinSelectionViewModel pin)
+    {
+        if (_group == null || !pin.IsChecked || pin.SignalName.Trim().Length == 0)
+            return "";
+        var kind = SignalNameCollisionProbe.Classify(
+            GateGroups(), _group, pin.PinName, InputPins.Contains(pin), pin.SignalName);
+        var key = kind switch
+        {
+            SignalCollisionKind.DuplicateOutput => "TruthTable.SignalWarnDuplicateOutput",
+            SignalCollisionKind.CrossRole => "TruthTable.SignalWarnCrossRole",
+            _ => null,
+        };
+        return key == null ? "" : string.Format(Translate(key), pin.SignalName.Trim());
+    }
+
+    /// <summary>
+    /// The gate groups feeding the collision walk: the canvas's assignment-carrying
+    /// groups, with the selected group appended — it is the live source of edits and
+    /// must be walked even when no canvas was given or the component never joined it.
+    /// </summary>
+    private IReadOnlyList<ComponentGroup> GateGroups()
+    {
+        var canvasGroups = _canvas?.Components
+            .Select(c => c.Component)
+            .OfType<ComponentGroup>()
+            .Where(g => g.TruthTablePinAssignment != null)
+            .ToList() ?? new List<ComponentGroup>();
+        if (_group?.TruthTablePinAssignment != null && !canvasGroups.Contains(_group))
+            canvasGroups.Add(_group);
+        return canvasGroups;
     }
 }

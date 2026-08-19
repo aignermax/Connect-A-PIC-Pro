@@ -1272,6 +1272,8 @@
   "TruthTable.NoGroupSelected": "Select exactly one group to see whether it behaves like a logic gate.",
   "TruthTable.Outputs": "Outputs:",
   "TruthTable.Signal": "Signal:",
+  "TruthTable.SignalWarnCrossRole": "'{0}' names both an input and an output — the network build rejects a name spanning two roles.",
+  "TruthTable.SignalWarnDuplicateOutput": "Another gate's output already uses '{0}' — output names must be unique.",
   "TruthTable.SignalWatermark": "signal name (optional)",
   "TruthTable.Threshold": "Threshold:",
   "TruthTable.Title": "Truth Table:",
@@ -1332,6 +1334,8 @@
   "LogicPanelHelp.RestorationBody": "A passive optical cascade has no level restoration: light power fades and interferes from stage to stage, so after about two stages the analog levels no longer read as clean bits. The logic layer evaluates each gate's own truth table instead — every gate output is exactly 0 or 1 again, so networks of any depth compose cleanly. That is how real digital electronics works over analog transistors, too.",
   "LogicPanelHelp.InputsTitle": "One toggle per unconnected gate input",
   "LogicPanelHelp.InputsBody": "Every gate input left unconnected on the canvas becomes a network input named GATE.PIN — in the half-adder example the addends A and B each fan out to four toggles. Switch all pins of one addend together to set its bit.",
+  "LogicPanelHelp.BusTitle": "Indexed signals read as decimal buses",
+  "LogicPanelHelp.BusBody": "Signals whose names share a prefix and end in an index — A0 to A3 — group into one bus line, for example A = 3 (0011). Index 0 is the least-significant bit. Type a decimal number into the field next to an input bus to set its bits at once; the value clamps to what the bus width can hold.",
   "Analysis.LogicPanel.DesignEdited": "The design changed — the logic network was discarded. Build it again to see live states.",
   "LogicPanel.FanOutWarning.Title": "Optical fan-out warning",
   "LogicPanel.FanOutWarning.GateLine": "Gate output '{0}' drives {1} gate inputs.",
@@ -1366,6 +1370,9 @@
   "LogicPanel.ReplayNext": "Next ▶",
   "LogicPanel.ReplayTime": "showing t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Back to live",
+  "LogicPanel.PlaybackPlay": "▶ Play",
+  "LogicPanel.PlaybackPause": "⏸ Pause",
   "LogicPanelTimelineHelp.ReplayTitle": "Step through the ripple",
-  "LogicPanelTimelineHelp.ReplayBody": "Click a row (or the Prev/Next buttons) and the canvas badges freeze at that instant: every gate that has already switched shows its new level, every gate further down the list still shows its old one — the change visibly ripples across the chip. Click the row again or 'Back to live' to return to the settled end state. The times are only looked up from the delay model; nothing is re-simulated."
+  "LogicPanelTimelineHelp.ReplayBody": "Click a row (or the Prev/Next buttons) and the canvas badges freeze at that instant: every gate that has already switched shows its new level, every gate further down the list still shows its old one — the change visibly ripples across the chip. Click the row again or 'Back to live' to return to the settled end state. The times are only looked up from the delay model; nothing is re-simulated.",
+  "LogicPanelTimelineHelp.PlaybackBody": "Press '▶ Play' and the ripple advances on its own — one event every 0.6 seconds. The pacing is didactic, not to scale: the real switch events are only picoseconds apart."
 }
