@@ -137,6 +137,7 @@ public partial class LogicPanelViewModel : ObservableObject
         _canvas?.LogicGateStates.Clear();
         HasFanOutWarnings = false;
         CriticalPathText = "";
+        ClearTimeline();
         foreach (var input in Inputs)
             input.PropertyChanged -= OnInputPropertyChanged;
         Inputs.Clear();
@@ -160,6 +161,7 @@ public partial class LogicPanelViewModel : ObservableObject
         foreach (var output in Outputs)
             output.IsOne = result[output.PinName];
         ShowGateStateBadges(result);
+        UpdateTimeline(bits);
     }
 
     /// <summary>
