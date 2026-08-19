@@ -56,6 +56,14 @@ public partial class TruthTableViewModel : ObservableObject
     [ObservableProperty]
     private string _wavelengthText = "";
 
+    /// <summary>
+    /// True when the selected group carries a persisted pin assignment (after an
+    /// extraction or a load) — only then do the input rows offer the editable
+    /// signal-name field (issue #1033), because the edits write into that assignment.
+    /// </summary>
+    [ObservableProperty]
+    private bool _signalNamesVisible;
+
     /// <summary>External pins of the selected group offered as logic inputs (checkboxes).</summary>
     public ObservableCollection<PinSelectionViewModel> InputPins { get; } = new();
 
@@ -95,6 +103,7 @@ public partial class TruthTableViewModel : ObservableObject
         BiasSummaryText = "";
         RebuildPinLists();
         PrefillFromPersistedAssignment();
+        SignalNamesVisible = IsGroupSelected && _group?.TruthTablePinAssignment != null;
         WavelengthText = IsGroupSelected
             ? string.Format(Translate("TruthTable.Wavelength"), ResolveWavelengthNm())
             : "";
@@ -126,6 +135,7 @@ public partial class TruthTableViewModel : ObservableObject
         {
             _revertingPinCheck = false;
         }
+        PrefillSignalNames(saved);
     }
 
     /// <summary>Ticks the checkbox of every listed pin that still exists on the group.</summary>
@@ -150,7 +160,11 @@ public partial class TruthTableViewModel : ObservableObject
 
         foreach (var pin in _group.ExternalPins)
         {
-            InputPins.Add(CreatePin(pin.Name));
+            var input = CreatePin(pin.Name);
+            // OnSignalNamesVisibleChanged only fires on change — freshly rebuilt rows
+            // take the flag explicitly so an unchanged value still reaches them.
+            input.SignalEditingVisible = SignalNamesVisible;
+            InputPins.Add(input);
             OutputPins.Add(CreatePin(pin.Name));
             BiasPins.Add(CreatePin(pin.Name));
         }
@@ -174,13 +188,27 @@ public partial class TruthTableViewModel : ObservableObject
     /// Enforces the pin-role invariants directly at the checkbox: a pin is at most one
     /// of input, output, or bias (checking it in one list revokes it in the other two),
     /// and at most <see cref="TruthTableExtractor.MaxLogicInputs"/> inputs may be checked.
+    /// Signal-name edits write through to the group's persisted assignment, and a pin
+    /// losing its input role drops its signal identity (issue #1033).
     /// </summary>
     private void OnPinPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (sender is not PinSelectionViewModel pin)
+            return;
+        if (e.PropertyName == nameof(PinSelectionViewModel.SignalName))
+        {
+            if (!_revertingPinCheck && InputPins.Contains(pin))
+                ApplySignalNameEdit(pin);
+            return;
+        }
         if (_revertingPinCheck || e.PropertyName != nameof(PinSelectionViewModel.IsChecked))
             return;
-        if (sender is not PinSelectionViewModel pin || !pin.IsChecked)
+        if (!pin.IsChecked)
+        {
+            if (InputPins.Contains(pin))
+                RevokeSignalName(pin);
             return;
+        }
 
         _revertingPinCheck = true;
         try
@@ -202,8 +230,13 @@ public partial class TruthTableViewModel : ObservableObject
             if (list.Contains(checkedPin))
                 continue;
             var twin = list.FirstOrDefault(p => p.PinName == checkedPin.PinName);
-            if (twin != null)
-                twin.IsChecked = false;
+            if (twin == null)
+                continue;
+            twin.IsChecked = false;
+            // The guard above suppresses the twin's own uncheck handler, so the
+            // input-role loss revokes its signal identity explicitly here.
+            if (ReferenceEquals(list, InputPins))
+                RevokeSignalName(twin);
         }
     }
 
