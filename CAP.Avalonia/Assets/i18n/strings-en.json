@@ -574,6 +574,7 @@
   "Library.NoGroupsLoaded": "No groups loaded",
   "Library.NoSavedGroups": "No saved groups",
   "Load.PinCalibrationChanged": "Pin calibration of '{0}' changed since this design was saved — its routes were recalculated.",
+  "Load.DuplicatePinConnectionsDropped": "Warning: {0} connection(s) were dropped because a pin already had a wire — this file may have been produced by a newer version or edited externally.",
   "MainView.ResetZoom": "Reset",
   "MainView.Simulate": "Simulate (L)",
   "ModeProbe.AutoInstallIncomplete": "Auto-install of '{0}' did not complete — see Settings → Python environment for details, or run: pip install {0}",

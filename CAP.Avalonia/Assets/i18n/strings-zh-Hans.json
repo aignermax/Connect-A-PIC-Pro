@@ -574,6 +574,7 @@
   "Library.NoGroupsLoaded": "未加载任何分组",
   "Library.NoSavedGroups": "没有已保存的分组",
   "Load.PinCalibrationChanged": "自保存此设计以来，“{0}”的引脚校准已更改——其布线已重新计算。",
+  "Load.DuplicatePinConnectionsDropped": "警告：{0} 条连接被丢弃，因为引脚已有连线——此文件可能由更新版本生成或被外部编辑过。",
   "MainView.ResetZoom": "重置",
   "MainView.Simulate": "仿真 (L)",
   "ModeProbe.AutoInstallIncomplete": "'{0}' 的自动安装未完成——详情请见 设置 → Python 环境，或运行：pip install {0}",
