@@ -355,6 +355,7 @@
   "Examples.NotGate.Description": "你的第一个逻辑门:用一个 NAND 搭建 NOT。",
   "Examples.OrGate.Description": "用 NOT 和 AND 模块搭建 OR 门。",
   "Examples.RippleCarryAdder.Description": "把全加器串成 4 位行波进位加法器——344 个门,一个结果。",
+  "Examples.SrLatch.Description": "两个交叉耦合的 NAND 寄存器记住一个比特——你的第一个存储电路。",
   "ErrorConsole.ClearTip": "清空控制台",
   "ErrorConsole.CopyAllTip": "将所有条目复制到剪贴板",
   "ErrorConsole.Title": "错误控制台",

@@ -51,6 +51,23 @@ public class ExamplesManifestLocalizationTests
             .ShouldBe(entries.Count, "manifest ranks must be unique to keep the ladder order deterministic");
     }
 
+    [Fact]
+    public void CuratedLadder_ListsTheSrLatch_AfterTheFourBitAdder()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var adderIndex = ladder.FindIndex(example => example.Name == "Logic Gate 4-Bit Adder");
+        adderIndex.ShouldBeGreaterThanOrEqualTo(0, "the 4-bit adder rung must stay curated");
+
+        var latchIndex = ladder.FindIndex(example => example.Name == "Logic Gate SR-Latch");
+        latchIndex.ShouldBeGreaterThan(adderIndex,
+            "the SR latch is the first sequential rung — it follows the datapath rungs");
+        ladder[latchIndex].Level.ShouldBe("Sequential");
+        ladder[latchIndex].DescriptionKey.ShouldBe("Examples.SrLatch.Description");
+    }
+
     private static List<ManifestEntry> ReadManifestEntries()
     {
         var manifestPath = Path.Combine(FindRepoRoot(), "examples", "examples.json");

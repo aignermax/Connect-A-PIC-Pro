@@ -355,6 +355,7 @@
   "Examples.NotGate.Description": "最初の論理ゲート:NAND 1つで作るNOT。",
   "Examples.OrGate.Description": "NOTとANDのブロックからORゲートを作る。",
   "Examples.RippleCarryAdder.Description": "全加算器を連ねて4ビット・リップルキャリー加算器へ — 344ゲートで1つの結果。",
+  "Examples.SrLatch.Description": "2つのNANDレジスタを交差結合して1ビットを記憶する — 初めてのメモリ回路。",
   "ErrorConsole.ClearTip": "コンソールをクリア",
   "ErrorConsole.CopyAllTip": "すべてのエントリをクリップボードにコピー",
   "ErrorConsole.Title": "エラーコンソール",

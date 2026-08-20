@@ -355,6 +355,7 @@
   "Examples.NotGate.Description": "Your first logic gate: a NOT built from a single NAND.",
   "Examples.OrGate.Description": "Build an OR gate from NOT and AND building blocks.",
   "Examples.RippleCarryAdder.Description": "Chain full adders into a 4-bit ripple-carry adder — 344 gates, one result.",
+  "Examples.SrLatch.Description": "Two cross-coupled NAND registers remember one bit — your first memory circuit.",
   "ErrorConsole.ClearTip": "Clear console",
   "ErrorConsole.CopyAllTip": "Copy all entries to clipboard",
   "ErrorConsole.Title": "Error Console",
