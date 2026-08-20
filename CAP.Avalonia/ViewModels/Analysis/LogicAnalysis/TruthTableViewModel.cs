@@ -101,6 +101,15 @@ public partial class TruthTableViewModel : ObservableObject
         Rows.Clear();
         StatusText = "";
         BiasSummaryText = "";
+        _revertingPinCheck = true;
+        try
+        {
+            IsRegister = _group?.TruthTablePinAssignment?.IsRegister ?? false;
+        }
+        finally
+        {
+            _revertingPinCheck = false;
+        }
         RebuildPinLists();
         PrefillFromPersistedAssignment();
         SignalNamesVisible = IsGroupSelected && _group?.TruthTablePinAssignment != null;

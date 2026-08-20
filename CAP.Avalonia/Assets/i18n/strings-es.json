@@ -1282,6 +1282,8 @@
   "TruthTable.Inputs": "Entradas (máx. 4):",
   "TruthTable.NoGroupSelected": "Selecciona exactamente un grupo para ver si se comporta como una puerta lógica.",
   "TruthTable.Outputs": "Salidas:",
+  "TruthTable.Register": "Registro (elemento de estado)",
+  "TruthTable.RegisterHint": "Las salidas mantienen su valor confirmado; el Step del panel Lógica muestrea las entradas y las confirma. Un bucle de realimentación solo es válido a través de un registro — así se construye un latch.",
   "TruthTable.Signal": "Señal:",
   "TruthTable.SignalWarnCrossRole": "\"{0}\" nombra tanto una entrada como una salida — el ensamblado de la red rechaza un nombre que abarca dos roles.",
   "TruthTable.SignalWarnDuplicateOutput": "La salida de otra puerta ya usa \"{0}\" — los nombres de salida deben ser únicos.",

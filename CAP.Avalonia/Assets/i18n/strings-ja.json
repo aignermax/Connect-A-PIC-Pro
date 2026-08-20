@@ -1282,6 +1282,8 @@
   "TruthTable.Inputs": "入力（最大 4）:",
   "TruthTable.NoGroupSelected": "グループを 1 つだけ選択すると、論理ゲートとして振る舞うか確認できます。",
   "TruthTable.Outputs": "出力:",
+  "TruthTable.Register": "レジスタ（状態要素）",
+  "TruthTable.RegisterHint": "出力は確定した値を保持します。ロジックパネルのステップが入力をサンプリングして確定します。フィードバックループはレジスタ経由でのみ有効です — これがラッチの作り方です。",
   "TruthTable.Signal": "信号:",
   "TruthTable.SignalWarnCrossRole": "「{0}」は入力と出力の両方を指しています — 二つの役割にまたがる名前はネットワークのビルドで拒否されます。",
   "TruthTable.SignalWarnDuplicateOutput": "別のゲートの出力がすでに「{0}」を使用しています — 出力名は一意にする必要があります。",

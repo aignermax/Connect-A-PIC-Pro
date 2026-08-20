@@ -32,6 +32,8 @@ public class TruthTablePanelRenderTests
         "TruthTable.NoGroupSelected",
         "TruthTable.Inputs",
         "TruthTable.Outputs",
+        "TruthTable.Register",
+        "TruthTable.RegisterHint",
         "TruthTable.Bias",
         "TruthTable.BiasSummary",
         "TruthTable.Threshold",
@@ -119,7 +121,8 @@ public class TruthTablePanelRenderTests
                 .Any(t => t.Text == hint)
                 .ShouldBeTrue("the panel must explain that exactly one group needs to be selected");
             panel.GetVisualDescendants().OfType<CheckBox>()
-                .ShouldBeEmpty("no group selected — no pin checkboxes");
+                .Where(c => c.IsEffectivelyVisible)
+                .ShouldBeEmpty("no group selected — no pin checkboxes rendered");
         }
         finally
         {
@@ -148,9 +151,12 @@ public class TruthTablePanelRenderTests
             Dispatcher.UIThread.RunJobs();
 
             var checkBoxes = panel.GetVisualDescendants().OfType<CheckBox>().ToList();
-            checkBoxes.Count.ShouldBe(9, "3 external pins offered as inputs, as outputs, and as bias");
+            checkBoxes.Count.ShouldBe(10, "3 external pins offered as inputs, as outputs, and as bias, plus the register toggle");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("a");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("y");
+            var registerLabel = LocalizationService.Instance.Translate("TruthTable.Register");
+            checkBoxes.Select(c => c.Content?.ToString()).ShouldContain(registerLabel,
+                "the register toggle renders with its localized label");
         }
         finally
         {

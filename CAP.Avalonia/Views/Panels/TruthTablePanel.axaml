@@ -140,6 +140,14 @@
             </StackPanel>
             <TextBlock Text="{Binding RightPanel.TruthTable.WavelengthText}" Foreground="Gray" FontSize="10" Margin="0,0,0,5"/>
 
+            <!-- Register designation (#1098): the group's persisted IsRegister flag —
+                 feedback loops through the network are legal only via a register. -->
+            <CheckBox Content="{loc:Localize TruthTable.Register}"
+                      IsChecked="{Binding RightPanel.TruthTable.IsRegister}"
+                      Foreground="LightGray" FontSize="11" Margin="0,4,0,0"/>
+            <TextBlock Text="{loc:Localize TruthTable.RegisterHint}" Foreground="Gray" FontSize="9"
+                       TextWrapping="Wrap" Margin="24,1,0,5"/>
+
             <StackPanel Orientation="Horizontal" Margin="0,5,0,5">
                 <Button Content="{loc:Localize TruthTable.Extract}"
                         Command="{Binding RightPanel.TruthTable.ExtractCommand}"
