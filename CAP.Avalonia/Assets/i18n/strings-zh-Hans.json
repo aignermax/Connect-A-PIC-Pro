@@ -1402,6 +1402,7 @@
   "LogicPanel.ReplayTime": "正在显示 t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "返回实时状态",
   "LogicPanel.Registers": "寄存器:",
+  "LogicGate.RegisterMarker.Tooltip": "寄存器：在下一个时钟步之前保持其已提交的输出。",
   "LogicPanel.StepClock": "时钟单步",
   "LogicPanel.PlaybackPlay": "▶ 播放",
   "LogicPanel.PlaybackPause": "⏸ 暂停",

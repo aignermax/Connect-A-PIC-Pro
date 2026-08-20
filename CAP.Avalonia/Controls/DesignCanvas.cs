@@ -188,6 +188,9 @@ public class DesignCanvas : Control
             // Logic-state badges (#994) ride on top of the gate groups like the
             // analysis overlay: a chip must never sink under a component fill.
             LogicGateStateBadgeRenderer.Render(context, rc);
+            // Register markers sit at the group's top-left corner, opposite the
+            // badges: visible on load, following the Register toggle live.
+            LogicGateRegisterMarkerRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
             // Cut tool overlay: guide lines and insertion candidates sit above
             // components and waveguides so the clickable markers are never obscured.

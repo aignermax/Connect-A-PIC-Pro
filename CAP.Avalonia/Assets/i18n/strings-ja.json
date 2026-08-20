@@ -1402,6 +1402,7 @@
   "LogicPanel.ReplayTime": "t = {0:0.0} ps を表示中",
   "LogicPanel.ReplayExit": "ライブ状態に戻る",
   "LogicPanel.Registers": "レジスタ:",
+  "LogicGate.RegisterMarker.Tooltip": "レジスタ: コミットされた出力を次のクロックステップまで保持します。",
   "LogicPanel.StepClock": "クロックを1ステップ進める",
   "LogicPanel.PlaybackPlay": "▶ 再生",
   "LogicPanel.PlaybackPause": "⏸ 一時停止",
