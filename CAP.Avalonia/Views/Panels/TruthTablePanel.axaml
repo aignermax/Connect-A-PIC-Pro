@@ -22,6 +22,12 @@
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
                                    Text="{loc:Localize TruthTableHelp.Intro}"/>
 
+                        <!-- Real-S-matrix honesty (#1101): the table is extracted from
+                             the actual optical simulation, not an idealized digital answer. -->
+                        <TextBlock Text="{loc:Localize TruthTableHelp.SimulationTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.SimulationBody}"/>
+
                         <TextBlock Text="{loc:Localize TruthTableHelp.ThresholdTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize TruthTableHelp.ThresholdBody}"/>
