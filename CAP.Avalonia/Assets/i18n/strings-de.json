@@ -1399,6 +1399,8 @@
   "LogicPanelTimelineHelp.PhysicsBody": "Im Wellenleiter bewegt sich Licht mit Lichtgeschwindigkeit geteilt durch den Gruppenindex (c/n_g ≈ c/4,2 für Silizium). Die Verzögerung eines Gatters ist seine interne optische Weglänge mal n_g/c — ein 100-µm-Pfad kostet etwa 1,4 ps. Laufzeiten der Verbindungen kommen obendrauf: Jede gezeigte Pikosekunde ist eine echte Strecke, die das Licht zurücklegen musste.",
   "LogicPanelTimelineHelp.OrderTitle": "Der langsamste Eingang entscheidet",
   "LogicPanelTimelineHelp.OrderBody": "Ein Gatter schaltet erst, wenn jeder seiner sich ändernden Eingänge angekommen ist — der längste Pfad zu diesem Gatter bestimmt seine Schaltzeit. Das letzte Ereignis der Liste ist das langsamste Signal dieses Umschaltens; es liegt nie später als die unten gezeigte Zahl des kritischen Pfads, denn der kritische Pfad ist der schlimmste Fall über alle möglichen Umschaltungen.",
+  "LogicPanelTimelineHelp.ClockTitle": "Taktschritte ziehen eine Trennlinie",
+  "LogicPanelTimelineHelp.ClockBody": "Jeder Druck auf „Takt weiterschalten“ hängt seine Ereignisse hinter einer Trennzeile „── Takt #k ──“ an — der Ablauf liest sich so: Oberhalb der Zeile hatten sich die Eingänge eingependelt, an der Zeile übernimmt jedes Register den abgetasteten Wert, und darunter pflanzen sich die neuen Ausgänge durchs Netzwerk fort. Die Wiederholung schreitet geradewegs über die Grenze hinweg — eine Zeile unterhalb der Trennzeile zeigt die Schaltung nach dieser Taktflanke.",
   "LogicPanel.ReplayPrev": "◀ Zurück",
   "LogicPanel.ReplayNext": "Weiter ▶",
   "LogicPanel.ReplayTime": "Anzeige bei t = {0:0.0} ps",
