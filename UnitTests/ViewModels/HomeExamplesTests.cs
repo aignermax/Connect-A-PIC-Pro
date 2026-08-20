@@ -108,4 +108,29 @@ public class HomeExamplesTests : IDisposable
             Directory.Delete(emptyRoot, recursive: true);
         }
     }
+
+    [Fact]
+    public void CuratedExample_ExposesResolvedDescription_UncuratedHasNone()
+    {
+        var examplesDir = Path.Combine(_examplesRoot, "examples");
+        File.WriteAllText(Path.Combine(examplesDir, "curated.lun"), "{}");
+        File.WriteAllText(Path.Combine(examplesDir, "examples.json"), """
+            { "examples": [ { "file": "curated.lun", "rank": 1, "level": "Basics", "descriptionKey": "Examples.NotGate.Description" } ] }
+            """);
+
+        var home = CreateHomeViewModel();
+
+        var curated = home.Examples.Single(e => e.Name == "curated");
+        curated.DescriptionKey.ShouldBe("Examples.NotGate.Description");
+        curated.Level.ShouldBe("Basics");
+        curated.Description.ShouldNotBeNullOrEmpty();
+        curated.Description.ShouldNotBe("Examples.NotGate.Description",
+            "the description must be resolved through the string tables, not leak the raw key");
+
+        var uncurated = home.Examples.Single(e => e.Name == "demo-circuit");
+        uncurated.DescriptionKey.ShouldBeNull();
+        uncurated.Description.ShouldBeEmpty();
+
+        home.Examples.First().Name.ShouldBe("curated", "the curated ladder entry sorts before uncurated files");
+    }
 }
