@@ -1406,6 +1406,7 @@
   "LogicPanel.Registers": "Registers:",
   "LogicGate.RegisterMarker.Tooltip": "Register: holds its committed output until the next clock step.",
   "LogicPanel.StepClock": "Step clock",
+  "LogicPanel.ResetRegisters": "Reset",
   "LogicPanel.ClockDivider": "── clock {0} ──",
   "LogicPanel.PlaybackPlay": "▶ Play",
   "LogicPanel.PlaybackPause": "⏸ Pause",

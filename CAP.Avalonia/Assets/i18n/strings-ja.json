@@ -1406,6 +1406,7 @@
   "LogicPanel.Registers": "レジスタ:",
   "LogicGate.RegisterMarker.Tooltip": "レジスタ: コミットされた出力を次のクロックステップまで保持します。",
   "LogicPanel.StepClock": "クロックを1ステップ進める",
+  "LogicPanel.ResetRegisters": "リセット",
   "LogicPanel.ClockDivider": "── クロック {0} ──",
   "LogicPanel.PlaybackPlay": "▶ 再生",
   "LogicPanel.PlaybackPause": "⏸ 一時停止",

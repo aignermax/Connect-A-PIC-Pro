@@ -105,6 +105,31 @@ public partial class LogicPanelViewModel
         NextTimelineEventCommand.NotifyCanExecuteChanged();
     }
 
+    /// <summary>
+    /// Restarts the timeline at the fresh settle phase of a register reset (issue
+    /// #1127): the clock history and any replay artifact go, the clock counter
+    /// returns to 0 (the next step opens "clock #1" again), and the reset's own
+    /// commit/ripple entries become the whole timeline — a settle phase like the
+    /// one after a toggle, so no clock divider. The before-state of the new
+    /// timeline is the pre-reset settling <paramref name="preResetResult"/>, so
+    /// replaying the reset's entries keeps the invariant of issue #1058. A quiet
+    /// reset (every register already read 0) leaves the timeline empty.
+    /// </summary>
+    private void RestartTimelineAtFreshSettle(
+        IReadOnlyList<LogicSwitchEvent> resetEvents,
+        IReadOnlyDictionary<string, bool> preResetResult)
+    {
+        ClearTimeline();
+        if (resetEvents.Count == 0)
+            return;
+        _replayBeforeResult = preResetResult;
+        foreach (var e in resetEvents)
+            TimelineEvents.Add(new LogicTimelineEventViewModel(e));
+        HasTimelineEvents = true;
+        PreviousTimelineEventCommand.NotifyCanExecuteChanged();
+        NextTimelineEventCommand.NotifyCanExecuteChanged();
+    }
+
     /// <summary>Two input assignments are equal when every named bit matches.</summary>
     private static bool BitsEqual(
         IReadOnlyDictionary<string, bool> a, IReadOnlyDictionary<string, bool> b) =>

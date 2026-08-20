@@ -1406,6 +1406,7 @@
   "LogicPanel.Registers": "Registros:",
   "LogicGate.RegisterMarker.Tooltip": "Registro: mantiene su salida confirmada hasta el siguiente paso de reloj.",
   "LogicPanel.StepClock": "Avanzar un ciclo de reloj",
+  "LogicPanel.ResetRegisters": "Restablecer",
   "LogicPanel.ClockDivider": "── reloj {0} ──",
   "LogicPanel.PlaybackPlay": "▶ Reproducir",
   "LogicPanel.PlaybackPause": "⏸ Pausa",

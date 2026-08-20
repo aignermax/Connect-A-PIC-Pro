@@ -13,7 +13,8 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// principle 4): the physical mapping of a register (e.g. an SA-based latch on an
 /// InP platform) comes later — no fake optics. Registers power up cleared
 /// (logic 0 on every output pin) — a documented convention of the behavioral
-/// model, not a physical claim.
+/// model, not a physical claim; <see cref="ResetRegisters"/> returns to this
+/// state without rebuilding the network.
 /// </summary>
 public sealed partial class LogicNetworkEvaluator
 {
@@ -24,8 +25,8 @@ public sealed partial class LogicNetworkEvaluator
 
     /// <summary>
     /// The committed state of every register output pin. Empty for a purely
-    /// combinational network. Read-only: the state advances only through
-    /// <see cref="Step"/>.
+    /// combinational network. Read-only: the state changes only through
+    /// <see cref="Step"/> and <see cref="ResetRegisters"/>.
     /// </summary>
     public IReadOnlyDictionary<LogicPinRef, bool> RegisterState => _committedRegisterOutputs;
 
@@ -91,6 +92,45 @@ public sealed partial class LogicNetworkEvaluator
             .OrderBy(pin => pin.GateId, StringComparer.Ordinal)
             .ThenBy(pin => pin.PinName, StringComparer.Ordinal)
             .Select(pin => new LogicSwitchEvent(0.0, pin.GateId, pin.PinName, _committedRegisterOutputs[pin]));
+        var ripple = LogicEventTimeline.ComputeRegisterRipple(this, settledBefore, _lastSettledOutputs, changed);
+        return commits.Concat(ripple).ToList();
+    }
+
+    /// <summary>
+    /// Returns every register to its power-up state — all committed outputs
+    /// cleared — without rebuilding the network: truth tables, wiring, and delays
+    /// stay valid (issue #1127). When the network was settled before, it re-settles
+    /// with the same input bits afterwards, so the next <see cref="Step"/> samples
+    /// the post-reset state. A purely combinational network has nothing to reset —
+    /// the call is a no-op then.
+    /// </summary>
+    /// <returns>
+    /// The timeline entries of the reset, relative to the reset instant at t = 0:
+    /// one commit entry per register output pin that fell back to 0, then the
+    /// downstream ripple of the post-reset settling in <see cref="LogicEventTimeline"/>
+    /// order — nothing is recomputed, this is what the reset just did. Empty when
+    /// every register already read 0 (a quiet reset) or when the network has no
+    /// registers at all.
+    /// </returns>
+    public IReadOnlyList<LogicSwitchEvent> ResetRegisters()
+    {
+        var changed = _committedRegisterOutputs
+            .Where(pair => pair.Value)
+            .Select(pair => pair.Key)
+            .OrderBy(pin => pin.GateId, StringComparer.Ordinal)
+            .ThenBy(pin => pin.PinName, StringComparer.Ordinal)
+            .ToList();
+        foreach (var pin in _committedRegisterOutputs.Keys.ToList())
+            _committedRegisterOutputs[pin] = false;
+
+        // A never-evaluated network is still at power-up — changed is empty then.
+        if (_lastInputBits == null || changed.Count == 0)
+            return Array.Empty<LogicSwitchEvent>();
+        var settledBefore = _lastSettledOutputs!;
+        _lastSettledOutputs = EvaluateGateOutputs(_lastInputBits);
+
+        var commits = changed
+            .Select(pin => new LogicSwitchEvent(0.0, pin.GateId, pin.PinName, false));
         var ripple = LogicEventTimeline.ComputeRegisterRipple(this, settledBefore, _lastSettledOutputs, changed);
         return commits.Concat(ripple).ToList();
     }

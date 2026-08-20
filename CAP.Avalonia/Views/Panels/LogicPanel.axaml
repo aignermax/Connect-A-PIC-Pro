@@ -213,13 +213,18 @@
             <!-- Register state (#1099, rung 5 sequential slice): the Step-clock
                  button advances every designated register by one clock; the readout
                  keeps the held state visible even when the canvas badges are
-                 off-screen. Shown only when the network contains a register. -->
-            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,2"
+                 off-screen. Reset (#1127) returns the registers to their power-up
+                 state without rebuilding the network. Shown only when the network
+                 contains a register. -->
+            <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,2"
                   IsVisible="{Binding RightPanel.Logic.HasRegisters}">
                 <TextBlock Text="{loc:Localize LogicPanel.Registers}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
                 <Button Grid.Column="1" Content="{loc:Localize LogicPanel.StepClock}"
                         Command="{Binding RightPanel.Logic.StepClockCommand}"
                         Padding="6,2" FontSize="10"/>
+                <Button Grid.Column="2" Content="{loc:Localize LogicPanel.ResetRegisters}"
+                        Command="{Binding RightPanel.Logic.ResetRegistersCommand}"
+                        Padding="6,2" FontSize="10" Margin="4,0,0,0"/>
             </Grid>
             <ItemsControl ItemsSource="{Binding RightPanel.Logic.RegisterStates}"
                           IsVisible="{Binding RightPanel.Logic.HasRegisters}">

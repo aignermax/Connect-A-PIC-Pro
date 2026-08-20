@@ -1406,6 +1406,7 @@
   "LogicPanel.Registers": "Register:",
   "LogicGate.RegisterMarker.Tooltip": "Register: hält seinen übernommenen Ausgang bis zum nächsten Takt-Schritt.",
   "LogicPanel.StepClock": "Takt weiterschalten",
+  "LogicPanel.ResetRegisters": "Zurücksetzen",
   "LogicPanel.ClockDivider": "── Takt {0} ──",
   "LogicPanel.PlaybackPlay": "▶ Abspielen",
   "LogicPanel.PlaybackPause": "⏸ Anhalten",

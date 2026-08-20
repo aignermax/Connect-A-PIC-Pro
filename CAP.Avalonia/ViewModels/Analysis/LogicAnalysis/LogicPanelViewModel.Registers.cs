@@ -9,16 +9,19 @@ namespace CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 /// Register half of <see cref="LogicPanelViewModel"/> (issue #1099, rung 5): when
 /// the assembled network contains at least one designated register, the panel
 /// shows a Step-clock button that advances every register by exactly one clock
-/// (<see cref="LogicNetworkEvaluator.Step"/>) and a compact readout of the
-/// committed register outputs, so the held state stays visible even when the
-/// canvas badges are off-screen. A purely combinational network has no registers —
-/// the button is hidden and disabled then.
+/// (<see cref="LogicNetworkEvaluator.Step"/>), a Reset button that returns every
+/// register to its power-up state without rebuilding the network
+/// (<see cref="LogicNetworkEvaluator.ResetRegisters"/>, issue #1127), and a
+/// compact readout of the committed register outputs, so the held state stays
+/// visible even when the canvas badges are off-screen. A purely combinational
+/// network has no registers — the buttons are hidden and disabled then.
 /// </summary>
 public partial class LogicPanelViewModel
 {
     /// <summary>True when the assembled network contains at least one register — only then is clocking meaningful.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StepClockCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ResetRegistersCommand))]
     private bool _hasRegisters;
 
     /// <summary>One row per register gate: its committed output bits, refreshed by every clock step.</summary>
@@ -52,6 +55,34 @@ public partial class LogicPanelViewModel
         SelectedTimelineEvent = null;
         ReEvaluate();
         AppendClockStepEvents(stepEvents, preStepResult);
+        RefreshRegisterStates();
+    }
+
+    /// <summary>
+    /// Returns every register to its power-up state — all committed outputs 0 —
+    /// without rebuilding the network: the per-gate truth tables and delays stay
+    /// valid (issue #1127). The panel re-settles with the visible input toggles
+    /// (the same settle path a clock step uses), so the count snaps back and the
+    /// outputs, canvas badges, and bus rows refresh from the cleared state. The
+    /// timeline restarts at the reset's fresh settle phase — the clock counter
+    /// returns to 0, so the next step is "clock #1" again — and any active replay
+    /// or playback ends. A purely combinational network has no registers: the
+    /// button stays hidden and disabled.
+    /// </summary>
+    [RelayCommand(CanExecute = nameof(HasRegisters))]
+    private void ResetRegisters()
+    {
+        if (_network == null)
+            return;
+        // Like a clock step, the reset re-settles with the visible toggles first:
+        // the timeline's replay artifact can leave the last captured state
+        // describing stale inputs.
+        var bits = Inputs.ToDictionary(input => input.PinName, input => input.IsOn);
+        var preResetResult = _network.Evaluate(bits);
+        var resetEvents = _network.ResetRegisters();
+        StopPlayback();
+        RestartTimelineAtFreshSettle(resetEvents, preResetResult);
+        ReEvaluate();
         RefreshRegisterStates();
     }
 
