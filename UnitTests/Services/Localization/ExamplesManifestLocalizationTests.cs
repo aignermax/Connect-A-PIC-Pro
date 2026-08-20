@@ -68,6 +68,24 @@ public class ExamplesManifestLocalizationTests
         ladder[latchIndex].DescriptionKey.ShouldBe("Examples.SrLatch.Description");
     }
 
+    [Fact]
+    public void CuratedLadder_ListsTheCounter2Bit_AfterTheSrLatch()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var latchIndex = ladder.FindIndex(example => example.Name == "Logic Gate SR-Latch");
+        latchIndex.ShouldBeGreaterThanOrEqualTo(0, "the SR latch rung must stay curated");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(latchIndex,
+            "the 2-bit counter is the sequential rung after the latch — " +
+            "the datapath stone that makes the circuit run");
+        ladder[counterIndex].Level.ShouldBe("Sequential");
+        ladder[counterIndex].DescriptionKey.ShouldBe("Examples.Counter2bit.Description");
+    }
+
     private static List<ManifestEntry> ReadManifestEntries()
     {
         var manifestPath = Path.Combine(FindRepoRoot(), "examples", "examples.json");
