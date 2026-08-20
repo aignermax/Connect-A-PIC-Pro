@@ -348,6 +348,7 @@
   "EditMode.ExitTip": "Gruppen-Bearbeitungsmodus verlassen und zur Hauptzeichenfläche zurückkehren (ESC-Taste)",
   "EditMode.Title": "GRUPPEN-BEARBEITUNGSMODUS",
   "Examples.Alu.Description": "Eine 1-Bit-ALU: Das Op-Bit wählt, ob das Ergebnis das AND oder das OR der Eingänge ist.",
+  "Examples.Bit.Description": "Ein Speicherbit: Setze Load und drücke Step — das Bit speichert Din und hält den Wert.",
   "Examples.Counter2bit.Description": "Ein 2-Bit-Zähler: Drücke Step und sieh zu, wie C1C0 0, 1, 2, 3 zählt — die Schaltung läuft.",
   "Examples.AndGate.Description": "Kombiniere zwei NAND-Gatter zu einem AND-Gatter.",
   "Examples.FullAdder.Description": "Addiere zwei Bits plus Übertrag — der Baustein jedes Rechners.",
