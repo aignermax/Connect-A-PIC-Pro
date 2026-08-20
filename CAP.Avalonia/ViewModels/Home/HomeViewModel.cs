@@ -82,6 +82,13 @@ public partial class HomeViewModel : ObservableObject
     /// </summary>
     public Func<string, Task<bool>>? OpenExampleRequested { get; set; }
 
+    /// <summary>
+    /// Callback to start the first-steps guided tour on a fresh design
+    /// (issue #1080). Wired by <see cref="MainViewModel"/>; creates the new
+    /// project and activates the tour only when that succeeds.
+    /// </summary>
+    public Func<Task>? LearnTutorialRequested { get; set; }
+
     /// <summary>Initializes the Home screen and builds the recent-projects and examples lists.</summary>
     public HomeViewModel(
         RecentProjectsService recentProjectsService,
@@ -241,6 +248,13 @@ public partial class HomeViewModel : ObservableObject
     {
         if (IsHomeVisible)
             RefreshRecentProjects();
+    }
+
+    [RelayCommand]
+    private async Task LearnTutorial()
+    {
+        if (LearnTutorialRequested != null)
+            await LearnTutorialRequested();
     }
 
     [RelayCommand]

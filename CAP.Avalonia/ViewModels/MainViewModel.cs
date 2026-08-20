@@ -125,6 +125,12 @@ public partial class MainViewModel : ObservableObject
     public HomeViewModel Home { get; }
 
     /// <summary>
+    /// Step engine for the "Learn Lunima" first-steps tour (issue #1080).
+    /// Started from the Home screen's Learn card; observes the shared canvas.
+    /// </summary>
+    public ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel Tutorial { get; }
+
+    /// <summary>
     /// Design file passed on the command line, resolved by
     /// <see cref="Services.DesignFileArguments.FindDesignFile"/> in App startup.
     /// Consumed once by the main window's Loaded handler; takes precedence
@@ -296,7 +302,8 @@ public partial class MainViewModel : ObservableObject
         ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
         ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null,
         Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null,
-        ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? layerVisibility = null)
+        ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? layerVisibility = null,
+        ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel? tutorialViewModel = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         // Injected for activation: constructing the binder wires the adaptive
@@ -341,7 +348,10 @@ public partial class MainViewModel : ObservableObject
         Home.OpenProjectRequested = async () => await FileOperations.LoadDesignCommand.ExecuteAsync(null);
         Home.OpenProjectFromPathRequested = FileOperations.LoadDesignFromPathAsync;
         Home.OpenExampleRequested = FileOperations.OpenDesignAsCopyAsync;
+        Home.LearnTutorialRequested = StartTutorialOnFreshDesignAsync;
         FileOperations.ProjectOpened = Home.OnProjectOpened;
+
+        Tutorial = tutorialViewModel ?? new ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel(canvas);
 
         // Keep the window title in sync with the open file and dirty state
         FileOperations.PropertyChanged += (_, e) =>
@@ -899,6 +909,19 @@ public partial class MainViewModel : ObservableObject
 
     [RelayCommand]
     private async Task SaveDesign() => await FileOperations.SaveDesignCommand.ExecuteAsync(null);
+
+    /// <summary>
+    /// Starts the first-steps tour on a fresh design (Home "Learn Lunima" card).
+    /// When the user cancels the unsaved-changes prompt, the tour does not start
+    /// and the current design stays open.
+    /// </summary>
+    private async Task StartTutorialOnFreshDesignAsync()
+    {
+        if (!await FileOperations.TryNewProjectAsync())
+            return;
+
+        Tutorial.Start();
+    }
 
     /// <summary>
     /// Recomputes <see cref="WindowTitle"/> from the current file path and dirty state.

@@ -1194,6 +1194,13 @@
         </DockPanel>
     </DockPanel>
 
+    <!-- First-steps tutorial overlay (#1080): bottom-centre card, non-modal so the
+         canvas stays interactive while the tour watches the user's actions -->
+    <Border IsVisible="{Binding Tutorial.IsActive, FallbackValue=False}"
+            HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28">
+        <panels:FirstStepsTutorialPanel DataContext="{Binding Tutorial}"/>
+    </Border>
+
     <!-- Home screen overlay: compact centered card over the dimmed editor,
          shown until a project is opened/created; reopenable via the Home button -->
     <Border IsVisible="{Binding Home.IsHomeVisible}" Background="#B3141414">

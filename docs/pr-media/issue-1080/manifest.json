@@ -1,0 +1,6 @@
+[
+  {"file": "01-home-tutorial-with-examples.png", "caption": "Home screen after the dev-ki merge: the green 'Learn Lunima' tour entry point coexists with the curated example ladder and its one-line descriptions from #1096."},
+  {"file": "02-tour-step1-place.png", "caption": "Starting the tour shows the non-modal card at step 1/3, asking the user to place a component from the library."},
+  {"file": "03-tour-step2-connect.png", "caption": "The engine observes the real canvas: adding a component auto-advances the card to step 2/3, connecting two pins."},
+  {"file": "04-tour-step3-simulate.png", "caption": "Routing a waveguide between two pins advances to the final step 3/3, running the light simulation."}
+]
