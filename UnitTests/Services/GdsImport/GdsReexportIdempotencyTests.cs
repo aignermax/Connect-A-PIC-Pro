@@ -138,18 +138,24 @@ public class GdsReexportIdempotencyTests : IDisposable
         // ── Absolute pins per generation (the equality assertions above are only
         // meaningful against a known-good generation 1 — the same numbers
         // GdsHighestLevelRoundTripTests pins for the single round trip) ──
-        pinless1.Count.ShouldBe(38,
-            "the junction networks' polygons ride the group as frozen paths (both engine scenarios)");
-        report1.FrozenRoutePathCount.ShouldBe(38);
-        outcome1.TopCellWaveguidePolygons.Count.ShouldBe(38);
-        var expectedConnections = export1.SiepicUpgraded ? 4 : 2;
+        // SiEPIC-upgraded: 32 frozen polygons since the collision-checked
+        // terminal-approach arcs of #1084 re-fragmented the junction network
+        // (was 39). The bare-nazca arm is unexercised where the SiEPIC upgrade
+        // runs (CI, dev machines) — re-measure it if that env ever changes.
+        var expectedFrozen = export1.SiepicUpgraded ? 32 : 40;
+        pinless1.Count.ShouldBe(expectedFrozen,
+            "the junction network's polygons ride the group as frozen paths");
+        report1.FrozenRoutePathCount.ShouldBe(expectedFrozen);
+        outcome1.TopCellWaveguidePolygons.Count.ShouldBe(expectedFrozen);
+        var expectedConnections = export1.SiepicUpgraded ? 5 : 2;
         report1.ConnectedCount.ShouldBe(expectedConnections,
-            "the clean two-pin route chains restore route-derived (4 SiEPIC-upgraded: 2 MMI braids, " +
-            "crossing↔crossing, halfring↔adiabatic; 2 bare-nazca: the MMI braids only)");
+            "the clean two-pin route chains restore route-derived (5 SiEPIC-upgraded: 2 MMI braids, " +
+            "halfring↔adiabatic, bdc↔crossing, crossing↔crossing — the #888 largest-viable-radius " +
+            "arcs pick these winners; 2 bare-nazca: the MMI braids only)");
         report1.CachedRouteCount.ShouldBe(expectedConnections);
         pinned1.Count.ShouldBe(expectedConnections);
         topology1.Edges.Count.ShouldBe(expectedConnections);
-        topology1.Ports.Count.ShouldBe(export1.SiepicUpgraded ? 20 : 42,
+        topology1.Ports.Count.ShouldBe(export1.SiepicUpgraded ? 18 : 42,
             "28 labeled pins minus the restored edges × 2 (bare-nazca: 46 incl. heuristic pins)");
     }
 

@@ -31,6 +31,19 @@ internal static partial class GdsRouteConnectivityMatcher
         return false;
     }
 
+    /// <summary>
+    /// True when two pin points sit within <paramref name="toleranceUm"/> of
+    /// each other (Euclidean): an own-export top-cell port label is stamped
+    /// exactly on the coupler pin, so after F2-formatting and db-unit
+    /// quantization the two points land far inside the pin-touch tolerance.
+    /// </summary>
+    private static bool IsCoincident(GdsAbsolutePin a, GdsAbsolutePin b, double toleranceUm)
+    {
+        double dx = a.XUm - b.XUm;
+        double dy = a.YUm - b.YUm;
+        return (dx * dx) + (dy * dy) <= toleranceUm * toleranceUm;
+    }
+
     /// <summary>Even-odd point-in-polygon (ray cast towards +X; boundary hits count as inside via the outline distance).</summary>
     private static bool PointInPolygon(IReadOnlyList<GdsOutlinePoint> polygon, double x, double y)
     {

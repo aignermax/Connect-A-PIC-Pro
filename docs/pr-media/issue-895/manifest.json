@@ -1,0 +1,14 @@
+[
+  {
+    "file": "01-ungrouped-route-visible.png",
+    "caption": "After a full ungroup the imported route lives directly on the canvas; the Imported Layers panel now counts this canvas-level geometry, so its layer row exists even without any remaining group."
+  },
+  {
+    "file": "02-layer-hidden.png",
+    "caption": "Hiding the layer in the Imported Layers panel now also hides the canvas-level frozen path (previously it ignored the filter and stayed drawn)."
+  },
+  {
+    "file": "03-layer-faded.png",
+    "caption": "The per-layer opacity slider applies too: the released route draws faded at 30% like every other shape on its layer."
+  }
+]

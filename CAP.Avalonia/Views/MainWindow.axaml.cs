@@ -630,7 +630,24 @@ public partial class MainWindow : Window
     /// click activates the already-open window; the lazy index load happens in
     /// the window's own Opened hook.
     /// </summary>
-    private void OpenRegistryBrowser_Click(object? sender, RoutedEventArgs e)
+    private void OpenRegistryBrowser_Click(object? sender, RoutedEventArgs e) =>
+        OpenRegistryBrowserWindow();
+
+    /// <summary>
+    /// Link row under the local library hits (issue #772): opens the registry window
+    /// with the library search pre-filled — same window-dedup as the other entry
+    /// points, so a second click only activates the window and refreshes its search.
+    /// </summary>
+    private void OpenRegistrySearchHint_Click(object? sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm)
+            return;
+
+        vm.Registry.SearchText = vm.LeftPanel.SearchText;
+        OpenRegistryBrowserWindow();
+    }
+
+    private void OpenRegistryBrowserWindow()
     {
         if (_registryBrowserWindow is { IsVisible: true } existing)
         {
@@ -675,6 +692,15 @@ public partial class MainWindow : Window
             var (width, height) = GetActualViewportSize();
             vm.ZoomToFit(width, height);
         }
+    }
+
+    /// <summary>
+    /// Scrolls the Design Checks panel into view after the "Check design" menu entry
+    /// ran the validation (the bound command does the checking itself).
+    /// </summary>
+    private void CheckDesignMenuItem_Click(object? sender, RoutedEventArgs e)
+    {
+        DesignChecksPanelHost.BringIntoView();
     }
 
     /// <summary>

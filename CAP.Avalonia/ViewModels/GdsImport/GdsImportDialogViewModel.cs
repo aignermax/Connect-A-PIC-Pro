@@ -127,6 +127,17 @@ public partial class GdsImportDialogViewModel : ObservableObject
     [ObservableProperty]
     private bool _rerouteConnectionsRequested = true;
 
+    /// <summary>
+    /// Auto-connect all pins after placement (default: off, issue #880). Every
+    /// remaining pair of facing, still-unconnected pins is routed with Lunima's
+    /// router (direct/S-bend first, A* fallback, crossing insertion). Opt-in per
+    /// import: manual geometry stays the default, and on large imports the pass
+    /// takes a while (progress in the status line, cancellable — already-routed
+    /// pairs are kept).
+    /// </summary>
+    [ObservableProperty]
+    private bool _autoConnectAllPinsRequested;
+
     /// <summary>True once an import finished successfully; switches the dialog to the result view.</summary>
     [ObservableProperty]
     [NotifyPropertyChangedFor(nameof(ShowOptions))]
@@ -253,6 +264,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
         ImportCompleted = false;
         Warnings.Clear();
         Infos.Clear();
+        ClearPinSuggestions();
         PopulateCensus(Array.Empty<CAP_DataAccess.Import.Gds.LayerCensus.GdsLayerCensusEntry>());
         StatusText = LocalizationService.Instance.Translate("GdsImport.StatusAnalyzing");
         // Capture the token BEFORE the first await: a window close mid-run
@@ -342,7 +354,7 @@ public partial class GdsImportDialogViewModel : ObservableObject
             token.ThrowIfCancellationRequested();
             var plan = GdsPlacementPlan.FromOutcome(outcome);
             var report = await _placementExecutor.ExecuteAsync(
-                plan, progress, token, RerouteConnectionsRequested);
+                plan, progress, token, RerouteConnectionsRequested, AutoConnectAllPinsRequested);
 
             foreach (var warning in outcome.Warnings)
                 Warnings.Add(warning);

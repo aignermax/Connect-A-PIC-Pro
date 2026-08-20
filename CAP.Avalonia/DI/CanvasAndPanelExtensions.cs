@@ -67,6 +67,8 @@ internal static class CanvasAndPanelExtensions
         // Right panel sub-ViewModels
         services.AddSingleton<ChipSizeViewModel>();
         services.AddTransient<ParameterSweepViewModel>();
+        services.AddTransient<ViewModels.Analysis.LogicAnalysis.TruthTableViewModel>();
+        services.AddTransient<ViewModels.Analysis.LogicAnalysis.LogicPanelViewModel>();
         services.AddTransient<ViewModels.Analysis.CircuitOptimization.CircuitOptimizationViewModel>();
         services.AddTransient<OnaSweepViewModel>();
         services.AddTransient<RoutingDiagnosticsViewModel>();
@@ -99,6 +101,8 @@ internal static class CanvasAndPanelExtensions
 
         // Bottom panel sub-ViewModels
         services.AddTransient<ConnectionRoutingViewModel>();
+        services.AddTransient<LengthMatchingViewModel>();
+        services.AddTransient<ViewModels.Canvas.RerouteImported.RerouteImportedRoutesViewModel>();
         services.AddTransient<ElementLockViewModel>();
         services.AddTransient<ErrorConsoleViewModel>();
 

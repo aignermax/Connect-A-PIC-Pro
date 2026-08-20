@@ -51,10 +51,15 @@ public static class SingleProcessPolicy
     /// snapshot when the active process has no computable fingerprint. Null (unwired caller)
     /// falls back to the snapshot, preserving prior behavior.
     /// </param>
+    /// <param name="chipletName">
+    /// Name of the target chiplet when the check runs against a chiplet's process scope
+    /// (issue #935) instead of the canvas lock; changes the block message's wording only.
+    /// </param>
     public static (bool IsAllowed, string? BlockReason) CheckPlacement(
         ActiveProcessSelection? active, string? componentPdkName,
         IReadOnlyCollection<string>? processAgnosticPdkNames = null,
-        IReadOnlyCollection<string>? liveMemberPdkNames = null)
+        IReadOnlyCollection<string>? liveMemberPdkNames = null,
+        string? chipletName = null)
     {
         if (IsExempt(componentPdkName, processAgnosticPdkNames))
             return (true, null);
@@ -66,9 +71,17 @@ public static class SingleProcessPolicy
         if (effectiveMembers.Contains(componentPdkName!, StringComparer.OrdinalIgnoreCase))
             return (true, null);
 
+        if (!string.IsNullOrWhiteSpace(chipletName))
+        {
+            return (false,
+                $"This component belongs to '{componentPdkName}', but chiplet '{chipletName}' " +
+                $"fabricates in the process '{active.DisplayName}' — a chiplet uses one process. " +
+                "Place the component outside the chiplet, or use Playground to mix processes.");
+        }
+
         return (false,
             $"This component belongs to '{componentPdkName}', but the chip is locked to the process " +
             $"'{active.DisplayName}'. A monolithic design uses one process — start a new design (or use " +
-            "Playground) to mix processes.");
+            "Playground) to mix processes. Content grouped as its own chiplet carries its own process.");
     }
 }

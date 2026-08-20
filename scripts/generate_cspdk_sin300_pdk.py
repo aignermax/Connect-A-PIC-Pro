@@ -88,6 +88,30 @@ XSECTION_SPECS = [
     ("heater_metal", "Metal", "HEATER", "Heater trace metal"),
 ]
 
+# Foundry DRC values from the public CORNERSTONE SiN 300nm documents (cspdk references/,
+# issue #920). The foundry's KLayout pre-DRC script enforces Table 4 of the MPW-13 Design
+# Guidelines: min. gap 250 nm and min. feature width 250 nm on GDS 203 (NITRIDE, light
+# field). The guidelines' ">=10 µm between waveguides" line is a crosstalk recommendation,
+# NOT a hard DRC rule, so it is not the spacing floor. Bend minima come from cspdk's own
+# tech constants (radius_nc/radius_no = 30, applied as radius_min — keep reading them from
+# the activated PDK below so a cspdk change is caught on regeneration); the published
+# guidelines define no hard bend-radius rule.
+DRC_MIN_WAVEGUIDE_SPACING_UM = 0.25
+DRC_OPTICAL_MIN_WIDTH_UM = 0.25
+DRC_PROCESS_SOURCE = (
+    "Min. waveguide gap 250 nm: CORNERSTONE SiN 300nm MPW-13 Design Guidelines, "
+    "section 5.4 Table 4 (GDS 203 NITRIDE, light field) - the limit the foundry KLayout "
+    "pre-DRC script flags as 'Minimum gap violation' (references/CORNERSTONE_Pre_DRC.pdf "
+    "in gdsfactory/cspdk). The guidelines' >=10 um waveguide separation is a crosstalk "
+    "recommendation, not a hard DRC rule."
+)
+DRC_XSECTION_SOURCE = (
+    "Min. waveguide width 250 nm: CORNERSTONE SiN 300nm MPW-13 Design Guidelines, "
+    "section 5.4 Table 4 (GDS 203 NITRIDE min. feature size). Min. bend radius 30 um: "
+    "cspdk.sin300 tech constants radius_nc/radius_no applied as radius_min "
+    "(gdsfactory/cspdk); the published guidelines define no hard bend-radius minimum."
+)
+
 
 def _num(v):
     """kdb.DBox left/right/top/bottom are float properties; width()/height() are methods;
@@ -320,20 +344,26 @@ def build_layers(sin):
 
 def build_xsections():
     """Real cross-section width/bend-radius numbers from cspdk.sin300's activated PDK
-    (gf.get_cross_section), not invented — see XSECTION_SPECS."""
+    (gf.get_cross_section), not invented — see XSECTION_SPECS. Optical sections
+    additionally carry the foundry DRC limits (see DRC_* constants, #920)."""
     import gdsfactory as gf
     xsections = []
     for name, kind, layer_name, description in XSECTION_SPECS:
         xs = gf.get_cross_section(name)
-        xsections.append({
+        entry = {
             "name": name,
             "kind": kind,
             "widthUm": round(float(xs.width), 3),
-            "minRadiusUm": round(float(xs.radius_min or 0), 3),
-            "recommendedRadiusUm": round(float(xs.radius or 0), 3),
-            "layers": [layer_name],
-            "description": description,
-        })
+        }
+        if kind == "Optical":
+            entry["minWidthUm"] = DRC_OPTICAL_MIN_WIDTH_UM
+        entry["minRadiusUm"] = round(float(xs.radius_min or 0), 3)
+        entry["recommendedRadiusUm"] = round(float(xs.radius or 0), 3)
+        entry["layers"] = [layer_name]
+        entry["description"] = description
+        if kind == "Optical":
+            entry["drcSource"] = DRC_XSECTION_SOURCE
+        xsections.append(entry)
     return xsections
 
 
@@ -384,6 +414,9 @@ def main():
                 {"name": "Si3N4", "role": "core"},
                 {"name": "SiO2", "role": "cladding"},
             ],
+            # Foundry-true DRC limits for DRC-lite (#920) — see the DRC_* constants above.
+            "minWaveguideSpacingUm": DRC_MIN_WAVEGUIDE_SPACING_UM,
+            "drcSource": DRC_PROCESS_SOURCE,
         },
         "components": sorted(components, key=lambda c: (c["category"], c["name"])),
     }

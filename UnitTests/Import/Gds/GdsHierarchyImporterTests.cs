@@ -738,6 +738,44 @@ public class GdsHierarchyImporterTests
     }
 
     [Fact]
+    public async Task Explode_TopCellRoutePolygon_WithOwnExportPortLabelOnPin_StillBecomesRouteDerivedConnection()
+    {
+        // The whole-layout export stamps a top-cell port label exactly on every
+        // coupler pin. Re-importing that file makes the route network read as a
+        // 3-pin junction (both real pins + the label) unless the coincident
+        // label is recognized as the SAME joint — the coupler-terminated route
+        // must still become a real connection, and the label must stay an
+        // unconsumed external port.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgA", 0, 0)
+                .SRef("wgB", 15000, 0)
+                .Boundary(1, 0, (10000, 1750), (15000, 1750), (15000, 2250), (10000, 2250), (10000, 1750))
+                .Text(1, 10, "wgc_out", 10000, 2000) // own-export port label exactly on wgA.out
+            .EndCell()
+            .WaveguideCell("wgA")
+            .WaveguideCell("wgB")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(library, "TOP", new GdsHierarchyImportOptions());
+
+        result.TopCellWaveguidePolygons.ShouldBeEmpty(
+            "the label is the same joint as the pin it sits on, not a third junction party");
+        var connection = result.Connections.ShouldHaveSingleItem();
+        connection.IsRouteDerived.ShouldBeTrue();
+        connection.A.InstanceIndex.ShouldBe(0);
+        connection.A.PinName.ShouldBe("out");
+        connection.B.InstanceIndex.ShouldBe(1);
+        connection.B.PinName.ShouldBe("in");
+        result.Infos.ShouldNotContain(i => i.Contains("junction"),
+            "a port label coincident with a touched pin is not junction topology");
+        result.Infos.ShouldContain(i => i.Contains("restored as 1 real connection(s) (re-routable)"));
+        result.Warnings.ShouldBeEmpty();
+    }
+
+    [Fact]
     public async Task Explode_TopCellOwnGeometryOnlyOnNonWaveguideLayers_BecomesBackgroundGeometry()
     {
         var library = await ReadLibraryAsync(GdsTestWriter.Create()
@@ -1270,6 +1308,43 @@ public class GdsHierarchyImporterTests
         result.Warnings.ShouldContain(w => w.Contains("duplicate pin name 'heur_1'") && w.Contains("heur_1_2"));
     }
 
+    // ── Excluded guessed pins ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task Explode_ExcludedGuessedPin_RemovedFromDraftAndSurvivorKeepsName()
+    {
+        // A cell with no port labels: the edge heuristic produces two pins
+        // (heur_1 on the left edge, heur_2 on the right edge). When the user
+        // removes heur_1 in the dialog, the exclusion must reach the importer
+        // and the surviving pin must keep the name the dialog showed.
+        var library = await ReadLibraryAsync(GdsTestWriter.Create()
+            .StandardPrologue()
+            .BeginCell("TOP")
+                .SRef("wgNoLabel", 0, 0)
+            .EndCell()
+            .UnlabeledWaveguideCell("wgNoLabel")
+            .EndLibrary()
+            .ToArray());
+
+        var result = await GdsHierarchyImporter.ImportAsync(
+            library, "TOP", new GdsHierarchyImportOptions
+            {
+                ExcludedGuessedPins = new[] { new GdsGuessedPin("wgNoLabel", "heur_1") },
+            });
+
+        var draft = result.ImportedCellDrafts.ShouldHaveSingleItem();
+        draft.Pins.Select(p => p.Name).ShouldBe(new[] { "heur_2" });
+        draft.Pins[0].XUm.ShouldBe(10, Tolerance);
+        draft.Pins[0].AngleDegrees.ShouldBe(0, Tolerance);
+
+        // No abutment exists with only one pin per instance.
+        result.Connections.ShouldBeEmpty();
+
+        // The instance's pin set follows the filtered draft.
+        var instance = result.Instances.ShouldHaveSingleItem();
+        instance.CellDraftName.ShouldBe("wgNoLabel");
+    }
+
     // ── Multi-line metadata labels ───────────────────────────────────────────
 
     [Fact]
@@ -1676,5 +1751,16 @@ file static class GdsHierarchyTestCells
                 .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
                 .Text(1, 10, "in", 0, inY)
                 .Text(1, 10, "out", 10000, outY)
+            .EndCell();
+
+    /// <summary>
+    /// Same geometry as <see cref="WaveguideCell"/> but without port labels, so
+    /// the edge heuristic is the only source of pins.
+    /// </summary>
+    public static GdsTestWriter UnlabeledWaveguideCell(this GdsTestWriter writer, string name) =>
+        writer
+            .BeginCell(name)
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
             .EndCell();
 }

@@ -5,6 +5,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Avalonia.Controls;
 using CAP.Avalonia.ViewModels.Library;
+using CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser;
 using CAP.Avalonia.ViewModels.Hierarchy;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.Services;
@@ -24,6 +25,7 @@ public partial class LeftPanelViewModel : ObservableObject
     private readonly UserPreferencesService _preferencesService;
     private readonly ErrorConsoleService? _errorConsole;
     private readonly AddCustomComponentDependencies? _addCustomComponentDeps;
+    private readonly RegistryBrowserViewModel? _registryBrowser;
 
     private readonly List<PdkDraft> _loadedPdkDrafts = new();
 
@@ -44,6 +46,15 @@ public partial class LeftPanelViewModel : ObservableObject
 
     [ObservableProperty]
     private double _libraryScrollOffset = 0.0;
+
+    /// <summary>
+    /// In-library link row to the online component registry (issue #772): empty while
+    /// hidden; either a hit count against the already-loaded registry index or — when
+    /// the index was never loaded this session — a neutral "search the registry" prompt.
+    /// Clicking opens the registry window with this search pre-filled (view-side).
+    /// </summary>
+    [ObservableProperty]
+    private string _registrySearchHintText = "";
 
     [ObservableProperty]
     private GroupTemplate? _selectedGroupTemplate;
@@ -88,19 +99,31 @@ public partial class LeftPanelViewModel : ObservableObject
         PdkManagerViewModel pdkManager,
         ComponentLibraryViewModel componentLibrary,
         ErrorConsoleService? errorConsole = null,
-        AddCustomComponentDependencies? addCustomComponentDeps = null)
+        AddCustomComponentDependencies? addCustomComponentDeps = null,
+        RegistryBrowserViewModel? registryBrowser = null)
     {
         _canvas = canvas;
         _pdkLoader = pdkLoader;
         _preferencesService = preferencesService;
         _errorConsole = errorConsole;
         _addCustomComponentDeps = addCustomComponentDeps;
+        _registryBrowser = registryBrowser;
 
         HierarchyPanel = hierarchyPanel;
         PdkManager = pdkManager;
         ComponentLibrary = componentLibrary;
 
         PdkManager.OnFilterChanged = FilterComponents;
+
+        if (_registryBrowser is not null)
+            _registryBrowser.Components.CollectionChanged += (_, _) => UpdateRegistrySearchHint();
+
+        // Like the search text, the hint must re-translate on a live UI language switch.
+        LocalizationService.Instance.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(LocalizationService.ActiveLanguageCode))
+                UpdateRegistrySearchHint();
+        };
     }
 
     /// <summary>
@@ -184,7 +207,7 @@ public partial class LeftPanelViewModel : ObservableObject
                 foreach (var pdkComp in pdk.Components)
                 {
                     var template = ConvertPdkComponentToTemplate(
-                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection);
+                        pdkComp, pdk.Name, pdk.NazcaModuleName, pdk.GdsFactoryRoutingCrossSection, pdk.Process);
                     template.IsCustom = false;
                     AllTemplates.Add(template);
                     componentCount++;
@@ -232,7 +255,47 @@ public partial class LeftPanelViewModel : ObservableObject
             FilteredTemplates.Add(t);
 
         SavePdkFilterState();
+        UpdateRegistrySearchHint();
     }
+
+    /// <summary>
+    /// Recomputes the registry link row from the current search text. Hits are counted
+    /// against the registry browser's locally known index (the loaded in-memory copy,
+    /// otherwise the on-disk cache) — the library search must never trigger a network
+    /// roundtrip (issue #772). When no index is locally known or the cached copy has
+    /// no hits, a neutral prompt keeps the online registry discoverable; an empty
+    /// search hides the row.
+    /// </summary>
+    private void UpdateRegistrySearchHint()
+    {
+        var query = SearchText?.Trim() ?? "";
+        if (query.Length == 0)
+        {
+            RegistrySearchHintText = "";
+            return;
+        }
+
+        if (_registryBrowser is not { HasIndexLoaded: true } registry)
+        {
+            var cachedHits = _registryBrowser?.CountDiskCachedSearchHits(query);
+            RegistrySearchHintText = cachedHits is > 0
+                ? FormatHitCount(cachedHits.Value)
+                : LocalizationService.Instance.Translate("Registry.SearchHintFallback");
+            return;
+        }
+
+        var hits = registry.Components.Count(c => MatchesRegistryQuery(c, query));
+        RegistrySearchHintText = hits == 0 ? "" : FormatHitCount(hits);
+    }
+
+    private static string FormatHitCount(int hits) =>
+        string.Format(CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("Registry.SearchHintHits"), hits);
+
+    /// <summary>Free-text match identical to the registry window's own filter.</summary>
+    private static bool MatchesRegistryQuery(RegistryComponentItemViewModel item, string query) =>
+        item.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+        || item.Description.Contains(query, StringComparison.OrdinalIgnoreCase);
 
     private static bool MatchesSearch(ComponentTemplate t, string query)
     {
@@ -363,7 +426,7 @@ public partial class LeftPanelViewModel : ObservableObject
             int addedCount = 0;
             foreach (var pdkComp in pdk.Components)
             {
-                var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName);
+                var template = ConvertPdkComponentToTemplate(pdkComp, pdk.Name, pdk.NazcaModuleName, process: pdk.Process);
                 template.IsCustom = true;
                 AllTemplates.Add(template);
                 if (!Categories.Contains(template.Category))
@@ -388,7 +451,8 @@ public partial class LeftPanelViewModel : ObservableObject
 
     private static ComponentTemplate ConvertPdkComponentToTemplate(
         PdkComponentDraft pdkComp, string pdkName, string? nazcaModuleName,
-        string? gdsFactoryRoutingCrossSection = null)
+        string? gdsFactoryRoutingCrossSection = null,
+        CAP_DataAccess.Components.ComponentDraftMapper.DTOs.ProcessDefinition? process = null)
         => PdkTemplateConverter.ConvertToTemplate(
-            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection);
+            pdkComp, pdkName, nazcaModuleName, gdsFactoryRoutingCrossSection, process);
 }

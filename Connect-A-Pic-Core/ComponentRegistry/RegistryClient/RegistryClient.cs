@@ -58,6 +58,15 @@ public class RegistryClient
         FetchAsync<RegistryIndex>(IndexPath, forceRefresh, cancellationToken);
 
     /// <summary>
+    /// Returns the locally cached registry index without any network access,
+    /// or null when no usable cached copy exists. Powers the component-library
+    /// online-hits hint (issue #772): the library search must never trigger a
+    /// download, so it matches against whatever the cache already holds.
+    /// </summary>
+    public RegistryIndex? TryGetCachedIndex() =>
+        TryReadFromCache<RegistryIndex>(IndexPath)?.Value;
+
+    /// <summary>
     /// Fetches a component manifest.
     /// </summary>
     /// <param name="manifestPath">Repo-relative manifest path from <see cref="RegistryIndexEntry.Path"/>.</param>

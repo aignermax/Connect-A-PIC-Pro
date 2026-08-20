@@ -53,7 +53,9 @@ import sys
 
 def extract_coords(gds_path: str) -> dict:
     """
-    Extract all geometric coordinates from a GDS file.
+    Extract all geometric coordinates from a GDS file, preferring gdspy and
+    falling back to gdstk (the GDS reader the repo's CI toolchain installs)
+    when gdspy is not installed.
 
     Parameters
     ----------
@@ -66,13 +68,25 @@ def extract_coords(gds_path: str) -> dict:
         Structured coordinate data (see module docstring for schema).
     """
     try:
-        import gdspy
+        import gdspy  # noqa: F401
+    except ImportError:
+        pass
+    else:
+        return _extract_coords_gdspy(gds_path)
+
+    try:
+        import gdstk  # noqa: F401
     except ImportError:
         raise ImportError(
-            "gdspy is required for GDS coordinate extraction.\n"
-            "Install with: pip install gdspy"
+            "gdspy or gdstk is required for GDS coordinate extraction.\n"
+            "Install with: pip install gdspy  (or: pip install gdstk)"
         )
 
+    return _extract_coords_gdstk(gds_path)
+
+
+def _extract_coords_gdspy(gds_path: str) -> dict:
+    import gdspy
     lib = gdspy.GdsLibrary(infile=gds_path)
 
     user_unit = lib.unit          # metres per user unit (typically 1e-6 for µm)
@@ -129,6 +143,57 @@ def extract_coords(gds_path: str) -> dict:
             origin = ref.origin if ref.origin is not None else [0, 0]
             cell_data["refs"].append({
                 "ref_cell": ref_name,
+                "origin": [round(float(origin[0]), 6), round(float(origin[1]), 6)],
+                "rotation": round(float(ref.rotation or 0), 6),
+                "magnification": round(float(ref.magnification or 1), 6),
+                "x_reflection": bool(ref.x_reflection)
+            })
+
+        result["cells"].append(cell_data)
+
+    return result
+
+
+def _extract_coords_gdstk(gds_path: str) -> dict:
+    """
+    Fallback extractor using gdstk (installed by the repo's CI toolchain, unlike
+    gdspy). Emits polygons and cell references identically to the gdspy path;
+    legacy GDS PATH elements collapse into polygons there, which is all the
+    produced (nazca) exports write either way.
+    """
+    import gdstk
+
+    lib = gdstk.read_gds(gds_path)
+
+    result = {
+        "gds_file": os.path.abspath(gds_path),
+        "units": {
+            "user_unit_m": lib.unit,
+            "db_unit_m": lib.precision,
+        },
+        "cells": []
+    }
+
+    for cell in lib.cells:
+        cell_data = {
+            "name": cell.name,
+            "polygons": [],
+            "paths": [],
+            "refs": []
+        }
+
+        for poly in cell.polygons:
+            cell_data["polygons"].append({
+                "layer": int(poly.layer),
+                "datatype": int(poly.datatype),
+                "vertices": [[round(float(v[0]), 6), round(float(v[1]), 6)]
+                             for v in poly.points]
+            })
+
+        for ref in cell.references:
+            origin = ref.origin if ref.origin is not None else [0, 0]
+            cell_data["refs"].append({
+                "ref_cell": ref.cell_name,
                 "origin": [round(float(origin[0]), 6), round(float(origin[1]), 6)],
                 "rotation": round(float(ref.rotation or 0), 6),
                 "magnification": round(float(ref.magnification or 1), 6),

@@ -53,6 +53,21 @@ public class ComponentClipboard
             .ToList();
 
     /// <summary>
+    /// PDK sources per TOP-LEVEL copied entry (issue #935): a copied group yields one entry
+    /// marked <c>IsGroup</c> carrying its recursive non-group children's sources; a loose
+    /// component yields its single source. Lets the paste guard admit a copied chiplet as a
+    /// whole while loose foreign components stay checked against the canvas process.
+    /// </summary>
+    public IReadOnlyList<(bool IsGroup, IReadOnlyList<string?> Sources)> PeekEntryPdkSources() =>
+        _entries.Select(e => e.OriginalComponent is ComponentGroup group
+                ? (true, (IReadOnlyList<string?>)group.GetAllComponentsRecursive()
+                    .Where(child => child is not ComponentGroup)
+                    .Select(child => PdkSourceResolver?.Invoke(child))
+                    .ToList())
+                : (false, (IReadOnlyList<string?>)new[] { e.PdkSource ?? PdkSourceResolver?.Invoke(e.OriginalComponent) }))
+            .ToList();
+
+    /// <summary>
     /// Copies the given components and their internal connections.
     /// </summary>
     public void Copy(

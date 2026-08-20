@@ -286,6 +286,89 @@ public class DirectRouteFirstPolicyTests
         path.DeepCopy().IsDirectStyledRoute.ShouldBeTrue();
     }
 
+    // ----- Largest-viable bend radius (issue #888) -----
+
+    [Fact]
+    public void TryBuildCandidate_NoAllowedRadii_KeepsGenerousRadius()
+    {
+        var start = Pin(x: 0, y: 0, angleDegrees: 0);
+        var end = Pin(x: 100, y: 100, angleDegrees: 270);
+
+        var path = DirectRouteFirstPolicy.TryBuildCandidate(start, end, DefaultBendRadius);
+
+        path.ShouldNotBeNull();
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(100.0 * SBendGeometry.GenerousRadiusFactor, 1e-3);
+        bend.RadiusMicrometers.ShouldBeGreaterThan(DefaultBendRadius);
+    }
+
+    [Fact]
+    public void TryBuildCandidate_DefaultAllowedRadii_SnapsToLargestAllowed()
+    {
+        var start = Pin(x: 0, y: 0, angleDegrees: 0);
+        var end = Pin(x: 100, y: 100, angleDegrees: 270);
+        var allowed = new List<double> { 5, 10, 20, 50 };
+
+        var path = DirectRouteFirstPolicy.TryBuildWithStyle(
+            start, end, DefaultBendRadius, out _, allowedBendRadii: allowed);
+
+        path.ShouldNotBeNull();
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(50.0, 1e-3);
+    }
+
+    [Fact]
+    public void TryBuildCandidate_RadiusFloorGoverned_AllowedRadiiRaisesAboveFloor()
+    {
+        // Perpendicular pins with legs of 30µm: generous radius = 27µm, floor = 25µm.
+        // The largest allowed value that fits and honors the floor is 30µm, larger than
+        // both the generous default and the bare floor.
+        var start = Pin(x: 0, y: 0, angleDegrees: 0);
+        var end = Pin(x: 30, y: 30, angleDegrees: 270);
+        var allowed = new List<double> { 5, 10, 20, 30, 50 };
+
+        var path = DirectRouteFirstPolicy.TryBuildWithStyle(
+            start, end, minBendRadiusMicrometers: 25.0, out _, allowedBendRadii: allowed);
+
+        path.ShouldNotBeNull();
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(30.0, 1e-3);
+        bend.RadiusMicrometers.ShouldBeGreaterThanOrEqualTo(25.0);
+    }
+
+    [Fact]
+    public void TryBuildCandidate_AllowedRadiiBelowFloor_IgnoresThemAndHonorsFloor()
+    {
+        var start = Pin(x: 0, y: 0, angleDegrees: 0);
+        var end = Pin(x: 30, y: 30, angleDegrees: 270);
+        // No allowed value is both ≥ floor (28) and ≤ maxFitting (30). The selector falls
+        // back to the original generous/floor logic, which returns the floor because it
+        // governs (28 > generous 27 and still fits).
+        var allowed = new List<double> { 5, 10, 20 };
+
+        var path = DirectRouteFirstPolicy.TryBuildWithStyle(
+            start, end, minBendRadiusMicrometers: 28.0, out _, allowedBendRadii: allowed);
+
+        path.ShouldNotBeNull();
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(28.0, 1e-3);
+    }
+
+    [Fact]
+    public void Route_ClearLine_UsesLargestAllowedRadius()
+    {
+        var router = CreateRouter();
+        router.InitializePathfindingGrid(-50, -50, 300, 300, Array.Empty<Component>());
+        var start = Pin(x: 0, y: 0, angleDegrees: 0);
+        var end = Pin(x: 100, y: 100, angleDegrees: 270);
+
+        var path = router.Route(start, end);
+
+        path.IsDirectStyledRoute.ShouldBeTrue();
+        var bend = path.Segments.OfType<BendSegment>().ShouldHaveSingleItem();
+        bend.RadiusMicrometers.ShouldBe(router.AllowedBendRadii.Max(), 1e-3);
+    }
+
     // ----- Helpers -----
 
     private static WaveguideRouter CreateRouter() => new()

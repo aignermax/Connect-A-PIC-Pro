@@ -5,6 +5,7 @@ using CAP_Core.Components.Core;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Export;
 using CAP_Core.Routing;
+using CAP_Core.Routing.InterconnectRouting;
 using CAP_Core.Routing.MetalRouting;
 
 namespace CAP.Avalonia.Services.GdsFactoryExport;
@@ -74,10 +75,7 @@ public partial class GdsFactoryExporter
         foreach (var comp in EnumerateExportableComponents(canvas, include))
             AppendPlacement(sb, comp, options, ref refIndex, ref activePdk);
         sb.AppendLine();
-        var routingOwner = SelectRoutingCrossSectionOwner(canvas, options, include);
-        AppendRoutingPdkActivation(sb, routingOwner, options, ref activePdk);
-        AppendConnections(
-            sb, canvas, RoutingWaveguideKwarg(routingOwner), metal, skippedConnections, unresolvedCrossings);
+        AppendConnections(sb, canvas, metal, options, ref activePdk, skippedConnections, unresolvedCrossings);
         if (mergeGdsFileName != null)
             AppendMixedBackendMerge(sb, mergeGdsFileName);
         AppendFooter(sb);
@@ -113,36 +111,41 @@ public partial class GdsFactoryExporter
         PinKindHelper.IsElectrical(first) && PinKindHelper.IsElectrical(second);
 
     /// <summary>
-    /// The waveguide-sizing keyword argument for routed straights/bends. gdsfactory-native
-    /// designs route with the PDK's cross-section (e.g. <c>cross_section='xs_nc'</c>): the
-    /// generic <c>gf.components.straight(width=…)</c> resolves the 'strip' cross-section, which
-    /// does not exist under a nitride PDK and crashed every export with a connection (#570 field
-    /// test). Nazca/generic designs keep the explicit <c>width=WG_WIDTH</c>.
+    /// The waveguide-sizing keyword argument for one routed connection: the gdsfactory
+    /// routing cross-section of the endpoint pins' process when one exists (e.g.
+    /// <c>cross_section='xs_nc'</c> — the generic <c>gf.components.straight(width=…)</c>
+    /// resolves 'strip', which does not exist under a nitride PDK, #570 field test), the
+    /// pins' PDK-stamped waveguide width when the process declares no named cross-section,
+    /// and the global <c>width=WG_WIDTH</c> only for unstamped demo/playground pins.
     /// </summary>
-    /// <param name="routingOwner">Deterministically chosen cross-section owner, or null.</param>
-    private static string RoutingWaveguideKwarg(Component? routingOwner) =>
-        routingOwner == null
-            ? "width=WG_WIDTH"
-            : $"cross_section='{routingOwner.GdsFactoryRoutingCrossSection}'";
+    private static string WaveguideKwargFor(ProcessCrossSection crossSection) =>
+        crossSection.GdsFactoryRoutingCrossSection is { Length: > 0 } named
+            ? $"cross_section='{named}'"
+            : crossSection.WidthMicrometers is double width
+                ? $"width={width.ToString("F2", CultureInfo.InvariantCulture)}"
+                : "width=WG_WIDTH";
 
     /// <summary>
-    /// Deterministic owner of the routing cross-section (#762 review, finding [5]): the
-    /// process with the MOST cross-section-bearing exportable components wins (routed
-    /// waveguides belong to the design's dominant process); ties break by ordinal
-    /// activation statement, and within the winning process the ordinal-smallest
-    /// cross-section name is used. Never canvas insertion order — reordering components
-    /// must not silently flip every routed waveguide to another process' geometry.
+    /// Mixed-process export only: switches the active PDK to the process owning this
+    /// connection's cross-section before its segments are emitted (the generic PDK for
+    /// width-only waveguides — a named cross-section does not resolve under a foreign
+    /// PDK, and the generic 'strip' default does not exist under a gdsfactory-native
+    /// one). No-op for single-backend designs, whose header activation already matches.
     /// </summary>
-    private static Component? SelectRoutingCrossSectionOwner(
-        DesignCanvasViewModel canvas, GdsFactoryExportOptions options,
-        Func<Component, bool>? include = null) =>
-        EnumerateExportableComponents(canvas, include)
-            .Where(c => !string.IsNullOrEmpty(c.GdsFactoryRoutingCrossSection))
-            .GroupBy(c => GdsFactoryPdkContext.ActivationOf(c, options), StringComparer.Ordinal)
-            .OrderByDescending(g => g.Count())
-            .ThenBy(g => g.Key, StringComparer.Ordinal)
-            .Select(g => g.OrderBy(c => c.GdsFactoryRoutingCrossSection, StringComparer.Ordinal).First())
-            .FirstOrDefault();
+    private static void SwitchRoutingPdk(
+        StringBuilder sb, GdsFactoryExportOptions options,
+        ProcessCrossSection crossSection, ref string? activePdk)
+    {
+        if (activePdk == null)
+            return;
+        var activation = crossSection.GdsFactoryOwner is { } owner
+            ? GdsFactoryPdkContext.ActivationOf(owner, options)
+            : GdsFactoryPdkContext.GenericActivation;
+        if (activation == activePdk)
+            return;
+        sb.AppendLine(activation);
+        activePdk = activation;
+    }
 
     /// <summary>
     /// Lists the distinct nazcaFunction names in the design that have no ubcpdk
@@ -264,35 +267,6 @@ public partial class GdsFactoryExporter
         if (EnumerateExportableComponents(canvas, include).Any(c => GdsFactoryPdkContext.UsesUbcPdkCell(c, options)))
             sb.AppendLine("import ubcpdk");
         sb.AppendLine(GdsFactoryPdkContext.GenericActivation);
-    }
-
-    /// <summary>
-    /// Mixed-process export only: before the routed connections, activates the PDK owning the
-    /// routing cross-section (or the generic PDK for the plain <c>width=WG_WIDTH</c> fallback),
-    /// so <c>gf.components.straight(cross_section=…)</c> resolves against the right process.
-    /// The winning process is NAMED in the script so two exports of the same design are
-    /// auditable (#762 review, finding [5]). No-op for single-backend designs.
-    /// </summary>
-    private static void AppendRoutingPdkActivation(
-        StringBuilder sb, Component? routingOwner, GdsFactoryExportOptions options,
-        ref string? activePdk)
-    {
-        if (activePdk == null)
-            return;
-        var activation = routingOwner != null
-            ? GdsFactoryPdkContext.ActivationOf(routingOwner, options)
-            : GdsFactoryPdkContext.GenericActivation;
-        sb.AppendLine(routingOwner != null
-            ? "# Mixed-process design: routed waveguides use cross-section " +
-              $"'{routingOwner.GdsFactoryRoutingCrossSection}' under {activation} " +
-              "(majority process, deterministic — independent of canvas order)"
-            : "# Mixed-process design: no routing cross-section found — waveguides use the generic width");
-        if (activation != activePdk)
-        {
-            sb.AppendLine(activation);
-            activePdk = activation;
-        }
-        sb.AppendLine();
     }
 
     private static void AppendStubs(

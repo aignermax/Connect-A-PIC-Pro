@@ -1,0 +1,224 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             xmlns:logic="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis"
+             x:Class="CAP.Avalonia.Views.Panels.TruthTablePanel"
+             x:DataType="vm:MainViewModel">
+
+    <StackPanel>
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize TruthTable.Title}" Foreground="MediumPurple" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why the analog optics needs a threshold to become
+                 digital logic, and why interference (e.g. the 50/50 combiner) shapes
+                 the table. -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize TruthTableHelp.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize TruthTableHelp.Intro}"/>
+
+                        <TextBlock Text="{loc:Localize TruthTableHelp.ThresholdTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.ThresholdBody}"/>
+
+                        <TextBlock Text="{loc:Localize TruthTableHelp.InterferenceTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.InterferenceBody}"/>
+
+                        <TextBlock Text="{loc:Localize TruthTableHelp.BiasTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.BiasBody}"/>
+
+                        <TextBlock Text="{loc:Localize TruthTableHelp.SignalsTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize TruthTableHelp.SignalsBody}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
+
+        <!-- Hint while anything other than exactly one group is selected -->
+        <TextBlock Text="{loc:Localize TruthTable.NoGroupSelected}" Foreground="Gray" FontSize="10" TextWrapping="Wrap"
+                   IsVisible="{Binding RightPanel.TruthTable.IsGroupSelected, Converter={x:Static BoolConverters.Not}}"/>
+
+        <StackPanel IsVisible="{Binding RightPanel.TruthTable.IsGroupSelected}">
+            <Grid ColumnDefinitions="*,110" Margin="0,5,0,2">
+                <TextBlock Text="{loc:Localize TruthTable.Inputs}" Foreground="Gray" FontSize="10"/>
+                <TextBlock Grid.Column="1" Text="{loc:Localize TruthTable.Signal}" Foreground="Gray" FontSize="10"
+                           Margin="4,0,0,0"
+                           IsVisible="{Binding RightPanel.TruthTable.SignalNamesVisible}"/>
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.InputPins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:PinSelectionViewModel">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,110">
+                                <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                          Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
+                                <!-- The signal field edits the group's persisted pin assignment,
+                                     so it appears only once the group carries one (after
+                                     extraction or load) and the pin is checked as input. -->
+                                <TextBox Grid.Column="1" Text="{Binding SignalName}"
+                                         Watermark="{loc:Localize TruthTable.SignalWatermark}"
+                                         FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBox.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="IsChecked"/>
+                                            <Binding Path="SignalEditingVisible"/>
+                                        </MultiBinding>
+                                    </TextBox.IsVisible>
+                                </TextBox>
+                            </Grid>
+                            <!-- Live collision hint: warns at typing time about the duplicate
+                                 output name or the input/output cross-role name the build would
+                                 reject minutes later (issue #1071). Warning only — the build
+                                 keeps its authoritative rejection. -->
+                            <TextBlock Text="{Binding SignalWarning}" Foreground="#FFB86B" FontSize="9"
+                                       TextWrapping="Wrap" Margin="0,0,0,2"
+                                       IsVisible="{Binding SignalWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <Grid ColumnDefinitions="*,110" Margin="0,8,0,2">
+                <TextBlock Text="{loc:Localize TruthTable.Outputs}" Foreground="Gray" FontSize="10"/>
+                <TextBlock Grid.Column="1" Text="{loc:Localize TruthTable.Signal}" Foreground="Gray" FontSize="10"
+                           Margin="4,0,0,0"
+                           IsVisible="{Binding RightPanel.TruthTable.SignalNamesVisible}"/>
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.OutputPins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:PinSelectionViewModel">
+                        <StackPanel>
+                            <Grid ColumnDefinitions="*,110">
+                                <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                          Foreground="LightGray" FontSize="11" Margin="0,1" VerticalAlignment="Center"/>
+                                <!-- Same persisted-assignment semantics as the input rows:
+                                     a named output's tap reads the signal name in the Logic
+                                     panel (S0, Cout) instead of the raw gate.pin id.
+                                     The inline warning under the field mirrors the input rows. -->
+                                <TextBox Grid.Column="1" Text="{Binding SignalName}"
+                                         Watermark="{loc:Localize TruthTable.SignalWatermark}"
+                                         FontSize="11" Padding="4,2" Margin="4,0,0,0" VerticalAlignment="Center">
+                                    <TextBox.IsVisible>
+                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                            <Binding Path="IsChecked"/>
+                                            <Binding Path="SignalEditingVisible"/>
+                                        </MultiBinding>
+                                    </TextBox.IsVisible>
+                                </TextBox>
+                            </Grid>
+                            <TextBlock Text="{Binding SignalWarning}" Foreground="#FFB86B" FontSize="9"
+                                       TextWrapping="Wrap" Margin="0,0,0,2"
+                                       IsVisible="{Binding SignalWarning, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <TextBlock Text="{loc:Localize TruthTable.Bias}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+            <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.BiasPins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:PinSelectionViewModel">
+                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsChecked}"
+                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <StackPanel Orientation="Horizontal" Margin="0,8,0,5">
+                <TextBlock Text="{loc:Localize TruthTable.Threshold}" Foreground="Gray" VerticalAlignment="Center" Width="70"/>
+                <NumericUpDown Value="{Binding RightPanel.TruthTable.Threshold}"
+                               Minimum="0.01" Maximum="0.99" Increment="0.05"
+                               FormatString="F2" Width="100"/>
+            </StackPanel>
+            <TextBlock Text="{Binding RightPanel.TruthTable.WavelengthText}" Foreground="Gray" FontSize="10" Margin="0,0,0,5"/>
+
+            <StackPanel Orientation="Horizontal" Margin="0,5,0,5">
+                <Button Content="{loc:Localize TruthTable.Extract}"
+                        Command="{Binding RightPanel.TruthTable.ExtractCommand}"
+                        Width="150" Padding="8,4" Background="#3d5d3d"
+                        IsEnabled="{Binding RightPanel.TruthTable.IsProcessing, Converter={x:Static BoolConverters.Not}}"/>
+                <Button Content="{loc:Localize TruthTable.Cancel}"
+                        Command="{Binding RightPanel.TruthTable.CancelCommand}"
+                        Width="70" Padding="8,4" Margin="5,0,0,0" Background="#5d3d3d"
+                        IsVisible="{Binding RightPanel.TruthTable.IsProcessing}"/>
+            </StackPanel>
+            <ProgressBar IsIndeterminate="True" Height="3" Margin="0,0,0,5"
+                         IsVisible="{Binding RightPanel.TruthTable.IsProcessing}"/>
+            <TextBlock Text="{Binding RightPanel.TruthTable.StatusText}" Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
+                       IsVisible="{Binding RightPanel.TruthTable.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+            <!-- Result table: input bit pattern | per output the bit and the raw power -->
+            <StackPanel IsVisible="{Binding RightPanel.TruthTable.HasResult}">
+                <TextBlock Text="{Binding RightPanel.TruthTable.BiasSummaryText}" Foreground="Gray" FontSize="10" Margin="0,5,0,0"
+                           IsVisible="{Binding RightPanel.TruthTable.BiasSummaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                <StackPanel Orientation="Horizontal" Margin="0,5,0,2">
+                    <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.InputHeaders}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" Foreground="Gray" FontSize="10" FontWeight="SemiBold" Width="24"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                    <TextBlock Text="|" Foreground="#3d3d3d" Margin="4,0"/>
+                    <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.OutputHeaders}">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel Orientation="Horizontal"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="x:String">
+                                <TextBlock Text="{Binding}" Foreground="Gray" FontSize="10" FontWeight="SemiBold" Width="56"/>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding RightPanel.TruthTable.Rows}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="logic:TruthTableRowViewModel">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding InputBitsText}" Foreground="LightGray"
+                                               FontFamily="Consolas" FontSize="11" Width="48"/>
+                                    <TextBlock Text="|" Foreground="#3d3d3d" Margin="4,0"/>
+                                    <ItemsControl ItemsSource="{Binding OutputCells}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <StackPanel Orientation="Horizontal"/>
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate x:DataType="logic:TruthTableOutputCellViewModel">
+                                                <StackPanel Width="56">
+                                                    <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                                               Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
+                                                    <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                                               Foreground="LightGray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                                                    <TextBlock Text="{Binding PowerText}" Foreground="Gray" FontFamily="Consolas" FontSize="9"/>
+                                                </StackPanel>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+            </StackPanel>
+        </StackPanel>
+    </StackPanel>
+
+</UserControl>

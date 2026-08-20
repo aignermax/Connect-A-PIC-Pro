@@ -263,6 +263,13 @@ public partial class MainViewModel : ObservableObject
     /// </summary>
     public ViewModels.Canvas.ChipSizeViewModel ChipSize { get; }
 
+    /// <summary>
+    /// Per-layer visibility of imported GDS geometry (issue #858). The canvas
+    /// render context consults its <c>State</c>; the Imported Layers panel binds
+    /// to its rows; settings are persisted per design in the .lun file.
+    /// </summary>
+    public ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel LayerVisibility { get; }
+
     public MainViewModel(
         DesignCanvasViewModel canvas,
         SimulationService simulationService,
@@ -295,6 +302,7 @@ public partial class MainViewModel : ObservableObject
         ViewModels.Canvas.CrossingInsertion.CrossingInsertionCanvasBinder? crossingInsertionBinder = null,
         ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null,
         Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null,
+        ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? layerVisibility = null,
         ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel? tutorialViewModel = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
@@ -326,6 +334,11 @@ public partial class MainViewModel : ObservableObject
         // Design-scoped GDS imports (#830): save embeds them in the .lun, load
         // restores/migrates them, New Project clears them.
         FileOperations.DesignScopedGdsComponents = designScopedGdsComponents;
+        // Per-layer visibility of imported GDS geometry (#858): edits mark the
+        // design dirty, and save/load/new-project round-trip through the .lun.
+        LayerVisibility = layerVisibility ?? new ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel(_canvas);
+        LayerVisibility.SettingsEdited = () => FileOperations.HasUnsavedChanges = true;
+        FileOperations.LayerVisibility = LayerVisibility;
         ViewportControl = viewportControl;
 
         // Home screen: shown at startup; delegates project I/O to FileOperations
@@ -385,6 +398,32 @@ public partial class MainViewModel : ObservableObject
         // the orchestrator refreshes the router before every routing pass, so AUTO cannot
         // bend tighter than the active process allows.
         _canvas.Routing.GetProcessMinBendRadiusMicrometers = resolveMinBendRadiusMicrometers;
+        // Metal traces are curved like waveguides (#854): the metal spec's bend radius floors
+        // the router for electrical connections and its trace width pads their grid obstacles.
+        // The bend-handle drag clamp for metal traces uses the same source.
+        _canvas.Routing.GetMetalRoutingSpec = metalSpecProvider;
+        CanvasInteraction.GetMetalMinBendRadiusMicrometers =
+            () => metalSpecProvider().MinBendRadiusMicrometers;
+        // Per-connection process floor (issue #937): on a multi-process canvas each
+        // connection is floored by its own endpoint components' PDK process (the stricter
+        // chiplet governs a cross-chiplet route), not by one canvas-wide value. The factory
+        // runs on the UI thread at pass start and snapshots the library and drafts, so the
+        // provider the router calls per connection on the routing thread never touches live
+        // ViewModel collections. Unresolvable endpoints (built-ins, groups, PDK-less drafts)
+        // yield null and the canvas-wide floor above governs.
+        _canvas.Routing.BuildConnectionProcessFloorProvider = () =>
+        {
+            var templates = LeftPanel.AllTemplates.ToList();
+            var drafts = LeftPanel.GetLoadedPdkDrafts().ToList();
+            return (startPin, endPin) =>
+                CAP_DataAccess.Components.ComponentDraftMapper.WaveguideBendRadiusResolver.ResolveForEndpointPdkNames(
+                    PdkSourceOf(startPin), PdkSourceOf(endPin), drafts);
+
+            string? PdkSourceOf(CAP_Core.Components.Core.PhysicalPin pin) =>
+                pin.ParentComponent is { } component
+                    ? ViewModels.Library.ComponentPdkSourceResolver.Resolve(component, templates)
+                    : null;
+        };
         // Let a Nazca export that hits gdsfactory-native components hand off to the gdsfactory export.
         FileOperations.RequestGdsFactoryExport = () => GdsFactoryExport.Export();
         ExportMenu = new ExportMenuViewModel(new IExportFormat[]
@@ -437,7 +476,10 @@ public partial class MainViewModel : ObservableObject
             resolveLiveMemberPdkNames: () =>
                 FileOperations.ActiveProcess is { } activeProcess
                     ? LeftPanel.ResolveLiveMemberPdkNames(activeProcess)
-                    : null);
+                    : null,
+            // Per-chiplet scoping (issue #935): the live catalog lets the policy derive a
+            // group's chiplet process binding from its children.
+            getProcessCatalog: () => ProcessCatalog.BuildGroups(LeftPanel.GetLoadedPdkProcessEntries()));
 
         CanvasInteraction.PlacementContext = placementContext;
         _canvas.Clipboard.PdkSourceResolver = placementContext.ResolveComponentPdkSource;
@@ -499,6 +541,7 @@ public partial class MainViewModel : ObservableObject
         CanvasInteraction.OnSelectionChanged = comp =>
         {
             RightPanel.Sweep.ConfigureForComponent(comp, Canvas);
+            RightPanel.TruthTable.ConfigureForSelection(comp, Canvas);
             BottomPanel.Analysis.Optimization.RefreshFromCanvas();
             LeftPanel.HierarchyPanel.SyncSelectionFromCanvas(comp);
         };
@@ -568,6 +611,12 @@ public partial class MainViewModel : ObservableObject
             {
                 // Feed the selected connection into the routing options panel (issue #574).
                 BottomPanel.ConnectionRouting.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the imported-route re-route panel.
+                BottomPanel.RerouteImported.SelectedConnection =
+                    CanvasInteraction.SelectedWaveguideConnection;
+                // ... and into the length-matching panel.
+                BottomPanel.LengthMatching.SelectedConnection =
                     CanvasInteraction.SelectedWaveguideConnection;
             }
         };
@@ -1176,6 +1225,41 @@ public partial class MainViewModel : ObservableObject
         var processLockActive = FileOperations.ActiveProcess is { IsPlayground: false };
         var compatiblePdkNames = LeftPanel.PdkManager.GetProcessCompatiblePdkNames();
 
+        // DRC-lite per connection (issue #936): each connection's width and spacing
+        // limits come from its OWN endpoint components' PDK processes — the stricter
+        // chiplet governs a cross-chiplet route, same rule as the router's bend floor
+        // (#937) — so a two-process canvas (only possible in Playground, #935) is
+        // checked per chiplet instead of silently skipping every PDK-dependent rule,
+        // and a locked multi-member process no longer checks the other members against
+        // the first member PDK's limits. PDKs that declare no minimum stay silent
+        // (#926). Library and drafts are snapshotted here on the UI thread (same
+        // pattern as the #937 floor provider); connections whose endpoints don't
+        // resolve to a PDK (built-ins) yield null and fall back to the lock-derived
+        // canvas-wide values below, exactly like the #937 floor. Frozen group paths
+        // carry no pins to resolve an owning process from, so they also keep the
+        // canvas-wide spacing (0 in Playground = off, as before).
+        var drcTemplates = LeftPanel.AllTemplates.ToList();
+        var drcDrafts = LeftPanel.GetLoadedPdkDrafts().ToList();
+        string? DrcPdkSourceOf(PhysicalPin? pin) =>
+            pin?.ParentComponent is { } component
+                ? ComponentPdkSourceResolver.Resolve(component, drcTemplates)
+                : null;
+        Func<CAP_Core.Components.Connections.WaveguideConnection, CAP_Core.Analysis.ConnectionDrcRules?> connectionDrcRuleProvider =
+            connection => ConnectionDrcRuleResolver.ResolveForEndpointPdkNames(
+                DrcPdkSourceOf(connection.StartPin), DrcPdkSourceOf(connection.EndPin), drcDrafts);
+
+        double minWaveguideSpacingMicrometers = 0;
+        IReadOnlyList<CAP_Core.Analysis.WaveguideMinWidthRule>? minWaveguideWidthRules = null;
+        if (processLockActive)
+        {
+            var memberProcess = LeftPanel.ResolveLiveMemberPdkNames(FileOperations.ActiveProcess!)
+                .Select(name => drcDrafts.FirstOrDefault(
+                    d => string.Equals(d.Name, name, StringComparison.OrdinalIgnoreCase))?.Process)
+                .FirstOrDefault(p => p is not null);
+            minWaveguideSpacingMicrometers = memberProcess.GetMinWaveguideSpacingMicrometersOrDefault();
+            minWaveguideWidthRules = memberProcess.GetMinWaveguideWidthRules();
+        }
+
         RightPanel.DesignValidation.RunValidation(
             connections,
             groups,
@@ -1185,7 +1269,10 @@ public partial class MainViewModel : ObservableObject
             pdkSourceByComponent,
             LeftPanel.GetProcessAgnosticPdkNames(),
             compatiblePdkNames,
-            processLockActive);
+            processLockActive,
+            minWaveguideSpacingMicrometers: minWaveguideSpacingMicrometers,
+            minWaveguideWidthRules: minWaveguideWidthRules,
+            connectionDrcRuleProvider: connectionDrcRuleProvider);
 
         StatusText = RightPanel.DesignValidation.StatusText;
     }
@@ -1256,6 +1343,13 @@ public class DesignFileData
     public List<Services.GdsImport.DesignScope.ImportedGdsComponentSetData>? ImportedGdsComponents { get; set; }
 
     /// <summary>
+    /// Per-layer visibility overrides for imported GDS geometry (issue #858).
+    /// Only non-default entries are stored; null when every layer is fully
+    /// visible. Older files without this field load with all layers shown.
+    /// </summary>
+    public List<Services.GdsImport.LayerVisibility.GdsLayerVisibilityData>? LayerVisibility { get; set; }
+
+    /// <summary>
     /// Chip width in micrometers as configured in the Chip Size settings.
     /// Null for files saved before chip-size support was added (defaults to 5000 μm on load).
     /// </summary>
@@ -1272,6 +1366,13 @@ public class DesignFileData
     /// Null for legacy files saved before single-process support; migrated on load.
     /// </summary>
     public ActiveProcessData? ActiveProcess { get; set; }
+
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856):
+    /// GDS-imported route geometry released by ungrouping its import group. Null for
+    /// files saved before canvas-level frozen paths existed.
+    /// </summary>
+    public List<CAP_DataAccess.Persistence.DTOs.FrozenPathDto>? CanvasFrozenPaths { get; set; }
 }
 
 /// <summary>
@@ -1300,6 +1401,23 @@ public class DesignGroupData
     /// Canvas Y position of the group ViewModel.
     /// </summary>
     public double CanvasY { get; set; }
+
+    /// <summary>
+    /// Per-chiplet process binding of a top-level group (issue #938): the fabrication
+    /// process the chiplet's contents belong to. Null for unbound groups, nested groups
+    /// (their scope is the top-level chiplet's), and files saved before per-chiplet
+    /// bindings existed — the design-level <see cref="DesignFileData.ActiveProcess"/>
+    /// remains the default for those and for ungrouped components.
+    /// </summary>
+    public ActiveProcessData? ProcessBinding { get; set; }
+
+    /// <summary>
+    /// Truth Table pin-role assignment of a top-level group (issue #981): the input,
+    /// output, and bias pins plus threshold the panel last successfully extracted with.
+    /// Null when the group was never extracted — including every file saved before the
+    /// persistence existed — so legacy .lun files stay clean of unused blocks.
+    /// </summary>
+    public CAP_Core.Components.Core.TruthTablePinAssignment? TruthTablePinAssignment { get; set; }
 }
 
 /// <summary>
@@ -1328,11 +1446,18 @@ public class ChildComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>
@@ -1364,11 +1489,18 @@ public class ComponentData
     public int Rotation { get; set; }
 
     /// <summary>
-    /// Exact continuous rotation in degrees (GDS imports keep non-cardinal
-    /// angles). Null in old files — falls back to <see cref="Rotation"/>
-    /// quarter-turns. Supersedes <see cref="Rotation"/> when present.
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations — <see cref="Rotation"/>
+    /// alone restores those.
     /// </summary>
     public double? RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the pins were mirrored across the local horizontal centerline
+    /// (GDS STRANS-reflected instance). Null in old files — no mirror.
+    /// </summary>
+    public bool? Mirrored { get; set; }
+
     public double? SliderValue { get; set; }
 
     /// <summary>
@@ -1472,6 +1604,15 @@ public class ConnectionData
 
     /// <summary>GDS datatype of the import source route polygons — see <see cref="SourceGdsLayer"/>.</summary>
     public int? SourceGdsDataType { get; set; }
+
+    /// <summary>
+    /// Target route length (µm) the connection was meandered to (issue #1008);
+    /// null = no length intent (also in files that predate the field).
+    /// </summary>
+    public double? TargetLengthMicrometers { get; set; }
+
+    /// <summary>Accepted deviation (µm) from <see cref="TargetLengthMicrometers"/>; null = no length intent.</summary>
+    public double? LengthToleranceMicrometers { get; set; }
 }
 
 /// <summary>

@@ -22,6 +22,14 @@ public partial class DesignCanvasViewModel : ObservableObject
     public ObservableCollection<WaveguideConnectionViewModel> Connections { get; } = new();
     public ObservableCollection<PinViewModel> AllPins { get; } = new();
 
+    /// <summary>
+    /// Pin-less frozen waveguide paths living directly on the canvas (issue #856).
+    /// Populated when ungrouping releases GDS-imported route geometry that has no
+    /// pins to re-expand into a live connection. Rendered and persisted like
+    /// group-internal paths; never simulated.
+    /// </summary>
+    public ObservableCollection<CanvasFrozenPathViewModel> CanvasFrozenPaths { get; } = new();
+
     // ── Core dependencies ─────────────────────────────────────────────────
     public WaveguideConnectionManager ConnectionManager { get; }
     public WaveguideRouter Router { get; }
@@ -42,6 +50,14 @@ public partial class DesignCanvasViewModel : ObservableObject
     /// persisted with the design file.
     /// </summary>
     public AnalysisOutputDesignation AnalysisOutput { get; } = new();
+
+    /// <summary>
+    /// Live logic state (0/1 badge) of every gate group while the Logic panel's
+    /// network is built (issue #994). Written by the Logic panel after every
+    /// evaluation, cleared when the network is discarded; rendered as small
+    /// badges on the gate groups without repainting the groups themselves.
+    /// </summary>
+    public LogicGateStateOverlay LogicGateStates { get; } = new();
 
     public ComponentClipboard Clipboard { get; } = new();
     public PowerFlowVisualizer PowerFlowVisualizer { get; } = new();

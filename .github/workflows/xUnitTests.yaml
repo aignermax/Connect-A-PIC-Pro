@@ -7,6 +7,9 @@ on:
   push:
     branches: [main]
   pull_request:
+  # On-demand baseline runs (e.g. on dev-ki) so a red PR check can be told
+  # apart from an already-red integration branch.
+  workflow_dispatch:
 
 jobs:
   nunit_tests:
@@ -93,6 +96,18 @@ jobs:
           # Upstream source: https://nazca-design.org/download/
           pip install "https://github.com/aignermax/Lunima/releases/download/vendor-cache-nazca-0.6.1/nazca-0.6.1.tar.gz"
           python3 -c "import nazca, nazca.demofab, gdstk, klayout.db, siepic_ebeam_pdk; print('PDK preview deps ok')"
+
+      - name: 🔬 Install KLayout CLI (for foundry-deck DRC tests)
+        run: |
+          set -euo pipefail
+          # The klayout pip wheel above ships only the Python module (klayout.db) —
+          # no executable on PATH. The foundry-deck DRC tests probe a `klayout`/
+          # `klayout_app` executable ($KLAYOUT or PATH), so the runner needs the
+          # app itself. Ubuntu universe ships 0.28.x, which runs the vendored
+          # CORNERSTONE pre-DRC deck headless (-b) just fine.
+          sudo apt-get update
+          sudo apt-get install -y klayout
+          klayout -v
 
       - name: 🏃 Run xUnit Tests
         working-directory: UnitTests

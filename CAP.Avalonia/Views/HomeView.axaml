@@ -54,32 +54,38 @@
                 </Button>
             </StackPanel>
 
-            <!-- Shipped example designs -->
+            <!-- Shipped example designs in learning-path order (curated manifest
+                 rank first, uncurated .lun files appended alphabetically), each
+                 with its localized one-line description under the name. -->
             <StackPanel IsVisible="{Binding HasExamples}" Margin="0,0,0,14">
                 <TextBlock Text="{loc:Localize Home.Examples}"
                            FontSize="13" FontWeight="SemiBold" Foreground="White"
                            Margin="0,0,0,4"/>
-                <ItemsControl ItemsSource="{Binding Examples}">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <WrapPanel/>
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="services:ExampleDesign">
-                            <Button Command="{Binding $parent[ItemsControl].DataContext.OpenExampleCommand}"
-                                    CommandParameter="{Binding}"
-                                    Background="#2d3d4d" Foreground="White"
-                                    Padding="10,5" Margin="0,0,6,4" FontSize="11"
-                                    ToolTip.Tip="{loc:Localize Home.ExampleTip}">
-                                <StackPanel Orientation="Horizontal" Spacing="6">
-                                    <TextBlock Text="🧪" FontSize="11"/>
-                                    <TextBlock Text="{Binding Name}"/>
-                                </StackPanel>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                <ScrollViewer MaxHeight="220" VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Examples}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:ExampleDesign">
+                                <Button Command="{Binding $parent[ItemsControl].DataContext.OpenExampleCommand}"
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
+                                        Background="#2d3d4d" Foreground="White"
+                                        Padding="10,5" Margin="0,0,0,4" FontSize="11"
+                                        ToolTip.Tip="{loc:Localize Home.ExampleTip}">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="🧪" FontSize="11" VerticalAlignment="Center"/>
+                                        <StackPanel Spacing="1">
+                                            <TextBlock Text="{Binding Name}"/>
+                                            <TextBlock Text="{Binding Description}"
+                                                       FontSize="10" Foreground="#9a9a9a"
+                                                       IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
             </StackPanel>
 
             <!-- Recent projects header -->

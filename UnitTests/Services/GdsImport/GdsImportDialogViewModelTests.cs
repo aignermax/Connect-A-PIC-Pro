@@ -113,6 +113,23 @@ public class GdsImportDialogViewModelTests : IDisposable
         .ToArray();
 
     /// <summary>
+    /// TOP referencing a single unlabeled waveguide cell — the detector must fall
+    /// back to the edge heuristic and produce two guessed pin suggestions.
+    /// </summary>
+    private static byte[] UnlabeledWaveguideLibrary() => GdsTestWriter.Create()
+        .StandardPrologue()
+        .BeginCell("TOP")
+            // A fictitious keep label plus the reference keeps TOP from being
+            // unwrapped as a pass-through wrapper, so the dialog's selected top
+            // cell stays "TOP" and its direct child is the unlabeled waveguide.
+            .Text(999, 0, "keep", 0, 0)
+            .SRef("wgNoLabel", 0, 0)
+        .EndCell()
+        .UnlabeledWaveguideCell("wgNoLabel")
+        .EndLibrary()
+        .ToArray();
+
+    /// <summary>
     /// TOP whose only content is two references to "np", a cell with a zero-width
     /// (degenerate) extent: the draft has zero size, so the service refuses
     /// registration and BOTH instances are skipped with the identical reason —
@@ -224,6 +241,35 @@ public class GdsImportDialogViewModelTests : IDisposable
 
         vm.CanImport.ShouldBeFalse();
         vm.ImportCommand.CanExecute(null).ShouldBeFalse();
+    }
+
+    // ── Guessed-pin suggestions ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task StartAnalysisAsync_UnlabeledWaveguide_PopulatesGuessedPinSuggestions()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(UnlabeledWaveguideLibrary()));
+
+        await vm.StartAnalysisAsync();
+
+        vm.HasError.ShouldBeFalse(vm.ErrorText);
+        vm.HasPinSuggestions.ShouldBeTrue();
+        vm.PinSuggestions.Count.ShouldBe(2);
+        vm.PinSuggestions.ShouldAllBe(s => s.IsGuessed,
+            "edge-heuristic pins must be flagged as guessed in the dialog");
+    }
+
+    [Fact]
+    public async Task RemovePinSuggestionCommand_RemovesPinFromSuggestions()
+    {
+        var (vm, _, _) = CreateDialog(WriteGds(UnlabeledWaveguideLibrary()));
+        await vm.StartAnalysisAsync();
+
+        var pin = vm.PinSuggestions.Where(s => s.PinName == "heur_1").ShouldHaveSingleItem();
+        pin.RemoveCommand.Execute(null);
+
+        vm.PinSuggestions.ShouldNotContain(s => s.PinName == "heur_1");
+        vm.PinSuggestions.Count.ShouldBe(1);
     }
 
     // ── Options validation ───────────────────────────────────────────────────
@@ -769,5 +815,12 @@ file static class GdsImportDialogTestCells
                 .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
                 .Text(1, 10, "in", 0, 2000)
                 .Text(1, 10, "out", 10000, 2000)
+            .EndCell();
+
+    public static GdsTestWriter UnlabeledWaveguideCell(this GdsTestWriter writer, string name) =>
+        writer
+            .BeginCell(name)
+                .Boundary(1, 0, (0, 1750), (10000, 1750), (10000, 2250), (0, 2250), (0, 1750))
+                .Boundary(111, 0, (0, 0), (10000, 0), (10000, 4000), (0, 4000), (0, 0))
             .EndCell();
 }

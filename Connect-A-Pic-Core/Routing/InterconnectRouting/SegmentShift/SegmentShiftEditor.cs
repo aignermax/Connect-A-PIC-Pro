@@ -1,4 +1,5 @@
 using CAP_Core.Components.Connections;
+using CAP_Core.Components.Core;
 
 namespace CAP_Core.Routing.InterconnectRouting.SegmentShift;
 
@@ -72,6 +73,10 @@ public static class SegmentShiftEditor
     /// records the result on <see cref="RoutedPath.PassesThroughComponent"/>, so a shift into
     /// an obstacle is flagged through the existing design-issue pipeline instead of silently
     /// producing an invalid route. Call after a drop and after undo/redo.
+    /// The route may hug its own pins: cells inside the pin corridors of the connection's
+    /// endpoint pins that only a NEIGHBOUR's padding band covers are tolerated — a foreign
+    /// component placed next to a pin must not raise a false collision flag on a collapsed
+    /// route. A foreign component body inside the corridor still flags.
     /// </summary>
     /// <param name="connection">The connection whose path was edited.</param>
     /// <param name="router">The router owning the pathfinding grid.</param>
@@ -80,7 +85,16 @@ public static class SegmentShiftEditor
         if (connection.RoutedPath == null)
             return;
         connection.RoutedPath.PassesThroughComponent =
-            router.IsPathBlockedByComponents(connection.RoutedPath.Segments);
+            router.IsPathBlockedByComponents(connection.RoutedPath.Segments, OwnEndpointPins(connection));
+    }
+
+    /// <summary>The connection's endpoint pins, whose pin corridors the route may hug.</summary>
+    private static List<PhysicalPin> OwnEndpointPins(WaveguideConnection connection)
+    {
+        var pins = new List<PhysicalPin>(2);
+        if (connection.StartPin != null) pins.Add(connection.StartPin);
+        if (connection.EndPin != null) pins.Add(connection.EndPin);
+        return pins;
     }
 
     /// <summary>Returns the segment index of the n-th straight segment, or -1 when out of range.</summary>

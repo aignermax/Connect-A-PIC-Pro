@@ -39,6 +39,14 @@ internal sealed record GdsRouteConnectivityResult
 /// than two pins are junction/crossing topology — guessing the pairing there
 /// would miswire, so they stay frozen with an informational note.
 ///
+/// One exception to the junction rule: Lunima's own export stamps a top-cell
+/// port label exactly on every coupler pin, so a coupler-terminated route
+/// legitimately sees the label as a THIRD touch on the same joint. A port
+/// touch coincident (within the touch tolerance) with an instance pin
+/// already touching the network IS that joint, not a third party — it is
+/// dropped from the pairing decision and stays unconsumed, so the design's
+/// external port survives while the route reconnects.
+///
 /// A pin "touches" a polygon when its point lies INSIDE the polygon (even-odd
 /// point-in-polygon) or within the tolerance of its outline — the union of
 /// both, not one or the other: route polygons are thin stripes whose end edge
@@ -191,6 +199,20 @@ internal static partial class GdsRouteConnectivityMatcher
                         touches.Add(new Touch(i, k, IsPort: false, pinsPerInstance[i][k]));
                     }
                 }
+            }
+
+            // Own-export port labels sit exactly on the coupler pins, so a route
+            // ending at a coupler sees the label as a third touch ON THE SAME
+            // JOINT — the junction rule would freeze the honest 2-pin route. A
+            // port coincident with an instance pin already touching the network
+            // IS that joint, not a third party: drop it from the pairing
+            // decision. The port itself stays unconsumed — it remains the
+            // design's external port and is never matched here.
+            if (touches.Count > 2)
+            {
+                var pinTouches = touches.Where(t => !t.IsPort).ToList();
+                touches.RemoveAll(t => t.IsPort
+                    && pinTouches.Any(p => IsCoincident(p.Pin, t.Pin, toleranceUm)));
             }
 
             if (touches.Count != 2)

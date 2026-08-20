@@ -59,5 +59,23 @@ namespace CAP_DataAccess.Components.ComponentDraftMapper.DTOs
         /// </summary>
         [JsonPropertyName("polarization")]
         public string? Polarization { get; set; }
+
+        /// <summary>
+        /// Optional waveguide width in micrometers at this pin (DRC-lite pin-mismatch
+        /// rule). When omitted, the process' default optical cross-section width is
+        /// used at template conversion; when neither exists the value stays null and
+        /// the rule stays silent (legacy PDKs never produce false positives).
+        /// </summary>
+        [JsonPropertyName("waveguideWidthMicrometers")]
+        public double? WaveguideWidthMicrometers { get; set; }
+
+        /// <summary>
+        /// Optional GDS layer number of this pin's waveguide (DRC-lite pin-mismatch
+        /// rule). When omitted, the layer of the process' default optical
+        /// cross-section is used at template conversion; when neither exists the
+        /// value stays null.
+        /// </summary>
+        [JsonPropertyName("layer")]
+        public int? Layer { get; set; }
     }
 }

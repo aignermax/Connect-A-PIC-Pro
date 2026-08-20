@@ -115,6 +115,20 @@ namespace CAP_Core.Components.Connections
         public int? SourceGdsDataType { get; set; }
 
         /// <summary>
+        /// Optional target geometric length (µm) this connection's route was stretched to
+        /// with a meander (issue #1008). Null means no length intent — the route is whatever
+        /// the router produces. Set by the meander actuator together with a frozen route;
+        /// persisted in .lun files so the intent survives save/load.
+        /// </summary>
+        public double? TargetLengthMicrometers { get; set; }
+
+        /// <summary>
+        /// Accepted deviation (µm) from <see cref="TargetLengthMicrometers"/>.
+        /// Null when no target length is set.
+        /// </summary>
+        public double? LengthToleranceMicrometers { get; set; }
+
+        /// <summary>
         /// The actual routed path with all segments (straights and bends).
         /// Populated after calling RecalculateTransmission().
         /// </summary>
@@ -166,7 +180,10 @@ namespace CAP_Core.Components.Connections
 
             // The effective bend radius honors both the connection's own setting and the
             // fabrication process' minimum: the larger of the two governs the geometry.
-            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, router.ProcessMinBendRadiusMicrometers);
+            // The floor is per-pin-pair: electrical pairs bend at the metal cross-section
+            // floor (issue #854), optical pairs at their endpoints' process floor when the
+            // router carries a provider (issue #937), else the canvas-wide floor.
+            double effectiveBendRadius = Math.Max(BendRadiusMicrometers, router.ResolveProcessFloorFor(StartPin, EndPin));
 
             if (Type != WaveguideType.Auto)
             {

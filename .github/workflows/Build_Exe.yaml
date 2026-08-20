@@ -48,6 +48,15 @@ jobs:
           pip install "https://github.com/aignermax/Lunima/releases/download/vendor-cache-nazca-0.6.1/nazca-0.6.1.tar.gz"
           python3 -c "import nazca, nazca.demofab, gdstk, klayout.db, siepic_ebeam_pdk; print('PDK preview deps ok')"
 
+      # Mirrors the step in xUnitTests.yaml: the klayout pip wheel ships only the
+      # Python module, but the foundry-deck DRC tests probe a `klayout` executable.
+      - name: Install KLayout CLI (for foundry-deck DRC tests)
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y klayout
+          klayout -v
+
       - name: Test
         working-directory: UnitTests
         env:
@@ -100,6 +109,13 @@ jobs:
           if [ -f CAP.Desktop.exe ]; then
             mv CAP.Desktop.exe Lunima.exe
           fi
+        shell: bash
+
+      # Ship the repo's example designs beside the binary so the Home screen's
+      # Examples section (walk-up discovery from the app base directory) also
+      # works in the portable zip/tar layout, not just the dev tree.
+      - name: Bundle example designs
+        run: cp -r examples publish/examples
         shell: bash
 
       - name: Upload artifact
@@ -158,6 +174,12 @@ jobs:
           --self-contained false
           -p:Version=${{ steps.version.outputs.version }}
           -o publish/win-x64-msi
+
+      # Examples must land in the publish dir BEFORE harvesting so the MSI
+      # installs them next to CAP.Desktop.exe (same discovery as portable).
+      - name: Bundle example designs
+        run: cp -r examples publish/win-x64-msi/examples
+        shell: bash
 
       - name: Generate HarvestedFiles.wxs
         shell: pwsh

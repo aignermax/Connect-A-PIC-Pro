@@ -97,8 +97,28 @@ New Design. Declare the block so your PDK participates in that grouping:
 | `coreThicknessNm` | No | Waveguide-core thickness in nm — the key axis for process compatibility |
 | `materials` | No | Optical materials; the entries with `role` `"core"` and `"cladding"` feed the compatibility fingerprint |
 | `layers` | No | GDS layer stack (name, layer/datatype) |
-| `xsections` | No | Waveguide/metal cross-sections (`widthUm`, bend radii) for routing |
+| `xsections` | No | Waveguide/metal cross-sections (`widthUm`, bend radii) for routing — see below |
 | `allowedAngles` | No | Allowed placement/connection angles in degrees |
+| `minWaveguideSpacingUm` | No | Foundry minimum edge-to-edge waveguide gap in µm; consumed by the DRC-lite spacing rule via `GetMinWaveguideSpacingMicrometersOrDefault` (falls back to a conservative default when absent) |
+| `drcSource` | No | Provenance of the process-level DRC values — the foundry document/table/script they were taken from |
+
+### Cross-Section Fields (`process.xsections[]`)
+
+| Field | Required | Description |
+|-------|----------|-------------|
+| `name` | Yes | Cross-section name (e.g. `"xs_nc"`, `"strip"`) |
+| `kind` | Yes | `"Optical"` (light-guiding waveguide) or `"Metal"` (electrical line) |
+| `widthUm` | Yes | Standard design width in µm |
+| `minWidthUm` | No | Foundry minimum feature width in µm (DRC limit; may be smaller than `widthUm`) |
+| `minRadiusUm` | No | Minimum allowed bend radius in µm — consumed by the DRC-lite bend rule via `WaveguideBendRadiusResolver` |
+| `recommendedRadiusUm` | No | Foundry-recommended bend radius in µm (≥ minimum) |
+| `layers` | No | Names of the `process.layers` entries this cross-section is drawn on |
+| `description` | No | Human-readable description |
+| `drcSource` | No | Provenance of the DRC values (`minWidthUm`, `minRadiusUm`) — the foundry document/table/script they were taken from |
+
+The bundled `cornerstone-sin-pdk.json` shows the DRC fields filled from the public
+CORNERSTONE SiN 300nm documents (MPW-13 Design Guidelines §5.4 Table 4, pre-DRC script),
+each with its `drcSource` citation.
 
 PDKs **without** a `process` block still load, but each forms its own unnamed
 singleton process. Tool PDKs (analyzers, probes) should instead set top-level
@@ -145,6 +165,8 @@ and never appear in the process picker.
 | `offsetYMicrometers` | Yes | Y position relative to the bounding box **top-left** corner (µm), increasing **down** |
 | `angleDegrees` | Yes | Port direction: `0`=right, `90`=up, `180`=left, `270`=down |
 | `pinKind` | No | Signal domain: `"Optical"` (default when absent) or `"Electrical"`. Electrical pins (heater/modulator contacts, detector anode/cathode, bond pads) can only be connected to other electrical pins — never to optical ports — and are excluded from the optical S-matrix and the optical (Nazca/gdsfactory/photontorch) export. |
+| `waveguideWidthMicrometers` | No | Waveguide width at this pin (µm), used by the DRC-lite pin-mismatch design check. When absent, optical pins inherit the width of the process' first optical `xsections` entry; when neither exists the value stays unset and the check stays silent for this pin. |
+| `layer` | No | GDS layer number of this pin's waveguide, used by the DRC-lite pin-mismatch design check. When absent, optical pins inherit the layer of the process' default optical cross-section (resolved via the process `layers` stack). |
 
 ### Outline Polygon Fields (`outlinePolygons`)
 

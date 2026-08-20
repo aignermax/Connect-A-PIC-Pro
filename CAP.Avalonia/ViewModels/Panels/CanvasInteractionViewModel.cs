@@ -71,15 +71,32 @@ public partial class CanvasInteractionViewModel : ObservableObject
     private WaveguideConnectionViewModel? _selectedWaveguideConnection;
 
     /// <summary>
-    /// True when the selected connection is an optical waveguide. Electrical connections are
-    /// metal traces (#682): they get no routing style and no bend handles, so the routing
-    /// panel binds its visibility to this instead of the raw selection.
+    /// Canvas-level pin-less frozen path currently selected (issue #856). Mutually
+    /// exclusive with component and connection selection, like
+    /// <see cref="SelectedWaveguideConnection"/>.
     /// </summary>
-    public bool IsOpticalConnectionSelected =>
-        SelectedWaveguideConnection is { } conn && !conn.Connection.IsElectrical;
+    [ObservableProperty]
+    private CanvasFrozenPathViewModel? _selectedCanvasFrozenPath;
+
+    partial void OnSelectedCanvasFrozenPathChanged(
+        CanvasFrozenPathViewModel? oldValue, CanvasFrozenPathViewModel? newValue)
+    {
+        if (oldValue != null) oldValue.IsSelected = false;
+        if (newValue != null) newValue.IsSelected = true;
+    }
+
+    /// <summary>
+    /// True when a connection is selected — directly or via the rubber-band selection
+    /// (issue #862). Metal traces route with curved bends like waveguides (#854), so
+    /// routing styles and bend handles apply to electrical connections too — the
+    /// routing panel binds its visibility to this.
+    /// </summary>
+    public bool IsConnectionSelected =>
+        SelectedWaveguideConnection is not null ||
+        _canvas.Selection.SelectedConnections.Any();
 
     partial void OnSelectedWaveguideConnectionChanged(WaveguideConnectionViewModel? value) =>
-        OnPropertyChanged(nameof(IsOpticalConnectionSelected));
+        OnPropertyChanged(nameof(IsConnectionSelected));
 
     private PhysicalPin? _connectionStartPin;
     private double _moveStartX;
@@ -139,6 +156,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     /// </summary>
     public Func<double>? GetMinBendRadiusMicrometers { get; set; }
 
+    /// <summary>
+    /// Callback returning the minimum allowed METAL bend radius (µm) of the design's active
+    /// fabrication process (issue #854), consulted by the bend-handle drag on electrical
+    /// connections. Wired by <c>MainViewModel</c> to the metal routing spec provider; when
+    /// unwired the drag falls back to <c>BendRadiusEditor.MinRadiusMicrometers</c>.
+    /// </summary>
+    public Func<double>? GetMetalMinBendRadiusMicrometers { get; set; }
+
     public CanvasInteractionViewModel(
         DesignCanvasViewModel canvas,
         CommandManager commandManager,
@@ -157,6 +182,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
         // Hierarchy → right panel: when canvas.SelectedComponent changes externally
         // (e.g. from the hierarchy panel), mirror it so the right-panel property editor updates.
         _canvas.PropertyChanged += OnCanvasPropertyChanged;
+
+        // Rubber-band connection selection (issue #862) feeds the routing panel's visibility.
+        _canvas.Selection.SelectedConnections.CollectionChanged +=
+            (_, _) => OnPropertyChanged(nameof(IsConnectionSelected));
     }
 
     /// <summary>
@@ -399,7 +428,10 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (SelectedTemplate == null) return;
 
-        var (isAllowed, blockReason) = PlacementContext.CheckPlacement(SelectedTemplate.PdkSource);
+        // Per-chiplet scope (issue #935): dropping onto a process-bound chiplet resolves
+        // against that chiplet's process; everywhere else the canvas-level process applies.
+        var (isAllowed, blockReason) = PlacementContext.CheckPlacementAt(
+            SelectedTemplate.PdkSource, ChipletAt(x, y));
         if (!isAllowed)
         {
             UpdateStatus?.Invoke(blockReason ?? "Process mismatch — cannot place component.");
@@ -433,8 +465,12 @@ public partial class CanvasInteractionViewModel : ObservableObject
 
         // Single-process enforcement over the group's children (issue #653): a group has no
         // PdkSource of its own, so a foreign-process child must not slip in via grouping.
-        var (isAllowed, blockReason) = PlacementContext.CheckGroupPlacement(
-            ChildPdkSources(SelectedGroupTemplate.TemplateGroup),
+        // Per-chiplet scope (issue #935): onto a bound chiplet the chiplet's process decides;
+        // at canvas level a uniformly foreign-process group is placeable as its own chiplet
+        // and gets that process pinned as its binding.
+        var (isAllowed, blockReason, derivedBinding) = PlacementContext.CheckGroupPlacementAt(
+            SelectedGroupTemplate.TemplateGroup,
+            ChipletAt(x, y),
             SelectedGroupTemplate.Name);
         if (!isAllowed)
         {
@@ -464,18 +500,27 @@ public partial class CanvasInteractionViewModel : ObservableObject
             return;
         }
 
+        // Pin the chiplet process binding resolved by the policy check onto the instance.
+        if (derivedBinding != null)
+        {
+            cmd.GroupToPlace.ProcessBinding = derivedBinding;
+        }
+
         _commandManager.ExecuteCommand(cmd);
         UpdateStatus?.Invoke($"Placed group '{SelectedGroupTemplate.Name}' at ({x:F0}, {y:F0})µm");
     }
 
     /// <summary>
-    /// Resolved PDK source of every recursive non-group child of <paramref name="group"/>,
-    /// used to check the single-process policy over a group's contents (issue #653).
+    /// The topmost group whose bounds contain the point — the chiplet a placement at that
+    /// position targets (issue #935); null when the drop lands on ungrouped canvas.
     /// </summary>
-    private IEnumerable<string?> ChildPdkSources(ComponentGroup group) =>
-        group.GetAllComponentsRecursive()
-            .Where(child => child is not ComponentGroup)
-            .Select(child => PlacementContext.ResolveComponentPdkSource(child));
+    private ComponentGroup? ChipletAt(double x, double y) =>
+        _canvas.Components
+            .Where(c => c.Component is ComponentGroup
+                        && x >= c.X && x <= c.X + c.Width
+                        && y >= c.Y && y <= c.Y + c.Height)
+            .Select(c => (ComponentGroup)c.Component)
+            .LastOrDefault();
 
     /// <summary>
     /// Selects the component or connection at the given canvas position, keeping the
@@ -521,6 +566,9 @@ public partial class CanvasInteractionViewModel : ObservableObject
         {
             conn.IsSelected = false;
         }
+        // Empty the batch connection set BEFORE the click result is applied: the sync below
+        // calls ClearSelection(), which would otherwise deselect a just-clicked batch member.
+        _canvas.Selection.ClearConnectionSelection();
 
         // Find component at position
         var component = ComponentAt(x, y);
@@ -531,6 +579,7 @@ public partial class CanvasInteractionViewModel : ObservableObject
             SelectedComponent = component;
             _canvas.SelectedComponent = component;
             SelectedWaveguideConnection = null;
+            SelectedCanvasFrozenPath = null;
             UpdateStatus?.Invoke($"Selected: {component.Name}");
         }
         else
@@ -542,13 +591,25 @@ public partial class CanvasInteractionViewModel : ObservableObject
                 SelectedWaveguideConnection = connection;
                 SelectedComponent = null;
                 _canvas.SelectedComponent = null;
+                SelectedCanvasFrozenPath = null;
                 UpdateStatus?.Invoke($"Selected connection: {connection.PathLength:F1}µm, Loss: {connection.LossDb:F2}dB");
+            }
+            else if (FindCanvasFrozenPathAt(x, y) is { } frozenPath)
+            {
+                SelectedCanvasFrozenPath = frozenPath;
+                SelectedComponent = null;
+                _canvas.SelectedComponent = null;
+                SelectedWaveguideConnection = null;
+                UpdateStatus?.Invoke(string.Format(
+                    Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathSelected"),
+                    frozenPath.Path.Path.TotalLengthMicrometers.ToString("F1")));
             }
             else
             {
                 SelectedComponent = null;
                 _canvas.SelectedComponent = null;
                 SelectedWaveguideConnection = null;
+                SelectedCanvasFrozenPath = null;
             }
         }
 
@@ -606,6 +667,16 @@ public partial class CanvasInteractionViewModel : ObservableObject
             var cmd = new DeleteConnectionCommand(_canvas, connection);
             _commandManager.ExecuteCommand(cmd);
             UpdateStatus?.Invoke("Deleted connection");
+            return;
+        }
+
+        if (FindCanvasFrozenPathAt(x, y) is { } frozenPath)
+        {
+            if (SelectedCanvasFrozenPath == frozenPath)
+                SelectedCanvasFrozenPath = null;
+            _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
         }
     }
 
@@ -649,6 +720,13 @@ public partial class CanvasInteractionViewModel : ObservableObject
         // "hover lights it up, but the click misses".
         return DesignCanvasHitTesting.HitTestConnection(new Point(x, y), _canvas);
     }
+
+    /// <summary>
+    /// Finds the canvas-level frozen path nearest the point (issue #856). Delegates to
+    /// the shared canvas hit test so hover, click and delete all agree on what is hit.
+    /// </summary>
+    public CanvasFrozenPathViewModel? FindCanvasFrozenPathAt(double x, double y)
+        => DesignCanvasHitTesting.HitTestCanvasFrozenPath(new Point(x, y), _canvas);
 
     /// <summary>
     /// Starts dragging a component.
@@ -808,6 +886,17 @@ public partial class CanvasInteractionViewModel : ObservableObject
         if (targets.Count == 0 && SelectedComponent != null)
             targets.Add(SelectedComponent);
 
+        // With no components selected, DEL acts on a selected canvas-level frozen
+        // path (issue #856), mirroring how imported route geometry is deleted.
+        if (targets.Count == 0 && SelectedCanvasFrozenPath is { } frozenPath)
+        {
+            SelectedCanvasFrozenPath = null;
+            _commandManager.ExecuteCommand(new DeleteCanvasFrozenPathCommand(_canvas, frozenPath));
+            UpdateStatus?.Invoke(
+                Services.Localization.LocalizationService.Instance.Translate("Status.FrozenPathDeleted"));
+            return;
+        }
+
         var deletable = targets.Where(c => !c.Component.IsLocked).ToList();
         if (deletable.Count == 0)
         {
@@ -849,11 +938,14 @@ public partial class CanvasInteractionViewModel : ObservableObject
     {
         if (!_canvas.Clipboard.HasContent) return;
 
-        // PeekPdkSources expands groups to their resolved children (the clipboard's
+        // PeekEntryPdkSources expands groups to their resolved children (the clipboard's
         // PdkSourceResolver is wired by MainViewModel), so a copied group cannot
         // smuggle foreign-process components past the paste guard (issue #653).
-        var blockedCount = _canvas.Clipboard.PeekPdkSources()
-            .Count(pdk => !PlacementContext.CheckPlacement(pdk).IsAllowed);
+        // Per entry (issue #935): a copied group whose children uniformly belong to one
+        // other catalog process pastes as its own chiplet; loose foreign components
+        // stay blocked by the canvas lock.
+        var blockedCount = _canvas.Clipboard.PeekEntryPdkSources()
+            .Count(entry => !PlacementContext.IsPasteEntryAllowed(entry.IsGroup, entry.Sources));
         if (blockedCount > 0)
         {
             // A blocked component implies a non-null, non-Playground active process.

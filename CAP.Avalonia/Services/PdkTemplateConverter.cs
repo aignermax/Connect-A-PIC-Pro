@@ -1,6 +1,5 @@
 using CAP.Avalonia.ViewModels.Library;
 using CAP_Core.Components.Core;
-using CAP_Core.Components.FormulaReading;
 using CAP_Core.Components.PinKinds;
 using CAP_Core.Components.Parametric;
 using CAP_Core.LightCalculation;
@@ -12,20 +11,35 @@ namespace CAP.Avalonia.Services;
 
 public static class PdkTemplateConverter
 {
+    /// <summary>
+    /// Converts a PDK component draft to a library template. Optical pins carry the
+    /// PDK's waveguide width/layer onto every placed instance (DRC-lite pin-mismatch
+    /// rule): an explicit per-pin draft value wins; otherwise the default optical
+    /// cross-section of <paramref name="process"/> fills in. When neither exists the
+    /// values stay null and the rule stays silent (legacy PDKs, playground).
+    /// </summary>
     public static ComponentTemplate ConvertToTemplate(
         PdkComponentDraft pdkComp,
         string pdkName,
         string? nazcaModuleName,
-        string? gdsFactoryRoutingCrossSection = null)
+        string? gdsFactoryRoutingCrossSection = null,
+        ProcessDefinition? process = null)
     {
-        var pinDefs = pdkComp.Pins.Select(p => new PinDefinition(
-            p.Name,
-            p.OffsetXMicrometers,
-            p.OffsetYMicrometers,
-            p.AngleDegrees,
-            PinKindHelper.Parse(p.PinKind),
-            PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction)
-        )).ToArray();
+        var opticalDefaults = ProcessOpticalDefaultsResolver.Resolve(process);
+        var pinDefs = pdkComp.Pins.Select(p =>
+        {
+            var kind = PinKindHelper.Parse(p.PinKind);
+            bool isOptical = kind == MatterType.Light;
+            return new PinDefinition(
+                p.Name,
+                p.OffsetXMicrometers,
+                p.OffsetYMicrometers,
+                p.AngleDegrees,
+                kind,
+                PolarizationRules.Resolve(p.Polarization, pdkComp.Name, pdkComp.NazcaFunction),
+                p.WaveguideWidthMicrometers ?? (isOptical ? opticalDefaults.WidthUm : null),
+                p.Layer ?? (isOptical ? opticalDefaults.Layer : null));
+        }).ToArray();
 
         double nazcaOriginOffsetX = pdkComp.NazcaOriginOffsetX ?? 0;
         double nazcaOriginOffsetY = pdkComp.NazcaOriginOffsetY ?? 0;
@@ -119,77 +133,8 @@ public static class PdkTemplateConverter
         PdkSMatrixDraft sMatrixDraft)
     {
         var parametric = ParametricSMatrixMapper.MapToParametricSMatrix(sMatrixDraft);
-
-        var pinIds = pins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
-        var sliderTuples = sliders.Select(s => (s.ID, s.Value)).ToList();
-        var sMatrix = new SMatrix(pinIds, sliderTuples);
-
-        var capturedDraft = sMatrixDraft;
-        sMatrix.ParametricRebuild = (newPins, newSliders) =>
-            BuildParametricSMatrix(newPins, newSliders, capturedDraft);
-
-        var pinByName = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
-        foreach (var pin in pins)
-            pinByName[pin.Name] = pin;
-
-        var paramToSliderGuid = new Dictionary<string, Guid>(StringComparer.OrdinalIgnoreCase);
-        foreach (var paramDraft in sMatrixDraft.Parameters ?? [])
-        {
-            if (paramDraft.SliderNumber is int sn)
-            {
-                if (sn < 0 || sn >= sliders.Count)
-                    throw new InvalidOperationException(
-                        $"Parameter '{paramDraft.Name}' references sliderNumber {sn}, " +
-                        $"but only {sliders.Count} slider(s) exist on this instance.");
-                paramToSliderGuid[paramDraft.Name] = sliders[sn].ID;
-            }
-        }
-
-        var orderedParamSliders = parametric.Parameters
-            .Where(p => paramToSliderGuid.ContainsKey(p.Name))
-            .Select(p => (p.Name, SliderGuid: paramToSliderGuid[p.Name]))
-            .ToList();
-
-        var usedSliderGuids = orderedParamSliders.Select(x => x.SliderGuid).ToList();
-
-        foreach (var conn in parametric.Connections)
-        {
-            if (!pinByName.TryGetValue(conn.FromPin, out var fromPin))
-                throw new InvalidOperationException(
-                    $"Parametric connection references unknown pin '{conn.FromPin}'.");
-            if (!pinByName.TryGetValue(conn.ToPin, out var toPin))
-                throw new InvalidOperationException(
-                    $"Parametric connection references unknown pin '{conn.ToPin}'.");
-
-            var capturedConn = conn;
-            var capturedParametric = parametric;
-            var capturedParamSliders = orderedParamSliders;
-
-            Func<List<object>, Complex> calcFunc = parameters =>
-            {
-                for (int i = 0; i < capturedParamSliders.Count && i < parameters.Count; i++)
-                {
-                    double val = Convert.ToDouble(parameters[i]);
-                    capturedParametric.SetParameterValue(capturedParamSliders[i].Name, val);
-                }
-
-                var results = capturedParametric.EvaluateConnections();
-                var match = results.Where(e =>
-                    e.FromPin == capturedConn.FromPin && e.ToPin == capturedConn.ToPin).ToList();
-                if (match.Count == 0)
-                    throw new InvalidOperationException(
-                        $"No evaluated connection for {capturedConn.FromPin}→{capturedConn.ToPin}.");
-                return match[0].Value;
-            };
-
-            var rawFormula = $"mag={conn.MagnitudeFormula};phase={conn.PhaseDegFormula}";
-            var connFn = new ConnectionFunction(calcFunc, rawFormula, usedSliderGuids, false);
-
-            sMatrix.NonLinearConnections[(fromPin.IDInFlow, toPin.IDOutFlow)] = connFn;
-            sMatrix.NonLinearConnections[(toPin.IDInFlow, fromPin.IDOutFlow)] = connFn;
-        }
-
-        return sMatrix;
+        var snapshot = new ParametricSMatrixSnapshot(parametric.Parameters, parametric.Connections);
+        return ParametricSMatrixFactory.Build(pins, sliders, snapshot);
     }
 
     public static SMatrix CreateSMatrixFromPdk(List<Pin> pins, PdkSMatrixDraft? sMatrixDraft)
@@ -198,7 +143,10 @@ public static class PdkTemplateConverter
         var sMatrix = new SMatrix(pinIds, new List<(Guid, double)>());
 
         if (sMatrixDraft?.Connections == null || sMatrixDraft.Connections.Count == 0)
+        {
+            AddDefaultPassThrough(pins, sMatrixDraft, sMatrix);
             return sMatrix;
+        }
 
         var pinByName = new Dictionary<string, Pin>(StringComparer.OrdinalIgnoreCase);
         foreach (var pin in pins)
@@ -221,5 +169,32 @@ public static class PdkTemplateConverter
 
         sMatrix.SetValues(transfers);
         return sMatrix;
+    }
+
+    /// <summary>
+    /// A draft without a simulation model (<c>null</c> S-matrix — GDS-imported
+    /// cells and black-box custom components) defaults to a lossless
+    /// pass-through: with exactly two optical pins, light crosses in both
+    /// directions at magnitude 1.0 (issue #1005 — previously the empty matrix
+    /// absorbed all light). Any other optical pin count keeps the empty,
+    /// fully absorbing matrix: a multi-port default would have to guess the
+    /// internal routing and would violate passivity. An explicitly declared
+    /// but empty connection list is honored as-is (intentional absorber).
+    /// </summary>
+    private static void AddDefaultPassThrough(List<Pin> pins, PdkSMatrixDraft? sMatrixDraft, SMatrix sMatrix)
+    {
+        if (sMatrixDraft != null)
+            return;
+
+        var opticalPins = pins.Where(p => p.MatterType == MatterType.Light).ToList();
+        if (opticalPins.Count != 2)
+            return;
+
+        var transfers = new Dictionary<(Guid, Guid), Complex>
+        {
+            [(opticalPins[0].IDInFlow, opticalPins[1].IDOutFlow)] = Complex.One,
+            [(opticalPins[1].IDInFlow, opticalPins[0].IDOutFlow)] = Complex.One,
+        };
+        sMatrix.SetValues(transfers);
     }
 }

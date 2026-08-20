@@ -52,6 +52,14 @@ public partial class Component : ICloneable
     public double PhysicalOffsetX { get; set; }
     public double PhysicalOffsetY { get; set; }
     public double RotationDegrees { get; set; }
+
+    /// <summary>
+    /// True when the physical pins were mirrored across the component's local
+    /// horizontal centerline (GDS STRANS-reflected instance — see
+    /// <see cref="ComponentPoseTransform.MirrorPinsHorizontally"/>). Persisted
+    /// with the design so the mirrored pin layout survives a save/load.
+    /// </summary>
+    public bool IsMirroredHorizontally { get; set; }
     public double NazcaOriginOffsetX { get; set; }
     public double NazcaOriginOffsetY { get; set; }
 
@@ -302,10 +310,30 @@ public partial class Component : ICloneable
         var clonedParts = CloneParts();
         var clonedSliderMap = CloneSliders();
         var clonedPins = GetAllPins(clonedParts);
-        var allClonedPinIDs = clonedPins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
         var allClonedSliderIDs = clonedSliderMap.Select(s => (s.Value.ID , s.Value.Value)).ToList();
         // Create a mapping from old pin IDs to new pin IDs
         var oldToNewPinIds = MapPinIDsWithNewIDs(clonedParts);
+
+        // Components restored from serialized group/prefab data reference their logical
+        // pins only through PhysicalPins (their Parts array no longer carries them).
+        // Those pins need fresh flow IDs as well: without them the clone aliases the
+        // source's S-matrix pin space and two copies of one circuit interfere in
+        // simulation instead of staying independent instances.
+        foreach (var physicalPin in PhysicalPins)
+        {
+            var logicalPin = physicalPin.LogicalPin;
+            if (logicalPin == null || oldToNewPinIds.ContainsKey(logicalPin.IDInFlow))
+                continue;
+
+            var standaloneClone = (Pin)logicalPin.Clone(); // Clone() keeps the old flow IDs
+            standaloneClone.IDInFlow = Guid.NewGuid();
+            standaloneClone.IDOutFlow = Guid.NewGuid();
+            oldToNewPinIds[logicalPin.IDInFlow] = standaloneClone.IDInFlow;
+            oldToNewPinIds[logicalPin.IDOutFlow] = standaloneClone.IDOutFlow;
+            clonedPins.Add(standaloneClone);
+        }
+
+        var allClonedPinIDs = clonedPins.SelectMany(p => new[] { p.IDInFlow, p.IDOutFlow }).ToList();
 
         // Clone the existing connections and update with new pin IDs
         Dictionary<int, SMatrix> clonedLaserSMatrixMap = new();
@@ -324,6 +352,12 @@ public partial class Component : ICloneable
             {
                 var rebuilt = oldMatrix.ParametricRebuild(clonedPins, clonedSliderMap.Values.ToList());
                 rebuilt.ParametricRebuild = oldMatrix.ParametricRebuild;
+                // The snapshot travels with every rebuild — without it a clone of a
+                // deserialized prefab could no longer be re-serialized with formulas.
+                rebuilt.ParametricSnapshot ??= oldMatrix.ParametricSnapshot;
+                // Carry the evaluated numeric transfers over (remapped to the clone's
+                // pin IDs) so the clone conducts light before any slider is touched.
+                rebuilt.SetValues(CreateConnectionsWithUpdatedPins(oldToNewPinIds, oldMatrix));
                 clonedLaserSMatrixMap.Add(laserAndMatrix.Key, rebuilt);
                 continue;
             }
@@ -365,6 +399,7 @@ public partial class Component : ICloneable
         clonedComponent.PhysicalOffsetX = PhysicalOffsetX;
         clonedComponent.PhysicalOffsetY = PhysicalOffsetY;
         clonedComponent.RotationDegrees = RotationDegrees;
+        clonedComponent.IsMirroredHorizontally = IsMirroredHorizontally;
         clonedComponent.NazcaOriginOffsetX = NazcaOriginOffsetX;
         clonedComponent.NazcaOriginOffsetY = NazcaOriginOffsetY;
         // The module is part of the component's geometry identity (it picks the Nazca cell):
@@ -380,6 +415,17 @@ public partial class Component : ICloneable
         clonedComponent.LaserEnabled = LaserEnabled;
         clonedComponent.HumanReadableName = HumanReadableName;
         clonedComponent.ParameterDefinitions = ParameterDefinitions;
+
+        // The constructor sweeps every slider to its range midpoint to prime the
+        // matrix observers; re-assert the source values so the clone keeps the
+        // source's parameter state (the change notification re-evaluates the
+        // rebuilt matrices against the clone's own sliders).
+        foreach (var sourceSlider in GetAllSliders())
+        {
+            var clonedSlider = clonedComponent.GetSlider(sourceSlider.Number);
+            if (clonedSlider != null)
+                clonedSlider.Value = sourceSlider.Value;
+        }
 
         return clonedComponent;
     }

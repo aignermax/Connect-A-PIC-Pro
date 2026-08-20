@@ -21,8 +21,9 @@ namespace CAP_Core.Routing.InterconnectRouting;
 /// above the floor.</item>
 /// </list>
 ///
-/// A candidate is only a PROPOSAL: the router verifies it against the same obstacle grid
-/// A* uses and falls back to A* when the styled path is actually blocked. Returns null
+/// A candidate is only a PROPOSAL: the router verifies it against the component obstacle
+/// grid A* uses and against the exact geometry of registered sibling routes, and falls
+/// back to A* when the styled path is actually blocked. Returns null
 /// when no styled geometry can leave the start pin along its direction (e.g. the end pin
 /// lies behind the start) or none satisfies the radius floor — A* then routes as before.
 /// </summary>
@@ -56,13 +57,20 @@ public static class DirectRouteFirstPolicy
         PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers) =>
         TryBuildWithStyle(startPin, endPin, minBendRadiusMicrometers, out _);
 
-    /// <summary>Like <see cref="TryBuildCandidate"/>, also reporting the chosen style.</summary>
+    /// <summary>
+    /// Like <see cref="TryBuildCandidate"/>, also reporting the chosen style and optionally
+    /// snapping arc radii to foundry allowed values.
+    /// </summary>
+    /// <param name="allowedBendRadii">Optional foundry-style allowed radii (µm). When supplied,
+    /// the largest allowed radius that fits the styled geometry and honors the floor is used
+    /// — larger radii mean lower bend loss.</param>
     public static RoutedPath? TryBuildWithStyle(
         PhysicalPin startPin, PhysicalPin endPin, double minBendRadiusMicrometers,
-        out CAP_Core.Components.Connections.WaveguideType style)
+        out CAP_Core.Components.Connections.WaveguideType style,
+        IReadOnlyList<double>? allowedBendRadii = null)
     {
         var arcPath = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, WaveguideType.Bend, minBendRadiusMicrometers);
+            startPin, endPin, WaveguideType.Bend, minBendRadiusMicrometers, allowedBendRadii);
         if (MeetsRadiusFloor(arcPath, minBendRadiusMicrometers))
         {
             style = WaveguideType.Bend;
@@ -73,7 +81,7 @@ public static class DirectRouteFirstPolicy
             ? WaveguideType.SBend
             : WaveguideType.Cobra;
         var smoothPath = ConnectionStyleRouteBuilder.Build(
-            startPin, endPin, smoothStyle, minBendRadiusMicrometers);
+            startPin, endPin, smoothStyle, minBendRadiusMicrometers, allowedBendRadii);
         if (MeetsRadiusFloor(smoothPath, minBendRadiusMicrometers))
         {
             style = smoothStyle;

@@ -341,6 +341,34 @@ public class DesignCanvasHitTesting
     }
 
     /// <summary>
+    /// Finds the canvas-level frozen path (pin-less GDS-imported route geometry, issue #856)
+    /// nearest to the given canvas point within the same tolerance as connections. Shares
+    /// the arc-accurate segment distance with <see cref="HitTestConnection"/> so hover,
+    /// click and delete all agree on what is hit.
+    /// </summary>
+    public static CanvasFrozenPathViewModel? HitTestCanvasFrozenPath(Point canvasPoint, DesignCanvasViewModel? vm)
+    {
+        if (vm == null) return null;
+
+        CanvasFrozenPathViewModel? closest = null;
+        double closestDistance = ConnectionHitTolerance;
+        foreach (var pathVm in vm.CanvasFrozenPaths)
+        {
+            var segments = pathVm.Path.Path?.Segments;
+            if (segments == null || segments.Count == 0) continue;
+
+            double distance = DistanceToSegments(segments, canvasPoint.X, canvasPoint.Y);
+            if (distance <= closestDistance)
+            {
+                closestDistance = distance;
+                closest = pathVm;
+            }
+        }
+
+        return closest;
+    }
+
+    /// <summary>
     /// Shortest distance from a canvas point to a connection's drawn path: the minimum over its
     /// routed segments — arcs sampled to short chords (<see cref="ArcSampling"/>); a bare chord
     /// cuts the corner of larger bends, so the highlight used to trigger visibly off the curve
@@ -353,6 +381,15 @@ public class DesignCanvasHitTesting
         if (segments.Count == 0)
             return PointToSegmentDistance(x, y, conn.StartX, conn.StartY, conn.EndX, conn.EndY);
 
+        return DistanceToSegments(segments, x, y);
+    }
+
+    /// <summary>
+    /// Minimum distance from a point to a list of routed segments, sampling arcs to
+    /// short chords so bends are hit where they are actually drawn.
+    /// </summary>
+    private static double DistanceToSegments(IReadOnlyList<PathSegment> segments, double x, double y)
+    {
         double min = double.MaxValue;
         foreach (var seg in segments)
         {

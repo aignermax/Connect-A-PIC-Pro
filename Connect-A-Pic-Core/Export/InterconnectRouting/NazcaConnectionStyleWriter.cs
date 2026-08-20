@@ -52,7 +52,12 @@ public static class NazcaConnectionStyleWriter
             return null;
 
         var ci = CultureInfo.InvariantCulture;
-        string w = connection.WidthMicrometers.ToString("F2", ci);
+        // The endpoint pins' PDK-stamped width is the process truth; the connection's own
+        // width is the fallback for unstamped (demo/playground) pins.
+        var widthUm = connection.StartPin.WaveguideWidthMicrometers
+            ?? connection.EndPin.WaveguideWidthMicrometers
+            ?? connection.WidthMicrometers;
+        string w = widthUm.ToString("F2", ci);
         string layer = sourceLayer is { } s
             ? $", layer=({s.Layer.ToString(ci)}, {s.DataType.ToString(ci)})"
             : gdsLayer.HasValue ? $", layer={gdsLayer.Value}" : string.Empty;

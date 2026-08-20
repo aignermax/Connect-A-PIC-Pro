@@ -48,7 +48,8 @@ public static class SBendGeometry
     /// <returns>Stub–arc–straight–arc–stub segments, or null in a degenerate case.</returns>
     public static IReadOnlyList<PathSegment>? BuildSymmetricS(
         double startX, double startY, double startAngleDegrees,
-        double longitudinal, double lateral, double minBendRadiusMicrometers = 0)
+        double longitudinal, double lateral, double minBendRadiusMicrometers = 0,
+        IReadOnlyList<double>? allowedBendRadii = null)
     {
         if (longitudinal <= Epsilon || Math.Abs(lateral) <= Epsilon)
             return null;
@@ -68,7 +69,7 @@ public static class SBendGeometry
         // the generous factor keeps a small middle straight so the arcs stay handle-grabbable.
         // A bend-radius floor (process minimum) may raise the radius up to that fit limit.
         double maxRadius = innerLongitudinal / (2.0 * sinPhi0);
-        double radius = ApplyRadiusFloor(maxRadius, minBendRadiusMicrometers);
+        double radius = ApplyRadiusFloor(maxRadius, minBendRadiusMicrometers, allowedBendRadii);
         if (radius <= Epsilon)
             return null;
 
@@ -89,15 +90,42 @@ public static class SBendGeometry
     /// Picks the styled-arc radius from the largest geometrically fitting radius and a
     /// bend-radius floor (the larger of the connection's radius and the fabrication process'
     /// minimum): the generous default is <see cref="GenerousRadiusFactor"/> × the fit; a floor
-    /// above it wins as long as it still fits the layout. A floor beyond the fit is ignored —
-    /// the fitting radius keeps governing (the documented styled-route exception).
+    /// above it wins as long as it still fits the layout. When foundry-style allowed radii are
+    /// supplied (issue #888), the largest allowed value that fits the geometry and honors the
+    /// floor is preferred instead, mirroring the largest-viable-radius policy of the A*
+    /// post-routing <see cref="AStarPathfinder.BendRadiusUpsizer"/>.
+    /// A floor beyond the fit is ignored — the fitting radius keeps governing (the documented
+    /// styled-route exception); such a path is normally rejected by the radius-floor check.
     /// </summary>
     /// <param name="maxFittingRadius">Largest radius the layout can geometrically accommodate (µm).</param>
     /// <param name="minBendRadiusMicrometers">Bend-radius floor (µm); 0 applies no floor.</param>
+    /// <param name="allowedBendRadii">Optional foundry-style allowed radii (µm). If provided,
+    /// the largest allowed value that fits the geometry and honors the floor is chosen.</param>
     /// <returns>The radius to build the arc(s) with (µm).</returns>
-    public static double ApplyRadiusFloor(double maxFittingRadius, double minBendRadiusMicrometers)
+    public static double ApplyRadiusFloor(
+        double maxFittingRadius,
+        double minBendRadiusMicrometers,
+        IReadOnlyList<double>? allowedBendRadii = null)
     {
         double generous = maxFittingRadius * GenerousRadiusFactor;
+
+        if (allowedBendRadii != null && allowedBendRadii.Count > 0)
+        {
+            double bestAllowed = 0;
+            foreach (double radius in allowedBendRadii.OrderByDescending(r => r))
+            {
+                if (radius > maxFittingRadius)
+                    continue;
+                if (radius < minBendRadiusMicrometers)
+                    break;
+                bestAllowed = radius;
+                break;
+            }
+
+            if (bestAllowed > 0)
+                return bestAllowed;
+        }
+
         bool floorFits = minBendRadiusMicrometers > generous && minBendRadiusMicrometers <= maxFittingRadius;
         return floorFits ? minBendRadiusMicrometers : generous;
     }

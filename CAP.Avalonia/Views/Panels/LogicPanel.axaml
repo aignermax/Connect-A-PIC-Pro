@@ -1,0 +1,319 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
+             xmlns:loc="using:CAP.Avalonia.Services.Localization"
+             xmlns:logic="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis"
+             xmlns:bus="using:CAP.Avalonia.ViewModels.Analysis.LogicAnalysis.BusView"
+             x:Class="CAP.Avalonia.Views.Panels.LogicPanel"
+             x:DataType="vm:MainViewModel">
+
+    <UserControl.Styles>
+        <!-- Replay (#1058): the selected timeline row — the instant the canvas badges
+             currently show — gets a visible highlight. -->
+        <Style Selector="Button.timeline-event">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="2,0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Left"/>
+            <Setter Property="HorizontalAlignment" Value="Stretch"/>
+        </Style>
+        <Style Selector="Button.timeline-event.selected">
+            <Setter Property="Background" Value="#3d3d5d"/>
+        </Style>
+    </UserControl.Styles>
+
+    <StackPanel>
+        <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize LogicPanel.Title}" Foreground="MediumPurple" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why the logic layer restores clean 0/1 levels
+                 while the passive optical cascade gives up after about two stages. -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize LogicPanelHelp.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize LogicPanelHelp.Intro}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.RestorationTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.RestorationBody}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.InputsTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.InputsBody}"/>
+
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.BusTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.BusBody}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
+
+        <TextBlock Text="{loc:Localize LogicPanel.Hint}" Foreground="Gray" FontSize="10" TextWrapping="Wrap"/>
+
+        <StackPanel Orientation="Horizontal" Margin="0,8,0,5">
+            <Button Content="{loc:Localize LogicPanel.Build}"
+                    Command="{Binding RightPanel.Logic.BuildNetworkCommand}"
+                    Width="150" Padding="8,4" Background="#3d5d3d"
+                    IsEnabled="{Binding RightPanel.Logic.IsProcessing, Converter={x:Static BoolConverters.Not}}"/>
+            <Button Content="{loc:Localize Common.Cancel}"
+                    Command="{Binding RightPanel.Logic.CancelCommand}"
+                    Width="70" Padding="8,4" Margin="5,0,0,0" Background="#5d3d3d"
+                    IsVisible="{Binding RightPanel.Logic.IsProcessing}"/>
+        </StackPanel>
+        <ProgressBar IsIndeterminate="True" Height="3" Margin="0,0,0,5"
+                     IsVisible="{Binding RightPanel.Logic.IsProcessing}"/>
+        <TextBlock Text="{Binding RightPanel.Logic.WavelengthText}" Foreground="Gray" FontSize="10" Margin="0,0,0,5"
+                   IsVisible="{Binding RightPanel.Logic.WavelengthText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+        <TextBlock Text="{Binding RightPanel.Logic.StatusText}" Foreground="Gray" FontSize="10" TextWrapping="Wrap" Margin="0,0,0,5"
+                   IsVisible="{Binding RightPanel.Logic.StatusText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+        <!-- Optical fan-out warnings (#996): non-blocking, the idealized logic result
+             stays available — the warning marks where a physical implementation would
+             need splitters and level restoration. -->
+        <Border IsVisible="{Binding RightPanel.Logic.HasFanOutWarnings}"
+                Background="#2a2413" BorderBrush="#8a6d1f" BorderThickness="1"
+                CornerRadius="4" Padding="6" Margin="0,0,0,5">
+            <StackPanel Spacing="3">
+                <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{loc:Localize LogicPanel.FanOutWarning.Title}"
+                               Foreground="#e6c860" FontSize="10" FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                    <!-- Education piece: why the half-/full-adder examples duplicate
+                         their XOR ladders instead of splitting one output. -->
+                    <controls:HelpFlyoutButton Grid.Column="1"
+                                               Title="{loc:Localize LogicPanelFanOutHelp.Title}"
+                                               VerticalAlignment="Center" Margin="4,-4,0,0">
+                        <controls:HelpFlyoutButton.HelpContent>
+                            <StackPanel Spacing="8" MaxWidth="400">
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.Intro}"/>
+
+                                <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.PhysicsBody}"/>
+
+                                <TextBlock Text="{loc:Localize LogicPanelFanOutHelp.ExamplesTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                           Text="{loc:Localize LogicPanelFanOutHelp.ExamplesBody}"/>
+                            </StackPanel>
+                        </controls:HelpFlyoutButton.HelpContent>
+                    </controls:HelpFlyoutButton>
+                </Grid>
+                <ItemsControl ItemsSource="{Binding RightPanel.Logic.FanOutWarnings}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="logic:LogicFanOutWarningViewModel">
+                            <StackPanel Spacing="1">
+                                <TextBlock Text="{Binding WarningText}" Foreground="#e6c860"
+                                           FontSize="10" TextWrapping="Wrap"/>
+                                <!-- Quantitative level report (#1011): the ideal-split arithmetic
+                                     and one verdict per receiving input. -->
+                                <TextBlock Text="{Binding SplitLine}" Foreground="#d8b44a"
+                                           FontSize="10" TextWrapping="Wrap"/>
+                                <ItemsControl ItemsSource="{Binding VerdictLines}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="x:String">
+                                            <TextBlock Text="{Binding}" Foreground="#d8b44a"
+                                                       FontSize="10" TextWrapping="Wrap" Margin="10,0,0,0"/>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <TextBlock Text="{loc:Localize LogicPanel.FanOutWarning.PhysicsNote}"
+                           Foreground="#a89040" FontSize="10" TextWrapping="Wrap" FontStyle="Italic"/>
+            </StackPanel>
+        </Border>
+
+        <!-- The assembled network: one toggle per unconnected gate input, one live
+             0/1 indicator per gate output -->
+        <StackPanel IsVisible="{Binding RightPanel.Logic.HasNetwork}">
+            <TextBlock Text="{loc:Localize LogicPanel.Inputs}" Foreground="Gray" FontSize="10" Margin="0,5,0,2"/>
+            <!-- Bus view (#1068): indexed families (A0–A3) collapse into a bus header
+                 line showing the decimal value with an editable quick-set field; plain
+                 names keep their single toggle. -->
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.InputRows}">
+                <ItemsControl.DataTemplates>
+                    <DataTemplate x:DataType="logic:LogicNetworkInputViewModel">
+                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsOn}"
+                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                    </DataTemplate>
+                    <DataTemplate x:DataType="bus:LogicSignalBusInputViewModel">
+                        <StackPanel Margin="0,1">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="{Binding HeaderText}" FontFamily="Consolas" FontSize="11"
+                                           Foreground="#cfe0ff" VerticalAlignment="Center"/>
+                                <TextBox Text="{Binding ValueText}" Width="56" Margin="8,0,0,0"
+                                         FontFamily="Consolas" FontSize="11" Padding="4,1"
+                                         VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <ItemsControl ItemsSource="{Binding Members}" Margin="14,0,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="logic:LogicNetworkInputViewModel">
+                                        <CheckBox Content="{Binding PinName}" IsChecked="{Binding IsOn}"
+                                                  Foreground="LightGray" FontSize="11" Margin="0,1"/>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.DataTemplates>
+            </ItemsControl>
+
+            <TextBlock Text="{loc:Localize LogicPanel.Outputs}" Foreground="Gray" FontSize="10" Margin="0,8,0,2"/>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.OutputRows}">
+                <ItemsControl.DataTemplates>
+                    <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
+                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                       Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
+                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                       Foreground="Gray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                            <TextBlock Text="{Binding DelayText}" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                        </StackPanel>
+                    </DataTemplate>
+                    <DataTemplate x:DataType="bus:LogicSignalBusOutputViewModel">
+                        <StackPanel Margin="0,1">
+                            <TextBlock Text="{Binding HeaderText}" FontFamily="Consolas" FontSize="11"
+                                       FontWeight="SemiBold" Foreground="#cfe0ff"/>
+                            <ItemsControl ItemsSource="{Binding Members}" Margin="14,0,0,0">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="logic:LogicNetworkOutputViewModel">
+                                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                                            <TextBlock Text="{Binding PinName}" Foreground="LightGray" FontSize="11" Width="96" VerticalAlignment="Center"/>
+                                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                                       Foreground="LightGreen" IsVisible="{Binding IsOne}"/>
+                                            <TextBlock Text="{Binding BitText}" FontFamily="Consolas" FontSize="12" FontWeight="Bold"
+                                                       Foreground="Gray" IsVisible="{Binding IsOne, Converter={x:Static BoolConverters.Not}}"/>
+                                            <TextBlock Text="{Binding DelayText}" Foreground="Gray" FontSize="10"
+                                                       VerticalAlignment="Center" Margin="8,0,0,0"/>
+                                        </StackPanel>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.DataTemplates>
+            </ItemsControl>
+
+            <!-- Event timeline (#1045, rung 5 visualizer slice 2): the switch events
+                 of the last input toggle in arrival-time order — the first "watch
+                 your computer compute" view on the way to the animated light
+                 propagation of the north star. -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,2">
+                <TextBlock Text="{loc:Localize LogicPanel.Timeline}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+                <!-- Plain-language physics: why light takes time, why some gates
+                     switch later, and how the last event relates to the critical
+                     path number shown below. -->
+                <controls:HelpFlyoutButton Grid.Column="1"
+                                           Title="{loc:Localize LogicPanelTimelineHelp.Title}"
+                                           VerticalAlignment="Center" Margin="4,-4,0,0">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.Intro}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.PhysicsBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.OrderTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.OrderBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
+                            <!-- Auto-play: the fixed 0.6 s cadence is didactic,
+                                 not to scale — the real events are picoseconds apart. -->
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.PlaybackBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </Grid>
+            <!-- Replay navigation: step through the switch events and the canvas
+                 badges show the network state at that instant — pure lookup, nothing
+                 is re-simulated. Play advances the replay on its own at a fixed
+                 didactic cadence. -->
+            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,0,2"
+                        IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
+                <Button Content="{Binding RightPanel.Logic.PlayPauseText}"
+                        Command="{Binding RightPanel.Logic.TogglePlaybackCommand}"
+                        Padding="6,2" FontSize="10"/>
+                <Button Content="{loc:Localize LogicPanel.ReplayPrev}"
+                        Command="{Binding RightPanel.Logic.PreviousTimelineEventCommand}"
+                        Padding="6,2" FontSize="10"/>
+                <Button Content="{loc:Localize LogicPanel.ReplayNext}"
+                        Command="{Binding RightPanel.Logic.NextTimelineEventCommand}"
+                        Padding="6,2" FontSize="10"/>
+                <TextBlock Text="{Binding RightPanel.Logic.ReplayTimeText}" Foreground="#e6c860"
+                           FontSize="10" VerticalAlignment="Center" Margin="4,0,0,0"
+                           IsVisible="{Binding RightPanel.Logic.IsReplayActive}"/>
+                <Button Content="{loc:Localize LogicPanel.ReplayExit}"
+                        Command="{Binding RightPanel.Logic.ExitReplayCommand}"
+                        Padding="6,2" FontSize="10"
+                        IsVisible="{Binding RightPanel.Logic.IsReplayActive}"/>
+            </StackPanel>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.TimelineEvents}"
+                          IsVisible="{Binding RightPanel.Logic.HasTimelineEvents}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:LogicTimelineEventViewModel">
+                        <Button Classes="timeline-event"
+                                Classes.selected="{Binding IsSelected}"
+                                Command="{Binding $parent[ItemsControl].DataContext.RightPanel.Logic.SelectTimelineEventCommand}"
+                                CommandParameter="{Binding}">
+                            <StackPanel Orientation="Horizontal" Margin="0,1">
+                                <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
+                                           FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
+                                           FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                           Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
+                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                           Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
+                            </StackPanel>
+                        </Button>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+            <TextBlock Text="{loc:Localize LogicPanel.TimelineEmpty}" Foreground="Gray" FontSize="10"
+                       FontStyle="Italic" TextWrapping="Wrap"
+                       IsVisible="{Binding RightPanel.Logic.HasTimelineEvents, Converter={x:Static BoolConverters.Not}}"/>
+
+            <!-- Propagation delays (#1002): the slowest gate chain from a network input
+                 to an output limits how fast the circuit can clock. -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0"
+                  IsVisible="{Binding RightPanel.Logic.CriticalPathText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="{Binding RightPanel.Logic.CriticalPathText}" Foreground="#cfe0ff"
+                           FontSize="11" FontWeight="SemiBold" VerticalAlignment="Center" TextWrapping="Wrap"/>
+                <controls:HelpFlyoutButton Grid.Column="1"
+                                           Title="{loc:Localize LogicPanelTimingHelp.Title}"
+                                           VerticalAlignment="Center" Margin="4,0,0,0">
+                    <controls:HelpFlyoutButton.HelpContent>
+                        <StackPanel Spacing="8" MaxWidth="400">
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                       Text="{loc:Localize LogicPanelTimingHelp.Intro}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimingHelp.PhysicsTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimingHelp.PhysicsBody}"/>
+
+                            <TextBlock Text="{loc:Localize LogicPanelTimingHelp.ClockTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimingHelp.ClockBody}"/>
+                        </StackPanel>
+                    </controls:HelpFlyoutButton.HelpContent>
+                </controls:HelpFlyoutButton>
+            </Grid>
+        </StackPanel>
+    </StackPanel>
+
+</UserControl>

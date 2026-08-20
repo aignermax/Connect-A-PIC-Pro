@@ -1,15 +1,82 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
+             xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.ConnectionRoutingPanel"
              x:DataType="vm:MainViewModel">
 
     <!-- Connection Routing: routing style only. The style reshapes the visible canvas curve;
          width/radius are applied automatically from the interconnect defaults (no manual UI). -->
-    <StackPanel IsVisible="{Binding CanvasInteraction.IsOpticalConnectionSelected}">
+    <StackPanel IsVisible="{Binding CanvasInteraction.IsConnectionSelected}">
         <Separator Margin="0,20,0,10" Background="#3d3d3d"/>
-        <TextBlock Text="{loc:Localize Routing.Connection.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold"/>
+        <Grid ColumnDefinitions="*,Auto">
+            <TextBlock Text="{loc:Localize Routing.Connection.Title}" Foreground="Orange" Margin="0,0,0,5" FontWeight="SemiBold" VerticalAlignment="Center"/>
+            <!-- Plain-language help: why sharp bends lose light and where the minimum
+                 bend radius comes from (the PDK / cross-section). -->
+            <controls:HelpFlyoutButton Grid.Column="1"
+                                       Title="{loc:Localize BendRadiusHelp.Title}"
+                                       VerticalAlignment="Center" Margin="0,-5,0,0">
+                <controls:HelpFlyoutButton.HelpContent>
+                    <StackPanel Spacing="8" MaxWidth="400">
+                        <StackPanel.Styles>
+                            <!-- Lost-light dots: they radiate out of the sharp bend. -->
+                            <Style Selector="Ellipse.leak">
+                                <Style.Animations>
+                                    <Animation Duration="0:0:2" IterationCount="INFINITE">
+                                        <KeyFrame Cue="0%"><Setter Property="Opacity" Value="0.8"/><Setter Property="Canvas.Left" Value="0"/></KeyFrame>
+                                        <KeyFrame Cue="100%"><Setter Property="Opacity" Value="0"/><Setter Property="Canvas.Left" Value="22"/></KeyFrame>
+                                    </Animation>
+                                </Style.Animations>
+                            </Style>
+                        </StackPanel.Styles>
+
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                   Text="{loc:Localize BendRadiusHelp.Intro}"/>
+
+                        <!-- Diagram: sharp bend leaks, smooth bend keeps the mode. -->
+                        <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                CornerRadius="4" Padding="4">
+                            <Canvas Width="360" Height="90">
+                                <!-- Smooth bend (top). -->
+                                <Path Data="M 20,25 L 120,25 C 180,25 180,65 240,65 L 340,65"
+                                      Stroke="#4FC3F7" StrokeThickness="4"/>
+                                <Ellipse Canvas.Left="168" Canvas.Top="21" Width="14" Height="14" Fill="#FFD54F"/>
+                                <TextBlock Canvas.Left="10" Canvas.Top="72" Text="{loc:Localize BendRadiusHelp.DiagramSmooth}" FontSize="9" Foreground="Gray"/>
+                                <!-- Sharp bend (bottom). -->
+                                <Path Data="M 20,45 L 160,45 L 160,75 L 340,75"
+                                      Stroke="#4FC3F7" StrokeThickness="4"/>
+                                <Ellipse Canvas.Left="162" Canvas.Top="49" Width="8" Height="8" Fill="#FFD54F"/>
+                                <Ellipse Classes="leak" Canvas.Left="166" Canvas.Top="42" Width="5" Height="5" Fill="#FF8A65"/>
+                                <Ellipse Classes="leak" Canvas.Left="166" Canvas.Top="54" Width="5" Height="5" Fill="#FF8A65"/>
+                                <TextBlock Canvas.Left="10" Canvas.Top="82" Text="{loc:Localize BendRadiusHelp.DiagramSharp}" FontSize="9" Foreground="Gray"/>
+                            </Canvas>
+                        </Border>
+
+                        <TextBlock Text="{loc:Localize BendRadiusHelp.LossTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize BendRadiusHelp.LossBody}"/>
+
+                        <TextBlock Text="{loc:Localize BendRadiusHelp.PdkTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize BendRadiusHelp.PdkBody}"/>
+
+                        <TextBlock Text="{loc:Localize BendRadiusHelp.AutoTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize BendRadiusHelp.AutoBody}"/>
+
+                        <TextBlock Text="{loc:Localize BendRadiusHelp.SbendTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize BendRadiusHelp.SbendBody}"/>
+                    </StackPanel>
+                </controls:HelpFlyoutButton.HelpContent>
+            </controls:HelpFlyoutButton>
+        </Grid>
+
+        <!-- Multi-selection (issue #862): the dropdown restyles all selected connections at once. -->
+        <TextBlock Text="{Binding BottomPanel.ConnectionRouting.BatchHint}"
+                   IsVisible="{Binding BottomPanel.ConnectionRouting.IsBatchSelection}"
+                   Foreground="Gray" Margin="0,0,0,3" TextWrapping="Wrap"/>
 
         <TextBlock Text="{loc:Localize Routing.Connection.Style}" Foreground="Gray" Margin="0,0,0,3"/>
         <ComboBox ItemsSource="{Binding BottomPanel.ConnectionRouting.RoutingStyles}"

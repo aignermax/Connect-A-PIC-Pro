@@ -66,6 +66,13 @@ public class ComponentGroupDto
     public int Rotation90CounterClock { get; set; }
 
     /// <summary>
+    /// Exact continuous rotation in degrees for non-cardinal placements (GDS
+    /// import). Null in old files and for cardinal rotations —
+    /// <see cref="Rotation90CounterClock"/> alone restores those.
+    /// </summary>
+    public double? RotationDegrees { get; set; }
+
+    /// <summary>
     /// List of child component identifiers (by Identifier property).
     /// Used to rebuild the parent-child relationships.
     /// </summary>

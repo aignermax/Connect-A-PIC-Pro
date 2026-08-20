@@ -2,6 +2,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:CAP.Avalonia.ViewModels"
              xmlns:editors="using:CAP.Avalonia.ViewModels.Properties.Editors"
+             xmlns:controls="using:CAP.Avalonia.Controls"
              xmlns:loc="using:CAP.Avalonia.Services.Localization"
              x:Class="CAP.Avalonia.Views.Panels.SelectedComponentPropertiesPanel"
              x:DataType="vm:MainViewModel">
@@ -143,7 +144,73 @@
                     <StackPanel>
                         <!-- Laser on/off (#690): a coupler with its laser off is listen-only,
                              i.e. an output. Shares LaserConfig with the canvas laser icon. -->
-                        <TextBlock Text="{loc:Localize SelectedProps.Laser}" Foreground="Gray" FontSize="10" Margin="0,4,0,2"/>
+                        <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,4,0,2">
+                            <TextBlock Text="{loc:Localize SelectedProps.Laser}" Foreground="Gray" FontSize="10"
+                                       VerticalAlignment="Center"/>
+                            <!-- Plain-language help (#907): what wavelength/power mean, why the
+                                 source is single-wavelength CW, and what the canvas colors show. -->
+                            <controls:HelpFlyoutButton Title="{loc:Localize LaserHelp.Title}"
+                                                       VerticalAlignment="Center">
+                                <controls:HelpFlyoutButton.HelpContent>
+                                    <StackPanel Spacing="8" MaxWidth="400">
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="#cfe0ff"
+                                                   Text="{loc:Localize LaserHelp.Intro}"/>
+
+                                        <!-- Diagram: laser icon on vs. off, plus the power-flow color ramp. -->
+                                        <Border Background="#151515" BorderBrush="#3d3d3d" BorderThickness="1"
+                                                CornerRadius="4" Padding="4">
+                                            <Canvas Width="360" Height="86">
+                                                <!-- Laser on: colored dot with rays. -->
+                                                <Ellipse Canvas.Left="20" Canvas.Top="10" Width="18" Height="18" Fill="#FF5252"/>
+                                                <Line StartPoint="29,5" EndPoint="29,0" Stroke="#FF5252" StrokeThickness="1.5"/>
+                                                <Line StartPoint="16,19" EndPoint="11,19" Stroke="#FF5252" StrokeThickness="1.5"/>
+                                                <Line StartPoint="42,19" EndPoint="47,19" Stroke="#FF5252" StrokeThickness="1.5"/>
+                                                <Line StartPoint="20,10" EndPoint="16,6" Stroke="#FF5252" StrokeThickness="1.5"/>
+                                                <Line StartPoint="38,10" EndPoint="42,6" Stroke="#FF5252" StrokeThickness="1.5"/>
+                                                <TextBlock Canvas.Left="4" Canvas.Top="34"
+                                                           Text="{loc:Localize LaserHelp.DiagramOn}" FontSize="9" Foreground="Gray"/>
+                                                <!-- Laser off: gray dot with a slash. -->
+                                                <Ellipse Canvas.Left="100" Canvas.Top="10" Width="18" Height="18" Fill="#9E9E9E"/>
+                                                <Line StartPoint="102,26" EndPoint="116,12" Stroke="#DCDCDC" StrokeThickness="1.5"/>
+                                                <TextBlock Canvas.Left="84" Canvas.Top="34"
+                                                           Text="{loc:Localize LaserHelp.DiagramOff}" FontSize="9" Foreground="Gray"/>
+                                                <!-- Power ramp: teal -> green -> yellow -> red. -->
+                                                <TextBlock Canvas.Left="170" Canvas.Top="4"
+                                                           Text="{loc:Localize LaserHelp.DiagramRamp}" FontSize="9" Foreground="Gray"/>
+                                                <Rectangle Canvas.Left="170" Canvas.Top="22" Width="180" Height="10" RadiusX="2" RadiusY="2">
+                                                    <Rectangle.Fill>
+                                                        <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                                            <GradientStop Offset="0" Color="#00B4B4"/>
+                                                            <GradientStop Offset="0.33" Color="#32DC32"/>
+                                                            <GradientStop Offset="0.66" Color="#FFDC00"/>
+                                                            <GradientStop Offset="1" Color="#FF6450"/>
+                                                        </LinearGradientBrush>
+                                                    </Rectangle.Fill>
+                                                </Rectangle>
+                                                <TextBlock Canvas.Left="170" Canvas.Top="38"
+                                                           Text="{loc:Localize LaserHelp.DiagramWeak}" FontSize="9" Foreground="Gray"/>
+                                                <TextBlock Canvas.Left="318" Canvas.Top="38"
+                                                           Text="{loc:Localize LaserHelp.DiagramStrong}" FontSize="9" Foreground="Gray"/>
+                                                <TextBlock Canvas.Left="170" Canvas.Top="58" Width="180" TextWrapping="Wrap"
+                                                           Text="{loc:Localize LaserHelp.DiagramRampNote}" FontSize="9" Foreground="#888888"/>
+                                            </Canvas>
+                                        </Border>
+
+                                        <TextBlock Text="{loc:Localize LaserHelp.WavelengthPowerTitle}" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize LaserHelp.WavelengthPowerBody}"/>
+
+                                        <TextBlock Text="{loc:Localize LaserHelp.CwTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize LaserHelp.CwBody}"/>
+
+                                        <TextBlock Text="{loc:Localize LaserHelp.CanvasTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                                   Text="{loc:Localize LaserHelp.CanvasBody}"/>
+                                    </StackPanel>
+                                </controls:HelpFlyoutButton.HelpContent>
+                            </controls:HelpFlyoutButton>
+                        </StackPanel>
                         <ToggleSwitch IsChecked="{Binding LaserConfig.IsEnabled, Mode=TwoWay}"
                                       OnContent="{loc:Localize SelectedProps.LaserOn}" OffContent="{loc:Localize SelectedProps.LaserOff}"
                                       FontSize="11" Margin="0,0,0,4"/>

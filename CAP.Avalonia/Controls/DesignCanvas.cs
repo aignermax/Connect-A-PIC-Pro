@@ -76,6 +76,7 @@ public class DesignCanvas : Control
     private readonly GridRenderer _gridRenderer;
     private readonly PathfindingOverlayRenderer _pathfindingOverlayRenderer;
     private readonly WaveguideConnectionRenderer _waveguideConnectionRenderer;
+    private readonly CanvasFrozenPathRenderer _canvasFrozenPathRenderer;
     private readonly BendHandleRenderer _bendHandleRenderer;
     private readonly SegmentShiftHandleRenderer _segmentShiftHandleRenderer;
     private readonly ComponentRenderer _componentRenderer;
@@ -108,6 +109,7 @@ public class DesignCanvas : Control
         _gridRenderer = new GridRenderer();
         _pathfindingOverlayRenderer = new PathfindingOverlayRenderer();
         _waveguideConnectionRenderer = new WaveguideConnectionRenderer();
+        _canvasFrozenPathRenderer = new CanvasFrozenPathRenderer();
         _bendHandleRenderer = new BendHandleRenderer();
         _segmentShiftHandleRenderer = new SegmentShiftHandleRenderer();
         _componentRenderer = new ComponentRenderer();
@@ -158,7 +160,8 @@ public class DesignCanvas : Control
             InteractionState = _interactionState,
             Zoom = Zoom,
             Bounds = Bounds,
-            GdsPreviewRenderService = MainViewModel?.GdsPreviewRenderService
+            GdsPreviewRenderService = MainViewModel?.GdsPreviewRenderService,
+            LayerVisibility = MainViewModel?.LayerVisibility.State
         };
 
         context.FillRectangle(Brushes.Black, Bounds);
@@ -170,6 +173,9 @@ public class DesignCanvas : Control
             _gridRenderer.RenderWorld(context, rc);
             _pathfindingOverlayRenderer.Render(context, rc);
             _waveguideConnectionRenderer.Render(context, rc);
+            // Canvas-level pin-less frozen paths (#856) draw with the other waveguide
+            // geometry, below components, exactly like group-internal frozen paths.
+            _canvasFrozenPathRenderer.Render(context, rc);
             _componentRenderer.Render(context, rc);
             // Deferred text labels (component/pin names, connection readouts) flush AFTER all
             // component bodies and connection lines, so no geometry can ever paint over a
@@ -179,6 +185,9 @@ public class DesignCanvas : Control
             // Analysis-output overlay (#754) sits on top of components so the candidate
             // glow and the designated "OUT" tag are never hidden by component fills.
             _analysisOutputRenderer.Render(context, rc);
+            // Logic-state badges (#994) ride on top of the gate groups like the
+            // analysis overlay: a chip must never sink under a component fill.
+            LogicGateStateBadgeRenderer.Render(context, rc);
             _previewRenderer.Render(context, rc);
             // Cut tool overlay: guide lines and insertion candidates sit above
             // components and waveguides so the clickable markers are never obscured.
@@ -326,6 +335,9 @@ public class DesignCanvas : Control
             new ConnectionGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new PlacementGestureRecognizer(_interactionState, InvalidateVisual),
             new ComponentDragGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom, c => Cursor = c),
+            // Canvas-level frozen paths (#856): components win when overlapping, but a
+            // click on imported route geometry must beat the selection box below.
+            new FrozenPathDragGestureRecognizer(InvalidateVisual, () => Zoom),
             new SelectionBoxGestureRecognizer(_interactionState, InvalidateVisual, () => Zoom),
             new HoverHighlightGestureRecognizer(_interactionState, InvalidateVisual),
         ];
@@ -375,7 +387,9 @@ public class DesignCanvas : Control
             oldCanvas.RepaintRequested = null;
             oldCanvas.Components.CollectionChanged -= OnComponentsCollectionChanged;
             oldCanvas.Connections.CollectionChanged -= OnConnectionsCollectionChanged;
+            oldCanvas.CanvasFrozenPaths.CollectionChanged -= OnConnectionsCollectionChanged;
             oldCanvas.AnalysisOutput.PropertyChanged -= OnAnalysisOutputChanged;
+            oldCanvas.LogicGateStates.StatesChanged -= OnLogicGateStatesChanged;
         }
         if (e.NewValue is DesignCanvasViewModel newCanvas)
         {
@@ -383,12 +397,18 @@ public class DesignCanvas : Control
             newCanvas.RepaintRequested = () => InvalidateVisual();
             newCanvas.Components.CollectionChanged += OnComponentsCollectionChanged;
             newCanvas.Connections.CollectionChanged += OnConnectionsCollectionChanged;
+            newCanvas.CanvasFrozenPaths.CollectionChanged += OnConnectionsCollectionChanged;
             newCanvas.AnalysisOutput.PropertyChanged += OnAnalysisOutputChanged;
+            newCanvas.LogicGateStates.StatesChanged += OnLogicGateStatesChanged;
         }
     }
 
     /// <summary>Repaints when the designated analysis output changes (#754) so the "OUT" tag follows.</summary>
     private void OnAnalysisOutputChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+        => InvalidateVisual();
+
+    /// <summary>Repaints when a logic-state badge flips or the overlay clears (#994).</summary>
+    private void OnLogicGateStatesChanged(object? sender, EventArgs e)
         => InvalidateVisual();
 
     private void OnComponentsCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
