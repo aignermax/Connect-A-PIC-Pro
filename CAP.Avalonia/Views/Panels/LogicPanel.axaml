@@ -203,6 +203,31 @@
                 </ItemsControl.DataTemplates>
             </ItemsControl>
 
+            <!-- Register state (#1099, rung 5 sequential slice): the Step-clock
+                 button advances every designated register by one clock; the readout
+                 keeps the held state visible even when the canvas badges are
+                 off-screen. Shown only when the network contains a register. -->
+            <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,2"
+                  IsVisible="{Binding RightPanel.Logic.HasRegisters}">
+                <TextBlock Text="{loc:Localize LogicPanel.Registers}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
+                <Button Grid.Column="1" Content="{loc:Localize LogicPanel.StepClock}"
+                        Command="{Binding RightPanel.Logic.StepClockCommand}"
+                        Padding="6,2" FontSize="10"/>
+            </Grid>
+            <ItemsControl ItemsSource="{Binding RightPanel.Logic.RegisterStates}"
+                          IsVisible="{Binding RightPanel.Logic.HasRegisters}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="logic:LogicRegisterStateViewModel">
+                        <StackPanel Orientation="Horizontal" Margin="0,1">
+                            <TextBlock Text="{Binding GateName}" Foreground="LightGray" FontSize="11"
+                                       Width="110" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding BitsText}" FontFamily="Consolas" FontSize="12"
+                                       FontWeight="Bold" Foreground="#e6c860" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
             <!-- Event timeline (#1045, rung 5 visualizer slice 2): the switch events
                  of the last input toggle in arrival-time order — the first "watch
                  your computer compute" view on the way to the animated light

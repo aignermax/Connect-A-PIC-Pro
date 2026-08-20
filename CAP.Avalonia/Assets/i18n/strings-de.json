@@ -1383,6 +1383,8 @@
   "LogicPanel.ReplayNext": "Weiter ▶",
   "LogicPanel.ReplayTime": "Anzeige bei t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Zurück zu Live",
+  "LogicPanel.Registers": "Register:",
+  "LogicPanel.StepClock": "Takt weiterschalten",
   "LogicPanel.PlaybackPlay": "▶ Abspielen",
   "LogicPanel.PlaybackPause": "⏸ Anhalten",
   "LogicPanelTimelineHelp.ReplayTitle": "Die Welle Schritt für Schritt",

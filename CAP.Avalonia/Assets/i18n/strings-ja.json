@@ -1383,6 +1383,8 @@
   "LogicPanel.ReplayNext": "次へ ▶",
   "LogicPanel.ReplayTime": "t = {0:0.0} ps を表示中",
   "LogicPanel.ReplayExit": "ライブ状態に戻る",
+  "LogicPanel.Registers": "レジスタ:",
+  "LogicPanel.StepClock": "クロックを1ステップ進める",
   "LogicPanel.PlaybackPlay": "▶ 再生",
   "LogicPanel.PlaybackPause": "⏸ 一時停止",
   "LogicPanelTimelineHelp.ReplayTitle": "波紋をステップでたどる",
