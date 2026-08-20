@@ -213,13 +213,24 @@
             <!-- Register state (#1099, rung 5 sequential slice): the Step-clock
                  button advances every designated register by one clock; the readout
                  keeps the held state visible even when the canvas badges are
-                 off-screen. Shown only when the network contains a register. -->
+                 off-screen. Shown only when the network contains a register.
+                 Run (#1111) clocks the network on its own at the selected cadence —
+                 every tick is exactly one Step press; input toggles stay live. -->
             <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,2"
                   IsVisible="{Binding RightPanel.Logic.HasRegisters}">
                 <TextBlock Text="{loc:Localize LogicPanel.Registers}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Content="{loc:Localize LogicPanel.StepClock}"
-                        Command="{Binding RightPanel.Logic.StepClockCommand}"
-                        Padding="6,2" FontSize="10"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <Button Content="{loc:Localize LogicPanel.StepClock}"
+                            Command="{Binding RightPanel.Logic.StepClockCommand}"
+                            Padding="6,2" FontSize="10"/>
+                    <Button Content="{Binding RightPanel.Logic.RunStopText}"
+                            Command="{Binding RightPanel.Logic.ToggleRunCommand}"
+                            Padding="6,2" FontSize="10"/>
+                    <ComboBox ItemsSource="{Binding RightPanel.Logic.RunIntervalOptions}"
+                              SelectedItem="{Binding RightPanel.Logic.SelectedRunInterval}"
+                              DisplayMemberBinding="{Binding Label}"
+                              FontSize="10" VerticalAlignment="Center"/>
+                </StackPanel>
             </Grid>
             <ItemsControl ItemsSource="{Binding RightPanel.Logic.RegisterStates}"
                           IsVisible="{Binding RightPanel.Logic.HasRegisters}">

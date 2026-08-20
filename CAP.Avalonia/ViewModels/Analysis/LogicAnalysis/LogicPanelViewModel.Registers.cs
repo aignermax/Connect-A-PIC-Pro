@@ -19,6 +19,7 @@ public partial class LogicPanelViewModel
     /// <summary>True when the assembled network contains at least one register — only then is clocking meaningful.</summary>
     [ObservableProperty]
     [NotifyCanExecuteChangedFor(nameof(StepClockCommand))]
+    [NotifyCanExecuteChangedFor(nameof(ToggleRunCommand))]
     private bool _hasRegisters;
 
     /// <summary>One row per register gate: its committed output bits, refreshed by every clock step.</summary>
@@ -33,7 +34,13 @@ public partial class LogicPanelViewModel
     /// a separate slice).
     /// </summary>
     [RelayCommand(CanExecute = nameof(HasRegisters))]
-    private void StepClock()
+    private void StepClock() => ClockOnce();
+
+    /// <summary>
+    /// One clock edge, shared by the Step button and every Run-mode tick (issue
+    /// #1111): an auto-clock tick is defined to behave exactly like a Step press.
+    /// </summary>
+    private void ClockOnce()
     {
         if (_network == null)
             return;
@@ -74,9 +81,10 @@ public partial class LogicPanelViewModel
             row.Refresh(_network.RegisterState);
     }
 
-    /// <summary>Drops the readout rows and the clock button together with the network behind them.</summary>
+    /// <summary>Drops the readout rows, halts the auto-clock, and hides the clock buttons together with the network behind them.</summary>
     private void ClearRegisterStates()
     {
+        StopRun();
         RegisterStates.Clear();
         HasRegisters = false;
     }

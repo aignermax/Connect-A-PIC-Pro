@@ -1,10 +1,8 @@
 using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
-using CAP_Core.Components.Connections;
-using CAP_Core.Components.Core;
 using Shouldly;
-using UnitTests.Analysis.LogicAnalysis;
 using Xunit;
+using static UnitTests.Helpers.LogicRingTestFixture;
 
 namespace UnitTests.Integration;
 
@@ -21,8 +19,6 @@ namespace UnitTests.Integration;
 /// </summary>
 public class LogicPanelStepClockTests
 {
-    private const double OrThreshold = 0.25;
-
     [Fact]
     public async Task StepClock_TwoRegisterRing_FlipsEachRegisterOncePerPress()
     {
@@ -115,46 +111,4 @@ public class LogicPanelStepClockTests
     /// <summary>The bit of one canvas badge, addressed by gate group and pin.</summary>
     private static bool BadgeBit(DesignCanvasViewModel canvas, string groupName, string pinName) =>
         canvas.LogicGateStates.Badges.Single(b => b.GroupName == groupName && b.PinName == pinName).IsOne;
-
-    /// <summary>The two-register ring on a fresh canvas: R1.y → R2.a and R2.y → R1.a.</summary>
-    private static DesignCanvasViewModel RingCanvas()
-    {
-        var first = OrGate("R1", isRegister: true);
-        var second = OrGate("R2", isRegister: true);
-        var canvas = new DesignCanvasViewModel();
-        canvas.Components.Add(new ComponentViewModel(first));
-        canvas.Components.Add(new ComponentViewModel(second));
-        canvas.Connections.Add(new WaveguideConnectionViewModel(Connect(first, "y", second, "a")));
-        canvas.Connections.Add(new WaveguideConnectionViewModel(Connect(second, "y", first, "a")));
-        return canvas;
-    }
-
-    /// <summary>
-    /// A combiner group with the OR-reading assignment persisted, as a save → load
-    /// round trip would deliver it — optionally carrying the register designation.
-    /// </summary>
-    private static ComponentGroup OrGate(string groupName, bool isRegister)
-    {
-        var group = LogicGateFixtureFactory.CreateCombinerGroup();
-        group.GroupName = groupName;
-        group.TruthTablePinAssignment = new TruthTablePinAssignment
-        {
-            InputPinNames = new List<string> { "a", "b" },
-            OutputPinNames = new List<string> { "y" },
-            BiasPinNames = new List<string>(),
-            Threshold = OrThreshold,
-            IsRegister = isRegister,
-        };
-        group.EnsureSMatrixComputed();
-        return group;
-    }
-
-    /// <summary>A design connection between two gate groups' external pins.</summary>
-    private static WaveguideConnection Connect(
-        ComponentGroup from, string fromPin, ComponentGroup to, string toPin) =>
-        new() { StartPin = Pin(from, fromPin), EndPin = Pin(to, toPin) };
-
-    /// <summary>Looks up a group's connectable external pin.</summary>
-    private static PhysicalPin Pin(ComponentGroup group, string name) =>
-        group.PhysicalPins.Single(p => p.Name == name);
 }

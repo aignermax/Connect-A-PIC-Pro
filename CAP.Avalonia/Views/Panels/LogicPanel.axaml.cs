@@ -13,7 +13,8 @@ namespace CAP.Avalonia.Views.Panels;
 /// DataContext is inherited from MainWindow (MainViewModel). The ViewModel stays
 /// timer-free so tests advance playback ticks synchronously; this code-behind owns
 /// the DispatcherTimer that turns <see cref="LogicPanelViewModel.IsPlaying"/> into
-/// wall-clock ticks (issue #1069).
+/// wall-clock ticks (issue #1069). The Run mode's auto-clock (#1111) lives behind
+/// an injected scheduler in the ViewModel; detaching the panel stops it here.
 /// </summary>
 public partial class LogicPanel : UserControl
 {
@@ -63,6 +64,7 @@ public partial class LogicPanel : UserControl
     protected override void OnDetachedFromVisualTree(VisualTreeAttachmentEventArgs e)
     {
         _playbackTimer?.Stop();
+        _logic?.StopRun();
         base.OnDetachedFromVisualTree(e);
     }
 }
