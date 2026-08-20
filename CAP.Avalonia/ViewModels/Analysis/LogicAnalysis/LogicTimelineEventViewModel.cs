@@ -37,6 +37,18 @@ public partial class LogicTimelineEventViewModel : ObservableObject
     public string TransitionText => IsRising ? "0→1" : "1→0";
 
     /// <summary>
+    /// The "clock #k" divider label shown above this row when it is the first entry
+    /// a clock step appended (issue #1110): the boundary between the preceding settle
+    /// phase and the register commit. Empty for settle-phase rows, so the timeline
+    /// reads "inputs settled → clock → registers committed → outputs rippled".
+    /// Display metadata only — the row stays a normal selectable event for replay.
+    /// </summary>
+    public string ClockBoundaryText { get; init; } = "";
+
+    /// <summary>True when this row opens a clock-step block behind a divider label.</summary>
+    public bool HasClockBoundary => ClockBoundaryText.Length > 0;
+
+    /// <summary>
     /// True while this row is the replayed event (issue #1058): the panel highlights the
     /// row and the canvas badges show the network state at this event's time.
     /// </summary>

@@ -39,18 +39,27 @@ public sealed partial class LogicNetworkEvaluator
     /// same pre-step state (simultaneous commit, D-FF semantics), and the network
     /// is re-settled afterwards, so consecutive steps advance consecutive clocks.
     /// </summary>
+    /// <returns>
+    /// The timeline entries of the step, relative to the clock edge at t = 0: one
+    /// commit entry per register output pin that changed (gate id, pin, new bit),
+    /// then the downstream ripple of the post-commit settling in
+    /// <see cref="LogicEventTimeline"/> order — nothing is recomputed, this is what
+    /// the step just did. Empty when no committed output changed (a quiet clock)
+    /// or when the network has no registers at all.
+    /// </returns>
     /// <exception cref="InvalidOperationException">
     /// <see cref="Evaluate"/> was never called — there is no settled state to sample.
     /// </exception>
-    public void Step()
+    public IReadOnlyList<LogicSwitchEvent> Step()
     {
         if (_lastInputBits == null || _lastSettledOutputs == null)
             throw new InvalidOperationException(
                 "Step() requires a settled network: call Evaluate at least once before the " +
                 "first Step, so the register inputs have values to sample.");
         if (_registerGateIds.Count == 0)
-            return;
+            return Array.Empty<LogicSwitchEvent>();
 
+        var settledBefore = _lastSettledOutputs;
         var sampled = new Dictionary<LogicPinRef, bool>();
         foreach (var gateId in _registerGateIds)
         {
@@ -67,11 +76,23 @@ public sealed partial class LogicNetworkEvaluator
             }
         }
 
+        var changed = new List<LogicPinRef>();
         foreach (var (pin, bit) in sampled)
         {
+            if (_committedRegisterOutputs[pin] != bit)
+                changed.Add(pin);
             _committedRegisterOutputs[pin] = bit;
         }
         _lastSettledOutputs = EvaluateGateOutputs(_lastInputBits);
+        if (changed.Count == 0)
+            return Array.Empty<LogicSwitchEvent>();
+
+        var commits = changed
+            .OrderBy(pin => pin.GateId, StringComparer.Ordinal)
+            .ThenBy(pin => pin.PinName, StringComparer.Ordinal)
+            .Select(pin => new LogicSwitchEvent(0.0, pin.GateId, pin.PinName, _committedRegisterOutputs[pin]));
+        var ripple = LogicEventTimeline.ComputeRegisterRipple(this, settledBefore, _lastSettledOutputs, changed);
+        return commits.Concat(ripple).ToList();
     }
 
     /// <summary>

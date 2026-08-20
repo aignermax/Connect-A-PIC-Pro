@@ -302,15 +302,24 @@
                                 Classes.selected="{Binding IsSelected}"
                                 Command="{Binding $parent[ItemsControl].DataContext.RightPanel.Logic.SelectTimelineEventCommand}"
                                 CommandParameter="{Binding}">
-                            <StackPanel Orientation="Horizontal" Margin="0,1">
-                                <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
-                                           FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
-                                           FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
-                                           Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
-                                <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
-                                           Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
+                            <StackPanel>
+                                <!-- Clock-step boundary (#1110): the divider label rides on the
+                                     first row a Step appended, so the timeline reads
+                                     "inputs settled → clock → registers committed → outputs rippled". -->
+                                <TextBlock Text="{Binding ClockBoundaryText}" Foreground="#e6c860"
+                                           FontFamily="Consolas" FontSize="10" FontWeight="Bold"
+                                           Margin="0,4,0,0"
+                                           IsVisible="{Binding HasClockBoundary}"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,1">
+                                    <TextBlock Text="{Binding TimeText}" Foreground="#cfe0ff"
+                                               FontFamily="Consolas" FontSize="11" Width="70" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding GatePinText}" Foreground="LightGray"
+                                               FontFamily="Consolas" FontSize="11" Width="110" VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                               Foreground="LightGreen" IsVisible="{Binding IsRising}"/>
+                                    <TextBlock Text="{Binding TransitionText}" FontFamily="Consolas" FontSize="11" FontWeight="Bold"
+                                               Foreground="Gray" IsVisible="{Binding IsRising, Converter={x:Static BoolConverters.Not}}"/>
+                                </StackPanel>
                             </StackPanel>
                         </Button>
                     </DataTemplate>
