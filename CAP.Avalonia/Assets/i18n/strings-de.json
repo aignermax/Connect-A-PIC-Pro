@@ -1403,6 +1403,7 @@
   "LogicPanel.ReplayTime": "Anzeige bei t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Zurück zu Live",
   "LogicPanel.Registers": "Register:",
+  "LogicGate.RegisterMarker.Tooltip": "Register: hält seinen übernommenen Ausgang bis zum nächsten Takt-Schritt.",
   "LogicPanel.StepClock": "Takt weiterschalten",
   "LogicPanel.ClockDivider": "── Takt {0} ──",
   "LogicPanel.PlaybackPlay": "▶ Abspielen",

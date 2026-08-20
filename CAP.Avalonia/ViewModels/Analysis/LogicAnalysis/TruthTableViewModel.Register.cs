@@ -31,6 +31,11 @@ public partial class TruthTableViewModel
             return;
         var assignment = _group?.TruthTablePinAssignment;
         if (assignment != null)
+        {
             assignment.IsRegister = value;
+            // The canvas register marker reads the persisted flag directly, so a
+            // repaint is all it takes for the toggle to show/hide the marker live.
+            _canvas?.RepaintRequested?.Invoke();
+        }
     }
 }
