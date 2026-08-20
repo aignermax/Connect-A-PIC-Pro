@@ -1397,8 +1397,6 @@
   "LogicPanelTimelineHelp.PhysicsBody": "En una guía de onda, la luz se mueve a la velocidad de la luz dividida por el índice de grupo (c/n_g ≈ c/4,2 para el silicio). El retardo de una puerta es la longitud de su camino óptico interno multiplicada por n_g/c: un camino de 100 µm cuesta unos 1,4 ps. Los retardos de los cables se suman: cada picosegundo mostrado es una distancia real que la luz tuvo que recorrer.",
   "LogicPanelTimelineHelp.OrderTitle": "La entrada más lenta decide",
   "LogicPanelTimelineHelp.OrderBody": "Una puerta solo conmuta cuando han llegado todas sus entradas que cambian: el camino más largo hacia esa puerta fija su instante de conmutación. El último evento de la lista es la señal más lenta de este cambio; nunca cae más tarde que el número de ruta crítica mostrado abajo, porque la ruta crítica es el peor caso entre todos los cambios posibles.",
-  "LogicPanelTimelineHelp.ClockTitle": "Los pasos de reloj trazan un divisor",
-  "LogicPanelTimelineHelp.ClockBody": "Cada pulsación de «Avanzar un ciclo de reloj» añade sus eventos tras un divisor «── reloj #k ──», así que la lista se lee en orden: encima del divisor tus entradas ya se habían estabilizado, en el divisor cada registro confirma el valor que muestreó, y debajo las nuevas salidas se propagan por la red. La reproducción avanza directamente a través del límite: una fila debajo de un divisor muestra el circuito después de ese flanco de reloj.",
   "LogicPanel.ReplayPrev": "◀ Anterior",
   "LogicPanel.ReplayNext": "Siguiente ▶",
   "LogicPanel.ReplayTime": "mostrando t = {0:0.0} ps",

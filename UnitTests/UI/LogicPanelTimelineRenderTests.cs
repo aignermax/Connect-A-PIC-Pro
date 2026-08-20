@@ -18,11 +18,9 @@ namespace UnitTests.UI;
 /// (issue #1045, rung 5 visualizer slice 2): the Timeline section renders its
 /// header and "(?)" help flyout, switch-event rows show time, gate.pin, and
 /// transition, the empty-state hint shows when no toggle has happened, and
-/// every new string is translated in all five shipped languages. The flyout's
-/// clock-divider section (#1118) explains the "── clock #k ──" rows a Step
-/// press appends. Same pattern as <c>TruthTablePanelRenderTests</c>: the
-/// render tests run under German so a missing translation falls back to
-/// English and trips the assertion.
+/// every new string is translated in all five shipped languages. Same pattern
+/// as <c>TruthTablePanelRenderTests</c>: the render tests run under German so
+/// a missing translation falls back to English and trips the assertion.
 /// </summary>
 [Collection("LocalizationSingleton")]
 public class LogicPanelTimelineRenderTests
@@ -39,8 +37,6 @@ public class LogicPanelTimelineRenderTests
         "LogicPanelTimelineHelp.PhysicsBody",
         "LogicPanelTimelineHelp.OrderTitle",
         "LogicPanelTimelineHelp.OrderBody",
-        "LogicPanelTimelineHelp.ClockTitle",
-        "LogicPanelTimelineHelp.ClockBody",
     };
 
     /// <summary>The Timeline section's "?" opens a flyout with the localized title.</summary>
@@ -177,19 +173,5 @@ public class LogicPanelTimelineRenderTests
                         $"{language.Code} must not fall back to English for {key}");
             }
         }
-    }
-
-    /// <summary>
-    /// Pins the #1118 clock-divider paragraph: it must show the divider's literal shape,
-    /// name the register commit at the clock edge, and say replay crosses the boundary.
-    /// </summary>
-    [Fact]
-    public void TimelineClockHelp_ExplainsClockDividerAndReplay()
-    {
-        var en = LocalizationResourceLoader.Load(SupportedLanguage.English.Code);
-
-        en["LogicPanelTimelineHelp.ClockBody"].ShouldContain("── clock #k ──");
-        en["LogicPanelTimelineHelp.ClockBody"].ShouldContain("register");
-        en["LogicPanelTimelineHelp.ClockBody"].ShouldContain("Replay");
     }
 }

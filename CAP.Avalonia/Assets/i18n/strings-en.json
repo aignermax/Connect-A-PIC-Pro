@@ -1397,8 +1397,6 @@
   "LogicPanelTimelineHelp.PhysicsBody": "In a waveguide, light moves at the speed of light divided by the group index (c/n_g ≈ c/4.2 for silicon). A gate's delay is its internal optical path length times n_g/c — a 100 µm path costs about 1.4 ps. Wire delays between gates add on top: every picosecond shown is a real distance the light had to travel.",
   "LogicPanelTimelineHelp.OrderTitle": "The slowest input decides",
   "LogicPanelTimelineHelp.OrderBody": "A gate only switches once every one of its changing inputs has arrived — the longest path to that gate sets its switch time. The last event in the list is the slowest signal of this toggle; it never lands later than the critical-path number shown below, because the critical path is the worst case over all possible toggles.",
-  "LogicPanelTimelineHelp.ClockTitle": "Clock steps draw a divider",
-  "LogicPanelTimelineHelp.ClockBody": "Each 'Step clock' press appends its events behind a '── clock #k ──' divider, so the list reads in order: your inputs settled above the divider, at the divider every register commits the value it sampled, and below it the fresh outputs ripple through the network. Replay steps straight across the boundary — a row below a divider shows the circuit after that clock edge.",
   "LogicPanel.ReplayPrev": "◀ Prev",
   "LogicPanel.ReplayNext": "Next ▶",
   "LogicPanel.ReplayTime": "showing t = {0:0.0} ps",

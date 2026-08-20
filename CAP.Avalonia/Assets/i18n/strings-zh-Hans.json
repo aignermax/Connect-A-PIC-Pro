@@ -1397,8 +1397,6 @@
   "LogicPanelTimelineHelp.PhysicsBody": "在波导中,光的传播速度等于光速除以群折射率(硅波导中 c/n_g ≈ c/4.2)。门的延迟等于其内部光程长度乘以 n_g/c——100 µm 的路径约需 1.4 ps。门之间的连线延迟再累加:显示的每一皮秒都是光真实走过的距离。",
   "LogicPanelTimelineHelp.OrderTitle": "最慢的输入说了算",
   "LogicPanelTimelineHelp.OrderBody": "一个门只有等它所有发生变化的输入都到达后才会翻转——通往该门的最长路径决定了它的翻转时刻。列表中最后一个事件就是本次切换中最慢的信号;它不会晚于下方显示的关键路径数值,因为关键路径是所有可能切换中最坏的情况。",
-  "LogicPanelTimelineHelp.ClockTitle": "时钟步进画出分隔线",
-  "LogicPanelTimelineHelp.ClockBody": "每按一次“时钟单步”,其事件都会追加在“── 时钟 #k ──”分隔线之后,因此列表按顺序表示:分隔线上方是输入已稳定,分隔线处每个寄存器提交其采样到的值,分隔线下方新输出在网络中传播。回放会直接跨过边界——分隔线下方的行显示的是该时钟沿之后的电路状态。",
   "LogicPanel.ReplayPrev": "◀ 上一步",
   "LogicPanel.ReplayNext": "下一步 ▶",
   "LogicPanel.ReplayTime": "正在显示 t = {0:0.0} ps",
