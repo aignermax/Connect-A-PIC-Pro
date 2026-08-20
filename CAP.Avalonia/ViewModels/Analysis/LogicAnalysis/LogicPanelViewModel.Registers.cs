@@ -84,6 +84,9 @@ public partial class LogicPanelViewModel
         RestartTimelineAtFreshSettle(resetEvents, preResetResult);
         ReEvaluate();
         RefreshRegisterStates();
+        // ReEvaluate refreshed the live bits without touching the timeline (the input
+        // toggles did not move), so the waveform's live levels would be stale.
+        RefreshWaveform();
     }
 
     /// <summary>Builds the readout rows from the network's committed register state, one row per register gate.</summary>

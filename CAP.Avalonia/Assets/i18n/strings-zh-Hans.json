@@ -1394,6 +1394,7 @@
   "LogicPanelTimingHelp.ClockBody": "这与电子学中的时序收敛同理:新的输入比特只有等最慢的门链稳定后才能到达输出。关键路径给出了最小时钟周期——10 ps 的关键路径意味着电路大约可以以 100 GHz 运行。门之间的连线延迟也计入路径。",
   "LogicPanel.Timeline": "时间线:",
   "LogicPanel.TimelineEmpty": "切换一个输入,观看开关事件在门电路中逐级传播。",
+  "LogicPanel.Waveforms": "波形:",
   "LogicPanelTimelineHelp.Title": "事件为什么会逐级传播?",
   "LogicPanelTimelineHelp.Intro": "每一行都是一个门输出在上次输入切换后跳到新电平的事件,按光到达的先后顺序排列。从上往下读:切换在 t = 0 进入,变化沿门网络传播,每个门都加上自己的延迟。",
   "LogicPanelTimelineHelp.PhysicsTitle": "光需要时间",

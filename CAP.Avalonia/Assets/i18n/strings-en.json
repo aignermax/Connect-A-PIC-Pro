@@ -1394,6 +1394,7 @@
   "LogicPanelTimingHelp.ClockBody": "Same idea as timing closure in electronics: a new input bit only arrives at the output after the slowest gate chain has settled. The critical path gives the minimum clock period — a 10 ps critical path means the circuit can clock at roughly 100 GHz. Wire delays between gates are included in the path.",
   "LogicPanel.Timeline": "Timeline:",
   "LogicPanel.TimelineEmpty": "Toggle an input to watch the switch events ripple through the gates.",
+  "LogicPanel.Waveforms": "Waveforms:",
   "LogicPanelTimelineHelp.Title": "Why do the events ripple?",
   "LogicPanelTimelineHelp.Intro": "Every row is one gate output switching to a new level after your last input toggle, in the order the light arrives. Read top to bottom: the toggle enters at t = 0 and the change fans out through the gate network, each gate adding its own delay.",
   "LogicPanelTimelineHelp.PhysicsTitle": "Light takes time",

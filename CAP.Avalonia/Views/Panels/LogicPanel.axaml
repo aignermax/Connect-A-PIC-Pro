@@ -334,6 +334,17 @@
                        FontStyle="Italic" TextWrapping="Wrap"
                        IsVisible="{Binding RightPanel.Logic.HasTimelineEvents, Converter={x:Static BoolConverters.Not}}"/>
 
+            <!-- Waveform strip (#1129, rung 5 visualizer): the same timeline drawn as
+                 per-signal 0/1 lanes — one trace per named signal, a vertical line per
+                 clock boundary, a cursor at the replayed instant. Read-only. -->
+            <TextBlock Text="{loc:Localize LogicPanel.Waveforms}" Foreground="Gray" FontSize="10"
+                       Margin="0,8,0,2"
+                       IsVisible="{Binding RightPanel.Logic.HasWaveform}"/>
+            <Border Background="#141414" CornerRadius="3"
+                    IsVisible="{Binding RightPanel.Logic.HasWaveform}">
+                <controls:LogicWaveformStrip Waveform="{Binding RightPanel.Logic.Waveform}"/>
+            </Border>
+
             <!-- Propagation delays (#1002): the slowest gate chain from a network input
                  to an output limits how fast the circuit can clock. -->
             <Grid ColumnDefinitions="*,Auto" Margin="0,8,0,0"

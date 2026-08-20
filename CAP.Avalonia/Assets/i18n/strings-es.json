@@ -1394,6 +1394,7 @@
   "LogicPanelTimingHelp.ClockBody": "La misma idea que el cierre de temporización en electrónica: un nuevo bit de entrada solo llega a la salida cuando la cadena de puertas más lenta se ha estabilizado. La ruta crítica da el período mínimo de reloj: 10 ps de ruta crítica significan un reloj de unos 100 GHz. Los retardos de los cables entre puertas están incluidos en la ruta.",
   "LogicPanel.Timeline": "Cronología:",
   "LogicPanel.TimelineEmpty": "Cambia una entrada para ver cómo los eventos de conmutación se propagan por las puertas.",
+  "LogicPanel.Waveforms": "Formas de onda:",
   "LogicPanelTimelineHelp.Title": "¿Por qué se propagan los eventos?",
   "LogicPanelTimelineHelp.Intro": "Cada fila es una salida de puerta que cambia a un nuevo nivel tras tu último cambio de entrada, en el orden en que llega la luz. Lee de arriba abajo: el cambio entra en t = 0 y se propaga por la red de puertas, cada una sumando su propio retardo.",
   "LogicPanelTimelineHelp.PhysicsTitle": "La luz tarda tiempo",

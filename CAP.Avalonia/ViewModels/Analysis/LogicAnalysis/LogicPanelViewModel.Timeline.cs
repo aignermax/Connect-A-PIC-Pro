@@ -65,6 +65,7 @@ public partial class LogicPanelViewModel
         _clockStepCount = 0;
         PreviousTimelineEventCommand.NotifyCanExecuteChanged();
         NextTimelineEventCommand.NotifyCanExecuteChanged();
+        RefreshWaveform();
     }
 
     /// <summary>
@@ -103,6 +104,7 @@ public partial class LogicPanelViewModel
         HasTimelineEvents = true;
         PreviousTimelineEventCommand.NotifyCanExecuteChanged();
         NextTimelineEventCommand.NotifyCanExecuteChanged();
+        RefreshWaveform();
     }
 
     /// <summary>
@@ -128,6 +130,7 @@ public partial class LogicPanelViewModel
         HasTimelineEvents = true;
         PreviousTimelineEventCommand.NotifyCanExecuteChanged();
         NextTimelineEventCommand.NotifyCanExecuteChanged();
+        RefreshWaveform();
     }
 
     /// <summary>Two input assignments are equal when every named bit matches.</summary>
@@ -143,5 +146,6 @@ public partial class LogicPanelViewModel
         _previousInputBits = null;
         _clockStepCount = 0;
         ClearReplay();
+        RefreshWaveform();
     }
 }

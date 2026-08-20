@@ -1394,6 +1394,7 @@
   "LogicPanelTimingHelp.ClockBody": "電子回路のタイミングクロージャと同じ考え方です。新しい入力ビットは、最も遅いゲートの連鎖が安定して初めて出力に届きます。クリティカルパスは最小クロック周期を示します。10 ps のクリティカルパスなら約 100 GHz で動作できます。ゲート間の配線遅延も経路に含まれています。",
   "LogicPanel.Timeline": "タイムライン:",
   "LogicPanel.TimelineEmpty": "入力を切り替えると、スイッチイベントがゲートを伝わる様子を見られます。",
+  "LogicPanel.Waveforms": "波形:",
   "LogicPanelTimelineHelp.Title": "なぜイベントは伝わるのか?",
   "LogicPanelTimelineHelp.Intro": "各行は、直前の入力切り替えの後に新しいレベルへ変わったゲート出力を、光が届く順に並べたものです。上から下へ読みます。切り替えは t = 0 で入り、変化がゲートネットワークを伝わり、各ゲートが自分の遅延を加えていきます。",
   "LogicPanelTimelineHelp.PhysicsTitle": "光には時間がかかる",
