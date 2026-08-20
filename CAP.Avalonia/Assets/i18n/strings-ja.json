@@ -350,6 +350,7 @@
   "Examples.Alu.Description": "1ビットALU:Opビットが結果を入力のANDにするかORにするかを選ぶ。",
   "Examples.Bit.Description": "メモリビット:LoadをセットしてStepを押す — ビットはDinを記憶し保持する。",
   "Examples.Counter2bit.Description": "2ビットカウンタ:Stepを押すとC1C0が0、1、2、3とカウントする — 回路が動き出す。",
+  "Examples.Pc2bit.Description": "2ビットプログラムカウンタ:LOAD=0でStepごとにカウントアップ、LOAD=1でL1L0をロード — NAND2TETRISのPC。",
   "Examples.AndGate.Description": "2つのNANDゲートを組み合わせてANDゲートを作る。",
   "Examples.FullAdder.Description": "2ビットとキャリー入力を加算する — あらゆるコンピュータの基本ブロック。",
   "Examples.HalfAdder.Description": "2ビットを加算する — 初めての算術回路。",
