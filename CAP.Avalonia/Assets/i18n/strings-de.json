@@ -347,6 +347,7 @@
   "EditMode.ExitButton": "Bearbeitungsmodus verlassen (ESC)",
   "EditMode.ExitTip": "Gruppen-Bearbeitungsmodus verlassen und zur Hauptzeichenfläche zurückkehren (ESC-Taste)",
   "EditMode.Title": "GRUPPEN-BEARBEITUNGSMODUS",
+  "Examples.Alu.Description": "Eine 1-Bit-ALU: Das Op-Bit wählt, ob das Ergebnis das AND oder das OR der Eingänge ist.",
   "Examples.AndGate.Description": "Kombiniere zwei NAND-Gatter zu einem AND-Gatter.",
   "Examples.FullAdder.Description": "Addiere zwei Bits plus Übertrag — der Baustein jedes Rechners.",
   "Examples.HalfAdder.Description": "Addiere zwei Bits — deine erste Rechenschaltung.",

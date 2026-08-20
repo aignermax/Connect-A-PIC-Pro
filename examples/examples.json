@@ -8,6 +8,7 @@
     { "file": "Logic Gate Full Adder.lun", "rank": 60, "level": "Adders", "descriptionKey": "Examples.FullAdder.Description" },
     { "file": "Logic Gate MUX.lun", "rank": 70, "level": "Datapath", "descriptionKey": "Examples.Mux.Description" },
     { "file": "Logic Gate 4-Bit Adder.lun", "rank": 80, "level": "Datapath", "descriptionKey": "Examples.RippleCarryAdder.Description" },
+    { "file": "Logic Gate ALU 1-bit.lun", "rank": 85, "level": "Datapath", "descriptionKey": "Examples.Alu.Description" },
     { "file": "Logic Gate SR-Latch.lun", "rank": 90, "level": "Sequential", "descriptionKey": "Examples.SrLatch.Description" }
   ]
 }

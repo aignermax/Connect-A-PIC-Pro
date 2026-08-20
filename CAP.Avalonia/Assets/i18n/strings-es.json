@@ -347,6 +347,7 @@
   "EditMode.ExitButton": "Salir del modo de edición (ESC)",
   "EditMode.ExitTip": "Salir del modo de edición de grupo y volver al lienzo principal (tecla ESC)",
   "EditMode.Title": "MODO DE EDICIÓN DE GRUPO",
+  "Examples.Alu.Description": "Una ALU de 1 bit: el bit Op elige si el resultado es el AND o el OR de las entradas.",
   "Examples.AndGate.Description": "Combina dos puertas NAND en una puerta AND.",
   "Examples.FullAdder.Description": "Suma dos bits más el acarreo: el bloque fundamental de todo ordenador.",
   "Examples.HalfAdder.Description": "Suma dos bits: tu primer circuito aritmético.",
