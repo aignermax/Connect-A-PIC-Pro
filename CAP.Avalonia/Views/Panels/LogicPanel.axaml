@@ -47,6 +47,13 @@
                         <TextBlock Text="{loc:Localize LogicPanelHelp.BusTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize LogicPanelHelp.BusBody}"/>
+
+                        <!-- Registers/clocking (#1101): the register state element landed
+                             in #1086; the register paragraph stays generic until the
+                             toggle UI (#1098) and the Step button (#1099) ship. -->
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.RegisterTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.RegisterBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
