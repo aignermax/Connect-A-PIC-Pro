@@ -1282,6 +1282,8 @@
   "TruthTable.Inputs": "Inputs (max 4):",
   "TruthTable.NoGroupSelected": "Select exactly one group to see whether it behaves like a logic gate.",
   "TruthTable.Outputs": "Outputs:",
+  "TruthTable.RegisterHint": "Outputs hold their committed value while the network settles; the clock Step() samples the inputs and commits them. A feedback loop is legal once it passes through a register.",
+  "TruthTable.RegisterToggle": "Register (state element)",
   "TruthTable.Signal": "Signal:",
   "TruthTable.SignalWarnCrossRole": "'{0}' names both an input and an output — the network build rejects a name spanning two roles.",
   "TruthTable.SignalWarnDuplicateOutput": "Another gate's output already uses '{0}' — output names must be unique.",

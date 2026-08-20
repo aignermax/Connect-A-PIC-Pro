@@ -132,6 +132,14 @@
                 </ItemsControl.ItemTemplate>
             </ItemsControl>
 
+            <!-- Register designation (issue #1098): the group becomes a behavioral
+                 state element, its persisted flag riding the .lun round trip. -->
+            <CheckBox Content="{loc:Localize TruthTable.RegisterToggle}"
+                      IsChecked="{Binding RightPanel.TruthTable.IsRegister}"
+                      Foreground="LightGray" FontSize="11" Margin="0,8,0,1"/>
+            <TextBlock Text="{loc:Localize TruthTable.RegisterHint}" Foreground="Gray" FontSize="9"
+                       TextWrapping="Wrap" Margin="0,0,0,2"/>
+
             <StackPanel Orientation="Horizontal" Margin="0,8,0,5">
                 <TextBlock Text="{loc:Localize TruthTable.Threshold}" Foreground="Gray" VerticalAlignment="Center" Width="70"/>
                 <NumericUpDown Value="{Binding RightPanel.TruthTable.Threshold}"

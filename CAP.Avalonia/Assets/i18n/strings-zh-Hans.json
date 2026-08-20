@@ -1282,6 +1282,8 @@
   "TruthTable.Inputs": "输入（最多 4 个）:",
   "TruthTable.NoGroupSelected": "仅选中一个分组,即可查看它是否表现得像一个逻辑门。",
   "TruthTable.Outputs": "输出:",
+  "TruthTable.RegisterHint": "输出在网络稳定期间保持已提交的值；时钟 Step() 对输入采样并提交。反馈回路只有经过寄存器才合法。",
+  "TruthTable.RegisterToggle": "寄存器（状态元件）",
   "TruthTable.Signal": "信号:",
   "TruthTable.SignalWarnCrossRole": "“{0}”同时用作输入和输出的名称——网络构建会拒绝跨两种角色的名称。",
   "TruthTable.SignalWarnDuplicateOutput": "另一个门的输出已使用“{0}”——输出名称必须唯一。",

@@ -348,6 +348,39 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RoundTrip_RegisterDesignationToggledThroughPanel_SurvivesSaveAndReload()
+    {
+        // Issue #1098: the register toggle in the Truth Table panel writes the
+        // designation into the group's persisted assignment; the .lun round trip
+        // restores it and the reopened panel shows the toggle set.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.IsRegister.ShouldBeFalse("a freshly extracted gate is plain combinational");
+        vm.IsRegister = true;
+        SingleGateGroup(canvas).TruthTablePinAssignment!.IsRegister.ShouldBeTrue(
+            "the toggle writes straight into the persisted assignment");
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("\"IsRegister\": true", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldNotBeNull().IsRegister.ShouldBeTrue(
+            "the toggled designation must be restored on the reloaded group");
+
+        var reloadedGroupVm = reloaded.Components.Single(c => c.Component is ComponentGroup);
+        reloaded.Selection.SelectSingle(reloadedGroupVm);
+        var reloadedVm = new TruthTableViewModel();
+        reloadedVm.ConfigureForSelection(reloadedGroupVm, reloaded);
+        reloadedVm.IsRegister.ShouldBeTrue(
+            "the reopened panel prefills the toggle from the saved designation");
+    }
+
+    [Fact]
     public async Task ReloadedGroup_PanelPrefillsRoles_AndExtractsNandTableWithoutManualAssignment()
     {
         var canvas = await LoadGateOnCanvas();

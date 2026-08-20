@@ -64,6 +64,16 @@ public partial class TruthTableViewModel : ObservableObject
     [ObservableProperty]
     private bool _signalNamesVisible;
 
+    /// <summary>
+    /// Register designation of the selected group (issue #1098): checked, the group
+    /// is a behavioral state element — its outputs hold their committed value while
+    /// the network settles, and <c>Step()</c> samples the inputs and commits them.
+    /// The next extraction folds the designation into the persisted assignment; with
+    /// an assignment already present, the toggle writes through directly.
+    /// </summary>
+    [ObservableProperty]
+    private bool _isRegister;
+
     /// <summary>External pins of the selected group offered as logic inputs (checkboxes).</summary>
     public ObservableCollection<PinSelectionViewModel> InputPins { get; } = new();
 
@@ -113,16 +123,19 @@ public partial class TruthTableViewModel : ObservableObject
     /// <summary>
     /// Re-applies the pin-role assignment the group was last successfully extracted
     /// with (issue #981 — persisted in the .lun file): ticks the same input/output/
-    /// bias checkboxes and restores the threshold, so a save → load round trip
-    /// brings the panel back exactly as the user left it. Silent for legacy files
-    /// and for groups never extracted; pin names that no longer exist on the group
-    /// are skipped instead of failing.
+    /// bias checkboxes, restores the threshold, and prefills the register toggle
+    /// (#1098), so a save → load round trip brings the panel back exactly as the
+    /// user left it. Silent for legacy files and for groups never extracted; pin
+    /// names that no longer exist on the group are skipped instead of failing.
     /// </summary>
     private void PrefillFromPersistedAssignment()
     {
         var saved = _group?.TruthTablePinAssignment;
         if (saved == null)
+        {
+            IsRegister = false; // no assignment → no designation; never leak the previous group's flag
             return;
+        }
 
         _revertingPinCheck = true;
         try
@@ -137,6 +150,7 @@ public partial class TruthTableViewModel : ObservableObject
             _revertingPinCheck = false;
         }
         PrefillSignalNames(saved);
+        IsRegister = saved.IsRegister; // writes back the same value — a harmless no-op on the persisted flag
     }
 
     /// <summary>Ticks the checkbox of every listed pin that still exists on the group.</summary>
@@ -256,6 +270,19 @@ public partial class TruthTableViewModel : ObservableObject
 
         checkedPin.IsChecked = false;
         StatusText = string.Format(Translate("Analysis.TruthTable.TooManyInputs"), TruthTableExtractor.MaxLogicInputs);
+    }
+
+    /// <summary>
+    /// The register designation rides on the group's persisted pin assignment like the
+    /// pin roles themselves: with an assignment present the toggle writes through at
+    /// once; without one (never extracted, legacy file) the pending designation rides
+    /// into the assignment the next extraction persists.
+    /// </summary>
+    partial void OnIsRegisterChanged(bool value)
+    {
+        var assignment = _group?.TruthTablePinAssignment;
+        if (assignment != null)
+            assignment.IsRegister = value;
     }
 
     /// <summary>The active laser's wavelength, falling back to the standard red wavelength.</summary>

@@ -1282,6 +1282,8 @@
   "TruthTable.Inputs": "入力（最大 4）:",
   "TruthTable.NoGroupSelected": "グループを 1 つだけ選択すると、論理ゲートとして振る舞うか確認できます。",
   "TruthTable.Outputs": "出力:",
+  "TruthTable.RegisterHint": "出力はネットワークが整定する間、コミットされた値を保持します。クロックの Step() が入力をサンプリングしてコミットします。フィードバックループはレジスタを通る場合にのみ有効です。",
+  "TruthTable.RegisterToggle": "レジスタ（状態要素）",
   "TruthTable.Signal": "信号:",
   "TruthTable.SignalWarnCrossRole": "「{0}」は入力と出力の両方を指しています — 二つの役割にまたがる名前はネットワークのビルドで拒否されます。",
   "TruthTable.SignalWarnDuplicateOutput": "別のゲートの出力がすでに「{0}」を使用しています — 出力名は一意にする必要があります。",

@@ -42,6 +42,8 @@ public class TruthTablePanelRenderTests
         "TruthTable.SignalWatermark",
         "TruthTable.SignalWarnCrossRole",
         "TruthTable.SignalWarnDuplicateOutput",
+        "TruthTable.RegisterToggle",
+        "TruthTable.RegisterHint",
         "TruthTableHelp.Title",
         "TruthTableHelp.Intro",
         "TruthTableHelp.ThresholdTitle",
@@ -119,7 +121,8 @@ public class TruthTablePanelRenderTests
                 .Any(t => t.Text == hint)
                 .ShouldBeTrue("the panel must explain that exactly one group needs to be selected");
             panel.GetVisualDescendants().OfType<CheckBox>()
-                .ShouldBeEmpty("no group selected — no pin checkboxes");
+                .Where(c => c.IsEffectivelyVisible)
+                .ShouldBeEmpty("no group selected — no pin checkboxes, no register toggle");
         }
         finally
         {
@@ -148,9 +151,13 @@ public class TruthTablePanelRenderTests
             Dispatcher.UIThread.RunJobs();
 
             var checkBoxes = panel.GetVisualDescendants().OfType<CheckBox>().ToList();
-            checkBoxes.Count.ShouldBe(9, "3 external pins offered as inputs, as outputs, and as bias");
+            checkBoxes.Count.ShouldBe(10,
+                "3 external pins offered as inputs, as outputs, and as bias, plus the register toggle (#1098)");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("a");
             checkBoxes.Select(c => c.Content?.ToString()).ShouldContain("y");
+            checkBoxes.Select(c => c.Content?.ToString()).ShouldContain(
+                LocalizationService.Instance.Translate("TruthTable.RegisterToggle"),
+                "the register designation toggle must render too");
         }
         finally
         {
