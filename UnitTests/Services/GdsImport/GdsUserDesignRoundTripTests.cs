@@ -194,13 +194,15 @@ public class GdsUserDesignRoundTripTests : IDisposable
         // top-cell polygon chains (asserted above). The route-network matcher
         // merges each chain and restores the five chains that span exactly two
         // pins as real connections; the remaining five chains entangle at the two
-        // crossing components into ONE junction network (39 polygons, 10 pins)
+        // crossing components into ONE junction network (32 polygons, 10 pins)
         // — crossing/junction topology is never disentangled by guessing, so
         // those stay frozen paths with an informational junction note. (With the
         // largest-viable-radius snap of the styled routes, #888, the wider arcs
         // pick different winners in the congested crossing area: bdc↔crossing
         // and crossing↔crossing restore cleanly, adiabatic↔crossing entangles —
-        // one net additional clean chain.)
+        // one net additional clean chain. The collision-checked
+        // terminal-approach arcs of #1084 re-fragment the frozen network:
+        // 32 polygons, was 39 — the 5/5 restore split is unchanged.)
         outcome.Connections.Count.ShouldBe(5);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived && !c.IsElectrical);
         // The two MMI↔MMI braids restore with demofab pin names either way
@@ -222,7 +224,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         outcome.Warnings.ShouldBeEmpty();
         outcome.Infos.ShouldContain(i => i.Contains("junction with"));
         outcome.Infos.ShouldContain(i => i.Contains("restored as 5 real connection(s)"));
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(39,
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(32,
             "the junction network rides the group as frozen, non-re-routable paths");
 
         // The registered templates carry the pins found in the GDS:
@@ -283,7 +285,7 @@ public class GdsUserDesignRoundTripTests : IDisposable
         group.GroupName.ShouldBe("ConnectAPIC_Design");
         group.InternalPaths.ShouldContain(p => p.StartPin == null,
             "the junction networks' polygons ride the group as pin-less frozen paths");
-        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(39);
+        group.InternalPaths.Count(p => p.StartPin == null).ShouldBe(32);
         group.InternalPaths.Count(p => p.StartPin != null).ShouldBe(5,
             "the five restored connections are frozen into the group with their pins");
         var children = group.GetAllComponentsRecursive().ToList();

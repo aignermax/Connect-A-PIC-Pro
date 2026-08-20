@@ -125,6 +125,38 @@ public class RegistryClientCacheTests : IDisposable
     }
 
     [Fact]
+    public void TryGetCachedIndex_EmptyCache_ReturnsNull_WithoutNetworkRequest()
+    {
+        var client = _harness.CreateClient();
+
+        client.TryGetCachedIndex().ShouldBeNull();
+        _harness.Handler.RequestCount.ShouldBe(0);
+    }
+
+    [Fact]
+    public async Task TryGetCachedIndex_WarmCache_ReturnsParsedIndex_WithoutNetworkRequest()
+    {
+        await _harness.CreateClient().GetIndexAsync(); // Populates the shared cache directory.
+        var requestsAfterCaching = _harness.Handler.RequestCount;
+        var offlineClient = _harness.CreateClient(); // Fresh client, same cache directory.
+
+        var index = offlineClient.TryGetCachedIndex();
+
+        index.ShouldNotBeNull();
+        index!.Components.Count.ShouldBe(5);
+        _harness.Handler.RequestCount.ShouldBe(requestsAfterCaching);
+    }
+
+    [Fact]
+    public void TryGetCachedIndex_CorruptCacheEntry_ReturnsNull()
+    {
+        _harness.CreateCache().Write("index.json", "{ corrupt");
+        var client = _harness.CreateClient();
+
+        client.TryGetCachedIndex().ShouldBeNull();
+    }
+
+    [Fact]
     public void ResolveArtifactPath_JoinsComponentDirectoryAndArtifactFile()
     {
         CAP_Core.ComponentRegistry.RegistryClient.RegistryClient
