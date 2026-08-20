@@ -126,6 +126,7 @@ public partial class LogicPanelViewModel : ObservableObject
             network.CriticalPathDelayPicoseconds,
             network.CriticalPathGateIds.Count);
         RebuildBusRows();
+        ShowRegisterStates(network);
 
         HasNetwork = true;
         ReEvaluate();
@@ -140,6 +141,7 @@ public partial class LogicPanelViewModel : ObservableObject
         HasFanOutWarnings = false;
         CriticalPathText = "";
         ClearTimeline();
+        ClearRegisterStates();
         DetachBusRows();
         InputRows.Clear();
         OutputRows.Clear();

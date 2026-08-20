@@ -1381,6 +1381,8 @@
   "LogicPanel.ReplayNext": "Siguiente ▶",
   "LogicPanel.ReplayTime": "mostrando t = {0:0.0} ps",
   "LogicPanel.ReplayExit": "Volver en vivo",
+  "LogicPanel.Registers": "Registros:",
+  "LogicPanel.StepClock": "Avanzar un ciclo de reloj",
   "LogicPanel.PlaybackPlay": "▶ Reproducir",
   "LogicPanel.PlaybackPause": "⏸ Pausa",
   "LogicPanelTimelineHelp.ReplayTitle": "Recorre la onda paso a paso",
