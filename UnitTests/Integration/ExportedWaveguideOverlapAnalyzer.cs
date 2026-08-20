@@ -134,13 +134,16 @@ public static partial class ExportedWaveguideOverlapAnalyzer
             var shared = resolved[i].Clusters.Intersect(resolved[j].Clusters).ToHashSet();
             if (shared.Count == 0) continue;
 
-            var cluster = clusters[shared.Min()];
-            bool allInsideFootprint = cluster.Polygons
-                .SelectMany(p => p.Points)
-                .All(pt => allowedRegions.Any(box => box.Contains(pt.X, pt.Y)));
-            if (allInsideFootprint) continue;
+            // Every shared chain must be footprint-checked on its own: an
+            // out-of-footprint shared chain is an overlap even when another
+            // shared chain of the same pair is only a pin abutment.
+            var outsideChains = shared
+                .Select(index => clusters[index])
+                .Where(cluster => !IsFullyInsideFootprints(cluster, allowedRegions))
+                .ToList();
+            if (outsideChains.Count == 0) continue;
 
-            var centroid = Centroid(cluster);
+            var centroid = Centroid(outsideChains[0]);
             violations.Add(
                 $"Connection '{resolved[i].Conn.Name}' overlaps connection '{resolved[j].Conn.Name}' " +
                 $"in the exported GDS (shared geometry chain centroid ({centroid.X:F2}, {centroid.Y:F2}) " +

@@ -79,7 +79,7 @@ def extract_coords(gds_path: str) -> dict:
     except ImportError:
         raise ImportError(
             "gdspy or gdstk is required for GDS coordinate extraction.\n"
-            "Install with: pip install gdspy"
+            "Install with: pip install gdspy  (or: pip install gdstk)"
         )
 
     return _extract_coords_gdstk(gds_path)

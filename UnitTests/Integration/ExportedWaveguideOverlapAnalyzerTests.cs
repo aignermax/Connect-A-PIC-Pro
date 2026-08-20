@@ -77,6 +77,37 @@ public class ExportedWaveguideOverlapAnalyzerTests
     }
 
     [Fact]
+    public void SharedChainOutsideFootprint_IsReported_EvenWhenAnotherSharedChainIsInside()
+    {
+        // A and B share two chains at their common start pin: one sits fully
+        // inside a component footprint (pin abutment — tolerated), the other
+        // reaches outside it. The tolerated chain must not mask the overlap.
+        // (The 0.5 µm gap between the shared polygons keeps them disjoint at the
+        // 0.02 µm contact tolerance, while the common pin at (0.7, 0) stays within
+        // the 1.0 µm coverage tolerance of both.)
+        var connections = new[]
+        {
+            Connection("A", (0.7, 0), (20, 0)),
+            Connection("B", (0.7, 0), (30, 0)),
+        };
+        var footprints = new[]
+        {
+            new ExportedWaveguideOverlapAnalyzer.BoundingBox(-2, 1.2, -2, 2),
+        };
+        var json = Gds(
+            Polygon(-1, -0.5, 1, 0.5),
+            Polygon(1.5, -0.5, 3, 0.5),
+            Polygon(19, -0.5, 21, 0.5),
+            Polygon(29, -0.5, 31, 0.5));
+
+        var violations = ExportedWaveguideOverlapAnalyzer.FindViolations(
+            json, CellName, connections, footprints);
+
+        violations.Where(v => v.Contains("overlaps")).ShouldHaveSingleItem()
+            .ShouldContain("Connection 'A' overlaps connection 'B'");
+    }
+
+    [Fact]
     public void UncoveredPin_NamesTheDroppedConnection()
     {
         var connections = new[]

@@ -36,7 +36,7 @@ public sealed class Issue704GdsExportHonestyJourneyFixture : IAsyncLifetime
     public List<ExportedWaveguideOverlapAnalyzer.BoundingBox> ComponentFootprints { get; private set; } = null!;
 
     /// <summary>Builds the layout, routes it, exports the script.</summary>
-    public Task InitializeAsync()
+    public async Task InitializeAsync()
     {
         var mzi8 = Issue704ReproCircuit.CreateMzi("MZI_8", 374.34455820950575, 218.3565233418277);
         var mzi9 = Issue704ReproCircuit.CreateMzi("MZI_9", 236.5708507637589, 649.767215289101);
@@ -55,7 +55,7 @@ public sealed class Issue704GdsExportHonestyJourneyFixture : IAsyncLifetime
 
         // Same bounds as the #704 route-level repro tests (the design fits inside).
         Canvas.InitializeAStarRouting(0, 0, 1200, 1000);
-        Canvas.RecalculateRoutesAsync().GetAwaiter().GetResult();
+        await Canvas.RecalculateRoutesAsync();
 
         Connections = Canvas.Connections
             .Select(vm => {
@@ -73,7 +73,6 @@ public sealed class Issue704GdsExportHonestyJourneyFixture : IAsyncLifetime
             .ToList();
 
         NazcaScript = new SimpleNazcaExporter().Export(Canvas);
-        return Task.CompletedTask;
     }
 
     /// <summary>Removes the temp working directory.</summary>

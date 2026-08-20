@@ -62,6 +62,12 @@ public static partial class ExportedWaveguideOverlapAnalyzer
         return clusters;
     }
 
+    /// <summary>True when every vertex of the chain lies inside one of the allowed regions.</summary>
+    private static bool IsFullyInsideFootprints(Cluster cluster, IReadOnlyList<BoundingBox> allowedRegions) =>
+        cluster.Polygons
+            .SelectMany(p => p.Points)
+            .All(pt => allowedRegions.Any(box => box.Contains(pt.X, pt.Y)));
+
     /// <summary>Geometric mean of every vertex belonging to the cluster.</summary>
     private static Point Centroid(Cluster cluster)
     {
