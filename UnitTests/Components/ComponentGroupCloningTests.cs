@@ -336,7 +336,8 @@ public class ComponentGroupCloningTests
             OutputPinNames = new List<string> { "Y" },
             BiasPinNames = new List<string> { "BIAS" },
             Threshold = 0.125,
-            InputSignalNames = new Dictionary<string, string> { ["A"] = "A" }
+            InputSignalNames = new Dictionary<string, string> { ["A"] = "A" },
+            IsRegister = true
         };
 
         var copy = original.DeepCopy();
@@ -350,6 +351,8 @@ public class ComponentGroupCloningTests
         copiedRoles.BiasPinNames.ShouldBe(original.TruthTablePinAssignment.BiasPinNames);
         copiedRoles.Threshold.ShouldBe(original.TruthTablePinAssignment.Threshold);
         copiedRoles.InputSignalNames.ShouldBe(original.TruthTablePinAssignment.InputSignalNames);
+        copiedRoles.IsRegister.ShouldBeTrue(
+            "a duplicated register gate must stay a register");
 
         copiedRoles.InputPinNames.Add("Mutated");
         original.TruthTablePinAssignment.InputPinNames.Count.ShouldBe(2,

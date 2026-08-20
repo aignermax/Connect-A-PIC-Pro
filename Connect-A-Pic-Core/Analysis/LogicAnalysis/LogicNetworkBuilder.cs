@@ -51,7 +51,10 @@ public sealed partial class LogicNetworkBuilder
     /// A gate id is duplicated, a role assignment does not match its model or group,
     /// or a connection is logically invalid. The message names the offending pins.
     /// </exception>
-    /// <exception cref="InvalidOperationException">The derived wiring forms a cycle.</exception>
+    /// <exception cref="InvalidOperationException">
+    /// The derived wiring forms a cycle that passes through no register-designated
+    /// gate (<see cref="GateRoleAssignment.IsRegister"/>).
+    /// </exception>
     public LogicNetworkEvaluator Build(
         IReadOnlyList<LogicGateInstance> gates,
         IReadOnlyList<WaveguideConnection> connections,
@@ -197,7 +200,12 @@ public sealed partial class LogicNetworkBuilder
 
         ThrowOnInputOutputNameCollision(inputMembers, outputTaps);
 
-        return new LogicNetworkEvaluator(networkInputs, models, wiring, outputTaps, delays, wireDelays);
+        var registerGateIds = contexts
+            .Where(context => context.Instance.Roles.IsRegister)
+            .Select(context => context.GateId)
+            .ToList();
+        return new LogicNetworkEvaluator(
+            networkInputs, models, wiring, outputTaps, delays, wireDelays, registerGateIds);
     }
 
     /// <summary>
