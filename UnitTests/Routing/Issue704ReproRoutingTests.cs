@@ -18,10 +18,10 @@ public class Issue704ReproRoutingTests
     private const double MinClearanceMicrometers = 2.0;
 
     /// <summary>Taper pin o1 absolute position from the repro files.</summary>
-    private const double TaperPinX = 944.2749306393268;
+    private const double TaperPinX = Issue704ReproCircuit.TaperPinX;
 
     /// <summary>Taper pin o1 absolute position from the repro files.</summary>
-    private const double TaperPinY = 816.626565747488;
+    private const double TaperPinY = Issue704ReproCircuit.TaperPinY;
 
     [Fact]
     public void OverlappingWaveguidesRepro_NeighboringPortRoutes_DoNotSilentlyOverlap()

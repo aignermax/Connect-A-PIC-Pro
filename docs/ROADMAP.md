@@ -46,7 +46,7 @@ is the product.
 
 - Rung 1 remainder: #880 (opt-in auto-connect after import); #725 (routing rework: direct-first, anytime-A*). The #704 defect umbrella is closed: bug 3 got a real fix — the PathSmoother terminal approach is now collision-checked against the routing grid (#1078/#1084); bugs 1 and 2 turned out already fixed since July (#705/#717) and are now pinned by tests (#1077/#1083 router self-intersection property suite, #1079/#1085 crossing reinsertion counter-test)
 - Rung 4/5 next: #1070 (1-bit ALU example, PR #1076 pending CI), #1086 (sequential slice 1: register state element, `complex`); transfer functions remain unscoped
-- Honesty E2E seams (kill review 2026-08-20): #1087 (imported GDS black-box cell inside a logic gate group — truth table + save/load), #1088 (tight neighbouring-port design → GDS export with zero overlapping waveguides)
+- Honesty E2E seams (kill review 2026-08-20): #1087 (imported GDS black-box cell inside a logic gate group — truth table + save/load) open; #1088 shipped — the tight neighbouring-port repro geometry now proves end-to-end over the real nazca path that the exported GDS carries one waveguide chain per routed connection with zero overlap outside component footprints, with `scripts/extract_gds_coords.py` executable on the CI toolchain via a gdstk fallback
 - Rung 4/7: length matching (#753) is complete — kernel (#1003/#1007), canvas actuator (#1008/#1013), UI (#1021/#1029)
 - Rung 7 next: foundry outreach with the DRC-clean 4-bit adder artifact (maintainer task; scale proof #1036/#1042 shipped)
 - PDK strategy (rung 7): #620 (AI-assisted PDK import), #773, #772, #740 (registry/library)

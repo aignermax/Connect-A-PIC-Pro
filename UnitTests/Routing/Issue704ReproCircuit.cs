@@ -33,6 +33,12 @@ public static class Issue704ReproCircuit
 
     private const int WavelengthNm = 1550;
 
+    /// <summary>Taper pin o1 absolute X position from the repro files.</summary>
+    public const double TaperPinX = 944.2749306393268;
+
+    /// <summary>Taper pin o1 absolute Y position from the repro files.</summary>
+    public const double TaperPinY = 816.626565747488;
+
     /// <summary>Creates an MZI-shaped block with pins o2 and o3 on its right edge.</summary>
     public static Component CreateMzi(string name, double x, double y) =>
         CreateBlock(name, x, y, MziWidth, MziHeight,
