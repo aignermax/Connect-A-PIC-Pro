@@ -107,6 +107,28 @@ public class ExamplesManifestLocalizationTests
         ladder[counterIndex].DescriptionKey.ShouldBe("Examples.Counter2bit.Description");
     }
 
+    [Fact]
+    public void CuratedLadder_ListsThePc2Bit_AfterTheCounter()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var bitIndex = ladder.FindIndex(example => example.Name == "Logic Gate Bit");
+        bitIndex.ShouldBeGreaterThanOrEqualTo(0, "the load-enabled bit rung must stay curated");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(bitIndex,
+            "the 2-bit counter builds on the register bit — it stays the rung after the Bit");
+
+        var pcIndex = ladder.FindIndex(example => example.Name == "Logic Gate PC 2-bit");
+        pcIndex.ShouldBeGreaterThan(counterIndex,
+            "the 2-bit program counter composes the counter with the load-enabled Bit — " +
+            "the NAND2TETRIS PC slice is the rung after the counter");
+        ladder[pcIndex].Level.ShouldBe("Datapath");
+        ladder[pcIndex].DescriptionKey.ShouldBe("Examples.Pc2bit.Description");
+    }
+
     private static List<ManifestEntry> ReadManifestEntries()
     {
         var manifestPath = Path.Combine(FindRepoRoot(), "examples", "examples.json");

@@ -128,6 +128,80 @@ public class LogicNetworkRegisterTests
     }
 
     [Fact]
+    public void ResetRegisters_CommittedState_ReturnsToPowerUpWithoutRebuild()
+    {
+        var network = DFlipFlop();
+        network.Evaluate(Bits(("d", true)));
+        network.Step();
+        network.RegisterState[new LogicPinRef("reg", "Y")].ShouldBeTrue("the step committed D=1");
+
+        var events = network.ResetRegisters();
+
+        network.RegisterState[new LogicPinRef("reg", "Y")].ShouldBeFalse(
+            "the register is back at its power-up state");
+        network.Evaluate(Bits(("d", true)))["q"].ShouldBeFalse(
+            "the cleared output holds while the input settles — no re-commit without a clock");
+        events.ShouldBe(new[] { new LogicSwitchEvent(0.0, "reg", "Y", false) },
+            "the reset reports exactly the commit that fell back to 0 — the DFF drives no ripple");
+
+        network.Step();
+        network.Evaluate(Bits(("d", true)))["q"].ShouldBeTrue(
+            "the next step samples the post-reset settling: D is still 1, so it commits 1 again");
+    }
+
+    [Fact]
+    public void ResetRegisters_ToggleLoop_EmitsTheCommitAndItsDownstreamRipple()
+    {
+        var network = ToggleLoop(registerGateIds: new[] { "reg" });
+        network.Evaluate(Bits(("x", false)));
+        network.Step();
+        network.Evaluate(Bits(("x", false)))["q"].ShouldBeTrue("the first clock committed NOT(0) = 1");
+
+        var events = network.ResetRegisters();
+
+        events.Select(e => (e.GateId, e.OutputPin, e.NewValue)).ShouldBe(new[]
+        {
+            ("reg", "Y", false),  // the commit at the reset instant
+            ("inv", "Y", true),   // the inverter ripples: NOT(0) settles high
+        });
+        network.Evaluate(Bits(("x", false)))["q"].ShouldBeFalse("the loop is back at power-up");
+    }
+
+    [Fact]
+    public void ResetRegisters_AtPowerUp_IsQuietAndNeedsNoSettle()
+    {
+        var network = DFlipFlop();
+
+        var events = network.ResetRegisters();
+
+        events.ShouldBeEmpty("every register already reads 0 — nothing commits, nothing ripples");
+        network.RegisterState.Values.ShouldAllBe(bit => !bit);
+        // A quiet reset does not settle the network — the first step still requires it.
+        Should.Throw<InvalidOperationException>(() => network.Step())
+            .Message.ShouldContain("Evaluate");
+    }
+
+    [Fact]
+    public void ResetRegisters_PurelyCombinationalNetwork_IsANoOp()
+    {
+        var network = new LogicNetworkEvaluator(
+            new[] { "d" },
+            new Dictionary<string, LogicGateModel> { ["buf"] = BufferGate() },
+            new Dictionary<LogicPinRef, LogicNetDriver>
+            {
+                [new LogicPinRef("buf", "A")] = new LogicNetDriver.NetworkInput("d"),
+            },
+            new Dictionary<string, LogicPinRef> { ["q"] = new("buf", "Y") });
+        network.Evaluate(Bits(("d", true)))["q"].ShouldBeTrue();
+
+        var events = network.ResetRegisters();
+
+        events.ShouldBeEmpty("no registers — nothing can reset");
+        network.RegisterState.ShouldBeEmpty();
+        network.Evaluate(Bits(("d", true)))["q"].ShouldBeTrue("the evaluation is untouched");
+    }
+
+    [Fact]
     public void Evaluate_SrLatchFromCrossCoupledNandRegisters_HoldsStateAcrossSteps()
     {
         var network = SrLatch();

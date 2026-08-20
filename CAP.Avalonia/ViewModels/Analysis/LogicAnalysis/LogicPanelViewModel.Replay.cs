@@ -113,6 +113,7 @@ public partial class LogicPanelViewModel
         ReplayTimeText = value == null
             ? ""
             : string.Format(Translate("LogicPanel.ReplayTime"), value.Event.TimePicoseconds);
+        RefreshWaveform();
         if (value == null)
         {
             RestoreLiveBadges();
