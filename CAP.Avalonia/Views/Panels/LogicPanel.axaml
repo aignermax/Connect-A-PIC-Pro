@@ -260,6 +260,10 @@
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.OrderBody}"/>
 
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ClockTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.ClockBody}"/>
+
                             <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
