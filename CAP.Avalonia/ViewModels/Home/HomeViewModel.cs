@@ -137,11 +137,14 @@ public partial class HomeViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Shows the Home screen (toolbar Home button), refreshing the recent list first.
+    /// Shows the Home screen (toolbar Home button), refreshing the recent list
+    /// and the examples list first — the latter so descriptions follow a
+    /// language switched in Settings since startup.
     /// </summary>
     public void Show()
     {
         RefreshRecentProjects();
+        RefreshExamples();
         IsHomeVisible = true;
     }
 
