@@ -260,10 +260,11 @@ public partial class LeftPanelViewModel : ObservableObject
 
     /// <summary>
     /// Recomputes the registry link row from the current search text. Hits are counted
-    /// against the registry browser's already-loaded index copy — the library search
-    /// must never trigger a network roundtrip (issue #772). Before any successful
-    /// registry load this session, a neutral prompt keeps the online registry
-    /// discoverable; an empty search hides the row.
+    /// against the registry browser's locally known index (the loaded in-memory copy,
+    /// otherwise the on-disk cache) — the library search must never trigger a network
+    /// roundtrip (issue #772). When no index is locally known or the cached copy has
+    /// no hits, a neutral prompt keeps the online registry discoverable; an empty
+    /// search hides the row.
     /// </summary>
     private void UpdateRegistrySearchHint()
     {
@@ -276,16 +277,20 @@ public partial class LeftPanelViewModel : ObservableObject
 
         if (_registryBrowser is not { HasIndexLoaded: true } registry)
         {
-            RegistrySearchHintText = LocalizationService.Instance.Translate("Registry.SearchHintFallback");
+            var cachedHits = _registryBrowser?.CountDiskCachedSearchHits(query);
+            RegistrySearchHintText = cachedHits is > 0
+                ? FormatHitCount(cachedHits.Value)
+                : LocalizationService.Instance.Translate("Registry.SearchHintFallback");
             return;
         }
 
         var hits = registry.Components.Count(c => MatchesRegistryQuery(c, query));
-        RegistrySearchHintText = hits == 0
-            ? ""
-            : string.Format(CultureInfo.InvariantCulture,
-                LocalizationService.Instance.Translate("Registry.SearchHintHits"), hits);
+        RegistrySearchHintText = hits == 0 ? "" : FormatHitCount(hits);
     }
+
+    private static string FormatHitCount(int hits) =>
+        string.Format(CultureInfo.InvariantCulture,
+            LocalizationService.Instance.Translate("Registry.SearchHintHits"), hits);
 
     /// <summary>Free-text match identical to the registry window's own filter.</summary>
     private static bool MatchesRegistryQuery(RegistryComponentItemViewModel item, string query) =>

@@ -8,16 +8,18 @@ using CAP_Core.ComponentRegistry.RegistryClient;
 using CAP_Core.Components.Creation;
 using CAP_DataAccess.Components.ComponentDraftMapper;
 using Shouldly;
+using UnitTests.ComponentRegistry.RegistryClient;
 using Xunit;
 
 namespace UnitTests.ComponentRegistry.RegistrySearchHint;
 
 /// <summary>
 /// Tests for the online-registry link row under the library search hits (issue
-/// #772): the hint matches ONLY against the registry browser's already-loaded
-/// in-memory index (no network roundtrip) — zero hits or an empty search hide
-/// the row, while before the first successful load a neutral prompt keeps the
-/// online registry discoverable.
+/// #772): the hint matches ONLY against the registry browser's locally known
+/// index — the already-loaded in-memory copy, otherwise the on-disk cache (no
+/// network roundtrip either way). Zero hits or an empty search hide the row,
+/// while without any locally known index a neutral prompt keeps the online
+/// registry discoverable.
 /// </summary>
 public class RegistrySearchHintTests
 {
@@ -49,13 +51,31 @@ public class RegistrySearchHintTests
 
     private static RegistryBrowserViewModel CreateRegistry(params RegistryIndexEntry[] entries)
     {
+        // Throwaway cache dir: the disk-cache fallback must never observe the
+        // developer machine's real registry cache — that would make the
+        // not-loaded assertions environment-dependent.
         var registry = new RegistryBrowserViewModel(
-            new CAP_Core.ComponentRegistry.RegistryClient.RegistryClient(new HttpClient()));
+            new CAP_Core.ComponentRegistry.RegistryClient.RegistryClient(
+                new HttpClient(), ThrowawayCache()));
         if (entries.Length > 0)
             registry.HasIndexLoaded = true;
         foreach (var entry in entries)
             registry.Components.Add(new RegistryComponentItemViewModel(entry));
         return registry;
+    }
+
+    private static RegistryCache ThrowawayCache() =>
+        new(Path.Combine(Path.GetTempPath(), $"registry-hint-cache-{Guid.NewGuid():N}"));
+
+    /// <summary>
+    /// Registry browser whose client shares the harness's warmed cache directory
+    /// but has never loaded the index this session — the pre-load disk-cache path.
+    /// </summary>
+    private static async Task<RegistryBrowserViewModel> CreateDiskCachedRegistryAsync(
+        RegistryTestHarness harness)
+    {
+        await harness.CreateClient().GetIndexAsync(); // Populates the shared cache directory.
+        return new RegistryBrowserViewModel(harness.CreateClient());
     }
 
     private static RegistryIndexEntry Entry(string name, string description) =>
@@ -154,5 +174,62 @@ public class RegistrySearchHintTests
         leftPanel.SearchText = "";
 
         leftPanel.RegistrySearchHintText.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public async Task DiskCachedIndex_BeforeFirstLoad_ShowsHitCount()
+    {
+        using var harness = new RegistryTestHarness();
+        var registry = await CreateDiskCachedRegistryAsync(harness); // Fixture index, never loaded in-session.
+        var leftPanel = CreateLeftPanel(registry);
+
+        // "coupler" matches the fixture's directional-coupler name and the MZI description.
+        leftPanel.SearchText = "coupler";
+
+        leftPanel.RegistrySearchHintText.ShouldBe("2 hits in the Component Registry…");
+    }
+
+    [Fact]
+    public async Task DiskCachedIndex_MatchingNeverTouchesNetwork()
+    {
+        using var harness = new RegistryTestHarness();
+        var registry = await CreateDiskCachedRegistryAsync(harness);
+        var requestsAfterCaching = harness.Handler.RequestCount;
+        var leftPanel = CreateLeftPanel(registry);
+
+        leftPanel.SearchText = "coupler";
+        leftPanel.SearchText = "ring";
+        leftPanel.SearchText = "waveguide";
+
+        harness.Handler.RequestCount.ShouldBe(requestsAfterCaching);
+        leftPanel.RegistrySearchHintText.ShouldBe("1 hits in the Component Registry…");
+    }
+
+    [Fact]
+    public async Task DiskCachedIndex_NoHits_ShowsNeutralPrompt()
+    {
+        using var harness = new RegistryTestHarness();
+        var registry = await CreateDiskCachedRegistryAsync(harness);
+        var leftPanel = CreateLeftPanel(registry);
+
+        leftPanel.SearchText = "no-such-component";
+
+        leftPanel.RegistrySearchHintText.ShouldBe("Search the Component Registry…");
+    }
+
+    [Fact]
+    public async Task LoadedIndex_ShadowsDiskCache()
+    {
+        using var harness = new RegistryTestHarness();
+        var registry = await CreateDiskCachedRegistryAsync(harness); // Disk: 2 "coupler" hits.
+        var leftPanel = CreateLeftPanel(registry);
+        leftPanel.SearchText = "coupler";
+        leftPanel.RegistrySearchHintText.ShouldBe("2 hits in the Component Registry…");
+
+        registry.HasIndexLoaded = true;
+        registry.Components.Add(new RegistryComponentItemViewModel(
+            Entry("Dual-ring coupler", "Add-drop through-port coupling.")));
+
+        leftPanel.RegistrySearchHintText.ShouldBe("1 hits in the Component Registry…");
     }
 }
