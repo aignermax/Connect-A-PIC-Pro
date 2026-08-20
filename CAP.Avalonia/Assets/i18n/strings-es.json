@@ -349,6 +349,7 @@
   "EditMode.Title": "MODO DE EDICIÓN DE GRUPO",
   "Examples.Alu.Description": "Una ALU de 1 bit: el bit Op elige si el resultado es el AND o el OR de las entradas.",
   "Examples.AndGate.Description": "Combina dos puertas NAND en una puerta AND.",
+  "Examples.Counter2Bit.Description": "Dos registros de conmutación cuentan 0-1-2-3 y reinician — pulsa Step y mira contar los bits.",
   "Examples.FullAdder.Description": "Suma dos bits más el acarreo: el bloque fundamental de todo ordenador.",
   "Examples.HalfAdder.Description": "Suma dos bits: tu primer circuito aritmético.",
   "Examples.MachZehnder.Description": "Divide la luz en dos caminos y recómbinala: el «Hola Mundo» de la fotónica.",

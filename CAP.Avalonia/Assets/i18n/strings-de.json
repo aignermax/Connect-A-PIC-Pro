@@ -349,6 +349,7 @@
   "EditMode.Title": "GRUPPEN-BEARBEITUNGSMODUS",
   "Examples.Alu.Description": "Eine 1-Bit-ALU: Das Op-Bit wählt, ob das Ergebnis das AND oder das OR der Eingänge ist.",
   "Examples.AndGate.Description": "Kombiniere zwei NAND-Gatter zu einem AND-Gatter.",
+  "Examples.Counter2Bit.Description": "Zwei Toggle-Register zählen 0-1-2-3 und laufen über — drücke Step und sieh die Bits zählen.",
   "Examples.FullAdder.Description": "Addiere zwei Bits plus Übertrag — der Baustein jedes Rechners.",
   "Examples.HalfAdder.Description": "Addiere zwei Bits — deine erste Rechenschaltung.",
   "Examples.MachZehnder.Description": "Teile Licht in zwei Pfade und führe es wieder zusammen — das Hello World der Photonik.",

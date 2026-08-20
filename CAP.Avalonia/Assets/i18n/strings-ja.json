@@ -349,6 +349,7 @@
   "EditMode.Title": "グループ編集モード",
   "Examples.Alu.Description": "1ビットALU:Opビットが結果を入力のANDにするかORにするかを選ぶ。",
   "Examples.AndGate.Description": "2つのNANDゲートを組み合わせてANDゲートを作る。",
+  "Examples.Counter2Bit.Description": "2つのトグルレジスタが0-1-2-3と数えて周回する — Stepを押してビットが数えるのを見よう。",
   "Examples.FullAdder.Description": "2ビットとキャリー入力を加算する — あらゆるコンピュータの基本ブロック。",
   "Examples.HalfAdder.Description": "2ビットを加算する — 初めての算術回路。",
   "Examples.MachZehnder.Description": "光を2つの経路に分けて再合成する — フォトニクスの「Hello World」。",

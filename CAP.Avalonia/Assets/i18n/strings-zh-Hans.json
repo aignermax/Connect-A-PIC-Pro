@@ -349,6 +349,7 @@
   "EditMode.Title": "组编辑模式",
   "Examples.Alu.Description": "1 位 ALU:Op 位选择结果是输入的 AND 还是 OR。",
   "Examples.AndGate.Description": "把两个 NAND 门组合成一个 AND 门。",
+  "Examples.Counter2Bit.Description": "两个翻转寄存器从 0 数到 3 再回绕——按 Step，看比特跳动。",
   "Examples.FullAdder.Description": "把两个比特连同进位相加——每台计算机的基本构件。",
   "Examples.HalfAdder.Description": "把两个比特相加——你的第一个算术电路。",
   "Examples.MachZehnder.Description": "把光分成两条路径再重新合并——光子学的「Hello World」。",

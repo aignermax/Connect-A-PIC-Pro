@@ -6,11 +6,19 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// </summary>
 public sealed partial class LogicNetworkEvaluator
 {
-    /// <summary>Rejects an empty network input list or duplicated input names.</summary>
+    /// <summary>
+    /// Rejects duplicated input names, and an empty input list unless the network
+    /// contains a register — a register-bearing network without inputs is
+    /// self-sufficient and stimulated by <see cref="Step"/> alone (e.g. a
+    /// free-running counter), while a combinational network without inputs could
+    /// never produce anything but constants.
+    /// </summary>
     private void ValidateNetworkInputs()
     {
-        if (InputPinNames.Count == 0)
-            throw new ArgumentException("A logic network needs at least one input pin.", nameof(InputPinNames));
+        if (InputPinNames.Count == 0 && _registerGateIds.Count == 0)
+            throw new ArgumentException(
+                "A logic network needs at least one input pin unless it contains a register.",
+                nameof(InputPinNames));
         var duplicate = InputPinNames.GroupBy(name => name).FirstOrDefault(group => group.Count() > 1)?.Key;
         if (duplicate != null)
             throw new ArgumentException($"Network input '{duplicate}' is declared more than once.", nameof(InputPinNames));

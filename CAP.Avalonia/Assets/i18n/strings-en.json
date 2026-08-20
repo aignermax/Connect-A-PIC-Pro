@@ -349,6 +349,7 @@
   "EditMode.Title": "GROUP EDIT MODE",
   "Examples.Alu.Description": "A 1-bit ALU: the Op bit selects whether the result is the AND or the OR of the inputs.",
   "Examples.AndGate.Description": "Combine two NAND gates into an AND gate.",
+  "Examples.Counter2Bit.Description": "Two toggle registers count 0-1-2-3 and wrap — press Step and watch the bits run.",
   "Examples.FullAdder.Description": "Add two bits plus a carry-in — the building block of every computer.",
   "Examples.HalfAdder.Description": "Add two bits — your first arithmetic circuit.",
   "Examples.MachZehnder.Description": "Split light into two paths and recombine it — the Hello World of photonics.",

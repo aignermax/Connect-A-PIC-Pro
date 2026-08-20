@@ -25,7 +25,11 @@ public sealed partial class LogicNetworkEvaluator
     /// <summary>
     /// Assembles and validates a logic network.
     /// </summary>
-    /// <param name="inputPinNames">Network-level input pin names (at least one, no duplicates).</param>
+    /// <param name="inputPinNames">
+    /// Network-level input pin names (no duplicates). May be empty only for a network
+    /// that contains at least one register — such a self-sufficient network is
+    /// stimulated by <see cref="Step"/> alone.
+    /// </param>
     /// <param name="gates">The gate instances of the network, keyed by their network-local id.</param>
     /// <param name="inputWiring">
     /// The driver of every gate input pin, keyed by (gateId, inputPin). Every input pin of
@@ -67,11 +71,11 @@ public sealed partial class LogicNetworkEvaluator
         _inputWiring = inputWiring ?? throw new ArgumentNullException(nameof(inputWiring));
         _outputTaps = outputTaps ?? throw new ArgumentNullException(nameof(outputTaps));
 
-        ValidateNetworkInputs();
         ValidateGates();
+        InitializeRegisters(registerGateIds);
+        ValidateNetworkInputs();
         ValidateWiring();
         ValidateOutputTaps();
-        InitializeRegisters(registerGateIds);
         _evaluationOrder = TopologicalOrder();
         DetectFanOut();
         InitializeTiming(gateDelays, wireDelays);

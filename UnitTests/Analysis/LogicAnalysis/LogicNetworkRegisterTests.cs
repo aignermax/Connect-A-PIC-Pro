@@ -120,6 +120,36 @@ public class LogicNetworkRegisterTests
     }
 
     [Fact]
+    public void Constructor_SelfSufficientRegisterLoopWithoutInputs_Assembles()
+    {
+        // A register-bearing network needs no network input: Step is its only
+        // stimulus (a free-running counter). The toggle loop still flips per clock.
+        var network = SelfSufficientToggleLoop();
+
+        network.InputPinNames.ShouldBeEmpty();
+        network.Evaluate(Bits())["q"].ShouldBeFalse("powered up cleared");
+        network.Step();
+        network.Evaluate(Bits())["q"].ShouldBeTrue("first clock: NOT(0) committed");
+        network.Step();
+        network.Evaluate(Bits())["q"].ShouldBeFalse("second clock: NOT(1) committed");
+    }
+
+    [Fact]
+    public void Constructor_CombinationalNetworkWithoutInputs_KeepsTheEmptyInputRejection()
+    {
+        var error = Should.Throw<ArgumentException>(() => new LogicNetworkEvaluator(
+            Array.Empty<string>(),
+            new Dictionary<string, LogicGateModel> { ["buf"] = BufferGate() },
+            new Dictionary<LogicPinRef, LogicNetDriver>
+            {
+                [new LogicPinRef("buf", "A")] = new LogicNetDriver.GateOutput(new LogicPinRef("buf", "Y")),
+            },
+            new Dictionary<string, LogicPinRef> { ["q"] = new("buf", "Y") }));
+
+        error.Message.ShouldContain("at least one input pin");
+    }
+
+    [Fact]
     public void Step_BeforeAnyEvaluate_ThrowsTellingTheCallerToSettleFirst()
     {
         var error = Should.Throw<InvalidOperationException>(() => DFlipFlop().Step());
@@ -216,6 +246,26 @@ public class LogicNetworkRegisterTests
                 ["qb"] = new("qbGate", "Y"),
             },
             registerGateIds: new[] { "qGate", "qbGate" });
+
+    /// <summary>
+    /// The toggle loop with no network input at all: the register and the inverter
+    /// feed each other, so <see cref="LogicNetworkEvaluator.Step"/> is the only stimulus.
+    /// </summary>
+    private static LogicNetworkEvaluator SelfSufficientToggleLoop() =>
+        new(
+            Array.Empty<string>(),
+            new Dictionary<string, LogicGateModel>
+            {
+                ["reg"] = BufferGate(),
+                ["inv"] = PinnedGateTables.NotGate(),
+            },
+            new Dictionary<LogicPinRef, LogicNetDriver>
+            {
+                [new LogicPinRef("reg", "A")] = new LogicNetDriver.GateOutput(new LogicPinRef("inv", "Y")),
+                [new LogicPinRef("inv", "A")] = new LogicNetDriver.GateOutput(new LogicPinRef("reg", "Y")),
+            },
+            new Dictionary<string, LogicPinRef> { ["q"] = new("reg", "Y") },
+            registerGateIds: new[] { "reg" });
 
     /// <summary>The D-flip-flop's combinational core: a buffer, Y = A.</summary>
     private static LogicGateModel BufferGate()
