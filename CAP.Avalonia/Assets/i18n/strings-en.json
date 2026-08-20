@@ -348,6 +348,7 @@
   "EditMode.ExitTip": "Exit group edit mode and return to main canvas (ESC key)",
   "EditMode.Title": "GROUP EDIT MODE",
   "Examples.Alu.Description": "A 1-bit ALU: the Op bit selects whether the result is the AND or the OR of the inputs.",
+  "Examples.Bit.Description": "A memory bit: set Load and step the clock — the bit stores Din and holds it.",
   "Examples.Counter2bit.Description": "A 2-bit counter: press Step and watch C1C0 count 0, 1, 2, 3 — the circuit runs.",
   "Examples.AndGate.Description": "Combine two NAND gates into an AND gate.",
   "Examples.FullAdder.Description": "Add two bits plus a carry-in — the building block of every computer.",

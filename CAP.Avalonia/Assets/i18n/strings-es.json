@@ -348,6 +348,7 @@
   "EditMode.ExitTip": "Salir del modo de edición de grupo y volver al lienzo principal (tecla ESC)",
   "EditMode.Title": "MODO DE EDICIÓN DE GRUPO",
   "Examples.Alu.Description": "Una ALU de 1 bit: el bit Op elige si el resultado es el AND o el OR de las entradas.",
+  "Examples.Bit.Description": "Un bit de memoria: activa Load y pulsa Step — el bit almacena Din y lo mantiene.",
   "Examples.Counter2bit.Description": "Un contador de 2 bits: pulsa Step y observa cómo C1C0 cuenta 0, 1, 2, 3 — el circuito funciona.",
   "Examples.AndGate.Description": "Combina dos puertas NAND en una puerta AND.",
   "Examples.FullAdder.Description": "Suma dos bits más el acarreo: el bloque fundamental de todo ordenador.",

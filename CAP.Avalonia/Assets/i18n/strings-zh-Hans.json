@@ -348,6 +348,7 @@
   "EditMode.ExitTip": "退出组编辑模式并返回主画布（ESC 键）",
   "EditMode.Title": "组编辑模式",
   "Examples.Alu.Description": "1 位 ALU:Op 位选择结果是输入的 AND 还是 OR。",
+  "Examples.Bit.Description": "存储位:置位 Load 并按下 Step——该位存入 Din 并保持。",
   "Examples.Counter2bit.Description": "2 位计数器:按下 Step,观看 C1C0 依次计出 0、1、2、3——电路动起来了。",
   "Examples.AndGate.Description": "把两个 NAND 门组合成一个 AND 门。",
   "Examples.FullAdder.Description": "把两个比特连同进位相加——每台计算机的基本构件。",
