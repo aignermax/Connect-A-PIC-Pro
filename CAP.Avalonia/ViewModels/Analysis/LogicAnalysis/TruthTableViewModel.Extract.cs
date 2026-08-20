@@ -41,7 +41,9 @@ public partial class TruthTableViewModel
             // extraction must not overwrite the last good one. Signal names (#1025,
             // #1046) ride along for pins that keep their role: re-extracting must not
             // silently drop the signal identity a design carries. The register
-            // designation (#1086) rides along the same way.
+            // designation (#1086) comes from the panel's toggle: it mirrors the
+            // previous assignment after the selection prefill, and a toggle made
+            // before the first extraction persists here for the first time (#1098).
             var previous = _group.TruthTablePinAssignment;
             _group.TruthTablePinAssignment = new TruthTablePinAssignment
             {
@@ -51,7 +53,7 @@ public partial class TruthTableViewModel
                 Threshold = Threshold,
                 InputSignalNames = PreservedSignalNames(previous?.InputSignalNames, inputs),
                 OutputSignalNames = PreservedSignalNames(previous?.OutputSignalNames, outputs),
-                IsRegister = previous?.IsRegister ?? false,
+                IsRegister = IsRegister,
             };
             SignalNamesVisible = true;
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);

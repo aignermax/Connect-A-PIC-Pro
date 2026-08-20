@@ -333,6 +333,62 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
     }
 
     [Fact]
+    public async Task RoundTrip_RegisterToggledThroughPanel_SurvivesSaveAndReload()
+    {
+        // Issue #1098: the register toggle in the Truth Table panel writes the
+        // persisted designation, and save → load → panel reopen mirrors it back.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.IsRegister.ShouldBeFalse("a freshly extracted gate designates no register");
+        vm.IsRegister = true;
+        SingleGateGroup(canvas).TruthTablePinAssignment!.IsRegister.ShouldBeTrue(
+            "the toggle writes through to the persisted assignment");
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("\"IsRegister\": true", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        var saved = SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldNotBeNull();
+        saved.IsRegister.ShouldBeTrue("the designation rides the save → load round trip");
+
+        // …and the reopened panel prefills the toggle from the file.
+        var reloadedGroupVm = reloaded.Components.Single(c => c.Component is ComponentGroup);
+        reloaded.Selection.SelectSingle(reloadedGroupVm);
+        var reloadedVm = new TruthTableViewModel();
+        reloadedVm.ConfigureForSelection(reloadedGroupVm, reloaded);
+        reloadedVm.IsRegister.ShouldBeTrue("the reopened panel prefills the toggle from the file");
+
+        reloadedVm.IsRegister = false;
+        saved.IsRegister.ShouldBeFalse("untoggling clears the persisted designation again");
+    }
+
+    [Fact]
+    public async Task RoundTrip_RegisterToggledThroughPanel_SurvivesReExtraction()
+    {
+        // Issue #1098: re-extracting the truth table rewrites the persisted
+        // assignment — the toggled register designation must ride along.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+
+        var groupVm = canvas.Components.Single(c => c.Component is ComponentGroup);
+        canvas.Selection.SelectSingle(groupVm);
+        var vm = new TruthTableViewModel();
+        vm.ConfigureForSelection(groupVm, canvas);
+        vm.IsRegister = true;
+
+        await vm.ExtractCommand.ExecuteAsync(null);
+        vm.HasResult.ShouldBeTrue("the re-extraction must succeed");
+
+        SingleGateGroup(canvas).TruthTablePinAssignment.ShouldNotBeNull()
+            .IsRegister.ShouldBeTrue("re-extraction must not strip the designation");
+    }
+
+    [Fact]
     public async Task RoundTrip_GateWithoutRegisterDesignation_PersistsNoRegisterFlag()
     {
         // Issue #1086: a plain combinational gate writes no register flag — the
