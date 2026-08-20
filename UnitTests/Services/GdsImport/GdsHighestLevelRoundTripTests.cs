@@ -106,16 +106,18 @@ public class GdsHighestLevelRoundTripTests : IDisposable
         // polygon chains. The route-network matcher restores the five chains
         // that span exactly two pins (the two MMI braids, adiabatic↔halfring,
         // bdc↔crossing, crossing↔crossing); the remaining five entangle into ONE
-        // junction network across the crossing components (39 polygons, 10 pins)
+        // junction network across the crossing components (32 polygons, 10 pins)
         // — never disentangled by guessing, so those stay frozen paths with an
         // informational note. (With the largest-viable-radius snap of the styled
         // routes, #888, the wider arcs pick different winners in the congested
         // crossing area: bdc↔crossing and crossing↔crossing restore cleanly,
-        // adiabatic↔crossing entangles — one net additional clean chain.)
+        // adiabatic↔crossing entangles — one net additional clean chain. The
+        // collision-checked terminal-approach arcs of #1084 re-fragment the
+        // frozen network: 32 polygons, was 39 — the 5/5 restore split is unchanged.)
         outcome.Connections.Count.ShouldBe(5);
         outcome.Connections.ShouldAllBe(c => c.IsRouteDerived);
         outcome.Warnings.ShouldBeEmpty("restored/frozen accounting is informational now");
-        outcome.TopCellWaveguidePolygons.Count.ShouldBe(39,
+        outcome.TopCellWaveguidePolygons.Count.ShouldBe(32,
             "the junction network's polygons ride the group as frozen, non-routable paths");
 
         // ── 4. Place with frozen imported geometry: this is a netlist-TOPOLOGY

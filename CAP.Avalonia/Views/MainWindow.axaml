@@ -674,6 +674,22 @@
                     <TextBlock DockPanel.Dock="Top" Text="{loc:Localize LeftPanel.PlaceHint}"
                                FontSize="10" Margin="10,0,10,5" Foreground="Gray" TextWrapping="Wrap"/>
 
+                    <!-- Online-registry link row under the local hits (#772): a subtle
+                         🌐 line — hit count once the registry index is loaded, neutral
+                         prompt before that — so it can never be mistaken for a placeable
+                         local template. Visible only while it has something to say. -->
+                    <Button DockPanel.Dock="Bottom" Click="OpenRegistrySearchHint_Click"
+                            IsVisible="{Binding LeftPanel.RegistrySearchHintText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                            Background="Transparent" BorderThickness="0" Padding="0" Margin="10,2"
+                            HorizontalContentAlignment="Left" Cursor="Hand"
+                            ToolTip.Tip="{loc:Localize Registry.SearchHintTip}">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="🌐" FontSize="10" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding LeftPanel.RegistrySearchHintText}"
+                                       Foreground="#7a9ec9" FontSize="10" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Button>
+
                     <ScrollViewer x:Name="ComponentLibraryScroll"
                                   VerticalScrollBarVisibility="Auto"
                                   HorizontalScrollBarVisibility="Disabled"

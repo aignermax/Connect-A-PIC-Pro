@@ -75,8 +75,18 @@ public partial class RegistryBrowserViewModel : ObservableObject
     [ObservableProperty]
     private bool _hasNoResults;
 
+    /// <summary>
+    /// True once an index load succeeded (network or local cache). The component-library
+    /// search hint matches only against this in-memory copy — never on the network.
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasIndexLoaded;
+
     /// <summary>In-flight index load; awaited by tests and the screenshot harness.</summary>
     public Task IndexLoadTask { get; private set; } = Task.CompletedTask;
+
+    private bool _diskCacheChecked;
+    private IReadOnlyList<RegistryIndexEntry>? _diskCachedEntries;
 
     /// <summary>In-flight detail load; awaited by tests and the screenshot harness.</summary>
     public Task DetailsLoadTask { get; private set; } = Task.CompletedTask;
@@ -103,6 +113,38 @@ public partial class RegistryBrowserViewModel : ObservableObject
     {
         if (Components.Count == 0 && !IsLoading)
             IndexLoadTask = LoadCoreAsync(forceRefresh: false);
+    }
+
+    /// <summary>
+    /// Counts name/description matches (the same free-text match the window applies)
+    /// against the on-disk cached index only — never the network. Lets the
+    /// component-library search hint show a real hit count before the first index
+    /// load of the session (issue #772). Returns null when no usable cached copy
+    /// exists (or the query is empty); the caller then falls back to a neutral prompt.
+    /// </summary>
+    public int? CountDiskCachedSearchHits(string? query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return null;
+
+        return GetDiskCachedEntries()?.Count(entry =>
+            entry.Name.Contains(query, StringComparison.OrdinalIgnoreCase)
+            || entry.Description.Contains(query, StringComparison.OrdinalIgnoreCase));
+    }
+
+    /// <summary>
+    /// Lazily reads the disk-cached index once per session and memoizes it: the
+    /// library search re-queries per keystroke, so the file is parsed at most
+    /// once. Shadowed by <see cref="Components"/> the moment the real load ran.
+    /// </summary>
+    private IReadOnlyList<RegistryIndexEntry>? GetDiskCachedEntries()
+    {
+        if (!_diskCacheChecked)
+        {
+            _diskCacheChecked = true;
+            _diskCachedEntries = _client.TryGetCachedIndex()?.Components;
+        }
+        return _diskCachedEntries;
     }
 
     /// <summary>Loads the registry index (cache-first).</summary>
@@ -136,6 +178,9 @@ public partial class RegistryBrowserViewModel : ObservableObject
             return;
         }
 
+        // Set before the Adds: CollectionChanged subscribers recomputing on each
+        // Add (library search hint) must already see the loaded state.
+        HasIndexLoaded = true;
         SelectedComponent = null;
         Components.Clear();
         foreach (var entry in result.Value!.Components.OrderBy(c => c.Name))

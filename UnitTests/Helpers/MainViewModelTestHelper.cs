@@ -56,8 +56,12 @@ public static class MainViewModelTestHelper
         simulationService ??= new SimulationService();
 
         var pdkLoader = new PdkLoader();
+        // Registry browser backed by the committed fixtures — no network access. Shared
+        // between LeftPanel (search hint, #772) and MainViewModel (the window itself).
+        var registryBrowser = new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
+            new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient());
         // A caller-supplied LeftPanel (UI-flow tests) must share canvas/prefs with the rest of the VM.
-        leftPanel ??= CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager);
+        leftPanel ??= CreateLeftPanelViewModel(canvas, libraryManager, pdkLoader, preferencesService, commandManager, registryBrowser);
         var rightPanel = CreateRightPanelViewModel(canvas, preferencesService);
         var bottomPanel = CreateBottomPanelViewModel(canvas, commandManager);
 
@@ -114,9 +118,7 @@ public static class MainViewModelTestHelper
             new CAP.Avalonia.Services.UserSMatrixOverrideStore(
                 Path.Combine(Path.GetTempPath(), $"sparam-overrides-test-{Guid.NewGuid()}.json")),
             new GdsPreviewRenderService(new NazcaComponentPreviewService("python3", "/nonexistent/script.py")),
-            // Registry browser backed by the committed fixtures — no network access.
-            new CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel(
-                new UnitTests.ComponentRegistry.RegistryClient.RegistryTestHarness().CreateClient()),
+            registryBrowser,
             gdsImportButton,
             designScopedGdsComponents: designScope);
     }
@@ -129,7 +131,8 @@ public static class MainViewModelTestHelper
         GroupLibraryManager? libraryManager = null,
         PdkLoader? pdkLoader = null,
         UserPreferencesService? preferencesService = null,
-        CommandManager? commandManager = null)
+        CommandManager? commandManager = null,
+        CAP.Avalonia.ViewModels.ComponentRegistry.RegistryBrowser.RegistryBrowserViewModel? registryBrowser = null)
     {
         canvas ??= new DesignCanvasViewModel();
         libraryManager ??= new GroupLibraryManager();
@@ -145,7 +148,8 @@ public static class MainViewModelTestHelper
             preferencesService,
             new HierarchyPanelViewModel(canvas),
             new PdkManagerViewModel(),
-            new ComponentLibraryViewModel(libraryManager));
+            new ComponentLibraryViewModel(libraryManager),
+            registryBrowser: registryBrowser);
 
         // Isolate from the developer's real user-PDK folder: the startup reload must scan an
         // empty temp dir, otherwise template counts/status texts become machine-dependent

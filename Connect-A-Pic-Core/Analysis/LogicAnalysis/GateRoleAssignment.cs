@@ -24,13 +24,20 @@ namespace CAP_Core.Analysis.LogicAnalysis;
 /// adder's sum reads <c>S</c>, its carry <c>Cout</c>. Names never merge (every tap
 /// is one gate output) and must be unique across the network. Null when unused.
 /// </param>
+/// <param name="IsRegister">
+/// Designates the gate as a behavioral register state element: its outputs hold
+/// their last committed value during combinational settling, its inputs are sampled
+/// and committed only on an explicit clock step, and a feedback cycle through it is
+/// legal. See <see cref="TruthTablePinAssignment.IsRegister"/>.
+/// </param>
 public sealed record GateRoleAssignment(
     IReadOnlyList<string> InputPinNames,
     IReadOnlyList<string> OutputPinNames,
     IReadOnlyList<string> BiasPinNames,
     double PowerThreshold,
     IReadOnlyDictionary<string, string>? InputSignalNames = null,
-    IReadOnlyDictionary<string, string>? OutputSignalNames = null);
+    IReadOnlyDictionary<string, string>? OutputSignalNames = null,
+    bool IsRegister = false);
 
 /// <summary>
 /// One top-level gate group on the canvas together with its logic-level model and

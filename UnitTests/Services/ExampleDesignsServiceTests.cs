@@ -71,4 +71,57 @@ public class ExampleDesignsServiceTests : IDisposable
 
         service.GetExamples().ShouldBeEmpty();
     }
+
+    [Fact]
+    public void Manifest_OrdersCuratedExamplesByRank_UncuratedAppendAlphabetically()
+    {
+        File.WriteAllText(Path.Combine(_examplesDirectory, "zebra.lun"), "{}");
+        File.WriteAllText(Path.Combine(_examplesDirectory, "beta.lun"), "{}");
+        File.WriteAllText(Path.Combine(_examplesDirectory, "alpha.lun"), "{}");
+        WriteManifest("""
+            {
+              "examples": [
+                { "file": "beta.lun", "rank": 2, "level": "Adders", "descriptionKey": "Examples.Beta.Description" },
+                { "file": "zebra.lun", "rank": 1, "level": "Basics", "descriptionKey": "Examples.Zebra.Description" }
+              ]
+            }
+            """);
+
+        var examples = new ExampleDesignsService(_nestedBaseDirectory).GetExamples();
+
+        examples.Select(e => e.Name).ShouldBe(new[] { "zebra", "beta", "alpha" });
+        examples[0].DescriptionKey.ShouldBe("Examples.Zebra.Description");
+        examples[0].Level.ShouldBe("Basics");
+        examples[2].DescriptionKey.ShouldBeNull("uncurated files carry no manifest metadata");
+        examples[2].Description.ShouldBeEmpty();
+    }
+
+    [Fact]
+    public void ManifestEntryForMissingFile_IsIgnored()
+    {
+        File.WriteAllText(Path.Combine(_examplesDirectory, "real.lun"), "{}");
+        WriteManifest("""
+            { "examples": [ { "file": "ghost.lun", "rank": 1, "descriptionKey": "Examples.Ghost.Description" } ] }
+            """);
+
+        var examples = new ExampleDesignsService(_nestedBaseDirectory).GetExamples();
+
+        examples.ShouldHaveSingleItem().Name.ShouldBe("real");
+    }
+
+    [Fact]
+    public void MalformedManifest_DegradesToPlainAlphabeticalOrder()
+    {
+        File.WriteAllText(Path.Combine(_examplesDirectory, "zeta.lun"), "{}");
+        File.WriteAllText(Path.Combine(_examplesDirectory, "alpha.lun"), "{}");
+        WriteManifest("{ this is not json");
+
+        var examples = new ExampleDesignsService(_nestedBaseDirectory).GetExamples();
+
+        examples.Select(e => e.Name).ShouldBe(new[] { "alpha", "zeta" });
+        examples.ShouldAllBe(e => e.DescriptionKey == null);
+    }
+
+    private void WriteManifest(string json) =>
+        File.WriteAllText(Path.Combine(_examplesDirectory, "examples.json"), json);
 }

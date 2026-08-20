@@ -7,6 +7,7 @@ using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Library;
 using CAP.Avalonia.ViewModels.Panels;
 using CAP_Core.Analysis.LogicAnalysis;
+using CAP_Core.Components.Connections;
 using CAP_Core.Components.Core;
 using CAP_Core.Export;
 using Moq;
@@ -28,6 +29,7 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
 {
     private const string ExampleFileName = "Logic Gate NOT-NAND.lun";
     private const double NandThreshold = 0.125;
+    private const int WavelengthNm = 1550;
     private static readonly string[] NandInputs = { "A", "B" };
     private static readonly string[] NandOutputs = { "Y" };
     private static readonly string[] NandBiases = { "BIAS" };
@@ -303,6 +305,46 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
 
         var reloaded = await LoadFromDisk();
         SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldBeNull();
+    }
+
+    [Fact]
+    public async Task RoundTrip_RegisterDesignationSurvivesSaveLoadAndReassembly()
+    {
+        // Issue #1086: the register flag rides in the persisted pin-role block like
+        // the roles themselves, and the reloaded designation reaches the assembled
+        // network as committed register state.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+        SingleGateGroup(canvas).TruthTablePinAssignment!.IsRegister = true;
+
+        await Save(canvas);
+        File.ReadAllText(_designFilePath).ShouldContain("\"IsRegister\": true", Case.Sensitive);
+
+        var reloaded = await LoadFromDisk();
+        var group = SingleGateGroup(reloaded);
+        group.TruthTablePinAssignment.ShouldNotBeNull().IsRegister.ShouldBeTrue(
+            "the register designation must be restored on the reloaded group");
+
+        group.EnsureSMatrixComputed();
+        var network = await new LogicNetworkAssembler().AssembleAsync(
+            new Component[] { group }, Array.Empty<WaveguideConnection>(), WavelengthNm);
+        network.RegisterState.Keys.ShouldBe(new[] { new LogicPinRef(group.GroupName, "Y") },
+            "the reloaded designation designates the register in the assembled network");
+    }
+
+    [Fact]
+    public async Task RoundTrip_GateWithoutRegisterDesignation_PersistsNoRegisterFlag()
+    {
+        // Issue #1086: a plain combinational gate writes no register flag — the
+        // default false is omitted, keeping the .lun format free of unused blocks.
+        var canvas = await LoadGateOnCanvas();
+        await ExtractNandThroughPanel(canvas);
+
+        await Save(canvas);
+        var fileText = File.ReadAllText(_designFilePath);
+        fileText.ShouldContain("TruthTablePinAssignment", Case.Sensitive);
+        fileText.ShouldNotContain("IsRegister", Case.Sensitive,
+            "a plain gate persists no register flag — legacy files stay byte-clean");
     }
 
     [Fact]

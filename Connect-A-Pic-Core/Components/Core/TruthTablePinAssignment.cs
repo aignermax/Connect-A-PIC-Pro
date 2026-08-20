@@ -50,6 +50,22 @@ public sealed class TruthTablePinAssignment
     public Dictionary<string, string>? OutputSignalNames { get; set; }
 
     /// <summary>
+    /// Designates the gate as a behavioral <b>register</b> state element (sequential
+    /// logic, rung 5): its outputs hold their last committed value while the network
+    /// settles combinationally, and only an explicit clock step samples its inputs
+    /// and commits them (D-semantics). A feedback cycle is legal exactly when it
+    /// passes through at least one register-designated gate. This is a deliberate
+    /// behavioral abstraction at the logic level (roadmap principle 4) — the physical
+    /// mapping (e.g. an SA-based latch on an InP platform) comes later; no fake optics.
+    /// False for plain combinational gates and for files saved before registers
+    /// existed — the flag is omitted from the .lun unless set, keeping legacy files
+    /// byte-clean.
+    /// </summary>
+    [System.Text.Json.Serialization.JsonIgnore(
+        Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsRegister { get; set; }
+
+    /// <summary>
     /// Creates an independent copy of the assignment: the lists and the signal-name
     /// dictionaries are mutable, so copies of one gate must not share them.
     /// </summary>
@@ -60,6 +76,7 @@ public sealed class TruthTablePinAssignment
         OutputPinNames = new List<string>(OutputPinNames),
         BiasPinNames = new List<string>(BiasPinNames),
         Threshold = Threshold,
+        IsRegister = IsRegister,
         InputSignalNames = InputSignalNames == null
             ? null
             : new Dictionary<string, string>(InputSignalNames),
