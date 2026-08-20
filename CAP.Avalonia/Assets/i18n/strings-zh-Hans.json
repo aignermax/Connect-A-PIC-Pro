@@ -512,6 +512,8 @@
   "Home.EmptyState": "还没有最近的项目 — 新建一个设计，或打开现有的 .lun 文件。",
   "Home.ExampleTip": "打开此示例设计的副本",
   "Home.Examples": "示例",
+  "Home.LearnTutorial": "学习 Lunima",
+  "Home.LearnTutorialTip": "在全新设计上开始引导教程：放置元件、连接两个引脚、观察光传播",
   "Home.MissingBadge": "缺失",
   "Home.NewProject": "新建项目",
   "Home.NewProjectTip": "开始一个新的空白设计",

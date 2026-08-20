@@ -512,6 +512,8 @@
   "Home.EmptyState": "最近のプロジェクトはまだありません — 新しいデザインを作成するか、既存の .lun ファイルを開いてください。",
   "Home.ExampleTip": "このサンプルデザインのコピーを開く",
   "Home.Examples": "サンプル",
+  "Home.LearnTutorial": "Lunima を学ぶ",
+  "Home.LearnTutorialTip": "新しいデザインでガイドツアーを開始：コンポーネントを配置し、2 つのピンを接続し、光を確認",
   "Home.MissingBadge": "見つかりません",
   "Home.NewProject": "新規プロジェクト",
   "Home.NewProjectTip": "新しい空のデザインを開始",

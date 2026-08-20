@@ -512,6 +512,8 @@
   "Home.EmptyState": "No recent projects yet — create a new design or open an existing .lun file.",
   "Home.ExampleTip": "Open a copy of this example design",
   "Home.Examples": "Examples",
+  "Home.LearnTutorial": "Learn Lunima",
+  "Home.LearnTutorialTip": "Start a guided tour on a fresh design: place a component, connect two pins, see the light",
   "Home.MissingBadge": "missing",
   "Home.NewProject": "New Project",
   "Home.NewProjectTip": "Start a new empty design",
