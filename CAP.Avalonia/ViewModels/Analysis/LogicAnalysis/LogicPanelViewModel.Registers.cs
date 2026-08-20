@@ -28,10 +28,12 @@ public partial class LogicPanelViewModel
     /// <summary>
     /// Advances every register by one clock: each register samples its inputs from
     /// the settled network and commits them, then the panel re-settles and refreshes
-    /// the gate-output list and the canvas badges from the new state. The toggle
-    /// timeline is discarded along the way — it described the pre-step settling and
-    /// no longer matches the visible state (timeline integration of step events is
-    /// a separate slice).
+    /// the gate-output list and the canvas badges from the new state. The step's
+    /// commit and ripple entries join the toggle timeline behind a "clock #k"
+    /// divider (issue #1110), so the execution visualizer shows the clocked network
+    /// advancing — inputs settled → clock → registers committed → outputs rippled.
+    /// A step also exits replay: the badges show the new live state, and a frozen
+    /// pre-step instant would otherwise stay highlighted while the state moved on.
     /// </summary>
     [RelayCommand(CanExecute = nameof(HasRegisters))]
     private void StepClock() => ClockOnce();
@@ -48,11 +50,15 @@ public partial class LogicPanelViewModel
         // timeline's replay artifact re-evaluates the before-toggle bits on every
         // input change, so the last captured state can describe stale inputs.
         // Re-settle with the visible inputs first: the step must sample what the
-        // user actually sees.
+        // user actually sees. The pre-step result is also the replay before-state
+        // of a timeline the step starts.
         var bits = Inputs.ToDictionary(input => input.PinName, input => input.IsOn);
-        _network.Evaluate(bits);
-        _network.Step();
+        var preStepResult = _network.Evaluate(bits);
+        var stepEvents = _network.Step();
+        StopPlayback();
+        SelectedTimelineEvent = null;
         ReEvaluate();
+        AppendClockStepEvents(stepEvents, preStepResult);
         RefreshRegisterStates();
     }
 

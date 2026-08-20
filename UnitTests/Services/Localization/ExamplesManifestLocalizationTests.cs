@@ -68,6 +68,45 @@ public class ExamplesManifestLocalizationTests
         ladder[latchIndex].DescriptionKey.ShouldBe("Examples.SrLatch.Description");
     }
 
+    [Fact]
+    public void CuratedLadder_ListsTheBit_BetweenTheSrLatchAndTheCounter()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var latchIndex = ladder.FindIndex(example => example.Name == "Logic Gate SR-Latch");
+        latchIndex.ShouldBeGreaterThanOrEqualTo(0, "the SR latch rung must stay curated");
+
+        var bitIndex = ladder.FindIndex(example => example.Name == "Logic Gate Bit");
+        bitIndex.ShouldBeGreaterThan(latchIndex,
+            "the load-enabled bit is the NAND2TETRIS Bit — it slots between the SR latch and the counter");
+        ladder[bitIndex].Level.ShouldBe("Sequential");
+        ladder[bitIndex].DescriptionKey.ShouldBe("Examples.Bit.Description");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(bitIndex,
+            "the 2-bit counter builds on the register bit — it stays the rung after the Bit");
+    }
+
+    [Fact]
+    public void CuratedLadder_ListsTheCounter2Bit_AfterTheSrLatch()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var latchIndex = ladder.FindIndex(example => example.Name == "Logic Gate SR-Latch");
+        latchIndex.ShouldBeGreaterThanOrEqualTo(0, "the SR latch rung must stay curated");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(latchIndex,
+            "the 2-bit counter is the sequential rung after the latch — " +
+            "the datapath stone that makes the circuit run");
+        ladder[counterIndex].Level.ShouldBe("Sequential");
+        ladder[counterIndex].DescriptionKey.ShouldBe("Examples.Counter2bit.Description");
+    }
+
     private static List<ManifestEntry> ReadManifestEntries()
     {
         var manifestPath = Path.Combine(FindRepoRoot(), "examples", "examples.json");

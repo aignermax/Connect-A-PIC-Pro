@@ -55,6 +55,9 @@ public partial class TruthTableViewModel
                 OutputSignalNames = PreservedSignalNames(previous?.OutputSignalNames, outputs),
                 IsRegister = IsRegister,
             };
+            // The canvas register marker reads the persisted flag: an extraction can
+            // create or replace it, so the marker must be offered a repaint either way.
+            _canvas?.RepaintRequested?.Invoke();
             SignalNamesVisible = true;
             StatusText = string.Format(Translate("Analysis.TruthTable.Complete"), table.Rows.Count);
         }

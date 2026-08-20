@@ -68,6 +68,14 @@ public partial class FileOperationsViewModel : ObservableObject
     private readonly HashSet<string> _pinCalibrationMigratedComponents = new(StringComparer.Ordinal);
 
     /// <summary>
+    /// Pin pairs of connections displaced (dropped) during the current load: a later
+    /// connection in the file landed on a pin an earlier connection already occupied
+    /// (replacement-on-connect UX, applied to the file's netlist). Reported once after
+    /// loading so a .lun that wires a pin more than once never shrinks silently.
+    /// </summary>
+    private readonly List<string> _displacedConnectionsDuringLoad = new();
+
+    /// <summary>
     /// Per-component S-matrix overrides loaded from the PIR section of the .lun file,
     /// or added via the S-parameter import feature. Survives save-over-reload cycles.
     /// Keyed by component identifier string; values are the stored S-matrices.
@@ -1021,6 +1029,7 @@ public partial class FileOperationsViewModel : ObservableObject
                 _canvas.ConnectionManager.Clear();
                 _commandManager.ClearHistory();
                 _pinCalibrationMigratedComponents.Clear();
+                _displacedConnectionsDuringLoad.Clear();
 
                 // Design-scoped imported components (#830): restore the sets embedded
                 // in this .lun (replacing the previous design's) and migrate any legacy
@@ -1220,6 +1229,7 @@ public partial class FileOperationsViewModel : ObservableObject
                     _recentProjects?.RecordProject(filePath);
                 }
                 UpdateStatus?.Invoke($"Loaded {Path.GetFileName(filePath)} ({_canvas.Components.Count} components, {_canvas.Connections.Count} connections, {groupCount} groups)");
+                ReportDisplacedConnections();
                 _commandManager.NotifyStateChanged();
 
                 // Rebuild hierarchy tree after loading
@@ -1712,6 +1722,20 @@ public partial class FileOperationsViewModel : ObservableObject
 
         WaveguideConnectionViewModel? connVm;
 
+        // Replacement-on-connect (both endpoints drop their existing wire) is intended
+        // UX interactively, but during load it quietly discards earlier wires from the
+        // file's netlist whenever a pin is wired more than once. Collect what is about
+        // to be displaced so the load report can name it — the wires stay dropped.
+        foreach (var existing in _canvas.Connections
+                     .Where(c => c.Connection.StartPin == startPin || c.Connection.EndPin == startPin
+                                 || c.Connection.StartPin == endPin || c.Connection.EndPin == endPin)
+                     .ToList())
+        {
+            var description = DescribeConnectionForLoadReport(existing.Connection);
+            if (!_displacedConnectionsDuringLoad.Contains(description))
+                _displacedConnectionsDuringLoad.Add(description);
+        }
+
         if (cachedPath != null && cachedPath.IsValid)
         {
             connVm = _canvas.ConnectPinsWithCachedRoute(startPin, endPin, cachedPath);
@@ -1761,6 +1785,38 @@ public partial class FileOperationsViewModel : ObservableObject
         }
         _pinCalibrationMigratedComponents.Clear();
         _ = _canvas.RecalculateRoutesAsync();
+    }
+
+    /// <summary>
+    /// One-line description of a connection for the load report, identifying both
+    /// endpoint pins by component identifier and pin name.
+    /// </summary>
+    private static string DescribeConnectionForLoadReport(WaveguideConnection connection) =>
+        $"{connection.StartPin.ParentComponent?.Identifier}.{connection.StartPin.Name} ↔ "
+        + $"{connection.EndPin.ParentComponent?.Identifier}.{connection.EndPin.Name}";
+
+    /// <summary>
+    /// Surfaces connections that were displaced during the load: a .lun whose netlist
+    /// wires one pin more than once loads only the last wire, simulating a different
+    /// circuit than the file describes. The status bar carries the localized count and
+    /// the error console lists the dropped pin pairs. No dialog, no behavior change —
+    /// clean files report nothing.
+    /// </summary>
+    private void ReportDisplacedConnections()
+    {
+        if (_displacedConnectionsDuringLoad.Count == 0)
+            return;
+
+        var count = _displacedConnectionsDuringLoad.Count;
+        UpdateStatus?.Invoke(string.Format(
+            System.Globalization.CultureInfo.InvariantCulture,
+            Services.Localization.LocalizationService.Instance.Translate("Load.DuplicatePinConnectionsDropped"),
+            count));
+        _errorConsole?.LogWarning(
+            $"{count} connection(s) were dropped while loading because a pin already had a wire "
+            + "(the file may have been produced by a newer version or edited externally): "
+            + string.Join("; ", _displacedConnectionsDuringLoad));
+        _displacedConnectionsDuringLoad.Clear();
     }
 
     /// <summary>

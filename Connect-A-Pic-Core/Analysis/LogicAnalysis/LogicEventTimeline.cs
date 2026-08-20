@@ -22,11 +22,13 @@ public sealed record LogicSwitchEvent(
 /// switches at <c>max(arrival over its inputs) + gateDelay</c>, where an arrival
 /// is the driver's switch time plus that wire's delay (a driver that never
 /// switches contributes a stable arrival of 0). Gates whose output value does
-/// not change emit no event. Register gates emit no events at all: their outputs
+/// not change emit no event. Register gates emit no settle events: their outputs
 /// hold the committed state through the settling and only advance on an explicit
-/// clock step, which a combinational toggle timeline does not model. This slice
-/// models exactly one switch per pin — no glitch/hazard modeling — and reuses the
-/// evaluator's <see cref="LogicNetworkEvaluator.GateDelaysPicoseconds"/> and
+/// clock step, whose commit entries and downstream ripple
+/// (<see cref="ComputeRegisterRipple"/>) <see cref="LogicNetworkEvaluator.Step"/>
+/// returns itself. This slice models exactly one switch per pin per phase — no
+/// glitch/hazard modeling — and reuses the evaluator's
+/// <see cref="LogicNetworkEvaluator.GateDelaysPicoseconds"/> and
 /// <see cref="LogicNetworkEvaluator.WireDelaysPicoseconds"/> without recomputing
 /// any physics.
 /// </summary>
@@ -57,8 +59,47 @@ public static class LogicEventTimeline
 
         var before = network.EvaluateGateOutputs(previousInputs);
         var after = network.EvaluateGateOutputs(nextInputs);
+        return ComputeSwitchEvents(network, before, after, seeds: null);
+    }
 
-        var switchTimes = new Dictionary<LogicPinRef, double>();
+    /// <summary>
+    /// Computes the downstream ripple of a clock commit: the register outputs in
+    /// <paramref name="changedRegisterPins"/> switch at the clock edge (t = 0) and
+    /// the combinational gates settle after them. Times are relative to the edge,
+    /// so every ripple event sits at a non-negative time after the commit entries.
+    /// </summary>
+    /// <param name="network">The network to walk; supplies gates, wiring, and delays.</param>
+    /// <param name="before">The settled gate outputs just before the commit.</param>
+    /// <param name="after">The settled gate outputs just after the commit.</param>
+    /// <param name="changedRegisterPins">The register output pins that switched at the edge.</param>
+    /// <returns>The ripple events in <see cref="Compute"/> order; empty when nothing downstream switched.</returns>
+    internal static IReadOnlyList<LogicSwitchEvent> ComputeRegisterRipple(
+        LogicNetworkEvaluator network,
+        IReadOnlyDictionary<LogicPinRef, bool> before,
+        IReadOnlyDictionary<LogicPinRef, bool> after,
+        IReadOnlyCollection<LogicPinRef> changedRegisterPins)
+    {
+        var seeds = new Dictionary<LogicPinRef, double>();
+        foreach (var pin in changedRegisterPins)
+            seeds[pin] = 0.0;
+        return ComputeSwitchEvents(network, before, after, seeds);
+    }
+
+    /// <summary>
+    /// The shared event walk: one event per non-register output pin whose settled
+    /// value differs between <paramref name="before"/> and <paramref name="after"/>,
+    /// timed at <c>max(arrival over its inputs) + gateDelay</c>. <paramref name="seeds"/>
+    /// pre-seeds switch times of pins that switched at t = 0 without being walked
+    /// (the committed register outputs of a clock step); a null seed set is the
+    /// input-toggle case, where only the stable-from-t = 0 network inputs drive.
+    /// </summary>
+    private static IReadOnlyList<LogicSwitchEvent> ComputeSwitchEvents(
+        LogicNetworkEvaluator network,
+        IReadOnlyDictionary<LogicPinRef, bool> before,
+        IReadOnlyDictionary<LogicPinRef, bool> after,
+        Dictionary<LogicPinRef, double>? seeds)
+    {
+        var switchTimes = seeds ?? new Dictionary<LogicPinRef, double>();
         var events = new List<LogicSwitchEvent>();
         foreach (var gateId in network.EvaluationOrder)
         {

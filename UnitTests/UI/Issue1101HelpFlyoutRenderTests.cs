@@ -14,12 +14,12 @@ namespace UnitTests.UI;
 /// <summary>
 /// Headless render and resource tests for the #1101 education slice (#881 family): the
 /// Truth Table help flyout explains that every row is a real S-matrix simulation, and the
-/// Logic panel help flyout explains registers and clocking generically (the register state
-/// element shipped in #1086; the toggle UI #1098 and Step button #1099 are still open, so
-/// the paragraph deliberately names no UI control yet). Same pattern as
-/// <c>Issue928HelpFlyoutRenderTests</c>: the render tests run under German so a missing
-/// translation falls back to English and trips the not-English assertion. Runs in the
-/// parallelization-free LocalizationSingleton collection because it mutates the
+/// Logic panel help flyout explains registers and clocking. #1118 refreshed the register
+/// copy to name what shipped alongside it — the Truth Table panel's register toggle, the
+/// Logic panel's Step clock button, and the SR-latch / 2-bit-counter examples. Same
+/// pattern as <c>Issue928HelpFlyoutRenderTests</c>: the render tests run under German so
+/// a missing translation falls back to English and trips the not-English assertion. Runs
+/// in the parallelization-free LocalizationSingleton collection because it mutates the
 /// process-wide language.
 /// </summary>
 [Collection("LocalizationSingleton")]
@@ -117,7 +117,9 @@ public class Issue1101HelpFlyoutRenderTests
     /// <summary>
     /// Pins the physics-honesty sentences: the truth-table section must credit the real
     /// S-matrix simulation, and the register section must mark the power-up-cleared state
-    /// as a behavioral convention and tie feedback loops to registers.
+    /// as a behavioral convention and tie feedback loops to registers. Since #1118 the
+    /// register section must also name the shipped UI (register toggle, Step clock
+    /// button) and point at the SR-latch / 2-bit-counter examples as the try-it-now path.
     /// </summary>
     [Fact]
     public void NewHelpText_KeepsPlainLanguageAndPhysicsHonesty()
@@ -130,6 +132,10 @@ public class Issue1101HelpFlyoutRenderTests
         en["LogicPanelHelp.RegisterBody"].ShouldContain("behavioral");
         en["LogicPanelHelp.RegisterBody"].ShouldContain("feedback");
         en["LogicPanelHelp.RegisterBody"].ShouldContain("0");
+        en["LogicPanelHelp.RegisterBody"].ShouldContain("Register (state element)");
+        en["LogicPanelHelp.RegisterBody"].ShouldContain("Step clock");
+        en["LogicPanelHelp.RegisterBody"].ShouldContain("SR-Latch");
+        en["LogicPanelHelp.RegisterBody"].ShouldContain("Counter 2-bit");
     }
 
     /// <summary>
