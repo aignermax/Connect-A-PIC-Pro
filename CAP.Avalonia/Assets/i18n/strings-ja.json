@@ -1402,6 +1402,7 @@
   "LogicPanel.ReplayExit": "ライブ状態に戻る",
   "LogicPanel.Registers": "レジスタ:",
   "LogicPanel.StepClock": "クロックを1ステップ進める",
+  "LogicPanel.ClockDivider": "── クロック {0} ──",
   "LogicPanel.PlaybackPlay": "▶ 再生",
   "LogicPanel.PlaybackPause": "⏸ 一時停止",
   "LogicPanelTimelineHelp.ReplayTitle": "波紋をステップでたどる",

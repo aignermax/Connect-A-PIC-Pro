@@ -1402,6 +1402,7 @@
   "LogicPanel.ReplayExit": "返回实时状态",
   "LogicPanel.Registers": "寄存器:",
   "LogicPanel.StepClock": "时钟单步",
+  "LogicPanel.ClockDivider": "── 时钟 {0} ──",
   "LogicPanel.PlaybackPlay": "▶ 播放",
   "LogicPanel.PlaybackPause": "⏸ 暂停",
   "LogicPanelTimelineHelp.ReplayTitle": "逐步观看波纹传播",
