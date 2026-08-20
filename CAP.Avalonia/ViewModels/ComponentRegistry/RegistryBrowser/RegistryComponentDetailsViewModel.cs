@@ -46,6 +46,15 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
     /// <summary>Artifacts of the component with status and provenance.</summary>
     public ObservableCollection<RegistryArtifactDisplay> Artifacts { get; } = new();
 
+    /// <summary>The loaded manifest of the selected component (null while loading / on error).</summary>
+    public ComponentManifest? Manifest { get; private set; }
+
+    /// <summary>Repo-relative path <see cref="Manifest"/> was loaded from.</summary>
+    public string? ManifestPath { get; private set; }
+
+    /// <summary>Raised after <see cref="Populate"/> replaced the manifest (download-button re-evaluation, #773).</summary>
+    public event Action? ManifestPopulated;
+
     /// <summary>
     /// Loads the manifest at <paramref name="manifestPath"/> and populates the pane.
     /// Never throws — failures surface via <see cref="ErrorMessage"/>.
@@ -56,16 +65,23 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
         Clear();
         var result = await client.GetComponentAsync(manifestPath);
         if (result.IsSuccess)
+        {
+            ManifestPath = manifestPath;
             Populate(result.Value!);
+        }
         else
+        {
             ErrorMessage = string.Format(CultureInfo.InvariantCulture,
                 LocalizationService.Instance.Translate("Registry.DetailsLoadFailed"), result.ErrorMessage);
+        }
         IsLoading = false;
     }
 
     /// <summary>Resets the pane to its empty state (no component selected).</summary>
     public void Clear()
     {
+        Manifest = null;
+        ManifestPath = null;
         ErrorMessage = "";
         Description = "";
         PortsText = "";
@@ -78,6 +94,7 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
 
     private void Populate(ComponentManifest manifest)
     {
+        Manifest = manifest;
         Description = manifest.Description;
         PortsText = manifest.Ports.Count == 0
             ? ""
@@ -98,6 +115,7 @@ public partial class RegistryComponentDetailsViewModel : ObservableObject
 
         HasParameters = Parameters.Count > 0;
         HasArtifacts = Artifacts.Count > 0;
+        ManifestPopulated?.Invoke();
     }
 }
 
