@@ -575,6 +575,7 @@
   "Library.NoGroupsLoaded": "No hay grupos cargados",
   "Library.NoSavedGroups": "No hay grupos guardados",
   "Load.PinCalibrationChanged": "La calibración de pines de '{0}' cambió desde que se guardó este diseño; sus rutas se recalcularon.",
+  "Load.DuplicatePinConnectionsDropped": "Advertencia: se descartaron {0} conexión(es) porque un pin ya tenía un cable; es posible que este archivo se haya generado con una versión más reciente o se haya editado externamente.",
   "MainView.ResetZoom": "Restablecer",
   "MainView.Simulate": "Simular (L)",
   "ModeProbe.AutoInstallIncomplete": "La instalación automática de '{0}' no se completó: consulta Ajustes → entorno de Python para más detalles, o ejecuta: pip install {0}",

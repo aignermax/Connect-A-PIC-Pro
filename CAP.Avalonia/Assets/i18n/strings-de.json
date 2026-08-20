@@ -575,6 +575,7 @@
   "Library.NoGroupsLoaded": "Keine Gruppen geladen",
   "Library.NoSavedGroups": "Keine gespeicherten Gruppen",
   "Load.PinCalibrationChanged": "Die Pin-Kalibrierung von '{0}' hat sich seit dem Speichern dieses Designs geändert — die betroffenen Routen wurden neu berechnet.",
+  "Load.DuplicatePinConnectionsDropped": "Warnung: {0} Verbindung(en) wurden verworfen, weil ein Pin bereits eine Leitung hatte — diese Datei wurde möglicherweise mit einer neueren Version erstellt oder extern bearbeitet.",
   "MainView.ResetZoom": "Zurücksetzen",
   "MainView.Simulate": "Simulieren (L)",
   "ModeProbe.AutoInstallIncomplete": "Automatische Installation von '{0}' nicht abgeschlossen — Details unter Einstellungen → Python-Umgebung, oder ausführen: pip install {0}",

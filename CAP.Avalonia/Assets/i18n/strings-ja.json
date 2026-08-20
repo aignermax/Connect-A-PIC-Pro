@@ -575,6 +575,7 @@
   "Library.NoGroupsLoaded": "グループが読み込まれていません",
   "Library.NoSavedGroups": "保存されたグループがありません",
   "Load.PinCalibrationChanged": "このデザインの保存後に「{0}」のピン較正が変更されました——該当する配線を再計算しました。",
+  "Load.DuplicatePinConnectionsDropped": "警告：ピンにすでに配線があったため、{0} 本の接続が破棄されました——このファイルは新しいバージョンで作成されたか、外部で編集された可能性があります。",
   "MainView.ResetZoom": "リセット",
   "MainView.Simulate": "シミュレート (L)",
   "ModeProbe.AutoInstallIncomplete": "'{0}' の自動インストールが完了しませんでした — 詳細は 設定 → Python 環境 を確認するか、次を実行: pip install {0}",
