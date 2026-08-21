@@ -82,6 +82,7 @@ public class LogicNetworkAssemblerExampleTests : IDisposable
         var nand = await LoadGateWithPersistedRoles(NandGateId, NandInputs, NandThreshold);
         var plain = SingleGateGroup(await LoadGateOnCanvas());
         plain.GroupName = "PLAIN";
+        plain.TruthTablePinAssignment = null;
 
         var network = await new LogicNetworkAssembler().AssembleAsync(
             new Component[] { nand, plain }, Array.Empty<WaveguideConnection>(), WavelengthNm);
@@ -100,6 +101,7 @@ public class LogicNetworkAssemblerExampleTests : IDisposable
     public async Task AssembleAsync_DesignWithoutGateGroups_ThrowsAReadableError()
     {
         var plain = SingleGateGroup(await LoadGateOnCanvas());
+        plain.TruthTablePinAssignment = null;
 
         var error = await Should.ThrowAsync<InvalidOperationException>(
             () => new LogicNetworkAssembler().AssembleAsync(
@@ -110,9 +112,11 @@ public class LogicNetworkAssemblerExampleTests : IDisposable
 
     /// <summary>
     /// Delivers one gate group the way Jonas gets it: the shipped example is loaded,
-    /// its truth table extracted through the real panel flow (which seeds the persisted
-    /// assignment), saved, and reloaded — the reloaded group carries roles and threshold
-    /// from the file, not from this test.
+    /// its truth table extracted through the real panel flow (which re-seeds the
+    /// persisted assignment), saved, and reloaded — the reloaded group carries roles
+    /// and threshold from the file, not from this test. The shipped file names the
+    /// A/B signals since #1141; the flow under test predates signal identity, so the
+    /// roles are re-extracted with unnamed pins like any pre-#1033 extraction.
     /// </summary>
     private async Task<ComponentGroup> LoadGateWithPersistedRoles(
         string gateId, string[] inputPinNames, double threshold)
@@ -142,12 +146,16 @@ public class LogicNetworkAssemblerExampleTests : IDisposable
         var vm = new TruthTableViewModel();
         vm.ConfigureForSelection(groupVm, canvas);
         vm.IsGroupSelected.ShouldBeTrue("the loaded gate group must activate the panel");
-        foreach (var name in inputPinNames)
-        {
-            vm.InputPins.Single(p => p.PinName == name).IsChecked = true;
-        }
+        // The persisted roles prefill the checks: uncheck every input the reading
+        // does not enumerate (the NOT reading drops B), then tick the wanted ones.
+        foreach (var pin in vm.InputPins)
+            pin.IsChecked = inputPinNames.Contains(pin.PinName);
         vm.OutputPins.Single(p => p.PinName == Outputs[0]).IsChecked = true;
         vm.BiasPins.Single(p => p.PinName == Biases[0]).IsChecked = true;
+        // Clear the shipped A/B signal names (#1141): the pre-#1033 flow under test
+        // assembles raw <gate>.<pin> input names, not signal-merged ones.
+        foreach (var pin in vm.InputPins)
+            pin.SignalName = "";
         vm.Threshold = threshold;
         await vm.ExtractCommand.ExecuteAsync(null);
         vm.HasResult.ShouldBeTrue("the extraction that seeds persistence must succeed");

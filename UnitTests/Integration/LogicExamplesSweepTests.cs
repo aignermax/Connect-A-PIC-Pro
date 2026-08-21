@@ -31,20 +31,6 @@ public class LogicExamplesSweepTests
     /// <summary>File-name prefix that marks a manifest entry as a logic example.</summary>
     private const string LogicExampleFilePrefix = "Logic Gate";
 
-    /// <summary>
-    /// Rung-4 gate-builder examples that predate the persisted pin-roles seam (#986):
-    /// their groups ship without <c>TruthTablePinAssignment</c>, so the assembler
-    /// reports "no logic gate in the design" — reported on issue #1130 as a finding.
-    /// Once the .lun files carry persisted roles, delete the entries: the sweep then
-    /// covers them with no other edit.
-    /// </summary>
-    private static readonly HashSet<string> KnownExamplesWithoutPersistedPinRoles = new()
-    {
-        "Logic Gate NOT-NAND.lun",
-        "Logic Gate AND-from-NAND.lun",
-        "Logic Gate OR-AND.lun",
-    };
-
     /// <summary>Manifest file inside the examples directory.</summary>
     private const string ManifestFileName = "examples.json";
 
@@ -65,8 +51,6 @@ public class LogicExamplesSweepTests
         var path = Path.Combine(ExampleDesignFilesTests.ExamplesDirectory(), exampleFileName);
         File.Exists(path).ShouldBeTrue(
             $"manifest entry '{exampleFileName}' must point at a shipped example file");
-        if (KnownExamplesWithoutPersistedPinRoles.Contains(exampleFileName))
-            return;
 
         var canvas = new DesignCanvasViewModel();
         var errorConsole = new ErrorConsoleService();

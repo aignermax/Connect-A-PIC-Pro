@@ -22,8 +22,10 @@ namespace UnitTests.Integration;
 /// (issue #981): whatever the panel last successfully extracted with — input pins
 /// in bit order, output pins, bias pins, threshold — survives save → load, the panel
 /// prefills on group selection, and extraction reproduces the pinned table without
-/// any manual role re-assignment. Legacy files without the new block keep loading
-/// exactly as before.
+/// any manual role re-assignment. The shipped example has carried its NAND reading
+/// since issue #1141, so the manual seeding extraction clears the shipped signal
+/// names to reproduce the pre-#1033 flow; legacy files without the block keep
+/// loading exactly as before.
 /// </summary>
 public class TruthTablePinAssignmentPersistenceTests : IDisposable
 {
@@ -291,20 +293,23 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
     [Fact]
     public async Task LegacyFile_WithoutTruthTableBlock_LoadsWithNullAssignment()
     {
-        // The shipped example predates the persistence block — it is the legacy case.
-        var canvas = await LoadGateOnCanvas();
-        SingleGateGroup(canvas).TruthTablePinAssignment.ShouldBeNull(
+        // A legacy .lun (no TruthTablePinAssignment block) loads with no assignment,
+        // and saving the untouched design must not invent a block: no assignment →
+        // nothing persisted, no format noise.
+        var group = TestComponentFactory.CreateComponentGroup("LegacyGroup");
+        var canvas = new DesignCanvasViewModel();
+        canvas.Components.Add(new ComponentViewModel(group));
+        group.TruthTablePinAssignment.ShouldBeNull(
             "legacy .lun files load with no truth-table assignment attached");
 
-        // Saving and reloading the untouched legacy design must not invent a block:
-        // no assignment → nothing persisted, no format noise.
         await Save(canvas);
         var fileText = File.ReadAllText(_designFilePath);
         fileText.ShouldNotContain("TruthTablePinAssignment", Case.Sensitive,
             "a never-extracted group persists no truth-table block");
 
         var reloaded = await LoadFromDisk();
-        SingleGateGroup(reloaded).TruthTablePinAssignment.ShouldBeNull();
+        reloaded.Components.Select(c => c.Component).OfType<ComponentGroup>()
+            .Single().TruthTablePinAssignment.ShouldBeNull();
     }
 
     [Fact]
@@ -451,6 +456,9 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
     /// <summary>
     /// Drives the loaded example through the Truth Table panel's ViewModel exactly as
     /// the interactive flow does — this is what populates the persisted assignment.
+    /// The shipped file carries named A/B signal fields since #1141; the pre-#1033
+    /// flow these tests pin starts from unnamed pins, so the seeding extraction
+    /// clears the shipped names first.
     /// </summary>
     private static async Task ExtractNandThroughPanel(DesignCanvasViewModel canvas)
     {
@@ -463,6 +471,8 @@ public class TruthTablePinAssignmentPersistenceTests : IDisposable
             vm.InputPins.Single(p => p.PinName == name).IsChecked = true;
         vm.OutputPins.Single(p => p.PinName == "Y").IsChecked = true;
         vm.BiasPins.Single(p => p.PinName == "BIAS").IsChecked = true;
+        foreach (var name in NandInputs)
+            vm.InputPins.Single(p => p.PinName == name).SignalName = "";
         vm.Threshold = NandThreshold;
         await vm.ExtractCommand.ExecuteAsync(null);
         vm.HasResult.ShouldBeTrue("the manual extraction that seeds persistence must succeed");

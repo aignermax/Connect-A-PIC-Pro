@@ -314,7 +314,24 @@
         }
       ],
       "CanvasX": 95,
-      "CanvasY": 100
+      "CanvasY": 100,
+      "TruthTablePinAssignment": {
+        "InputPinNames": [
+          "A",
+          "B"
+        ],
+        "OutputPinNames": [
+          "Y"
+        ],
+        "BiasPinNames": [
+          "BIAS"
+        ],
+        "Threshold": 0.125,
+        "InputSignalNames": {
+          "A": "A",
+          "B": "B"
+        }
+      }
     }
   ],
   "Metadata": {
