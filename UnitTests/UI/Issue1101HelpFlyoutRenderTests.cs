@@ -16,11 +16,13 @@ namespace UnitTests.UI;
 /// Truth Table help flyout explains that every row is a real S-matrix simulation, and the
 /// Logic panel help flyout explains registers and clocking. #1118 refreshed the register
 /// copy to name what shipped alongside it — the Truth Table panel's register toggle, the
-/// Logic panel's Step clock button, and the SR-latch / 2-bit-counter examples. Same
-/// pattern as <c>Issue928HelpFlyoutRenderTests</c>: the render tests run under German so
-/// a missing translation falls back to English and trips the not-English assertion. Runs
-/// in the parallelization-free LocalizationSingleton collection because it mutates the
-/// process-wide language.
+/// Logic panel's Step clock button, and the SR-latch / 2-bit-counter examples. #1134
+/// adds the Run auto-clock (#1111) and Reset (#1127) section to the same flyout — one
+/// tick per Step press, cadence as UI convenience, power-up reset as a behavioral
+/// convention. Same pattern as <c>Issue928HelpFlyoutRenderTests</c>: the render tests
+/// run under German so a missing translation falls back to English and trips the
+/// not-English assertion. Runs in the parallelization-free LocalizationSingleton
+/// collection because it mutates the process-wide language.
 /// </summary>
 [Collection("LocalizationSingleton")]
 public class Issue1101HelpFlyoutRenderTests
@@ -33,6 +35,8 @@ public class Issue1101HelpFlyoutRenderTests
         "TruthTableHelp.SimulationBody",
         "LogicPanelHelp.RegisterTitle",
         "LogicPanelHelp.RegisterBody",
+        "LogicPanelHelp.RunResetTitle",
+        "LogicPanelHelp.RunResetBody",
     };
 
     /// <summary>The Truth Table "?" shows the new real-simulation section (German title).</summary>
@@ -80,6 +84,7 @@ public class Issue1101HelpFlyoutRenderTests
             var help = panel.GetVisualDescendants().OfType<HelpFlyoutButton>().FirstOrDefault();
             help.ShouldNotBeNull("the Logic panel header must carry the help button");
             AssertFlyoutShows(window, help, "LogicPanelHelp.RegisterTitle", "Registers and clocking");
+            AssertFlyoutShows(window, help, "LogicPanelHelp.RunResetTitle", "Run and Reset");
         }
         finally
         {
@@ -136,6 +141,15 @@ public class Issue1101HelpFlyoutRenderTests
         en["LogicPanelHelp.RegisterBody"].ShouldContain("Step clock");
         en["LogicPanelHelp.RegisterBody"].ShouldContain("SR-Latch");
         en["LogicPanelHelp.RegisterBody"].ShouldContain("Counter 2-bit");
+
+        // Run cadence honesty + reset-as-convention (#1134): the flyout ties the
+        // tick to a Step, marks the cadence as a UI convenience, and names Reset's
+        // power-up convention a behavioral-model claim, not physics.
+        en["LogicPanelHelp.RunResetBody"].ShouldContain("Step");
+        en["LogicPanelHelp.RunResetBody"].ShouldContain("not physics");
+        en["LogicPanelHelp.RunResetBody"].ShouldContain("behavioral model");
+        en["LogicPanelHelp.RunResetBody"].ShouldContain("not a physical claim");
+        en["LogicPanelHelp.RunResetBody"].ShouldContain("restarts at 0");
     }
 
     /// <summary>

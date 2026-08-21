@@ -54,6 +54,13 @@
                         <TextBlock Text="{loc:Localize LogicPanelHelp.RegisterTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize LogicPanelHelp.RegisterBody}"/>
+
+                        <!-- Run (#1111) and Reset (#1127): the auto-clock cadence is a
+                             UI convenience, and the power-up reset is a convention of
+                             the behavioral model — the flyout keeps that honest. -->
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.RunResetTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.RunResetBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
@@ -215,16 +222,27 @@
                  keeps the held state visible even when the canvas badges are
                  off-screen. Reset (#1127) returns the registers to their power-up
                  state without rebuilding the network. Shown only when the network
-                 contains a register. -->
+                 contains a register. Run (#1111) clocks the network on its own at
+                 the selected cadence — every tick is exactly one Step press; input
+                 toggles stay live. -->
             <Grid ColumnDefinitions="*,Auto,Auto" Margin="0,8,0,2"
                   IsVisible="{Binding RightPanel.Logic.HasRegisters}">
                 <TextBlock Text="{loc:Localize LogicPanel.Registers}" Foreground="Gray" FontSize="10" VerticalAlignment="Center"/>
-                <Button Grid.Column="1" Content="{loc:Localize LogicPanel.StepClock}"
-                        Command="{Binding RightPanel.Logic.StepClockCommand}"
-                        Padding="6,2" FontSize="10"/>
-                <Button Grid.Column="2" Content="{loc:Localize LogicPanel.ResetRegisters}"
-                        Command="{Binding RightPanel.Logic.ResetRegistersCommand}"
-                        Padding="6,2" FontSize="10" Margin="4,0,0,0"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <Button Content="{loc:Localize LogicPanel.StepClock}"
+                            Command="{Binding RightPanel.Logic.StepClockCommand}"
+                            Padding="6,2" FontSize="10"/>
+                    <Button Content="{Binding RightPanel.Logic.RunStopText}"
+                            Command="{Binding RightPanel.Logic.ToggleRunCommand}"
+                            Padding="6,2" FontSize="10"/>
+                    <ComboBox ItemsSource="{Binding RightPanel.Logic.RunIntervalOptions}"
+                              SelectedItem="{Binding RightPanel.Logic.SelectedRunInterval}"
+                              DisplayMemberBinding="{Binding Label}"
+                              FontSize="10" VerticalAlignment="Center"/>
+                    <Button Content="{loc:Localize LogicPanel.ResetRegisters}"
+                            Command="{Binding RightPanel.Logic.ResetRegistersCommand}"
+                            Padding="6,2" FontSize="10"/>
+                </StackPanel>
             </Grid>
             <ItemsControl ItemsSource="{Binding RightPanel.Logic.RegisterStates}"
                           IsVisible="{Binding RightPanel.Logic.HasRegisters}">
@@ -272,6 +290,12 @@
                             <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
+                            <!-- Waveform lanes (#1129): gold vertical lines are the clock
+                                 boundaries, the white cursor is the replayed instant, and
+                                 horizontal distance is real optical path length (L·n_g/c). -->
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.WaveformTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.WaveformBody}"/>
                             <!-- Auto-play: the fixed 0.6 s cadence is didactic,
                                  not to scale — the real events are picoseconds apart. -->
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"

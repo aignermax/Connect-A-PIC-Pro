@@ -111,8 +111,11 @@ public class LogicWaveformStripRenderTests
         var pixels = RenderStrip(model, width, out var height);
         var lanes = model.Lanes.ToList();
 
-        CountGold(pixels, width, 0, width - 1, 0, height - 1)
-            .ShouldBe(0, "no divider pixels may render without a clock step");
+        // The label column's gray signal-name glyphs anti-alias into "gold-ish"
+        // pixels (label column x < TraceLeft) — dividers live in the trace area,
+        // so only the trace area is asserted gold-free on a divider-less render.
+        CountGold(pixels, width, (int)LogicWaveformRenderer.TraceLeft - 1, width - 1, 0, height - 1)
+            .ShouldBeLessThanOrEqualTo(0, "no divider pixels may render in the trace area without a clock step");
 
         var sLane = lanes.Single(l => l.SignalName == "S");
         var sEdge = sLane.Edges.ShouldHaveSingleItem("the sum rises exactly once for A=1, B=Cin=0");

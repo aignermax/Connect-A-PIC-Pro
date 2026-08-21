@@ -1411,10 +1411,17 @@
   "LogicGate.RegisterMarker.Tooltip": "Register: hält seinen übernommenen Ausgang bis zum nächsten Takt-Schritt.",
   "LogicPanel.StepClock": "Takt weiterschalten",
   "LogicPanel.ResetRegisters": "Zurücksetzen",
+  "LogicPanel.Run": "Starten",
+  "LogicPanel.RunStop": "Stoppen",
+  "LogicPanel.RunIntervalFormat": "{0} s pro Takt",
   "LogicPanel.ClockDivider": "── Takt {0} ──",
   "LogicPanel.PlaybackPlay": "▶ Abspielen",
   "LogicPanel.PlaybackPause": "⏸ Anhalten",
   "LogicPanelTimelineHelp.ReplayTitle": "Die Welle Schritt für Schritt",
   "LogicPanelTimelineHelp.ReplayBody": "Klicke auf eine Zeile (oder die Zurück/Weiter-Schaltflächen) und die Badges auf der Zeichenfläche frieren zu diesem Zeitpunkt ein: Jedes Gatter, das bereits geschaltet hat, zeigt seinen neuen Pegel, jedes Gatter weiter unten in der Liste noch seinen alten — die Änderung läuft sichtbar über den Chip. Klicke die Zeile erneut oder auf 'Zurück zu Live', um zum stabilen Endzustand zurückzukehren. Die Zeiten werden nur aus dem Verzögerungsmodell nachgeschlagen; nichts wird neu simuliert.",
-  "LogicPanelTimelineHelp.PlaybackBody": "Mit '▶ Abspielen' läuft die Welle von selbst — ein Ereignis alle 0,6 Sekunden. Das Tempo ist didaktisch, nicht maßstäblich: Die echten Schaltvorgänge liegen nur Pikosekunden auseinander."
+  "LogicPanelTimelineHelp.PlaybackBody": "Mit '▶ Abspielen' läuft die Welle von selbst — ein Ereignis alle 0,6 Sekunden. Das Tempo ist didaktisch, nicht maßstäblich: Die echten Schaltvorgänge liegen nur Pikosekunden auseinander.",
+  "LogicPanelHelp.RunResetTitle": "Run und Reset",
+  "LogicPanelHelp.RunResetBody": "Ein Druck auf „Starten“ lässt das Netzwerk im gewählten Tempo von selbst takten — jeder Tick ist genau ein „Takt weiterschalten“: Die sichtbaren Eingänge pendeln sich ein, alle Register übernehmen ihre abgetasteten Werte gleichzeitig, und die neuen Ausgänge pflanzen sich durchs Netz fort. Das Tempo ist eine Bequemlichkeit der Oberfläche, keine Physik — echte optische Uhren wären um Größenordnungen schneller. Die Eingänge bleiben mitten im Lauf bedienbar; ein umgeschalteter landet einfach im nächsten Tick. „Zurücksetzen“ bringt jedes Register wieder in die dokumentierte Einschaltkonvention (alle Ausgänge 0), ohne das Netzwerk neu aufzubauen — eine Konvention des Verhaltensmodells, kein physikalischer Anspruch — und der Takt-Zähler startet wieder bei 0.",
+  "LogicPanelTimelineHelp.WaveformTitle": "Die gleichen Ereignisse als Signalverläufe",
+  "LogicPanelTimelineHelp.WaveformBody": "Unter der Liste zeichnet sich dieselbe Abfolge: ein 0/1-Schrittverlauf pro benanntem Signal. Die goldenen Vertikallinien sind die Trennzeilen „── Takt #k ──“, und der weiße Cursor markiert den wiedergegebenen Zeitpunkt. Kanten sitzen an ihren echten Ankunftszeiten — L·n_g/c, die optische Länge mal dem Gruppenindex durch c — also ist der horizontale Abstand auf der Leiste echte optische Weglänge."
 }
