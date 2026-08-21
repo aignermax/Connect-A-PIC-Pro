@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using CAP.Avalonia.Commands;
 using CAP.Avalonia.Services;
+using CAP.Avalonia.ViewModels.Analysis.LogicAnalysis;
 using CAP.Avalonia.ViewModels.Canvas;
 using CAP.Avalonia.ViewModels.Export;
 using CAP.Avalonia.ViewModels.Library;
@@ -104,8 +105,48 @@ public class LogicGateAndFromNandExampleTests
         AssertRow(table, 3, expectedBit: false, expectedPower: ExtinguishedPower);
     }
 
+    /// <summary>
+    /// The persisted pin roles and signal names make the example build in the Logic
+    /// panel without any manual role assignment: toggles A and B drive the cascaded
+    /// gate and its output tap reads the AND table.
+    /// </summary>
+    [Fact]
+    public async Task LogicPanel_Toggles_ReproduceAndTable()
+    {
+        var canvas = await LoadGateOnCanvas();
+        var panel = new LogicPanelViewModel();
+        panel.Configure(canvas);
+        await panel.BuildNetworkCommand.ExecuteAsync(null);
+
+        panel.HasNetwork.ShouldBeTrue(
+            $"the persisted pin roles must assemble in the Logic panel: {panel.StatusText}");
+        panel.Inputs.Select(i => i.PinName).ShouldBe(InputsAb, ignoreOrder: true,
+            customMessage: "the persisted signal names A and B become the panel toggles");
+        panel.Outputs.Count.ShouldBe(1, "the single gate exposes exactly one output tap");
+
+        EvaluatePanel(panel, a: false, b: false).ShouldBeFalse("AND: A=0 B=0 must read 0");
+        EvaluatePanel(panel, a: true, b: false).ShouldBeFalse("AND: A=1 B=0 must read 0");
+        EvaluatePanel(panel, a: false, b: true).ShouldBeFalse("AND: A=0 B=1 must read 0");
+        EvaluatePanel(panel, a: true, b: true).ShouldBeTrue("AND: A=1 B=1 must read 1");
+    }
+
+    /// <summary>Sets the A/B toggles and returns the single output tap's evaluated bit.</summary>
+    private static bool EvaluatePanel(LogicPanelViewModel panel, bool a, bool b)
+    {
+        panel.Inputs.Single(i => i.PinName == "A").IsOn = a;
+        panel.Inputs.Single(i => i.PinName == "B").IsOn = b;
+        return panel.Outputs.Single().IsOne;
+    }
+
     /// <summary>Loads the shipped example through the real load path and returns its group.</summary>
     private static async Task<ComponentGroup> LoadGateGroup()
+    {
+        var canvas = await LoadGateOnCanvas();
+        return canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().Single();
+    }
+
+    /// <summary>Loads the shipped example through the real load path and returns the canvas.</summary>
+    private static async Task<DesignCanvasViewModel> LoadGateOnCanvas()
     {
         var library = new ObservableCollection<ComponentTemplate>(TestPdkLoader.LoadAllTemplates());
         var canvas = new DesignCanvasViewModel();
@@ -123,7 +164,7 @@ public class LogicGateAndFromNandExampleTests
         (await fileOps.LoadDesignFromPathAsync(examplePath)).ShouldBeTrue(
             $"the shipped example '{ExampleFileName}' must load through the real load path");
 
-        return canvas.Components.Select(c => c.Component).OfType<ComponentGroup>().Single();
+        return canvas;
     }
 
     /// <summary>Extracts the gate's truth table at the given analog→digital threshold.</summary>
