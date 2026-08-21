@@ -17,6 +17,7 @@ public partial class LogicPanelViewModel
     private IReadOnlyDictionary<string, bool>? _previousInputBits;
 
     /// <summary>How many clock steps have appended their entries to the current timeline.</summary>
+    [ObservableProperty]
     private int _clockStepCount;
 
     /// <summary>
@@ -62,7 +63,7 @@ public partial class LogicPanelViewModel
             TimelineEvents.Add(new LogicTimelineEventViewModel(e));
         HasTimelineEvents = TimelineEvents.Count > 0;
         _previousInputBits = currentBits;
-        _clockStepCount = 0;
+        ClockStepCount = 0;
         PreviousTimelineEventCommand.NotifyCanExecuteChanged();
         NextTimelineEventCommand.NotifyCanExecuteChanged();
         RefreshWaveform();
@@ -86,9 +87,9 @@ public partial class LogicPanelViewModel
             return;
         if (TimelineEvents.Count == 0)
             _replayBeforeResult = preStepResult;
-        _clockStepCount++;
+        ClockStepCount++;
         var offset = TimelineEvents.Count == 0 ? 0.0 : TimelineEvents[^1].Event.TimePicoseconds;
-        var divider = string.Format(Translate("LogicPanel.ClockDivider"), _clockStepCount);
+        var divider = string.Format(Translate("LogicPanel.ClockDivider"), ClockStepCount);
         var isBlockFirst = true;
         foreach (var e in stepEvents)
         {
@@ -144,7 +145,7 @@ public partial class LogicPanelViewModel
         TimelineEvents.Clear();
         HasTimelineEvents = false;
         _previousInputBits = null;
-        _clockStepCount = 0;
+        ClockStepCount = 0;
         ClearReplay();
         RefreshWaveform();
     }
