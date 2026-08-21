@@ -54,6 +54,13 @@
                         <TextBlock Text="{loc:Localize LogicPanelHelp.RegisterTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                         <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                    Text="{loc:Localize LogicPanelHelp.RegisterBody}"/>
+
+                        <!-- Run (#1111) and Reset (#1127): the auto-clock cadence is a
+                             UI convenience, and the power-up reset is a convention of
+                             the behavioral model — the flyout keeps that honest. -->
+                        <TextBlock Text="{loc:Localize LogicPanelHelp.RunResetTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                        <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                   Text="{loc:Localize LogicPanelHelp.RunResetBody}"/>
                     </StackPanel>
                 </controls:HelpFlyoutButton.HelpContent>
             </controls:HelpFlyoutButton>
@@ -283,6 +290,12 @@
                             <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.ReplayTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
                                        Text="{loc:Localize LogicPanelTimelineHelp.ReplayBody}"/>
+                            <!-- Waveform lanes (#1129): gold vertical lines are the clock
+                                 boundaries, the white cursor is the replayed instant, and
+                                 horizontal distance is real optical path length (L·n_g/c). -->
+                            <TextBlock Text="{loc:Localize LogicPanelTimelineHelp.WaveformTitle}" FontWeight="Bold" FontSize="12" Foreground="White" Margin="0,4,0,0"/>
+                            <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"
+                                       Text="{loc:Localize LogicPanelTimelineHelp.WaveformBody}"/>
                             <!-- Auto-play: the fixed 0.6 s cadence is didactic,
                                  not to scale — the real events are picoseconds apart. -->
                             <TextBlock TextWrapping="Wrap" FontSize="11" Foreground="LightGray"

@@ -20,7 +20,8 @@ namespace UnitTests.UI;
 /// transition, the empty-state hint shows when no toggle has happened, and
 /// every new string is translated in all five shipped languages. The flyout's
 /// clock-divider section explains the "── clock #k ──" rows a Step clock
-/// press appends. Same pattern as <c>TruthTablePanelRenderTests</c>: the
+/// press appends; #1134 adds the waveform-lane reader section ("── clock #k ──"
+/// verticals, white cursor, L·n_g/c arrival times). Same pattern as <c>TruthTablePanelRenderTests</c>: the
 /// render tests run under German so a missing translation falls back to
 /// English and trips the assertion.
 /// </summary>
@@ -41,6 +42,8 @@ public class LogicPanelTimelineRenderTests
         "LogicPanelTimelineHelp.OrderBody",
         "LogicPanelTimelineHelp.ClockTitle",
         "LogicPanelTimelineHelp.ClockBody",
+        "LogicPanelTimelineHelp.WaveformTitle",
+        "LogicPanelTimelineHelp.WaveformBody",
     };
 
     /// <summary>The Timeline section's "?" opens a flyout with the localized title.</summary>
@@ -76,6 +79,13 @@ public class LogicPanelTimelineRenderTests
             window.GetVisualDescendants().OfType<TextBlock>()
                 .Any(t => t.Text == expected)
                 .ShouldBeTrue($"opening the flyout must show the localized title '{expected}'");
+
+            var waveformExpected = LocalizationService.Instance.Translate("LogicPanelTimelineHelp.WaveformTitle");
+            waveformExpected.ShouldNotBe("The same events as waveform lanes",
+                "test language must translate LogicPanelTimelineHelp.WaveformTitle — an English value means a missing key");
+            window.GetVisualDescendants().OfType<TextBlock>()
+                .Any(t => t.Text == waveformExpected)
+                .ShouldBeTrue($"opening the flyout must show the waveform section title '{waveformExpected}'");
         }
         finally
         {
@@ -199,5 +209,27 @@ public class LogicPanelTimelineRenderTests
         var en = LocalizationResourceLoader.Load(SupportedLanguage.English.Code);
         en["LogicPanelTimelineHelp.ClockBody"].ShouldContain("register");
         en["LogicPanelTimelineHelp.ClockBody"].ShouldContain("Replay");
+    }
+
+    /// <summary>
+    /// Pins the waveform-lanes paragraph (#1129, #1134): it must show the per-language
+    /// divider literal, name the white cursor, pin the physics (arrival times L·n_g/c,
+    /// horizontal distance = real optical path length), and name the lane groceries.
+    /// </summary>
+    [Fact]
+    public void TimelineWaveformHelp_ExplainsLanesDividersCursorAndPhysics()
+    {
+        foreach (var language in SupportedLanguage.All)
+        {
+            var table = LocalizationResourceLoader.Load(language.Code);
+            var dividerLiteral = string.Format(table["LogicPanel.ClockDivider"], "#k");
+            table["LogicPanelTimelineHelp.WaveformBody"].ShouldContain(dividerLiteral);
+        }
+
+        var en = LocalizationResourceLoader.Load(SupportedLanguage.English.Code);
+        en["LogicPanelTimelineHelp.WaveformBody"].ShouldContain("white cursor");
+        en["LogicPanelTimelineHelp.WaveformBody"].ShouldContain("L·n_g/c");
+        en["LogicPanelTimelineHelp.WaveformBody"].ShouldContain("step trace");
+        en["LogicPanelTimelineHelp.WaveformBody"].ShouldContain("optical path length");
     }
 }
