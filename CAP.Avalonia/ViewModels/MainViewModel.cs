@@ -131,6 +131,13 @@ public partial class MainViewModel : ObservableObject
     public ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel Tutorial { get; }
 
     /// <summary>
+    /// Step engine for the "Watch it compute" tour (issue #1143). Started from
+    /// the Home screen's second tour card; observes the Logic panel of the
+    /// Counter example it opens.
+    /// </summary>
+    public ViewModels.Onboarding.FirstStepsTutorial.WatchComputeTourViewModel WatchTour { get; }
+
+    /// <summary>
     /// Design file passed on the command line, resolved by
     /// <see cref="Services.DesignFileArguments.FindDesignFile"/> in App startup.
     /// Consumed once by the main window's Loaded handler; takes precedence
@@ -303,7 +310,8 @@ public partial class MainViewModel : ObservableObject
         ViewModels.Solvers.ModeProbe.ModeProbeViewModel? modeProbe = null,
         Services.GdsImport.DesignScope.DesignScopedGdsComponentService? designScopedGdsComponents = null,
         ViewModels.GdsImport.LayerVisibility.GdsLayerVisibilityViewModel? layerVisibility = null,
-        ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel? tutorialViewModel = null)
+        ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel? tutorialViewModel = null,
+        ViewModels.Onboarding.FirstStepsTutorial.WatchComputeTourViewModel? watchComputeTourViewModel = null)
     {
         _urlLauncher = urlLauncher ?? Services.PlatformShellLauncher.CreateDefault();
         // Injected for activation: constructing the binder wires the adaptive
@@ -349,9 +357,13 @@ public partial class MainViewModel : ObservableObject
         Home.OpenProjectFromPathRequested = FileOperations.LoadDesignFromPathAsync;
         Home.OpenExampleRequested = FileOperations.OpenDesignAsCopyAsync;
         Home.LearnTutorialRequested = StartTutorialOnFreshDesignAsync;
+        Home.WatchComputeTourRequested = StartWatchComputeTourAsync;
         FileOperations.ProjectOpened = Home.OnProjectOpened;
 
         Tutorial = tutorialViewModel ?? new ViewModels.Onboarding.FirstStepsTutorial.TutorialViewModel(canvas);
+        // The tour must observe the panel instance the user actually clicks.
+        WatchTour = watchComputeTourViewModel
+            ?? new ViewModels.Onboarding.FirstStepsTutorial.WatchComputeTourViewModel(RightPanel.Logic);
 
         // Keep the window title in sync with the open file and dirty state
         FileOperations.PropertyChanged += (_, e) =>
@@ -921,6 +933,25 @@ public partial class MainViewModel : ObservableObject
             return;
 
         Tutorial.Start();
+    }
+
+    /// <summary>
+    /// Starts the "Watch it compute" tour on the shipped Counter example (Home
+    /// tour card, issue #1143). The example opens as an untitled copy through
+    /// the same loader the Examples list uses; when the user cancels the
+    /// unsaved-changes prompt (or the example is not installed), the tour does
+    /// not start and the current design stays open.
+    /// </summary>
+    private async Task StartWatchComputeTourAsync()
+    {
+        var counterPath = Home.Examples
+            .FirstOrDefault(example => System.IO.Path.GetFileName(example.FilePath)
+                == ViewModels.Onboarding.FirstStepsTutorial.WatchComputeTourViewModel.CounterExampleFileName)
+            ?.FilePath;
+        if (counterPath == null || !await FileOperations.OpenDesignAsCopyAsync(counterPath))
+            return;
+
+        WatchTour.Start();
     }
 
     /// <summary>

@@ -89,6 +89,13 @@ public partial class HomeViewModel : ObservableObject
     /// </summary>
     public Func<Task>? LearnTutorialRequested { get; set; }
 
+    /// <summary>
+    /// Callback to start the "Watch it compute" guided tour (issue #1143):
+    /// opens the shipped Counter example as an untitled copy and activates the
+    /// tour only when that succeeds.
+    /// </summary>
+    public Func<Task>? WatchComputeTourRequested { get; set; }
+
     /// <summary>Initializes the Home screen and builds the recent-projects and examples lists.</summary>
     public HomeViewModel(
         RecentProjectsService recentProjectsService,
@@ -255,6 +262,13 @@ public partial class HomeViewModel : ObservableObject
     {
         if (LearnTutorialRequested != null)
             await LearnTutorialRequested();
+    }
+
+    [RelayCommand]
+    private async Task WatchComputeTour()
+    {
+        if (WatchComputeTourRequested != null)
+            await WatchComputeTourRequested();
     }
 
     [RelayCommand]

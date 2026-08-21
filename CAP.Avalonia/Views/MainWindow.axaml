@@ -1201,6 +1201,13 @@
         <panels:FirstStepsTutorialPanel DataContext="{Binding Tutorial}"/>
     </Border>
 
+    <!-- "Watch it compute" tour overlay (#1143): same non-modal bottom-centre card,
+         watching the Logic panel while the Counter example runs -->
+    <Border IsVisible="{Binding WatchTour.IsActive, FallbackValue=False}"
+            HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,28">
+        <panels:WatchComputeTourPanel DataContext="{Binding WatchTour}"/>
+    </Border>
+
     <!-- Home screen overlay: compact centered card over the dimmed editor,
          shown until a project is opened/created; reopenable via the Home button -->
     <Border IsVisible="{Binding Home.IsHomeVisible}" Background="#B3141414">
