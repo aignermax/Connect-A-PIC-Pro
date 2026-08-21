@@ -12,6 +12,7 @@
     { "file": "Logic Gate SR-Latch.lun", "rank": 90, "level": "Sequential", "descriptionKey": "Examples.SrLatch.Description" },
     { "file": "Logic Gate Bit.lun", "rank": 95, "level": "Sequential", "descriptionKey": "Examples.Bit.Description" },
     { "file": "Logic Gate Register 2-bit.lun", "rank": 97, "level": "Sequential", "descriptionKey": "Examples.Register2bit.Description" },
+    { "file": "Logic Gate RAM 2x2.lun", "rank": 98, "level": "Sequential", "descriptionKey": "Examples.Ram2x2.Description" },
     { "file": "Logic Gate Counter 2-bit.lun", "rank": 100, "level": "Sequential", "descriptionKey": "Examples.Counter2bit.Description" },
     { "file": "Logic Gate PC 2-bit.lun", "rank": 105, "level": "Datapath", "descriptionKey": "Examples.Pc2bit.Description" }
   ]
