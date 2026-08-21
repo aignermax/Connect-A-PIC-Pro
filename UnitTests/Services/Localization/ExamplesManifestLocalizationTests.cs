@@ -90,6 +90,27 @@ public class ExamplesManifestLocalizationTests
     }
 
     [Fact]
+    public void CuratedLadder_ListsTheRegister2Bit_BetweenTheBitAndTheCounter()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var bitIndex = ladder.FindIndex(example => example.Name == "Logic Gate Bit");
+        bitIndex.ShouldBeGreaterThanOrEqualTo(0, "the load-enabled bit rung must stay curated");
+
+        var registerIndex = ladder.FindIndex(example => example.Name == "Logic Gate Register 2-bit");
+        registerIndex.ShouldBeGreaterThan(bitIndex,
+            "the 2-bit register is the NAND2TETRIS Register — it slots between the Bit and the counter");
+        ladder[registerIndex].Level.ShouldBe("Sequential");
+        ladder[registerIndex].DescriptionKey.ShouldBe("Examples.Register2bit.Description");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(registerIndex,
+            "the 2-bit counter builds on the multi-bit register — it stays the rung after the Register");
+    }
+
+    [Fact]
     public void CuratedLadder_ListsTheCounter2Bit_AfterTheSrLatch()
     {
         var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
