@@ -111,6 +111,27 @@ public class ExamplesManifestLocalizationTests
     }
 
     [Fact]
+    public void CuratedLadder_ListsTheRam2x2_BetweenTheRegisterAndTheCounter()
+    {
+        var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()
+            .Where(example => example.DescriptionKey != null)
+            .ToList();
+
+        var registerIndex = ladder.FindIndex(example => example.Name == "Logic Gate Register 2-bit");
+        registerIndex.ShouldBeGreaterThanOrEqualTo(0, "the 2-bit register rung must stay curated");
+
+        var ramIndex = ladder.FindIndex(example => example.Name == "Logic Gate RAM 2x2");
+        ramIndex.ShouldBeGreaterThan(registerIndex,
+            "the 2x2 RAM is the NAND2TETRIS RAM slice — it slots between the Register and the counter");
+        ladder[ramIndex].Level.ShouldBe("Sequential");
+        ladder[ramIndex].DescriptionKey.ShouldBe("Examples.Ram2x2.Description");
+
+        var counterIndex = ladder.FindIndex(example => example.Name == "Logic Gate Counter 2-bit");
+        counterIndex.ShouldBeGreaterThan(ramIndex,
+            "the 2-bit counter builds on addressable memory — it stays the rung after the RAM");
+    }
+
+    [Fact]
     public void CuratedLadder_ListsTheCounter2Bit_AfterTheSrLatch()
     {
         var ladder = new CAP.Avalonia.Services.ExampleDesignsService().GetExamples()

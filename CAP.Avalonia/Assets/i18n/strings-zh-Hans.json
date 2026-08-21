@@ -350,6 +350,7 @@
   "Examples.Alu.Description": "1 位 ALU:Op 位选择结果是输入的 AND 还是 OR。",
   "Examples.Bit.Description": "存储位:置位 Load 并按下 Step——该位存入 Din 并保持。",
   "Examples.Register2bit.Description": "2 位寄存器:设置 D1D0,脉冲 LOAD 并按下 Step——字被存入并在 LOAD 保持为 0 时保持不变。",
+  "Examples.Ram2x2.Description": "2x2 位 RAM:ADDR 选择两个字中哪个存放和回答——每一存储器的核心。",
   "Examples.Counter2bit.Description": "2 位计数器:按下 Step,观看 C1C0 依次计出 0、1、2、3——电路动起来了。",
   "Examples.Pc2bit.Description": "2 位程序计数器:LOAD=0 时每次 Step 递增,LOAD=1 时载入 L1L0——NAND2TETRIS 的 PC。",
   "Examples.AndGate.Description": "把两个 NAND 门组合成一个 AND 门。",

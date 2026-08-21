@@ -350,6 +350,7 @@
   "Examples.Alu.Description": "A 1-bit ALU: the Op bit selects whether the result is the AND or the OR of the inputs.",
   "Examples.Bit.Description": "A memory bit: set Load and step the clock — the bit stores Din and holds it.",
   "Examples.Register2bit.Description": "A 2-bit register: set D1D0, pulse LOAD and step — the word is stored and held while LOAD rests at 0.",
+  "Examples.Ram2x2.Description": "A 2x2-bit RAM: ADDR selects which of the two words stores and reads — the core of every memory.",
   "Examples.Counter2bit.Description": "A 2-bit counter: press Step and watch C1C0 count 0, 1, 2, 3 — the circuit runs.",
   "Examples.Pc2bit.Description": "A 2-bit program counter: LOAD=0 counts up each Step, LOAD=1 loads L1L0 — the NAND2TETRIS PC.",
   "Examples.AndGate.Description": "Combine two NAND gates into an AND gate.",
