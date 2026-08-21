@@ -167,6 +167,30 @@ public class RegistryBrowserDownloadTests : IDisposable
     }
 
     [Fact]
+    public async Task Download_FinishingAfterSelectionChanged_DropsTheStaleMessage()
+    {
+        var vm = CreateViewModel();
+        await LoadAndSelectAsync(vm);
+        var spectrumUrl = $"{RegistryTestHarness.BaseUrl}/" +
+            CAP_Core.ComponentRegistry.RegistryClient.RegistryClient.ResolveArtifactPath(
+                RegistryTestHarness.ManifestPath, RegistryTestHarness.SpectrumFile);
+        _harness.Handler.Hold(spectrumUrl);
+
+        vm.DownloadCommand.Execute(null);
+        var inFlightDownload = vm.DownloadTask;
+        vm.SelectedComponent = vm.Components.First(c => c.Id != "y-branch-1x2");
+        await vm.DetailsLoadTask;
+
+        _harness.Handler.Release(spectrumUrl);
+        await inFlightDownload;
+
+        // A success message for the previously shown component would mislead.
+        vm.DownloadMessage.ShouldBeNull();
+        vm.DownloadIsError.ShouldBeFalse();
+        vm.IsDownloading.ShouldBeFalse();
+    }
+
+    [Fact]
     public async Task SelectingAnotherComponent_ResetsMessageAndDisputedWarning()
     {
         var vm = CreateViewModel();

@@ -120,6 +120,8 @@ public partial class RegistryBrowserViewModel
         try
         {
             var result = await _downloadService.DownloadAsync(manifestPath, manifest, choice);
+            if (!ReferenceEquals(Details.Manifest, manifest))
+                return;
             DownloadIsError = !result.IsSuccess;
             DownloadMessage = result.IsSuccess
                 ? string.Format(CultureInfo.InvariantCulture,
@@ -129,6 +131,10 @@ public partial class RegistryBrowserViewModel
         }
         catch (Exception ex)
         {
+            // A message for a component the user has meanwhile navigated away
+            // from would be misleading — drop it silently.
+            if (!ReferenceEquals(Details.Manifest, manifest))
+                return;
             DownloadIsError = true;
             DownloadMessage = string.Format(CultureInfo.InvariantCulture,
                 LocalizationService.Instance.Translate("Registry.DownloadFailed"), ex.Message);

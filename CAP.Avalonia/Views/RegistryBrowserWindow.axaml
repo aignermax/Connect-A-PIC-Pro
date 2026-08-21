@@ -198,6 +198,7 @@
                                 <Button Content="{loc:Localize Registry.Download}"
                                         Command="{Binding DownloadCommand}"
                                         ToolTip.Tip="{Binding DownloadUnavailableReason}"
+                                        ToolTip.ShowOnDisabled="True"
                                         FontSize="11" Background="#3d5d3d"/>
                                 <ctrl:HelpFlyoutButton Title="{loc:Localize Registry.DownloadHelpTitle}"
                                                        VerticalAlignment="Center">
