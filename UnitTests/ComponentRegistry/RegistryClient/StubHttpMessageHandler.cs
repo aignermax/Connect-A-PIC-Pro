@@ -9,6 +9,7 @@ namespace UnitTests.ComponentRegistry.RegistryClient;
 public class StubHttpMessageHandler : HttpMessageHandler
 {
     private readonly Dictionary<string, string> _responses = new();
+    private readonly Dictionary<string, TaskCompletionSource> _holds = new();
     private int _afterRequestCount;
     private Action? _afterRequestsAction;
 
@@ -31,7 +32,18 @@ public class StubHttpMessageHandler : HttpMessageHandler
         _afterRequestsAction = action;
     }
 
-    protected override Task<HttpResponseMessage> SendAsync(
+    /// <summary>Parks responses for <paramref name="url"/> until <see cref="Release"/> is called.</summary>
+    public void Hold(string url) =>
+        _holds[url] = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+
+    /// <summary>Lets previously held responses for <paramref name="url"/> complete.</summary>
+    public void Release(string url)
+    {
+        if (_holds.Remove(url, out var gate))
+            gate.SetResult();
+    }
+
+    protected override async Task<HttpResponseMessage> SendAsync(
         HttpRequestMessage request, CancellationToken cancellationToken)
     {
         RequestCount++;
@@ -39,6 +51,8 @@ public class StubHttpMessageHandler : HttpMessageHandler
             throw new HttpRequestException("Simulated network failure");
 
         var url = request.RequestUri!.ToString();
+        if (_holds.TryGetValue(url, out var gate))
+            await gate.Task;
         var response = _responses.TryGetValue(url, out var body)
             ? new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(body) }
             : new HttpResponseMessage(HttpStatusCode.NotFound);
@@ -49,6 +63,6 @@ public class StubHttpMessageHandler : HttpMessageHandler
             _afterRequestsAction = null;
             action();
         }
-        return Task.FromResult(response);
+        return response;
     }
 }

@@ -190,6 +190,38 @@
                                        IsVisible="{Binding Details.License, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                 <Run Text="{loc:Localize Registry.LicensePrefix}"/><Run Text="{Binding Details.License}"/>
                             </TextBlock>
+
+                            <!-- Download into the local library (#773): adopts the component's real
+                                 simulated/measured S-parameters into a process-bound "Registry" PDK.
+                                 Disabled without a usable artifact or when the process mismatches. -->
+                            <StackPanel Orientation="Horizontal" Spacing="6" Margin="0,8,0,0">
+                                <Button Content="{loc:Localize Registry.Download}"
+                                        Command="{Binding DownloadCommand}"
+                                        ToolTip.Tip="{Binding DownloadUnavailableReason}"
+                                        ToolTip.ShowOnDisabled="True"
+                                        FontSize="11" Background="#3d5d3d"/>
+                                <ctrl:HelpFlyoutButton Title="{loc:Localize Registry.DownloadHelpTitle}"
+                                                       VerticalAlignment="Center">
+                                    <ctrl:HelpFlyoutButton.HelpContent>
+                                        <TextBlock MaxWidth="280" TextWrapping="Wrap" FontSize="11"
+                                                   Text="{loc:Localize Registry.DownloadHelpContent}"/>
+                                    </ctrl:HelpFlyoutButton.HelpContent>
+                                </ctrl:HelpFlyoutButton>
+                            </StackPanel>
+                            <Border Background="#7a3d3d" CornerRadius="4" Padding="6"
+                                    IsVisible="{Binding PendingDisputedConfirm}">
+                                <StackPanel Spacing="4">
+                                    <TextBlock Text="{loc:Localize Registry.DisputedWarning}"
+                                               Foreground="White" FontSize="10" TextWrapping="Wrap"/>
+                                    <Button Content="{loc:Localize Registry.DownloadAnyway}"
+                                            Command="{Binding ConfirmDisputedDownloadCommand}"
+                                            FontSize="10" Background="#5d2d2d"
+                                            HorizontalAlignment="Left"/>
+                                </StackPanel>
+                            </Border>
+                            <TextBlock Text="{Binding DownloadMessage}" Foreground="{Binding DownloadMessageColor}" FontSize="10"
+                                       TextWrapping="Wrap"
+                                       IsVisible="{Binding DownloadMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                         </StackPanel>
                     </ScrollViewer>
                 </Panel>

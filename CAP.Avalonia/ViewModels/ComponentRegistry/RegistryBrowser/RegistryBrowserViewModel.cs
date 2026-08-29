@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Globalization;
+using CAP.Avalonia.Services.ComponentRegistry;
 using CAP.Avalonia.Services.Localization;
 using CAP_Core.ComponentRegistry.RegistryClient;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -98,10 +99,16 @@ public partial class RegistryBrowserViewModel : ObservableObject
     /// </summary>
     public Task PreviewsLoadTask { get; private set; } = Task.CompletedTask;
 
-    /// <summary>Creates the browser on top of a configured registry client.</summary>
-    public RegistryBrowserViewModel(RegistryClient client)
+    /// <summary>
+    /// Creates the browser on top of a configured registry client.
+    /// <paramref name="downloadService"/> enables the "download into the local
+    /// library" feature (issue #773); null keeps the browser read-only.
+    /// </summary>
+    public RegistryBrowserViewModel(RegistryClient client, RegistryDownloadService? downloadService = null)
     {
         _client = client;
+        _downloadService = downloadService;
+        Details.ManifestPopulated += NotifyDownloadStateChanged;
     }
 
     /// <summary>
@@ -283,13 +290,18 @@ public partial class RegistryBrowserViewModel : ObservableObject
     {
         foreach (var item in Components)
             item.UpdateProcessMismatch(value);
+        NotifyDownloadStateChanged();
     }
 
     partial void OnSelectedComponentChanged(RegistryComponentItemViewModel? value)
     {
+        PendingDisputedConfirm = false;
+        DownloadMessage = null;
+        DownloadIsError = false;
         if (value is null)
             Details.Clear();
         else
             DetailsLoadTask = Details.LoadAsync(_client, value.ManifestPath);
+        NotifyDownloadStateChanged();
     }
 }
